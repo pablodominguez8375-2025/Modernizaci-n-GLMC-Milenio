@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Treasury.Entities;
 
@@ -27,6 +28,7 @@ public static class TreasuryEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(httpContext.User))
@@ -57,6 +59,8 @@ public static class TreasuryEndpoints
         };
 
         db.FinancialRegularitySnapshots.Add(snapshot);
+        audit.Add(httpContext, "treasury.workshop_regularity.recorded", nameof(FinancialRegularitySnapshot), snapshot.Id.ToString(), organizationId, AuditResults.Success,
+            new { snapshot.Scope, snapshot.Status, snapshot.AsOfDate });
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/tesoreria/talleres/{organizationId}/regularidad", ToResponse(snapshot));
@@ -99,6 +103,7 @@ public static class TreasuryEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(httpContext.User))
@@ -132,6 +137,8 @@ public static class TreasuryEndpoints
         };
 
         db.FinancialRegularitySnapshots.Add(snapshot);
+        audit.Add(httpContext, "treasury.member_regularity.recorded", nameof(FinancialRegularitySnapshot), snapshot.Id.ToString(), organizationId, AuditResults.Success,
+            new { snapshot.MemberId, snapshot.Scope, snapshot.Status, snapshot.AsOfDate });
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/tesoreria/talleres/{organizationId}/miembros/{memberId}/regularidad", ToResponse(snapshot));
