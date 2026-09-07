@@ -87,6 +87,7 @@ app.MapHospitalariaEndpoints();
 app.MapCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
 app.MapPrivacyEndpoints();
+app.MapPrivacyRiskEndpoints();
 
 app.Run();
 
