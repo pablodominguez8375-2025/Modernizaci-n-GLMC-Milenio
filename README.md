@@ -53,4 +53,6 @@ Como base:
 ## Estado
 El proyecto se encuentra en fase de fundación técnica y construcción del primer MVP ejecutable. La rama `dev` concentra la implementación activa y el PR #1 consolida los avances hacia `main`.
 
+El bloque de elegibilidad de ceremonias ya dispone de modelo, persistencia, migración, motor de reglas, pruebas automatizadas y API base para publicaciones vigentes de insinuados.
+
 Consulta `/docs`, `/backlog`, `/backend` y `/infrastructure` para el detalle versionado.
