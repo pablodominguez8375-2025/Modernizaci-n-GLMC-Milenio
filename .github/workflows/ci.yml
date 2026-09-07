@@ -88,7 +88,13 @@ jobs:
         run: docker build --build-arg VITE_USE_MOCKS=true -t pmgm-web-ci frontend
 
       - name: Validate Nginx configuration
-        run: docker run --rm pmgm-web-ci nginx -t
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create pmgm-nginx-ci
+          trap 'docker rm -f pmgm-api-placeholder >/dev/null 2>&1 || true; docker network rm pmgm-nginx-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --name pmgm-api-placeholder --network pmgm-nginx-ci --network-alias api nginx:stable-alpine
+          docker run --rm --network pmgm-nginx-ci pmgm-web-ci nginx -t
 
   infrastructure-validate:
     name: Infrastructure configuration
