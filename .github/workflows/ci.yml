@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   backend-build:
-    name: Backend build
+    name: Backend build and tests
     runs-on: ubuntu-latest
 
     steps:
@@ -23,8 +23,14 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Restore
+      - name: Restore API
         run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
 
-      - name: Build
+      - name: Build API
         run: dotnet build backend/src/PMGM.Api/PMGM.Api.csproj --configuration Release --no-restore
+
+      - name: Restore tests
+        run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
+
+      - name: Test
+        run: dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj --configuration Release --no-restore
