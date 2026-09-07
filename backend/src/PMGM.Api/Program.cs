@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Membership;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -35,9 +36,11 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.1.0",
+    version = "0.2.0",
     runtime = ".NET 10"
 }));
+
+app.MapMembershipEndpoints();
 
 app.Run();
 
