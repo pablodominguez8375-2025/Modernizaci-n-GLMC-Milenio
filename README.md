@@ -8,12 +8,13 @@ Construir una plataforma institucional unificada con acceso único, base maestra
 ## Principios
 - Identidad institucional única.
 - Una sola ficha maestra por persona/miembro.
-- Historial sin sobrescritura destructiva.
-- Permisos por rol y contexto de Taller.
+- Historial sin sobrescritura destructiva, sujeto a políticas de conservación y privacidad.
+- Permisos por rol, finalidad y contexto de Taller.
 - Auditoría transversal.
-- Seguridad y privacidad desde el diseño.
+- Seguridad y privacidad desde el diseño y por defecto.
 - Integración entre módulos sin duplicar fuentes maestras.
 - Reglas institucionales parametrizables y versionadas.
+- Cumplimiento de la normativa chilena de protección de datos personales, con preparación explícita para la Ley 21.719.
 
 ## Núcleo funcional en desarrollo
 - Personas, miembros, Talleres y pertenencias históricas.
@@ -26,6 +27,17 @@ Construir una plataforma institucional unificada con acceso único, base maestra
 - Control de reposiciones del Taller en Gran Hospitalaria.
 - Portal institucional de insinuados para iniciaciones.
 - Plazo mínimo de publicación configurable, inicialmente 20 días.
+- Protección de datos: finalidad, minimización, conservación, derechos de titulares, incidentes, EIPD/DPIA y accountability.
+
+## Ley 21.719
+Proyecto Milenio incorpora como requisito P0 transversal la preparación para la Ley N° 21.719, que regula la protección y tratamiento de datos personales y crea la Agencia de Protección de Datos Personales.
+
+Documentos principales:
+- `PMGM-REQ-026` — Cumplimiento Ley 21.719.
+- `PMGM-SEC-003` — Matriz técnica de cumplimiento.
+- `PMGM-BLG-048` — Backlog de implementación.
+
+La plataforma considera especialmente sensible la información que pueda revelar pertenencia, trayectoria o convicciones filosóficas/ideológicas. La conservación histórica se diseñará por finalidad y base jurídica, con capacidades de anonimización y supresión cuando corresponda.
 
 ## Regla de ceremonias
 Una ceremonia sólo puede avanzar a autorización definitiva cuando las validaciones obligatorias aplicables se encuentren aprobadas o exista una excepción formal y auditada.
