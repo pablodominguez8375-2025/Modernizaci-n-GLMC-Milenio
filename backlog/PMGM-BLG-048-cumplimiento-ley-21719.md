@@ -50,7 +50,9 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - catálogo inicial versionado de clasificación de datos por módulo/entidad/campo;
 - guardrails automáticos de clasificación: sensibles/restringidos fuera de logs, proyección pública explícita y no exportable por defecto;
 - DTO mínimo específico para Portal de Insinuados, sin `PersonId`, `OrganizationId`, `CeremonyRequestId` ni identificadores internos;
-- pruebas automáticas que fijan la superficie permitida del DTO público del Portal de Insinuados;
+- separación de respuesta administrativa y proyección mínima en Gran Tesorería y Gran Hospitalaria;
+- proyección inter-módulo específica para elegibilidad de ceremonias que entrega sólo estado, fecha de corte y cumplimiento, sin IDs de snapshots, notas ni referencias internas;
+- pruebas automáticas que fijan la superficie permitida de DTOs públicos e inter-módulo;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos, acciones de retención y cálculo de plazos;
 - pruebas unitarias del motor de decisión de retención, política de ejecución y política de cierre de incidentes;
@@ -63,7 +65,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - ampliar adaptadores de anonimización/pseudonimización a entidades adicionales sólo cuando exista política aprobada y prueba de no pérdida indebida de trazabilidad;
 - definir, con revisión jurídica, si alguna categoría admite borrado físico automático y bajo qué doble control;
 - ampliar el catálogo de clasificación a todo nuevo campo incorporado al modelo;
-- ampliar DTOs mínimos por finalidad a reportes, exportaciones y consultas inter-módulo;
+- ampliar DTOs mínimos por finalidad a otros reportes y exportaciones no cubiertos todavía;
 - pruebas de integración contra PostgreSQL;
 - revisión jurídica final previa a producción.
 
@@ -82,14 +84,15 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 12. un legal hold vigente debe impedir toda ejecución de eliminación o anonimización asociada a la política afectada;
 13. toda acción automática de retención debe revalidar el hold inmediatamente antes de mutar datos;
 14. el borrado duro no se habilita por defecto y requiere una decisión jurídica/técnica explícita por categoría;
-15. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada.
+15. las consultas entre módulos deben usar DTOs ligados a una finalidad y no reutilizar entidades administrativas completas;
+16. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada.
 
 ## Criterios de aceptación
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
 2. cada categoría de dato tiene clasificación y política de conservación;
 3. el sistema puede registrar, seguir, resolver y cerrar solicitudes de derechos;
 4. las vistas de Portal de Insinuados no exponen identificadores internos ni datos restringidos por defecto;
-5. Gran Secretaría consume estados mínimos de Tesorería/Hospitalaria;
+5. Gran Secretaría y Régimen Interior consumen estados mínimos de Tesorería/Hospitalaria sin notas, referencias ni IDs internos;
 6. proveedores con acceso a datos están inventariados y conservan historial de versiones;
 7. transferencias internacionales están identificadas, revisables y conservan historial de versiones;
 8. incidentes no pueden cerrarse sin evaluación, decisiones explícitas, comunicaciones requeridas y acciones correctivas;

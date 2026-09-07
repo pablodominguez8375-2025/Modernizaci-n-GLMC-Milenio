@@ -55,11 +55,19 @@ public static class HospitalariaEndpoints
         };
 
         db.HospitalariaRegularitySnapshots.Add(snapshot);
-        audit.Add(httpContext, "hospitalaria.workshop_regularity.recorded", nameof(HospitalariaRegularitySnapshot), snapshot.Id.ToString(), organizationId, AuditResults.Success,
+        audit.Add(
+            httpContext,
+            "hospitalaria.workshop_regularity.recorded",
+            nameof(HospitalariaRegularitySnapshot),
+            snapshot.Id.ToString(),
+            organizationId,
+            AuditResults.Success,
             new { snapshot.Status, snapshot.AsOfDate });
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.Created($"/api/hospitalaria/talleres/{organizationId}/regularidad", ToResponse(snapshot));
+        return Results.Created(
+            $"/api/hospitalaria/talleres/{organizationId}/regularidad",
+            ToAdministrativeResponse(snapshot));
     }
 
     private static async Task<IResult> GetWorkshopRegularityAsync(
@@ -76,7 +84,7 @@ public static class HospitalariaEndpoints
             return Results.Forbid();
         }
 
-        var cutoff = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var cutoff = asOf ?? TodayInChile();
         var snapshot = await db.HospitalariaRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId && x.AsOfDate <= cutoff)
@@ -84,12 +92,23 @@ public static class HospitalariaEndpoints
             .ThenByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return snapshot is null
-            ? Results.NotFound(new { message = "No existe una validación de Gran Hospitalaria para la fecha indicada." })
-            : Results.Ok(ToResponse(snapshot));
+        if (snapshot is null)
+        {
+            return Results.NotFound(new { message = "No existe una validación de Gran Hospitalaria para la fecha indicada." });
+        }
+
+        if (access.CanManageHospitalariaRegularity(httpContext.User))
+        {
+            return Results.Ok(ToAdministrativeResponse(snapshot));
+        }
+
+        return Results.Ok(ToMinimalProjection(snapshot));
     }
 
-    private static object ToResponse(HospitalariaRegularitySnapshot snapshot) => new
+    private static HospitalariaRegularityProjectionDto ToMinimalProjection(HospitalariaRegularitySnapshot snapshot)
+        => new(snapshot.Status, snapshot.AsOfDate);
+
+    private static object ToAdministrativeResponse(HospitalariaRegularitySnapshot snapshot) => new
     {
         snapshot.Id,
         snapshot.OrganizationId,
@@ -99,7 +118,18 @@ public static class HospitalariaEndpoints
         snapshot.Notes,
         snapshot.RecordedAtUtc
     };
+
+    private static DateOnly TodayInChile()
+    {
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
+        var chileNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone);
+        return DateOnly.FromDateTime(chileNow.DateTime);
+    }
 }
+
+public sealed record HospitalariaRegularityProjectionDto(
+    string Status,
+    DateOnly AsOfDate);
 
 public sealed record HospitalariaRegularityRequest(
     string Status,

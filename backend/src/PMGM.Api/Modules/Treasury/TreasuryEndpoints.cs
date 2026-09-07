@@ -59,11 +59,19 @@ public static class TreasuryEndpoints
         };
 
         db.FinancialRegularitySnapshots.Add(snapshot);
-        audit.Add(httpContext, "treasury.workshop_regularity.recorded", nameof(FinancialRegularitySnapshot), snapshot.Id.ToString(), organizationId, AuditResults.Success,
+        audit.Add(
+            httpContext,
+            "treasury.workshop_regularity.recorded",
+            nameof(FinancialRegularitySnapshot),
+            snapshot.Id.ToString(),
+            organizationId,
+            AuditResults.Success,
             new { snapshot.Scope, snapshot.Status, snapshot.AsOfDate });
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.Created($"/api/tesoreria/talleres/{organizationId}/regularidad", ToResponse(snapshot));
+        return Results.Created(
+            $"/api/tesoreria/talleres/{organizationId}/regularidad",
+            ToAdministrativeResponse(snapshot));
     }
 
     private static async Task<IResult> GetWorkshopRegularityAsync(
@@ -80,7 +88,7 @@ public static class TreasuryEndpoints
             return Results.Forbid();
         }
 
-        var cutoff = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var cutoff = asOf ?? TodayInChile();
         var snapshot = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId &&
@@ -91,9 +99,17 @@ public static class TreasuryEndpoints
             .ThenByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return snapshot is null
-            ? Results.NotFound(new { message = "No existe una validación de regularidad del Taller para la fecha indicada." })
-            : Results.Ok(ToResponse(snapshot));
+        if (snapshot is null)
+        {
+            return Results.NotFound(new { message = "No existe una validación de regularidad del Taller para la fecha indicada." });
+        }
+
+        if (access.CanManageTreasuryRegularity(httpContext.User))
+        {
+            return Results.Ok(ToAdministrativeResponse(snapshot));
+        }
+
+        return Results.Ok(ToMinimalProjection(snapshot));
     }
 
     private static async Task<IResult> SetMemberRegularityAsync(
@@ -137,11 +153,19 @@ public static class TreasuryEndpoints
         };
 
         db.FinancialRegularitySnapshots.Add(snapshot);
-        audit.Add(httpContext, "treasury.member_regularity.recorded", nameof(FinancialRegularitySnapshot), snapshot.Id.ToString(), organizationId, AuditResults.Success,
-            new { snapshot.MemberId, snapshot.Scope, snapshot.Status, snapshot.AsOfDate });
+        audit.Add(
+            httpContext,
+            "treasury.member_regularity.recorded",
+            nameof(FinancialRegularitySnapshot),
+            snapshot.Id.ToString(),
+            organizationId,
+            AuditResults.Success,
+            new { snapshot.Scope, snapshot.Status, snapshot.AsOfDate });
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.Created($"/api/tesoreria/talleres/{organizationId}/miembros/{memberId}/regularidad", ToResponse(snapshot));
+        return Results.Created(
+            $"/api/tesoreria/talleres/{organizationId}/miembros/{memberId}/regularidad",
+            ToAdministrativeResponse(snapshot));
     }
 
     private static async Task<IResult> GetMemberRegularityAsync(
@@ -159,7 +183,7 @@ public static class TreasuryEndpoints
             return Results.Forbid();
         }
 
-        var cutoff = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var cutoff = asOf ?? TodayInChile();
         var snapshot = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId &&
@@ -169,12 +193,23 @@ public static class TreasuryEndpoints
             .ThenByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return snapshot is null
-            ? Results.NotFound(new { message = "No existe una validación de regularidad del hermano para la fecha indicada." })
-            : Results.Ok(ToResponse(snapshot));
+        if (snapshot is null)
+        {
+            return Results.NotFound(new { message = "No existe una validación de regularidad del hermano para la fecha indicada." });
+        }
+
+        if (access.CanManageTreasuryRegularity(httpContext.User))
+        {
+            return Results.Ok(ToAdministrativeResponse(snapshot));
+        }
+
+        return Results.Ok(ToMinimalProjection(snapshot));
     }
 
-    private static object ToResponse(FinancialRegularitySnapshot snapshot) => new
+    private static FinancialRegularityProjectionDto ToMinimalProjection(FinancialRegularitySnapshot snapshot)
+        => new(snapshot.Status, snapshot.AsOfDate);
+
+    private static object ToAdministrativeResponse(FinancialRegularitySnapshot snapshot) => new
     {
         snapshot.Id,
         snapshot.OrganizationId,
@@ -186,7 +221,18 @@ public static class TreasuryEndpoints
         snapshot.Notes,
         snapshot.RecordedAtUtc
     };
+
+    private static DateOnly TodayInChile()
+    {
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
+        var chileNow = TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, timeZone);
+        return DateOnly.FromDateTime(chileNow.DateTime);
+    }
 }
+
+public sealed record FinancialRegularityProjectionDto(
+    string Status,
+    DateOnly AsOfDate);
 
 public sealed record RegularityRequest(
     string Status,
