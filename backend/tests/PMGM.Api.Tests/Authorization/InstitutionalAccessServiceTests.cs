@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using PMGM.Api.Modules.Authorization;
+using Xunit;
 
 namespace PMGM.Api.Tests.Authorization;
 
