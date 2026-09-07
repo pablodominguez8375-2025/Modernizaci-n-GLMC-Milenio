@@ -26,15 +26,20 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - versionado no destructivo y baja lógica de encargados/proveedores;
 - versionado no destructivo y baja lógica de transferencias internacionales;
 - `PrivacySecurityIncident` para incidentes de privacidad/seguridad;
+- workflow reforzado de incidentes con etapas separadas de evaluación, decisión de notificación, comunicación efectiva, medidas correctivas y cierre;
+- decisiones independientes para autoridad y titulares, con fundamento y fecha de decisión;
+- registro independiente del canal y evidencia de cada comunicación, sin confundir decisión con envío efectivo;
+- política de cierre que bloquea el cierre si falta evaluación, decisión explícita, comunicación obligatoria o medidas correctivas;
+- timeline de incidentes construido desde auditoría, sin duplicar narrativas sensibles en metadatos;
 - `PrivacyImpactAssessment` para EIPD/DPIA;
-- migración `AddAuditAndPrivacyCompliance` para PostgreSQL;
+- migraciones PostgreSQL de privacidad y workflow de incidentes;
 - rol técnico `privacy_officer` con alcance de Orden;
 - autorización centralizada `CanManagePrivacy`;
 - dashboard inicial de privacidad con fecha institucional `America/Santiago`;
 - API de actividades de tratamiento;
 - API de solicitudes de derechos, incluida resolución/cierre con verificación de identidad;
 - API de políticas de retención;
-- API de incidentes, incluida evaluación, decisión de notificación y cierre;
+- API de incidentes y workflow de respuesta;
 - API de EIPD, incluida aprobación formal y registro de riesgo residual;
 - API de encargados/proveedores;
 - API de transferencias internacionales;
@@ -44,13 +49,13 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - pruebas automáticas que fijan la superficie permitida del DTO público del Portal de Insinuados;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos, acciones de retención y cálculo de plazos;
-- pruebas unitarias del motor de decisión de retención;
+- pruebas unitarias del motor de decisión de retención y de la política de cierre de incidentes;
 - auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias, legal holds, reglas jurídicas y bajas/versiones de terceros;
+- minimización adicional de metadatos de auditoría para evitar duplicar identificadores personales o narrativas sensibles;
 - gate estructural de privacidad y gate de clasificación de datos ejecutados automáticamente en CI/CD.
 
 ## Alcance pendiente
 - revisión jurídica y carga inicial de los valores efectivos de cada plazo legal versionado;
-- workflow más detallado de notificación y comunicaciones de incidentes;
 - motor automático de ejecución material de políticas de retención sobre entidades soportadas;
 - anonimización/pseudonimización ejecutable;
 - ampliar el catálogo de clasificación a todo nuevo campo incorporado al modelo;
@@ -65,7 +70,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 4. todo acceso se limita por rol, alcance y finalidad;
 5. derechos de titulares deben ser trazables desde recepción a cierre;
 6. los plazos normativos se obtienen de reglas versionadas y con fuente jurídica, no de constantes hardcodeadas;
-7. incidentes deben registrar evaluación, medidas y decisiones de notificación;
+7. incidentes deben registrar por separado evaluación, decisiones de notificación, comunicaciones realizadas, medidas correctivas y cierre;
 8. tratamientos de alto riesgo deben asociarse a una EIPD aprobada antes de producción;
 9. transferencias internacionales y encargados deben quedar inventariados y versionados sin pérdida de historial;
 10. operaciones críticas deben dejar auditoría verificable;
@@ -81,7 +86,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 5. Gran Secretaría consume estados mínimos de Tesorería/Hospitalaria;
 6. proveedores con acceso a datos están inventariados y conservan historial de versiones;
 7. transferencias internacionales están identificadas, revisables y conservan historial de versiones;
-8. incidentes pueden registrarse, evaluarse, documentarse y cerrarse;
+8. incidentes no pueden cerrarse sin evaluación, decisiones explícitas, comunicaciones requeridas y acciones correctivas;
 9. tratamientos de alto riesgo permiten registrar y aprobar EIPD previa;
 10. operaciones de riesgo dejan auditoría;
 11. el gate de release bloquea producción si faltan finalidad, base jurídica, conservación o controles de acceso;

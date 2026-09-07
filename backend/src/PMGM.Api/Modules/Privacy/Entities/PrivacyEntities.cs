@@ -166,12 +166,38 @@ public sealed class PrivacySecurityIncident
     public required string RiskLevel { get; set; }
     public string? ImmediateMeasures { get; set; }
     public required string Status { get; set; }
+
+    public DateTimeOffset? AssessmentCompletedAtUtc { get; set; }
+    [MaxLength(4000)]
+    public string? AssessmentSummary { get; set; }
+
     public bool NotifyAuthority { get; set; }
-    public bool NotifySubjects { get; set; }
+    [MaxLength(40)]
+    public string? AuthorityDecision { get; set; }
+    public DateTimeOffset? AuthorityDecisionAtUtc { get; set; }
+    [MaxLength(4000)]
+    public string? AuthorityDecisionReason { get; set; }
     public DateTimeOffset? AuthorityNotifiedAtUtc { get; set; }
+    [MaxLength(120)]
+    public string? AuthorityNotificationChannel { get; set; }
     public string? AuthorityReference { get; set; }
+
+    public bool NotifySubjects { get; set; }
+    [MaxLength(40)]
+    public string? SubjectsDecision { get; set; }
+    public DateTimeOffset? SubjectsDecisionAtUtc { get; set; }
+    [MaxLength(4000)]
+    public string? SubjectsDecisionReason { get; set; }
     public DateTimeOffset? SubjectsNotifiedAtUtc { get; set; }
+    [MaxLength(120)]
+    public string? SubjectsNotificationChannel { get; set; }
+    [MaxLength(500)]
+    public string? SubjectsNotificationReference { get; set; }
+
     public string? CorrectiveActions { get; set; }
+    public DateTimeOffset? ClosedAtUtc { get; set; }
+    [MaxLength(320)]
+    public string? ClosedBySubject { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 

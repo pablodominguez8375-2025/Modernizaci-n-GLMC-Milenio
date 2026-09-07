@@ -48,10 +48,14 @@ public static class PrivacyRiskEndpoints
                 x.EstimatedSubjects,
                 x.RiskLevel,
                 x.Status,
+                x.AssessmentCompletedAtUtc,
+                x.AuthorityDecision,
                 x.NotifyAuthority,
-                x.NotifySubjects,
                 x.AuthorityNotifiedAtUtc,
-                x.SubjectsNotifiedAtUtc
+                x.SubjectsDecision,
+                x.NotifySubjects,
+                x.SubjectsNotifiedAtUtc,
+                x.ClosedAtUtc
             })
             .ToListAsync(cancellationToken);
 
@@ -86,14 +90,26 @@ public static class PrivacyRiskEndpoints
             EstimatedSubjects = request.EstimatedSubjects,
             RiskLevel = request.RiskLevel,
             ImmediateMeasures = request.ImmediateMeasures,
-            Status = PrivacyCodes.Status.UnderReview,
-            NotifyAuthority = request.NotifyAuthority,
-            NotifySubjects = request.NotifySubjects
+            Status = PrivacyIncidentCodes.Status.Open,
+            NotifyAuthority = false,
+            NotifySubjects = false
         };
 
         db.PrivacySecurityIncidents.Add(entity);
-        audit.Add(httpContext, "privacy.incident.created", nameof(PrivacySecurityIncident), entity.Id.ToString(), null, AuditResults.Success,
-            new { entity.RiskLevel, entity.InvolvesSensitiveData, entity.EstimatedSubjects, entity.NotifyAuthority, entity.NotifySubjects });
+        audit.Add(
+            httpContext,
+            "privacy.incident.created",
+            nameof(PrivacySecurityIncident),
+            entity.Id.ToString(),
+            null,
+            AuditResults.Success,
+            new
+            {
+                entity.RiskLevel,
+                entity.InvolvesSensitiveData,
+                entity.EstimatedSubjects,
+                entity.Status
+            });
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/privacy/incidents/{entity.Id}", new { entity.Id, entity.Status });
@@ -263,9 +279,7 @@ public sealed record CreatePrivacyIncidentRequest(
     bool InvolvesSensitiveData,
     int? EstimatedSubjects,
     string RiskLevel,
-    string? ImmediateMeasures,
-    bool NotifyAuthority,
-    bool NotifySubjects);
+    string? ImmediateMeasures);
 
 public sealed record CreatePrivacyImpactAssessmentRequest(
     Guid DataProcessingActivityId,
