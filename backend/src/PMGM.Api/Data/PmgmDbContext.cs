@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.Membership.Entities;
+using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Data;
 
@@ -15,6 +17,8 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<InstitutionalStatusEvent> InstitutionalStatusEvents => Set<InstitutionalStatusEvent>();
     public DbSet<DegreeEvent> DegreeEvents => Set<DegreeEvent>();
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
+    public DbSet<FinancialRegularitySnapshot> FinancialRegularitySnapshots => Set<FinancialRegularitySnapshot>();
+    public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
@@ -133,6 +137,32 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MemberId, x.OrganizationId, x.StartDate });
+        });
+
+        modelBuilder.Entity<FinancialRegularitySnapshot>(entity =>
+        {
+            entity.ToTable("financial_regularity_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Scope).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.MemberId, x.AsOfDate });
+        });
+
+        modelBuilder.Entity<HospitalariaRegularitySnapshot>(entity =>
+        {
+            entity.ToTable("hospitalaria_regularity_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.AsOfDate });
         });
 
         modelBuilder.Entity<CeremonyRequest>(entity =>
