@@ -1,5 +1,3 @@
-using PMGM.Api.Modules.Audit.Entities;
-
 namespace PMGM.Api.Modules.GrandSecretariat.Entities;
 
 public sealed class InstitutionalSpace
@@ -44,8 +42,4 @@ public sealed class SecretariatDocument
     public DateTimeOffset IssuedAtUtc { get; set; }
     public required string IssuedBySubject { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
-}
-
-public sealed class GrandSecretariatAuditEvent : AuditEvent
-{
 }
