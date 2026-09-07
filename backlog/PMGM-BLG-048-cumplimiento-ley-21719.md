@@ -37,6 +37,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - API de transferencias internacionales;
 - catálogo inicial versionado de clasificación de datos por módulo/entidad/campo;
 - guardrails automáticos de clasificación: sensibles/restringidos fuera de logs, proyección pública explícita y no exportable por defecto;
+- DTO mínimo específico para Portal de Insinuados, sin `PersonId`, `OrganizationId`, `CeremonyRequestId` ni identificadores internos;
+- pruebas automáticas que fijan la superficie permitida del DTO público del Portal de Insinuados;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos y acciones de retención;
 - pruebas unitarias del motor de decisión de retención;
@@ -49,7 +51,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - motor automático de ejecución material de políticas de retención sobre entidades soportadas;
 - anonimización/pseudonimización ejecutable;
 - ampliar el catálogo de clasificación a todo nuevo campo incorporado al modelo;
-- DTOs mínimos adicionales por finalidad;
+- ampliar DTOs mínimos por finalidad a reportes, exportaciones y consultas inter-módulo;
 - pruebas de integración contra PostgreSQL;
 - revisión jurídica final previa a producción.
 
@@ -71,7 +73,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
 2. cada categoría de dato tiene clasificación y política de conservación;
 3. el sistema puede registrar, seguir, resolver y cerrar solicitudes de derechos;
-4. las vistas de Portal de Insinuados no exponen datos restringidos por defecto;
+4. las vistas de Portal de Insinuados no exponen identificadores internos ni datos restringidos por defecto;
 5. Gran Secretaría consume estados mínimos de Tesorería/Hospitalaria;
 6. proveedores con acceso a datos están inventariados y conservan historial de versiones;
 7. transferencias internacionales están identificadas, revisables y conservan historial de versiones;

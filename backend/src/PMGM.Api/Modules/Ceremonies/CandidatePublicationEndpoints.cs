@@ -33,20 +33,11 @@ public static class CandidatePublicationEndpoints
             .OrderBy(x => x.PublishedFromUtc)
             .Select(x => new
             {
-                x.Id,
-                x.CeremonyRequestId,
-                candidate = new
-                {
-                    x.Person.Id,
-                    x.Person.FirstNames,
-                    x.Person.LastNames
-                },
-                workshop = new
-                {
-                    x.Organization.Id,
-                    x.Organization.Name,
-                    x.Organization.Number
-                },
+                OrganizationId = x.Organization.Id,
+                x.Person.FirstNames,
+                x.Person.LastNames,
+                WorkshopName = x.Organization.Name,
+                WorkshopNumber = x.Organization.Number,
                 x.PublishedFromUtc,
                 x.PublishedUntilUtc,
                 x.RequiredDays,
@@ -56,21 +47,19 @@ public static class CandidatePublicationEndpoints
             .ToListAsync(cancellationToken);
 
         var result = rows
-            .Where(x => access.CanReadOrganization(httpContext.User, x.workshop.Id))
-            .Select(x => new
-            {
-                x.Id,
-                x.CeremonyRequestId,
-                x.candidate,
-                x.workshop,
-                x.PublishedFromUtc,
-                x.PublishedUntilUtc,
-                x.RequiredDays,
-                elapsedDays = Math.Max(0, (int)Math.Floor((now - x.PublishedFromUtc).TotalDays)),
-                complianceDateUtc = x.PublishedFromUtc.AddDays(x.RequiredDays),
-                x.RuleCode,
-                x.Status
-            });
+            .Where(x => access.CanReadOrganization(httpContext.User, x.OrganizationId))
+            .Select(x => new CandidatePublicationPublicDto(
+                DisplayName: string.Join(' ', new[] { x.FirstNames, x.LastNames }.Where(value => !string.IsNullOrWhiteSpace(value))),
+                WorkshopName: x.WorkshopName,
+                WorkshopNumber: x.WorkshopNumber,
+                PublishedFromUtc: x.PublishedFromUtc,
+                PublishedUntilUtc: x.PublishedUntilUtc,
+                RequiredDays: x.RequiredDays,
+                ElapsedDays: Math.Max(0, (int)Math.Floor((now - x.PublishedFromUtc).TotalDays)),
+                ComplianceDateUtc: x.PublishedFromUtc.AddDays(x.RequiredDays),
+                RuleCode: x.RuleCode,
+                Status: x.Status))
+            .ToList();
 
         return Results.Ok(result);
     }
