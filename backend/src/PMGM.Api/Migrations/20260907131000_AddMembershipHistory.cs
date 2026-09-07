@@ -169,21 +169,21 @@ public partial class AddMembershipHistory : Migration
                 table.ForeignKey("FK_member_transfers_organizations_TargetOrganizationId", x => x.TargetOrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
             });
 
-        migrationBuilder.CreateIndex("IX_members_PersonId", "core", "members", "PersonId", unique: true);
-        migrationBuilder.CreateIndex("IX_members_InstitutionalNumber", "core", "members", "InstitutionalNumber", unique: true);
-        migrationBuilder.CreateIndex("IX_memberships_OrganizationId", "core", "memberships", "OrganizationId");
-        migrationBuilder.CreateIndex("IX_memberships_MemberId_OrganizationId_StartDate", "core", "memberships", new[] { "MemberId", "OrganizationId", "StartDate" });
-        migrationBuilder.CreateIndex("IX_institutional_status_events_OrganizationId", "core", "institutional_status_events", "OrganizationId");
-        migrationBuilder.CreateIndex("IX_institutional_status_events_MemberId_EffectiveDate", "core", "institutional_status_events", new[] { "MemberId", "EffectiveDate" });
-        migrationBuilder.CreateIndex("IX_degree_events_OrganizationId", "core", "degree_events", "OrganizationId");
-        migrationBuilder.CreateIndex("IX_degree_events_MemberId_EffectiveDate", "core", "degree_events", new[] { "MemberId", "EffectiveDate" });
-        migrationBuilder.CreateIndex("IX_office_assignments_OrganizationId", "core", "office_assignments", "OrganizationId");
-        migrationBuilder.CreateIndex("IX_office_assignments_MemberId_OrganizationId_StartDate", "core", "office_assignments", new[] { "MemberId", "OrganizationId", "StartDate" });
-        migrationBuilder.CreateIndex("IX_member_transfers_SourceMembershipId", "core", "member_transfers", "SourceMembershipId");
-        migrationBuilder.CreateIndex("IX_member_transfers_TargetMembershipId", "core", "member_transfers", "TargetMembershipId");
-        migrationBuilder.CreateIndex("IX_member_transfers_SourceOrganizationId", "core", "member_transfers", "SourceOrganizationId");
-        migrationBuilder.CreateIndex("IX_member_transfers_TargetOrganizationId", "core", "member_transfers", "TargetOrganizationId");
-        migrationBuilder.CreateIndex("IX_member_transfers_MemberId_RequestedDate", "core", "member_transfers", new[] { "MemberId", "RequestedDate" });
+        migrationBuilder.CreateIndex(name: "IX_members_PersonId", schema: "core", table: "members", column: "PersonId", unique: true);
+        migrationBuilder.CreateIndex(name: "IX_members_InstitutionalNumber", schema: "core", table: "members", column: "InstitutionalNumber", unique: true);
+        migrationBuilder.CreateIndex(name: "IX_memberships_OrganizationId", schema: "core", table: "memberships", column: "OrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_memberships_MemberId_OrganizationId_StartDate", schema: "core", table: "memberships", columns: new[] { "MemberId", "OrganizationId", "StartDate" });
+        migrationBuilder.CreateIndex(name: "IX_institutional_status_events_OrganizationId", schema: "core", table: "institutional_status_events", column: "OrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_institutional_status_events_MemberId_EffectiveDate", schema: "core", table: "institutional_status_events", columns: new[] { "MemberId", "EffectiveDate" });
+        migrationBuilder.CreateIndex(name: "IX_degree_events_OrganizationId", schema: "core", table: "degree_events", column: "OrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_degree_events_MemberId_EffectiveDate", schema: "core", table: "degree_events", columns: new[] { "MemberId", "EffectiveDate" });
+        migrationBuilder.CreateIndex(name: "IX_office_assignments_OrganizationId", schema: "core", table: "office_assignments", column: "OrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_office_assignments_MemberId_OrganizationId_StartDate", schema: "core", table: "office_assignments", columns: new[] { "MemberId", "OrganizationId", "StartDate" });
+        migrationBuilder.CreateIndex(name: "IX_member_transfers_SourceMembershipId", schema: "core", table: "member_transfers", column: "SourceMembershipId");
+        migrationBuilder.CreateIndex(name: "IX_member_transfers_TargetMembershipId", schema: "core", table: "member_transfers", column: "TargetMembershipId");
+        migrationBuilder.CreateIndex(name: "IX_member_transfers_SourceOrganizationId", schema: "core", table: "member_transfers", column: "SourceOrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_member_transfers_TargetOrganizationId", schema: "core", table: "member_transfers", column: "TargetOrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_member_transfers_MemberId_RequestedDate", schema: "core", table: "member_transfers", columns: new[] { "MemberId", "RequestedDate" });
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
