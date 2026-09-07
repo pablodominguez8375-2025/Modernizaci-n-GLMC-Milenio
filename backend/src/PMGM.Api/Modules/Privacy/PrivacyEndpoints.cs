@@ -34,7 +34,7 @@ public static class PrivacyEndpoints
             return Results.Forbid();
         }
 
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = PrivacyDeadlineCalculator.ToChileDate(DateTimeOffset.UtcNow);
 
         var openRequests = await db.DataSubjectRequests
             .AsNoTracking()
@@ -210,6 +210,7 @@ public static class PrivacyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IPrivacyLegalRuleResolver legalRuleResolver,
         IAuditService audit,
         CancellationToken cancellationToken)
     {
@@ -229,25 +230,73 @@ public static class PrivacyEndpoints
             return Results.BadRequest(new { message = "La persona indicada no existe en la base maestra." });
         }
 
+        var receivedAt = request.ReceivedAtUtc ?? DateTimeOffset.UtcNow;
+        var receivedDate = PrivacyDeadlineCalculator.ToChileDate(receivedAt);
+        var legalDeadline = await legalRuleResolver.ResolveDataSubjectRequestDeadlineAsync(
+            request.RequestType,
+            receivedDate,
+            cancellationToken);
+
+        if (legalDeadline is not null &&
+            request.DueDate is not null &&
+            request.DueDate != legalDeadline.DueDate)
+        {
+            return Results.BadRequest(new
+            {
+                message = "La fecha de vencimiento informada no coincide con la regla jurídica vigente.",
+                expectedDueDate = legalDeadline.DueDate,
+                ruleCode = legalDeadline.RuleCode
+            });
+        }
+
+        var dueDate = legalDeadline?.DueDate ?? request.DueDate;
+        if (dueDate is null)
+        {
+            return Results.BadRequest(new
+            {
+                message = "No existe una regla jurídica vigente para calcular el plazo y tampoco se informó una fecha de vencimiento controlada."
+            });
+        }
+
         var entity = new DataSubjectRequest
         {
             PersonId = request.PersonId,
             RequestType = request.RequestType,
-            ReceivedAtUtc = request.ReceivedAtUtc ?? DateTimeOffset.UtcNow,
+            ReceivedAtUtc = receivedAt,
             Channel = request.Channel,
             IdentityVerified = request.IdentityVerified,
             Status = PrivacyCodes.Status.UnderReview,
-            DueDate = request.DueDate,
+            DueDate = dueDate,
             ResponsibleSubject = request.ResponsibleSubject,
             EvidenceReference = request.EvidenceReference
         };
 
         db.DataSubjectRequests.Add(entity);
-        audit.Add(httpContext, "privacy.data_subject_request.created", nameof(DataSubjectRequest), entity.Id.ToString(), null, AuditResults.Success,
-            new { entity.RequestType, entity.PersonId, entity.IdentityVerified, entity.DueDate });
+        audit.Add(
+            httpContext,
+            "privacy.data_subject_request.created",
+            nameof(DataSubjectRequest),
+            entity.Id.ToString(),
+            null,
+            AuditResults.Success,
+            new
+            {
+                entity.RequestType,
+                entity.IdentityVerified,
+                entity.DueDate,
+                deadlineSource = legalDeadline is null ? "controlled_manual_date" : "versioned_legal_rule",
+                deadlineRuleCode = legalDeadline?.RuleCode,
+                deadlineRuleSettingId = legalDeadline?.RuleSettingId
+            });
 
         await db.SaveChangesAsync(cancellationToken);
-        return Results.Created($"/api/privacy/data-subject-requests/{entity.Id}", new { entity.Id, entity.Status });
+        return Results.Created($"/api/privacy/data-subject-requests/{entity.Id}", new
+        {
+            entity.Id,
+            entity.Status,
+            entity.DueDate,
+            deadlineRuleCode = legalDeadline?.RuleCode
+        });
     }
 }
 

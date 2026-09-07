@@ -45,6 +45,7 @@ builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
 builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 
 var app = builder.Build();
 
@@ -72,7 +73,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.8.3",
+    version = "0.8.4",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -91,6 +92,7 @@ app.MapPrivacyRetentionEndpoints();
 app.MapPrivacyRiskEndpoints();
 app.MapPrivacyProcessorEndpoints();
 app.MapPrivacyProcessorLifecycleEndpoints();
+app.MapPrivacyLegalRuleEndpoints();
 app.MapPrivacyWorkflowEndpoints();
 
 app.Run();
