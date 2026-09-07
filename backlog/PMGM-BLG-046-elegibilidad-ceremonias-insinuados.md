@@ -25,12 +25,15 @@
 - códigos estables de ceremonia, validación y publicación;
 - evaluador `CeremonyEligibilityService`;
 - rol técnico `grand_hospitalaria`;
+- migración PostgreSQL `AddCeremonyEligibility`;
+- endpoint autenticado `GET /api/candidate-publications/active` como base API del portal;
+- respuesta minimizada a nombre, Taller, fechas y estado de publicación, sin RUT, contacto ni datos administrativos;
 - pruebas unitarias para bloqueos de Tesorería, Hospitalaria y plazo de publicación.
 
 ## Pendiente
-- migración EF Core de las nuevas tablas;
-- endpoints administrativos de solicitud y validación;
-- endpoint/portal de insinuados;
+- endpoints administrativos de alta/edición de solicitud y validaciones;
+- frontend del portal de insinuados;
+- configuración administrativa del plazo y campos visibles;
 - mecanismo de observaciones si la institución lo habilita;
 - integración real con fuentes de Gran Tesorería y Gran Hospitalaria;
 - snapshot de validaciones al emitir autorización;
