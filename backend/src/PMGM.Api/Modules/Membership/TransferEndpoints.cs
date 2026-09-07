@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership.Entities;
+using MembershipEntity = PMGM.Api.Modules.Membership.Entities.Membership;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -213,7 +214,7 @@ public static class TransferEndpoints
         sourceMembership.Status = MembershipCodes.MembershipStatus.Transferred;
         sourceMembership.EndReason = "Transferencia a otro Taller";
 
-        var targetMembership = new Membership
+        var targetMembership = new MembershipEntity
         {
             MemberId = memberId,
             OrganizationId = transfer.TargetOrganizationId,
