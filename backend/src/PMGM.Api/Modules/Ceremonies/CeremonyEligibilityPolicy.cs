@@ -85,10 +85,10 @@ public static class CeremonyEligibilityPolicy
                 "El insinuado no registra una publicación válida.");
         }
 
-        if (publication.Status is CeremonyCodes.PublicationStatus.Suspended or CeremonyCodes.PublicationStatus.Cancelled)
+        if (publication.Status is not CeremonyCodes.PublicationStatus.Published and not CeremonyCodes.PublicationStatus.Completed)
         {
             return new("publicacion_insinuado", "Publicación del insinuado", CeremonyCodes.ValidationStatus.Rejected,
-                "La publicación del insinuado está suspendida o cancelada.");
+                "La publicación del insinuado no se encuentra en un estado válido para computar el plazo.");
         }
 
         if (publication.CompletedDays < publication.RequiredDays)
