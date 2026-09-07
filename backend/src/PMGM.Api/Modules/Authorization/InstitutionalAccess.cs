@@ -28,6 +28,11 @@ public interface IInstitutionalAccessService
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
+    bool CanManageTreasuryRegularity(ClaimsPrincipal user);
+    bool CanManageHospitalariaRegularity(ClaimsPrincipal user);
+    bool CanReadInstitutionalRegularity(ClaimsPrincipal user);
+    bool CanEvaluateCeremonies(ClaimsPrincipal user);
+    bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
 }
 
 public sealed class InstitutionalAccessService : IInstitutionalAccessService
@@ -78,6 +83,40 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     public bool CanRunRegimenInteriorReports(ClaimsPrincipal user)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
+
+    public bool CanManageTreasuryRegularity(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranTesoreria);
+
+    public bool CanManageHospitalariaRegularity(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranHospitalaria);
+
+    public bool CanReadInstitutionalRegularity(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(
+               user,
+               InstitutionalRoles.GranLogiaAdmin,
+               InstitutionalRoles.RegimenInterior,
+               InstitutionalRoles.GranSecretaria,
+               InstitutionalRoles.GranTesoreria,
+               InstitutionalRoles.GranHospitalaria);
+
+    public bool CanEvaluateCeremonies(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria);
+
+    public bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId)
+    {
+        if (HasOrderScope(user) &&
+            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria))
+        {
+            return true;
+        }
+
+        return HasOrganizationClaim(user, organizationId) &&
+               HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
+    }
 
     private static bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
         => user.Claims.Any(x =>
