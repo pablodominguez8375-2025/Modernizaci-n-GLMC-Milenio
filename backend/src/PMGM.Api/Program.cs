@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Membership;
@@ -13,9 +14,22 @@ builder.Services.AddDbContext<PmgmDbContext>(options =>
     options.UseNpgsql(connectionString);
 });
 
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = builder.Configuration["Authentication:Authority"];
+        options.Audience = builder.Configuration["Authentication:Audience"];
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    });
+
+builder.Services.AddAuthorization();
+
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok(new
 {
