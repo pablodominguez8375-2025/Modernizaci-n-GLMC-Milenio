@@ -1,7 +1,7 @@
 # PMGM-BLG-001 — Backlog inicial del MVP
 
 **Estado:** Activo  
-**Versión:** 0.1
+**Versión:** 0.2
 
 ## Convención
 - P0: bloqueante/cimiento.
@@ -120,12 +120,45 @@
 **Aceptación:** una solicitud conserva trazabilidad completa de cambios de estado.
 
 ### PMGM-BLG-020 — Ceremonias
-**Prioridad:** P2
-**Aceptación:** solicitudes de ceremonia se gestionan desde el acceso único y quedan asociadas al miembro/Taller correspondiente.
+**Prioridad:** P1
+**Aceptación:** solicitudes de ceremonia se gestionan desde el acceso único, quedan asociadas al miembro/Taller correspondiente y exponen los antecedentes requeridos para su autorización.
 
 ### PMGM-BLG-021 — Reportes de Régimen Interior
-**Prioridad:** P2
-**Aceptación:** reportes usan la base maestra y respetan permisos y filtros institucionales.
+**Prioridad:** P1
+- total Orden y por Taller;
+- activos e inactivos;
+- retiros voluntarios y forzosos;
+- reintegros;
+- defunciones / Oriente Eterno;
+- Hermanos Past activos según clasificación institucional;
+- morosidad total y por Taller consumida desde Tesorería;
+- fechas de iniciación, aumento de salario, exaltación, retiro y reintegro;
+- historial de pertenencias, grados y cargos;
+- filtros por período, Taller, grado, estado y condición administrativa;
+- exportación autorizada PDF/XLSX/CSV.
+**Aceptación:** reportes usan la base maestra, respetan permisos institucionales y permiten navegar del agregado al detalle autorizado.
+
+### PMGM-BLG-034 — Historial de estados institucionales
+**Prioridad:** P1
+**Aceptación:** altas, estados activos/inactivos, retiros, reintegros y defunciones se registran como hitos históricos trazables, conservando fecha efectiva, motivo, actor y evidencia cuando corresponda.
+
+### PMGM-BLG-035 — Motor de consistencia histórica
+**Prioridad:** P1
+**Aceptación:** el sistema detecta secuencias imposibles o incompletas entre iniciación, aumento de salario, exaltación, retiro, reintegro, defunción y pertenencia, generando observaciones sin modificar automáticamente el dato.
+
+### PMGM-BLG-036 — Elegibilidad para ceremonias y reconocimientos
+**Prioridad:** P1
+- reglas parametrizables;
+- evaluación explicable;
+- estados Cumple/Observado/No cumple;
+- visualización de razones y antecedentes;
+- decisión humana obligatoria;
+- excepciones justificadas y auditadas.
+**Aceptación:** una autoridad autorizada puede revisar de forma consolidada los antecedentes que sustentan una ceremonia o reconocimiento y registrar una resolución trazable.
+
+### PMGM-BLG-037 — Tablero ejecutivo de Régimen Interior
+**Prioridad:** P1
+**Aceptación:** muestra totales y tendencias de miembros, retiros, reintegros, defunciones, grados, morosidad, solicitudes pendientes e inconsistencias, con filtros por Taller y período y acceso al detalle según permisos.
 
 ## EPIC 05 — Gestión Logial
 
@@ -187,10 +220,12 @@
 1. BLG-001 a 004.
 2. BLG-002 + 008 + 031 desde el inicio.
 3. BLG-005 y 006.
-4. BLG-009 a 014.
-5. BLG-015 a 019.
-6. BLG-022, 023, 025 y 026.
-7. Resto P2 según validación institucional.
+4. BLG-009 a 014 + BLG-034.
+5. BLG-018 + BLG-021 + BLG-035.
+6. BLG-019 + BLG-020 + BLG-036 + BLG-037.
+7. BLG-015 a 017 y resto de experiencia.
+8. BLG-022, 023, 025 y 026.
+9. Resto P2 según validación institucional.
 
 ## Criterio de MVP demostrable
 El MVP se considera demostrable cuando un usuario puede:
@@ -198,6 +233,9 @@ El MVP se considera demostrable cuando un usuario puede:
 2. acceder a un dashboard según rol;
 3. consultar/gestionar miembros y Talleres según permisos;
 4. ver pertenencias, grados, cargos y periodos;
-5. ejecutar al menos un flujo de Secretaría/Régimen Interior;
-6. acceder a documentos/biblioteca autorizados;
-7. dejar auditoría verificable de las operaciones anteriores.
+5. consultar reportes de Régimen Interior por Orden y Taller;
+6. verificar hitos y fechas históricas relevantes;
+7. detectar inconsistencias de estado/fechas;
+8. revisar antecedentes para al menos un flujo de ceremonia o reconocimiento;
+9. acceder a documentos/biblioteca autorizados;
+10. dejar auditoría verificable de las operaciones anteriores.
