@@ -8,8 +8,6 @@ namespace PMGM.Api.Modules.Privacy;
 
 public static class PrivacyEndpoints
 {
-    private const string PrivacyOfficerRole = "privacy_officer";
-
     public static IEndpointRouteBuilder MapPrivacyEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/privacy")
@@ -25,17 +23,13 @@ public static class PrivacyEndpoints
         return endpoints;
     }
 
-    private static bool CanManagePrivacy(HttpContext httpContext, IInstitutionalAccessService access)
-        => access.HasOrderScope(httpContext.User) &&
-           access.HasRole(httpContext.User, InstitutionalRoles.GranLogiaAdmin, PrivacyOfficerRole);
-
     private static async Task<IResult> GetDashboardAsync(
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!CanManagePrivacy(httpContext, access))
+        if (!access.CanManagePrivacy(httpContext.User))
         {
             return Results.Forbid();
         }
@@ -78,7 +72,7 @@ public static class PrivacyEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!CanManagePrivacy(httpContext, access))
+        if (!access.CanManagePrivacy(httpContext.User))
         {
             return Results.Forbid();
         }
@@ -116,7 +110,7 @@ public static class PrivacyEndpoints
         IAuditService audit,
         CancellationToken cancellationToken)
     {
-        if (!CanManagePrivacy(httpContext, access))
+        if (!access.CanManagePrivacy(httpContext.User))
         {
             return Results.Forbid();
         }
@@ -179,7 +173,7 @@ public static class PrivacyEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!CanManagePrivacy(httpContext, access))
+        if (!access.CanManagePrivacy(httpContext.User))
         {
             return Results.Forbid();
         }
@@ -219,7 +213,7 @@ public static class PrivacyEndpoints
         IAuditService audit,
         CancellationToken cancellationToken)
     {
-        if (!CanManagePrivacy(httpContext, access))
+        if (!access.CanManagePrivacy(httpContext.User))
         {
             return Results.Forbid();
         }
