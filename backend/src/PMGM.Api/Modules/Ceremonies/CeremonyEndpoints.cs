@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
@@ -36,6 +37,7 @@ public static class CeremonyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!IsCeremonyTypeValid(request.CeremonyType))
@@ -99,6 +101,20 @@ public static class CeremonyEndpoints
         };
 
         db.CeremonyRequests.Add(entity);
+        audit.Add(
+            httpContext,
+            "ceremony.request.created",
+            nameof(CeremonyRequest),
+            entity.Id.ToString(),
+            entity.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                entity.CeremonyType,
+                entity.ProposedDate,
+                entity.Status
+            });
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/ceremonias/solicitudes/{entity.Id}", new
@@ -119,6 +135,7 @@ public static class CeremonyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var canValidate = access.HasOrderScope(httpContext.User) &&
@@ -151,6 +168,20 @@ public static class CeremonyEndpoints
         };
 
         db.CeremonyValidations.Add(validation);
+        audit.Add(
+            httpContext,
+            "ceremony.internal_affairs_validation.recorded",
+            nameof(CeremonyValidation),
+            validation.Id.ToString(),
+            ceremony.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                validation.ValidationType,
+                validation.Status,
+                validation.AsOfDate
+            });
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new
@@ -169,6 +200,7 @@ public static class CeremonyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var ceremony = await db.CeremonyRequests
@@ -216,6 +248,21 @@ public static class CeremonyEndpoints
         };
 
         db.CandidatePublications.Add(publication);
+        audit.Add(
+            httpContext,
+            "ceremony.candidate_publication.started",
+            nameof(CandidatePublication),
+            publication.Id.ToString(),
+            publication.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                publication.PublishedFromUtc,
+                publication.RequiredDays,
+                publication.RuleCode,
+                publication.Status
+            });
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/ceremonias/solicitudes/{requestId}/publicacion-insinuado", new
@@ -258,6 +305,7 @@ public static class CeremonyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var canAuthorize = access.HasOrderScope(httpContext.User) &&
@@ -290,6 +338,25 @@ public static class CeremonyEndpoints
             ceremony.Status = context.Decision.Status == "observed"
                 ? CeremonyCodes.RequestStatus.Observed
                 : CeremonyCodes.RequestStatus.Rejected;
+
+            audit.Add(
+                httpContext,
+                "ceremony.authorization.rejected",
+                nameof(CeremonyRequest),
+                ceremony.Id.ToString(),
+                ceremony.OrganizationId,
+                AuditResults.Rejected,
+                new
+                {
+                    ceremony.CeremonyType,
+                    ceremony.Status,
+                    evaluatedAsOf = context.AsOfDate,
+                    blockingRequirements = context.Decision.Requirements
+                        .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
+                        .Select(x => x.Code)
+                        .ToArray()
+                });
+
             await db.SaveChangesAsync(cancellationToken);
             return Results.Conflict(new
             {
@@ -309,13 +376,32 @@ public static class CeremonyEndpoints
         }
 
         ceremony.Status = CeremonyCodes.RequestStatus.Authorized;
+        var authorizedAtUtc = DateTimeOffset.UtcNow;
+
+        audit.Add(
+            httpContext,
+            "ceremony.authorization.approved",
+            nameof(CeremonyRequest),
+            ceremony.Id.ToString(),
+            ceremony.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                ceremony.CeremonyType,
+                ceremony.Status,
+                authorizedAtUtc,
+                evaluatedAsOf = context.AsOfDate,
+                publicationRequiredDays = context.Publication?.RequiredDays,
+                publicationCompletedDays = context.Publication?.CompletedDays
+            });
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new
         {
             ceremony.Id,
             ceremony.Status,
-            authorizedAtUtc = DateTimeOffset.UtcNow,
+            authorizedAtUtc,
             eligibility = ToEligibilityResponse(context)
         });
     }
@@ -378,6 +464,7 @@ public static class CeremonyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var canManageRule = access.HasOrderScope(httpContext.User) &&
@@ -426,6 +513,21 @@ public static class CeremonyEndpoints
         };
 
         db.InstitutionalRuleSettings.Add(rule);
+        audit.Add(
+            httpContext,
+            "ceremony.rule.initiation_publication.versioned",
+            nameof(InstitutionalRuleSetting),
+            rule.Id.ToString(),
+            null,
+            AuditResults.Success,
+            new
+            {
+                rule.Code,
+                minimumDays = request.MinimumDays,
+                rule.EffectiveFrom,
+                rule.Status
+            });
+
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created("/api/ceremonias/reglas/publicacion-iniciacion", new

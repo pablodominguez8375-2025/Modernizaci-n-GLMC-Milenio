@@ -33,6 +33,9 @@
 - proyección inter-módulo `ceremony-regularity` que entrega a Régimen Interior/Gran Secretaría sólo estado, fecha de corte y cumplimiento;
 - separación entre vistas administrativas de Tesorería/Hospitalaria y DTOs mínimos consumibles por otros módulos;
 - congelamiento de referencias de validación al momento de autorizar la ceremonia;
+- auditoría persistente de creación de solicitud, validación de Régimen Interior, publicación de insinuado, autorización/rechazo y versionado de regla de publicación;
+- metadatos de auditoría minimizados: no duplican `PersonId`, `MemberId`, notas, razones ni referencias internas;
+- actor y correlation ID resueltos centralmente por `IAuditService` para las operaciones auditadas;
 - pruebas unitarias para bloqueos de Tesorería, Hospitalaria y plazo de publicación;
 - pruebas de superficie para impedir que DTOs públicos/inter-módulo incorporen IDs, notas o referencias administrativas.
 
@@ -41,7 +44,7 @@
 - configuración administrativa de campos visibles;
 - mecanismo de observaciones si la institución lo habilita;
 - integración con plantillas y correlativos de Gran Secretaría;
-- auditoría completa de todos los endpoints de ceremonia con actor/correlation ID.
+- pruebas de integración PostgreSQL del flujo completo solicitud → validaciones → autorización.
 
 ## Criterios de aceptación
 1. No se autoriza ceremonia con validación financiera no habilitante.
@@ -53,3 +56,4 @@
 7. Gran Secretaría puede identificar exactamente qué requisito bloquea la autorización.
 8. Tesorería y Hospitalaria no entregan notas, referencias o IDs internos a consumidores que sólo requieren regularidad.
 9. Ninguna ruta de Portal de Insinuados expone `PersonId`, `OrganizationId`, `CeremonyRequestId` ni IDs de publicación.
+10. Las operaciones críticas de ceremonia dejan `AuditEvent` con actor, acción, entidad, resultado, organización y correlation ID.
