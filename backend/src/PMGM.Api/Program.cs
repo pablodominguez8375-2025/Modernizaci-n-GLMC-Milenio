@@ -1,4 +1,6 @@
+using System.Globalization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
@@ -8,6 +10,15 @@ using PMGM.Api.Modules.RegimenInterior;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+builder.Services.AddLocalization();
+builder.Services.Configure<RequestLocalizationOptions>(options =>
+{
+    var supportedCultures = new[] { new CultureInfo("es-CL") };
+    options.DefaultRequestCulture = new RequestCulture("es-CL");
+    options.SupportedCultures = supportedCultures;
+    options.SupportedUICultures = supportedCultures;
+});
+
 builder.Services.AddDbContext<PmgmDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("MainDatabase")
@@ -31,6 +42,7 @@ builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessSe
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UseRequestLocalization();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -53,8 +65,11 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.3.0",
-    runtime = ".NET 10"
+    version = "0.4.0",
+    runtime = ".NET 10",
+    culture = "es-CL",
+    institutionalTimeZone = "America/Santiago",
+    defaultCurrency = "CLP"
 }));
 
 app.MapMembershipEndpoints();
