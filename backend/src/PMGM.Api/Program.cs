@@ -88,6 +88,7 @@ app.MapCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
 app.MapPrivacyEndpoints();
 app.MapPrivacyRiskEndpoints();
+app.MapPrivacyProcessorEndpoints();
 
 app.Run();
 
