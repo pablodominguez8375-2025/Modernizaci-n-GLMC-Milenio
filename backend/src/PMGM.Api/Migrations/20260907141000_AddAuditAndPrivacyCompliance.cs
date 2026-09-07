@@ -205,19 +205,85 @@ public partial class AddAuditAndPrivacyCompliance : Migration
                 table.ForeignKey("FK_privacy_impact_assessments_data_processing_activities_DataProcessingActivityId", x => x.DataProcessingActivityId, "core", "data_processing_activities", "Id", onDelete: ReferentialAction.Restrict);
             });
 
-        migrationBuilder.CreateIndex("IX_audit_events_OccurredAtUtc", "core", "audit_events", "OccurredAtUtc");
-        migrationBuilder.CreateIndex("IX_audit_events_EntityType_EntityId", "core", "audit_events", new[] { "EntityType", "EntityId" });
-        migrationBuilder.CreateIndex("IX_audit_events_CorrelationId", "core", "audit_events", "CorrelationId");
-        migrationBuilder.CreateIndex("IX_data_processors_Name_Service", "core", "data_processors", new[] { "Name", "Service" });
-        migrationBuilder.CreateIndex("IX_data_retention_policies_Code_EffectiveFrom", "core", "data_retention_policies", new[] { "Code", "EffectiveFrom" }, unique: true);
-        migrationBuilder.CreateIndex("IX_privacy_security_incidents_Status_DetectedAtUtc", "core", "privacy_security_incidents", new[] { "Status", "DetectedAtUtc" });
-        migrationBuilder.CreateIndex("IX_data_subject_requests_PersonId", "core", "data_subject_requests", "PersonId");
-        migrationBuilder.CreateIndex("IX_data_subject_requests_Status_DueDate", "core", "data_subject_requests", new[] { "Status", "DueDate" });
-        migrationBuilder.CreateIndex("IX_data_processing_activities_RetentionPolicyId", "core", "data_processing_activities", "RetentionPolicyId");
-        migrationBuilder.CreateIndex("IX_data_processing_activities_Code_EffectiveFrom", "core", "data_processing_activities", new[] { "Code", "EffectiveFrom" }, unique: true);
-        migrationBuilder.CreateIndex("IX_international_data_transfers_DataProcessorId", "core", "international_data_transfers", "DataProcessorId");
-        migrationBuilder.CreateIndex("IX_international_data_transfers_DataProcessingActivityId_DestinationCountry_EffectiveFrom", "core", "international_data_transfers", new[] { "DataProcessingActivityId", "DestinationCountry", "EffectiveFrom" });
-        migrationBuilder.CreateIndex("IX_privacy_impact_assessments_DataProcessingActivityId_CreatedAtUtc", "core", "privacy_impact_assessments", new[] { "DataProcessingActivityId", "CreatedAtUtc" });
+        migrationBuilder.CreateIndex(
+            name: "IX_audit_events_OccurredAtUtc",
+            schema: "core",
+            table: "audit_events",
+            column: "OccurredAtUtc");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_audit_events_EntityType_EntityId",
+            schema: "core",
+            table: "audit_events",
+            columns: new[] { "EntityType", "EntityId" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_audit_events_CorrelationId",
+            schema: "core",
+            table: "audit_events",
+            column: "CorrelationId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_data_processors_Name_Service",
+            schema: "core",
+            table: "data_processors",
+            columns: new[] { "Name", "Service" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_data_retention_policies_Code_EffectiveFrom",
+            schema: "core",
+            table: "data_retention_policies",
+            columns: new[] { "Code", "EffectiveFrom" },
+            unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "IX_privacy_security_incidents_Status_DetectedAtUtc",
+            schema: "core",
+            table: "privacy_security_incidents",
+            columns: new[] { "Status", "DetectedAtUtc" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_data_subject_requests_PersonId",
+            schema: "core",
+            table: "data_subject_requests",
+            column: "PersonId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_data_subject_requests_Status_DueDate",
+            schema: "core",
+            table: "data_subject_requests",
+            columns: new[] { "Status", "DueDate" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_data_processing_activities_RetentionPolicyId",
+            schema: "core",
+            table: "data_processing_activities",
+            column: "RetentionPolicyId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_data_processing_activities_Code_EffectiveFrom",
+            schema: "core",
+            table: "data_processing_activities",
+            columns: new[] { "Code", "EffectiveFrom" },
+            unique: true);
+
+        migrationBuilder.CreateIndex(
+            name: "IX_international_data_transfers_DataProcessorId",
+            schema: "core",
+            table: "international_data_transfers",
+            column: "DataProcessorId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_international_data_transfers_DataProcessingActivityId_DestinationCountry_EffectiveFrom",
+            schema: "core",
+            table: "international_data_transfers",
+            columns: new[] { "DataProcessingActivityId", "DestinationCountry", "EffectiveFrom" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_privacy_impact_assessments_DataProcessingActivityId_CreatedAtUtc",
+            schema: "core",
+            table: "privacy_impact_assessments",
+            columns: new[] { "DataProcessingActivityId", "CreatedAtUtc" });
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
