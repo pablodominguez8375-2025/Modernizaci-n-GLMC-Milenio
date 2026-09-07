@@ -8,7 +8,8 @@ public static class MembershipEndpoints
     public static IEndpointRouteBuilder MapMembershipEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/members")
-            .WithTags("Membership");
+            .WithTags("Membership")
+            .RequireAuthorization();
 
         group.MapGet("/{id:guid}/history", GetMemberHistoryAsync);
         return endpoints;
