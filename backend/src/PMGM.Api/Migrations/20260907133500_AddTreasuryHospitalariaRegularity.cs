@@ -89,33 +89,29 @@ public partial class AddTreasuryHospitalariaRegularity : Migration
             table: "hospitalaria_regularity_snapshots",
             columns: new[] { "OrganizationId", "AsOfDate" });
 
-        migrationBuilder.InsertData(
-            schema: "core",
-            table: "institutional_rule_settings",
-            columns: new[]
-            {
-                "Id", "Code", "Value", "EffectiveFrom", "EffectiveTo", "Status", "SourceReference", "CreatedAtUtc"
-            },
-            values: new object[]
-            {
-                Guid.Parse("25000000-0000-0000-0000-000000000020"),
-                "initiation.publication.minimum_days",
-                "20",
-                new DateOnly(2026, 9, 7),
-                null!,
-                "active",
-                "PMGM-REQ-025",
-                new DateTimeOffset(2026, 9, 7, 0, 0, 0, TimeSpan.Zero)
-            });
+        migrationBuilder.Sql(
+            """
+            INSERT INTO core.institutional_rule_settings
+                ("Id", "Code", "Value", "EffectiveFrom", "EffectiveTo", "Status", "SourceReference", "CreatedAtUtc")
+            VALUES
+                ('25000000-0000-0000-0000-000000000020'::uuid,
+                 'initiation.publication.minimum_days',
+                 '20',
+                 DATE '2026-09-07',
+                 NULL,
+                 'active',
+                 'PMGM-REQ-025',
+                 TIMESTAMPTZ '2026-09-07 00:00:00+00');
+            """);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DeleteData(
-            schema: "core",
-            table: "institutional_rule_settings",
-            keyColumn: "Id",
-            keyValue: Guid.Parse("25000000-0000-0000-0000-000000000020"));
+        migrationBuilder.Sql(
+            """
+            DELETE FROM core.institutional_rule_settings
+            WHERE "Id" = '25000000-0000-0000-0000-000000000020'::uuid;
+            """);
 
         migrationBuilder.DropTable(name: "financial_regularity_snapshots", schema: "core");
         migrationBuilder.DropTable(name: "hospitalaria_regularity_snapshots", schema: "core");
