@@ -69,8 +69,20 @@ public partial class AddMembershipHistory : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_memberships", x => x.Id);
-                table.ForeignKey("FK_memberships_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_memberships_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_memberships_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_memberships_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -91,8 +103,20 @@ public partial class AddMembershipHistory : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_institutional_status_events", x => x.Id);
-                table.ForeignKey("FK_institutional_status_events_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_institutional_status_events_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_institutional_status_events_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_institutional_status_events_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -112,8 +136,20 @@ public partial class AddMembershipHistory : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_degree_events", x => x.Id);
-                table.ForeignKey("FK_degree_events_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_degree_events_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_degree_events_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_degree_events_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -134,8 +170,20 @@ public partial class AddMembershipHistory : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_office_assignments", x => x.Id);
-                table.ForeignKey("FK_office_assignments_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_office_assignments_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_office_assignments_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_office_assignments_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -162,11 +210,41 @@ public partial class AddMembershipHistory : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_member_transfers", x => x.Id);
-                table.ForeignKey("FK_member_transfers_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_member_transfers_memberships_SourceMembershipId", x => x.SourceMembershipId, "core", "memberships", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_member_transfers_memberships_TargetMembershipId", x => x.TargetMembershipId, "core", "memberships", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_member_transfers_organizations_SourceOrganizationId", x => x.SourceOrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_member_transfers_organizations_TargetOrganizationId", x => x.TargetOrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_member_transfers_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_member_transfers_memberships_SourceMembershipId",
+                    column: x => x.SourceMembershipId,
+                    principalSchema: "core",
+                    principalTable: "memberships",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_member_transfers_memberships_TargetMembershipId",
+                    column: x => x.TargetMembershipId,
+                    principalSchema: "core",
+                    principalTable: "memberships",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_member_transfers_organizations_SourceOrganizationId",
+                    column: x => x.SourceOrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_member_transfers_organizations_TargetOrganizationId",
+                    column: x => x.TargetOrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(name: "IX_members_PersonId", schema: "core", table: "members", column: "PersonId", unique: true);
