@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership.Entities;
 using MembershipEntity = PMGM.Api.Modules.Membership.Entities.Membership;
@@ -27,6 +28,7 @@ public static class TransferEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var sourceMembership = await db.Memberships
@@ -91,6 +93,8 @@ public static class TransferEndpoints
         };
 
         db.MemberTransfers.Add(transfer);
+        audit.Add(httpContext, "membership.transfer.requested", nameof(MemberTransfer), transfer.Id.ToString(), sourceMembership.OrganizationId, AuditResults.Success,
+            new { transfer.MemberId, transfer.SourceOrganizationId, transfer.TargetOrganizationId, transfer.ProposedEffectiveDate });
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/members/{memberId}/transfers/{transfer.Id}", new
@@ -111,6 +115,7 @@ public static class TransferEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!access.CanApproveTransfers(httpContext.User))
@@ -140,6 +145,8 @@ public static class TransferEndpoints
         transfer.Resolution = request.Resolution;
         transfer.Status = MembershipCodes.TransferStatus.Approved;
 
+        audit.Add(httpContext, "membership.transfer.approved", nameof(MemberTransfer), transfer.Id.ToString(), transfer.SourceOrganizationId, AuditResults.Success,
+            new { transfer.MemberId, transfer.SourceOrganizationId, transfer.TargetOrganizationId, transfer.ApprovedEffectiveDate });
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new
@@ -157,6 +164,7 @@ public static class TransferEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!access.CanApproveTransfers(httpContext.User))
@@ -239,6 +247,17 @@ public static class TransferEndpoints
             EvidenceReference = transfer.EvidenceReference,
             Notes = $"Transferencia desde {transfer.SourceOrganizationId} hacia {transfer.TargetOrganizationId}."
         });
+
+        audit.Add(httpContext, "membership.transfer.executed", nameof(MemberTransfer), transfer.Id.ToString(), transfer.SourceOrganizationId, AuditResults.Success,
+            new
+            {
+                transfer.MemberId,
+                transfer.SourceOrganizationId,
+                transfer.TargetOrganizationId,
+                effectiveDate,
+                sourceMembershipId = sourceMembership.Id,
+                targetMembershipId = targetMembership.Id
+            });
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
