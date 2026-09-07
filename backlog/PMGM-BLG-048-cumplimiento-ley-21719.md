@@ -13,6 +13,10 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - `IAuditService` conectado al `PmgmDbContext`;
 - `DataProcessingActivity` para inventario/versionado de actividades de tratamiento;
 - `DataRetentionPolicy` para conservación, revisión, anonimización o supresión;
+- `DataRetentionHold` para legal hold con autoridad identificada, motivo, evidencia y vigencia;
+- `DataRetentionEvaluation` y motor de decisión para calcular vencimiento, acción recomendada y bloqueo por legal hold;
+- API para listar/crear/liberar legal holds y ejecutar/listar evaluaciones de retención;
+- migración PostgreSQL para legal holds y evaluaciones de retención;
 - `DataSubjectRequest` para acceso, rectificación, supresión, oposición, portabilidad y bloqueo;
 - `DataProcessor` para encargados/proveedores;
 - `InternationalDataTransfer` para transferencias internacionales;
@@ -31,19 +35,19 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - API de transferencias internacionales;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos y acciones de retención;
-- auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores y transferencias.
+- pruebas unitarias del motor de decisión de retención;
+- auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias y legal holds;
+- gate estructural de privacidad ejecutado automáticamente en CI/CD.
 
 ## Alcance pendiente
 - actualización/versionado y baja lógica de encargados/proveedores;
 - actualización/versionado y baja lógica de transferencias internacionales;
 - cálculo de plazos legales desde configuración jurídica versionada;
 - workflow más detallado de notificación y comunicaciones de incidentes;
-- motor automático de aplicación de políticas de retención;
+- motor automático de ejecución material de políticas de retención sobre entidades soportadas;
 - anonimización/pseudonimización ejecutable;
-- `legal hold` con autoridad, motivo y vigencia;
 - catálogo de clasificación de datos por campo/módulo;
 - DTOs mínimos adicionales por finalidad;
-- gate automático de privacidad en CI/CD;
 - pruebas de integración contra PostgreSQL;
 - revisión jurídica final previa a producción.
 
@@ -57,7 +61,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 7. tratamientos de alto riesgo deben asociarse a una EIPD aprobada antes de producción;
 8. transferencias internacionales y encargados deben quedar inventariados;
 9. operaciones críticas deben dejar auditoría verificable;
-10. Portal de Insinuados debe exponer sólo la proyección mínima autorizada.
+10. Portal de Insinuados debe exponer sólo la proyección mínima autorizada;
+11. un legal hold vigente debe impedir toda ejecución de eliminación o anonimización asociada a la política afectada.
 
 ## Criterios de aceptación
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
@@ -71,4 +76,5 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 9. tratamientos de alto riesgo permiten registrar y aprobar EIPD previa;
 10. operaciones de riesgo dejan auditoría;
 11. el gate de release bloquea producción si faltan finalidad, base jurídica, conservación o controles de acceso;
-12. se realiza revisión de preparación legal antes del 01-12-2026.
+12. las evaluaciones de retención calculan vencimiento y no permiten ejecutar una acción destructiva mientras exista legal hold vigente;
+13. se realiza revisión de preparación legal antes del 01-12-2026.
