@@ -16,6 +16,7 @@ public static class InstitutionalRoles
     public const string GranSecretaria = "grand_secretariat";
     public const string GranTesoreria = "grand_treasury";
     public const string GranHospitalaria = "grand_hospitalaria";
+    public const string PrivacyOfficer = "privacy_officer";
     public const string TallerAdmin = "lodge_admin";
     public const string TallerSecretaria = "lodge_secretariat";
 }
@@ -33,6 +34,7 @@ public interface IInstitutionalAccessService
     bool CanReadInstitutionalRegularity(ClaimsPrincipal user);
     bool CanEvaluateCeremonies(ClaimsPrincipal user);
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
+    bool CanManagePrivacy(ClaimsPrincipal user);
 }
 
 public sealed class InstitutionalAccessService : IInstitutionalAccessService
@@ -57,7 +59,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
                 InstitutionalRoles.RegimenInterior,
                 InstitutionalRoles.GranSecretaria,
                 InstitutionalRoles.GranTesoreria,
-                InstitutionalRoles.GranHospitalaria))
+                InstitutionalRoles.GranHospitalaria,
+                InstitutionalRoles.PrivacyOfficer))
         {
             return true;
         }
@@ -117,6 +120,10 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         return HasOrganizationClaim(user, organizationId) &&
                HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
     }
+
+    public bool CanManagePrivacy(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.PrivacyOfficer);
 
     private static bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
         => user.Claims.Any(x =>
