@@ -125,7 +125,13 @@ public partial class AddAuditAndPrivacyCompliance : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_data_subject_requests", x => x.Id);
-                table.ForeignKey("FK_data_subject_requests_people_PersonId", x => x.PersonId, "core", "people", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_data_subject_requests_people_PersonId",
+                    column: x => x.PersonId,
+                    principalSchema: "core",
+                    principalTable: "people",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -154,7 +160,13 @@ public partial class AddAuditAndPrivacyCompliance : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_data_processing_activities", x => x.Id);
-                table.ForeignKey("FK_data_processing_activities_data_retention_policies_RetentionPolicyId", x => x.RetentionPolicyId, "core", "data_retention_policies", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_data_processing_activities_data_retention_policies_RetentionPolicyId",
+                    column: x => x.RetentionPolicyId,
+                    principalSchema: "core",
+                    principalTable: "data_retention_policies",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -177,8 +189,20 @@ public partial class AddAuditAndPrivacyCompliance : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_international_data_transfers", x => x.Id);
-                table.ForeignKey("FK_international_data_transfers_data_processing_activities_DataProcessingActivityId", x => x.DataProcessingActivityId, "core", "data_processing_activities", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_international_data_transfers_data_processors_DataProcessorId", x => x.DataProcessorId, "core", "data_processors", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_international_data_transfers_data_processing_activities_DataProcessingActivityId",
+                    column: x => x.DataProcessingActivityId,
+                    principalSchema: "core",
+                    principalTable: "data_processing_activities",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_international_data_transfers_data_processors_DataProcessorId",
+                    column: x => x.DataProcessorId,
+                    principalSchema: "core",
+                    principalTable: "data_processors",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -202,7 +226,13 @@ public partial class AddAuditAndPrivacyCompliance : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_privacy_impact_assessments", x => x.Id);
-                table.ForeignKey("FK_privacy_impact_assessments_data_processing_activities_DataProcessingActivityId", x => x.DataProcessingActivityId, "core", "data_processing_activities", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_privacy_impact_assessments_data_processing_activities_DataProcessingActivityId",
+                    column: x => x.DataProcessingActivityId,
+                    principalSchema: "core",
+                    principalTable: "data_processing_activities",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(
