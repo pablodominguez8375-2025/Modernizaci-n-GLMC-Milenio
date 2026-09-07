@@ -77,6 +77,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 app.MapMembershipEndpoints();
 app.MapTransferEndpoints();
 app.MapRegimenInteriorEndpoints();
+app.MapCandidatePublicationEndpoints();
 
 app.Run();
 
