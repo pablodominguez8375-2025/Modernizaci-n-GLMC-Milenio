@@ -5,8 +5,10 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Hospitalaria;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.RegimenInterior;
+using PMGM.Api.Modules.Treasury;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,7 +69,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.5.0",
+    version = "0.6.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -77,6 +79,9 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 app.MapMembershipEndpoints();
 app.MapTransferEndpoints();
 app.MapRegimenInteriorEndpoints();
+app.MapTreasuryEndpoints();
+app.MapHospitalariaEndpoints();
+app.MapCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
 
 app.Run();
