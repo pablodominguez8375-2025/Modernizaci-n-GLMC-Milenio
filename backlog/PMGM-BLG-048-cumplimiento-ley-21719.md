@@ -22,25 +22,25 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - rol técnico `privacy_officer` con alcance de Orden;
 - autorización centralizada `CanManagePrivacy`;
 - dashboard inicial de privacidad;
-- API para actividades de tratamiento;
-- API para solicitudes de derechos;
-- API para políticas de retención;
-- API para incidentes;
-- API para EIPD;
+- API de actividades de tratamiento;
+- API de solicitudes de derechos, incluida resolución/cierre con verificación de identidad;
+- API de políticas de retención;
+- API de incidentes, incluida evaluación, decisión de notificación y cierre;
+- API de EIPD, incluida aprobación formal y registro de riesgo residual;
+- API de encargados/proveedores;
+- API de transferencias internacionales;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos y acciones de retención;
-- auditoría de creación de actividades, solicitudes, incidentes, EIPD y políticas de retención.
+- auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores y transferencias.
 
 ## Alcance pendiente
-- CRUD/versionado completo de encargados/proveedores;
-- CRUD/versionado de transferencias internacionales;
-- flujo de resolución/cierre de derechos de titulares;
+- actualización/versionado y baja lógica de encargados/proveedores;
+- actualización/versionado y baja lógica de transferencias internacionales;
 - cálculo de plazos legales desde configuración jurídica versionada;
-- workflow de evaluación/notificación de incidentes;
-- aprobación/cierre formal de EIPD;
+- workflow más detallado de notificación y comunicaciones de incidentes;
 - motor automático de aplicación de políticas de retención;
 - anonimización/pseudonimización ejecutable;
-- legal hold;
+- `legal hold` con autoridad, motivo y vigencia;
 - catálogo de clasificación de datos por campo/módulo;
 - DTOs mínimos adicionales por finalidad;
 - gate automático de privacidad en CI/CD;
@@ -54,7 +54,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 4. todo acceso se limita por rol, alcance y finalidad;
 5. derechos de titulares deben ser trazables desde recepción a cierre;
 6. incidentes deben registrar evaluación, medidas y decisiones de notificación;
-7. tratamientos de alto riesgo deben poder asociarse a una EIPD;
+7. tratamientos de alto riesgo deben asociarse a una EIPD aprobada antes de producción;
 8. transferencias internacionales y encargados deben quedar inventariados;
 9. operaciones críticas deben dejar auditoría verificable;
 10. Portal de Insinuados debe exponer sólo la proyección mínima autorizada.
@@ -62,13 +62,13 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 ## Criterios de aceptación
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
 2. cada categoría de dato tiene clasificación y política de conservación;
-3. el sistema puede registrar y seguir solicitudes de derechos;
+3. el sistema puede registrar, seguir, resolver y cerrar solicitudes de derechos;
 4. las vistas de Portal de Insinuados no exponen datos restringidos por defecto;
 5. Gran Secretaría consume estados mínimos de Tesorería/Hospitalaria;
 6. proveedores con acceso a datos están inventariados;
 7. transferencias internacionales están identificadas y revisables;
-8. incidentes pueden registrarse, evaluarse y documentarse;
-9. tratamientos de alto riesgo permiten registrar EIPD previa;
+8. incidentes pueden registrarse, evaluarse, documentarse y cerrarse;
+9. tratamientos de alto riesgo permiten registrar y aprobar EIPD previa;
 10. operaciones de riesgo dejan auditoría;
 11. el gate de release bloquea producción si faltan finalidad, base jurídica, conservación o controles de acceso;
 12. se realiza revisión de preparación legal antes del 01-12-2026.
