@@ -35,18 +35,20 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - API de EIPD, incluida aprobación formal y registro de riesgo residual;
 - API de encargados/proveedores;
 - API de transferencias internacionales;
+- catálogo inicial versionado de clasificación de datos por módulo/entidad/campo;
+- guardrails automáticos de clasificación: sensibles/restringidos fuera de logs, proyección pública explícita y no exportable por defecto;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos y acciones de retención;
 - pruebas unitarias del motor de decisión de retención;
 - auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias, legal holds y bajas/versiones de terceros;
-- gate estructural de privacidad ejecutado automáticamente en CI/CD.
+- gate estructural de privacidad y gate de clasificación de datos ejecutados automáticamente en CI/CD.
 
 ## Alcance pendiente
 - cálculo de plazos legales desde configuración jurídica versionada;
 - workflow más detallado de notificación y comunicaciones de incidentes;
 - motor automático de ejecución material de políticas de retención sobre entidades soportadas;
 - anonimización/pseudonimización ejecutable;
-- catálogo de clasificación de datos por campo/módulo;
+- ampliar el catálogo de clasificación a todo nuevo campo incorporado al modelo;
 - DTOs mínimos adicionales por finalidad;
 - pruebas de integración contra PostgreSQL;
 - revisión jurídica final previa a producción.
@@ -62,7 +64,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 8. transferencias internacionales y encargados deben quedar inventariados y versionados sin pérdida de historial;
 9. operaciones críticas deben dejar auditoría verificable;
 10. Portal de Insinuados debe exponer sólo la proyección mínima autorizada;
-11. un legal hold vigente debe impedir toda ejecución de eliminación o anonimización asociada a la política afectada.
+11. un legal hold vigente debe impedir toda ejecución de eliminación o anonimización asociada a la política afectada;
+12. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada.
 
 ## Criterios de aceptación
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
@@ -77,4 +80,5 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 10. operaciones de riesgo dejan auditoría;
 11. el gate de release bloquea producción si faltan finalidad, base jurídica, conservación o controles de acceso;
 12. las evaluaciones de retención calculan vencimiento y no permiten ejecutar una acción destructiva mientras exista legal hold vigente;
-13. se realiza revisión de preparación legal antes del 01-12-2026.
+13. el gate de clasificación rechaza datos sensibles/restringidos habilitados para logs o proyecciones públicas inconsistentes;
+14. se realiza revisión de preparación legal antes del 01-12-2026.

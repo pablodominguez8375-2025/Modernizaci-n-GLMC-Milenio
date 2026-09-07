@@ -21,6 +21,9 @@ jobs:
       - name: Privacy gate — Ley 21.719
         run: python3 tests/privacy_gate.py
 
+      - name: Data classification gate
+        run: python3 tests/data_classification_gate.py
+
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
