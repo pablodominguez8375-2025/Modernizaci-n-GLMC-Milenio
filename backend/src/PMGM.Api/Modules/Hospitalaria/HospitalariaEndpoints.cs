@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 
@@ -25,6 +26,7 @@ public static class HospitalariaEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!access.CanManageHospitalariaRegularity(httpContext.User))
@@ -53,6 +55,8 @@ public static class HospitalariaEndpoints
         };
 
         db.HospitalariaRegularitySnapshots.Add(snapshot);
+        audit.Add(httpContext, "hospitalaria.workshop_regularity.recorded", nameof(HospitalariaRegularitySnapshot), snapshot.Id.ToString(), organizationId, AuditResults.Success,
+            new { snapshot.Status, snapshot.AsOfDate });
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/hospitalaria/talleres/{organizationId}/regularidad", ToResponse(snapshot));
