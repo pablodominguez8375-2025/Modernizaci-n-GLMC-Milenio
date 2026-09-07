@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 
 namespace PMGM.Api.Modules.Ceremonies;
 
@@ -16,7 +17,9 @@ public static class CandidatePublicationEndpoints
     }
 
     private static async Task<IResult> GetActivePublicationsAsync(
+        HttpContext httpContext,
         PmgmDbContext db,
+        IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -52,20 +55,22 @@ public static class CandidatePublicationEndpoints
             })
             .ToListAsync(cancellationToken);
 
-        var result = rows.Select(x => new
-        {
-            x.Id,
-            x.CeremonyRequestId,
-            x.candidate,
-            x.workshop,
-            x.PublishedFromUtc,
-            x.PublishedUntilUtc,
-            x.RequiredDays,
-            elapsedDays = Math.Max(0, (int)Math.Floor((now - x.PublishedFromUtc).TotalDays)),
-            complianceDateUtc = x.PublishedFromUtc.AddDays(x.RequiredDays),
-            x.RuleCode,
-            x.Status
-        });
+        var result = rows
+            .Where(x => access.CanReadOrganization(httpContext.User, x.workshop.Id))
+            .Select(x => new
+            {
+                x.Id,
+                x.CeremonyRequestId,
+                x.candidate,
+                x.workshop,
+                x.PublishedFromUtc,
+                x.PublishedUntilUtc,
+                x.RequiredDays,
+                elapsedDays = Math.Max(0, (int)Math.Floor((now - x.PublishedFromUtc).TotalDays)),
+                complianceDateUtc = x.PublishedFromUtc.AddDays(x.RequiredDays),
+                x.RuleCode,
+                x.Status
+            });
 
         return Results.Ok(result);
     }
