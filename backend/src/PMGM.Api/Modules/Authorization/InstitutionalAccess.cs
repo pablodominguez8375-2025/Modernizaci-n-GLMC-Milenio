@@ -15,6 +15,7 @@ public static class InstitutionalRoles
     public const string RegimenInterior = "internal_affairs";
     public const string GranSecretaria = "grand_secretariat";
     public const string GranTesoreria = "grand_treasury";
+    public const string GranHospitalaria = "grand_hospitalaria";
     public const string TallerAdmin = "lodge_admin";
     public const string TallerSecretaria = "lodge_secretariat";
 }
@@ -50,7 +51,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
                 InstitutionalRoles.GranLogiaAdmin,
                 InstitutionalRoles.RegimenInterior,
                 InstitutionalRoles.GranSecretaria,
-                InstitutionalRoles.GranTesoreria))
+                InstitutionalRoles.GranTesoreria,
+                InstitutionalRoles.GranHospitalaria))
         {
             return true;
         }
