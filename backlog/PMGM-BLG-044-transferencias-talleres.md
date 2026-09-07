@@ -1,7 +1,8 @@
 # PMGM-BLG-044 — Transferencias entre Talleres
 
 **Prioridad:** P1  
-**EPIC:** Base maestra institucional / Régimen Interior
+**EPIC:** Base maestra institucional / Régimen Interior  
+**Estado:** EN PROGRESO
 
 ## Alcance
 - mantener identidad única del miembro;
@@ -15,6 +16,27 @@
 - auditar actor y cambios;
 - reportar entradas/salidas y trayectoria de Talleres;
 - aplicar permisos diferenciados sobre datos históricos locales.
+
+## Implementado en v0.3
+- entidad `MemberTransfer` persistente;
+- solicitud autenticada de transferencia;
+- autorización por alcance de Taller o Gran Logia;
+- aprobación por Régimen Interior / administración Gran Logia;
+- ejecución transaccional;
+- cierre de pertenencia de origen sin eliminarla;
+- creación de nueva pertenencia en Taller receptor para el mismo `MemberId`;
+- vínculo entre transferencia y pertenencia nueva;
+- rechazo de doble pertenencia vigente en el destino para la fecha efectiva;
+- registro de hito `workshop_transfer`;
+- historial consolidado protegido por alcance institucional.
+
+## Pendiente
+- auditoría transversal con actor/correlation ID en tabla dedicada;
+- rechazo/cancelación formal de transferencias;
+- documentos oficiales asociados a la resolución;
+- notificaciones a Taller de origen y receptor;
+- pruebas de integración PostgreSQL para rollback y concurrencia;
+- reportes específicos de entradas/salidas por Taller.
 
 ## Criterios de aceptación
 1. cambiar de Taller no crea un segundo Miembro;
