@@ -20,6 +20,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - `DataSubjectRequest` para acceso, rectificación, supresión, oposición, portabilidad y bloqueo;
 - `DataProcessor` para encargados/proveedores;
 - `InternationalDataTransfer` para transferencias internacionales;
+- versionado no destructivo y baja lógica de encargados/proveedores;
+- versionado no destructivo y baja lógica de transferencias internacionales;
 - `PrivacySecurityIncident` para incidentes de privacidad/seguridad;
 - `PrivacyImpactAssessment` para EIPD/DPIA;
 - migración `AddAuditAndPrivacyCompliance` para PostgreSQL;
@@ -36,12 +38,10 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos y acciones de retención;
 - pruebas unitarias del motor de decisión de retención;
-- auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias y legal holds;
+- auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias, legal holds y bajas/versiones de terceros;
 - gate estructural de privacidad ejecutado automáticamente en CI/CD.
 
 ## Alcance pendiente
-- actualización/versionado y baja lógica de encargados/proveedores;
-- actualización/versionado y baja lógica de transferencias internacionales;
 - cálculo de plazos legales desde configuración jurídica versionada;
 - workflow más detallado de notificación y comunicaciones de incidentes;
 - motor automático de ejecución material de políticas de retención sobre entidades soportadas;
@@ -59,7 +59,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 5. derechos de titulares deben ser trazables desde recepción a cierre;
 6. incidentes deben registrar evaluación, medidas y decisiones de notificación;
 7. tratamientos de alto riesgo deben asociarse a una EIPD aprobada antes de producción;
-8. transferencias internacionales y encargados deben quedar inventariados;
+8. transferencias internacionales y encargados deben quedar inventariados y versionados sin pérdida de historial;
 9. operaciones críticas deben dejar auditoría verificable;
 10. Portal de Insinuados debe exponer sólo la proyección mínima autorizada;
 11. un legal hold vigente debe impedir toda ejecución de eliminación o anonimización asociada a la política afectada.
@@ -70,8 +70,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 3. el sistema puede registrar, seguir, resolver y cerrar solicitudes de derechos;
 4. las vistas de Portal de Insinuados no exponen datos restringidos por defecto;
 5. Gran Secretaría consume estados mínimos de Tesorería/Hospitalaria;
-6. proveedores con acceso a datos están inventariados;
-7. transferencias internacionales están identificadas y revisables;
+6. proveedores con acceso a datos están inventariados y conservan historial de versiones;
+7. transferencias internacionales están identificadas, revisables y conservan historial de versiones;
 8. incidentes pueden registrarse, evaluarse, documentarse y cerrarse;
 9. tratamientos de alto riesgo permiten registrar y aprobar EIPD previa;
 10. operaciones de riesgo dejan auditoría;
