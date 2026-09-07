@@ -1,0 +1,30 @@
+name: PMGM CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-build:
+    name: Backend build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
+
+      - name: Build
+        run: dotnet build backend/src/PMGM.Api/PMGM.Api.csproj --configuration Release --no-restore
