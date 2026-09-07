@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership.Entities;
 
@@ -14,6 +15,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<InstitutionalStatusEvent> InstitutionalStatusEvents => Set<InstitutionalStatusEvent>();
     public DbSet<DegreeEvent> DegreeEvents => Set<DegreeEvent>();
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
+    public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
+    public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
+    public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
+    public DbSet<InstitutionalRuleSetting> InstitutionalRuleSettings => Set<InstitutionalRuleSetting>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -128,6 +133,60 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MemberId, x.OrganizationId, x.StartDate });
+        });
+
+        modelBuilder.Entity<CeremonyRequest>(entity =>
+        {
+            entity.ToTable("ceremony_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CeremonyType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.CandidatePerson).WithMany().HasForeignKey(x => x.CandidatePersonId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.CeremonyType, x.Status });
+        });
+
+        modelBuilder.Entity<CeremonyValidation>(entity =>
+        {
+            entity.ToTable("ceremony_validations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ValidationType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.CeremonyRequest).WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CeremonyRequestId, x.ValidationType, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<CandidatePublication>(entity =>
+        {
+            entity.ToTable("candidate_publications");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RuleCode).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.SuspensionReason).HasMaxLength(500);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasOne(x => x.CeremonyRequest).WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Person).WithMany().HasForeignKey(x => x.PersonId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.PersonId, x.PublishedFromUtc });
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+
+        modelBuilder.Entity<InstitutionalRuleSetting>(entity =>
+        {
+            entity.ToTable("institutional_rule_settings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Value).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.Code, x.EffectiveFrom });
         });
     }
 }
