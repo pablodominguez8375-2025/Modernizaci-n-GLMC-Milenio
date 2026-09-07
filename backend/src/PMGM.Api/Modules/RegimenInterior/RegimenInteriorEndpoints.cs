@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Treasury;
 
 namespace PMGM.Api.Modules.RegimenInterior;
 
@@ -69,10 +70,15 @@ public static class RegimenInteriorEndpoints
         var currentMemberships = historicalMemberships
             .Where(x => x.EndDate == null || x.EndDate >= cutoff);
 
-        var currentMemberIds = await currentMemberships
-            .Select(x => x.MemberId)
+        var currentAffiliations = await currentMemberships
+            .Select(x => new AffiliationRow(x.MemberId, x.OrganizationId))
             .Distinct()
             .ToListAsync(cancellationToken);
+
+        var currentMemberIds = currentAffiliations
+            .Select(x => x.MemberId)
+            .Distinct()
+            .ToList();
 
         var knownStatusCodes = new[]
         {
@@ -151,6 +157,43 @@ public static class RegimenInteriorEndpoints
             .OrderBy(x => x.Key)
             .ToDictionary(x => x.Key, x => x.Count());
 
+        var financialRows = currentMemberIds.Count == 0
+            ? []
+            : await db.FinancialRegularitySnapshots
+                .AsNoTracking()
+                .Where(x => x.MemberId != null &&
+                            currentMemberIds.Contains(x.MemberId.Value) &&
+                            x.AsOfDate <= cutoff &&
+                            (organizationId == null || x.OrganizationId == organizationId.Value))
+                .Select(x => new FinancialRow(
+                    x.MemberId!.Value,
+                    x.OrganizationId,
+                    x.Status,
+                    x.AsOfDate,
+                    x.RecordedAtUtc))
+                .ToListAsync(cancellationToken);
+
+        var latestFinancialByAffiliation = financialRows
+            .GroupBy(x => new { x.MemberId, x.OrganizationId })
+            .Select(x => x
+                .OrderByDescending(y => y.AsOfDate)
+                .ThenByDescending(y => y.RecordedAtUtc)
+                .First())
+            .ToList();
+
+        var financialKeys = latestFinancialByAffiliation
+            .Select(x => (x.MemberId, x.OrganizationId))
+            .ToHashSet();
+
+        var affiliationsWithoutFinancialStatus = currentAffiliations.Count(x =>
+            !financialKeys.Contains((x.MemberId, x.OrganizationId)));
+
+        var delinquentMemberIds = latestFinancialByAffiliation
+            .Where(x => x.Status == TreasuryCodes.RegularityStatus.Delinquent)
+            .Select(x => x.MemberId)
+            .Distinct()
+            .ToHashSet();
+
         var pendingTransfersQuery = db.MemberTransfers
             .AsNoTracking()
             .Where(x => x.Status == MembershipCodes.TransferStatus.Requested ||
@@ -187,10 +230,23 @@ public static class RegimenInteriorEndpoints
                 deaths = historicalEvents.Count(x => x == MembershipCodes.InstitutionalStatus.Deceased),
                 transfers = historicalEvents.Count(x => x == MembershipCodes.InstitutionalStatus.WorkshopTransfer)
             },
+            financialRegularity = new
+            {
+                source = "Gran Tesorería",
+                currentAffiliations = currentAffiliations.Count,
+                upToDate = latestFinancialByAffiliation.Count(x => x.Status == TreasuryCodes.RegularityStatus.UpToDate),
+                delinquent = latestFinancialByAffiliation.Count(x => x.Status == TreasuryCodes.RegularityStatus.Delinquent),
+                pending = latestFinancialByAffiliation.Count(x => x.Status == TreasuryCodes.RegularityStatus.Pending),
+                exempt = latestFinancialByAffiliation.Count(x => x.Status == TreasuryCodes.RegularityStatus.Exempt),
+                withoutStatus = affiliationsWithoutFinancialStatus,
+                delinquentMembersDistinct = delinquentMemberIds.Count
+            },
             degreeDistribution,
             pendingTransfers
         });
     }
+
+    private sealed record AffiliationRow(Guid MemberId, Guid OrganizationId);
 
     private sealed record StatusRow(
         Guid MemberId,
@@ -202,5 +258,12 @@ public static class RegimenInteriorEndpoints
         Guid MemberId,
         string Degree,
         DateOnly EffectiveDate,
+        DateTimeOffset RecordedAtUtc);
+
+    private sealed record FinancialRow(
+        Guid MemberId,
+        Guid OrganizationId,
+        string Status,
+        DateOnly AsOfDate,
         DateTimeOffset RecordedAtUtc);
 }
