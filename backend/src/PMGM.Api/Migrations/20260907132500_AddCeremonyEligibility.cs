@@ -99,14 +99,53 @@ public partial class AddCeremonyEligibility : Migration
                 table.ForeignKey("FK_candidate_publications_people_PersonId", x => x.PersonId, "core", "people", "Id", onDelete: ReferentialAction.Restrict);
             });
 
-        migrationBuilder.CreateIndex("IX_institutional_rule_settings_Code_EffectiveFrom", "core", "institutional_rule_settings", new[] { "Code", "EffectiveFrom" });
-        migrationBuilder.CreateIndex("IX_ceremony_requests_MemberId", "core", "ceremony_requests", "MemberId");
-        migrationBuilder.CreateIndex("IX_ceremony_requests_CandidatePersonId", "core", "ceremony_requests", "CandidatePersonId");
-        migrationBuilder.CreateIndex("IX_ceremony_requests_OrganizationId_CeremonyType_Status", "core", "ceremony_requests", new[] { "OrganizationId", "CeremonyType", "Status" });
-        migrationBuilder.CreateIndex("IX_ceremony_validations_CeremonyRequestId_ValidationType_RecordedAtUtc", "core", "ceremony_validations", new[] { "CeremonyRequestId", "ValidationType", "RecordedAtUtc" });
-        migrationBuilder.CreateIndex("IX_candidate_publications_CeremonyRequestId", "core", "candidate_publications", "CeremonyRequestId");
-        migrationBuilder.CreateIndex("IX_candidate_publications_PersonId_PublishedFromUtc", "core", "candidate_publications", new[] { "PersonId", "PublishedFromUtc" });
-        migrationBuilder.CreateIndex("IX_candidate_publications_OrganizationId_Status", "core", "candidate_publications", new[] { "OrganizationId", "Status" });
+        migrationBuilder.CreateIndex(
+            name: "IX_institutional_rule_settings_Code_EffectiveFrom",
+            schema: "core",
+            table: "institutional_rule_settings",
+            columns: new[] { "Code", "EffectiveFrom" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_ceremony_requests_MemberId",
+            schema: "core",
+            table: "ceremony_requests",
+            column: "MemberId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_ceremony_requests_CandidatePersonId",
+            schema: "core",
+            table: "ceremony_requests",
+            column: "CandidatePersonId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_ceremony_requests_OrganizationId_CeremonyType_Status",
+            schema: "core",
+            table: "ceremony_requests",
+            columns: new[] { "OrganizationId", "CeremonyType", "Status" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_ceremony_validations_CeremonyRequestId_ValidationType_RecordedAtUtc",
+            schema: "core",
+            table: "ceremony_validations",
+            columns: new[] { "CeremonyRequestId", "ValidationType", "RecordedAtUtc" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_candidate_publications_CeremonyRequestId",
+            schema: "core",
+            table: "candidate_publications",
+            column: "CeremonyRequestId");
+
+        migrationBuilder.CreateIndex(
+            name: "IX_candidate_publications_PersonId_PublishedFromUtc",
+            schema: "core",
+            table: "candidate_publications",
+            columns: new[] { "PersonId", "PublishedFromUtc" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_candidate_publications_OrganizationId_Status",
+            schema: "core",
+            table: "candidate_publications",
+            columns: new[] { "OrganizationId", "Status" });
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
