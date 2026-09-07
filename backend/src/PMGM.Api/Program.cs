@@ -49,6 +49,13 @@ builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>(
 
 var app = builder.Build();
 
+if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
