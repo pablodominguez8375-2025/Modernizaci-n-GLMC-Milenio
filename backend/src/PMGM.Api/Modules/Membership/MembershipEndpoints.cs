@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -17,7 +18,9 @@ public static class MembershipEndpoints
 
     private static async Task<IResult> GetMemberHistoryAsync(
         Guid id,
+        HttpContext httpContext,
         PmgmDbContext db,
+        IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
         var member = await db.Members
@@ -40,9 +43,34 @@ public static class MembershipEndpoints
             return Results.NotFound();
         }
 
-        var memberships = await db.Memberships
+        var memberOrganizationIds = await db.Memberships
             .AsNoTracking()
             .Where(x => x.MemberId == id)
+            .Select(x => x.OrganizationId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        var hasOrderHistoryAccess = access.HasOrderScope(httpContext.User) &&
+            access.HasRole(
+                httpContext.User,
+                InstitutionalRoles.GranLogiaAdmin,
+                InstitutionalRoles.RegimenInterior);
+
+        var allowedOrganizationIds = hasOrderHistoryAccess
+            ? memberOrganizationIds
+            : memberOrganizationIds
+                .Where(x => access.CanReadOrganization(httpContext.User, x))
+                .ToList();
+
+        if (!hasOrderHistoryAccess && allowedOrganizationIds.Count == 0)
+        {
+            return Results.Forbid();
+        }
+
+        var memberships = await db.Memberships
+            .AsNoTracking()
+            .Where(x => x.MemberId == id &&
+                        (hasOrderHistoryAccess || allowedOrganizationIds.Contains(x.OrganizationId)))
             .OrderByDescending(x => x.StartDate)
             .Select(x => new
             {
@@ -60,7 +88,10 @@ public static class MembershipEndpoints
 
         var transfers = await db.MemberTransfers
             .AsNoTracking()
-            .Where(x => x.MemberId == id)
+            .Where(x => x.MemberId == id &&
+                        (hasOrderHistoryAccess ||
+                         allowedOrganizationIds.Contains(x.SourceOrganizationId) ||
+                         allowedOrganizationIds.Contains(x.TargetOrganizationId)))
             .OrderByDescending(x => x.RequestedDate)
             .Select(x => new
             {
@@ -84,7 +115,10 @@ public static class MembershipEndpoints
 
         var statusEvents = await db.InstitutionalStatusEvents
             .AsNoTracking()
-            .Where(x => x.MemberId == id)
+            .Where(x => x.MemberId == id &&
+                        (hasOrderHistoryAccess ||
+                         x.OrganizationId == null ||
+                         allowedOrganizationIds.Contains(x.OrganizationId.Value)))
             .OrderByDescending(x => x.EffectiveDate)
             .ThenByDescending(x => x.RecordedAtUtc)
             .Select(x => new
@@ -103,7 +137,8 @@ public static class MembershipEndpoints
 
         var degreeEvents = await db.DegreeEvents
             .AsNoTracking()
-            .Where(x => x.MemberId == id)
+            .Where(x => x.MemberId == id &&
+                        (hasOrderHistoryAccess || allowedOrganizationIds.Contains(x.OrganizationId)))
             .OrderByDescending(x => x.EffectiveDate)
             .ThenByDescending(x => x.RecordedAtUtc)
             .Select(x => new
@@ -120,7 +155,8 @@ public static class MembershipEndpoints
 
         var offices = await db.OfficeAssignments
             .AsNoTracking()
-            .Where(x => x.MemberId == id)
+            .Where(x => x.MemberId == id &&
+                        (hasOrderHistoryAccess || allowedOrganizationIds.Contains(x.OrganizationId)))
             .OrderByDescending(x => x.StartDate)
             .Select(x => new
             {
@@ -138,6 +174,7 @@ public static class MembershipEndpoints
         return Results.Ok(new
         {
             member,
+            scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",
             memberships,
             transfers,
             statusEvents,
