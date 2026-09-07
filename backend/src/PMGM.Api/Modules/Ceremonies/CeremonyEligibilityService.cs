@@ -1,3 +1,6 @@
+using PMGM.Api.Modules.Hospitalaria;
+using PMGM.Api.Modules.Treasury;
+
 namespace PMGM.Api.Modules.Ceremonies;
 
 public sealed record CeremonyEligibilityInput(
@@ -31,69 +34,84 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
 
     public CeremonyEligibilityResult Evaluate(CeremonyEligibilityInput input, DateTimeOffset nowUtc)
     {
-        var blockingReasons = new List<string>();
+        var regimenStatus = GetValidation(input, CeremonyCodes.ValidationType.InternalAffairs);
+        var treasuryValidation = GetValidation(input, CeremonyCodes.ValidationType.Treasury);
+        var hospitalariaValidation = GetValidation(input, CeremonyCodes.ValidationType.Hospitalaria);
 
-        RequireValidation(input, CeremonyCodes.ValidationType.InternalAffairs, blockingReasons);
-        RequireValidation(input, CeremonyCodes.ValidationType.Treasury, blockingReasons);
-        RequireValidation(input, CeremonyCodes.ValidationType.Hospitalaria, blockingReasons);
+        var treasuryStatus = treasuryValidation is null
+            ? null
+            : EnablingStatuses.Contains(treasuryValidation)
+                ? TreasuryCodes.RegularityStatus.UpToDate
+                : TreasuryCodes.RegularityStatus.Delinquent;
 
-        int? publicationElapsedDays = null;
+        var hospitalariaStatus = hospitalariaValidation is null
+            ? null
+            : EnablingStatuses.Contains(hospitalariaValidation)
+                ? HospitalariaCodes.RegularityStatus.UpToDate
+                : HospitalariaCodes.RegularityStatus.Overdue;
 
-        if (string.Equals(input.CeremonyType, CeremonyCodes.Type.Initiation, StringComparison.OrdinalIgnoreCase))
+        CandidatePublicationEvidence? publication = null;
+        int? elapsedDays = null;
+
+        if (string.Equals(input.CeremonyType, CeremonyCodes.Type.Initiation, StringComparison.OrdinalIgnoreCase) &&
+            input.PublicationStartedAtUtc is not null)
         {
-            if (input.PublicationRequiredDays < 1)
-            {
-                blockingReasons.Add("La regla de días mínimos de publicación no es válida.");
-            }
-            else if (input.PublicationStartedAtUtc is null)
-            {
-                blockingReasons.Add("El insinuado aún no posee una publicación válida.");
-            }
-            else if (input.PublicationSuspended)
-            {
-                blockingReasons.Add("La publicación del insinuado se encuentra suspendida.");
-            }
-            else
-            {
-                var effectiveEnd = input.PublicationEndedAtUtc ?? nowUtc;
-                publicationElapsedDays = Math.Max(
-                    0,
-                    (int)Math.Floor((effectiveEnd - input.PublicationStartedAtUtc.Value).TotalDays));
+            var effectiveEnd = input.PublicationEndedAtUtc ?? nowUtc;
+            elapsedDays = Math.Max(
+                0,
+                (int)Math.Floor((effectiveEnd - input.PublicationStartedAtUtc.Value).TotalDays));
 
-                if (publicationElapsedDays < input.PublicationRequiredDays)
-                {
-                    blockingReasons.Add(
-                        $"La publicación del insinuado registra {publicationElapsedDays} días y requiere {input.PublicationRequiredDays} días.");
-                }
-            }
+            var publicationValidation = GetValidation(input, CeremonyCodes.ValidationType.CandidatePublication);
+            var publicationStatus = input.PublicationSuspended
+                ? CeremonyCodes.PublicationStatus.Suspended
+                : publicationValidation is null || !EnablingStatuses.Contains(publicationValidation)
+                    ? CeremonyCodes.PublicationStatus.Cancelled
+                    : input.PublicationEndedAtUtc is null
+                        ? CeremonyCodes.PublicationStatus.Published
+                        : CeremonyCodes.PublicationStatus.Completed;
 
-            RequireValidation(input, CeremonyCodes.ValidationType.CandidatePublication, blockingReasons);
+            publication = new CandidatePublicationEvidence(
+                Guid.Empty,
+                publicationStatus,
+                input.PublicationRequiredDays,
+                elapsedDays.Value,
+                CeremonyCodes.Rules.InitiationPublicationMinimumDays);
         }
 
+        var decision = CeremonyEligibilityPolicy.Evaluate(
+            input.CeremonyType,
+            regimenStatus,
+            treasuryStatus,
+            hospitalariaStatus,
+            publication);
+
+        var blockingReasons = decision.Requirements
+            .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
+            .Select(x => $"{MapRequirementCodeToValidationType(x.Code)}: {x.Reason}")
+            .ToList();
+
         return new CeremonyEligibilityResult(
-            IsEligible: blockingReasons.Count == 0,
-            Status: blockingReasons.Count == 0 ? CeremonyCodes.RequestStatus.Eligible : CeremonyCodes.RequestStatus.Observed,
+            IsEligible: decision.CanAuthorize,
+            Status: decision.CanAuthorize ? CeremonyCodes.RequestStatus.Eligible : CeremonyCodes.RequestStatus.Observed,
             BlockingReasons: blockingReasons,
-            PublicationElapsedDays: publicationElapsedDays,
+            PublicationElapsedDays: string.Equals(input.CeremonyType, CeremonyCodes.Type.Initiation, StringComparison.OrdinalIgnoreCase)
+                ? elapsedDays
+                : null,
             PublicationRequiredDays: string.Equals(input.CeremonyType, CeremonyCodes.Type.Initiation, StringComparison.OrdinalIgnoreCase)
                 ? input.PublicationRequiredDays
                 : null);
     }
 
-    private static void RequireValidation(
-        CeremonyEligibilityInput input,
-        string validationType,
-        ICollection<string> blockingReasons)
-    {
-        if (!input.Validations.TryGetValue(validationType, out var status))
-        {
-            blockingReasons.Add($"Falta validación obligatoria: {validationType}.");
-            return;
-        }
+    private static string? GetValidation(CeremonyEligibilityInput input, string validationType)
+        => input.Validations.TryGetValue(validationType, out var status) ? status : null;
 
-        if (!EnablingStatuses.Contains(status))
+    private static string MapRequirementCodeToValidationType(string code)
+        => code switch
         {
-            blockingReasons.Add($"La validación {validationType} no se encuentra aprobada: {status}.");
-        }
-    }
+            "regimen_interior" => CeremonyCodes.ValidationType.InternalAffairs,
+            "gran_tesoreria" => CeremonyCodes.ValidationType.Treasury,
+            "gran_hospitalaria" => CeremonyCodes.ValidationType.Hospitalaria,
+            "publicacion_insinuado" => CeremonyCodes.ValidationType.CandidatePublication,
+            _ => code
+        };
 }
