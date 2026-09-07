@@ -16,7 +16,12 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - `DataRetentionHold` para legal hold con autoridad identificada, motivo, evidencia y vigencia;
 - `DataRetentionEvaluation` y motor de decisión para calcular vencimiento, acción recomendada y bloqueo por legal hold;
 - API para listar/crear/liberar legal holds y ejecutar/listar evaluaciones de retención;
-- migración PostgreSQL para legal holds y evaluaciones de retención;
+- revalidación de legal hold al momento exacto de ejecutar una política, evitando ejecutar sobre una evaluación antigua si apareció un hold posterior;
+- estado de ejecución persistente en la evaluación: acción, fecha, ejecutor, evidencia y resultado técnico;
+- anonimización ejecutable inicial para `DataSubjectRequest`, desligando `PersonId`, responsable y narrativas restringidas una vez vencido el plazo y sin hold;
+- borrado duro bloqueado para ejecución automática; requiere revisión humana/adaptador específico antes de habilitarse;
+- acciones `review` y entidades sin adaptador automático quedan derivadas a revisión manual;
+- migraciones PostgreSQL para legal holds, evaluaciones y estado de ejecución de retención;
 - `DataSubjectRequest` para acceso, rectificación, supresión, oposición, portabilidad y bloqueo;
 - reglas jurídicas de plazos versionadas mediante `InstitutionalRuleSetting`, sin días hardcodeados en la API;
 - resolución automática de fecha de vencimiento para solicitudes de derechos cuando existe regla jurídica vigente;
@@ -32,13 +37,12 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - política de cierre que bloquea el cierre si falta evaluación, decisión explícita, comunicación obligatoria o medidas correctivas;
 - timeline de incidentes construido desde auditoría, sin duplicar narrativas sensibles en metadatos;
 - `PrivacyImpactAssessment` para EIPD/DPIA;
-- migraciones PostgreSQL de privacidad y workflow de incidentes;
 - rol técnico `privacy_officer` con alcance de Orden;
 - autorización centralizada `CanManagePrivacy`;
 - dashboard inicial de privacidad con fecha institucional `America/Santiago`;
 - API de actividades de tratamiento;
 - API de solicitudes de derechos, incluida resolución/cierre con verificación de identidad;
-- API de políticas de retención;
+- API de políticas de retención y ejecución controlada;
 - API de incidentes y workflow de respuesta;
 - API de EIPD, incluida aprobación formal y registro de riesgo residual;
 - API de encargados/proveedores;
@@ -49,15 +53,15 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - pruebas automáticas que fijan la superficie permitida del DTO público del Portal de Insinuados;
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos, acciones de retención y cálculo de plazos;
-- pruebas unitarias del motor de decisión de retención y de la política de cierre de incidentes;
+- pruebas unitarias del motor de decisión de retención, política de ejecución y política de cierre de incidentes;
 - auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias, legal holds, reglas jurídicas y bajas/versiones de terceros;
 - minimización adicional de metadatos de auditoría para evitar duplicar identificadores personales o narrativas sensibles;
 - gate estructural de privacidad y gate de clasificación de datos ejecutados automáticamente en CI/CD.
 
 ## Alcance pendiente
 - revisión jurídica y carga inicial de los valores efectivos de cada plazo legal versionado;
-- motor automático de ejecución material de políticas de retención sobre entidades soportadas;
-- anonimización/pseudonimización ejecutable;
+- ampliar adaptadores de anonimización/pseudonimización a entidades adicionales sólo cuando exista política aprobada y prueba de no pérdida indebida de trazabilidad;
+- definir, con revisión jurídica, si alguna categoría admite borrado físico automático y bajo qué doble control;
 - ampliar el catálogo de clasificación a todo nuevo campo incorporado al modelo;
 - ampliar DTOs mínimos por finalidad a reportes, exportaciones y consultas inter-módulo;
 - pruebas de integración contra PostgreSQL;
@@ -76,7 +80,9 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 10. operaciones críticas deben dejar auditoría verificable;
 11. Portal de Insinuados debe exponer sólo la proyección mínima autorizada;
 12. un legal hold vigente debe impedir toda ejecución de eliminación o anonimización asociada a la política afectada;
-13. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada.
+13. toda acción automática de retención debe revalidar el hold inmediatamente antes de mutar datos;
+14. el borrado duro no se habilita por defecto y requiere una decisión jurídica/técnica explícita por categoría;
+15. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada.
 
 ## Criterios de aceptación
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
@@ -91,6 +97,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 10. operaciones de riesgo dejan auditoría;
 11. el gate de release bloquea producción si faltan finalidad, base jurídica, conservación o controles de acceso;
 12. las evaluaciones de retención calculan vencimiento y no permiten ejecutar una acción destructiva mientras exista legal hold vigente;
-13. el gate de clasificación rechaza datos sensibles/restringidos habilitados para logs o proyecciones públicas inconsistentes;
-14. las solicitudes de derechos calculan su fecha de vencimiento con la versión de regla jurídica vigente a la fecha de recepción;
-15. se realiza revisión de preparación legal antes del 01-12-2026.
+13. la ejecución de anonimización vuelve a comprobar el legal hold en tiempo real y deja resultado verificable;
+14. el gate de clasificación rechaza datos sensibles/restringidos habilitados para logs o proyecciones públicas inconsistentes;
+15. las solicitudes de derechos calculan su fecha de vencimiento con la versión de regla jurídica vigente a la fecha de recepción;
+16. se realiza revisión de preparación legal antes del 01-12-2026.

@@ -20,6 +20,7 @@ public static class PrivacyRetentionEndpoints
         group.MapPost("/holds/{id:guid}/release", ReleaseHoldAsync);
         group.MapGet("/evaluations", GetEvaluationsAsync);
         group.MapPost("/evaluate", EvaluateAsync);
+        group.MapPost("/evaluations/{id:guid}/execute", ExecuteEvaluationAsync);
 
         return endpoints;
     }
@@ -157,7 +158,6 @@ public static class PrivacyRetentionEndpoints
             {
                 hold.RetentionPolicyId,
                 hold.EntityType,
-                hold.EntityId,
                 hold.EffectiveFrom,
                 hold.EffectiveTo
             });
@@ -219,9 +219,7 @@ public static class PrivacyRetentionEndpoints
             {
                 hold.RetentionPolicyId,
                 hold.EntityType,
-                hold.EntityId,
-                hold.EffectiveTo,
-                request.EvidenceReference
+                hold.EffectiveTo
             });
 
         if (!string.IsNullOrWhiteSpace(request.EvidenceReference))
@@ -274,6 +272,11 @@ public static class PrivacyRetentionEndpoints
                 x.RetentionHoldId,
                 x.Rationale,
                 x.Status,
+                x.ExecutedAction,
+                x.ExecutedAtUtc,
+                x.ExecutedBySubject,
+                x.ExecutionEvidenceReference,
+                x.ExecutionResult,
                 x.EvaluatedAtUtc
             })
             .ToListAsync(cancellationToken);
@@ -359,7 +362,6 @@ public static class PrivacyRetentionEndpoints
             {
                 evaluation.RetentionPolicyId,
                 evaluation.EntityType,
-                evaluation.EntityId,
                 evaluation.AnchorDate,
                 evaluation.EvaluationDate,
                 evaluation.DueDate,
@@ -379,6 +381,134 @@ public static class PrivacyRetentionEndpoints
             evaluation.RetentionHoldId,
             evaluation.Status,
             evaluation.Rationale
+        });
+    }
+
+    private static async Task<IResult> ExecuteEvaluationAsync(
+        Guid id,
+        ExecuteRetentionEvaluationRequest request,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManagePrivacy(httpContext.User))
+        {
+            return Results.Forbid();
+        }
+
+        var evaluation = await db.Set<DataRetentionEvaluation>()
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+
+        if (evaluation is null)
+        {
+            return Results.NotFound(new { message = "La evaluación de retención indicada no existe." });
+        }
+
+        var today = TodayInChile();
+        var activeHold = await db.Set<DataRetentionHold>()
+            .AsNoTracking()
+            .AnyAsync(x =>
+                x.RetentionPolicyId == evaluation.RetentionPolicyId &&
+                x.EntityType == evaluation.EntityType &&
+                x.EntityId == evaluation.EntityId &&
+                x.Status == PrivacyCodes.Status.Active &&
+                x.EffectiveFrom <= today &&
+                (x.EffectiveTo == null || x.EffectiveTo >= today),
+                cancellationToken);
+
+        var executionDecision = RetentionExecutionPolicy.Evaluate(
+            evaluation,
+            request.ExpectedAction,
+            activeHold);
+
+        if (!executionDecision.CanExecute)
+        {
+            return Results.Conflict(new
+            {
+                message = executionDecision.Reason,
+                requiresManualReview = executionDecision.RequiresManualReview
+            });
+        }
+
+        var subject = ResolveSubject(httpContext.User);
+        if (string.IsNullOrWhiteSpace(subject))
+        {
+            return Results.BadRequest(new { message = "No fue posible identificar al usuario que ejecuta la política de retención." });
+        }
+
+        string executionResult;
+
+        if (request.ExpectedAction == PrivacyCodes.RetentionAction.Keep)
+        {
+            executionResult = "no_change_required";
+        }
+        else if (request.ExpectedAction == PrivacyCodes.RetentionAction.Anonymize)
+        {
+            if (string.IsNullOrWhiteSpace(request.EvidenceReference))
+            {
+                return Results.BadRequest(new { message = "La anonimización requiere una referencia de evidencia de ejecución." });
+            }
+
+            if (!Guid.TryParse(evaluation.EntityId, out var dataSubjectRequestId))
+            {
+                return Results.Conflict(new { message = "El identificador de la entidad no tiene un formato compatible con el adaptador de anonimización." });
+            }
+
+            var dataSubjectRequest = await db.DataSubjectRequests
+                .SingleOrDefaultAsync(x => x.Id == dataSubjectRequestId, cancellationToken);
+
+            if (dataSubjectRequest is null)
+            {
+                return Results.NotFound(new { message = "La solicitud de derechos asociada a la evaluación ya no existe." });
+            }
+
+            dataSubjectRequest.PersonId = null;
+            dataSubjectRequest.ResponsibleSubject = null;
+            dataSubjectRequest.Resolution = null;
+            dataSubjectRequest.Grounds = null;
+            dataSubjectRequest.EvidenceReference = null;
+
+            executionResult = "data_subject_request_identity_and_restricted_narratives_cleared";
+        }
+        else
+        {
+            return Results.Conflict(new { message = "La acción indicada no dispone de un adaptador automático habilitado." });
+        }
+
+        evaluation.ExecutedAction = request.ExpectedAction;
+        evaluation.ExecutedAtUtc = DateTimeOffset.UtcNow;
+        evaluation.ExecutedBySubject = subject;
+        evaluation.ExecutionEvidenceReference = request.EvidenceReference;
+        evaluation.ExecutionResult = executionResult;
+        evaluation.Status = RetentionExecutionStatuses.Executed;
+
+        audit.Add(
+            httpContext,
+            "privacy.retention.executed",
+            nameof(DataRetentionEvaluation),
+            evaluation.Id.ToString(),
+            null,
+            AuditResults.Success,
+            new
+            {
+                evaluation.RetentionPolicyId,
+                evaluation.EntityType,
+                evaluation.ExecutedAction,
+                evaluation.ExecutedAtUtc,
+                evaluation.ExecutionResult
+            });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            evaluation.Id,
+            evaluation.Status,
+            evaluation.ExecutedAction,
+            evaluation.ExecutedAtUtc,
+            evaluation.ExecutionResult
         });
     }
 
@@ -414,3 +544,7 @@ public sealed record EvaluateRetentionRequest(
     string EntityId,
     DateOnly AnchorDate,
     DateOnly? EvaluationDate);
+
+public sealed record ExecuteRetentionEvaluationRequest(
+    string ExpectedAction,
+    string? EvidenceReference);

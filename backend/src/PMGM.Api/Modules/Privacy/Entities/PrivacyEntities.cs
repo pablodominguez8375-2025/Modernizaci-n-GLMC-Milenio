@@ -95,6 +95,15 @@ public sealed class DataRetentionEvaluation
     public required string Rationale { get; set; }
     [MaxLength(40)]
     public required string Status { get; set; }
+    [MaxLength(80)]
+    public string? ExecutedAction { get; set; }
+    public DateTimeOffset? ExecutedAtUtc { get; set; }
+    [MaxLength(320)]
+    public string? ExecutedBySubject { get; set; }
+    [MaxLength(500)]
+    public string? ExecutionEvidenceReference { get; set; }
+    [MaxLength(1000)]
+    public string? ExecutionResult { get; set; }
     public DateTimeOffset EvaluatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
