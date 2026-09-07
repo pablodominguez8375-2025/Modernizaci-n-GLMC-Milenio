@@ -28,20 +28,20 @@
 - migración PostgreSQL `AddCeremonyEligibility`;
 - endpoint autenticado `GET /api/candidate-publications/active` como base API del portal;
 - respuesta minimizada a nombre, Taller, fechas y estado de publicación, sin RUT, contacto ni datos administrativos;
+- ruta legada `GET /api/ceremonias/portal-insinuados` endurecida para reutilizar la misma superficie `CandidatePublicationPublicDto`, sin IDs internos;
 - fuentes reales de regularidad de Gran Tesorería y Gran Hospitalaria conectadas al flujo de elegibilidad;
 - proyección inter-módulo `ceremony-regularity` que entrega a Régimen Interior/Gran Secretaría sólo estado, fecha de corte y cumplimiento;
 - separación entre vistas administrativas de Tesorería/Hospitalaria y DTOs mínimos consumibles por otros módulos;
 - congelamiento de referencias de validación al momento de autorizar la ceremonia;
 - pruebas unitarias para bloqueos de Tesorería, Hospitalaria y plazo de publicación;
-- pruebas de superficie para impedir que DTOs inter-módulo incorporen IDs, notas o referencias administrativas.
+- pruebas de superficie para impedir que DTOs públicos/inter-módulo incorporen IDs, notas o referencias administrativas.
 
 ## Pendiente
 - frontend del portal de insinuados;
 - configuración administrativa de campos visibles;
 - mecanismo de observaciones si la institución lo habilita;
 - integración con plantillas y correlativos de Gran Secretaría;
-- auditoría completa de todos los endpoints de ceremonia con actor/correlation ID;
-- eliminar o endurecer cualquier endpoint legado del portal que aún replique identificadores internos.
+- auditoría completa de todos los endpoints de ceremonia con actor/correlation ID.
 
 ## Criterios de aceptación
 1. No se autoriza ceremonia con validación financiera no habilitante.
@@ -52,3 +52,4 @@
 6. El insinuado no se convierte en miembro antes de la iniciación.
 7. Gran Secretaría puede identificar exactamente qué requisito bloquea la autorización.
 8. Tesorería y Hospitalaria no entregan notas, referencias o IDs internos a consumidores que sólo requieren regularidad.
+9. Ninguna ruta de Portal de Insinuados expone `PersonId`, `OrganizationId`, `CeremonyRequestId` ni IDs de publicación.
