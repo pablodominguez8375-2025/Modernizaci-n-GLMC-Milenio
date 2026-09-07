@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:18.6
+    container_name: pmgm-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pmgm
+      POSTGRES_USER: pmgm_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pmgm_dev_only}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pmgm_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pmgm_app -d pmgm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: pmgm-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${POSTGRES_PASSWORD:-pmgm_dev_only}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pmgm_postgres_data:
