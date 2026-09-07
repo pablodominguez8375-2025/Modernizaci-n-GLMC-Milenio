@@ -56,6 +56,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - pruebas de RBAC para Privacy Officer;
 - pruebas de códigos de derechos, acciones de retención y cálculo de plazos;
 - pruebas unitarias del motor de decisión de retención, política de ejecución y política de cierre de incidentes;
+- prueba de integración contra PostgreSQL real en CI, aplicando todas las migraciones y validando escritura/lectura básica del modelo;
+- servicio PostgreSQL efímero en GitHub Actions para detectar migraciones rotas, tipos incompatibles y errores de esquema;
 - auditoría de creación/resolución de actividades, solicitudes, incidentes, EIPD, políticas, proveedores, transferencias, legal holds, reglas jurídicas y bajas/versiones de terceros;
 - minimización adicional de metadatos de auditoría para evitar duplicar identificadores personales o narrativas sensibles;
 - gate estructural de privacidad y gate de clasificación de datos ejecutados automáticamente en CI/CD.
@@ -66,7 +68,7 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 - definir, con revisión jurídica, si alguna categoría admite borrado físico automático y bajo qué doble control;
 - ampliar el catálogo de clasificación a todo nuevo campo incorporado al modelo;
 - ampliar DTOs mínimos por finalidad a otros reportes y exportaciones no cubiertos todavía;
-- pruebas de integración contra PostgreSQL;
+- ampliar pruebas PostgreSQL desde smoke test de migración hacia escenarios funcionales completos de privacidad, membresía y ceremonias;
 - revisión jurídica final previa a producción.
 
 ## Principios técnicos obligatorios
@@ -85,7 +87,8 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 13. toda acción automática de retención debe revalidar el hold inmediatamente antes de mutar datos;
 14. el borrado duro no se habilita por defecto y requiere una decisión jurídica/técnica explícita por categoría;
 15. las consultas entre módulos deben usar DTOs ligados a una finalidad y no reutilizar entidades administrativas completas;
-16. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada.
+16. cada campo de riesgo debe tener clasificación, finalidad, reglas de log/exportación/proyección y política de conservación identificada;
+17. toda migración debe poder aplicarse sobre PostgreSQL real dentro del pipeline antes de aceptar un cambio en `dev` o `main`.
 
 ## Criterios de aceptación
 1. cada tratamiento relevante tiene finalidad/base jurídica registradas;
@@ -103,4 +106,5 @@ Implementar las capacidades técnicas y operativas necesarias para que Proyecto 
 13. la ejecución de anonimización vuelve a comprobar el legal hold en tiempo real y deja resultado verificable;
 14. el gate de clasificación rechaza datos sensibles/restringidos habilitados para logs o proyecciones públicas inconsistentes;
 15. las solicitudes de derechos calculan su fecha de vencimiento con la versión de regla jurídica vigente a la fecha de recepción;
-16. se realiza revisión de preparación legal antes del 01-12-2026.
+16. todas las migraciones vigentes se aplican correctamente sobre una instancia PostgreSQL limpia en CI;
+17. se realiza revisión de preparación legal antes del 01-12-2026.

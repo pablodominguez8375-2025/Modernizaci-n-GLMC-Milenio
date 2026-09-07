@@ -14,6 +14,24 @@ jobs:
     name: Backend build and tests
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: pmgm_ci
+          POSTGRES_USER: pmgm
+          POSTGRES_PASSWORD: pmgm_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pmgm -d pmgm_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PMGM_TEST_POSTGRES: Host=localhost;Port=5432;Database=pmgm_ci;Username=pmgm;Password=pmgm_ci_only
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,5 +56,5 @@ jobs:
       - name: Restore tests
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
-      - name: Test
+      - name: Test unit and PostgreSQL integration
         run: dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj --configuration Release --no-restore
