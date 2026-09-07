@@ -12,21 +12,9 @@ public static class AuditResults
     public const string Observed = "observed";
 }
 
-public interface IAuditService
+public static class AuditEventFactory
 {
-    void Add(
-        HttpContext httpContext,
-        string action,
-        string entityType,
-        string entityId,
-        Guid? organizationId,
-        string result,
-        object? metadata = null);
-}
-
-public sealed class AuditService(PmgmDbContext db) : IAuditService
-{
-    public void Add(
+    public static AuditEvent Create(
         HttpContext httpContext,
         string action,
         string entityType,
@@ -49,7 +37,7 @@ public sealed class AuditService(PmgmDbContext db) : IAuditService
             correlationId = suppliedCorrelationId.ToString();
         }
 
-        db.AuditEvents.Add(new AuditEvent
+        return new AuditEvent
         {
             Action = action,
             EntityType = entityType,
@@ -60,6 +48,38 @@ public sealed class AuditService(PmgmDbContext db) : IAuditService
             Result = result,
             CorrelationId = correlationId,
             MetadataJson = metadata is null ? null : JsonSerializer.Serialize(metadata)
-        });
+        };
     }
+}
+
+public interface IAuditService
+{
+    void Add(
+        HttpContext httpContext,
+        string action,
+        string entityType,
+        string entityId,
+        Guid? organizationId,
+        string result,
+        object? metadata = null);
+}
+
+public sealed class AuditService(PmgmDbContext db) : IAuditService
+{
+    public void Add(
+        HttpContext httpContext,
+        string action,
+        string entityType,
+        string entityId,
+        Guid? organizationId,
+        string result,
+        object? metadata = null)
+        => db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext,
+            action,
+            entityType,
+            entityId,
+            organizationId,
+            result,
+            metadata));
 }
