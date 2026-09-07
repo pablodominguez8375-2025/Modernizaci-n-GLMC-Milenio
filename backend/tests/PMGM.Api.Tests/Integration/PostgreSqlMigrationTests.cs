@@ -15,6 +15,7 @@ using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
 
+[Collection(PostgresIntegrationCollection.Name)]
 public sealed class PostgreSqlMigrationTests
 {
     [Fact]
