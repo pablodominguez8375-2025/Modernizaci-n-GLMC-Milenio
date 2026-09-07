@@ -1,7 +1,7 @@
 # PMGM-BLG-001 — Backlog inicial del MVP
 
 **Estado:** Activo  
-**Versión:** 0.2
+**Versión:** 0.3
 
 ## Convención
 - P0: bloqueante/cimiento.
@@ -216,6 +216,63 @@
 **Prioridad:** P1
 **Aceptación:** ambiente separado de producción, con secretos y BD propios.
 
+## EPIC 09 — Gran Secretaría
+
+### PMGM-BLG-038 — Documentos oficiales y plantillas
+**Prioridad:** P1
+- decretos;
+- comunicados;
+- circulares y tipos configurables;
+- plantillas institucionales con campos automáticos;
+- control de versiones;
+- estados borrador/revisión/aprobado/emitido/anulado/reemplazado.
+**Aceptación:** Gran Secretaría puede redactar y versionar un documento oficial usando datos de la base maestra sin reingreso innecesario.
+
+### PMGM-BLG-039 — Numeración, emisión y archivo oficial
+**Prioridad:** P1
+- series y correlativos configurables;
+- secuencia por tipo y período;
+- emisión controlada;
+- anulación sin reutilización del número;
+- reemplazo documentado;
+- distribución y archivo histórico.
+**Aceptación:** un documento emitido conserva correlativo único, versión, autoridad, fecha, destinatarios y trazabilidad completa.
+
+### PMGM-BLG-040 — Orquestación de autorización de ceremonias
+**Prioridad:** P1
+- consumir aprobación de Régimen Interior;
+- consumir validación de Gran Tesorería;
+- validar aprobaciones adicionales configurables;
+- bloquear emisión si faltan aprobaciones obligatorias;
+- generar plancha/documento de iniciación, aumento de salario o exaltación desde plantilla;
+- congelar evidencia de las aprobaciones utilizadas.
+**Aceptación:** Gran Secretaría sólo puede emitir una autorización definitiva cuando las validaciones obligatorias están aprobadas o existe una excepción formal y auditada.
+
+### PMGM-BLG-041 — Templos, salas y reservas
+**Prioridad:** P1
+- catálogo de espacios;
+- disponibilidad;
+- capacidad y restricciones;
+- solicitudes de reserva;
+- aprobación/rechazo/reprogramación/cancelación;
+- bloqueos y mantenimiento;
+- prevención de doble reserva.
+**Aceptación:** el sistema impide dos reservas confirmadas del mismo espacio en horarios solapados y conserva historial de toda resolución.
+
+### PMGM-BLG-042 — Calendario institucional de espacios
+**Prioridad:** P1
+- vista diaria/semanal/mensual;
+- reservas confirmadas;
+- pendientes;
+- bloqueos/mantenimiento;
+- reuniones y ceremonias especiales;
+- visibilidad según permisos/confidencialidad.
+**Aceptación:** Gran Secretaría puede revisar ocupación y disponibilidad institucional desde un calendario único y navegar al trámite asociado.
+
+### PMGM-BLG-043 — Reportes de Gran Secretaría
+**Prioridad:** P2
+**Aceptación:** reporta documentos emitidos, ceremonias autorizadas/pendientes, tiempos de tramitación, documentos pendientes de firma y uso/ocupación de templos y salas por período y Taller.
+
 ## Orden recomendado de implementación
 1. BLG-001 a 004.
 2. BLG-002 + 008 + 031 desde el inicio.
@@ -223,9 +280,11 @@
 4. BLG-009 a 014 + BLG-034.
 5. BLG-018 + BLG-021 + BLG-035.
 6. BLG-019 + BLG-020 + BLG-036 + BLG-037.
-7. BLG-015 a 017 y resto de experiencia.
-8. BLG-022, 023, 025 y 026.
-9. Resto P2 según validación institucional.
+7. BLG-038 + BLG-039 + BLG-040.
+8. BLG-041 + BLG-042.
+9. BLG-015 a 017 y resto de experiencia.
+10. BLG-022, 023, 025 y 026.
+11. Resto P2 según validación institucional.
 
 ## Criterio de MVP demostrable
 El MVP se considera demostrable cuando un usuario puede:
@@ -237,5 +296,8 @@ El MVP se considera demostrable cuando un usuario puede:
 6. verificar hitos y fechas históricas relevantes;
 7. detectar inconsistencias de estado/fechas;
 8. revisar antecedentes para al menos un flujo de ceremonia o reconocimiento;
-9. acceder a documentos/biblioteca autorizados;
-10. dejar auditoría verificable de las operaciones anteriores.
+9. registrar las aprobaciones de Régimen Interior y Gran Tesorería para una ceremonia;
+10. generar desde Gran Secretaría un documento oficial de autorización de ceremonia;
+11. consultar y reservar un templo o sala sin provocar doble reserva;
+12. acceder a documentos/biblioteca autorizados;
+13. dejar auditoría verificable de las operaciones anteriores.
