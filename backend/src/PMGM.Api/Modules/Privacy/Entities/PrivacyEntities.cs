@@ -1,3 +1,6 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Modules.Core.Entities;
 
 namespace PMGM.Api.Modules.Privacy.Entities;
@@ -40,6 +43,59 @@ public sealed class DataRetentionPolicy
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveTo { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public ICollection<DataRetentionHold> Holds { get; set; } = new List<DataRetentionHold>();
+    public ICollection<DataRetentionEvaluation> Evaluations { get; set; } = new List<DataRetentionEvaluation>();
+}
+
+[Table("data_retention_holds", Schema = "core")]
+[Index(nameof(EntityType), nameof(EntityId), nameof(Status))]
+[Index(nameof(RetentionPolicyId), nameof(EffectiveFrom))]
+public sealed class DataRetentionHold
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid RetentionPolicyId { get; set; }
+    public DataRetentionPolicy RetentionPolicy { get; set; } = null!;
+    [MaxLength(120)]
+    public required string EntityType { get; set; }
+    [MaxLength(160)]
+    public required string EntityId { get; set; }
+    [MaxLength(2000)]
+    public required string Reason { get; set; }
+    [MaxLength(320)]
+    public required string AuthoritySubject { get; set; }
+    public DateOnly EffectiveFrom { get; set; }
+    public DateOnly? EffectiveTo { get; set; }
+    [MaxLength(40)]
+    public required string Status { get; set; }
+    [MaxLength(500)]
+    public string? EvidenceReference { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+[Table("data_retention_evaluations", Schema = "core")]
+[Index(nameof(EntityType), nameof(EntityId), nameof(EvaluatedAtUtc))]
+[Index(nameof(RetentionPolicyId), nameof(EvaluatedAtUtc))]
+public sealed class DataRetentionEvaluation
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid RetentionPolicyId { get; set; }
+    public DataRetentionPolicy RetentionPolicy { get; set; } = null!;
+    [MaxLength(120)]
+    public required string EntityType { get; set; }
+    [MaxLength(160)]
+    public required string EntityId { get; set; }
+    public DateOnly AnchorDate { get; set; }
+    public DateOnly EvaluationDate { get; set; }
+    public DateOnly? DueDate { get; set; }
+    [MaxLength(80)]
+    public required string RecommendedAction { get; set; }
+    public bool BlockedByHold { get; set; }
+    public Guid? RetentionHoldId { get; set; }
+    [MaxLength(2000)]
+    public required string Rationale { get; set; }
+    [MaxLength(40)]
+    public required string Status { get; set; }
+    public DateTimeOffset EvaluatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class DataSubjectRequest
