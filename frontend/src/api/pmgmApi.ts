@@ -34,6 +34,7 @@ export interface PmgmApiClientOptions {
   baseUrl?: string
   getAccessToken?: AccessTokenProvider
   useMocks?: boolean
+  onUnauthorized?: () => Promise<void>
 }
 
 const mockCandidates: CandidatePublication[] = [
@@ -67,11 +68,13 @@ export class PmgmApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
+  private readonly onUnauthorized?: () => Promise<void>
 
   constructor(options: PmgmApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
     this.getAccessToken = options.getAccessToken
     this.useMocks = options.useMocks ?? false
+    this.onUnauthorized = options.onUnauthorized
   }
 
   async getCandidatePortal(): Promise<CandidatePortalResponse> {
@@ -109,17 +112,22 @@ export class PmgmApiClient {
     headers.set('Accept', 'application/json')
 
     const token = await this.getAccessToken?.()
+    if (!token) throw new Error('Debe ingresar para consultar la información institucional.')
     if (token) {
       headers.set('Authorization', `Bearer ${token}`)
     }
 
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
-      credentials: 'same-origin',
+      credentials: 'omit',
+      redirect: 'error',
+      cache: 'no-store',
       headers,
     })
 
     if (!response.ok) {
+      if (response.status === 401) await this.onUnauthorized?.()
+      if (response.status === 403) throw new Error('Su cuenta no tiene permiso para consultar esta información.')
       throw new Error(`La API respondió ${response.status} ${response.statusText}.`)
     }
 
@@ -127,10 +135,14 @@ export class PmgmApiClient {
   }
 }
 
-export function createDefaultPmgmApiClient(): PmgmApiClient {
+export function createDefaultPmgmApiClient(getAccessToken?: AccessTokenProvider, onUnauthorized?: () => Promise<void>): PmgmApiClient {
   const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''
-  const useMocks = (import.meta.env.VITE_USE_MOCKS ?? 'true').toLowerCase() === 'true'
-  return new PmgmApiClient({ baseUrl, useMocks })
+  const useMocks = import.meta.env.VITE_USE_MOCKS === 'true'
+  const url = new URL(baseUrl || '/', window.location.origin)
+  if (url.origin !== window.location.origin || url.username || url.password || url.search || url.hash) {
+    throw new Error('La API debe usar el mismo origen mediante el proxy institucional.')
+  }
+  return new PmgmApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized })
 }
 
 function sleep(milliseconds: number): Promise<void> {

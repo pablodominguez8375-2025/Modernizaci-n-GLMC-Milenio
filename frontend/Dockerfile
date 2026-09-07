@@ -1,12 +1,18 @@
 FROM node:24-alpine AS build
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install --no-audit --no-fund
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
 
 COPY . .
 ARG VITE_API_BASE_URL=
 ARG VITE_USE_MOCKS=false
+ARG VITE_OIDC_AUTHORITY=
+ARG VITE_OIDC_CLIENT_ID=
+ARG VITE_OIDC_SCOPE="openid profile"
+ENV VITE_OIDC_AUTHORITY=${VITE_OIDC_AUTHORITY}
+ENV VITE_OIDC_CLIENT_ID=${VITE_OIDC_CLIENT_ID}
+ENV VITE_OIDC_SCOPE=${VITE_OIDC_SCOPE}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_USE_MOCKS=${VITE_USE_MOCKS}
 RUN npm run build

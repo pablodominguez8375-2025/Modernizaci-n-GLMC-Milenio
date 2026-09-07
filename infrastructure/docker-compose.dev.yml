@@ -29,6 +29,8 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       Database__ApplyMigrationsOnStartup: "true"
+      Authentication__Authority: ${OIDC_AUTHORITY:-}
+      Authentication__Audience: ${OIDC_API_AUDIENCE:-pmgm-api}
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${POSTGRES_PASSWORD:-pmgm_dev_only}
     ports:
       - "8080:8080"
@@ -40,6 +42,9 @@ services:
       args:
         VITE_API_BASE_URL: ""
         VITE_USE_MOCKS: ${VITE_USE_MOCKS:-true}
+        VITE_OIDC_AUTHORITY: ${OIDC_AUTHORITY:-}
+        VITE_OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+        VITE_OIDC_SCOPE: ${OIDC_SCOPE:-openid profile}
     container_name: pmgm-web
     restart: unless-stopped
     depends_on:

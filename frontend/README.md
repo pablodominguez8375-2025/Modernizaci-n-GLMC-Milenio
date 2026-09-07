@@ -18,7 +18,7 @@ Decisión registrada en `docs/adrs/PMGM-ADR-002.md`.
 ## Inicio rápido
 ```bash
 cd frontend
-npm install
+npm ci
 cp .env.example .env.local
 npm run dev
 ```
@@ -29,6 +29,7 @@ Por defecto `.env.example` activa `VITE_USE_MOCKS=true`, de manera que el dashbo
 ```bash
 npm run dev
 npm run lint
+npm test
 npm run build
 npm run preview
 ```
@@ -42,7 +43,7 @@ npm run preview
 ## Seguridad
 Las variables `VITE_*` se incorporan al bundle del navegador. **Nunca** deben contener secretos, client secrets, contraseñas ni access tokens.
 
-La autorización efectiva siempre se valida en el backend. El cliente API ya admite un proveedor futuro de access token para OIDC/PKCE sin acoplar la UI al proveedor de identidad.
+La autorización efectiva siempre se valida en el backend. El cliente API recibe el access token del adaptador OIDC/PKCE sin acoplar la UI al proveedor de identidad.
 
 ## Primer alcance visual
 - Shell institucional responsive.
@@ -51,3 +52,7 @@ La autorización efectiva siempre se valida en el backend. El cliente API ya adm
 - Búsqueda por persona/Taller.
 - Indicador visual del cumplimiento del plazo.
 - Fechas presentadas en `es-CL` y zona `America/Santiago`.
+
+## Autenticación
+
+Implementación OIDC Authorization Code + PKCE disponible. Ver [configuración, sesión y aceptación](OIDC.md) y [ADR-005](../adrs/PMGM-ADR-005-frontend-oidc-pkce.md). Demo requiere `VITE_USE_MOCKS=true` explícito.

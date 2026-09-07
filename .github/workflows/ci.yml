@@ -76,13 +76,16 @@ jobs:
           node-version: 24
 
       - name: Install frontend dependencies
-        run: npm install --prefix frontend --no-audit --no-fund
+        run: npm ci --prefix frontend --no-audit --no-fund
 
       - name: Lint frontend
         run: npm run lint --prefix frontend
 
       - name: Build frontend
         run: npm run build --prefix frontend
+
+      - name: Test OIDC session and API boundary
+        run: npm test --prefix frontend
 
       - name: Build frontend container
         run: docker build --build-arg VITE_USE_MOCKS=true -t pmgm-web-ci frontend

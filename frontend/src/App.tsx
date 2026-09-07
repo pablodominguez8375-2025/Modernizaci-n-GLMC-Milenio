@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  createDefaultPmgmApiClient,
+  type PmgmApiClient,
   type CandidatePublication,
   type CandidatePortalResponse,
   type SystemInfo,
@@ -8,9 +8,7 @@ import {
 
 type View = 'dashboard' | 'candidates'
 
-const api = createDefaultPmgmApiClient()
-
-export default function App() {
+export default function App({ api, onLogout }: { api: PmgmApiClient; onLogout?: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -37,7 +35,7 @@ export default function App() {
     return () => {
       active = false
     }
-  }, [])
+  }, [api])
 
   return (
     <div className="app-shell">
@@ -51,6 +49,7 @@ export default function App() {
         </button>
         <div className="topbar-meta">
           {api.useMocks && <span className="demo-badge">Modo demostración</span>}
+          {onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}
           <span className="environment-badge">v{systemInfo?.version ?? '0.10.0'}</span>
         </div>
       </header>
