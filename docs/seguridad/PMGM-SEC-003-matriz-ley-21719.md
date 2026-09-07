@@ -7,6 +7,8 @@
 ## 1. Objetivo
 Traducir las obligaciones relevantes de la Ley 21.719 en controles de arquitectura, aplicación, datos, seguridad y operación del Proyecto Milenio.
 
+La Ley 21.719 fue publicada el 13-12-2024 y su vigencia general está diferida al 01-12-2026. Esta matriz se utiliza desde ahora como diseño objetivo, sin perjuicio de la normativa actualmente vigente y de los reglamentos e instrucciones que emita la autoridad competente.
+
 ## 2. Matriz de cumplimiento
 
 | Tema | Riesgo PMGM | Control requerido | Evidencia técnica esperada |
@@ -20,7 +22,7 @@ Traducir las obligaciones relevantes de la Ley 21.719 en controles de arquitectu
 | Calidad/rectificación | datos erróneos o contradictorios | versionado/historial de correcciones | old/new value, actor, motivo, evidencia |
 | Supresión | retención innecesaria | motor de retención y supresión | política + job + log de ejecución |
 | Anonimización | conservar identidad sin necesidad | servicio de anonimización/pseudonimización | estrategia, job, evidencia irreversible cuando corresponda |
-| Portal de insinuados | exposición pública excesiva | vista mínima separada del expediente | DTO público/configurado + pruebas de no exposición |
+| Portal de insinuados | exposición excesiva | vista mínima separada del expediente | DTO de publicación + pruebas de no exposición |
 | Tesorería/Hospitalaria | revelar detalle financiero innecesario | proyección de estado mínimo | `al_dia/no_al_dia/excepcion` sin movimientos detallados |
 | Seguridad | filtración, pérdida o alteración | cifrado, MFA, RBAC, backups, monitoreo | configuración, pruebas, inventario de controles |
 | Incidentes | no detectar o reportar vulneración | registro y workflow de incidentes | evento, riesgo, categorías, titulares, medidas, notificaciones |
@@ -193,7 +195,7 @@ Ninguna decisión de alto riesgo debe quedar sólo en una conversación o correo
 
 ## 13. Pruebas mínimas
 - usuario de Taller A no accede a datos restringidos de Taller B;
-- endpoint público del portal de insinuados no devuelve RUT/email/teléfono/domicilio;
+- el portal de insinuados no devuelve RUT/email/teléfono/domicilio salvo política explícita y jurídicamente validada;
 - Gran Secretaría ve estado de regularidad, no movimientos de cuenta;
 - cambios de política de retención quedan versionados;
 - solicitudes de rectificación conservan auditoría sin impedir corrección efectiva;
@@ -218,5 +220,18 @@ Además de seguridad técnica, cada release con tratamiento personal relevante d
 
 Un `NO DEFINIDO` en finalidad, base jurídica, conservación o acceso bloquea la promoción a producción.
 
-## 15. Revisión jurídica
+## 15. Referencias funcionales de la Ley 21.719
+El diseño toma en cuenta, entre otras, las siguientes materias:
+- derechos de acceso, rectificación, supresión, oposición, portabilidad y bloqueo;
+- deber de información/transparencia;
+- protección desde el diseño y por defecto;
+- seguridad proporcional al riesgo;
+- reporte de vulneraciones cuando exista riesgo razonable;
+- tratamiento de datos sensibles;
+- regla especial para personas jurídicas sin fines de lucro de finalidad filosófica respecto de sus miembros;
+- evaluación de impacto para tratamientos de alto riesgo;
+- encargados/terceros mandatarios;
+- transferencias internacionales.
+
+## 16. Revisión jurídica
 Esta matriz establece controles técnicos de soporte al cumplimiento. La interpretación jurídica definitiva y las políticas institucionales deberán validarse antes de producción y actualizarse frente a reglamentos, instrucciones generales y criterios que emita la Agencia de Protección de Datos Personales.
