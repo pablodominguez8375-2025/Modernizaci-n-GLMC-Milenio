@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.RegimenInterior;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -24,6 +26,7 @@ builder.Services
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
 
 var app = builder.Build();
 
@@ -50,11 +53,13 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.2.0",
+    version = "0.3.0",
     runtime = ".NET 10"
 }));
 
 app.MapMembershipEndpoints();
+app.MapTransferEndpoints();
+app.MapRegimenInteriorEndpoints();
 
 app.Run();
 
