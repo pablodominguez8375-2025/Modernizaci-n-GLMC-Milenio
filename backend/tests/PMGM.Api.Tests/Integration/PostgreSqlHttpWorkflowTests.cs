@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
@@ -22,6 +23,7 @@ using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
 
+[Collection(PostgresIntegrationCollection.Name)]
 public sealed class PostgreSqlHttpWorkflowTests
 {
     [Fact]
