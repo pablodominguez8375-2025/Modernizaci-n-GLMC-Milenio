@@ -1,0 +1,84 @@
+{
+  "version": "0.1",
+  "law": "Chile Ley 21.719",
+  "effectiveDate": "2026-12-01",
+  "treatments": [
+    {
+      "code": "PMGM-DPA-001",
+      "module": "Core/Membresia",
+      "purpose": "Gestionar la identidad institucional, pertenencia e historial necesario de los miembros.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "rbac_and_scope",
+      "containsSensitiveData": true,
+      "owner": "Régimen Interior",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-002",
+      "module": "Régimen Interior",
+      "purpose": "Administrar antecedentes institucionales, reportes, consistencia histórica y apoyo a decisiones autorizadas.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "order_scope_rbac",
+      "containsSensitiveData": true,
+      "owner": "Régimen Interior",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-003",
+      "module": "Gran Tesorería",
+      "purpose": "Gestionar obligaciones financieras y exponer a otros módulos sólo estados mínimos de regularidad según finalidad.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "order_scope_rbac",
+      "containsSensitiveData": false,
+      "owner": "Gran Tesorería",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-004",
+      "module": "Gran Hospitalaria",
+      "purpose": "Gestionar reposiciones u obligaciones hospitalarias y exponer estados mínimos de regularidad para autorizaciones.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "order_scope_rbac",
+      "containsSensitiveData": false,
+      "owner": "Gran Hospitalaria",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-005",
+      "module": "Ceremonias/Portal de Insinuados",
+      "purpose": "Gestionar solicitudes de ceremonias y la publicación institucional mínima de insinuados cuando corresponda.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "rbac_scope_minimized_projection",
+      "containsSensitiveData": true,
+      "owner": "Gran Secretaría / Régimen Interior",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-006",
+      "module": "Auditoría",
+      "purpose": "Demostrar trazabilidad, seguridad, responsabilidad y cumplimiento de operaciones institucionales relevantes.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "privileged_access",
+      "containsSensitiveData": false,
+      "owner": "Administración / Privacidad",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-007",
+      "module": "Privacidad",
+      "purpose": "Gestionar derechos de titulares, incidentes, proveedores, transferencias internacionales, retención y evaluaciones de impacto.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "privacy_officer_order_scope",
+      "containsSensitiveData": true,
+      "owner": "Privacy Officer / DPD",
+      "legalReviewRequired": true
+    }
+  ]
+}
