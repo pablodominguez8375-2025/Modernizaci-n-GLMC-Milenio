@@ -49,9 +49,27 @@ public partial class AddCeremonyEligibility : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_ceremony_requests", x => x.Id);
-                table.ForeignKey("FK_ceremony_requests_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_ceremony_requests_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_ceremony_requests_people_CandidatePersonId", x => x.CandidatePersonId, "core", "people", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_ceremony_requests_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_ceremony_requests_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_ceremony_requests_people_CandidatePersonId",
+                    column: x => x.CandidatePersonId,
+                    principalSchema: "core",
+                    principalTable: "people",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -71,7 +89,13 @@ public partial class AddCeremonyEligibility : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_ceremony_validations", x => x.Id);
-                table.ForeignKey("FK_ceremony_validations_ceremony_requests_CeremonyRequestId", x => x.CeremonyRequestId, "core", "ceremony_requests", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_ceremony_validations_ceremony_requests_CeremonyRequestId",
+                    column: x => x.CeremonyRequestId,
+                    principalSchema: "core",
+                    principalTable: "ceremony_requests",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -94,9 +118,27 @@ public partial class AddCeremonyEligibility : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_candidate_publications", x => x.Id);
-                table.ForeignKey("FK_candidate_publications_ceremony_requests_CeremonyRequestId", x => x.CeremonyRequestId, "core", "ceremony_requests", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_candidate_publications_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_candidate_publications_people_PersonId", x => x.PersonId, "core", "people", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_candidate_publications_ceremony_requests_CeremonyRequestId",
+                    column: x => x.CeremonyRequestId,
+                    principalSchema: "core",
+                    principalTable: "ceremony_requests",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_candidate_publications_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_candidate_publications_people_PersonId",
+                    column: x => x.PersonId,
+                    principalSchema: "core",
+                    principalTable: "people",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(
