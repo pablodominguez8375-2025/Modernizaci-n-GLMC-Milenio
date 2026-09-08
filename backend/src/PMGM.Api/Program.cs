@@ -16,17 +16,90 @@ using PMGM.Api.Modules.RegimenInterior;
 using PMGM.Api.Modules.Treasury;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddProblemDetails(); builder.Services.AddLocalization(); builder.Services.Configure<RequestLocalizationOptions>(options => { var supportedCultures = new[] { new CultureInfo("es-CL") }; options.DefaultRequestCulture = new RequestCulture("es-CL"); options.SupportedCultures = supportedCultures; options.SupportedUICultures = supportedCultures; });
-var mainConnectionString = builder.Configuration.GetConnectionString("MainDatabase") ?? "Host=localhost;Port=5432;Database=pmgm;Username=pmgm_app;Password=pmgm_dev_only";
-builder.Services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(mainConnectionString)); builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer(options => { options.Authority = builder.Configuration["Authentication:Authority"]; options.Audience = builder.Configuration["Authentication:Audience"]; options.RequireHttpsMetadata = !builder.Environment.IsDevelopment(); });
-builder.Services.AddAuthorization(); builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>(); builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>(); builder.Services.AddScoped<IAuditService, AuditService>(); builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
+
+builder.Services.AddProblemDetails();
+builder.Services.AddLocalization();
+builder.Services.Configure<RequestLocalizationOptions>(options =>
+{
+    var supportedCultures = new[] { new CultureInfo("es-CL") };
+    options.DefaultRequestCulture = new RequestCulture("es-CL");
+    options.SupportedCultures = supportedCultures;
+    options.SupportedUICultures = supportedCultures;
+});
+
+var mainConnectionString = builder.Configuration.GetConnectionString("MainDatabase")
+    ?? "Host=localhost;Port=5432;Database=pmgm;Username=pmgm_app;Password=pmgm_dev_only";
+
+builder.Services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.Authority = builder.Configuration["Authentication:Authority"];
+        options.Audience = builder.Configuration["Authentication:Audience"];
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+    });
+
+builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
+builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
+
 var app = builder.Build();
-if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup")) { await using var scope = app.Services.CreateAsyncScope(); var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>(); await db.Database.MigrateAsync(); }
-app.UseExceptionHandler(); app.UseRequestLocalization(); app.UseAuthentication(); app.UseAuthorization();
+
+if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+    await db.Database.MigrateAsync();
+}
+
+app.UseExceptionHandler();
+app.UseRequestLocalization();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "PMGM.Api" }));
-app.MapGet("/health/ready", async (PmgmDbContext db, CancellationToken cancellationToken) => await db.Database.CanConnectAsync(cancellationToken) ? Results.Ok(new { status = "ready", database = "postgresql" }) : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
-app.MapGet("/api/system/info", () => Results.Ok(new { project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile", api = "PMGM.Api", version = "0.12.0", runtime = ".NET 10", culture = "es-CL", institutionalTimeZone = "America/Santiago", defaultCurrency = "CLP" }));
-app.MapSessionEndpoints(); app.MapOrganizationEndpoints(); app.MapMembershipEndpoints(); app.MapTransferEndpoints(); app.MapRegimenInteriorEndpoints(); app.MapTreasuryEndpoints(); app.MapHospitalariaEndpoints(); app.MapInstitutionalRegularityProjectionEndpoints(); app.MapCeremonyEndpoints(); app.MapCandidatePublicationEndpoints(); app.MapGrandSecretariatEndpoints(); app.MapGrandSecretariatQueryEndpoints(); app.MapGrandSecretariatCeremonyQueueEndpoints(); app.MapPrivacyEndpoints(); app.MapPrivacyRetentionEndpoints(); app.MapPrivacyRiskEndpoints(); app.MapPrivacyProcessorEndpoints(); app.MapPrivacyProcessorLifecycleEndpoints(); app.MapPrivacyLegalRuleEndpoints(); app.MapPrivacyWorkflowEndpoints();
+app.MapGet("/health/ready", async (PmgmDbContext db, CancellationToken cancellationToken) =>
+    await db.Database.CanConnectAsync(cancellationToken)
+        ? Results.Ok(new { status = "ready", database = "postgresql" })
+        : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+
+app.MapGet("/api/system/info", () => Results.Ok(new
+{
+    project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
+    api = "PMGM.Api",
+    version = "0.12.1",
+    runtime = ".NET 10",
+    culture = "es-CL",
+    institutionalTimeZone = "America/Santiago",
+    defaultCurrency = "CLP"
+}));
+
+app.MapSessionEndpoints();
+app.MapOrganizationEndpoints();
+app.MapMembershipEndpoints();
+app.MapTransferEndpoints();
+app.MapRegimenInteriorEndpoints();
+app.MapTreasuryEndpoints();
+app.MapHospitalariaEndpoints();
+app.MapInstitutionalRegularityProjectionEndpoints();
+app.MapCeremonyEndpoints();
+app.MapCandidatePublicationEndpoints();
+app.MapCeremonyReviewQueueEndpoints();
+app.MapGrandSecretariatEndpoints();
+app.MapGrandSecretariatQueryEndpoints();
+app.MapGrandSecretariatCeremonyQueueEndpoints();
+app.MapPrivacyEndpoints();
+app.MapPrivacyRetentionEndpoints();
+app.MapPrivacyRiskEndpoints();
+app.MapPrivacyProcessorEndpoints();
+app.MapPrivacyProcessorLifecycleEndpoints();
+app.MapPrivacyLegalRuleEndpoints();
+app.MapPrivacyWorkflowEndpoints();
+
 app.Run();
+
 public partial class Program;

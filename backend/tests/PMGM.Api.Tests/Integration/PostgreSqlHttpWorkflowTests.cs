@@ -118,7 +118,7 @@ public sealed class PostgreSqlHttpWorkflowTests
                 memberId,
                 candidatePersonId = (Guid?)null,
                 proposedDate = new DateOnly(2026, 10, 1),
-                notes = (string?)null
+                notes = "Nota restringida que nunca debe salir en la bandeja."
             },
             cancellationToken);
         Assert.Equal(HttpStatusCode.Created, ceremonyResponse.StatusCode);
@@ -132,7 +132,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             {
                 status = CeremonyCodes.ValidationStatus.Approved,
                 sourceReference = "CI-HTTP-RI",
-                notes = (string?)null
+                notes = "Observación interna restringida."
             },
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, validationResponse.StatusCode);
@@ -145,6 +145,33 @@ public sealed class PostgreSqlHttpWorkflowTests
         var eligibilityJson = await eligibilityResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.True(eligibilityJson.GetProperty("canAuthorize").GetBoolean());
 
+        var queueBeforeResponse = await client.GetAsync(
+            "/api/institutional/ceremonias/bandeja",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, queueBeforeResponse.StatusCode);
+        var cacheControl = queueBeforeResponse.Headers.CacheControl?.ToString() ?? string.Empty;
+        Assert.Contains("private", cacheControl, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no-store", cacheControl, StringComparison.OrdinalIgnoreCase);
+
+        var queueBeforeJson = await queueBeforeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var queueBeforeItem = queueBeforeJson.GetProperty("items")
+            .EnumerateArray()
+            .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
+
+        Assert.Equal(organizationId, queueBeforeItem.GetProperty("organizationId").GetGuid());
+        Assert.Equal("Hermano Integración", queueBeforeItem.GetProperty("subjectDisplayName").GetString());
+        Assert.Equal(CeremonyCodes.Type.WageIncrease, queueBeforeItem.GetProperty("ceremonyType").GetString());
+        Assert.Equal(CeremonyCodes.RequestStatus.UnderReview, queueBeforeItem.GetProperty("status").GetString());
+        Assert.True(queueBeforeItem.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
+        Assert.True(queueBeforeItem.GetProperty("actions").GetProperty("canValidateInternalAffairs").GetBoolean());
+        Assert.True(queueBeforeItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
+        Assert.False(queueBeforeItem.GetProperty("actions").GetProperty("canPublishCandidate").GetBoolean());
+        Assert.False(queueBeforeItem.TryGetProperty("memberId", out _));
+        Assert.False(queueBeforeItem.TryGetProperty("candidatePersonId", out _));
+        Assert.False(queueBeforeItem.TryGetProperty("notes", out _));
+        Assert.False(queueBeforeItem.TryGetProperty("email", out _));
+        Assert.False(queueBeforeItem.TryGetProperty("institutionalNumber", out _));
+
         var authorizeResponse = await client.PostAsync(
             $"/api/ceremonias/solicitudes/{ceremonyId}/autorizar",
             content: null,
@@ -153,6 +180,18 @@ public sealed class PostgreSqlHttpWorkflowTests
 
         var authorizeJson = await authorizeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(CeremonyCodes.RequestStatus.Authorized, authorizeJson.GetProperty("status").GetString());
+
+        var queueAfterResponse = await client.GetAsync(
+            "/api/institutional/ceremonias/bandeja",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, queueAfterResponse.StatusCode);
+        var queueAfterJson = await queueAfterResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var queueAfterItem = queueAfterJson.GetProperty("items")
+            .EnumerateArray()
+            .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
+        Assert.Equal(CeremonyCodes.RequestStatus.Authorized, queueAfterItem.GetProperty("status").GetString());
+        Assert.False(queueAfterItem.GetProperty("actions").GetProperty("canValidateInternalAffairs").GetBoolean());
+        Assert.False(queueAfterItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
 
         await using (var verificationScope = factory.Services.CreateAsyncScope())
         {

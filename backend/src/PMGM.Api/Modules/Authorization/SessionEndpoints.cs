@@ -35,6 +35,9 @@ public sealed record SessionCapabilitiesDto(
     bool CanManageTreasuryRegularity,
     bool CanManageHospitalariaRegularity,
     bool CanEvaluateCeremonies,
+    bool CanReviewCeremonies,
+    bool CanValidateCeremonyInternalAffairs,
+    bool CanAuthorizeCeremonies,
     bool CanManagePrivacy);
 
 public static class SessionProfileBuilder
@@ -55,6 +58,10 @@ public static class SessionProfileBuilder
                 ? "organization"
                 : "authenticated";
 
+        var canReviewCeremonies = access.CanEvaluateCeremonies(user) ||
+                                  (access.HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria) &&
+                                   user.Claims.Any(x => x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
+
         return new SessionProfileDto(
             DisplayName: displayName.Trim(),
             AccessScope: accessScope,
@@ -65,6 +72,9 @@ public static class SessionProfileBuilder
                 CanManageTreasuryRegularity: access.CanManageTreasuryRegularity(user),
                 CanManageHospitalariaRegularity: access.CanManageHospitalariaRegularity(user),
                 CanEvaluateCeremonies: access.CanEvaluateCeremonies(user),
+                CanReviewCeremonies: canReviewCeremonies,
+                CanValidateCeremonyInternalAffairs: access.CanValidateCeremonyInternalAffairs(user),
+                CanAuthorizeCeremonies: access.CanAuthorizeCeremonies(user),
                 CanManagePrivacy: access.CanManagePrivacy(user)));
     }
 }

@@ -34,6 +34,9 @@ public interface IInstitutionalAccessService
     bool CanManageHospitalariaRegularity(ClaimsPrincipal user);
     bool CanReadInstitutionalRegularity(ClaimsPrincipal user);
     bool CanEvaluateCeremonies(ClaimsPrincipal user);
+    bool CanReviewCeremonies(ClaimsPrincipal user, Guid organizationId);
+    bool CanValidateCeremonyInternalAffairs(ClaimsPrincipal user);
+    bool CanAuthorizeCeremonies(ClaimsPrincipal user);
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
     bool CanManagePrivacy(ClaimsPrincipal user);
 }
@@ -113,6 +116,25 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     public bool CanEvaluateCeremonies(ClaimsPrincipal user)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria);
+
+    public bool CanReviewCeremonies(ClaimsPrincipal user, Guid organizationId)
+    {
+        if (CanEvaluateCeremonies(user))
+        {
+            return true;
+        }
+
+        return HasOrganizationClaim(user, organizationId) &&
+               HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
+    }
+
+    public bool CanValidateCeremonyInternalAffairs(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
+
+    public bool CanAuthorizeCeremonies(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranSecretaria);
 
     public bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId)
     {
