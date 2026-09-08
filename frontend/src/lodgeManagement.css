@@ -1,0 +1,27 @@
+.lodge-toolbar { display: grid; grid-template-columns: minmax(260px, 420px) 1fr; gap: 22px; align-items: end; margin-bottom: 18px; }
+.lodge-context { display: grid; gap: 5px; justify-items: end; text-align: right; color: var(--muted); }
+.lodge-context strong { color: var(--ink); font-size: 13px; }
+.lodge-context small { max-width: 560px; line-height: 1.5; }
+.lodge-layout { display: grid; grid-template-columns: minmax(300px, .8fr) minmax(0, 1.7fr); gap: 18px; align-items: start; }
+.lodge-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.lodge-meeting-list { display: grid; gap: 8px; margin-top: 20px; }
+.lodge-meeting { width: 100%; border: 1px solid #e3e7ee; background: #fff; border-radius: 12px; padding: 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; text-align: left; }
+.lodge-meeting:hover, .lodge-meeting.selected { border-color: #d4ba7c; background: var(--gold-soft); }
+.lodge-meeting > div { display: grid; gap: 3px; min-width: 0; }
+.lodge-meeting strong { color: var(--ink); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.lodge-meeting small { color: var(--muted); font-size: 10px; }
+.lodge-detail { min-width: 0; }
+.lodge-section { border-top: 1px solid #e8ebf1; padding-top: 20px; margin-top: 20px; }
+.lodge-section h3 { margin: 2px 0 0; font-size: 17px; }
+.lodge-attendance-list, .lodge-minute-list { display: grid; gap: 8px; margin-top: 17px; }
+.lodge-attendance-list > div { border: 1px solid #e5e9f0; border-radius: 10px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface-soft); }
+.lodge-attendance-list > div > div { display: grid; gap: 2px; }
+.lodge-attendance-list strong { font-size: 12px; color: var(--ink); }
+.lodge-attendance-list small { color: var(--muted); font-size: 10px; }
+.lodge-minute-list article { border: 1px solid #e5e9f0; border-radius: 12px; padding: 14px; display: grid; gap: 10px; background: #fff; }
+.lodge-minute-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.lodge-minute-list p { white-space: pre-wrap; max-height: 210px; overflow: auto; margin: 0; color: #4d5870; line-height: 1.55; font-size: 12px; }
+.lodge-minute-list small { color: var(--muted); }
+.lodge-minute-list .regularity-secondary { justify-self: start; }
+@media (max-width: 1050px) { .lodge-layout { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .lodge-toolbar, .lodge-form-row { grid-template-columns: 1fr; } .lodge-context { justify-items: start; text-align: left; } .lodge-meeting { align-items: flex-start; } }
