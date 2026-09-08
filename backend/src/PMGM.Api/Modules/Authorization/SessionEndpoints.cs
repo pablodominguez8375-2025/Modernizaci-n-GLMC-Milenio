@@ -38,6 +38,7 @@ public sealed record SessionCapabilitiesDto(
     bool CanReviewCeremonies,
     bool CanValidateCeremonyInternalAffairs,
     bool CanAuthorizeCeremonies,
+    bool CanManageLodgeOperations,
     bool CanManagePrivacy);
 
 public static class SessionProfileBuilder
@@ -75,6 +76,7 @@ public static class SessionProfileBuilder
                 CanReviewCeremonies: canReviewCeremonies,
                 CanValidateCeremonyInternalAffairs: access.CanValidateCeremonyInternalAffairs(user),
                 CanAuthorizeCeremonies: access.CanAuthorizeCeremonies(user),
+                CanManageLodgeOperations: access.CanManageLodgeOperations(user),
                 CanManagePrivacy: access.CanManagePrivacy(user)));
     }
 }

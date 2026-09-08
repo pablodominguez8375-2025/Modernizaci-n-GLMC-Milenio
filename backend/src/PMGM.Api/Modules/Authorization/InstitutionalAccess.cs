@@ -27,6 +27,7 @@ public interface IInstitutionalAccessService
     bool HasRole(ClaimsPrincipal user, params string[] roles);
     bool CanReadOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
+    bool CanManageLodgeOperations(ClaimsPrincipal user);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
@@ -82,6 +83,11 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         return HasOrganizationClaim(user, organizationId) &&
                HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
     }
+
+    public bool CanManageLodgeOperations(ClaimsPrincipal user)
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin)) ||
+           (HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria) &&
+            user.Claims.Any(x => x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
 
     public bool CanApproveTransfers(ClaimsPrincipal user)
         => HasOrderScope(user) &&

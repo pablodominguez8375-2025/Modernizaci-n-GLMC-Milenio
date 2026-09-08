@@ -3,7 +3,10 @@ import json
 from pathlib import Path
 import sys
 
-CATALOG = Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-CATALOG.json")
+CATALOGS = [
+    Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-CATALOG.json"),
+    Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-LODGE-MANAGEMENT.json"),
+]
 ALLOWED_CLASSIFICATIONS = {
     "public_projection",
     "internal",
@@ -35,19 +38,24 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+def load_rows() -> list[dict]:
+    rows: list[dict] = []
+    for catalog in CATALOGS:
+        if not catalog.exists():
+            fail(f"No existe el catálogo {catalog}.")
+        try:
+            payload = json.loads(catalog.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            fail(f"No fue posible leer {catalog}: {exc}")
+        catalog_rows = payload.get("classifications")
+        if not isinstance(catalog_rows, list) or not catalog_rows:
+            fail(f"{catalog} debe contener al menos una clasificación de campo.")
+        rows.extend(catalog_rows)
+    return rows
+
+
 def main() -> int:
-    if not CATALOG.exists():
-        fail(f"No existe el catálogo {CATALOG}.")
-
-    try:
-        payload = json.loads(CATALOG.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError) as exc:
-        fail(f"No fue posible leer el catálogo: {exc}")
-
-    rows = payload.get("classifications")
-    if not isinstance(rows, list) or not rows:
-        fail("El catálogo debe contener al menos una clasificación de campo.")
-
+    rows = load_rows()
     seen_codes: set[str] = set()
     seen_fields: set[tuple[str, str, str]] = set()
 
@@ -102,7 +110,7 @@ def main() -> int:
         if row["publicProjection"] and row["allowExport"]:
             fail(f"{code}: la proyección pública no habilita exportación masiva por defecto.")
 
-    print(f"Data classification gate OK: {len(rows)} campos clasificados con guardrails estructurales.")
+    print(f"Data classification gate OK: {len(rows)} campos clasificados en {len(CATALOGS)} catálogos con guardrails estructurales.")
     return 0
 
 
