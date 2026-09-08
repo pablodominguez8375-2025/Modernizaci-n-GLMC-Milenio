@@ -134,8 +134,10 @@ jobs:
           dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
           --configuration Release
           --no-restore
-          --logger "trx;LogFileName=pmgm-tests.trx"
           --results-directory artifacts/test-results
+          --report-xunit-trx
+          --report-xunit-trx-filename pmgm-tests.trx
+          --xunit-info
 
       - name: Publish backend test results
         if: always()
