@@ -130,7 +130,21 @@ jobs:
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
       - name: Test unit, PostgreSQL, S3 and ClamAV integration
-        run: dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj --configuration Release --no-restore
+        run: >-
+          dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
+          --configuration Release
+          --no-restore
+          --logger "trx;LogFileName=pmgm-tests.trx"
+          --results-directory artifacts/test-results
+
+      - name: Publish backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-backend-test-results
+          path: artifacts/test-results
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Stop ClamAV
         if: always()
@@ -185,5 +199,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Docker Compose
+      - name: Validate development Docker Compose
         run: docker compose -f infrastructure/docker-compose.dev.yml config
+
+      - name: Validate QA Docker Compose
+        env:
+          POSTGRES_PASSWORD: ci_qa_postgres_only
+          MINIO_ACCESS_KEY: ci_qa_storage
+          MINIO_SECRET_KEY: ci_qa_storage_secret_only
+        run: docker compose -f infrastructure/docker-compose.qa.yml config
