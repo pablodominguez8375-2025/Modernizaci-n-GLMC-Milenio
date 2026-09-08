@@ -3,6 +3,7 @@ import {
   type PmgmApiClient,
   type CandidatePublication,
   type CandidatePortalResponse,
+  type SessionProfile,
   type SystemInfo,
 } from './api/pmgmApi'
 
@@ -12,17 +13,19 @@ export default function App({ api, onLogout }: { api: PmgmApiClient; onLogout?: 
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
+  const [profile, setProfile] = useState<SessionProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
 
-    Promise.all([api.getCandidatePortal(), api.getSystemInfo()])
-      .then(([portalResponse, systemResponse]) => {
+    Promise.all([api.getCandidatePortal(), api.getSystemInfo(), api.getSessionProfile()])
+      .then(([portalResponse, systemResponse, sessionProfile]) => {
         if (!active) return
         setPortal(portalResponse)
         setSystemInfo(systemResponse)
+        setProfile(sessionProfile)
       })
       .catch((reason: unknown) => {
         if (!active) return
@@ -49,8 +52,9 @@ export default function App({ api, onLogout }: { api: PmgmApiClient; onLogout?: 
         </button>
         <div className="topbar-meta">
           {api.useMocks && <span className="demo-badge">Modo demostración</span>}
+          {profile && <span className="environment-badge">{profile.displayName}</span>}
           {onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}
-          <span className="environment-badge">v{systemInfo?.version ?? '0.10.0'}</span>
+          <span className="environment-badge">v{systemInfo?.version ?? '0.11.0'}</span>
         </div>
       </header>
 
@@ -63,15 +67,15 @@ export default function App({ api, onLogout }: { api: PmgmApiClient; onLogout?: 
             <span aria-hidden="true">◎</span> Insinuados
           </button>
           <div className="nav-section">Gestión institucional</div>
-          <span className="nav-item disabled"><span aria-hidden="true">◇</span> Régimen Interior <em>próximo</em></span>
-          <span className="nav-item disabled"><span aria-hidden="true">▤</span> Gran Secretaría <em>próximo</em></span>
+          <ModuleAccess icon="◇" label="Régimen Interior" allowed={profile?.capabilities.canRunRegimenInteriorReports ?? false} />
+          <ModuleAccess icon="▤" label="Gran Secretaría" allowed={profile?.capabilities.canManageGrandSecretariat ?? false} />
           <span className="nav-item disabled"><span aria-hidden="true">□</span> Gestión Logial <em>próximo</em></span>
         </nav>
 
         <main className="content" id="contenido-principal">
           {error && <ErrorBanner message={error} />}
           {view === 'dashboard' ? (
-            <Dashboard portal={portal} systemInfo={systemInfo} loading={loading} onOpenCandidates={() => setView('candidates')} />
+            <Dashboard portal={portal} systemInfo={systemInfo} profile={profile} loading={loading} onOpenCandidates={() => setView('candidates')} />
           ) : (
             <CandidatePortal portal={portal} loading={loading} />
           )}
@@ -84,15 +88,20 @@ export default function App({ api, onLogout }: { api: PmgmApiClient; onLogout?: 
 function Dashboard({
   portal,
   systemInfo,
+  profile,
   loading,
   onOpenCandidates,
 }: {
   portal: CandidatePortalResponse | null
   systemInfo: SystemInfo | null
+  profile: SessionProfile | null
   loading: boolean
   onOpenCandidates: () => void
 }) {
   const completedPublications = portal?.items.filter((item) => item.elapsedDays >= item.requiredDays).length ?? 0
+  const institutionalCapabilities = profile
+    ? Object.values(profile.capabilities).filter(Boolean).length
+    : 0
 
   return (
     <>
@@ -111,7 +120,7 @@ function Dashboard({
       <section className="metric-grid" aria-label="Indicadores principales">
         <MetricCard label="Insinuados publicados" value={loading ? '—' : String(portal?.total ?? 0)} detail="Período institucional vigente" />
         <MetricCard label="Plazo cumplido" value={loading ? '—' : String(completedPublications)} detail="Listos para continuar validaciones" />
-        <MetricCard label="Regla de publicación" value="20 días" detail="Parametrizable por la institución" />
+        <MetricCard label="Ámbito de acceso" value={loading ? '—' : accessScopeLabel(profile?.accessScope)} detail={`${institutionalCapabilities} capacidades autorizadas por la API`} />
         <MetricCard label="Backend" value={systemInfo?.runtime ?? '.NET 10'} detail="PostgreSQL · Auditoría persistente" />
       </section>
 
@@ -132,13 +141,21 @@ function Dashboard({
           <h2>Próximos hitos</h2>
           <ol>
             <li><span className="milestone-state done">✓</span><div><strong>Gran Secretaría</strong><small>Reservas, autorizaciones y documentos con auditoría.</small></div></li>
-            <li><span className="milestone-state current">2</span><div><strong>Portal e intranet</strong><small>Experiencia responsive por roles.</small></div></li>
-            <li><span className="milestone-state">3</span><div><strong>SSO institucional</strong><small>OIDC/PKCE y proveedor definitivo.</small></div></li>
+            <li><span className="milestone-state done">✓</span><div><strong>SSO base</strong><small>OIDC/PKCE, sesión en memoria y capacidades calculadas por la API.</small></div></li>
+            <li><span className="milestone-state current">3</span><div><strong>Proveedor institucional</strong><small>Configurar IdP real, MFA y claims institucionales.</small></div></li>
             <li><span className="milestone-state">4</span><div><strong>Gestión Logial</strong><small>Tenidas, asistencia, actas y Secretaría de Taller.</small></div></li>
           </ol>
         </article>
       </section>
     </>
+  )
+}
+
+function ModuleAccess({ icon, label, allowed }: { icon: string; label: string; allowed: boolean }) {
+  return (
+    <span className={allowed ? 'nav-item' : 'nav-item disabled'}>
+      <span aria-hidden="true">{icon}</span> {label} <em>{allowed ? 'autorizado' : 'sin acceso'}</em>
+    </span>
   )
 }
 
@@ -232,6 +249,13 @@ function LoadingRows() {
 
 function ErrorBanner({ message }: { message: string }) {
   return <div className="error-banner" role="alert"><strong>No fue posible conectar con la información institucional.</strong><span>{message}</span></div>
+}
+
+function accessScopeLabel(scope?: SessionProfile['accessScope']): string {
+  if (scope === 'order') return 'Orden'
+  if (scope === 'organization') return 'Taller'
+  if (scope === 'authenticated') return 'Autenticado'
+  return '—'
 }
 
 function normalize(value: string): string {

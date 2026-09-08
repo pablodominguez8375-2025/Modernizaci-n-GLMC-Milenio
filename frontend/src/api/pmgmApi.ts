@@ -28,6 +28,22 @@ export interface SystemInfo {
   defaultCurrency: string
 }
 
+export interface SessionCapabilities {
+  canApproveTransfers: boolean
+  canRunRegimenInteriorReports: boolean
+  canManageGrandSecretariat: boolean
+  canManageTreasuryRegularity: boolean
+  canManageHospitalariaRegularity: boolean
+  canEvaluateCeremonies: boolean
+  canManagePrivacy: boolean
+}
+
+export interface SessionProfile {
+  displayName: string
+  accessScope: 'order' | 'organization' | 'authenticated'
+  capabilities: SessionCapabilities
+}
+
 export type AccessTokenProvider = () => Promise<string | null>
 
 export interface PmgmApiClientOptions {
@@ -64,6 +80,20 @@ const mockCandidates: CandidatePublication[] = [
   },
 ]
 
+const mockSession: SessionProfile = {
+  displayName: 'Usuario demostrativo',
+  accessScope: 'order',
+  capabilities: {
+    canApproveTransfers: true,
+    canRunRegimenInteriorReports: true,
+    canManageGrandSecretariat: true,
+    canManageTreasuryRegularity: true,
+    canManageHospitalariaRegularity: true,
+    canEvaluateCeremonies: true,
+    canManagePrivacy: true,
+  },
+}
+
 export class PmgmApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
@@ -96,7 +126,7 @@ export class PmgmApiClient {
       return {
         project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile',
         api: 'PMGM.Api',
-        version: '0.10.0',
+        version: '0.11.0',
         runtime: '.NET 10',
         culture: 'es-CL',
         institutionalTimeZone: 'America/Santiago',
@@ -107,15 +137,18 @@ export class PmgmApiClient {
     return this.request<SystemInfo>('/api/system/info')
   }
 
+  async getSessionProfile(): Promise<SessionProfile> {
+    if (this.useMocks) return mockSession
+    return this.request<SessionProfile>('/api/session/me')
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers)
     headers.set('Accept', 'application/json')
 
     const token = await this.getAccessToken?.()
     if (!token) throw new Error('Debe ingresar para consultar la información institucional.')
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`)
-    }
+    headers.set('Authorization', `Bearer ${token}`)
 
     const response = await fetch(`${this.baseUrl}${path}`, {
       ...init,
