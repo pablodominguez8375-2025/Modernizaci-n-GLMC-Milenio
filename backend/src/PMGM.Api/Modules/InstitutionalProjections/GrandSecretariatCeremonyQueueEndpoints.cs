@@ -58,16 +58,40 @@ public static class GrandSecretariatCeremonyQueueEndpoints
                 .ToListAsync(cancellationToken))
                 .ToHashSet();
 
-        var items = ceremonies.Select(x => new GrandSecretariatCeremonyQueueItemDto(
-            x.Id,
-            x.OrganizationId,
-            x.OrganizationName,
-            x.OrganizationNumber,
-            x.CeremonyType,
-            x.ProposedDate,
-            x.Status,
-            issuedIds.Contains(x.Id),
-            x.CreatedAtUtc)).ToList();
+        var reservationRows = requestIds.Count == 0
+            ? []
+            : await secretariatDb.SpaceReservations
+                .AsNoTracking()
+                .Include(x => x.Space)
+                .Where(x => x.CeremonyRequestId != null &&
+                            requestIds.Contains(x.CeremonyRequestId.Value) &&
+                            x.Status == GrandSecretariatCodes.ReservationStatus.Reserved)
+                .ToListAsync(cancellationToken);
+
+        var reservationByRequest = reservationRows
+            .GroupBy(x => x.CeremonyRequestId!.Value)
+            .ToDictionary(
+                x => x.Key,
+                x => x.OrderBy(y => y.StartsAtUtc).First());
+
+        var items = ceremonies.Select(x =>
+        {
+            reservationByRequest.TryGetValue(x.Id, out var reservation);
+            return new GrandSecretariatCeremonyQueueItemDto(
+                x.Id,
+                x.OrganizationId,
+                x.OrganizationName,
+                x.OrganizationNumber,
+                x.CeremonyType,
+                x.ProposedDate,
+                x.Status,
+                issuedIds.Contains(x.Id),
+                reservation?.Id,
+                reservation?.Space.Name,
+                reservation?.StartsAtUtc,
+                reservation?.EndsAtUtc,
+                x.CreatedAtUtc);
+        }).ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new GrandSecretariatCeremonyQueueResponse(items.Count, items));
@@ -83,6 +107,10 @@ public sealed record GrandSecretariatCeremonyQueueItemDto(
     DateOnly? ProposedDate,
     string Status,
     bool FormalAuthorizationIssued,
+    Guid? SpaceReservationId,
+    string? SpaceName,
+    DateTimeOffset? ReservationStartsAtUtc,
+    DateTimeOffset? ReservationEndsAtUtc,
     DateTimeOffset CreatedAtUtc);
 
 public sealed record GrandSecretariatCeremonyQueueResponse(
