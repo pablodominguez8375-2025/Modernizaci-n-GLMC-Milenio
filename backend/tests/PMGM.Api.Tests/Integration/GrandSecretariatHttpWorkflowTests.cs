@@ -24,10 +24,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
     public async Task Authorized_ceremony_can_reserve_space_and_issue_formal_authorization()
     {
         var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
-        if (string.IsNullOrWhiteSpace(connectionString))
-        {
-            return;
-        }
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
 
         var cancellationToken = TestContext.Current.CancellationToken;
         using var factory = new GrandSecretariatWebApplicationFactory(connectionString);
@@ -58,7 +55,6 @@ public sealed class GrandSecretariatHttpWorkflowTests
 
             db.AddRange(organization, ceremony);
             await db.SaveChangesAsync(cancellationToken);
-
             organizationId = organization.Id;
             ceremonyId = ceremony.Id;
         }
@@ -78,7 +74,6 @@ public sealed class GrandSecretariatHttpWorkflowTests
 
         var spaceJson = await createSpace.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var spaceId = spaceJson.GetProperty("id").GetGuid();
-
         var startsAtUtc = new DateTimeOffset(2026, 10, 15, 22, 0, 0, TimeSpan.Zero);
         var endsAtUtc = startsAtUtc.AddHours(3);
 
@@ -100,6 +95,35 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var reservationJson = await reservationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var reservationId = reservationJson.GetProperty("id").GetGuid();
 
+        var queueBeforeResponse = await client.GetAsync(
+            "/api/institutional/gran-secretaria/ceremonias-autorizadas",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, queueBeforeResponse.StatusCode);
+        Assert.Equal("private, no-store", queueBeforeResponse.Headers.CacheControl?.ToString());
+
+        var queueBeforeJson = await queueBeforeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var queueBeforeItem = queueBeforeJson.GetProperty("items")
+            .EnumerateArray()
+            .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
+        Assert.False(queueBeforeItem.GetProperty("formalAuthorizationIssued").GetBoolean());
+        Assert.Equal(reservationId, queueBeforeItem.GetProperty("spaceReservationId").GetGuid());
+        Assert.Equal("Templo CI", queueBeforeItem.GetProperty("spaceName").GetString());
+        Assert.Equal(startsAtUtc, queueBeforeItem.GetProperty("reservationStartsAtUtc").GetDateTimeOffset());
+        Assert.Equal(endsAtUtc, queueBeforeItem.GetProperty("reservationEndsAtUtc").GetDateTimeOffset());
+        Assert.False(queueBeforeItem.TryGetProperty("memberId", out _));
+        Assert.False(queueBeforeItem.TryGetProperty("candidatePersonId", out _));
+        Assert.False(queueBeforeItem.TryGetProperty("notes", out _));
+
+        var reservationsProjectionResponse = await client.GetAsync(
+            $"/api/gran-secretaria/reservas?fromUtc={Uri.EscapeDataString(startsAtUtc.ToString("O"))}&toUtc={Uri.EscapeDataString(endsAtUtc.ToString("O"))}&ceremonyRequestId={ceremonyId}",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, reservationsProjectionResponse.StatusCode);
+        var reservationsProjectionJson = await reservationsProjectionResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var reservationProjection = reservationsProjectionJson.GetProperty("items").EnumerateArray().Single();
+        Assert.Equal(reservationId, reservationProjection.GetProperty("id").GetGuid());
+        Assert.Equal(ceremonyId, reservationProjection.GetProperty("ceremonyRequestId").GetGuid());
+        Assert.False(reservationProjection.TryGetProperty("notes", out _));
+
         var overlapResponse = await client.PostAsJsonAsync(
             "/api/gran-secretaria/reservas",
             new
@@ -119,11 +143,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
             $"/api/gran-secretaria/espacios/disponibilidad?fromUtc={Uri.EscapeDataString(startsAtUtc.ToString("O"))}&toUtc={Uri.EscapeDataString(endsAtUtc.ToString("O"))}",
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, availabilityResponse.StatusCode);
-
         var availabilityJson = await availabilityResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        var targetSpace = availabilityJson.GetProperty("items")
-            .EnumerateArray()
-            .Single(x => x.GetProperty("id").GetGuid() == spaceId);
+        var targetSpace = availabilityJson.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == spaceId);
         Assert.False(targetSpace.GetProperty("isAvailable").GetBoolean());
 
         var authorizationResponse = await client.PostAsJsonAsync(
@@ -133,11 +154,18 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(HttpStatusCode.Created, authorizationResponse.StatusCode);
 
         var authorizationJson = await authorizationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.Equal(
-            GrandSecretariatCodes.DocumentType.CeremonyAuthorization,
-            authorizationJson.GetProperty("documentType").GetString());
+        Assert.Equal(GrandSecretariatCodes.DocumentType.CeremonyAuthorization, authorizationJson.GetProperty("documentType").GetString());
         Assert.Equal(ceremonyId, authorizationJson.GetProperty("relatedCeremonyRequestId").GetGuid());
         Assert.Equal(reservationId, authorizationJson.GetProperty("spaceReservationId").GetGuid());
+
+        var queueAfterResponse = await client.GetAsync(
+            "/api/institutional/gran-secretaria/ceremonias-autorizadas",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, queueAfterResponse.StatusCode);
+        var queueAfterJson = await queueAfterResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var queueAfterItem = queueAfterJson.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
+        Assert.True(queueAfterItem.GetProperty("formalAuthorizationIssued").GetBoolean());
+        Assert.Equal(reservationId, queueAfterItem.GetProperty("spaceReservationId").GetGuid());
 
         var duplicateAuthorization = await client.PostAsJsonAsync(
             $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
@@ -160,7 +188,6 @@ public sealed class GrandSecretariatHttpWorkflowTests
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
-
             var authorization = await db.SecretariatDocuments
                 .AsNoTracking()
                 .SingleAsync(

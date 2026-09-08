@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
+  type GrandSecretariatCeremonyQueueItem,
   type InstitutionalSpace,
   type OrganizationOption,
   type PmgmApiClient,
@@ -17,6 +18,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null)
   const [documents, setDocuments] = useState<SecretariatDocument[]>([])
+  const [ceremonies, setCeremonies] = useState<GrandSecretariatCeremonyQueueItem[]>([])
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -28,28 +30,20 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
     if (new Date(toUtc) <= new Date(fromUtc)) throw new Error('El término debe ser posterior al inicio.')
     setAvailability(await api.getSecretariatAvailability(fromUtc, toUtc))
   }
-
-  const refreshDocuments = async () => {
-    const response = await api.getSecretariatDocuments()
-    setDocuments(response.items)
-  }
+  const refreshDocuments = async () => { const response = await api.getSecretariatDocuments(); setDocuments(response.items) }
+  const refreshCeremonies = async () => { const response = await api.getSecretariatCeremonyQueue(); setCeremonies(response.items) }
 
   useEffect(() => {
     let active = true
     Promise.all([
       api.getOrganizationOptions(),
       api.getSecretariatDocuments(),
+      api.getSecretariatCeremonyQueue(),
       api.getSecretariatAvailability(santiagoLocalToIso(initial.from), santiagoLocalToIso(initial.to)),
-    ]).then(([orgs, docs, spaces]) => {
+    ]).then(([orgs, docs, queue, spaces]) => {
       if (!active) return
-      setOrganizations(orgs.items)
-      setDocuments(docs.items)
-      setAvailability(spaces)
-    }).catch(reason => {
-      if (active) setError(toMessage(reason))
-    }).finally(() => {
-      if (active) setLoading(false)
-    })
+      setOrganizations(orgs.items); setDocuments(docs.items); setCeremonies(queue.items); setAvailability(spaces)
+    }).catch(reason => { if (active) setError(toMessage(reason)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [api, initial])
 
@@ -60,21 +54,25 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
     finally { setWorking(false) }
   }
 
+  const pendingAuthorizations = ceremonies.filter(item => !item.formalAuthorizationIssued).length
+
   return (
     <>
       <section className="page-heading">
         <div>
           <p className="eyebrow">Operación institucional</p>
           <h1>Gran Secretaría</h1>
-          <p>Espacios, reservas y documentos oficiales, con trazabilidad y horario institucional de Chile.</p>
+          <p>Espacios, reservas, autorizaciones de ceremonia y documentos oficiales, con trazabilidad y horario institucional de Chile.</p>
         </div>
-        <span className="count-badge">{loading ? 'cargando…' : `${documents.length} documentos`}</span>
+        <span className="count-badge">{loading ? 'cargando…' : `${pendingAuthorizations} autorizaciones pendientes`}</span>
       </section>
 
       {error && <div className="error-banner" role="alert"><strong>Operación no completada.</strong><span>{error}</span></div>}
       {message && <div className="success-banner" role="status">{message}</div>}
 
       <section className="secretariat-grid">
+        <CeremonyAuthorizationPanel api={api} items={ceremonies} working={working} execute={execute} refreshDocuments={refreshDocuments} refreshCeremonies={refreshCeremonies} />
+
         <article className="panel secretariat-wide">
           <div className="panel-heading">
             <div><p className="eyebrow">Calendario</p><h2>Disponibilidad de templos y salas</h2></div>
@@ -90,13 +88,13 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
           </div>
         </article>
 
-        <ReservationPanel api={api} organizations={organizations} availability={availability} working={working} execute={execute} refreshAvailability={refreshAvailability} fromLocal={fromLocal} toLocal={toLocal} />
+        <ReservationPanel api={api} organizations={organizations} ceremonies={ceremonies} availability={availability} working={working} execute={execute} refreshAvailability={refreshAvailability} refreshCeremonies={refreshCeremonies} fromLocal={fromLocal} toLocal={toLocal} />
         <SpacePanel api={api} working={working} execute={execute} refreshAvailability={refreshAvailability} />
         <DocumentPanel api={api} organizations={organizations} working={working} execute={execute} refreshDocuments={refreshDocuments} />
 
         <article className="panel secretariat-wide">
-          <div className="panel-heading"><div><p className="eyebrow">Registro oficial</p><h2>Documentos recientes</h2></div></div>
-          {documents.length === 0 ? <p className="muted">Aún no hay decretos o comunicados emitidos.</p> : (
+          <div className="panel-heading"><div><p className="eyebrow">Registro oficial</p><h2>Documentos recientes</h2></div><span className="count-badge">{documents.length} registros</span></div>
+          {documents.length === 0 ? <p className="muted">Aún no hay documentos emitidos.</p> : (
             <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document.documentType)} · {formatChile(document.issuedAtUtc)}</small></div>)}</div>
           )}
         </article>
@@ -105,35 +103,62 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   )
 }
 
-function ReservationPanel({ api, organizations, availability, working, execute, refreshAvailability, fromLocal, toLocal }: {
-  api: PmgmApiClient; organizations: OrganizationOption[]; availability: SpaceAvailabilityResponse | null; working: boolean
-  execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshAvailability: () => Promise<void>; fromLocal: string; toLocal: string
+function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocuments, refreshCeremonies }: {
+  api: PmgmApiClient; items: GrandSecretariatCeremonyQueueItem[]; working: boolean
+  execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshDocuments: () => Promise<void>; refreshCeremonies: () => Promise<void>
+}) {
+  const issue = (item: GrandSecretariatCeremonyQueueItem) => {
+    const success = item.spaceReservationId ? 'Autorización formal emitida con la reserva institucional asociada.' : 'Autorización formal emitida dejando constancia de que no existe sala asignada.'
+    void execute(async () => {
+      await api.issueSecretariatCeremonyAuthorization(item.id, item.spaceReservationId)
+      await Promise.all([refreshDocuments(), refreshCeremonies()])
+    }, success)
+  }
+
+  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Autorización formal de Gran Secretaría</h2></div><span className="count-badge">{items.filter(item => !item.formalAuthorizationIssued).length} pendientes</span></div>
+    <p className="form-note">Esta bandeja no expone nombres de hermanos o insinuados. La autorización formal sólo utiliza el Taller, tipo de ceremonia, fecha y reserva institucional cuando existe.</p>
+    {items.length === 0 ? <p className="muted">No hay ceremonias autorizadas pendientes de gestión documental.</p> : <div className="ceremony-queue">{items.map(item => <div className="ceremony-row" key={item.id}>
+      <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Autorización emitida' : 'Pendiente de documento'}</span></div><span>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
+      {!item.formalAuthorizationIssued && <button className={item.spaceReservationId ? 'primary-action' : 'secondary-action'} type="button" disabled={working} onClick={() => issue(item)}>{item.spaceReservationId ? 'Emitir autorización' : 'Emitir sin sala asignada'}</button>}
+    </div>)}</div>}
+  </article>
+}
+
+function ReservationPanel({ api, organizations, ceremonies, availability, working, execute, refreshAvailability, refreshCeremonies, fromLocal, toLocal }: {
+  api: PmgmApiClient; organizations: OrganizationOption[]; ceremonies: GrandSecretariatCeremonyQueueItem[]; availability: SpaceAvailabilityResponse | null; working: boolean
+  execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshAvailability: () => Promise<void>; refreshCeremonies: () => Promise<void>; fromLocal: string; toLocal: string
 }) {
   const availableSpaces = availability?.items.filter(x => x.isAvailable) ?? []
+  const reservableCeremonies = ceremonies.filter(item => !item.formalAuthorizationIssued && !item.spaceReservationId)
   const [organizationId, setOrganizationId] = useState('')
+  const [ceremonyId, setCeremonyId] = useState('')
   const [spaceId, setSpaceId] = useState('')
   const [purpose, setPurpose] = useState('')
+  const selectedCeremony = reservableCeremonies.find(item => item.id === ceremonyId)
+  const effectiveOrganizationId = selectedCeremony?.organizationId ?? organizationId
   useEffect(() => { if (!organizationId && organizations[0]) setOrganizationId(organizations[0].id) }, [organizations, organizationId])
   useEffect(() => { if (!availableSpaces.some(x => x.id === spaceId)) setSpaceId(availableSpaces[0]?.id ?? '') }, [availableSpaces, spaceId])
+  useEffect(() => { if (ceremonyId && !reservableCeremonies.some(item => item.id === ceremonyId)) setCeremonyId('') }, [ceremonyId, reservableCeremonies])
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
     void execute(async () => {
       await api.createSecretariatReservation({
-        spaceId, organizationId, purpose,
+        spaceId, organizationId: effectiveOrganizationId, ceremonyRequestId: ceremonyId || null, purpose,
         startsAtUtc: santiagoLocalToIso(fromLocal), endsAtUtc: santiagoLocalToIso(toLocal),
       })
-      setPurpose('')
-      await refreshAvailability()
-    }, 'Reserva institucional registrada y auditada.')
+      setPurpose(''); setCeremonyId('')
+      await Promise.all([refreshAvailability(), refreshCeremonies()])
+    }, ceremonyId ? 'Reserva vinculada a la ceremonia autorizada y auditada.' : 'Reserva institucional registrada y auditada.')
   }
 
   return <article className="panel"><p className="eyebrow">Reserva</p><h2>Asignar espacio</h2><form className="stack-form" onSubmit={submit}>
-    <Field label="Taller / organización"><select required value={organizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field>
+    <Field label="Ceremonia autorizada · opcional"><select value={ceremonyId} onChange={e => setCeremonyId(e.target.value)}><option value="">Reserva general, sin ceremonia</option>{reservableCeremonies.map(item => <option key={item.id} value={item.id}>{ceremonyTypeLabel(item.ceremonyType)} · {item.organizationName}{item.proposedDate ? ` · ${formatDateOnly(item.proposedDate)}` : ''}</option>)}</select></Field>
+    <Field label="Taller / organización"><select required disabled={!!selectedCeremony} value={effectiveOrganizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field>
     <Field label="Templo o sala disponible"><select required value={spaceId} onChange={e => setSpaceId(e.target.value)}><option value="">Seleccione…</option>{availableSpaces.map(s => <option key={s.id} value={s.id}>{s.name} · {spaceTypeLabel(s.spaceType)}</option>)}</select></Field>
-    <Field label="Propósito"><input required maxLength={300} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="Ej.: Tenida especial" /></Field>
-    <small className="form-note">Usa el período consultado arriba. Las reservas vinculadas a una ceremonia se incorporarán desde el flujo de Ceremonias.</small>
-    <button className="primary-action" disabled={working || !spaceId || !organizationId}>Reservar</button>
+    <Field label="Propósito"><input required maxLength={300} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder={selectedCeremony ? `Ej.: ${ceremonyTypeLabel(selectedCeremony.ceremonyType)}` : 'Ej.: Tenida especial'} /></Field>
+    <small className="form-note">Usa el período consultado arriba. Si selecciona una ceremonia, el Taller queda fijado por la solicitud autorizada y la reserva se vincula automáticamente.</small>
+    <button className="primary-action" disabled={working || !spaceId || !effectiveOrganizationId}>Reservar</button>
   </form></article>
 }
 
@@ -169,8 +194,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function SpaceRow({ space }: { space: InstitutionalSpace }) { return <div className="space-row"><div><strong>{space.name}</strong><small>{space.code} · {spaceTypeLabel(space.spaceType)}{space.capacity ? ` · ${space.capacity} personas` : ''}</small></div><span className={space.isAvailable ? 'status-pill complete' : 'status-pill active'}>{space.isAvailable ? 'Disponible' : 'Ocupado'}</span></div> }
 function organizationLabel(o: OrganizationOption) { return `${o.name}${o.number ? ` · Nº ${o.number}` : ''}` }
 function spaceTypeLabel(type: InstitutionalSpace['spaceType']) { return type === 'temple' ? 'Templo' : 'Sala de Secretaría' }
+function ceremonyTypeLabel(type: GrandSecretariatCeremonyQueueItem['ceremonyType']) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function documentTypeLabel(type: SecretariatDocument['documentType']) { return type === 'decree' ? 'Decreto' : type === 'communication' ? 'Comunicado' : 'Autorización de ceremonia' }
 function formatChile(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short', timeZone: SANTIAGO }).format(new Date(value)) }
+function formatChileRange(from: string | null, to: string | null) { if (!from || !to) return 'horario no disponible'; const date = new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: SANTIAGO }).format(new Date(from)); const time = new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: SANTIAGO }); return `${date} · ${time.format(new Date(from))}–${time.format(new Date(to))}` }
+function formatDateOnly(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`)) }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'No fue posible completar la operación.' }
 
 function defaultWindow() {
