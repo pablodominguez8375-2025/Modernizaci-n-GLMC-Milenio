@@ -54,7 +54,8 @@ public static class DocumentContentEndpoints
 
         var receivedContentType = NormalizeContentType(httpContext.Request.ContentType);
         var expectedContentType = NormalizeContentType(version.ContentType);
-        if (receivedContentType is null || !string.Equals(receivedContentType, expectedContentType, StringComparison.OrdinalIgnoreCase))
+        if (receivedContentType is null || expectedContentType is null ||
+            !string.Equals(receivedContentType, expectedContentType, StringComparison.OrdinalIgnoreCase))
         {
             return Results.Json(
                 new { message = "El tipo MIME recibido no coincide con el tipo registrado para la versión." },
