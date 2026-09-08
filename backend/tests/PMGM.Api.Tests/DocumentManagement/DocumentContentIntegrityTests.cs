@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using PMGM.Api.Modules.DocumentManagement;
+using Xunit;
 
 namespace PMGM.Api.Tests.DocumentManagement;
 
