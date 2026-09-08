@@ -17,6 +17,7 @@ public static class InstitutionalRoles
     public const string GranTesoreria = "grand_treasury";
     public const string GranHospitalaria = "grand_hospitalaria";
     public const string PrivacyOfficer = "privacy_officer";
+    public const string DocumentManager = "document_manager";
     public const string TallerAdmin = "lodge_admin";
     public const string TallerSecretaria = "lodge_secretariat";
 }
@@ -39,6 +40,8 @@ public interface IInstitutionalAccessService
     bool CanValidateCeremonyInternalAffairs(ClaimsPrincipal user);
     bool CanAuthorizeCeremonies(ClaimsPrincipal user);
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
+    bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId);
+    bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId);
     bool CanManagePrivacy(ClaimsPrincipal user);
 }
 
@@ -152,6 +155,30 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
         return HasOrganizationClaim(user, organizationId) &&
                HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
+    }
+
+    public bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId)
+    {
+        if (HasOrderScope(user) &&
+            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.DocumentManager))
+        {
+            return true;
+        }
+
+        return organizationId is not null &&
+               HasOrganizationClaim(user, organizationId.Value) &&
+               HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
+    }
+
+    public bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId)
+    {
+        if (HasOrderScope(user) &&
+            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.DocumentManager))
+        {
+            return true;
+        }
+
+        return HasOrganizationClaim(user, organizationId);
     }
 
     public bool CanManagePrivacy(ClaimsPrincipal user)

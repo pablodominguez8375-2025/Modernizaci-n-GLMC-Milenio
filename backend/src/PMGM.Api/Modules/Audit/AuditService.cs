@@ -32,7 +32,12 @@ public static class AuditMetadataSanitizer
         "EventType",
         "Notes",
         "Content",
-        "ExcuseReason"
+        "ExcuseReason",
+        "Title",
+        "OriginalFileName",
+        "ObjectKey",
+        "Sha256",
+        "ScanReference"
     };
 
     public static string? Serialize(object? metadata)

@@ -39,6 +39,8 @@ public sealed record SessionCapabilitiesDto(
     bool CanValidateCeremonyInternalAffairs,
     bool CanAuthorizeCeremonies,
     bool CanManageLodgeOperations,
+    bool CanManageDocuments,
+    bool CanReadLibrary,
     bool CanManagePrivacy);
 
 public static class SessionProfileBuilder
@@ -51,17 +53,23 @@ public static class SessionProfileBuilder
             ?? user.FindFirstValue("name")
             ?? "Usuario institucional";
 
+        var organizationId = user.Claims
+            .Where(x => x.Type == InstitutionalClaims.Organization)
+            .Select(x => Guid.TryParse(x.Value, out var id) ? id : (Guid?)null)
+            .FirstOrDefault(x => x is not null);
+
         var accessScope = access.HasOrderScope(user)
             ? "order"
-            : user.Claims.Any(x =>
-                x.Type == InstitutionalClaims.Organization &&
-                Guid.TryParse(x.Value, out _))
+            : organizationId is not null
                 ? "organization"
                 : "authenticated";
 
         var canReviewCeremonies = access.CanEvaluateCeremonies(user) ||
                                   (access.HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria) &&
-                                   user.Claims.Any(x => x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
+                                   organizationId is not null);
+
+        var canManageDocuments = access.CanManageDocuments(user, null) ||
+                                 (organizationId is not null && access.CanManageDocuments(user, organizationId.Value));
 
         return new SessionProfileDto(
             DisplayName: displayName.Trim(),
@@ -77,6 +85,8 @@ public static class SessionProfileBuilder
                 CanValidateCeremonyInternalAffairs: access.CanValidateCeremonyInternalAffairs(user),
                 CanAuthorizeCeremonies: access.CanAuthorizeCeremonies(user),
                 CanManageLodgeOperations: access.CanManageLodgeOperations(user),
+                CanManageDocuments: canManageDocuments,
+                CanReadLibrary: user.Identity?.IsAuthenticated == true,
                 CanManagePrivacy: access.CanManagePrivacy(user)));
     }
 }

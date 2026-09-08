@@ -1,5 +1,5 @@
 {
-  "version": "0.1",
+  "version": "0.2",
   "law": "Chile Ley 21.719",
   "effectiveDate": "2026-12-01",
   "treatments": [
@@ -78,6 +78,28 @@
       "accessControlStatus": "privacy_officer_order_scope",
       "containsSensitiveData": true,
       "owner": "Privacy Officer / DPD",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-008",
+      "module": "Gestión Logial",
+      "purpose": "Gestionar Tenidas, asistencia, justificaciones y actas versionadas dentro del Taller autorizado, preservando la trazabilidad histórica.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "lodge_purpose_specific_rbac",
+      "containsSensitiveData": true,
+      "owner": "Secretaría de Taller",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-009",
+      "module": "Gestor Documental/Biblioteca Virtual",
+      "purpose": "Gestionar documentos institucionales, sus versiones e integridad y publicar en Biblioteca únicamente las proyecciones autorizadas por finalidad y alcance.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "document_purpose_rbac_minimized_library_projection",
+      "containsSensitiveData": true,
+      "owner": "Gestión Documental / Biblioteca Virtual",
       "legalReviewRequired": true
     }
   ]
