@@ -3,8 +3,8 @@
 **Estado:** Activo  
 **Rama de trabajo:** `dev`  
 **Rama estable:** `main`  
-**Corte funcional actual:** v0.14.x en `dev`  
-**Siguiente incremento:** v0.15.0 — Object Storage y ciclo binario seguro
+**Corte funcional actual:** v0.15.0 en `dev`  
+**Siguiente incremento:** v0.16.0 — Biblioteca Virtual básica sobre núcleo documental seguro
 
 ## Visión
 Proyecto Milenio construye una plataforma institucional unificada para la Gran Logia Mixta de Chile, con acceso único, base maestra, trazabilidad histórica, seguridad por roles y módulos integrados.
@@ -19,8 +19,10 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Cultura de presentación `es-CL`.
 - Zona horaria institucional `America/Santiago`.
 - Monolito modular con límites de dominio explícitos.
-- Object Storage desacoplado para binarios documentales (PMGM-ADR-003).
-- Ciclo binario seguro especificado para implementación en PMGM-ARCH-003.
+- Object Storage S3-compatible desacoplado para binarios documentales (PMGM-ADR-003).
+- MinIO privado como implementación reproducible de desarrollo/CI.
+- ClamAV integrado al ciclo antimalware documental.
+- Ciclo binario seguro implementado según PMGM-ARCH-003.
 
 ## Principios funcionales consolidados
 1. Una persona posee una identidad maestra única.
@@ -114,23 +116,40 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Actas versionadas.
 - Interfaz inicial conectada a la intranet.
 
-### Gestión Documental Operativa
+### Gestión Documental Operativa — v0.15.0
 - Colecciones documentales.
 - Metadata de documentos.
 - Versiones, clasificación y políticas de acceso.
 - Estados técnicos `pending_upload`, `uploaded`, `scanning`, `available`, `rejected`.
-- `ObjectKey` opaco y contrato `IDocumentObjectStore` ya definidos en código.
-- Endpoints de consulta y publicación sin exposición de secretos de almacenamiento.
-- PMGM-ARCH-003 define carga binaria, descarga autorizada, integridad, scanner y reconciliación.
-- Pendiente de v0.15.0: adaptador S3-compatible real, binarios, antimalware, descarga autorizada y pruebas de integración.
+- `ObjectKey` opaco; el binario permanece fuera de PostgreSQL.
+- Contrato `IDocumentObjectStore` desacoplado de proveedor.
+- Adaptador S3-compatible real mediante AWS SDK y MinIO para desarrollo/CI.
+- Bucket privado `pmgm-documents`; sin publicación anónima.
+- Carga binaria autorizada con bloqueo de sobrescritura.
+- Verificación posterior de tamaño y hash SHA-256 sobre el objeto persistido.
+- Validación de correspondencia entre extensión y MIME permitido.
+- Validación de firma/contenido real para PDF, PNG, JPEG, ZIP, texto y Office Open XML.
+- Eliminación del objeto cuando la firma real no coincide con el tipo documental declarado.
+- Análisis antimalware real con ClamAV antes de disponibilidad.
+- Detección y rechazo comprobados en CI mediante firma de prueba EICAR.
+- Descarga administrativa autorizada sólo para versiones `available`.
+- Descarga desde Biblioteca sólo para documentos publicados y visibles según política de acceso.
+- Reconciliación auditada de objetos físicos existentes cuando PostgreSQL permanece en `pending_upload` tras una interrupción parcial.
+- Rechazo y eliminación segura en reconciliación si metadata, firma o tamaño son inconsistentes.
+- Auditoría de carga, escaneo, rechazo, descarga sensible y reconciliación sin copiar secretos físicos ni hashes a metadata innecesaria.
+- Pruebas HTTP end-to-end del ciclo carga → análisis → disponibilidad → publicación → descarga.
+- PMGM-ARCH-003 implementado y verificado por CI.
 
 ### Biblioteca Virtual
 - Requisito funcional formalizado en PMGM-REQ-031.
 - Backlog independiente PMGM-BLG-050.
 - Separación explícita respecto de Gran Archivo.
+- Catálogo mínimo ya proyecta únicamente documentos publicados con versión disponible y aplica política de acceso en backend.
+- Descarga binaria segura disponible sobre el núcleo v0.15.0.
+- No expone `ObjectKey`, SHA-256, nombre físico ni referencia técnica de escaneo.
 - Flujo editorial, taxonomías, búsqueda, políticas de acceso y publicación controlada definidos.
 - Integración prevista con Docencia, Gestión Documental y Gran Archivo mediante referencias/derivados autorizados.
-- Implementación funcional completa pendiente sobre el núcleo documental seguro.
+- v0.16.0 ampliará búsqueda/filtros, navegación y experiencia de consulta sin duplicar custodia documental.
 
 ### Gran Archivo / Gran Archivero
 - Requisito funcional formalizado en PMGM-REQ-030.
@@ -138,7 +157,7 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Separación explícita respecto de Biblioteca Virtual.
 - Custodia histórica, clasificación archivística, transferencias, digitalización, préstamos y cadena de custodia definidos.
 - Integración prevista con Gran Secretaría, Talleres y Biblioteca Virtual.
-- Implementación pendiente posterior al núcleo de Object Storage.
+- Implementación pendiente posterior al primer incremento funcional de Biblioteca Virtual.
 
 ### Privacidad y Ley 21.719
 - Registro de actividades de tratamiento.
@@ -151,31 +170,37 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 
 ### Calidad e infraestructura
 - PostgreSQL 17 real en CI.
+- MinIO/S3-compatible real en CI con bucket privado.
+- ClamAV real en CI.
+- Prueba de integración S3: almacenar, comprobar existencia, leer, impedir sobrescritura y eliminar.
+- Prueba ClamAV: contenido limpio y detección EICAR.
 - Migraciones completas desde base vacía.
 - Migration Safety Gate.
 - Privacy Gate — Ley 21.719.
 - Data Classification Gate.
-- Pruebas unitarias e integración PostgreSQL.
+- Pruebas unitarias e integración PostgreSQL/S3/ClamAV.
 - Pruebas HTTP end-to-end en módulos críticos.
 - Auditoría con actor y correlation ID.
+- CI #441 valida íntegramente el cierre técnico de v0.15.0.
+
+## Incrementos completados recientes
+- **PMGM-BLG-052 — v0.15.0:** Object Storage, carga binaria, integridad, antimalware, descarga autorizada, hardening MIME/firma y reconciliación segura.
 
 ## Backlog activo formalizado
-1. PMGM-BLG-052 — Object Storage y ciclo binario documental seguro (`v0.15.0`, P0).
-2. PMGM-BLG-028 — Notificaciones internas + correo institucional (`v0.16.0`).
-3. PMGM-BLG-029 — Calendario institucional unificado (`v0.16.x`).
-4. PMGM-BLG-050 — Biblioteca Virtual.
-5. PMGM-BLG-051 — Gran Archivo / Gran Archivero.
+1. PMGM-BLG-050 — Biblioteca Virtual (`v0.16.0`, P1 institucional).
+2. PMGM-BLG-051 — Gran Archivo / Gran Archivero.
+3. PMGM-BLG-028 — Notificaciones internas + correo institucional.
+4. PMGM-BLG-029 — Calendario institucional unificado.
 
 ## Orden de ejecución recomendado
-1. PMGM-BLG-052 — Object Storage, carga, integridad, antimalware y descarga autorizada.
-2. Biblioteca Virtual básica sobre el núcleo seguro.
-3. Gran Archivo: estructura archivística, transferencias y custodia.
-4. Digitalización, preservación y préstamos del Gran Archivo.
-5. Notificaciones y calendario institucional.
-6. Cliente OIDC/PKCE y proveedor definitivo de identidad.
-7. OpenAPI automatizado para frontend.
-8. Docencia y conexión con Biblioteca Virtual.
-9. Integraciones externas y hardening de producción.
+1. Biblioteca Virtual básica sobre el núcleo seguro.
+2. Gran Archivo: estructura archivística, transferencias y custodia.
+3. Digitalización, preservación y préstamos del Gran Archivo.
+4. Notificaciones y calendario institucional.
+5. Cliente OIDC/PKCE y proveedor definitivo de identidad.
+6. OpenAPI automatizado para frontend.
+7. Docencia y conexión con Biblioteca Virtual.
+8. Integraciones externas y hardening de producción.
 
 ## Exclusiones explícitas
 - CENDOC no se incluye como módulo, dependencia ni componente del Proyecto Milenio.
