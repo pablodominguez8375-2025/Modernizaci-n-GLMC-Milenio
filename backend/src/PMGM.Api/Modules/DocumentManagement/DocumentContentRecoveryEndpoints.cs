@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.DocumentManagement.Entities;
