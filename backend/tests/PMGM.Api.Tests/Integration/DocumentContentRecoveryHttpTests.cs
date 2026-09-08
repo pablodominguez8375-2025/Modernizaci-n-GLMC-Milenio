@@ -34,6 +34,12 @@ public sealed class DocumentContentRecoveryHttpTests
             }));
         using var client = factory.CreateClient();
 
+        await using (var migrationScope = factory.Services.CreateAsyncScope())
+        {
+            var db = migrationScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(cancellationToken);
+        }
+
         var payload = Encoding.UTF8.GetBytes("Objeto persistido antes de confirmar PostgreSQL");
         var versionId = await CreatePendingVersionAsync(
             client,
@@ -94,6 +100,12 @@ public sealed class DocumentContentRecoveryHttpTests
                 services.AddSingleton<IDocumentObjectStore>(objectStore);
             }));
         using var client = factory.CreateClient();
+
+        await using (var migrationScope = factory.Services.CreateAsyncScope())
+        {
+            var db = migrationScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(cancellationToken);
+        }
 
         var fakePdf = Encoding.ASCII.GetBytes("MZ-not-a-real-pdf-document");
         var versionId = await CreatePendingVersionAsync(
