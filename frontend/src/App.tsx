@@ -1,16 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
 import CeremoniesPage from './CeremoniesPage'
+import DocumentManagementPage from './DocumentManagementPage'
 import GrandSecretariatPage from './GrandSecretariatPage'
+import LibraryPage from './LibraryPage'
 import LodgeManagementPage from './LodgeManagementPage'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
+import { type DocumentApiClient } from './api/documentApi'
 import { type LodgeApiClient } from './api/lodgeApi'
 import { type PmgmApiClient, type CandidatePublication, type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
 
-type View = 'dashboard' | 'candidates' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge'
-type LodgeAwareCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean }
+type View = 'dashboard' | 'candidates' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean }
 
-export default function App({ api, lodgeApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; onLogout?: () => void }) {
+export default function App({ api, lodgeApi, documentApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; onLogout?: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -30,17 +33,20 @@ export default function App({ api, lodgeApi, onLogout }: { api: PmgmApiClient; l
     return () => { active = false }
   }, [api])
 
-  const canCeremonies = profile?.capabilities.canReviewCeremonies ?? false
-  const canRegimen = profile?.capabilities.canRunRegimenInteriorReports ?? false
-  const canTreasury = profile?.capabilities.canManageTreasuryRegularity ?? false
-  const canHospitalaria = profile?.capabilities.canManageHospitalariaRegularity ?? false
-  const canSecretariat = profile?.capabilities.canManageGrandSecretariat ?? false
-  const canLodge = api.useMocks || ((profile?.capabilities as LodgeAwareCapabilities | undefined)?.canManageLodgeOperations ?? false)
+  const capabilities = profile?.capabilities as ExtendedCapabilities | undefined
+  const canCeremonies = capabilities?.canReviewCeremonies ?? false
+  const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
+  const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
+  const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
+  const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
+  const canLodge = api.useMocks || (capabilities?.canManageLodgeOperations ?? false)
+  const canLibrary = api.useMocks || (capabilities?.canReadLibrary ?? false)
+  const canDocuments = api.useMocks || (capabilities?.canManageDocuments ?? false)
 
   return <div className="app-shell">
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Ir al inicio"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button>
-      <div className="topbar-meta">{api.useMocks && <span className="demo-badge">Modo demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">v{systemInfo?.version ?? '0.13.0'}</span></div>
+      <div className="topbar-meta">{api.useMocks && <span className="demo-badge">Modo demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">v{systemInfo?.version ?? '0.14.0'}</span></div>
     </header>
 
     <div className="workspace">
@@ -55,6 +61,9 @@ export default function App({ api, lodgeApi, onLogout }: { api: PmgmApiClient; l
         <ModuleAccess icon="▤" label="Gran Secretaría" allowed={canSecretariat} active={view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
         <div className="nav-section">Taller</div>
         <ModuleAccess icon="□" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />
+        <div className="nav-section">Conocimiento</div>
+        <ModuleAccess icon="▥" label="Biblioteca Virtual" allowed={canLibrary} active={view === 'library'} onOpen={canLibrary ? () => setView('library') : undefined} />
+        <ModuleAccess icon="▦" label="Gestor Documental" allowed={canDocuments} active={view === 'documents'} onOpen={canDocuments ? () => setView('documents') : undefined} />
       </nav>
 
       <main className="content" id="contenido-principal">
@@ -67,6 +76,8 @@ export default function App({ api, lodgeApi, onLogout }: { api: PmgmApiClient; l
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} />}
+        {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}
+        {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
       </main>
     </div>
   </div>
@@ -78,7 +89,7 @@ function Dashboard({ portal, systemInfo, profile, loading, onOpenCandidates }: {
   return <>
     <section className="hero-panel"><div><p className="eyebrow">Plataforma institucional unificada</p><h1>Panel de inicio</h1><p className="lead">Una sola base maestra para miembros, Talleres, ceremonias, documentos y control institucional.</p></div><div className="hero-status"><span className="status-dot" aria-hidden="true" />Núcleo API {systemInfo ? 'disponible' : loading ? 'consultando' : 'sin datos'}</div></section>
     <section className="metric-grid"><MetricCard label="Insinuados publicados" value={loading ? '—' : String(portal?.total ?? 0)} detail="Período institucional vigente" /><MetricCard label="Plazo cumplido" value={loading ? '—' : String(completed)} detail="Listos para continuar validaciones" /><MetricCard label="Ámbito de acceso" value={loading ? '—' : accessScopeLabel(profile?.accessScope)} detail={`${capabilities} capacidades autorizadas por la API`} /><MetricCard label="Backend" value={systemInfo?.runtime ?? '.NET 10'} detail="PostgreSQL · Auditoría persistente" /></section>
-    <section className="dashboard-grid"><article className="panel"><div className="panel-heading"><div><p className="eyebrow">Ceremonias</p><h2>Publicaciones activas</h2></div><button className="text-button" type="button" onClick={onOpenCandidates}>Ver portal</button></div>{loading ? <LoadingRows /> : <CandidateSummary items={portal?.items ?? []} />}</article><article className="panel milestones"><p className="eyebrow">Hoja de ruta MVP</p><h2>Hitos institucionales</h2><ol><li><span className="milestone-state done">✓</span><div><strong>Ceremonias</strong><small>Bandeja, validaciones, regularidad y autorización por rol.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Tesorería y Hospitalaria</strong><small>Regularidad de Talleres conectada a elegibilidad de ceremonias.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gran Secretaría</strong><small>Espacios, reservas y autorizaciones formales auditadas.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gestión Logial</strong><small>Tenidas, asistencia append-only y actas versionadas.</small></div></li></ol></article></section>
+    <section className="dashboard-grid"><article className="panel"><div className="panel-heading"><div><p className="eyebrow">Ceremonias</p><h2>Publicaciones activas</h2></div><button className="text-button" type="button" onClick={onOpenCandidates}>Ver portal</button></div>{loading ? <LoadingRows /> : <CandidateSummary items={portal?.items ?? []} />}</article><article className="panel milestones"><p className="eyebrow">Hoja de ruta MVP</p><h2>Hitos institucionales</h2><ol><li><span className="milestone-state done">✓</span><div><strong>Ceremonias</strong><small>Bandeja, validaciones, regularidad y autorización por rol.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gran Secretaría</strong><small>Espacios, reservas y autorizaciones formales auditadas.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gestión Logial</strong><small>Tenidas, asistencia append-only y actas versionadas.</small></div></li><li><span className="milestone-state current">5</span><div><strong>Documentos y Biblioteca</strong><small>Metadata, versiones, integridad y publicación controlada; almacenamiento de objetos es el siguiente corte.</small></div></li></ol></article></section>
   </>
 }
 
