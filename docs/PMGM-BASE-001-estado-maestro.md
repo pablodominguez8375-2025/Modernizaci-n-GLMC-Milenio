@@ -40,7 +40,8 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 17. Las notificaciones se desacoplarán de los módulos de negocio y deberán ser idempotentes y auditables.
 18. El calendario institucional proyectará eventos desde sus fuentes de verdad sin duplicarlas.
 19. Biblioteca Virtual y Gran Archivo son módulos distintos: Biblioteca publica y facilita consulta; Gran Archivo custodia y preserva el patrimonio documental histórico.
-20. CENDOC no forma parte del alcance del Proyecto Milenio.
+20. Gestión Documental Operativa, Biblioteca Virtual y Gran Archivo tienen responsabilidades separadas y no deben fusionarse en un único dominio funcional.
+21. CENDOC no forma parte del alcance del Proyecto Milenio.
 
 ## Requisitos funcionales formalizados
 - PMGM-REQ-021 — Régimen Interior: reportes, control histórico y apoyo a decisiones.
@@ -54,6 +55,7 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - PMGM-REQ-028 — Notificaciones institucionales multicanal.
 - PMGM-REQ-029 — Calendario institucional unificado.
 - PMGM-REQ-030 — Gran Archivero y Archivo Histórico Institucional.
+- PMGM-REQ-031 — Biblioteca Virtual.
 
 ## Decisiones de arquitectura
 - PMGM-ADR-001 — Arquitectura base del proyecto.
@@ -107,19 +109,27 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Actas versionadas.
 - Interfaz inicial conectada a la intranet.
 
-### Gestor Documental y Biblioteca Virtual
+### Gestión Documental Operativa
 - Colecciones documentales.
 - Metadata de documentos.
-- Versiones, clasificación, políticas de acceso y publicación controlada.
+- Versiones, clasificación y políticas de acceso.
 - Endpoints de consulta sin exposición de secretos de almacenamiento.
-- Interfaz de Gestor Documental y Biblioteca conectada a la intranet.
-- Pendiente: almacenamiento binario real, análisis de seguridad, descarga autorizada y lifecycle físico (PMGM-REQ-027 / PMGM-BLG-027).
+- Pendiente: almacenamiento binario real, análisis de seguridad, descarga autorizada y lifecycle físico (PMGM-REQ-027).
+
+### Biblioteca Virtual
+- Requisito funcional formalizado en PMGM-REQ-031.
+- Backlog independiente PMGM-BLG-050.
+- Separación explícita respecto de Gran Archivo.
+- Flujo editorial, taxonomías, búsqueda, políticas de acceso y publicación controlada definidos.
+- Integración prevista con Docencia, Gestión Documental y Gran Archivo mediante referencias/derivados autorizados.
+- Implementación pendiente sobre el núcleo documental seguro.
 
 ### Gran Archivo / Gran Archivero
 - Requisito funcional formalizado en PMGM-REQ-030.
+- Backlog independiente PMGM-BLG-051.
 - Separación explícita respecto de Biblioteca Virtual.
 - Custodia histórica, clasificación archivística, transferencias, digitalización, préstamos y cadena de custodia definidos.
-- Integración prevista con Gran Secretaría, Talleres y Gestor Documental.
+- Integración prevista con Gran Secretaría, Talleres y Biblioteca Virtual.
 - Implementación pendiente posterior al núcleo de Object Storage.
 
 ### Privacidad y Ley 21.719
@@ -145,15 +155,18 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 1. PMGM-BLG-027 — Object Storage y ciclo binario documental (`v0.15.0`).
 2. PMGM-BLG-028 — Notificaciones internas + correo institucional (`v0.16.0`).
 3. PMGM-BLG-029 — Calendario institucional unificado (`v0.16.x`).
-4. PMGM-BLG-030 — Gran Archivo / Gran Archivero, dependiente del núcleo documental seguro.
+4. PMGM-BLG-050 — Biblioteca Virtual.
+5. PMGM-BLG-051 — Gran Archivo / Gran Archivero.
 
 ## Próximos bloques posteriores
 1. Cliente OIDC/PKCE y selección del proveedor definitivo de identidad.
 2. Generación/validación automatizada de contratos OpenAPI para frontend.
-3. Gran Archivo / Archivo Histórico digital sobre el núcleo documental seguro.
-4. Docencia y Biblioteca Virtual con taxonomía, búsquedas y colecciones especializadas.
-5. Integraciones con calendarios externos mediante conectores separados.
-6. Hardening de producción: observabilidad, backups, recuperación, gestión de secretos y despliegue.
+3. Object Storage seguro para archivos binarios.
+4. Biblioteca Virtual con flujo editorial, taxonomía, búsquedas y colecciones especializadas.
+5. Gran Archivo / Archivo Histórico digital con transferencias, custodia, preservación y préstamos.
+6. Docencia y conexión con Biblioteca Virtual.
+7. Integraciones con calendarios externos mediante conectores separados.
+8. Hardening de producción: observabilidad, backups, recuperación, gestión de secretos y despliegue.
 
 ## Exclusiones explícitas
 - CENDOC no se incluye como módulo, dependencia ni componente del Proyecto Milenio.
