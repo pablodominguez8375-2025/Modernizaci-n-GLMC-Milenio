@@ -154,7 +154,7 @@ internal sealed class InMemoryDocumentObjectStore : IDocumentObjectStore
 {
     private readonly Dictionary<string, byte[]> _objects = new(StringComparer.Ordinal);
 
-    public Task StoreAsync(
+    public async Task StoreAsync(
         string objectKey,
         Stream content,
         string contentType,
@@ -164,10 +164,9 @@ internal sealed class InMemoryDocumentObjectStore : IDocumentObjectStore
         if (_objects.ContainsKey(objectKey))
             throw new InvalidOperationException("No se permite sobrescribir un objeto documental.");
 
-        using var buffer = new MemoryStream();
-        content.CopyTo(buffer);
+        await using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer, cancellationToken);
         _objects.Add(objectKey, buffer.ToArray());
-        return Task.CompletedTask;
     }
 
     public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken = default)
