@@ -107,6 +107,7 @@ app.MapLodgeManagementEndpoints();
 app.MapDocumentManagementEndpoints();
 app.MapDocumentManagementQueryEndpoints();
 app.MapDocumentContentEndpoints();
+app.MapDocumentContentRecoveryEndpoints();
 app.MapPrivacyEndpoints();
 app.MapPrivacyRetentionEndpoints();
 app.MapPrivacyRiskEndpoints();
