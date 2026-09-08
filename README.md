@@ -3,7 +3,7 @@
 Repositorio central del proyecto de modernización digital de la Gran Logia Mixta de Chile.
 
 ## Objetivo
-Construir una plataforma institucional unificada con acceso único, base maestra de datos, trazabilidad, seguridad, gestión logial, Régimen Interior, Gran Secretaría, Gran Tesorería, Gran Hospitalaria, biblioteca/documentación y servicios digitales para los miembros.
+Construir una plataforma institucional unificada con acceso único, base maestra de datos, trazabilidad, seguridad, gestión logial, Régimen Interior, Gran Secretaría, Gran Tesorería, Gran Hospitalaria, Biblioteca Virtual, Gran Archivero y servicios digitales para los miembros.
 
 ## Principios
 - Identidad institucional única.
@@ -27,7 +27,17 @@ Construir una plataforma institucional unificada con acceso único, base maestra
 - Control de reposiciones del Taller en Gran Hospitalaria.
 - Portal institucional de insinuados para iniciaciones.
 - Plazo mínimo de publicación configurable, inicialmente 20 días.
+- Biblioteca Virtual para consulta y publicación controlada de material autorizado.
+- Gran Archivo / Gran Archivero para custodia y preservación del patrimonio documental histórico.
 - Protección de datos: finalidad, minimización, conservación, derechos de titulares, incidentes, EIPD/DPIA y accountability.
+
+## Separación documental institucional
+Proyecto Milenio establece tres responsabilidades distintas:
+1. **Gestión Documental Operativa:** documentos vigentes o de trabajo de los módulos de negocio.
+2. **Biblioteca Virtual:** publicación, organización, búsqueda y consulta de material autorizado.
+3. **Gran Archivo / Gran Archivero:** custodia, clasificación, preservación, digitalización y acceso controlado al patrimonio histórico institucional.
+
+**CENDOC no forma parte del alcance del Proyecto Milenio.**
 
 ## Ley 21.719
 Proyecto Milenio incorpora como requisito P0 transversal la preparación para la Ley N° 21.719, que regula la protección y tratamiento de datos personales y crea la Agencia de Protección de Datos Personales.
@@ -53,17 +63,28 @@ Como base:
 - Backend: ASP.NET Core / .NET 10 LTS.
 - Base de datos: PostgreSQL.
 - Persistencia: Entity Framework Core + Npgsql.
+- Frontend: React + TypeScript + Vite.
 - Contenedores: Docker / Docker Compose.
 - CI: GitHub Actions.
 - Identidad: JWT/OIDC, proveedor definitivo pendiente de ADR.
+- Archivos binarios: Object Storage desacoplado.
 
 ## Flujo de trabajo
 - `main`: rama estable.
 - `dev`: integración y desarrollo.
 - requisitos → diseño → aprobación → desarrollo → pruebas → documentación → publicación.
 
+## Requisitos documentales principales
+- `PMGM-REQ-027` — Almacenamiento seguro de documentos y versiones.
+- `PMGM-REQ-030` — Gran Archivero y Archivo Histórico Institucional.
+- `PMGM-REQ-031` — Biblioteca Virtual.
+
+## Backlog documental principal
+- `PMGM-BLG-050` — Biblioteca Virtual.
+- `PMGM-BLG-051` — Gran Archivero y Archivo Histórico.
+
 ## Estado
-El proyecto se encuentra en fase de fundación técnica y construcción del primer MVP ejecutable. La rama `dev` concentra la implementación activa y el PR #1 consolida los avances hacia `main`.
+El proyecto se encuentra en fase de fundación técnica y construcción incremental del primer ecosistema ejecutable. La rama `dev` concentra la implementación activa.
 
 El bloque de elegibilidad de ceremonias ya dispone de modelo, persistencia, migración, motor de reglas, pruebas automatizadas y API base para publicaciones vigentes de insinuados.
 
