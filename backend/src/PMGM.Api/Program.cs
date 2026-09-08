@@ -29,6 +29,11 @@ builder.Services.Configure<RequestLocalizationOptions>(options =>
     options.SupportedUICultures = supportedCultures;
 });
 
+builder.Services.Configure<DocumentStorageOptions>(
+    builder.Configuration.GetSection(DocumentStorageOptions.SectionName));
+builder.Services.Configure<DocumentMalwareOptions>(
+    builder.Configuration.GetSection(DocumentMalwareOptions.SectionName));
+
 var mainConnectionString = builder.Configuration.GetConnectionString("MainDatabase")
     ?? "Host=localhost;Port=5432;Database=pmgm;Username=pmgm_app;Password=pmgm_dev_only";
 
@@ -48,6 +53,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
 builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
+builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
+builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 
@@ -75,7 +82,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.14.0",
+    version = "0.15.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -99,6 +106,7 @@ app.MapGrandSecretariatCeremonyQueueEndpoints();
 app.MapLodgeManagementEndpoints();
 app.MapDocumentManagementEndpoints();
 app.MapDocumentManagementQueryEndpoints();
+app.MapDocumentContentEndpoints();
 app.MapPrivacyEndpoints();
 app.MapPrivacyRetentionEndpoints();
 app.MapPrivacyRiskEndpoints();
