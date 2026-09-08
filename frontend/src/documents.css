@@ -29,6 +29,8 @@
 .published-marker { font-size: 10px; font-weight: 850; color: var(--success); }
 .document-info-strip { margin-top: 18px; border: 1px solid #dce2ec; border-radius: 11px; padding: 12px 14px; display: flex; gap: 10px; align-items: baseline; background: var(--surface-soft); color: var(--muted); font-size: 11px; }
 .document-info-strip strong { color: var(--ink); }
+.library-toolbar { display: grid; gap: 14px; }
+.library-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .document-library-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 18px; }
 .library-card { border: 1px solid #e2e7ef; border-radius: 13px; padding: 16px; display: grid; gap: 13px; background: #fff; }
 .library-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 10px; background: var(--gold-soft); color: #806122; font-size: 19px; }
@@ -39,5 +41,7 @@
 .library-card dd { margin: 2px 0 0; font-size: 11px; font-weight: 800; }
 .document-chip { display: inline-block; border-radius: 999px; padding: 4px 7px; background: #eef1f6; color: #546074; font-size: 9px; font-weight: 800; text-transform: capitalize; }
 .document-pending-action { border-top: 1px solid #eceff4; padding-top: 10px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.library-card-action { border-top: 1px solid #eceff4; padding-top: 10px; display: flex; justify-content: flex-end; }
+.library-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 18px; color: var(--muted); font-size: 11px; }
 @media (max-width: 1050px) { .document-library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .document-version-form { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { .document-management-grid, .document-library-grid { grid-template-columns: 1fr; } .document-wide { grid-column: auto; } .document-version-form { grid-template-columns: 1fr; } .version-row { grid-template-columns: 1fr; } .document-info-strip { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 760px) { .document-management-grid, .document-library-grid, .library-filters { grid-template-columns: 1fr; } .document-wide { grid-column: auto; } .document-version-form { grid-template-columns: 1fr; } .version-row { grid-template-columns: 1fr; } .document-info-strip { align-items: flex-start; flex-direction: column; } .library-pagination { justify-content: space-between; } }
