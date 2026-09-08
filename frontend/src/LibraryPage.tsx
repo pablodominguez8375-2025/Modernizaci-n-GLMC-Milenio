@@ -1,54 +1,121 @@
-import { useEffect, useMemo, useState } from 'react'
-import { type DocumentApiClient, type LibraryDocument } from './api/documentApi'
+import { useEffect, useState } from 'react'
+import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 
+const pageSize = 12
+const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [] }
+
 export default function LibraryPage({ documentApi }: { documentApi: DocumentApiClient }) {
-  const [items, setItems] = useState<LibraryDocument[]>([])
+  const [items, setItems] = useState<LibraryCatalogItem[]>([])
+  const [facets, setFacets] = useState<LibraryFacetsResponse>(emptyFacets)
   const [query, setQuery] = useState('')
+  const [collectionId, setCollectionId] = useState('')
+  const [documentType, setDocumentType] = useState('')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
-    documentApi.getLibrary()
-      .then(response => { if (active) setItems(response.items) })
+    documentApi.getLibraryFacets()
+      .then(response => { if (active) setFacets(response) })
       .catch(reason => { if (active) setError(toMessage(reason)) })
-      .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [documentApi])
 
-  const filtered = useMemo(() => {
-    const needle = normalize(query)
-    return needle ? items.filter(item => normalize(`${item.title} ${item.documentType} ${item.collectionName}`).includes(needle)) : items
-  }, [items, query])
+  useEffect(() => {
+    let active = true
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError(null)
+      documentApi.searchLibrary({
+        q: query || undefined,
+        collectionId: collectionId || undefined,
+        documentType: documentType || undefined,
+        page,
+        pageSize,
+      })
+        .then(response => {
+          if (!active) return
+          setItems(response.items)
+          setTotal(response.total)
+        })
+        .catch(reason => { if (active) setError(toMessage(reason)) })
+        .finally(() => { if (active) setLoading(false) })
+    }, query ? 250 : 0)
+
+    return () => { active = false; window.clearTimeout(timer) }
+  }, [collectionId, documentApi, documentType, page, query])
+
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  async function download(item: LibraryCatalogItem) {
+    setDownloadingId(item.id)
+    setError(null)
+    try {
+      const blob = await documentApi.downloadLibraryDocument(item.id)
+      const objectUrl = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = downloadName(item)
+      anchor.rel = 'noopener'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(objectUrl)
+    } catch (reason) {
+      setError(toMessage(reason))
+    } finally {
+      setDownloadingId(null)
+    }
+  }
 
   return <>
     <section className="page-heading">
       <div><p className="eyebrow">Conocimiento institucional</p><h1>Biblioteca Virtual</h1><p>Documentos publicados expresamente para su consulta según alcance y política de acceso.</p></div>
-      <span className="count-badge">{loading ? 'cargando…' : `${filtered.length} publicaciones`}</span>
+      <span className="count-badge">{loading ? 'cargando…' : `${total} publicaciones`}</span>
     </section>
-    {error && <div className="error-banner" role="alert"><strong>No fue posible abrir la Biblioteca.</strong><span>{error}</span></div>}
+
+    {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
+
     <section className="panel">
-      <label className="search-field"><span>Buscar en Biblioteca</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Título, colección o tipo documental" /></label>
-      {loading ? <div className="loading-rows"><span /><span /><span /></div> : filtered.length === 0 ? <div className="empty-state"><strong>No hay publicaciones visibles.</strong><p>La Biblioteca sólo muestra documentos con una versión disponible y publicada.</p></div> : <div className="document-library-grid">{filtered.map(item => <LibraryCard key={item.id} item={item} />)}</div>}
+      <div className="library-toolbar">
+        <label className="search-field"><span>Buscar en Biblioteca</span><input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} placeholder="Título, colección o tipo documental" /></label>
+        <div className="library-filters">
+          <label className="document-field"><span>Colección</span><select value={collectionId} onChange={event => { setCollectionId(event.target.value); setPage(1) }}><option value="">Todas</option>{facets.collections.map(item => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select></label>
+          <label className="document-field"><span>Tipo documental</span><select value={documentType} onChange={event => { setDocumentType(event.target.value); setPage(1) }}><option value="">Todos</option>{facets.documentTypes.map(item => <option key={item.value} value={item.value}>{typeLabel(item.label)} ({item.count})</option>)}</select></label>
+        </div>
+      </div>
+
+      {loading ? <div className="loading-rows"><span /><span /><span /></div> : items.length === 0 ? <div className="empty-state"><strong>No hay publicaciones visibles.</strong><p>La Biblioteca sólo muestra documentos publicados, disponibles y autorizados para su cuenta.</p></div> : <div className="document-library-grid">{items.map(item => <LibraryCard key={item.id} item={item} downloading={downloadingId === item.id} onDownload={() => download(item)} />)}</div>}
+
+      {!loading && total > pageSize && <nav className="library-pagination" aria-label="Paginación de Biblioteca">
+        <button className="document-secondary" type="button" disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>Anterior</button>
+        <span>Página {page} de {pageCount}</span>
+        <button className="document-secondary" type="button" disabled={page >= pageCount} onClick={() => setPage(value => Math.min(pageCount, value + 1))}>Siguiente</button>
+      </nav>}
     </section>
-    <section className="document-info-strip"><strong>Acceso controlado</strong><span>La Biblioteca no expone nombres físicos de archivo, claves de almacenamiento, hash SHA-256 ni referencias técnicas de escaneo.</span></section>
+
+    <section className="document-info-strip"><strong>Acceso controlado</strong><span>La búsqueda y las facetas se calculan sólo sobre publicaciones autorizadas. La descarga usa el backend institucional y nunca expone una URL pública de Object Storage.</span></section>
   </>
 }
 
-function LibraryCard({ item }: { item: LibraryDocument }) {
+function LibraryCard({ item, downloading, onDownload }: { item: LibraryCatalogItem; downloading: boolean; onDownload: () => void }) {
   return <article className="library-card">
     <div className="library-icon" aria-hidden="true">▥</div>
     <div><span className="document-chip">{typeLabel(item.documentType)}</span><h3>{item.title}</h3><p>{item.collectionName}</p></div>
     <dl><div><dt>Versión</dt><dd>v{item.versionNumber}</dd></div><div><dt>Formato</dt><dd>{contentTypeLabel(item.contentType)}</dd></div><div><dt>Tamaño</dt><dd>{formatBytes(item.sizeBytes)}</dd></div></dl>
     <small>Publicado {formatChile(item.publishedAtUtc)}</small>
-    <div className="document-pending-action">Lectura/descarga se habilitará al conectar el almacenamiento documental.</div>
+    <div className="library-card-action"><button type="button" className="document-primary compact" disabled={downloading} onClick={onDownload}>{downloading ? 'Preparando…' : 'Descargar'}</button></div>
   </article>
 }
 
-function normalize(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
 function typeLabel(value: string) { return value.replaceAll('_', ' ') }
-function contentTypeLabel(value: string) { return value === 'application/pdf' ? 'PDF' : value.includes('word') ? 'Word' : value.split('/').at(-1)?.toUpperCase() ?? value }
+function contentTypeLabel(value: string) { return value === 'application/pdf' ? 'PDF' : value.includes('wordprocessingml') ? 'Word' : value.includes('spreadsheetml') ? 'Excel' : value.includes('presentationml') ? 'PowerPoint' : value.split('/').at(-1)?.toUpperCase() ?? value }
 function formatBytes(value: number) { if (value < 1024) return `${value} B`; if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB` }
 function formatChile(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(new Date(value)) }
+function downloadName(item: LibraryCatalogItem) { const base = item.title.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9._ -]+/g, '').trim().replace(/\s+/g, '-').slice(0, 90) || 'documento'; return `${base}.${extensionFor(item.contentType)}` }
+function extensionFor(contentType: string) { if (contentType === 'application/pdf') return 'pdf'; if (contentType === 'image/png') return 'png'; if (contentType === 'image/jpeg') return 'jpg'; if (contentType.includes('wordprocessingml')) return 'docx'; if (contentType.includes('spreadsheetml')) return 'xlsx'; if (contentType.includes('presentationml')) return 'pptx'; if (contentType === 'text/csv') return 'csv'; if (contentType === 'text/markdown') return 'md'; return 'txt' }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'No fue posible completar la operación.' }
