@@ -52,9 +52,19 @@ public static class DocumentContentEndpoints
         if (contentLength > storageOptions.Value.MaxUploadBytes)
             return Results.Json(new { message = "El archivo excede el tamaño máximo permitido." }, statusCode: StatusCodes.Status413PayloadTooLarge);
 
-        var receivedContentType = NormalizeContentType(httpContext.Request.ContentType);
-        var expectedContentType = NormalizeContentType(version.ContentType);
-        if (receivedContentType is null || expectedContentType is null ||
+        if (!DocumentContentTypePolicy.TryValidateMetadata(
+                version.OriginalFileName,
+                version.ContentType,
+                out var expectedContentType,
+                out var metadataError))
+        {
+            return Results.Json(
+                new { message = metadataError ?? "El tipo de archivo registrado no está permitido." },
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
+        }
+
+        var receivedContentType = DocumentContentTypePolicy.Normalize(httpContext.Request.ContentType);
+        if (receivedContentType is null ||
             !string.Equals(receivedContentType, expectedContentType, StringComparison.OrdinalIgnoreCase))
         {
             return Results.Json(
@@ -66,6 +76,39 @@ public static class DocumentContentEndpoints
             return Results.Conflict(new { message = "Ya existe contenido físico para esta versión; no se permite sobrescritura." });
 
         await objectStore.StoreAsync(version.ObjectKey, httpContext.Request.Body, expectedContentType, cancellationToken);
+
+        bool contentTypeMatches;
+        await using (var persisted = await objectStore.OpenReadAsync(version.ObjectKey, cancellationToken))
+        {
+            contentTypeMatches = await DocumentContentTypePolicy.MatchesContentAsync(
+                persisted,
+                expectedContentType,
+                cancellationToken);
+        }
+
+        if (!contentTypeMatches)
+        {
+            await objectStore.DeleteAsync(version.ObjectKey, cancellationToken);
+            db.AuditEvents.Add(AuditEventFactory.Create(
+                httpContext,
+                "documents.content.signature_rejected",
+                nameof(DocumentVersion),
+                version.Id.ToString(),
+                version.Document.OrganizationId,
+                AuditResults.Rejected,
+                new
+                {
+                    version.DocumentId,
+                    version.VersionNumber,
+                    ExpectedContentType = expectedContentType,
+                    ObjectDeleted = true
+                }));
+            await db.SaveChangesAsync(cancellationToken);
+
+            return Results.Json(
+                new { message = "La firma real del archivo no corresponde al tipo documental declarado." },
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
+        }
 
         DocumentContentIntegrityResult integrity;
         await using (var persisted = await objectStore.OpenReadAsync(version.ObjectKey, cancellationToken))
@@ -340,11 +383,5 @@ public static class DocumentContentEndpoints
             }));
 
         await db.SaveChangesAsync(cancellationToken);
-    }
-
-    private static string? NormalizeContentType(string? value)
-    {
-        var normalized = value?.Split(';', 2, StringSplitOptions.TrimEntries)[0].Trim();
-        return string.IsNullOrWhiteSpace(normalized) ? null : normalized.ToLowerInvariant();
     }
 }
