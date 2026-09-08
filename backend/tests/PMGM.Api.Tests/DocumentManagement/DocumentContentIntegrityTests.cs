@@ -10,10 +10,11 @@ public sealed class DocumentContentIntegrityTests
     [Fact]
     public async Task ComputeAsync_ReturnsSizeAndSha256()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         var bytes = Encoding.UTF8.GetBytes("Proyecto Milenio");
         await using var stream = new MemoryStream(bytes);
 
-        var result = await DocumentContentIntegrity.ComputeAsync(stream);
+        var result = await DocumentContentIntegrity.ComputeAsync(stream, cancellationToken);
 
         var expectedHash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         Assert.Equal(bytes.LongLength, result.SizeBytes);
@@ -24,9 +25,10 @@ public sealed class DocumentContentIntegrityTests
     [Fact]
     public async Task ComputeAsync_EmptyStream_HasStableHash()
     {
+        var cancellationToken = TestContext.Current.CancellationToken;
         await using var stream = new MemoryStream(Array.Empty<byte>());
 
-        var result = await DocumentContentIntegrity.ComputeAsync(stream);
+        var result = await DocumentContentIntegrity.ComputeAsync(stream, cancellationToken);
 
         Assert.Equal(0, result.SizeBytes);
         Assert.Equal(
