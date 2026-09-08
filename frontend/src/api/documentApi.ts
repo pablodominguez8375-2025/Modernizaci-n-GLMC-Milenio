@@ -20,6 +20,11 @@ export interface LibraryDocument {
   id: string; title: string; documentType: string; collectionName: string; versionNumber: number; contentType: string; sizeBytes: number; publishedAtUtc: string
 }
 export interface LibraryDocumentsResponse { total: number; items: LibraryDocument[] }
+export interface LibraryCatalogItem extends LibraryDocument { collectionId: string }
+export interface LibraryCatalogResponse { total: number; page: number; pageSize: number; items: LibraryCatalogItem[] }
+export interface LibraryFacetItem { value: string; label: string; count: number }
+export interface LibraryFacetsResponse { collections: LibraryFacetItem[]; documentTypes: LibraryFacetItem[] }
+export interface LibrarySearchParams { q?: string; collectionId?: string; documentType?: string; fromYear?: number; toYear?: number; page?: number; pageSize?: number }
 export interface CreateDocumentCollectionRequest { code: string; name: string; description?: string | null; scope: DocumentScope; organizationId?: string | null }
 export interface CreateInstitutionalDocumentRequest { title: string; documentType: string; classification: DocumentClassification; accessPolicy: DocumentAccessPolicy }
 export interface CreateDocumentVersionRequest { originalFileName: string; contentType: string; sizeBytes: number }
@@ -55,6 +60,53 @@ export class DocumentApiClient {
   async getLibrary(): Promise<LibraryDocumentsResponse> {
     if (this.useMocks) return { total: this.mockLibrary.length, items: this.mockLibrary.map(item => ({ ...item })) }
     return this.request<LibraryDocumentsResponse>('/api/biblioteca')
+  }
+
+  async searchLibrary(params: LibrarySearchParams = {}): Promise<LibraryCatalogResponse> {
+    if (this.useMocks) {
+      const query = normalizeSearch(params.q)
+      let items = this.mockLibrary.map(item => this.toCatalogItem(item))
+      if (query) items = items.filter(item => normalizeSearch(`${item.title} ${item.documentType} ${item.collectionName}`).includes(query))
+      if (params.collectionId) items = items.filter(item => item.collectionId === params.collectionId)
+      if (params.documentType) items = items.filter(item => item.documentType.toLowerCase() === params.documentType?.trim().toLowerCase())
+      if (params.fromYear) items = items.filter(item => new Date(item.publishedAtUtc).getUTCFullYear() >= params.fromYear!)
+      if (params.toYear) items = items.filter(item => new Date(item.publishedAtUtc).getUTCFullYear() <= params.toYear!)
+      items.sort((a, b) => b.publishedAtUtc.localeCompare(a.publishedAtUtc) || a.title.localeCompare(b.title, 'es'))
+      const page = Math.max(1, params.page ?? 1), pageSize = Math.min(50, Math.max(1, params.pageSize ?? 24))
+      return { total: items.length, page, pageSize, items: items.slice((page - 1) * pageSize, page * pageSize).map(item => ({ ...item })) }
+    }
+
+    const query = new URLSearchParams()
+    if (params.q?.trim()) query.set('q', params.q.trim())
+    if (params.collectionId) query.set('collectionId', params.collectionId)
+    if (params.documentType?.trim()) query.set('documentType', params.documentType.trim())
+    if (params.fromYear) query.set('fromYear', String(params.fromYear))
+    if (params.toYear) query.set('toYear', String(params.toYear))
+    if (params.page) query.set('page', String(params.page))
+    if (params.pageSize) query.set('pageSize', String(params.pageSize))
+    return this.request<LibraryCatalogResponse>(`/api/biblioteca/buscar${query.size ? `?${query}` : ''}`)
+  }
+
+  async getLibraryFacets(): Promise<LibraryFacetsResponse> {
+    if (this.useMocks) {
+      const catalog = this.mockLibrary.map(item => this.toCatalogItem(item))
+      const collectionCounts = new Map<string, LibraryFacetItem>()
+      const typeCounts = new Map<string, LibraryFacetItem>()
+      for (const item of catalog) {
+        const collection = collectionCounts.get(item.collectionId)
+        collectionCounts.set(item.collectionId, { value: item.collectionId, label: item.collectionName, count: (collection?.count ?? 0) + 1 })
+        const type = typeCounts.get(item.documentType)
+        typeCounts.set(item.documentType, { value: item.documentType, label: item.documentType, count: (type?.count ?? 0) + 1 })
+      }
+      return { collections: [...collectionCounts.values()], documentTypes: [...typeCounts.values()] }
+    }
+    return this.request<LibraryFacetsResponse>('/api/biblioteca/facetas')
+  }
+
+  async downloadLibraryDocument(documentId: string): Promise<Blob> {
+    if (this.useMocks) return new Blob(['Contenido demostrativo de Biblioteca Virtual'], { type: 'text/plain' })
+    const response = await this.authorizedFetch(`/api/biblioteca/${encodeURIComponent(documentId)}/contenido`, {}, 'application/octet-stream')
+    return response.blob()
   }
 
   async getCollections(organizationId?: string): Promise<DocumentCollectionsResponse> {
@@ -132,9 +184,21 @@ export class DocumentApiClient {
     return this.request<{ id: string; status: string }>(`/api/documentos/${encodeURIComponent(documentId)}/retirar-publicacion`, { method: 'POST' })
   }
 
+  private toCatalogItem(item: LibraryDocument): LibraryCatalogItem {
+    const document = this.mockDocuments.get(item.id)
+    const collectionId = document?.collectionId ?? this.mockCollections.find(collection => collection.name === item.collectionName)?.id ?? demoCollection.id
+    return { ...item, collectionId }
+  }
+
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
-    const headers = new Headers(init.headers); headers.set('Accept', 'application/json')
+    const response = await this.authorizedFetch(path, init, 'application/json')
+    return response.json() as Promise<T>
+  }
+
+  private async authorizedFetch(path: string, init: RequestInit = {}, accept = 'application/json'): Promise<Response> {
+    const headers = new Headers(init.headers); headers.set('Accept', accept)
     const token = await this.getAccessToken?.(); if (!token) throw new Error('Debe ingresar para consultar documentos institucionales.')
     headers.set('Authorization', `Bearer ${token}`)
     const response = await fetch(`${this.baseUrl}${path}`, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', headers })
@@ -145,7 +209,7 @@ export class DocumentApiClient {
       if (response.status === 403) message = 'Su cuenta no tiene permiso para acceder a este recurso documental.'
       throw new DocumentApiHttpError(response.status, message || `La API respondió ${response.status} ${response.statusText}.`)
     }
-    return response.json() as Promise<T>
+    return response
   }
 }
 
@@ -157,5 +221,6 @@ export function createDefaultDocumentApiClient(getAccessToken?: DocumentAccessTo
   return new DocumentApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized })
 }
 
+function normalizeSearch(value?: string) { return (value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
 function cloneDocument(value: InstitutionalDocument): InstitutionalDocument { return { ...value, versions: value.versions.map(item => ({ ...item })) } }
 function toListItem(value: InstitutionalDocument): DocumentListItem { return { id: value.id, collectionId: value.collectionId, organizationId: value.organizationId, title: value.title, documentType: value.documentType, classification: value.classification, accessPolicy: value.accessPolicy, status: value.status, publishedVersionId: value.publishedVersionId, publishedAtUtc: value.publishedAtUtc } }
