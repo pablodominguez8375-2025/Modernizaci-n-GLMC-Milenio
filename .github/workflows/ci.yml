@@ -31,6 +31,10 @@ jobs:
 
     env:
       PMGM_TEST_POSTGRES: Host=localhost;Port=5432;Database=pmgm_ci;Username=pmgm;Password=pmgm_ci_only
+      PMGM_TEST_S3_URL: http://127.0.0.1:9000
+      PMGM_TEST_S3_ACCESS_KEY: pmgm_minio_ci
+      PMGM_TEST_S3_SECRET_KEY: pmgm_minio_ci_secret_change_me
+      PMGM_TEST_S3_BUCKET: pmgm-documents
 
     steps:
       - name: Checkout
@@ -50,6 +54,37 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Start private MinIO for S3 integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name pmgm-minio-ci \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER="$PMGM_TEST_S3_ACCESS_KEY" \
+            -e MINIO_ROOT_PASSWORD="$PMGM_TEST_S3_SECRET_KEY" \
+            quay.io/minio/minio:latest server /data
+
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ready" != "true" ]; then
+            docker logs pmgm-minio-ci
+            exit 1
+          fi
+
+          docker run --rm \
+            --network host \
+            --entrypoint /bin/sh \
+            minio/mc:latest \
+            -c "mc alias set pmgm '$PMGM_TEST_S3_URL' '$PMGM_TEST_S3_ACCESS_KEY' '$PMGM_TEST_S3_SECRET_KEY' && mc mb --ignore-existing pmgm/$PMGM_TEST_S3_BUCKET && mc anonymous set none pmgm/$PMGM_TEST_S3_BUCKET"
+
       - name: Restore API
         run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
 
@@ -59,8 +94,12 @@ jobs:
       - name: Restore tests
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
-      - name: Test unit and PostgreSQL integration
+      - name: Test unit, PostgreSQL and S3 integration
         run: dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj --configuration Release --no-restore
+
+      - name: Stop MinIO
+        if: always()
+        run: docker rm -f pmgm-minio-ci >/dev/null 2>&1 || true
 
   frontend-build:
     name: Frontend lint and build
