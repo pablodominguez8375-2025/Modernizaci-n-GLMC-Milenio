@@ -2,7 +2,8 @@
 
 **Estado:** Activo  
 **Rama de trabajo:** `dev`  
-**Rama estable:** `main`
+**Rama estable:** `main`  
+**Corte funcional actual:** v0.14.x en `dev`
 
 ## Visión
 Proyecto Milenio construye una plataforma institucional unificada para la Gran Logia Mixta de Chile, con acceso único, base maestra, trazabilidad histórica, seguridad por roles y módulos integrados.
@@ -17,6 +18,7 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Cultura de presentación `es-CL`.
 - Zona horaria institucional `America/Santiago`.
 - Monolito modular con límites de dominio explícitos.
+- Object Storage desacoplado para binarios documentales (PMGM-ADR-003; implementación pendiente).
 
 ## Principios funcionales consolidados
 1. Una persona posee una identidad maestra única.
@@ -34,14 +36,26 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 13. No se utilizará RUT como clave primaria técnica.
 14. Las reservas de templos y salas no pueden solaparse y deben mantener trazabilidad de actor y resultado.
 15. La autorización formal de una ceremonia sólo puede ser emitida por Gran Secretaría una vez autorizado el flujo institucional previo.
+16. Los binarios documentales no se almacenarán como contenido principal en PostgreSQL y no serán públicos por defecto.
+17. Las notificaciones se desacoplarán de los módulos de negocio y deberán ser idempotentes y auditables.
+18. El calendario institucional proyectará eventos desde sus fuentes de verdad sin duplicarlas.
 
 ## Requisitos funcionales formalizados
 - PMGM-REQ-021 — Régimen Interior: reportes, control histórico y apoyo a decisiones.
 - PMGM-REQ-022 — Gran Secretaría: decretos, comunicados, autorizaciones y gestión de espacios.
+- PMGM-REQ-022-ADD-001 — Extensión Gran Secretaría: Hospitalaria y publicación previa.
 - PMGM-REQ-023 — Transferencia entre Talleres.
 - PMGM-REQ-024 — Localización Español (Chile).
 - PMGM-REQ-025 — Elegibilidad de ceremonias y publicación de insinuados.
-- PMGM-REQ-022-ADD-001 — Extensión Gran Secretaría: Hospitalaria y publicación previa.
+- PMGM-REQ-026 — Cumplimiento Ley 21.719.
+- PMGM-REQ-027 — Almacenamiento seguro de documentos y versiones.
+- PMGM-REQ-028 — Notificaciones institucionales multicanal.
+- PMGM-REQ-029 — Calendario institucional unificado.
+
+## Decisiones de arquitectura
+- PMGM-ADR-001 — Arquitectura base del proyecto.
+- PMGM-ADR-002 — React + TypeScript + Vite para frontend.
+- PMGM-ADR-003 — Object Storage desacoplado para archivos binarios.
 
 ## Estado de implementación en `dev`
 
@@ -70,7 +84,7 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Validaciones obligatorias de Tesorería y Hospitalaria.
 - Publicación de insinuados con plazo configurable.
 - Regla inicial de 20 días.
-- Portal API de publicaciones vigentes.
+- Portal API y frontend de publicaciones vigentes.
 - Autorización institucional y congelamiento de evidencias.
 - Auditoría persistente de creación, validación, publicación y autorización/rechazo.
 
@@ -83,6 +97,20 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Emisión formal de autorización de ceremonia sólo cuando el flujo institucional está previamente autorizado.
 - Vinculación opcional de autorización formal con reserva de templo/sala.
 - Auditoría de espacios, reservas, conflictos y documentos.
+
+### Gestión Logial
+- Tenidas.
+- Registro de asistencia con enfoque append-only.
+- Actas versionadas.
+- Interfaz inicial conectada a la intranet.
+
+### Gestor Documental y Biblioteca
+- Colecciones documentales.
+- Metadata de documentos.
+- Versiones, clasificación, políticas de acceso y publicación controlada.
+- Endpoints de consulta sin exposición de secretos de almacenamiento.
+- Interfaz de Gestor Documental y Biblioteca conectada a la intranet.
+- Pendiente: almacenamiento binario real, análisis de seguridad, descarga autorizada y lifecycle físico (PMGM-REQ-027 / PMGM-BLG-027).
 
 ### Privacidad y Ley 21.719
 - Registro de actividades de tratamiento.
@@ -100,18 +128,21 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Privacy Gate — Ley 21.719.
 - Data Classification Gate.
 - Pruebas unitarias e integración PostgreSQL.
-- Pruebas HTTP end-to-end de ceremonia y Gran Secretaría.
+- Pruebas HTTP end-to-end en módulos críticos.
 - Auditoría con actor y correlation ID.
 
-## Próximos bloques
-1. Frontend React/TypeScript del portal de insinuados.
-2. Dashboard MVP institucional por rol.
-3. Cliente OIDC/PKCE y selección del proveedor definitivo de identidad.
-4. Generación/validación automatizada de contratos OpenAPI para frontend.
-5. Gestión Logial: tenidas, asistencia, actas y Secretaría de Taller.
-6. Biblioteca/documentos institucionales y almacenamiento de objetos.
-7. Notificaciones y correo institucional.
-8. Calendario integrado para templos, salas, ceremonias y reuniones.
+## Backlog activo formalizado
+1. PMGM-BLG-027 — Object Storage y ciclo binario documental (`v0.15.0`).
+2. PMGM-BLG-028 — Notificaciones internas + correo institucional (`v0.16.0`).
+3. PMGM-BLG-029 — Calendario institucional unificado (`v0.16.x`).
+
+## Próximos bloques posteriores
+1. Cliente OIDC/PKCE y selección del proveedor definitivo de identidad.
+2. Generación/validación automatizada de contratos OpenAPI para frontend.
+3. CENDOC / archivo histórico digital sobre el núcleo documental.
+4. Docencia y Biblioteca con taxonomía, búsquedas y colecciones especializadas.
+5. Integraciones con calendarios externos mediante conectores separados.
+6. Hardening de producción: observabilidad, backups, recuperación, gestión de secretos y despliegue.
 
 ## Criterio de avance
 Ningún incremento se considera estable si rompe compilación, migraciones, gates o pruebas del pipeline. Los cambios continúan en `dev` hasta revisión y aprobación para `main`.
