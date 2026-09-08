@@ -3,7 +3,8 @@
 **Estado:** Activo  
 **Rama de trabajo:** `dev`  
 **Rama estable:** `main`  
-**Corte funcional actual:** v0.14.x en `dev`
+**Corte funcional actual:** v0.14.x en `dev`  
+**Siguiente incremento:** v0.15.0 — Object Storage y ciclo binario seguro
 
 ## Visión
 Proyecto Milenio construye una plataforma institucional unificada para la Gran Logia Mixta de Chile, con acceso único, base maestra, trazabilidad histórica, seguridad por roles y módulos integrados.
@@ -18,7 +19,8 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Cultura de presentación `es-CL`.
 - Zona horaria institucional `America/Santiago`.
 - Monolito modular con límites de dominio explícitos.
-- Object Storage desacoplado para binarios documentales (PMGM-ADR-003; implementación pendiente).
+- Object Storage desacoplado para binarios documentales (PMGM-ADR-003).
+- Ciclo binario seguro especificado para implementación en PMGM-ARCH-003.
 
 ## Principios funcionales consolidados
 1. Una persona posee una identidad maestra única.
@@ -41,7 +43,8 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 18. El calendario institucional proyectará eventos desde sus fuentes de verdad sin duplicarlas.
 19. Biblioteca Virtual y Gran Archivo son módulos distintos: Biblioteca publica y facilita consulta; Gran Archivo custodia y preserva el patrimonio documental histórico.
 20. Gestión Documental Operativa, Biblioteca Virtual y Gran Archivo tienen responsabilidades separadas y no deben fusionarse en un único dominio funcional.
-21. CENDOC no forma parte del alcance del Proyecto Milenio.
+21. Los tres dominios documentales comparten un núcleo técnico binario seguro, sin escritura cruzada directa entre módulos.
+22. CENDOC no forma parte del alcance del Proyecto Milenio.
 
 ## Requisitos funcionales formalizados
 - PMGM-REQ-021 — Régimen Interior: reportes, control histórico y apoyo a decisiones.
@@ -57,10 +60,12 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - PMGM-REQ-030 — Gran Archivero y Archivo Histórico Institucional.
 - PMGM-REQ-031 — Biblioteca Virtual.
 
-## Decisiones de arquitectura
+## Decisiones y arquitectura
 - PMGM-ADR-001 — Arquitectura base del proyecto.
 - PMGM-ADR-002 — React + TypeScript + Vite para frontend.
 - PMGM-ADR-003 — Object Storage desacoplado para archivos binarios.
+- PMGM-ARCH-002 — Límites entre Gestión Documental Operativa, Biblioteca Virtual y Gran Archivo.
+- PMGM-ARCH-003 — Ciclo binario seguro y contrato de Object Storage.
 
 ## Estado de implementación en `dev`
 
@@ -113,8 +118,11 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Colecciones documentales.
 - Metadata de documentos.
 - Versiones, clasificación y políticas de acceso.
-- Endpoints de consulta sin exposición de secretos de almacenamiento.
-- Pendiente: almacenamiento binario real, análisis de seguridad, descarga autorizada y lifecycle físico (PMGM-REQ-027).
+- Estados técnicos `pending_upload`, `uploaded`, `scanning`, `available`, `rejected`.
+- `ObjectKey` opaco y contrato `IDocumentObjectStore` ya definidos en código.
+- Endpoints de consulta y publicación sin exposición de secretos de almacenamiento.
+- PMGM-ARCH-003 define carga binaria, descarga autorizada, integridad, scanner y reconciliación.
+- Pendiente de v0.15.0: adaptador S3-compatible real, binarios, antimalware, descarga autorizada y pruebas de integración.
 
 ### Biblioteca Virtual
 - Requisito funcional formalizado en PMGM-REQ-031.
@@ -122,7 +130,7 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Separación explícita respecto de Gran Archivo.
 - Flujo editorial, taxonomías, búsqueda, políticas de acceso y publicación controlada definidos.
 - Integración prevista con Docencia, Gestión Documental y Gran Archivo mediante referencias/derivados autorizados.
-- Implementación pendiente sobre el núcleo documental seguro.
+- Implementación funcional completa pendiente sobre el núcleo documental seguro.
 
 ### Gran Archivo / Gran Archivero
 - Requisito funcional formalizado en PMGM-REQ-030.
@@ -152,21 +160,22 @@ Proyecto Milenio construye una plataforma institucional unificada para la Gran L
 - Auditoría con actor y correlation ID.
 
 ## Backlog activo formalizado
-1. PMGM-BLG-027 — Object Storage y ciclo binario documental (`v0.15.0`).
+1. PMGM-BLG-052 — Object Storage y ciclo binario documental seguro (`v0.15.0`, P0).
 2. PMGM-BLG-028 — Notificaciones internas + correo institucional (`v0.16.0`).
 3. PMGM-BLG-029 — Calendario institucional unificado (`v0.16.x`).
 4. PMGM-BLG-050 — Biblioteca Virtual.
 5. PMGM-BLG-051 — Gran Archivo / Gran Archivero.
 
-## Próximos bloques posteriores
-1. Cliente OIDC/PKCE y selección del proveedor definitivo de identidad.
-2. Generación/validación automatizada de contratos OpenAPI para frontend.
-3. Object Storage seguro para archivos binarios.
-4. Biblioteca Virtual con flujo editorial, taxonomía, búsquedas y colecciones especializadas.
-5. Gran Archivo / Archivo Histórico digital con transferencias, custodia, preservación y préstamos.
-6. Docencia y conexión con Biblioteca Virtual.
-7. Integraciones con calendarios externos mediante conectores separados.
-8. Hardening de producción: observabilidad, backups, recuperación, gestión de secretos y despliegue.
+## Orden de ejecución recomendado
+1. PMGM-BLG-052 — Object Storage, carga, integridad, antimalware y descarga autorizada.
+2. Biblioteca Virtual básica sobre el núcleo seguro.
+3. Gran Archivo: estructura archivística, transferencias y custodia.
+4. Digitalización, preservación y préstamos del Gran Archivo.
+5. Notificaciones y calendario institucional.
+6. Cliente OIDC/PKCE y proveedor definitivo de identidad.
+7. OpenAPI automatizado para frontend.
+8. Docencia y conexión con Biblioteca Virtual.
+9. Integraciones externas y hardening de producción.
 
 ## Exclusiones explícitas
 - CENDOC no se incluye como módulo, dependencia ni componente del Proyecto Milenio.
