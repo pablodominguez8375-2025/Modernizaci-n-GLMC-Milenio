@@ -35,6 +35,8 @@ jobs:
       PMGM_TEST_S3_ACCESS_KEY: pmgm_minio_ci
       PMGM_TEST_S3_SECRET_KEY: pmgm_minio_ci_secret_change_me
       PMGM_TEST_S3_BUCKET: pmgm-documents
+      PMGM_TEST_CLAMAV_HOST: 127.0.0.1
+      PMGM_TEST_CLAMAV_PORT: 3310
 
     steps:
       - name: Checkout
@@ -85,6 +87,39 @@ jobs:
             minio/mc:latest \
             -c "mc alias set pmgm '$PMGM_TEST_S3_URL' '$PMGM_TEST_S3_ACCESS_KEY' '$PMGM_TEST_S3_SECRET_KEY' && mc mb --ignore-existing pmgm/$PMGM_TEST_S3_BUCKET && mc anonymous set none pmgm/$PMGM_TEST_S3_BUCKET"
 
+      - name: Start ClamAV for malware integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name pmgm-clamav-ci \
+            -p 3310:3310 \
+            clamav/clamav:1.4
+
+          ready=false
+          for attempt in $(seq 1 60); do
+            if python3 - <<'PY'
+          import socket
+          try:
+              with socket.create_connection(("127.0.0.1", 3310), timeout=1) as connection:
+                  connection.sendall(b"zPING\0")
+                  response = connection.recv(64)
+              raise SystemExit(0 if b"PONG" in response else 1)
+          except OSError:
+              raise SystemExit(1)
+          PY
+            then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ready" != "true" ]; then
+            docker logs pmgm-clamav-ci
+            exit 1
+          fi
+
       - name: Restore API
         run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
 
@@ -94,8 +129,12 @@ jobs:
       - name: Restore tests
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
-      - name: Test unit, PostgreSQL and S3 integration
+      - name: Test unit, PostgreSQL, S3 and ClamAV integration
         run: dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj --configuration Release --no-restore
+
+      - name: Stop ClamAV
+        if: always()
+        run: docker rm -f pmgm-clamav-ci >/dev/null 2>&1 || true
 
       - name: Stop MinIO
         if: always()
