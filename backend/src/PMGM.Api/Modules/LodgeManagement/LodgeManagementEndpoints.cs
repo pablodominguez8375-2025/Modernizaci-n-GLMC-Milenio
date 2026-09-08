@@ -242,10 +242,12 @@ public static class LodgeManagementEndpoints
             : await institutionalDb.Members
                 .AsNoTracking()
                 .Where(x => memberIds.Contains(x.Id))
-                .ToDictionaryAsync(
-                    x => x.Id,
-                    x => (x.Person.FirstNames + " " + x.Person.LastNames).Trim(),
-                    cancellationToken);
+                .Select(x => new
+                {
+                    x.Id,
+                    DisplayName = (x.Person.FirstNames + " " + x.Person.LastNames).Trim()
+                })
+                .ToDictionaryAsync(x => x.Id, x => x.DisplayName, cancellationToken);
 
         var items = latest
             .Select(x => new LodgeAttendanceCurrentDto(
