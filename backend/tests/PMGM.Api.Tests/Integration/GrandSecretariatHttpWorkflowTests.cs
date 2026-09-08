@@ -99,7 +99,10 @@ public sealed class GrandSecretariatHttpWorkflowTests
             "/api/institutional/gran-secretaria/ceremonias-autorizadas",
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, queueBeforeResponse.StatusCode);
-        Assert.Equal("private, no-store", queueBeforeResponse.Headers.CacheControl?.ToString());
+        var cacheControl = queueBeforeResponse.Headers.CacheControl;
+        Assert.NotNull(cacheControl);
+        Assert.True(cacheControl.NoStore);
+        Assert.True(cacheControl.Private);
 
         var queueBeforeJson = await queueBeforeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var queueBeforeItem = queueBeforeJson.GetProperty("items")
