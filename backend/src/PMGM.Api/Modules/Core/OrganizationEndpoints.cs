@@ -85,9 +85,12 @@ public static class OrganizationEndpoints
             .Distinct()
             .ToListAsync(cancellationToken);
 
+        // El grado pertenece al hermano y debe viajar con él en un traslado.
+        // Por eso se obtiene el último evento de grado global del miembro,
+        // aunque haya ocurrido en su Taller de origen.
         var degreeEvents = await db.DegreeEvents
             .AsNoTracking()
-            .Where(x => x.OrganizationId == id && activeMemberIds.Contains(x.MemberId))
+            .Where(x => activeMemberIds.Contains(x.MemberId))
             .OrderByDescending(x => x.EffectiveDate)
             .ThenByDescending(x => x.RecordedAtUtc)
             .Select(x => new { x.MemberId, x.Degree, x.EffectiveDate, x.RecordedAtUtc })
