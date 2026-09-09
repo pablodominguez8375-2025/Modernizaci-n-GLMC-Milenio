@@ -1,0 +1,12 @@
+# Override para una demostración inmediata sin identidad externa ni carga manual de datos.
+# Uso:
+# docker compose --env-file .env.qa -f infrastructure/docker-compose.qa.yml -f infrastructure/docker-compose.showcase.yml up -d --build
+services:
+  web:
+    build:
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_USE_MOCKS: "true"
+        VITE_OIDC_AUTHORITY: ""
+        VITE_OIDC_CLIENT_ID: ""
+        VITE_OIDC_SCOPE: "openid profile"
