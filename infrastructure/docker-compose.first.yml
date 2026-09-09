@@ -1,0 +1,130 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pmgm
+      POSTGRES_USER: pmgm_app
+      POSTGRES_PASSWORD: ${PMGM_FIRST_DB_PASSWORD:-pmgm_qa_local_only}
+    volumes:
+      - pmgm_first_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pmgm_app -d pmgm"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks: [pmgm_first_internal]
+
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${PMGM_FIRST_MINIO_USER:-pmgmqa}
+      MINIO_ROOT_PASSWORD: ${PMGM_FIRST_MINIO_PASSWORD:-pmgm_qa_minio_local_only}
+    volumes:
+      - pmgm_first_minio_data:/data
+    networks: [pmgm_first_internal]
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on: [minio]
+    restart: "no"
+    environment:
+      MINIO_ACCESS_KEY: ${PMGM_FIRST_MINIO_USER:-pmgmqa}
+      MINIO_SECRET_KEY: ${PMGM_FIRST_MINIO_PASSWORD:-pmgm_qa_minio_local_only}
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set pmgm http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done;
+      mc mb --ignore-existing pmgm/pmgm-documents;
+      mc anonymous set none pmgm/pmgm-documents;
+      exit 0;
+      "
+    networks: [pmgm_first_internal]
+
+  clamav:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    volumes:
+      - pmgm_first_clamav_db:/var/lib/clamav
+    networks: [pmgm_first_internal]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: qa-keycloak-admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD:-pmgm_qa_keycloak_local_only}
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME: http://127.0.0.1:8180
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HOSTNAME_STRICT: "true"
+    volumes:
+      - ./keycloak/pmgm-qa-realm.json:/opt/keycloak/data/import/pmgm-qa-realm.json:ro
+      - pmgm_first_keycloak_data:/opt/keycloak/data
+    ports:
+      - "127.0.0.1:8180:8080"
+    networks: [pmgm_first_internal]
+
+  api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      clamav:
+        condition: service_started
+      keycloak:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      Database__ApplyMigrationsOnStartup: "true"
+      DemoData__Enabled: "true"
+      Authentication__Authority: http://keycloak:8080/realms/pmgm
+      Authentication__Audience: pmgm-api
+      Authentication__RequireHttpsMetadata: "false"
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${PMGM_FIRST_DB_PASSWORD:-pmgm_qa_local_only}
+      DocumentStorage__ServiceUrl: http://minio:9000
+      DocumentStorage__Region: us-east-1
+      DocumentStorage__Bucket: pmgm-documents
+      DocumentStorage__AccessKey: ${PMGM_FIRST_MINIO_USER:-pmgmqa}
+      DocumentStorage__SecretKey: ${PMGM_FIRST_MINIO_PASSWORD:-pmgm_qa_minio_local_only}
+      DocumentStorage__ForcePathStyle: "true"
+      DocumentStorage__MaxUploadBytes: "52428800"
+      DocumentMalware__Host: clamav
+      DocumentMalware__Port: "3310"
+      DocumentMalware__MaxStreamBytes: "52428800"
+    networks: [pmgm_first_internal]
+
+  web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+        VITE_USE_MOCKS: "false"
+        VITE_OIDC_AUTHORITY: http://127.0.0.1:8180/realms/pmgm
+        VITE_OIDC_CLIENT_ID: pmgm-web
+        VITE_OIDC_SCOPE: openid profile
+        VITE_OIDC_ALLOW_HTTP_LOCAL: "true"
+    restart: unless-stopped
+    depends_on: [api, keycloak]
+    ports:
+      - "127.0.0.1:8081:80"
+    networks: [pmgm_first_internal]
+
+networks:
+  pmgm_first_internal:
+    driver: bridge
+
+volumes:
+  pmgm_first_postgres_data:
+  pmgm_first_minio_data:
+  pmgm_first_clamav_db:
+  pmgm_first_keycloak_data:
