@@ -51,7 +51,7 @@ corrupted_count="$("${compose[@]}" exec -T postgres psql -At -U pmgm_app -d pmgm
   -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc rm --recursive --force pmgm/pmgm-documents >/dev/null'
 
 remaining_objects="$("${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
-  -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc find pmgm/pmgm-documents --type f | wc -l' | tr -d '[:space:]')"
+  -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc ls --recursive pmgm/pmgm-documents | wc -l' | tr -d '[:space:]')"
 [ "$remaining_objects" = "0" ] || { echo "La simulación MinIO no dejó el bucket vacío." >&2; exit 1; }
 
 echo "Restaurando desde respaldo verificado..."
