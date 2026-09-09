@@ -30,6 +30,7 @@ public static class LibraryCatalogEndpoints
         HttpContext httpContext,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         CancellationToken cancellationToken)
     {
         var currentPage = page ?? 1;
@@ -51,7 +52,9 @@ public static class LibraryCatalogEndpoints
         if (documentType is not null && normalizedDocumentType is null)
             return Results.BadRequest(new { message = "El tipo documental excede el máximo permitido." });
 
-        var query = BuildVisibleCatalogQuery(httpContext.User, db, access);
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        var effectiveDegree = memberContext?.EffectiveDegree;
+        var query = BuildVisibleCatalogQuery(httpContext.User, db, access, effectiveDegree);
 
         if (collectionId is not null)
             query = query.Where(x => x.CollectionId == collectionId.Value);
@@ -109,9 +112,12 @@ public static class LibraryCatalogEndpoints
         HttpContext httpContext,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         CancellationToken cancellationToken)
     {
-        var query = BuildVisibleCatalogQuery(httpContext.User, db, access);
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        var effectiveDegree = memberContext?.EffectiveDegree;
+        var query = BuildVisibleCatalogQuery(httpContext.User, db, access, effectiveDegree);
 
         var collectionRows = await query
             .GroupBy(x => new { x.CollectionId, x.CollectionName })
@@ -160,7 +166,8 @@ public static class LibraryCatalogEndpoints
     private static IQueryable<LibraryCatalogQueryRow> BuildVisibleCatalogQuery(
         ClaimsPrincipal user,
         DocumentManagementDbContext db,
-        IInstitutionalAccessService access)
+        IInstitutionalAccessService access,
+        int? effectiveDegree)
     {
         var canReadAllOrganizations = access.HasOrderScope(user) &&
             access.HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.DocumentManager);
@@ -170,6 +177,8 @@ public static class LibraryCatalogEndpoints
             .Where(document =>
                 document.Status == DocumentManagementCodes.DocumentStatus.Published &&
                 document.PublishedVersionId != null &&
+                (document.MinimumDegreeRequired == null ||
+                 (effectiveDegree != null && document.MinimumDegreeRequired <= effectiveDegree)) &&
                 (document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated ||
                  (document.AccessPolicy == DocumentManagementCodes.AccessPolicy.OrganizationAuthenticated &&
                   document.OrganizationId != null &&
