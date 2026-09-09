@@ -11,6 +11,7 @@
   "verifyEmail": false,
   "roles": {
     "realm": [
+      { "name": "platform_superadmin" },
       { "name": "grand_lodge_admin" },
       { "name": "internal_affairs" },
       { "name": "grand_secretariat" },
@@ -116,6 +117,7 @@
         "pmgm_scope": ["order"]
       },
       "realmRoles": [
+        "platform_superadmin",
         "grand_lodge_admin",
         "internal_affairs",
         "grand_secretariat",

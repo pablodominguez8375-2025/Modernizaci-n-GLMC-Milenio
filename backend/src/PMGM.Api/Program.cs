@@ -6,6 +6,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Infrastructure;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Bootstrap;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Core;
 using PMGM.Api.Modules.DocumentManagement;
@@ -46,6 +47,7 @@ builder.Services.AddScoped<CalendarSourceProjectionInterceptor>();
 builder.Services.AddDbContext<PmgmDbContext>((services, options) =>
     options.UseNpgsql(mainConnectionString)
         .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
+builder.Services.AddDbContext<BootstrapDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
     options.UseNpgsql(mainConnectionString)
@@ -68,6 +70,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
 builder.Services.AddScoped<IInstitutionalMemberContextResolver, InstitutionalMemberContextResolver>();
+builder.Services.AddScoped<IInstitutionalBootstrapService, InstitutionalBootstrapService>();
 builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
 builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
 builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
@@ -90,6 +93,8 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
     await db.Database.MigrateAsync();
+    var bootstrapDb = scope.ServiceProvider.GetRequiredService<BootstrapDbContext>();
+    await bootstrapDb.Database.MigrateAsync();
     var documentDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
     await documentDb.Database.MigrateAsync();
     var grandArchiveDb = scope.ServiceProvider.GetRequiredService<GrandArchiveDbContext>();
@@ -127,7 +132,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.32.0",
+    version = "0.33.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -135,6 +140,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 }));
 
 app.MapSessionEndpoints();
+app.MapBootstrapEndpoints();
 app.MapOrganizationEndpoints();
 app.MapMembershipEndpoints();
 app.MapTransferEndpoints();

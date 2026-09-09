@@ -43,7 +43,6 @@ wait_url "$PMGM_PILOT_PUBLIC_URL/health/ready" "API ready/PostgreSQL"
 wait_url "$PMGM_PILOT_PUBLIC_URL/health/web" "frontend Nginx"
 wait_url "$PMGM_PILOT_PUBLIC_URL/" "frontend HTTPS"
 
-# El callback pertenece al SPA; /identity pertenece a Keycloak. Este control evita regresiones de routing.
 callback_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-callback.html -w '%{http_code}' "$PMGM_PILOT_PUBLIC_URL/auth/callback")"
 [ "$callback_status" = "200" ] || { echo "El callback SPA devolvió HTTP $callback_status." >&2; exit 1; }
 printf '✓ separación /auth (SPA) y /identity (Keycloak)\n'
@@ -64,16 +63,19 @@ system_info="$(curl "${curl_common[@]}" --fail -H 'Accept: application/json' "$P
 SYSTEM_INFO="$system_info" python3 - <<'PY'
 import json, os
 payload = json.loads(os.environ['SYSTEM_INFO'])
-if payload.get('version') != '0.32.0':
+if payload.get('version') != '0.33.0':
     raise SystemExit(f"versión API inesperada: {payload.get('version')}")
 PY
-printf '✓ API v0.32.0 expuesta sólo detrás de HTTPS\n'
+printf '✓ API v0.33.0 expuesta sólo detrás de HTTPS\n'
 
 session_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-session.json -w '%{http_code}' -H 'Accept: application/json' "$PMGM_PILOT_PUBLIC_URL/api/session/me")"
 [ "$session_status" = "401" ] || { echo "Se esperaba 401 sin token en /api/session/me y se obtuvo $session_status." >&2; exit 1; }
 printf '✓ endpoint protegido exige autenticación\n'
 
-# El cliente web del piloto no puede usar Resource Owner Password Credentials.
+bootstrap_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-bootstrap.json -w '%{http_code}' -H 'Accept: application/json' "$PMGM_PILOT_PUBLIC_URL/api/platform/bootstrap/catalog")"
+[ "$bootstrap_status" = "401" ] || { echo "Se esperaba 401 sin token en bootstrap y se obtuvo $bootstrap_status." >&2; exit 1; }
+printf '✓ bootstrap institucional exige autenticación\n'
+
 token_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-token.json -w '%{http_code}' \
   -H 'Content-Type: application/x-www-form-urlencoded' \
   --data-urlencode 'client_id=pmgm-web' \

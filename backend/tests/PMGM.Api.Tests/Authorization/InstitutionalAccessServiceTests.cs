@@ -9,6 +9,32 @@ public sealed class InstitutionalAccessServiceTests
     private readonly InstitutionalAccessService _service = new();
 
     [Fact]
+    public void PlatformSuperAdmin_WithOrderScope_HasAdministrativeBypass()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin));
+
+        Assert.True(_service.IsPlatformSuperAdmin(user));
+        Assert.True(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
+        Assert.True(_service.CanManageOrganization(user, organization));
+        Assert.True(_service.CanApproveTransfers(user));
+        Assert.True(_service.CanManageGrandSecretariat(user));
+        Assert.True(_service.CanManageGrandArchive(user));
+        Assert.True(_service.CanManagePrivacy(user));
+    }
+
+    [Fact]
+    public void PlatformSuperAdmin_WithoutOrderScope_DoesNotBypassRoles()
+    {
+        var user = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin));
+
+        Assert.False(_service.IsPlatformSuperAdmin(user));
+        Assert.False(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
+    }
+
+    [Fact]
     public void RegimenInterior_WithOrderScope_CanRunReports()
     {
         var user = CreateUser(

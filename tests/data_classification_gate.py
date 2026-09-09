@@ -9,6 +9,7 @@ CATALOGS = [
     Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-NOTIFICATIONS.json"),
     Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-DATA-QUALITY-CASES.json"),
     Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-GRAND-ARCHIVE.json"),
+    Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-BOOTSTRAP.json"),
 ]
 ALLOWED_CLASSIFICATIONS = {
     "public_projection",
