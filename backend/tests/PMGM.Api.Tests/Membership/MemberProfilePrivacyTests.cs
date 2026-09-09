@@ -3,7 +3,7 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
 using Xunit;
 
-namespace PMGM.Api.Tests.Membership;
+namespace PMGM.Api.Tests.Unit;
 
 public sealed class MemberProfilePrivacyTests
 {
