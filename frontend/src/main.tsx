@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import AuthRoot from './auth/AuthRoot'
 import './styles.css'
 import './calendar.css'
+import './showcase.css'
 
 const root = document.getElementById('root')
 
