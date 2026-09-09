@@ -3,10 +3,18 @@ set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 ENV_FILE="${PMGM_PILOT_ENV_FILE:-$ROOT/infrastructure/.env.pilot.local}"
+RELEASE_MANIFEST="$ROOT/release/PMGM-RELEASE-1.0.0-rc1.json"
 
 command -v curl >/dev/null 2>&1 || { echo "curl es obligatorio." >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "Python 3 es obligatorio." >&2; exit 1; }
 [ -f "$ENV_FILE" ] || { echo "No existe $ENV_FILE" >&2; exit 1; }
+[ -f "$RELEASE_MANIFEST" ] || { echo "No existe $RELEASE_MANIFEST" >&2; exit 1; }
+
+(
+  cd "$ROOT"
+  python3 tests/release_gate.py
+)
+release_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["releaseVersion"])' "$RELEASE_MANIFEST")"
 
 set -a
 # shellcheck disable=SC1090
@@ -60,13 +68,14 @@ PY
 printf '✓ issuer OIDC público consistente\n'
 
 system_info="$(curl "${curl_common[@]}" --fail -H 'Accept: application/json' "$PMGM_PILOT_PUBLIC_URL/api/system/info")"
-SYSTEM_INFO="$system_info" python3 - <<'PY'
+SYSTEM_INFO="$system_info" EXPECTED_VERSION="$release_version" python3 - <<'PY'
 import json, os
 payload = json.loads(os.environ['SYSTEM_INFO'])
-if payload.get('version') != '0.33.0':
-    raise SystemExit(f"versión API inesperada: {payload.get('version')}")
+expected = os.environ['EXPECTED_VERSION']
+if payload.get('version') != expected:
+    raise SystemExit(f"versión API inesperada: {payload.get('version')} != {expected}")
 PY
-printf '✓ API v0.33.0 expuesta sólo detrás de HTTPS\n'
+printf '✓ API %s expuesta sólo detrás de HTTPS\n' "$release_version"
 
 session_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-session.json -w '%{http_code}' -H 'Accept: application/json' "$PMGM_PILOT_PUBLIC_URL/api/session/me")"
 [ "$session_status" = "401" ] || { echo "Se esperaba 401 sin token en /api/session/me y se obtuvo $session_status." >&2; exit 1; }
@@ -89,4 +98,4 @@ if [ "$token_status" = "200" ]; then
 fi
 printf '✓ password grant deshabilitado para pmgm-web (HTTP %s)\n' "$token_status"
 
-printf '\nSMOKE PILOTO OK\n'
+printf '\nSMOKE PILOTO %s OK\n' "$release_version"

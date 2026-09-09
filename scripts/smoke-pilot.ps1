@@ -3,6 +3,7 @@ param()
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $envFile = if ($env:PMGM_PILOT_ENV_FILE) { $env:PMGM_PILOT_ENV_FILE } else { Join-Path $repoRoot 'infrastructure/.env.pilot.local' }
+$releaseManifestPath = Join-Path $repoRoot 'release/PMGM-RELEASE-1.0.0-rc1.json'
 
 function Import-PmgmEnv([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) { throw "No existe $Path" }
@@ -13,8 +14,15 @@ function Import-PmgmEnv([string]$Path) {
     }
 }
 
+if (-not (Test-Path -LiteralPath $releaseManifestPath)) { throw "No existe $releaseManifestPath" }
+$releaseManifest = Get-Content -LiteralPath $releaseManifestPath -Raw | ConvertFrom-Json
+$releaseVersion = [string]$releaseManifest.releaseVersion
+if ([string]::IsNullOrWhiteSpace($releaseVersion)) { throw 'El manifest de release no declara releaseVersion.' }
+
 Import-PmgmEnv $envFile
 if ([string]::IsNullOrWhiteSpace($env:PMGM_PILOT_PUBLIC_URL)) { throw 'PMGM_PILOT_PUBLIC_URL es obligatorio.' }
+if ([string]::IsNullOrWhiteSpace($env:PMGM_PILOT_ADMIN_USERNAME)) { throw 'PMGM_PILOT_ADMIN_USERNAME es obligatorio.' }
+if ([string]::IsNullOrWhiteSpace($env:PMGM_PILOT_ADMIN_PASSWORD)) { throw 'PMGM_PILOT_ADMIN_PASSWORD es obligatorio.' }
 
 $skipCert = $env:PMGM_PILOT_INSECURE_TLS -eq 'true'
 
@@ -57,8 +65,8 @@ if ($discovery.issuer -ne $expectedIssuer) { throw "Issuer inesperado: $($discov
 Write-Host '✓ issuer OIDC público consistente' -ForegroundColor Green
 
 $systemInfo = (Invoke-PilotWeb "$base/api/system/info").Content | ConvertFrom-Json
-if ($systemInfo.version -ne '0.32.0') { throw "Versión API inesperada: $($systemInfo.version)" }
-Write-Host '✓ API v0.32.0 detrás de HTTPS' -ForegroundColor Green
+if ($systemInfo.version -ne $releaseVersion) { throw "Versión API inesperada: $($systemInfo.version) != $releaseVersion" }
+Write-Host "✓ API $releaseVersion detrás de HTTPS" -ForegroundColor Green
 
 $sessionStatus = 0
 try {
@@ -70,6 +78,17 @@ try {
 }
 if ($sessionStatus -ne 401) { throw "Se esperaba 401 sin token en /api/session/me y se obtuvo $sessionStatus." }
 Write-Host '✓ endpoint protegido exige autenticación' -ForegroundColor Green
+
+$bootstrapStatus = 0
+try {
+    $response = Invoke-PilotWeb "$base/api/platform/bootstrap/catalog"
+    $bootstrapStatus = [int]$response.StatusCode
+} catch {
+    if ($_.Exception.Response) { $bootstrapStatus = [int]$_.Exception.Response.StatusCode }
+    else { throw }
+}
+if ($bootstrapStatus -ne 401) { throw "Se esperaba 401 sin token en bootstrap y se obtuvo $bootstrapStatus." }
+Write-Host '✓ bootstrap institucional exige autenticación' -ForegroundColor Green
 
 $tokenBody = @{
     client_id = 'pmgm-web'
@@ -89,4 +108,4 @@ if ($tokenStatus -eq 200) { throw 'FALLO DE SEGURIDAD: pmgm-web aceptó password
 Write-Host "✓ password grant deshabilitado para pmgm-web (HTTP $tokenStatus)" -ForegroundColor Green
 
 Write-Host ''
-Write-Host 'SMOKE PILOTO OK' -ForegroundColor Green
+Write-Host "SMOKE PILOTO $releaseVersion OK" -ForegroundColor Green
