@@ -4,15 +4,18 @@ set -euo pipefail
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 ENV_FILE="${PMGM_PILOT_ENV_FILE:-$ROOT/infrastructure/.env.pilot.local}"
 RELEASE_MANIFEST="$ROOT/release/PMGM-RELEASE-1.0.0-rc1.json"
+UAT_TEMPLATE="$ROOT/release/PMGM-UAT-1.0.0-rc1.template.json"
 
 command -v curl >/dev/null 2>&1 || { echo "curl es obligatorio." >&2; exit 1; }
 command -v python3 >/dev/null 2>&1 || { echo "Python 3 es obligatorio." >&2; exit 1; }
 [ -f "$ENV_FILE" ] || { echo "No existe $ENV_FILE" >&2; exit 1; }
 [ -f "$RELEASE_MANIFEST" ] || { echo "No existe $RELEASE_MANIFEST" >&2; exit 1; }
+[ -f "$UAT_TEMPLATE" ] || { echo "No existe $UAT_TEMPLATE" >&2; exit 1; }
 
 (
   cd "$ROOT"
   python3 tests/release_gate.py
+  python3 tests/uat_evidence_gate.py "$UAT_TEMPLATE" --allow-pending
 )
 release_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["releaseVersion"])' "$RELEASE_MANIFEST")"
 
