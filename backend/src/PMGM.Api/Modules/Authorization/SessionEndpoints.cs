@@ -29,6 +29,7 @@ public sealed record SessionProfileDto(
     SessionCapabilitiesDto Capabilities);
 
 public sealed record SessionCapabilitiesDto(
+    bool CanBootstrapInstitutional,
     bool CanApproveTransfers,
     bool CanRunRegimenInteriorReports,
     bool CanManageGrandSecretariat,
@@ -76,6 +77,7 @@ public static class SessionProfileBuilder
             DisplayName: displayName.Trim(),
             AccessScope: accessScope,
             Capabilities: new SessionCapabilitiesDto(
+                CanBootstrapInstitutional: access.IsPlatformSuperAdmin(user),
                 CanApproveTransfers: access.CanApproveTransfers(user),
                 CanRunRegimenInteriorReports: access.CanRunRegimenInteriorReports(user),
                 CanManageGrandSecretariat: access.CanManageGrandSecretariat(user),
