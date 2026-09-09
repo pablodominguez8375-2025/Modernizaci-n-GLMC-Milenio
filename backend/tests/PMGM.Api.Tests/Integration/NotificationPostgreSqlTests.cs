@@ -112,8 +112,8 @@ public sealed class NotificationPostgreSqlTests
             serviceA.QueueAsync(command, cancellationToken),
             serviceB.QueueAsync(command, cancellationToken));
 
-        Assert.Single(results.Where(x => x.Created));
-        Assert.Single(results.Where(x => !x.Created));
+        Assert.Single(results, x => x.Created);
+        Assert.Single(results, x => !x.Created);
         Assert.Equal(results[0].MessageId, results[1].MessageId);
 
         await using var verificationDb = new NotificationDbContext(options);
