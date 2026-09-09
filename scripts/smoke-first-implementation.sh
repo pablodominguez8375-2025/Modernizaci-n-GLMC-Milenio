@@ -55,15 +55,37 @@ print(token)
 PY
 }
 
+json_get() {
+  local token="$1" path="$2"
+  curl -fsS --max-time 20 -H "Authorization: Bearer $token" -H 'Accept: application/json' "$BASE_URL$path"
+}
+
 assert_json_get() {
   local token="$1" path="$2" name="$3"
   local payload
-  payload=$(curl -fsS --max-time 20 -H "Authorization: Bearer $token" -H 'Accept: application/json' "$BASE_URL$path")
+  payload=$(json_get "$token" "$path")
   BODY="$payload" python3 - <<'PY'
 import json, os
 json.loads(os.environ['BODY'])
 PY
   printf '✓ %s\n' "$name"
+}
+
+assert_transferred_degree() {
+  local payload="$1" actor="$2"
+  BODY="$payload" python3 - <<'PY'
+import json, os
+payload = json.loads(os.environ['BODY'])
+rows = payload.get('items', [])
+row = next((item for item in rows if item.get('institutionalNumber') == 'GLM-QA-0230'), None)
+if row is None:
+    raise SystemExit('no se encontró al miembro trasladado GLM-QA-0230 en Taller 23')
+if row.get('membershipStatus') != 'active':
+    raise SystemExit(f"membresía trasladada no está activa: {row.get('membershipStatus')}")
+if row.get('currentDegree') != 'master':
+    raise SystemExit(f"el grado maestro no acompañó el traslado: {row.get('currentDegree')}")
+PY
+  printf '✓ grado maestro preservado tras traslado (%s)\n' "$actor"
 }
 
 wait_url "$OIDC_URL/.well-known/openid-configuration" "Keycloak discovery"
@@ -76,7 +98,9 @@ workshop_token=$(get_token 'qa.taller23')
 printf '✓ autenticación QA mediante Keycloak\n'
 
 assert_json_get "$admin_token" '/api/session/me' 'sesión institucional de Gran Logia'
-assert_json_get "$admin_token" "/api/members?organizationId=$LODGE23&limit=20" 'Membresía / Ficha de Taller'
+admin_members=$(json_get "$admin_token" "/api/members?organizationId=$LODGE23&limit=20")
+assert_transferred_degree "$admin_members" 'Gran Logia'
+printf '✓ Membresía / Ficha de Taller\n'
 assert_json_get "$admin_token" '/api/candidate-publications/active' 'Portal de insinuados'
 assert_json_get "$admin_token" '/api/biblioteca' 'Biblioteca Virtual'
 assert_json_get "$admin_token" '/api/grand-archive/?status=active&limit=20' 'Gran Archivero'
@@ -91,7 +115,7 @@ if [ "$workshop_archive_status" != '403' ]; then
 fi
 printf '✓ segregación de permisos: Taller no accede a Gran Archivero\n'
 
-workshop_session=$(curl -fsS --max-time 20 -H "Authorization: Bearer $workshop_token" "$BASE_URL/api/session/me")
+workshop_session=$(json_get "$workshop_token" '/api/session/me')
 BODY="$workshop_session" python3 - <<'PY'
 import json, os
 payload = json.loads(os.environ['BODY'])
@@ -101,5 +125,7 @@ if payload.get('capabilities', {}).get('canManageLodgeOperations') is not True:
     raise SystemExit('el perfil Taller no obtuvo capacidad de gestión logial')
 PY
 printf '✓ perfil Taller limitado a organization con Gestión Logial\n'
+workshop_members=$(json_get "$workshop_token" "/api/members?organizationId=$LODGE23&limit=20")
+assert_transferred_degree "$workshop_members" 'Taller destino'
 
 printf '\nSMOKE FIRST IMPLEMENTATION OK\n'
