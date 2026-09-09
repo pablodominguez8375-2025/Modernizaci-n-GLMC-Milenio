@@ -3,7 +3,7 @@ import { type GrandArchiveApiClient, type GrandArchiveCandidate, type GrandArchi
 import './grandArchive.css'
 
 const TYPES: Array<{ value: GrandArchiveRecordType; label: string }> = [
-  { value: 'decree', label: 'Decreto' }, { value: 'communication', label: 'Comunicado' }, { value: 'minutes', label: 'Acta' },
+  { value: 'decree', label: 'Decreto' }, { value: 'communication', label: 'Comunicado' }, { value: 'minute', label: 'Acta' },
   { value: 'resolution', label: 'Resolución' }, { value: 'regulation', label: 'Reglamento' }, { value: 'correspondence', label: 'Correspondencia' },
   { value: 'historical_record', label: 'Registro histórico' }, { value: 'other', label: 'Otro' },
 ]
