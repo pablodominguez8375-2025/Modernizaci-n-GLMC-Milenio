@@ -6,6 +6,7 @@ import sys
 CATALOGS = [
     Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-CATALOG.json"),
     Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-LODGE-MANAGEMENT.json"),
+    Path("docs/seguridad/PMGM-DATA-CLASSIFICATION-NOTIFICATIONS.json"),
 ]
 ALLOWED_CLASSIFICATIONS = {
     "public_projection",
