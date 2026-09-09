@@ -60,14 +60,16 @@ public static class MembershipEndpoints
         var take = Math.Clamp(limit ?? 100, 1, 250);
         var normalizedQuery = query?.Trim();
 
+        // Mantener la consulta completamente traducible a SQL. El patrón anterior
+        // GroupBy(...).First() impedía a EF Core navegar luego hacia Member.Person.
         var latestMemberships = db.Memberships
             .AsNoTracking()
-            .Where(x => x.OrganizationId == organizationId)
-            .GroupBy(x => x.MemberId)
-            .Select(group => group
-                .OrderByDescending(x => x.StartDate)
-                .ThenByDescending(x => x.CreatedAtUtc)
-                .First());
+            .Where(x => x.OrganizationId == organizationId &&
+                        !db.Memberships.Any(other =>
+                            other.OrganizationId == organizationId &&
+                            other.MemberId == x.MemberId &&
+                            (other.StartDate > x.StartDate ||
+                             (other.StartDate == x.StartDate && other.CreatedAtUtc > x.CreatedAtUtc))));
 
         if (!string.IsNullOrWhiteSpace(status))
         {
@@ -99,7 +101,7 @@ public static class MembershipEndpoints
                 x.StartDate,
                 x.EndDate,
                 CurrentDegree = db.DegreeEvents
-                    .Where(degree => degree.MemberId == x.MemberId && degree.OrganizationId == organizationId)
+                    .Where(degree => degree.MemberId == x.MemberId)
                     .OrderByDescending(degree => degree.EffectiveDate)
                     .ThenByDescending(degree => degree.RecordedAtUtc)
                     .Select(degree => degree.Degree)

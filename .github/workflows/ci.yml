@@ -199,9 +199,24 @@ jobs:
       - name: Validate showcase Nginx configuration
         run: docker run --rm pmgm-showcase-ci nginx -t
 
+      - name: Build first-implementation frontend configuration
+        run: >-
+          docker build
+          --build-arg VITE_USE_MOCKS=false
+          --build-arg VITE_OIDC_AUTHORITY=http://127.0.0.1:8180/realms/pmgm
+          --build-arg VITE_OIDC_CLIENT_ID=pmgm-web
+          --build-arg VITE_OIDC_ALLOW_HTTP_LOCAL=true
+          -t pmgm-first-web-ci frontend
+
   infrastructure-validate:
     name: Infrastructure configuration
     runs-on: ubuntu-latest
+    env:
+      PMGM_FIRST_DB_PASSWORD: ci_first_db_only
+      PMGM_FIRST_MINIO_USER: ci_first_storage
+      PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
+      PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
+      PMGM_QA_USER_PASSWORD: ci_first_user_only
 
     steps:
       - name: Checkout
@@ -219,3 +234,48 @@ jobs:
 
       - name: Validate standalone showcase Docker Compose
         run: docker compose -f infrastructure/docker-compose.showcase.yml config
+
+      - name: Validate first-implementation Docker Compose
+        run: docker compose -f infrastructure/docker-compose.first.yml config
+
+      - name: Validate Keycloak QA realm JSON
+        run: python3 -m json.tool infrastructure/keycloak/pmgm-realm.json >/dev/null
+
+      - name: Validate Keycloak realm filename convention
+        run: >-
+          python3 -c "import json, pathlib; path=pathlib.Path('infrastructure/keycloak/pmgm-realm.json');
+          realm=json.load(path.open())['realm']; assert path.name == f'{realm}-realm.json', (path.name, realm)"
+
+      - name: Reject fixed QA passwords in realm
+        run: >-
+          python3 -c "import json; p=json.load(open('infrastructure/keycloak/pmgm-realm.json'));
+          values=[c.get('value','') for u in p.get('users',[]) for c in u.get('credentials',[])];
+          assert values and all(v == '\${PMGM_QA_USER_PASSWORD}' for v in values), values"
+
+  first-implementation-smoke:
+    name: First implementation authenticated smoke
+    runs-on: ubuntu-latest
+    env:
+      PMGM_FIRST_DB_PASSWORD: ci_first_db_only
+      PMGM_FIRST_MINIO_USER: ci_first_storage
+      PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
+      PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
+      PMGM_QA_USER_PASSWORD: ci_first_user_only
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start first implementation
+        run: docker compose -f infrastructure/docker-compose.first.yml up -d --build
+
+      - name: Run authenticated stack smoke
+        run: bash scripts/smoke-first-implementation.sh
+
+      - name: Show first-implementation logs on failure
+        if: failure()
+        run: docker compose -f infrastructure/docker-compose.first.yml logs --no-color --tail=300
+
+      - name: Stop first implementation
+        if: always()
+        run: docker compose -f infrastructure/docker-compose.first.yml down -v --remove-orphans

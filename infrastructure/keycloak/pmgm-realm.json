@@ -1,0 +1,151 @@
+{
+  "realm": "pmgm",
+  "displayName": "Proyecto Milenio QA",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "roles": {
+    "realm": [
+      { "name": "grand_lodge_admin" },
+      { "name": "internal_affairs" },
+      { "name": "grand_secretariat" },
+      { "name": "grand_treasury" },
+      { "name": "grand_hospitalaria" },
+      { "name": "privacy_officer" },
+      { "name": "document_manager" },
+      { "name": "grand_archivist" },
+      { "name": "lodge_admin" },
+      { "name": "lodge_secretariat" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "pmgm-web",
+      "name": "Proyecto Milenio Web QA",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "http://127.0.0.1:8081/auth/callback",
+        "http://localhost:8081/auth/callback"
+      ],
+      "webOrigins": [
+        "http://127.0.0.1:8081",
+        "http://localhost:8081"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:8081/auth/logout##http://localhost:8081/auth/logout"
+      },
+      "protocolMappers": [
+        {
+          "name": "pmgm-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "pmgm-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "pmgm-realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.realmRoleMapping.rolePrefix": "",
+            "multivalued": "true",
+            "claim.name": "pmgm_role",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "pmgm-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "pmgm_scope",
+            "claim.name": "pmgm_scope",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "pmgm-organization",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "pmgm_org",
+            "claim.name": "pmgm_org",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "qa.admin",
+      "enabled": true,
+      "firstName": "Administración",
+      "lastName": "QA Milenio",
+      "email": "qa.admin@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": ["order"]
+      },
+      "realmRoles": [
+        "grand_lodge_admin",
+        "internal_affairs",
+        "grand_secretariat",
+        "grand_treasury",
+        "grand_hospitalaria",
+        "privacy_officer",
+        "document_manager",
+        "grand_archivist"
+      ],
+      "credentials": [
+        { "type": "password", "value": "${PMGM_QA_USER_PASSWORD}", "temporary": false }
+      ]
+    },
+    {
+      "username": "qa.taller23",
+      "enabled": true,
+      "firstName": "Secretaría",
+      "lastName": "Taller QA 23",
+      "email": "qa.taller23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": ["organization"],
+        "pmgm_org": ["23232323-2323-2323-2323-232323232323"]
+      },
+      "realmRoles": ["lodge_admin", "lodge_secretariat"],
+      "credentials": [
+        { "type": "password", "value": "${PMGM_QA_USER_PASSWORD}", "temporary": false }
+      ]
+    }
+  ]
+}

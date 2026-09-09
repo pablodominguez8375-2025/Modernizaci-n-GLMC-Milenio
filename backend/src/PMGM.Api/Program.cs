@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Infrastructure;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
@@ -60,7 +61,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     {
         options.Authority = builder.Configuration["Authentication:Authority"];
         options.Audience = builder.Configuration["Authentication:Audience"];
-        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.RequireHttpsMetadata = builder.Configuration.GetValue<bool?>("Authentication:RequireHttpsMetadata")
+            ?? !builder.Environment.IsDevelopment();
     });
 
 builder.Services.AddAuthorization();
@@ -79,6 +81,7 @@ builder.Services.AddScoped<IRegimenInteriorMemberControlService, RegimenInterior
 builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
 builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
+builder.Services.AddScoped<FirstImplementationSeedService>();
 
 var app = builder.Build();
 
@@ -99,6 +102,15 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await regimenInteriorDb.Database.MigrateAsync();
 }
 
+if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
+{
+    if (app.Environment.IsProduction())
+        throw new InvalidOperationException("DemoData:Enabled nunca puede utilizarse en Production.");
+
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<FirstImplementationSeedService>().SeedAsync();
+}
+
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
@@ -115,7 +127,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.29.0",
+    version = "0.30.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
