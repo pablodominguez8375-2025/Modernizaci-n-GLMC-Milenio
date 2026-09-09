@@ -26,10 +26,7 @@ function Import-PmgmEnv([string]$Path) {
 }
 
 function Invoke-Compose {
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Arguments
-    )
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
     & docker @script:composeArgs @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose falló con código $LASTEXITCODE: $($Arguments -join ' ')"
@@ -37,10 +34,7 @@ function Invoke-Compose {
 }
 
 function Invoke-ComposeCapture {
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Arguments
-    )
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
     $output = @(& docker @script:composeArgs @Arguments)
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose falló con código $LASTEXITCODE: $($Arguments -join ' ')"
@@ -75,12 +69,12 @@ $resume = @('api', 'web') | Where-Object { $runningBefore -contains $_ }
 
 if ($resume.Count -gt 0) {
     Write-Host 'Deteniendo acceso a la aplicación...'
-    Invoke-Compose stop @resume | Out-Null
+    Invoke-Compose -Arguments (@('stop') + @($resume)) | Out-Null
 }
 
 try {
     Write-Host 'Preparando PostgreSQL y MinIO...'
-    Invoke-Compose up -d postgres minio | Out-Null
+    Invoke-Compose -Arguments @('up', '-d', 'postgres', 'minio') | Out-Null
 
     $postgresReady = $false
     for ($attempt = 1; $attempt -le 30; $attempt++) {
@@ -92,17 +86,32 @@ try {
 
     Write-Host 'Restaurando PostgreSQL...'
     $tmpDump = '/tmp/pmgm-first-restore.dump'
-    Invoke-Compose exec -T postgres rm -f $tmpDump | Out-Null
-    Invoke-Compose cp (Join-Path $BackupPath 'database/pmgm.dump') "postgres:$tmpDump" | Out-Null
-    Invoke-Compose exec -T postgres pg_restore --clean --if-exists --no-owner --no-privileges --exit-on-error -U pmgm_app -d pmgm $tmpDump | Out-Null
-    Invoke-Compose exec -T postgres rm -f $tmpDump | Out-Null
+    Invoke-Compose -Arguments @('exec', '-T', 'postgres', 'rm', '-f', $tmpDump) | Out-Null
+    Invoke-Compose -Arguments @('cp', (Join-Path $BackupPath 'database/pmgm.dump'), "postgres:$tmpDump") | Out-Null
+    Invoke-Compose -Arguments @(
+        'exec', '-T', 'postgres', 'pg_restore',
+        '--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error',
+        '-U', 'pmgm_app', '-d', 'pmgm', $tmpDump
+    ) | Out-Null
+    Invoke-Compose -Arguments @('exec', '-T', 'postgres', 'rm', '-f', $tmpDump) | Out-Null
 
     Write-Host 'Restaurando MinIO por API S3...'
     $objectsPath = Join-Path $BackupPath 'objects'
-    Invoke-Compose run --rm -T --no-deps -v "${objectsPath}:/backup:ro" --entrypoint /bin/sh minio-init -c 'set -eu; until mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null 2>&1; do sleep 2; done; mc mb --ignore-existing pmgm/pmgm-documents >/dev/null; mc anonymous set none pmgm/pmgm-documents >/dev/null; mc mirror --overwrite --remove /backup/pmgm-documents pmgm/pmgm-documents' | Out-Null
+    $minioRestoreScript = 'set -eu; until mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null 2>&1; do sleep 2; done; mc mb --ignore-existing pmgm/pmgm-documents >/dev/null; mc anonymous set none pmgm/pmgm-documents >/dev/null; mc mirror --overwrite --remove /backup/pmgm-documents pmgm/pmgm-documents'
+    Invoke-Compose -Arguments @(
+        'run', '--rm', '-T', '--no-deps',
+        '-v', "${objectsPath}:/backup:ro",
+        '--entrypoint', '/bin/sh',
+        'minio-init', '-c', $minioRestoreScript
+    ) | Out-Null
 
     $localCount = @(Get-ChildItem -LiteralPath (Join-Path $BackupPath 'objects/pmgm-documents') -Recurse -File).Count
-    $countOutput = Invoke-ComposeCapture run --rm -T --no-deps --entrypoint /bin/sh minio-init -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc find pmgm/pmgm-documents --type f | wc -l'
+    $minioCountScript = 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc find pmgm/pmgm-documents --type f | wc -l'
+    $countOutput = Invoke-ComposeCapture -Arguments @(
+        'run', '--rm', '-T', '--no-deps',
+        '--entrypoint', '/bin/sh',
+        'minio-init', '-c', $minioCountScript
+    )
     $numericLine = @($countOutput | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ -match '^\d+$' } | Select-Object -Last 1)
     if ($numericLine.Count -ne 1) { throw "No fue posible determinar el conteo remoto de MinIO: $($countOutput -join ' ')" }
     $remoteCount = [int]$numericLine[0]
@@ -117,7 +126,7 @@ catch {
 
 if ($resume.Count -gt 0) {
     Write-Host 'Reanudando servicios previamente activos...'
-    Invoke-Compose up -d @resume | Out-Null
+    Invoke-Compose -Arguments (@('up', '-d') + @($resume)) | Out-Null
 }
 
 Write-Host 'RESTAURACIÓN OK' -ForegroundColor Green
