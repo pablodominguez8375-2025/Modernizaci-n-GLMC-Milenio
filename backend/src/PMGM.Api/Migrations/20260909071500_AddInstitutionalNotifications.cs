@@ -6,7 +6,7 @@ using PMGM.Api.Data;
 
 namespace PMGM.Api.Migrations;
 
-[DbContext(typeof(PmgmDbContext))]
+[DbContext(typeof(NotificationDbContext))]
 [Migration("20260909071500_AddInstitutionalNotifications")]
 public partial class AddInstitutionalNotifications : Migration
 {
