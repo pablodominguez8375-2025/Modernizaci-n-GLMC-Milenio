@@ -36,7 +36,7 @@ public sealed class LibraryCatalogHttpTests
         var hiddenType = $"hidden_{suffix}";
         var uniqueNeedle = $"busqueda-{suffix}";
 
-        var historyDocumentId = await CreatePublishedDocumentAsync(
+        var historyDocumentId = await CreateDocumentAndAttemptPublicationAsync(
             client,
             collectionId,
             $"Historia institucional {uniqueNeedle}",
@@ -44,7 +44,7 @@ public sealed class LibraryCatalogHttpTests
             DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
             cancellationToken);
 
-        await CreatePublishedDocumentAsync(
+        await CreateDocumentAndAttemptPublicationAsync(
             client,
             collectionId,
             $"Formación masónica {suffix}",
@@ -52,13 +52,14 @@ public sealed class LibraryCatalogHttpTests
             DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
             cancellationToken);
 
-        await CreatePublishedDocumentAsync(
+        await CreateDocumentAndAttemptPublicationAsync(
             client,
             collectionId,
             $"Documento de gestión {suffix}",
             hiddenType,
             DocumentManagementCodes.AccessPolicy.ManagementOnly,
-            cancellationToken);
+            cancellationToken,
+            expectPublication: false);
 
         var searchResponse = await client.GetAsync(
             $"/api/biblioteca/buscar?q={Uri.EscapeDataString(uniqueNeedle)}&page=1&pageSize=10",
@@ -119,13 +120,14 @@ public sealed class LibraryCatalogHttpTests
         return json.GetProperty("id").GetGuid();
     }
 
-    private static async Task<Guid> CreatePublishedDocumentAsync(
+    private static async Task<Guid> CreateDocumentAndAttemptPublicationAsync(
         HttpClient client,
         Guid collectionId,
         string title,
         string documentType,
         string accessPolicy,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool expectPublication = true)
     {
         var documentResponse = await client.PostAsJsonAsync(
             $"/api/documentos/colecciones/{collectionId}/documentos",
@@ -180,7 +182,17 @@ public sealed class LibraryCatalogHttpTests
             $"/api/documentos/{documentId}/publicar",
             new { versionId },
             cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, publishResponse.StatusCode);
+
+        if (expectPublication)
+        {
+            Assert.Equal(HttpStatusCode.OK, publishResponse.StatusCode);
+        }
+        else
+        {
+            Assert.Equal(HttpStatusCode.Conflict, publishResponse.StatusCode);
+            var conflictText = await publishResponse.Content.ReadAsStringAsync(cancellationToken);
+            Assert.Contains("no permite publicarlo en Biblioteca", conflictText, StringComparison.OrdinalIgnoreCase);
+        }
 
         return documentId;
     }
