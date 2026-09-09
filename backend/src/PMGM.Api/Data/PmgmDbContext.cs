@@ -45,6 +45,8 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.FirstNames).HasMaxLength(160).IsRequired();
             entity.Property(x => x.LastNames).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(320);
+            entity.Property(x => x.Phone).HasMaxLength(80);
+            entity.Property(x => x.Address).HasMaxLength(500);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
         });
 
@@ -258,8 +260,25 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.LegalBasis).HasMaxLength(500).IsRequired();
             entity.Property(x => x.ExpirationEvent).HasMaxLength(160);
             entity.Property(x => x.ExpirationAction).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.HasIndex(x => new { x.Code, x.EffectiveFrom }).IsUnique();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ApprovedBySubject).HasMaxLength(320);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => x.Code).IsUnique();
+        });
+
+        modelBuilder.Entity<DataSubjectRequest>(entity =>
+        {
+            entity.ToTable("data_subject_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RequestType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.RequestorReference).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.DataCategory).HasMaxLength(160);
+            entity.Property(x => x.Purpose).HasMaxLength(1000);
+            entity.Property(x => x.Decision).HasMaxLength(1000);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.Property(x => x.DueAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.Status, x.DueAtUtc });
         });
 
         modelBuilder.Entity<DataProcessingActivity>(entity =>
@@ -268,32 +287,18 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Code).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Name).HasMaxLength(240).IsRequired();
-            entity.Property(x => x.Module).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.Purpose).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.LawfulBasis).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.DataCategoriesJson).HasColumnType("jsonb");
-            entity.Property(x => x.SubjectCategoriesJson).HasColumnType("jsonb");
-            entity.Property(x => x.RecipientsJson).HasColumnType("jsonb");
-            entity.Property(x => x.InternalOwner).HasMaxLength(240);
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.HasOne(x => x.RetentionPolicy).WithMany().HasForeignKey(x => x.RetentionPolicyId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.Code, x.EffectiveFrom }).IsUnique();
-        });
-
-        modelBuilder.Entity<DataSubjectRequest>(entity =>
-        {
-            entity.ToTable("data_subject_requests");
-            entity.HasKey(x => x.Id);
-            entity.Property(x => x.RequestType).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Channel).HasMaxLength(80).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.ResponsibleSubject).HasMaxLength(320);
-            entity.Property(x => x.Resolution).HasMaxLength(4000);
-            entity.Property(x => x.Grounds).HasMaxLength(4000);
-            entity.Property(x => x.EvidenceReference).HasMaxLength(500);
-            entity.HasOne(x => x.Person).WithMany().HasForeignKey(x => x.PersonId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.Status, x.DueDate });
-            entity.HasIndex(x => x.PersonId);
+            entity.Property(x => x.Purpose).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.LegalBasis).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.DataCategories).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.DataSubjects).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.Recipients).HasMaxLength(1000);
+            entity.Property(x => x.InternationalTransfers).HasMaxLength(1000);
+            entity.Property(x => x.RetentionRule).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.SecurityMeasures).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.OwnerRole).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => x.Code).IsUnique();
         });
 
         modelBuilder.Entity<DataProcessor>(entity =>
@@ -301,61 +306,53 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.ToTable("data_processors");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(240).IsRequired();
-            entity.Property(x => x.Service).HasMaxLength(240).IsRequired();
-            entity.Property(x => x.Purpose).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.CountriesJson).HasColumnType("jsonb");
-            entity.Property(x => x.DataCategoriesJson).HasColumnType("jsonb");
-            entity.Property(x => x.SubjectCategoriesJson).HasColumnType("jsonb");
-            entity.Property(x => x.SubprocessorsJson).HasColumnType("jsonb");
-            entity.Property(x => x.AgreementReference).HasMaxLength(500);
-            entity.Property(x => x.TransferMechanism).HasMaxLength(500);
-            entity.Property(x => x.IncidentObligations).HasMaxLength(2000);
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.HasIndex(x => new { x.Name, x.Service });
+            entity.Property(x => x.Purpose).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.DataCategories).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.ContractReference).HasMaxLength(500);
+            entity.Property(x => x.Country).HasMaxLength(120);
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => x.Name);
         });
 
         modelBuilder.Entity<InternationalDataTransfer>(entity =>
         {
             entity.ToTable("international_data_transfers");
             entity.HasKey(x => x.Id);
+            entity.Property(x => x.ProcessorName).HasMaxLength(240).IsRequired();
             entity.Property(x => x.DestinationCountry).HasMaxLength(120).IsRequired();
-            entity.Property(x => x.Recipient).HasMaxLength(320).IsRequired();
-            entity.Property(x => x.LegalMechanism).HasMaxLength(500).IsRequired();
-            entity.Property(x => x.Safeguards).HasMaxLength(2000);
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.HasOne(x => x.DataProcessingActivity).WithMany().HasForeignKey(x => x.DataProcessingActivityId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(x => x.DataProcessor).WithMany().HasForeignKey(x => x.DataProcessorId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.DataProcessingActivityId, x.DestinationCountry, x.EffectiveFrom });
+            entity.Property(x => x.TransferMechanism).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.DataCategories).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.DestinationCountry, x.Status });
         });
 
         modelBuilder.Entity<PrivacySecurityIncident>(entity =>
         {
             entity.ToTable("privacy_security_incidents");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.Source).HasMaxLength(240).IsRequired();
-            entity.Property(x => x.Nature).HasMaxLength(2000).IsRequired();
-            entity.Property(x => x.DataCategoriesJson).HasColumnType("jsonb");
-            entity.Property(x => x.RiskLevel).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.ImmediateMeasures).HasMaxLength(4000);
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.AuthorityReference).HasMaxLength(500);
-            entity.Property(x => x.CorrectiveActions).HasMaxLength(4000);
-            entity.HasIndex(x => new { x.Status, x.DetectedAtUtc });
+            entity.Property(x => x.Severity).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Summary).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.DataCategories).HasMaxLength(2000);
+            entity.Property(x => x.AffectedDataSubjects).HasMaxLength(1000);
+            entity.Property(x => x.NotificationReference).HasMaxLength(500);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.Status, x.Severity });
         });
 
         modelBuilder.Entity<PrivacyImpactAssessment>(entity =>
         {
             entity.ToTable("privacy_impact_assessments");
             entity.HasKey(x => x.Id);
-            entity.Property(x => x.RiskLevel).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.AssessmentSummary).HasMaxLength(4000).IsRequired();
-            entity.Property(x => x.Mitigations).HasMaxLength(4000);
-            entity.Property(x => x.ResidualRisk).HasMaxLength(2000);
-            entity.Property(x => x.ApprovedBySubject).HasMaxLength(320);
-            entity.Property(x => x.EvidenceReference).HasMaxLength(500);
-            entity.HasOne(x => x.DataProcessingActivity).WithMany().HasForeignKey(x => x.DataProcessingActivityId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.DataProcessingActivityId, x.CreatedAtUtc });
+            entity.Property(x => x.Name).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.Scope).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.RiskLevel).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.MitigationPlan).HasMaxLength(4000);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.Status, x.RiskLevel });
         });
     }
 }
