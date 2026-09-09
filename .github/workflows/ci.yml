@@ -208,6 +208,15 @@ jobs:
           --build-arg VITE_OIDC_ALLOW_HTTP_LOCAL=true
           -t pmgm-first-web-ci frontend
 
+      - name: Build pilot frontend configuration
+        run: >-
+          docker build
+          --build-arg VITE_USE_MOCKS=false
+          --build-arg VITE_OIDC_AUTHORITY=https://localhost:8443/identity/realms/pmgm
+          --build-arg VITE_OIDC_CLIENT_ID=pmgm-web
+          --build-arg VITE_OIDC_ALLOW_HTTP_LOCAL=false
+          -t pmgm-pilot-web-ci frontend
+
   infrastructure-validate:
     name: Infrastructure configuration
     runs-on: ubuntu-latest
@@ -217,6 +226,22 @@ jobs:
       PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
       PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
       PMGM_QA_USER_PASSWORD: ci_first_user_only
+      PMGM_PILOT_HOSTNAME: localhost
+      PMGM_PILOT_PUBLIC_URL: https://localhost:8443
+      PMGM_PILOT_BIND_ADDRESS: 127.0.0.1
+      PMGM_PILOT_HTTP_PORT: 8088
+      PMGM_PILOT_HTTPS_PORT: 8443
+      PMGM_PILOT_CADDYFILE: ./caddy/Caddyfile.pilot-ci
+      PMGM_PILOT_ALLOW_LOCALHOST: "true"
+      PMGM_PILOT_INSECURE_TLS: "true"
+      PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
+      PMGM_PILOT_MINIO_USER: ci-pilot-storage
+      PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
+      PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
+      PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD: ci-pilot-keycloak-secret-2026-003
+      PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
+      PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
+      PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
 
     steps:
       - name: Checkout
@@ -238,6 +263,29 @@ jobs:
       - name: Validate first-implementation Docker Compose
         run: docker compose -f infrastructure/docker-compose.first.yml config
 
+      - name: Validate pilot Docker Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f infrastructure/docker-compose.pilot.yml config
+          docker compose -f infrastructure/docker-compose.pilot.yml config --format json > "$RUNNER_TEMP/pilot-compose.json"
+          PILOT_COMPOSE="$RUNNER_TEMP/pilot-compose.json" python3 - <<'PY'
+          import json, os
+          payload=json.load(open(os.environ['PILOT_COMPOSE']))
+          services=payload['services']
+          for name, service in services.items():
+              if name != 'gateway' and service.get('ports'):
+                  raise SystemExit(f'{name} expone puertos públicos en el piloto')
+          api_env=services['api']['environment']
+          if str(api_env.get('DemoData__Enabled','')).lower() != 'false':
+              raise SystemExit('DemoData debe estar desactivado en piloto')
+          command=services['keycloak'].get('command', [])
+          if not command or command[0] != 'start' or 'start-dev' in command:
+              raise SystemExit(f'Keycloak piloto no está en server mode: {command}')
+          if '/identity' not in services['keycloak']['environment'].get('KC_HTTP_RELATIVE_PATH',''):
+              raise SystemExit('Keycloak piloto debe vivir bajo /identity')
+          PY
+
       - name: Validate Keycloak QA realm JSON
         run: python3 -m json.tool infrastructure/keycloak/pmgm-realm.json >/dev/null
 
@@ -252,7 +300,29 @@ jobs:
           values=[c.get('value','') for u in p.get('users',[]) for c in u.get('credentials',[])];
           assert values and all(v == '\${PMGM_QA_USER_PASSWORD}' for v in values), values"
 
-      - name: Validate backup and recovery Bash scripts
+      - name: Validate Keycloak pilot realm
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool infrastructure/keycloak/pmgm-pilot-realm.json >/dev/null
+          python3 - <<'PY'
+          import json
+          p=json.load(open('infrastructure/keycloak/pmgm-pilot-realm.json'))
+          assert p['realm']=='pmgm'
+          assert p['sslRequired']=='external'
+          users=p.get('users',[])
+          assert len(users)==1
+          assert users[0]['username']=='${PMGM_PILOT_ADMIN_USERNAME}'
+          assert not any(str(u.get('username','')).lower().startswith('qa') for u in users)
+          assert users[0]['credentials'][0]['value']=='${PMGM_PILOT_ADMIN_PASSWORD}'
+          client=next(c for c in p['clients'] if c['clientId']=='pmgm-web')
+          assert client['standardFlowEnabled'] is True
+          assert client['directAccessGrantsEnabled'] is False
+          assert client['attributes']['pkce.code.challenge.method']=='S256'
+          assert all('localhost' not in x for x in client['redirectUris'])
+          PY
+
+      - name: Validate backup, pilot and recovery Bash scripts
         shell: bash
         run: >-
           bash -n
@@ -260,15 +330,28 @@ jobs:
           scripts/verify-first-backup.sh
           scripts/restore-first-implementation.sh
           scripts/recovery-drill-first-implementation.sh
+          scripts/preflight-pilot.sh
+          scripts/start-pilot.sh
+          scripts/smoke-pilot.sh
+          scripts/backup-pilot.sh
+          scripts/verify-pilot-backup.sh
+          scripts/restore-pilot.sh
+          scripts/recovery-drill-pilot.sh
 
-      - name: Validate backup and recovery PowerShell scripts
+      - name: Validate backup, pilot and recovery PowerShell scripts
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $files = @(
             'scripts/backup-first-implementation.ps1',
             'scripts/verify-first-backup.ps1',
-            'scripts/restore-first-implementation.ps1'
+            'scripts/restore-first-implementation.ps1',
+            'scripts/preflight-pilot.ps1',
+            'scripts/start-pilot.ps1',
+            'scripts/smoke-pilot.ps1',
+            'scripts/backup-pilot.ps1',
+            'scripts/verify-pilot-backup.ps1',
+            'scripts/restore-pilot.ps1'
           )
           foreach ($file in $files) {
             $tokens = $null
@@ -279,9 +362,7 @@ jobs:
               [ref]$errors
             ) | Out-Null
             if ($errors.Count -gt 0) {
-              foreach ($parseError in $errors) {
-                Write-Error "${file}: $($parseError.Message)"
-              }
+              foreach ($parseError in $errors) { Write-Error "${file}: $($parseError.Message)" }
               throw "PowerShell syntax inválida en $file"
             }
           }
@@ -316,3 +397,73 @@ jobs:
       - name: Stop first implementation
         if: always()
         run: docker compose -f infrastructure/docker-compose.first.yml down -v --remove-orphans
+
+  pilot-operational-smoke:
+    name: Pilot operational HTTPS and recovery
+    runs-on: ubuntu-latest
+    env:
+      PMGM_PILOT_HOSTNAME: localhost
+      PMGM_PILOT_PUBLIC_URL: https://localhost:8443
+      PMGM_PILOT_BIND_ADDRESS: 127.0.0.1
+      PMGM_PILOT_HTTP_PORT: 8088
+      PMGM_PILOT_HTTPS_PORT: 8443
+      PMGM_PILOT_CADDYFILE: ./caddy/Caddyfile.pilot-ci
+      PMGM_PILOT_ALLOW_LOCALHOST: "true"
+      PMGM_PILOT_INSECURE_TLS: "true"
+      PMGM_PILOT_RECOVERY_DRILL_ALLOWED: "true"
+      PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
+      PMGM_PILOT_MINIO_USER: ci-pilot-storage
+      PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
+      PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
+      PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD: ci-pilot-keycloak-secret-2026-003
+      PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
+      PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
+      PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create CI pilot environment file
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/pmgm-pilot.env" <<EOF
+          PMGM_PILOT_HOSTNAME=$PMGM_PILOT_HOSTNAME
+          PMGM_PILOT_PUBLIC_URL=$PMGM_PILOT_PUBLIC_URL
+          PMGM_PILOT_BIND_ADDRESS=$PMGM_PILOT_BIND_ADDRESS
+          PMGM_PILOT_HTTP_PORT=$PMGM_PILOT_HTTP_PORT
+          PMGM_PILOT_HTTPS_PORT=$PMGM_PILOT_HTTPS_PORT
+          PMGM_PILOT_CADDYFILE=$PMGM_PILOT_CADDYFILE
+          PMGM_PILOT_ALLOW_LOCALHOST=$PMGM_PILOT_ALLOW_LOCALHOST
+          PMGM_PILOT_INSECURE_TLS=$PMGM_PILOT_INSECURE_TLS
+          PMGM_PILOT_RECOVERY_DRILL_ALLOWED=$PMGM_PILOT_RECOVERY_DRILL_ALLOWED
+          PMGM_PILOT_DB_PASSWORD=$PMGM_PILOT_DB_PASSWORD
+          PMGM_PILOT_MINIO_USER=$PMGM_PILOT_MINIO_USER
+          PMGM_PILOT_MINIO_PASSWORD=$PMGM_PILOT_MINIO_PASSWORD
+          PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME=$PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME
+          PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD=$PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD
+          PMGM_PILOT_ADMIN_USERNAME=$PMGM_PILOT_ADMIN_USERNAME
+          PMGM_PILOT_ADMIN_EMAIL=$PMGM_PILOT_ADMIN_EMAIL
+          PMGM_PILOT_ADMIN_PASSWORD=$PMGM_PILOT_ADMIN_PASSWORD
+          EOF
+          echo "PMGM_PILOT_ENV_FILE=$RUNNER_TEMP/pmgm-pilot.env" >> "$GITHUB_ENV"
+
+      - name: Run pilot preflight
+        run: bash scripts/preflight-pilot.sh
+
+      - name: Build and start operational pilot
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml up -d --build
+
+      - name: Run pilot HTTPS/OIDC smoke
+        run: bash scripts/smoke-pilot.sh
+
+      - name: Run pilot backup and recovery drill
+        run: bash scripts/recovery-drill-pilot.sh "$RUNNER_TEMP/pmgm-pilot-recovery-drill"
+
+      - name: Show pilot logs on failure
+        if: failure()
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml logs --no-color --tail=400
+
+      - name: Stop operational pilot
+        if: always()
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml down -v --remove-orphans
