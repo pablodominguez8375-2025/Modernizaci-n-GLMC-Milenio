@@ -59,9 +59,9 @@ public sealed class CalendarSourceSyncPostgreSqlTests
 
         var space = new InstitutionalSpace
         {
-            Code = $"QA-{Guid.NewGuid():N}"[..18],
+            Code = $"QA-{Guid.NewGuid():N}",
             Name = "Templo QA",
-            SpaceType = "temple",
+            SpaceType = GrandSecretariatCodes.SpaceType.Temple,
             Status = GrandSecretariatCodes.SpaceStatus.Active
         };
         secretariatDb.InstitutionalSpaces.Add(space);
@@ -114,5 +114,14 @@ public sealed class CalendarSourceSyncPostgreSqlTests
         var santiago = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
         Assert.Equal(new DateOnly(2026, 9, 20), DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ceremonyProjection.StartsAtUtc, santiago).DateTime));
         Assert.Equal(new DateOnly(2026, 9, 21), DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ceremonyProjection.EndsAtUtc, santiago).DateTime));
+
+        ceremony.ProposedDate = null;
+        institutionalDb.CeremonyRequests.Update(ceremony);
+        await institutionalDb.SaveChangesAsync(cancellationToken);
+        await service.ReconcileAsync(cancellationToken);
+
+        var cancelledProjection = await calendarDb.CalendarEvents.AsNoTracking().SingleAsync(
+            x => x.SourceModule == "ceremonies" && x.SourceEntityId == ceremony.Id.ToString("N"), cancellationToken);
+        Assert.Equal(CalendarCodes.Status.Cancelled, cancelledProjection.Status);
     }
 }
