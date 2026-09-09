@@ -6,19 +6,21 @@ import DocumentManagementPage from './DocumentManagementPage'
 import GrandSecretariatPage from './GrandSecretariatPage'
 import LibraryPage from './LibraryPage'
 import LodgeManagementPage from './LodgeManagementPage'
+import MemberDirectoryPage from './MemberDirectoryPage'
 import NotificationsPage from './NotificationsPage'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
 import { type CalendarApiClient } from './api/calendarApi'
 import { type DocumentApiClient } from './api/documentApi'
 import { type LodgeApiClient } from './api/lodgeApi'
+import { type MembershipApiClient } from './api/membershipApi'
 import { type NotificationApiClient } from './api/notificationApi'
 import { type PmgmApiClient, type CandidatePublication, type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
 
-type View = 'dashboard' | 'candidates' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
+type View = 'dashboard' | 'candidates' | 'members' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean }
 
-export default function App({ api, lodgeApi, documentApi, calendarApi, notificationApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; calendarApi: CalendarApiClient; notificationApi: NotificationApiClient; onLogout?: () => void }) {
+export default function App({ api, lodgeApi, membershipApi, documentApi, calendarApi, notificationApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; membershipApi: MembershipApiClient; documentApi: DocumentApiClient; calendarApi: CalendarApiClient; notificationApi: NotificationApiClient; onLogout?: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -41,6 +43,7 @@ export default function App({ api, lodgeApi, documentApi, calendarApi, notificat
   const capabilities = profile?.capabilities as ExtendedCapabilities | undefined
   const canCalendar = api.useMocks || profile !== null
   const canNotifications = api.useMocks || profile !== null
+  const canMembers = api.useMocks || profile !== null
   const canCeremonies = capabilities?.canReviewCeremonies ?? false
   const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
@@ -58,7 +61,7 @@ export default function App({ api, lodgeApi, documentApi, calendarApi, notificat
         {profile && <span className="environment-badge">{profile.displayName}</span>}
         {canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}
         {onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}
-        <span className="environment-badge">{api.useMocks ? 'UI QA v0.22' : `API v${systemInfo?.version ?? '—'}`}</span>
+        <span className="environment-badge">{api.useMocks ? 'UI QA v0.23' : `API v${systemInfo?.version ?? '—'}`}</span>
       </div>
     </header>
 
@@ -68,6 +71,7 @@ export default function App({ api, lodgeApi, documentApi, calendarApi, notificat
         <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('candidates')}><span aria-hidden="true">◎</span> Insinuados</button>
         <ModuleAccess icon="✦" label="Notificaciones" allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         <div className="nav-section">Gestión institucional</div>
+        <ModuleAccess icon="◫" label="Fichas de miembros" allowed={canMembers} active={view === 'members'} onOpen={canMembers ? () => setView('members') : undefined} />
         <ModuleAccess icon="▣" label="Calendario" allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="◉" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />
         <ModuleAccess icon="◇" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
@@ -85,6 +89,7 @@ export default function App({ api, lodgeApi, documentApi, calendarApi, notificat
         {error && <ErrorBanner message={error} />}
         {view === 'dashboard' && <DashboardPage portal={portal} systemInfo={systemInfo} profile={profile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} />}
+        {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
         {view === 'notifications' && canNotifications && <NotificationsPage notificationApi={notificationApi} />}
         {view === 'calendar' && canCalendar && <CalendarPage api={api} calendarApi={calendarApi} canManage={canSecretariat} />}
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
