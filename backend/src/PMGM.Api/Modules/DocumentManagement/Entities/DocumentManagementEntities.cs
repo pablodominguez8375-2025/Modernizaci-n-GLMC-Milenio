@@ -23,6 +23,7 @@ public sealed class InstitutionalDocument
     public string DocumentType { get; set; } = string.Empty;
     public string Classification { get; set; } = DocumentManagementCodes.Classification.Internal;
     public string AccessPolicy { get; set; } = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated;
+    public int? MinimumDegreeRequired { get; set; }
     public string Status { get; set; } = DocumentManagementCodes.DocumentStatus.Draft;
     public Guid? PublishedVersionId { get; set; }
     public DateTimeOffset? PublishedAtUtc { get; set; }
