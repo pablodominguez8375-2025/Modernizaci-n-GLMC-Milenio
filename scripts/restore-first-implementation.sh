@@ -65,7 +65,7 @@ fi
 : "${PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD:?PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD es obligatorio}"
 : "${PMGM_QA_USER_PASSWORD:?PMGM_QA_USER_PASSWORD es obligatorio}"
 
-running_before="$(${compose[@]} ps --status running --services 2>/dev/null || true)"
+running_before="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
 resume_services=()
 for service in api web; do
   if printf '%s\n' "$running_before" | grep -qx "$service"; then
