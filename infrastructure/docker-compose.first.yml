@@ -5,7 +5,7 @@ services:
     environment:
       POSTGRES_DB: pmgm
       POSTGRES_USER: pmgm_app
-      POSTGRES_PASSWORD: ${PMGM_FIRST_DB_PASSWORD:-pmgm_qa_local_only}
+      POSTGRES_PASSWORD: ${PMGM_FIRST_DB_PASSWORD:?PMGM_FIRST_DB_PASSWORD es obligatorio}
     volumes:
       - pmgm_first_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -20,8 +20,8 @@ services:
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${PMGM_FIRST_MINIO_USER:-pmgmqa}
-      MINIO_ROOT_PASSWORD: ${PMGM_FIRST_MINIO_PASSWORD:-pmgm_qa_minio_local_only}
+      MINIO_ROOT_USER: ${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_FIRST_MINIO_PASSWORD:?PMGM_FIRST_MINIO_PASSWORD es obligatorio}
     volumes:
       - pmgm_first_minio_data:/data
     networks: [pmgm_first_internal]
@@ -31,8 +31,8 @@ services:
     depends_on: [minio]
     restart: "no"
     environment:
-      MINIO_ACCESS_KEY: ${PMGM_FIRST_MINIO_USER:-pmgmqa}
-      MINIO_SECRET_KEY: ${PMGM_FIRST_MINIO_PASSWORD:-pmgm_qa_minio_local_only}
+      MINIO_ACCESS_KEY: ${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}
+      MINIO_SECRET_KEY: ${PMGM_FIRST_MINIO_PASSWORD:?PMGM_FIRST_MINIO_PASSWORD es obligatorio}
     entrypoint: >
       /bin/sh -c "
       until mc alias set pmgm http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done;
@@ -55,7 +55,8 @@ services:
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: qa-keycloak-admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD:-pmgm_qa_keycloak_local_only}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD:?PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD es obligatorio}
+      PMGM_QA_USER_PASSWORD: ${PMGM_QA_USER_PASSWORD:?PMGM_QA_USER_PASSWORD es obligatorio}
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_HOSTNAME: http://127.0.0.1:8180
@@ -89,12 +90,12 @@ services:
       Authentication__Authority: http://keycloak:8080/realms/pmgm
       Authentication__Audience: pmgm-api
       Authentication__RequireHttpsMetadata: "false"
-      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${PMGM_FIRST_DB_PASSWORD:-pmgm_qa_local_only}
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${PMGM_FIRST_DB_PASSWORD:?PMGM_FIRST_DB_PASSWORD es obligatorio}
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
       DocumentStorage__Bucket: pmgm-documents
-      DocumentStorage__AccessKey: ${PMGM_FIRST_MINIO_USER:-pmgmqa}
-      DocumentStorage__SecretKey: ${PMGM_FIRST_MINIO_PASSWORD:-pmgm_qa_minio_local_only}
+      DocumentStorage__AccessKey: ${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}
+      DocumentStorage__SecretKey: ${PMGM_FIRST_MINIO_PASSWORD:?PMGM_FIRST_MINIO_PASSWORD es obligatorio}
       DocumentStorage__ForcePathStyle: "true"
       DocumentStorage__MaxUploadBytes: "52428800"
       DocumentMalware__Host: clamav
