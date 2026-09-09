@@ -76,6 +76,7 @@ public sealed class DataQualityCaseQueuePostgreSqlTests
         var opened = await caseService.OpenAsync(command, reviewer, cancellationToken);
         Assert.True(opened.Created);
         Assert.Equal(DataQualityCaseCodes.Status.Open, opened.Case.Status);
+        Assert.False(opened.Case.AssignedToCurrentUser);
         Assert.Single(opened.Case.Events);
 
         var duplicate = await caseService.OpenAsync(command, reviewer, cancellationToken);
@@ -84,7 +85,8 @@ public sealed class DataQualityCaseQueuePostgreSqlTests
 
         var claimed = await caseService.ClaimAsync(opened.Case.Id, reviewer, cancellationToken);
         Assert.Equal(DataQualityCaseCodes.Status.UnderReview, claimed.Status);
-        Assert.Equal(reviewer.Subject, claimed.AssignedToSubject);
+        Assert.True(claimed.AssignedToCurrentUser);
+        Assert.Equal("Revisor QA", claimed.AssignedToDisplayName);
         Assert.Equal(2, claimed.Events.Count);
 
         await Assert.ThrowsAsync<CaseAlreadyAssignedException>(() =>
