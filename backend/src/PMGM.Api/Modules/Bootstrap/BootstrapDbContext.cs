@@ -38,7 +38,6 @@ public sealed class BootstrapDbContext(DbContextOptions<BootstrapDbContext> opti
             entity.Property(x => x.PackageKey).HasMaxLength(160).IsRequired();
             entity.Property(x => x.PayloadSha256).HasMaxLength(64).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
-            entity.Property(x => x.AppliedBySubject).HasMaxLength(320);
             entity.Property(x => x.SummaryJson).HasColumnType("jsonb").IsRequired();
             entity.Property(x => x.AppliedAtUtc).IsRequired();
             entity.HasIndex(x => new { x.PackageKey, x.PackageVersion }).IsUnique();
