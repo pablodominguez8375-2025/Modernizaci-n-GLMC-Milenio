@@ -51,6 +51,7 @@ builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
 builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<RegimenInteriorDbContext>(options => options.UseNpgsql(mainConnectionString));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -74,6 +75,7 @@ builder.Services.AddScoped<IInstitutionalCalendarSourceSyncService, Institutiona
 builder.Services.AddScoped<IExecutiveReportingService, ExecutiveReportingService>();
 builder.Services.AddScoped<IRegimenInteriorMemberControlService, RegimenInteriorMemberControlService>();
 builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
+builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 
 var app = builder.Build();
 
@@ -86,6 +88,8 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await notificationDb.Database.MigrateAsync();
     var calendarDb = scope.ServiceProvider.GetRequiredService<CalendarDbContext>();
     await calendarDb.Database.MigrateAsync();
+    var regimenInteriorDb = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
+    await regimenInteriorDb.Database.MigrateAsync();
 }
 
 app.UseExceptionHandler();
@@ -104,7 +108,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.27.0",
+    version = "0.28.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -118,6 +122,7 @@ app.MapTransferEndpoints();
 app.MapRegimenInteriorEndpoints();
 app.MapRegimenInteriorMemberControlEndpoints();
 app.MapRegimenInteriorDataQualityEndpoints();
+app.MapDataQualityCaseEndpoints();
 app.MapExecutiveReportingEndpoints();
 app.MapTreasuryEndpoints();
 app.MapHospitalariaEndpoints();
