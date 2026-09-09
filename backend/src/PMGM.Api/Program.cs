@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
@@ -122,6 +123,12 @@ app.UseAuthentication();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseAuthorization();
 
+var apiVersion = typeof(Program).Assembly
+    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
+    .InformationalVersion
+    .Split('+', 2)[0]
+    ?? "0.0.0-unknown";
+
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "PMGM.Api" }));
 app.MapGet("/health/ready", async (PmgmDbContext db, CancellationToken cancellationToken) =>
     await db.Database.CanConnectAsync(cancellationToken)
@@ -132,7 +139,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.33.0",
+    version = apiVersion,
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
