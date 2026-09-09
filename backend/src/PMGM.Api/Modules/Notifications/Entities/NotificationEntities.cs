@@ -1,3 +1,5 @@
+using PMGM.Api.Modules.Notifications;
+
 namespace PMGM.Api.Modules.Notifications.Entities;
 
 public sealed class NotificationTemplate
