@@ -239,11 +239,16 @@ jobs:
         run: docker compose -f infrastructure/docker-compose.first.yml config
 
       - name: Validate Keycloak QA realm JSON
-        run: python3 -m json.tool infrastructure/keycloak/pmgm-qa-realm.json >/dev/null
+        run: python3 -m json.tool infrastructure/keycloak/pmgm-realm.json >/dev/null
+
+      - name: Validate Keycloak realm filename convention
+        run: >-
+          python3 -c "import json, pathlib; path=pathlib.Path('infrastructure/keycloak/pmgm-realm.json');
+          realm=json.load(path.open())['realm']; assert path.name == f'{realm}-realm.json', (path.name, realm)"
 
       - name: Reject fixed QA passwords in realm
         run: >-
-          python3 -c "import json; p=json.load(open('infrastructure/keycloak/pmgm-qa-realm.json'));
+          python3 -c "import json; p=json.load(open('infrastructure/keycloak/pmgm-realm.json'));
           values=[c.get('value','') for u in p.get('users',[]) for c in u.get('credentials',[])];
           assert values and all(v == '\${PMGM_QA_USER_PASSWORD}' for v in values), values"
 
