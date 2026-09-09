@@ -29,7 +29,8 @@ public static class NotificationEndpoints
     private static async Task<IResult> CreateTemplateAsync(
         CreateNotificationTemplateRequest request,
         HttpContext httpContext,
-        PmgmDbContext db,
+        NotificationDbContext notificationDb,
+        PmgmDbContext auditDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -49,7 +50,7 @@ public static class NotificationEndpoints
             return Results.BadRequest(new { message = "Versión, estado o clasificación de plantilla no válidos." });
         }
 
-        var exists = await db.NotificationTemplates.AnyAsync(
+        var exists = await notificationDb.NotificationTemplates.AnyAsync(
             x => x.Code == request.Code && x.Version == request.Version,
             cancellationToken);
         if (exists)
@@ -70,10 +71,12 @@ public static class NotificationEndpoints
             EffectiveFromUtc = request.EffectiveFromUtc ?? DateTimeOffset.UtcNow
         };
 
-        db.NotificationTemplates.Add(template);
+        notificationDb.NotificationTemplates.Add(template);
+        await notificationDb.SaveChangesAsync(cancellationToken);
+
         audit.Add(httpContext, "notification.template.created", nameof(NotificationTemplate), template.Id.ToString(), null,
             AuditResults.Success, new { template.Code, template.Version, template.Sensitivity });
-        await db.SaveChangesAsync(cancellationToken);
+        await auditDb.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/notifications/templates/{template.Id}", new
         {
@@ -93,7 +96,7 @@ public static class NotificationEndpoints
         IInstitutionalAccessService access,
         IInstitutionalNotificationService service,
         IAuditService audit,
-        PmgmDbContext db,
+        PmgmDbContext auditDb,
         CancellationToken cancellationToken)
     {
         var canQueue = access.CanManageGrandSecretariat(httpContext.User) ||
@@ -127,7 +130,7 @@ public static class NotificationEndpoints
             audit.Add(httpContext, result.Created ? "notification.queued" : "notification.duplicate_ignored",
                 nameof(NotificationMessage), result.MessageId.ToString(), null, AuditResults.Success,
                 new { request.TypeCode, request.Channels, result.Created });
-            await db.SaveChangesAsync(cancellationToken);
+            await auditDb.SaveChangesAsync(cancellationToken);
 
             return result.Created
                 ? Results.Created($"/api/notifications/{result.MessageId}", result)
@@ -147,7 +150,7 @@ public static class NotificationEndpoints
         bool unreadOnly,
         int? limit,
         HttpContext httpContext,
-        PmgmDbContext db,
+        NotificationDbContext notificationDb,
         CancellationToken cancellationToken)
     {
         var subject = httpContext.User.FindFirstValue("sub");
@@ -157,7 +160,7 @@ public static class NotificationEndpoints
         }
 
         var take = Math.Clamp(limit ?? 50, 1, 100);
-        var query = db.NotificationMessages.AsNoTracking()
+        var query = notificationDb.NotificationMessages.AsNoTracking()
             .Where(x => x.RecipientSubject == subject &&
                         x.Deliveries.Any(d => d.Channel == NotificationCodes.Channel.Internal &&
                                               d.Status == NotificationCodes.DeliveryStatus.Delivered));
@@ -180,7 +183,8 @@ public static class NotificationEndpoints
     private static async Task<IResult> MarkReadAsync(
         Guid messageId,
         HttpContext httpContext,
-        PmgmDbContext db,
+        NotificationDbContext notificationDb,
+        PmgmDbContext auditDb,
         IAuditService audit,
         CancellationToken cancellationToken)
     {
@@ -190,7 +194,7 @@ public static class NotificationEndpoints
             return Results.Forbid();
         }
 
-        var message = await db.NotificationMessages.SingleOrDefaultAsync(
+        var message = await notificationDb.NotificationMessages.SingleOrDefaultAsync(
             x => x.Id == messageId && x.RecipientSubject == subject &&
                  x.Deliveries.Any(d => d.Channel == NotificationCodes.Channel.Internal),
             cancellationToken);
@@ -200,9 +204,11 @@ public static class NotificationEndpoints
         }
 
         message.ReadAtUtc ??= DateTimeOffset.UtcNow;
+        await notificationDb.SaveChangesAsync(cancellationToken);
+
         audit.Add(httpContext, "notification.read", nameof(NotificationMessage), message.Id.ToString(), null,
             AuditResults.Success, new { message.TypeCode });
-        await db.SaveChangesAsync(cancellationToken);
+        await auditDb.SaveChangesAsync(cancellationToken);
         return Results.NoContent();
     }
 
@@ -210,7 +216,7 @@ public static class NotificationEndpoints
         string? status,
         int? limit,
         HttpContext httpContext,
-        PmgmDbContext db,
+        NotificationDbContext notificationDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -225,7 +231,7 @@ public static class NotificationEndpoints
         }
 
         var take = Math.Clamp(limit ?? 100, 1, 200);
-        var query = db.NotificationDeliveries.AsNoTracking();
+        var query = notificationDb.NotificationDeliveries.AsNoTracking();
         if (!string.IsNullOrWhiteSpace(status))
         {
             query = query.Where(x => x.Status == status);
@@ -256,7 +262,8 @@ public static class NotificationEndpoints
         Guid deliveryId,
         RecordDeliveryResultRequest request,
         HttpContext httpContext,
-        PmgmDbContext db,
+        NotificationDbContext notificationDb,
+        PmgmDbContext auditDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -271,7 +278,7 @@ public static class NotificationEndpoints
             return Results.BadRequest(new { message = "El resultado de entrega indicado no es válido." });
         }
 
-        var delivery = await db.NotificationDeliveries.SingleOrDefaultAsync(x => x.Id == deliveryId, cancellationToken);
+        var delivery = await notificationDb.NotificationDeliveries.SingleOrDefaultAsync(x => x.Id == deliveryId, cancellationToken);
         if (delivery is null)
         {
             return Results.NotFound();
@@ -291,10 +298,11 @@ public static class NotificationEndpoints
             ErrorCode = request.ErrorCode,
             DeliveredAtUtc = delivery.DeliveredAtUtc
         });
+        await notificationDb.SaveChangesAsync(cancellationToken);
 
         audit.Add(httpContext, "notification.delivery.result_recorded", nameof(NotificationDelivery), delivery.Id.ToString(), null,
             AuditResults.Success, new { delivery.Channel, delivery.Status, delivery.AttemptCount, request.ErrorCode });
-        await db.SaveChangesAsync(cancellationToken);
+        await auditDb.SaveChangesAsync(cancellationToken);
         return Results.NoContent();
     }
 }
