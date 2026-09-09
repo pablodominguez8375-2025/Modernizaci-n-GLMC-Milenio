@@ -7,7 +7,6 @@ public sealed class InstitutionalBootstrapApplication
     public int PackageVersion { get; set; }
     public required string PayloadSha256 { get; set; }
     public required string Status { get; set; }
-    public string? AppliedBySubject { get; set; }
     public DateTimeOffset AppliedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public required string SummaryJson { get; set; }
 }
