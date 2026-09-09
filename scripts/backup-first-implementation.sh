@@ -70,7 +70,7 @@ if [ -e "$OUTPUT" ]; then
   exit 1
 fi
 
-running_services="$(${compose[@]} ps --status running --services 2>/dev/null || true)"
+running_services="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
 for required in postgres minio; do
   if ! printf '%s\n' "$running_services" | grep -qx "$required"; then
     echo "El servicio $required no está en ejecución. Inicie primero la primera implementación." >&2
