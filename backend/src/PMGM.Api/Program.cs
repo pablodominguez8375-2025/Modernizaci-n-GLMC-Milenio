@@ -39,9 +39,14 @@ builder.Services.Configure<DocumentMalwareOptions>(
 var mainConnectionString = builder.Configuration.GetConnectionString("MainDatabase")
     ?? "Host=localhost;Port=5432;Database=pmgm;Username=pmgm_app;Password=pmgm_dev_only";
 
-builder.Services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddScoped<CalendarSourceProjectionInterceptor>();
+builder.Services.AddDbContext<PmgmDbContext>((services, options) =>
+    options.UseNpgsql(mainConnectionString)
+        .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
 builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<LodgeManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
+    options.UseNpgsql(mainConnectionString)
+        .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
 builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
