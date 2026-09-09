@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -11,7 +12,7 @@ public interface IDataQualityCaseService
 {
     Task<OpenDataQualityCaseResult> OpenAsync(OpenDataQualityCaseCommand command, CaseActor actor, CancellationToken cancellationToken);
     Task<DataQualityCaseListResponse> ListAsync(DataQualityCaseListQuery query, string? actorSubject, CancellationToken cancellationToken);
-    Task<DataQualityCaseDto?> GetAsync(Guid caseId, CancellationToken cancellationToken);
+    Task<DataQualityCaseDto?> GetAsync(Guid caseId, string? actorSubject, CancellationToken cancellationToken);
     Task<DataQualityCaseDto> ClaimAsync(Guid caseId, CaseActor actor, CancellationToken cancellationToken);
     Task<DataQualityCaseDto> ResolveAsync(Guid caseId, ResolveDataQualityCaseCommand command, CaseActor actor, bool allowOverride, CancellationToken cancellationToken);
 }
@@ -67,7 +68,7 @@ public sealed class DataQualityCaseService(
         var existing = await ActiveByFingerprintAsync(fingerprint, cancellationToken);
         if (existing is not null)
         {
-            return new OpenDataQualityCaseResult(await ToDtoAsync(existing, false, cancellationToken), false);
+            return new OpenDataQualityCaseResult(await ToDtoAsync(existing, false, actor.Subject, cancellationToken), false);
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -100,7 +101,7 @@ public sealed class DataQualityCaseService(
         try
         {
             await caseDb.SaveChangesAsync(cancellationToken);
-            return new OpenDataQualityCaseResult(await ToDtoAsync(entity, true, cancellationToken), true);
+            return new OpenDataQualityCaseResult(await ToDtoAsync(entity, true, actor.Subject, cancellationToken), true);
         }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException
         {
@@ -110,7 +111,7 @@ public sealed class DataQualityCaseService(
             caseDb.ChangeTracker.Clear();
             existing = await ActiveByFingerprintAsync(fingerprint, cancellationToken);
             if (existing is null) throw;
-            return new OpenDataQualityCaseResult(await ToDtoAsync(existing, false, cancellationToken), false);
+            return new OpenDataQualityCaseResult(await ToDtoAsync(existing, false, actor.Subject, cancellationToken), false);
         }
     }
 
@@ -135,52 +136,62 @@ public sealed class DataQualityCaseService(
             .ThenByDescending(x => x.UpdatedAtUtc)
             .Take(query.Limit)
             .ToListAsync(cancellationToken);
-        var items = await EnrichAsync(entities, includeEvents: false, cancellationToken);
+        var items = await EnrichAsync(entities, includeEvents: false, actorSubject, cancellationToken);
         return new DataQualityCaseListResponse(total, items.Count, items);
     }
 
-    public async Task<DataQualityCaseDto?> GetAsync(Guid caseId, CancellationToken cancellationToken)
+    public async Task<DataQualityCaseDto?> GetAsync(Guid caseId, string? actorSubject, CancellationToken cancellationToken)
     {
         var entity = await caseDb.DataQualityCases
             .AsNoTracking()
             .Include(x => x.Events)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
-        return entity is null ? null : await ToDtoAsync(entity, true, cancellationToken);
+        return entity is null ? null : await ToDtoAsync(entity, true, actorSubject, cancellationToken);
     }
 
     public async Task<DataQualityCaseDto> ClaimAsync(Guid caseId, CaseActor actor, CancellationToken cancellationToken)
     {
-        var entity = await caseDb.DataQualityCases
+        await using var transaction = await caseDb.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var updated = await caseDb.DataQualityCases
+            .Where(x => x.Id == caseId && x.Status == DataQualityCaseCodes.Status.Open)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.Status, DataQualityCaseCodes.Status.UnderReview)
+                .SetProperty(x => x.AssignedToSubject, actor.Subject)
+                .SetProperty(x => x.AssignedToDisplayName, actor.DisplayName)
+                .SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
+
+        if (updated == 1)
+        {
+            caseDb.DataQualityCaseEvents.Add(new DataQualityCaseEvent
+            {
+                DataQualityCaseId = caseId,
+                Action = DataQualityCaseCodes.Action.Claimed,
+                FromStatus = DataQualityCaseCodes.Status.Open,
+                ToStatus = DataQualityCaseCodes.Status.UnderReview,
+                ActorSubject = actor.Subject,
+                ActorDisplayName = actor.DisplayName
+            });
+            await caseDb.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return await RequiredDtoAsync(caseId, actor.Subject, cancellationToken);
+        }
+
+        await transaction.RollbackAsync(cancellationToken);
+        var current = await caseDb.DataQualityCases
+            .AsNoTracking()
             .Include(x => x.Events)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken)
             ?? throw new KeyNotFoundException("El caso de corroboración no existe.");
 
-        if (!DataQualityCaseCodes.Status.IsActive(entity.Status))
-            throw new InvalidCaseTransitionException("Sólo un caso abierto o en revisión puede ser tomado.");
-
-        if (entity.Status == DataQualityCaseCodes.Status.UnderReview)
+        if (current.Status == DataQualityCaseCodes.Status.UnderReview)
         {
-            if (string.Equals(entity.AssignedToSubject, actor.Subject, StringComparison.Ordinal))
-                return await ToDtoAsync(entity, true, cancellationToken);
+            if (string.Equals(current.AssignedToSubject, actor.Subject, StringComparison.Ordinal))
+                return await ToDtoAsync(current, true, actor.Subject, cancellationToken);
             throw new CaseAlreadyAssignedException();
         }
 
-        var from = entity.Status;
-        entity.Status = DataQualityCaseCodes.Status.UnderReview;
-        entity.AssignedToSubject = actor.Subject;
-        entity.AssignedToDisplayName = actor.DisplayName;
-        entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
-        entity.Events.Add(new DataQualityCaseEvent
-        {
-            DataQualityCaseId = entity.Id,
-            Action = DataQualityCaseCodes.Action.Claimed,
-            FromStatus = from,
-            ToStatus = entity.Status,
-            ActorSubject = actor.Subject,
-            ActorDisplayName = actor.DisplayName
-        });
-        await caseDb.SaveChangesAsync(cancellationToken);
-        return await ToDtoAsync(entity, true, cancellationToken);
+        throw new InvalidCaseTransitionException("Sólo un caso abierto o en revisión puede ser tomado.");
     }
 
     public async Task<DataQualityCaseDto> ResolveAsync(
@@ -190,16 +201,6 @@ public sealed class DataQualityCaseService(
         bool allowOverride,
         CancellationToken cancellationToken)
     {
-        var entity = await caseDb.DataQualityCases
-            .Include(x => x.Events)
-            .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken)
-            ?? throw new KeyNotFoundException("El caso de corroboración no existe.");
-
-        if (entity.Status != DataQualityCaseCodes.Status.UnderReview)
-            throw new InvalidCaseTransitionException("El caso debe estar en revisión antes de resolverlo.");
-        if (!allowOverride && !string.Equals(entity.AssignedToSubject, actor.Subject, StringComparison.Ordinal))
-            throw new CaseAssignedToAnotherReviewerException();
-
         var targetStatus = command.Outcome switch
         {
             DataQualityResolutionOutcome.Confirmed => DataQualityCaseCodes.Status.ResolvedConfirmed,
@@ -207,27 +208,49 @@ public sealed class DataQualityCaseService(
             _ => throw new ArgumentException("El resultado de resolución no es válido.", nameof(command))
         };
 
-        var from = entity.Status;
+        await using var transaction = await caseDb.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken);
         var now = DateTimeOffset.UtcNow;
-        entity.Status = targetStatus;
-        entity.ResolutionSummary = command.ResolutionSummary.Trim();
-        entity.EvidenceReference = string.IsNullOrWhiteSpace(command.EvidenceReference) ? null : command.EvidenceReference.Trim();
-        entity.ResolvedBySubject = actor.Subject;
-        entity.ResolvedAtUtc = now;
-        entity.UpdatedAtUtc = now;
-        entity.Events.Add(new DataQualityCaseEvent
+        var source = caseDb.DataQualityCases
+            .Where(x => x.Id == caseId && x.Status == DataQualityCaseCodes.Status.UnderReview);
+        if (!allowOverride)
         {
-            DataQualityCaseId = entity.Id,
-            Action = targetStatus == DataQualityCaseCodes.Status.ResolvedConfirmed
-                ? DataQualityCaseCodes.Action.ResolvedConfirmed
-                : DataQualityCaseCodes.Action.Dismissed,
-            FromStatus = from,
-            ToStatus = targetStatus,
-            ActorSubject = actor.Subject,
-            ActorDisplayName = actor.DisplayName
-        });
-        await caseDb.SaveChangesAsync(cancellationToken);
-        return await ToDtoAsync(entity, true, cancellationToken);
+            source = source.Where(x => x.AssignedToSubject == actor.Subject);
+        }
+
+        var summary = command.ResolutionSummary.Trim();
+        var evidence = string.IsNullOrWhiteSpace(command.EvidenceReference) ? null : command.EvidenceReference.Trim();
+        var updated = await source.ExecuteUpdateAsync(setters => setters
+            .SetProperty(x => x.Status, targetStatus)
+            .SetProperty(x => x.ResolutionSummary, summary)
+            .SetProperty(x => x.EvidenceReference, evidence)
+            .SetProperty(x => x.ResolvedBySubject, actor.Subject)
+            .SetProperty(x => x.ResolvedAtUtc, now)
+            .SetProperty(x => x.UpdatedAtUtc, now), cancellationToken);
+
+        if (updated == 1)
+        {
+            caseDb.DataQualityCaseEvents.Add(new DataQualityCaseEvent
+            {
+                DataQualityCaseId = caseId,
+                Action = targetStatus == DataQualityCaseCodes.Status.ResolvedConfirmed
+                    ? DataQualityCaseCodes.Action.ResolvedConfirmed
+                    : DataQualityCaseCodes.Action.Dismissed,
+                FromStatus = DataQualityCaseCodes.Status.UnderReview,
+                ToStatus = targetStatus,
+                ActorSubject = actor.Subject,
+                ActorDisplayName = actor.DisplayName
+            });
+            await caseDb.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return await RequiredDtoAsync(caseId, actor.Subject, cancellationToken);
+        }
+
+        await transaction.RollbackAsync(cancellationToken);
+        var current = await caseDb.DataQualityCases.AsNoTracking().SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken)
+            ?? throw new KeyNotFoundException("El caso de corroboración no existe.");
+        if (current.Status != DataQualityCaseCodes.Status.UnderReview)
+            throw new InvalidCaseTransitionException("El caso debe estar en revisión antes de resolverlo.");
+        throw new CaseAssignedToAnotherReviewerException();
     }
 
     private Task<DataQualityCase?> ActiveByFingerprintAsync(string fingerprint, CancellationToken cancellationToken)
@@ -237,12 +260,26 @@ public sealed class DataQualityCaseService(
                                        (x.Status == DataQualityCaseCodes.Status.Open || x.Status == DataQualityCaseCodes.Status.UnderReview),
                 cancellationToken);
 
-    private async Task<DataQualityCaseDto> ToDtoAsync(DataQualityCase entity, bool includeEvents, CancellationToken cancellationToken)
-        => (await EnrichAsync([entity], includeEvents, cancellationToken)).Single();
+    private async Task<DataQualityCaseDto> RequiredDtoAsync(Guid caseId, string? actorSubject, CancellationToken cancellationToken)
+    {
+        var entity = await caseDb.DataQualityCases
+            .AsNoTracking()
+            .Include(x => x.Events)
+            .SingleAsync(x => x.Id == caseId, cancellationToken);
+        return await ToDtoAsync(entity, true, actorSubject, cancellationToken);
+    }
+
+    private async Task<DataQualityCaseDto> ToDtoAsync(
+        DataQualityCase entity,
+        bool includeEvents,
+        string? actorSubject,
+        CancellationToken cancellationToken)
+        => (await EnrichAsync([entity], includeEvents, actorSubject, cancellationToken)).Single();
 
     private async Task<IReadOnlyList<DataQualityCaseDto>> EnrichAsync(
         IReadOnlyList<DataQualityCase> entities,
         bool includeEvents,
+        string? actorSubject,
         CancellationToken cancellationToken)
     {
         if (entities.Count == 0) return [];
@@ -266,7 +303,7 @@ public sealed class DataQualityCaseService(
             var organizationName = entity.OrganizationId is not null && organizations.TryGetValue(entity.OrganizationId.Value, out var name) ? name : null;
             var events = includeEvents
                 ? entity.Events.OrderBy(x => x.OccurredAtUtc).Select(x => new DataQualityCaseEventDto(
-                    x.Id, x.Action, x.FromStatus, x.ToStatus, x.ActorSubject, x.ActorDisplayName, x.OccurredAtUtc)).ToList()
+                    x.Id, x.Action, x.FromStatus, x.ToStatus, x.ActorDisplayName, x.OccurredAtUtc)).ToList()
                 : [];
             return new DataQualityCaseDto(
                 entity.Id,
@@ -281,15 +318,13 @@ public sealed class DataQualityCaseService(
                 entity.PrimaryDate,
                 entity.RelatedDate,
                 entity.Status,
-                entity.AssignedToSubject,
                 entity.AssignedToDisplayName,
-                entity.CreatedBySubject,
+                !string.IsNullOrWhiteSpace(actorSubject) && string.Equals(entity.AssignedToSubject, actorSubject, StringComparison.Ordinal),
                 entity.CreatedByDisplayName,
                 entity.CreatedAtUtc,
                 entity.UpdatedAtUtc,
                 entity.ResolutionSummary,
                 entity.EvidenceReference,
-                entity.ResolvedBySubject,
                 entity.ResolvedAtUtc,
                 events);
         }).ToList();
@@ -353,15 +388,13 @@ public sealed record DataQualityCaseDto(
     DateOnly? PrimaryDate,
     DateOnly? RelatedDate,
     string Status,
-    string? AssignedToSubject,
     string? AssignedToDisplayName,
-    string CreatedBySubject,
+    bool AssignedToCurrentUser,
     string? CreatedByDisplayName,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc,
     string? ResolutionSummary,
     string? EvidenceReference,
-    string? ResolvedBySubject,
     DateTimeOffset? ResolvedAtUtc,
     IReadOnlyList<DataQualityCaseEventDto> Events);
 
@@ -370,7 +403,6 @@ public sealed record DataQualityCaseEventDto(
     string Action,
     string? FromStatus,
     string ToStatus,
-    string ActorSubject,
     string? ActorDisplayName,
     DateTimeOffset OccurredAtUtc);
 
