@@ -192,8 +192,7 @@ public static class OrganizationEndpoints
             })
             .ToListAsync(cancellationToken);
 
-        var canReadRegularity = access.CanReadInstitutionalRegularity(httpContext.User) ||
-                                access.CanManageOrganization(httpContext.User, id);
+        var canReadRegularity = OrganizationProfilePrivacy.CanReadRegularity(access, httpContext.User, id);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
