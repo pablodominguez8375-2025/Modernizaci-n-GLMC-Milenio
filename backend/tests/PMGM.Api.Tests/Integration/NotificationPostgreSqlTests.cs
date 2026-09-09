@@ -47,20 +47,7 @@ public sealed class NotificationPostgreSqlTests
 
         var service = new InstitutionalNotificationService(db);
         var idempotencyKey = $"qa:{Guid.NewGuid():N}";
-        var command = new QueueNotificationCommand(
-            uniqueCode,
-            null,
-            "qa.notification",
-            "qa-user",
-            null,
-            new[] { NotificationCodes.Channel.Internal },
-            new Dictionary<string, string?> { ["numero"] = "123" },
-            idempotencyKey,
-            "qa-correlation",
-            "qa-event",
-            "/qa/123",
-            true,
-            null);
+        var command = BuildCommand(uniqueCode, idempotencyKey);
 
         var first = await service.QueueAsync(command, cancellationToken);
         var second = await service.QueueAsync(command, cancellationToken);
@@ -80,4 +67,74 @@ public sealed class NotificationPostgreSqlTests
         Assert.Equal(NotificationCodes.DeliveryStatus.Delivered, message.Deliveries.Single().Status);
         Assert.Single(message.Deliveries.Single().Attempts);
     }
+
+    [Fact]
+    public async Task Concurrent_notification_requests_keep_a_single_logical_message()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = new DbContextOptionsBuilder<NotificationDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        var uniqueCode = $"test.notification.concurrent.{Guid.NewGuid():N}";
+        await using (var setupDb = new NotificationDbContext(options))
+        {
+            await setupDb.Database.MigrateAsync(cancellationToken);
+            setupDb.NotificationTemplates.Add(new NotificationTemplate
+            {
+                Code = uniqueCode,
+                Version = 1,
+                Name = "Plantilla concurrencia QA",
+                SubjectTemplate = "Aviso {{numero}}",
+                BodyTemplate = "La solicitud {{numero}} cambió de estado.",
+                AllowedVariablesJson = JsonSerializer.Serialize(new[] { "numero" }),
+                Sensitivity = NotificationCodes.Classification.Internal,
+                Status = NotificationCodes.TemplateStatus.Active
+            });
+            await setupDb.SaveChangesAsync(cancellationToken);
+        }
+
+        var idempotencyKey = $"qa-concurrent:{Guid.NewGuid():N}";
+        var command = BuildCommand(uniqueCode, idempotencyKey);
+
+        await using var dbA = new NotificationDbContext(options);
+        await using var dbB = new NotificationDbContext(options);
+        var serviceA = new InstitutionalNotificationService(dbA);
+        var serviceB = new InstitutionalNotificationService(dbB);
+
+        var results = await Task.WhenAll(
+            serviceA.QueueAsync(command, cancellationToken),
+            serviceB.QueueAsync(command, cancellationToken));
+
+        Assert.Single(results.Where(x => x.Created));
+        Assert.Single(results.Where(x => !x.Created));
+        Assert.Equal(results[0].MessageId, results[1].MessageId);
+
+        await using var verificationDb = new NotificationDbContext(options);
+        Assert.Equal(1, await verificationDb.NotificationMessages.CountAsync(
+            x => x.IdempotencyKey == idempotencyKey,
+            cancellationToken));
+    }
+
+    private static QueueNotificationCommand BuildCommand(string templateCode, string idempotencyKey)
+        => new(
+            templateCode,
+            null,
+            "qa.notification",
+            "qa-user",
+            null,
+            new[] { NotificationCodes.Channel.Internal },
+            new Dictionary<string, string?> { ["numero"] = "123" },
+            idempotencyKey,
+            "qa-correlation",
+            "qa-event",
+            "/qa/123",
+            true,
+            null);
 }
