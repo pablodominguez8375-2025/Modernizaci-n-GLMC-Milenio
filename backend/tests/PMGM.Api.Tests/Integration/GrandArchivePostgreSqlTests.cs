@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.DocumentManagement.Entities;
 using PMGM.Api.Modules.GrandArchive;
@@ -21,8 +22,15 @@ public sealed class GrandArchivePostgreSqlTests
         var documentOptions = new DbContextOptionsBuilder<DocumentManagementDbContext>().UseNpgsql(connectionString).Options;
         var archiveOptions = new DbContextOptionsBuilder<GrandArchiveDbContext>().UseNpgsql(connectionString).Options;
 
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var lodge = new Organization { Name = $"Taller Archivo {suffix}", Number = $"A{suffix[..3]}", Type = "workshop" };
         await using (var coreDb = new PmgmDbContext(coreOptions))
+        {
             await coreDb.Database.MigrateAsync(cancellationToken);
+            coreDb.Organizations.Add(lodge);
+            await coreDb.SaveChangesAsync(cancellationToken);
+        }
+
         await using var documentDb = new DocumentManagementDbContext(documentOptions);
         await using var archiveDb = new GrandArchiveDbContext(archiveOptions);
         await archiveDb.Database.MigrateAsync(cancellationToken);
@@ -30,9 +38,8 @@ public sealed class GrandArchivePostgreSqlTests
         var migrations = (await archiveDb.Database.GetAppliedMigrationsAsync(cancellationToken)).ToList();
         Assert.Contains("20260909192100_AddGrandArchive", migrations);
 
-        var suffix = Guid.NewGuid().ToString("N")[..8];
         var orderCollection = new DocumentCollection { Code = $"GA-{suffix}", Name = $"Archivo Orden {suffix}", Scope = DocumentManagementCodes.Scope.Order, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = "qa" };
-        var lodgeCollection = new DocumentCollection { Code = $"TL-{suffix}", Name = $"Taller {suffix}", Scope = DocumentManagementCodes.Scope.Organization, OrganizationId = Guid.NewGuid(), Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = "qa" };
+        var lodgeCollection = new DocumentCollection { Code = $"TL-{suffix}", Name = $"Taller {suffix}", Scope = DocumentManagementCodes.Scope.Organization, OrganizationId = lodge.Id, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = "qa" };
         var decree = Document(orderCollection, "Decreto histórico QA", "decree");
         var workPaper = Document(orderCollection, "Plancha QA", "work_paper");
         var lodgeDocument = Document(lodgeCollection, "Acta de Taller QA", "minutes");
