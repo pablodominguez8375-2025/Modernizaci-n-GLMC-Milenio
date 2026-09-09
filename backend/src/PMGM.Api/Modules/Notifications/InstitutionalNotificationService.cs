@@ -30,7 +30,7 @@ public sealed class InstitutionalNotificationService(NotificationDbContext db) :
         }
 
         if (!string.IsNullOrWhiteSpace(command.ActionUrl) &&
-            (!command.ActionUrl.StartsWith('/', StringComparison.Ordinal) || command.ActionUrl.StartsWith("//", StringComparison.Ordinal)))
+            (!command.ActionUrl.StartsWith("/", StringComparison.Ordinal) || command.ActionUrl.StartsWith("//", StringComparison.Ordinal)))
         {
             throw new ArgumentException("La URL de acción debe ser una ruta interna relativa a la aplicación.", nameof(command));
         }
