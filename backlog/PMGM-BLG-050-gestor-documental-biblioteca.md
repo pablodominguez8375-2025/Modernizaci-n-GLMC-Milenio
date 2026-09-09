@@ -1,6 +1,6 @@
 # PMGM-BLG-050 — Biblioteca Virtual
 
-**Estado:** En desarrollo — v0.16.0  
+**Estado:** Núcleo v0.16.0 estable en CI; mejora editorial pendiente  
 **Prioridad:** P1 institucional / P0 seguridad de acceso  
 **Fecha:** 2026-09-08  
 **Requisitos:** PMGM-REQ-031, PMGM-REQ-031-ADD-001  
@@ -40,9 +40,11 @@ Construir la **Biblioteca Virtual** como módulo independiente para publicación
 12. Un usuario de grado insuficiente no recibe por defecto el recurso en resultados, conteos ni facetas.
 13. Conocer el ID de un recurso no permite eludir la política de grado (protección IDOR/BOLA).
 14. Las demás restricciones declaradas se combinan por defecto de forma acumulativa (`AND`).
+15. La identidad autenticada se vincula al miembro mediante `issuer/sub`, no mediante RUT ni grado suministrado por frontend.
+16. Las planchas de trabajo publicadas en Biblioteca mantienen referencia a Gestión Logial y no ingresan por defecto al Gran Archivo.
 
 ## Estado v0.16
-### Implementado
+### Implementado y verde
 - [x] Catálogo server-side de documentos publicados con versión `available`.
 - [x] Búsqueda por metadata.
 - [x] Filtro por tipo documental y colección.
@@ -52,21 +54,28 @@ Construir la **Biblioteca Virtual** como módulo independiente para publicación
 - [x] Descarga autenticada mediante API.
 - [x] UI React conectada a búsqueda/facetas/descarga.
 - [x] Pruebas frontend del catálogo.
+- [x] Prueba HTTP backend del catálogo estabilizada.
+- [x] `MinimumDegreeRequired` agregado al modelo y migración PostgreSQL.
+- [x] Vínculo institucional `issuer/sub → MemberId` para autorización.
+- [x] Resolución del grado efectivo desde `DegreeEvent` vigente.
+- [x] Filtro por grado en catálogo y facetas.
+- [x] Protección por grado de detalle y descarga directa por ID.
+- [x] Endpoint auditable para configurar/cambiar grado mínimo.
+- [x] Prueba integral acumulativa 1.º → 2.º → 3.º sobre búsqueda, facetas, detalle y descarga.
+- [x] Protección contra bypass por ID directo.
+- [x] CI #519 completamente verde: backend, PostgreSQL, S3/MinIO, ClamAV, frontend e infraestructura.
 
-### En cierre de v0.16
-- [ ] Estabilizar prueba HTTP backend del catálogo.
-- [ ] Agregar `minimum_degree_required` al modelo y migración.
-- [ ] Resolver grado efectivo desde Membresía/identidad institucional.
-- [ ] Filtrar catálogo, facetas, detalle y descarga por grado.
-- [ ] Pruebas grado 1/2/3 y acceso por ID directo.
-- [ ] Actualizar UI editorial para mostrar/configurar audiencia por grado.
+### Mejora editorial pendiente, no bloqueante del núcleo seguro
+- [ ] UI editorial para visualizar/configurar `MinimumDegreeRequired` sin usar llamada técnica manual.
+- [ ] Estimación/visualización de audiencia efectiva antes de publicar.
+- [ ] Advertencia editorial cuando se cambie el grado mínimo de una publicación vigente.
 
 ## Entregables posteriores
 - [ ] Entidades bibliográficas/taxonomías enriquecidas.
 - [ ] Workflow editorial completo.
 - [ ] Autores, materias y palabras clave.
 - [ ] Integración con Gran Archivo mediante referencias/derivados.
-- [ ] Integración con Docencia/Gestión Documental.
+- [ ] Integración con Docencia/Gestión Logial, incluyendo Planchas de Trabajo.
 - [ ] Auditoría editorial ampliada.
 - [ ] OCR/indexación full-text en fase posterior, siempre respetando ACL.
 
@@ -78,5 +87,5 @@ Construir la **Biblioteca Virtual** como módulo independiente para publicación
 - CENDOC.
 - OCR/indexación full-text avanzada en primera etapa.
 
-## Criterio de aceptación
-El bloque v0.16 queda listo cuando el catálogo, filtros, facetas, detalle y descarga estén verdes en CI y la autorización acumulativa por grado se aplique en backend usando el grado institucional vigente, sin filtración de metadata ni bypass por ID directo.
+## Criterio de aceptación del núcleo seguro
+Cumplido en CI #519: catálogo, filtros, facetas, detalle y descarga están verdes y la autorización acumulativa por grado se aplica en backend usando identidad y grado institucional vigente, sin filtración de metadata ni bypass por ID directo.
