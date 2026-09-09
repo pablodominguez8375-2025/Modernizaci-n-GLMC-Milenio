@@ -13,6 +13,7 @@ using PMGM.Api.Modules.Hospitalaria;
 using PMGM.Api.Modules.InstitutionalProjections;
 using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Notifications;
 using PMGM.Api.Modules.Privacy;
 using PMGM.Api.Modules.RegimenInterior;
 using PMGM.Api.Modules.Treasury;
@@ -41,6 +42,7 @@ builder.Services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(mainCo
 builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<LodgeManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -58,6 +60,7 @@ builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
 builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
+builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
 
 var app = builder.Build();
 
@@ -66,6 +69,8 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
     await db.Database.MigrateAsync();
+    var notificationDb = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+    await notificationDb.Database.MigrateAsync();
 }
 
 app.UseExceptionHandler();
@@ -84,7 +89,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.17.0",
+    version = "0.18.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -113,6 +118,7 @@ app.MapDocumentContentEndpoints();
 app.MapDocumentContentRecoveryEndpoints();
 app.MapLibraryCatalogEndpoints();
 app.MapLibraryAccessPolicyEndpoints();
+app.MapNotificationEndpoints();
 app.MapPrivacyEndpoints();
 app.MapPrivacyRetentionEndpoints();
 app.MapPrivacyRiskEndpoints();
