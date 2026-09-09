@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace PMGM.Api.Modules.Bootstrap.Entities;
 
 public sealed class InstitutionalBootstrapApplication
@@ -7,6 +9,9 @@ public sealed class InstitutionalBootstrapApplication
     public int PackageVersion { get; set; }
     public required string PayloadSha256 { get; set; }
     public required string Status { get; set; }
+    // Sólo sirve durante la operación; la identidad durable queda en AuditEvent.
+    [NotMapped]
+    public string? AppliedBySubject { get; set; }
     public DateTimeOffset AppliedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public required string SummaryJson { get; set; }
 }
