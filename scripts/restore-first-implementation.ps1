@@ -29,7 +29,7 @@ function Invoke-Compose {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
     & docker @script:composeArgs @Arguments
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose falló con código $LASTEXITCODE: $($Arguments -join ' ')"
+        throw "docker compose falló con código ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
 }
 
@@ -37,7 +37,7 @@ function Invoke-ComposeCapture {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
     $output = @(& docker @script:composeArgs @Arguments)
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose falló con código $LASTEXITCODE: $($Arguments -join ' ')"
+        throw "docker compose falló con código ${LASTEXITCODE}: $($Arguments -join ' ')"
     }
     return $output
 }
