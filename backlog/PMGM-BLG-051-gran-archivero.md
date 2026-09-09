@@ -25,7 +25,8 @@ Implementar el módulo **Gran Archivo / Gran Archivero** para custodia, clasific
 - Préstamos físicos y cadena de custodia.
 - Integración con Biblioteca Virtual mediante derivados autorizados.
 - Auditoría integral.
-- Custodia expresa de planchas, decretos, cartas, investigaciones, amonestaciones, expedientes disciplinarios, informes reservados y otros antecedentes de valor histórico.
+- Custodia expresa de **planchas de Secretaría y otros documentos oficiales**, decretos, cartas/correspondencia, investigaciones, amonestaciones, expedientes disciplinarios, informes reservados y otros antecedentes de valor histórico formalmente transferidos.
+- Las **planchas de trabajo de los hermanos no ingresan al Gran Archivo por defecto**; permanecen en Gestión Logial y sólo se publican en Biblioteca cuando sean autorizadas. Un eventual ingreso archivístico requeriría una decisión institucional específica y transferencia formal independiente.
 - Separación entre **descubrimiento en catálogo** y **acceso al contenido**.
 - Visibilidad `hidden`, `catalog_only`, `catalog_extended` o `content_allowed`.
 - Permisos por grado, hermano específico, Taller, cargo/rol, comisión/órgano, finalidad, fecha de apertura o autorización especial.
@@ -48,6 +49,7 @@ Implementar el módulo **Gran Archivo / Gran Archivero** para custodia, clasific
 14. Investigaciones, amonestaciones y expedientes disciplinarios parten con política restrictiva.
 15. Toda concesión/revocación de acceso por hermano registra otorgante, motivo, alcance, vigencia y evidencia cuando corresponda.
 16. Conocer un identificador interno no permite eludir autorización.
+17. “Plancha de trabajo” y “plancha de Secretaría” son categorías diferentes y nunca deben mezclarse en el modelo documental.
 
 ## Entregables
 - [ ] Entidades archivísticas y catálogos.
