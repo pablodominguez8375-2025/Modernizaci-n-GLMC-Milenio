@@ -11,6 +11,7 @@ public static class InstitutionalClaims
 
 public static class InstitutionalRoles
 {
+    public const string PlatformSuperAdmin = "platform_superadmin";
     public const string GranLogiaAdmin = "grand_lodge_admin";
     public const string RegimenInterior = "internal_affairs";
     public const string GranSecretaria = "grand_secretariat";
@@ -26,6 +27,7 @@ public static class InstitutionalRoles
 public interface IInstitutionalAccessService
 {
     bool HasOrderScope(ClaimsPrincipal user);
+    bool IsPlatformSuperAdmin(ClaimsPrincipal user);
     bool HasRole(ClaimsPrincipal user, params string[] roles);
     bool CanReadOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
@@ -54,8 +56,15 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
             x.Type == InstitutionalClaims.Scope &&
             string.Equals(x.Value, "order", StringComparison.OrdinalIgnoreCase));
 
+    public bool IsPlatformSuperAdmin(ClaimsPrincipal user)
+        => HasOrderScope(user) && user.Claims.Any(x =>
+            x.Type == InstitutionalClaims.Role &&
+            string.Equals(x.Value, InstitutionalRoles.PlatformSuperAdmin, StringComparison.OrdinalIgnoreCase));
+
     public bool HasRole(ClaimsPrincipal user, params string[] roles)
     {
+        if (IsPlatformSuperAdmin(user)) return true;
+
         var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Role && roleSet.Contains(x.Value));
