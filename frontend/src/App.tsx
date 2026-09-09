@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import CalendarPage from './CalendarPage'
 import CeremoniesPage from './CeremoniesPage'
 import DocumentManagementPage from './DocumentManagementPage'
 import GrandSecretariatPage from './GrandSecretariatPage'
@@ -6,14 +7,15 @@ import LibraryPage from './LibraryPage'
 import LodgeManagementPage from './LodgeManagementPage'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
+import { type CalendarApiClient } from './api/calendarApi'
 import { type DocumentApiClient } from './api/documentApi'
 import { type LodgeApiClient } from './api/lodgeApi'
 import { type PmgmApiClient, type CandidatePublication, type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
 
-type View = 'dashboard' | 'candidates' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
+type View = 'dashboard' | 'candidates' | 'calendar' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean }
 
-export default function App({ api, lodgeApi, documentApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; onLogout?: () => void }) {
+export default function App({ api, lodgeApi, documentApi, calendarApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; calendarApi: CalendarApiClient; onLogout?: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -34,6 +36,7 @@ export default function App({ api, lodgeApi, documentApi, onLogout }: { api: Pmg
   }, [api])
 
   const capabilities = profile?.capabilities as ExtendedCapabilities | undefined
+  const canCalendar = api.useMocks || profile !== null
   const canCeremonies = capabilities?.canReviewCeremonies ?? false
   const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
@@ -46,7 +49,7 @@ export default function App({ api, lodgeApi, documentApi, onLogout }: { api: Pmg
   return <div className="app-shell">
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Ir al inicio"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button>
-      <div className="topbar-meta">{api.useMocks && <span className="demo-badge">Modo demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">v{systemInfo?.version ?? '0.14.0'}</span></div>
+      <div className="topbar-meta">{api.useMocks && <span className="demo-badge">Modo demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">v{systemInfo?.version ?? '0.21.0'}</span></div>
     </header>
 
     <div className="workspace">
@@ -54,6 +57,7 @@ export default function App({ api, lodgeApi, documentApi, onLogout }: { api: Pmg
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('dashboard')}><span aria-hidden="true">⌂</span> Inicio</button>
         <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('candidates')}><span aria-hidden="true">◎</span> Insinuados</button>
         <div className="nav-section">Gestión institucional</div>
+        <ModuleAccess icon="▣" label="Calendario" allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="◉" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />
         <ModuleAccess icon="◇" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
         <ModuleAccess icon="◈" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
@@ -68,8 +72,9 @@ export default function App({ api, lodgeApi, documentApi, onLogout }: { api: Pmg
 
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
-        {view === 'dashboard' && <Dashboard portal={portal} systemInfo={systemInfo} profile={profile} loading={loading} onOpenCandidates={() => setView('candidates')} />}
+        {view === 'dashboard' && <Dashboard portal={portal} systemInfo={systemInfo} profile={profile} loading={loading} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} />}
+        {view === 'calendar' && canCalendar && <CalendarPage api={api} calendarApi={calendarApi} canManage={canSecretariat} />}
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
         {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
@@ -83,13 +88,13 @@ export default function App({ api, lodgeApi, documentApi, onLogout }: { api: Pmg
   </div>
 }
 
-function Dashboard({ portal, systemInfo, profile, loading, onOpenCandidates }: { portal: CandidatePortalResponse | null; systemInfo: SystemInfo | null; profile: SessionProfile | null; loading: boolean; onOpenCandidates: () => void }) {
+function Dashboard({ portal, systemInfo, profile, loading, onOpenCandidates, onOpenCalendar }: { portal: CandidatePortalResponse | null; systemInfo: SystemInfo | null; profile: SessionProfile | null; loading: boolean; onOpenCandidates: () => void; onOpenCalendar: () => void }) {
   const completed = portal?.items.filter(item => item.elapsedDays >= item.requiredDays).length ?? 0
   const capabilities = profile ? Object.values(profile.capabilities).filter(Boolean).length : 0
   return <>
-    <section className="hero-panel"><div><p className="eyebrow">Plataforma institucional unificada</p><h1>Panel de inicio</h1><p className="lead">Una sola base maestra para miembros, Talleres, ceremonias, documentos y control institucional.</p></div><div className="hero-status"><span className="status-dot" aria-hidden="true" />Núcleo API {systemInfo ? 'disponible' : loading ? 'consultando' : 'sin datos'}</div></section>
+    <section className="hero-panel"><div><p className="eyebrow">Plataforma institucional unificada</p><h1>Panel de inicio</h1><p className="lead">Una sola base maestra para miembros, Talleres, ceremonias, agenda, documentos y control institucional.</p></div><div className="hero-status"><span className="status-dot" aria-hidden="true" />Núcleo API {systemInfo ? 'disponible' : loading ? 'consultando' : 'sin datos'}</div></section>
     <section className="metric-grid"><MetricCard label="Insinuados publicados" value={loading ? '—' : String(portal?.total ?? 0)} detail="Período institucional vigente" /><MetricCard label="Plazo cumplido" value={loading ? '—' : String(completed)} detail="Listos para continuar validaciones" /><MetricCard label="Ámbito de acceso" value={loading ? '—' : accessScopeLabel(profile?.accessScope)} detail={`${capabilities} capacidades autorizadas por la API`} /><MetricCard label="Backend" value={systemInfo?.runtime ?? '.NET 10'} detail="PostgreSQL · Auditoría persistente" /></section>
-    <section className="dashboard-grid"><article className="panel"><div className="panel-heading"><div><p className="eyebrow">Ceremonias</p><h2>Publicaciones activas</h2></div><button className="text-button" type="button" onClick={onOpenCandidates}>Ver portal</button></div>{loading ? <LoadingRows /> : <CandidateSummary items={portal?.items ?? []} />}</article><article className="panel milestones"><p className="eyebrow">Hoja de ruta MVP</p><h2>Hitos institucionales</h2><ol><li><span className="milestone-state done">✓</span><div><strong>Ceremonias</strong><small>Bandeja, validaciones, regularidad y autorización por rol.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gran Secretaría</strong><small>Espacios, reservas y autorizaciones formales auditadas.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gestión Logial</strong><small>Tenidas, asistencia append-only y actas versionadas.</small></div></li><li><span className="milestone-state current">5</span><div><strong>Documentos y Biblioteca</strong><small>Metadata, versiones, integridad y publicación controlada; almacenamiento de objetos es el siguiente corte.</small></div></li></ol></article></section>
+    <section className="dashboard-grid"><article className="panel"><div className="panel-heading"><div><p className="eyebrow">Ceremonias</p><h2>Publicaciones activas</h2></div><button className="text-button" type="button" onClick={onOpenCandidates}>Ver portal</button></div>{loading ? <LoadingRows /> : <CandidateSummary items={portal?.items ?? []} />}<div className="dashboard-calendar-cta"><div><p className="eyebrow">Agenda</p><strong>Calendario Institucional Unificado</strong><small>Tenidas, ceremonias, docencia y reservas con permisos.</small></div><button type="button" onClick={onOpenCalendar}>Abrir calendario</button></div></article><article className="panel milestones"><p className="eyebrow">Hoja de ruta MVP</p><h2>Hitos institucionales</h2><ol><li><span className="milestone-state done">✓</span><div><strong>Ceremonias</strong><small>Bandeja, validaciones, regularidad y autorización por rol.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gran Secretaría</strong><small>Espacios, reservas y autorizaciones formales auditadas.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Gestión Logial</strong><small>Tenidas, asistencia append-only y actas versionadas.</small></div></li><li><span className="milestone-state done">✓</span><div><strong>Notificaciones y Calendario</strong><small>Avisos trazables, agenda unificada y privacidad por proyección.</small></div></li><li><span className="milestone-state current">6</span><div><strong>QA mostrable</strong><small>Interfaz integrada, datos demo y despliegue reproducible.</small></div></li></ol></article></section>
   </>
 }
 
