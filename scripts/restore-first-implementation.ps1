@@ -106,7 +106,7 @@ try {
     ) | Out-Null
 
     $localCount = @(Get-ChildItem -LiteralPath (Join-Path $BackupPath 'objects/pmgm-documents') -Recurse -File).Count
-    $minioCountScript = 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc find pmgm/pmgm-documents --type f | wc -l'
+    $minioCountScript = 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc ls --recursive pmgm/pmgm-documents | wc -l'
     $countOutput = Invoke-ComposeCapture -Arguments @(
         'run', '--rm', '-T', '--no-deps',
         '--entrypoint', '/bin/sh',
