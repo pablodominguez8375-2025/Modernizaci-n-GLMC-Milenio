@@ -24,6 +24,15 @@ public static class LodgeManagementCodes
 
         public static bool IsValid(string value)
             => value is Apprentice or Fellowcraft or Master or All;
+
+        public static int? ToNumeric(string value)
+            => value switch
+            {
+                Apprentice => 1,
+                Fellowcraft => 2,
+                Master => 3,
+                _ => null
+            };
     }
 
     public static class MeetingStatus
@@ -49,5 +58,36 @@ public static class LodgeManagementCodes
         public const string Draft = "draft";
         public const string Approved = "approved";
         public const string Superseded = "superseded";
+    }
+
+    public static class InstructionStatus
+    {
+        public const string Held = "held";
+        public const string Cancelled = "cancelled";
+    }
+
+    public static class InstructionAttendanceStatus
+    {
+        public const string Present = "present";
+        public const string Absent = "absent";
+
+        public static bool IsValid(string value)
+            => value is Present or Absent;
+    }
+
+    public static class InstructionOffice
+    {
+        public const string SecondWarden = "second_warden";
+        public const string FirstWarden = "first_warden";
+        public const string ImmediatePastMaster = "immediate_past_master";
+
+        public static string? ForGrade(string grade)
+            => grade switch
+            {
+                Grade.Apprentice => SecondWarden,
+                Grade.Fellowcraft => FirstWarden,
+                Grade.Master => ImmediatePastMaster,
+                _ => null
+            };
     }
 }
