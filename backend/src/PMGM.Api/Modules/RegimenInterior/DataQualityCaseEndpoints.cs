@@ -1,6 +1,4 @@
 using System.Security.Claims;
-using Microsoft.EntityFrameworkCore;
-using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 
 namespace PMGM.Api.Modules.RegimenInterior;
@@ -57,7 +55,7 @@ public static class DataQualityCaseEndpoints
         CancellationToken cancellationToken)
     {
         if (!access.CanRunRegimenInteriorReports(httpContext.User)) return Results.Forbid();
-        var item = await service.GetAsync(caseId, cancellationToken);
+        var item = await service.GetAsync(caseId, Subject(httpContext.User), cancellationToken);
         if (item is null) return Results.NotFound();
         NoStore(httpContext);
         return Results.Ok(item);
