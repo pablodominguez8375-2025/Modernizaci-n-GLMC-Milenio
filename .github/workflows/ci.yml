@@ -252,6 +252,40 @@ jobs:
           values=[c.get('value','') for u in p.get('users',[]) for c in u.get('credentials',[])];
           assert values and all(v == '\${PMGM_QA_USER_PASSWORD}' for v in values), values"
 
+      - name: Validate backup and recovery Bash scripts
+        shell: bash
+        run: >-
+          bash -n
+          scripts/backup-first-implementation.sh
+          scripts/verify-first-backup.sh
+          scripts/restore-first-implementation.sh
+          scripts/recovery-drill-first-implementation.sh
+
+      - name: Validate backup and recovery PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(
+            'scripts/backup-first-implementation.ps1',
+            'scripts/verify-first-backup.ps1',
+            'scripts/restore-first-implementation.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              foreach ($parseError in $errors) {
+                Write-Error "${file}: $($parseError.Message)"
+              }
+              throw "PowerShell syntax inválida en $file"
+            }
+          }
+
   first-implementation-smoke:
     name: First implementation authenticated smoke
     runs-on: ubuntu-latest
@@ -271,6 +305,9 @@ jobs:
 
       - name: Run authenticated stack smoke
         run: bash scripts/smoke-first-implementation.sh
+
+      - name: Run backup and recovery drill
+        run: bash scripts/recovery-drill-first-implementation.sh "$RUNNER_TEMP/pmgm-recovery-drill"
 
       - name: Show first-implementation logs on failure
         if: failure()
