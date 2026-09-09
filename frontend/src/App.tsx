@@ -58,7 +58,7 @@ export default function App({ api, lodgeApi, documentApi, calendarApi, notificat
         {profile && <span className="environment-badge">{profile.displayName}</span>}
         {canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}
         {onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}
-        <span className="environment-badge">v{systemInfo?.version ?? '0.22.0'}</span>
+        <span className="environment-badge">{api.useMocks ? 'UI QA v0.22' : `API v${systemInfo?.version ?? '—'}`}</span>
       </div>
     </header>
 
