@@ -1,5 +1,5 @@
 {
-  "version": "0.3",
+  "version": "0.4",
   "law": "Chile Ley 21.719",
   "effectiveDate": "2026-12-01",
   "treatments": [
@@ -109,6 +109,17 @@
       "lawfulBasisStatus": "pending_legal_review",
       "retentionPolicyStatus": "defined_in_system",
       "accessControlStatus": "recipient_subject_scope_and_grand_secretariat_rbac",
+      "containsSensitiveData": true,
+      "owner": "Gran Secretaría / Privacidad",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-011",
+      "module": "Calendario institucional unificado",
+      "purpose": "Consolidar y proyectar actividades institucionales desde sus módulos fuente, mostrando sólo la información necesaria según rol, alcance y visibilidad, incluida una proyección mínima de ocupación cuando el detalle sea restringido.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "rbac_scope_minimized_calendar_projection_and_authorized_ics_export",
       "containsSensitiveData": true,
       "owner": "Gran Secretaría / Privacidad",
       "legalReviewRequired": true
