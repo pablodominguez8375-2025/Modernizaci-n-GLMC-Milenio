@@ -99,7 +99,7 @@ public static class MembershipEndpoints
                 x.StartDate,
                 x.EndDate,
                 CurrentDegree = db.DegreeEvents
-                    .Where(degree => degree.MemberId == x.MemberId && degree.OrganizationId == organizationId)
+                    .Where(degree => degree.MemberId == x.MemberId)
                     .OrderByDescending(degree => degree.EffectiveDate)
                     .ThenByDescending(degree => degree.RecordedAtUtc)
                     .Select(degree => degree.Degree)
