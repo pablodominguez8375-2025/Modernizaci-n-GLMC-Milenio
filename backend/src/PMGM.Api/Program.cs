@@ -39,9 +39,14 @@ builder.Services.Configure<DocumentMalwareOptions>(
 var mainConnectionString = builder.Configuration.GetConnectionString("MainDatabase")
     ?? "Host=localhost;Port=5432;Database=pmgm;Username=pmgm_app;Password=pmgm_dev_only";
 
-builder.Services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddScoped<CalendarSourceProjectionInterceptor>();
+builder.Services.AddDbContext<PmgmDbContext>((services, options) =>
+    options.UseNpgsql(mainConnectionString)
+        .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
 builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<LodgeManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
+    options.UseNpgsql(mainConnectionString)
+        .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
 builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
@@ -64,6 +69,7 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
 builder.Services.AddScoped<IInstitutionalCalendarProjectionService, InstitutionalCalendarProjectionService>();
+builder.Services.AddScoped<IInstitutionalCalendarSourceSyncService, InstitutionalCalendarSourceSyncService>();
 
 var app = builder.Build();
 
@@ -94,7 +100,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.19.0",
+    version = "0.20.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -125,6 +131,7 @@ app.MapLibraryCatalogEndpoints();
 app.MapLibraryAccessPolicyEndpoints();
 app.MapNotificationEndpoints();
 app.MapInstitutionalCalendarEndpoints();
+app.MapInstitutionalCalendarSourceEndpoints();
 app.MapPrivacyEndpoints();
 app.MapPrivacyRetentionEndpoints();
 app.MapPrivacyRiskEndpoints();
