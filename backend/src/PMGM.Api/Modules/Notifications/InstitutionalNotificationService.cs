@@ -10,7 +10,7 @@ public interface IInstitutionalNotificationService
     Task<QueueNotificationResult> QueueAsync(QueueNotificationCommand command, CancellationToken cancellationToken);
 }
 
-public sealed class InstitutionalNotificationService(PmgmDbContext db) : IInstitutionalNotificationService
+public sealed class InstitutionalNotificationService(NotificationDbContext db) : IInstitutionalNotificationService
 {
     public async Task<QueueNotificationResult> QueueAsync(
         QueueNotificationCommand command,
@@ -58,8 +58,7 @@ public sealed class InstitutionalNotificationService(PmgmDbContext db) : IInstit
         }
 
         var allowedVariables = JsonSerializer.Deserialize<string[]>(template.AllowedVariablesJson) ?? [];
-        var variableNames = command.Variables.Keys.ToArray();
-        var unexpected = variableNames.Except(allowedVariables, StringComparer.Ordinal).ToArray();
+        var unexpected = command.Variables.Keys.Except(allowedVariables, StringComparer.Ordinal).ToArray();
         if (unexpected.Length > 0)
         {
             throw new ArgumentException($"La plantilla no autoriza estas variables: {string.Join(", ", unexpected)}.", nameof(command));
