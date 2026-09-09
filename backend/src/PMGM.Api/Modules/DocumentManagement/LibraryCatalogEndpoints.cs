@@ -113,27 +113,45 @@ public static class LibraryCatalogEndpoints
     {
         var query = BuildVisibleCatalogQuery(httpContext.User, db, access);
 
-        var collections = await query
+        var collectionRows = await query
             .GroupBy(x => new { x.CollectionId, x.CollectionName })
-            .Select(group => new LibraryFacetItemDto(
-                group.Key.CollectionId.ToString(),
-                group.Key.CollectionName,
-                group.Count()))
+            .Select(group => new
+            {
+                Value = group.Key.CollectionId,
+                Label = group.Key.CollectionName,
+                Count = group.Count()
+            })
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Label)
             .Take(200)
             .ToListAsync(cancellationToken);
 
-        var documentTypes = await query
+        var collections = collectionRows
+            .Select(x => new LibraryFacetItemDto(
+                x.Value.ToString(),
+                x.Label,
+                x.Count))
+            .ToList();
+
+        var documentTypeRows = await query
             .GroupBy(x => x.DocumentType)
-            .Select(group => new LibraryFacetItemDto(
-                group.Key,
-                group.Key,
-                group.Count()))
+            .Select(group => new
+            {
+                Value = group.Key,
+                Label = group.Key,
+                Count = group.Count()
+            })
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Label)
             .Take(200)
             .ToListAsync(cancellationToken);
+
+        var documentTypes = documentTypeRows
+            .Select(x => new LibraryFacetItemDto(
+                x.Value,
+                x.Label,
+                x.Count))
+            .ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new LibraryFacetsResponse(collections, documentTypes));
