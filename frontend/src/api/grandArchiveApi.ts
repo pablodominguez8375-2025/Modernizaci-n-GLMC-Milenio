@@ -1,5 +1,5 @@
 export type GrandArchiveStatus = 'active' | 'withdrawn'
-export type GrandArchiveRecordType = 'decree' | 'communication' | 'minutes' | 'resolution' | 'regulation' | 'correspondence' | 'historical_record' | 'other'
+export type GrandArchiveRecordType = 'decree' | 'communication' | 'minute' | 'resolution' | 'regulation' | 'correspondence' | 'historical_record' | 'other'
 
 export interface GrandArchiveRecord {
   id: string
