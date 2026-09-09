@@ -75,7 +75,8 @@ $null = Get-Json $adminToken '/api/session/me' 'sesión institucional de Gran Lo
 $adminMembers = Get-Json $adminToken "/api/members?organizationId=$lodge23&limit=20" 'Membresía / Ficha de Taller'
 Assert-TransferredDegree $adminMembers 'Gran Logia'
 $null = Get-Json $adminToken '/api/candidate-publications/active' 'Portal de insinuados'
-$null = Get-Json $adminToken '/api/biblioteca' 'Biblioteca Virtual'
+# Usar la ruta canónica evita que el smoke dependa del seguimiento automático de 307.
+$null = Get-Json $adminToken '/api/biblioteca/' 'Biblioteca Virtual'
 $null = Get-Json $adminToken '/api/grand-archive/?status=active&limit=20' 'Gran Archivero'
 
 $headers = @{ Authorization = "Bearer $workshopToken"; Accept = 'application/json' }
