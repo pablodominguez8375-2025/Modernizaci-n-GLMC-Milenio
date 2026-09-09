@@ -42,7 +42,7 @@ public sealed class GrandArchivePostgreSqlTests
         var lodgeCollection = new DocumentCollection { Code = $"TL-{suffix}", Name = $"Taller {suffix}", Scope = DocumentManagementCodes.Scope.Organization, OrganizationId = lodge.Id, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = "qa" };
         var decree = Document(orderCollection, "Decreto histórico QA", "decree");
         var workPaper = Document(orderCollection, "Plancha QA", "work_paper");
-        var lodgeDocument = Document(lodgeCollection, "Acta de Taller QA", "minutes");
+        var lodgeDocument = Document(lodgeCollection, "Acta de Taller QA", "minute");
         documentDb.AddRange(orderCollection, lodgeCollection, decree, workPaper, lodgeDocument);
         await documentDb.SaveChangesAsync(cancellationToken);
 
@@ -67,7 +67,7 @@ public sealed class GrandArchivePostgreSqlTests
             null, null, null, null), actor, cancellationToken));
 
         await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.RegisterAsync(new RegisterGrandArchiveCommand(
-            lodgeDocument.Id, lodgeVersion.Id, $"GA-TL-{suffix}", GrandArchiveCodes.RecordType.Minutes,
+            lodgeDocument.Id, lodgeVersion.Id, $"GA-TL-{suffix}", GrandArchiveCodes.RecordType.Minute,
             null, null, null, null), actor, cancellationToken));
 
         var withdrawn = await service.WithdrawAsync(registered.Id, "Retiro controlado para validar trazabilidad archivística.", actor, cancellationToken);
