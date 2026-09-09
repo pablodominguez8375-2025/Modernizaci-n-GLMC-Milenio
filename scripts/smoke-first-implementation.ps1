@@ -54,6 +54,14 @@ function Get-Json([string]$Token, [string]$Path, [string]$Name) {
     return $result
 }
 
+function Assert-TransferredDegree($Payload, [string]$Actor) {
+    $row = $Payload.items | Where-Object { $_.institutionalNumber -eq 'GLM-QA-0230' } | Select-Object -First 1
+    if (-not $row) { throw 'No se encontró al miembro trasladado GLM-QA-0230 en Taller 23.' }
+    if ($row.membershipStatus -ne 'active') { throw "Membresía trasladada no está activa: $($row.membershipStatus)" }
+    if ($row.currentDegree -ne 'master') { throw "El grado maestro no acompañó el traslado: $($row.currentDegree)" }
+    Write-Host "✓ grado maestro preservado tras traslado ($Actor)" -ForegroundColor Green
+}
+
 Wait-Endpoint "$OidcUrl/.well-known/openid-configuration" 'Keycloak discovery'
 Wait-Endpoint "$BaseUrl/health/live" 'API live'
 Wait-Endpoint "$BaseUrl/health/ready" 'API ready/PostgreSQL'
@@ -64,7 +72,8 @@ $workshopToken = Get-QaToken 'qa.taller23'
 Write-Host '✓ autenticación QA mediante Keycloak' -ForegroundColor Green
 
 $null = Get-Json $adminToken '/api/session/me' 'sesión institucional de Gran Logia'
-$null = Get-Json $adminToken "/api/members?organizationId=$lodge23&limit=20" 'Membresía / Ficha de Taller'
+$adminMembers = Get-Json $adminToken "/api/members?organizationId=$lodge23&limit=20" 'Membresía / Ficha de Taller'
+Assert-TransferredDegree $adminMembers 'Gran Logia'
 $null = Get-Json $adminToken '/api/candidate-publications/active' 'Portal de insinuados'
 $null = Get-Json $adminToken '/api/biblioteca' 'Biblioteca Virtual'
 $null = Get-Json $adminToken '/api/grand-archive/?status=active&limit=20' 'Gran Archivero'
@@ -85,6 +94,9 @@ $workshopSession = Get-Json $workshopToken '/api/session/me' 'sesión institucio
 if ($workshopSession.accessScope -ne 'organization') { throw "Scope inesperado para Taller: $($workshopSession.accessScope)" }
 if ($workshopSession.capabilities.canManageLodgeOperations -ne $true) { throw 'El perfil Taller no obtuvo capacidad de Gestión Logial.' }
 Write-Host '✓ perfil Taller limitado a organization con Gestión Logial' -ForegroundColor Green
+
+$workshopMembers = Get-Json $workshopToken "/api/members?organizationId=$lodge23&limit=20" 'Membresía desde Taller destino'
+Assert-TransferredDegree $workshopMembers 'Taller destino'
 
 Write-Host ''
 Write-Host 'SMOKE FIRST IMPLEMENTATION OK' -ForegroundColor Green
