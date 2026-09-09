@@ -8,6 +8,7 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Core;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.ExecutiveReporting;
 using PMGM.Api.Modules.GrandSecretariat;
 using PMGM.Api.Modules.Hospitalaria;
 using PMGM.Api.Modules.InstitutionalCalendar;
@@ -70,6 +71,7 @@ builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>(
 builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
 builder.Services.AddScoped<IInstitutionalCalendarProjectionService, InstitutionalCalendarProjectionService>();
 builder.Services.AddScoped<IInstitutionalCalendarSourceSyncService, InstitutionalCalendarSourceSyncService>();
+builder.Services.AddScoped<IExecutiveReportingService, ExecutiveReportingService>();
 
 var app = builder.Build();
 
@@ -100,7 +102,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.20.0",
+    version = "0.25.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -112,6 +114,7 @@ app.MapOrganizationEndpoints();
 app.MapMembershipEndpoints();
 app.MapTransferEndpoints();
 app.MapRegimenInteriorEndpoints();
+app.MapExecutiveReportingEndpoints();
 app.MapTreasuryEndpoints();
 app.MapHospitalariaEndpoints();
 app.MapInstitutionalRegularityProjectionEndpoints();
