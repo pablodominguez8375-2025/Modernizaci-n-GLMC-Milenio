@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.DocumentManagement;
 using Xunit;
@@ -20,6 +22,8 @@ public sealed class LibraryCatalogHttpTests
 
         var cancellationToken = TestContext.Current.CancellationToken;
         using var factory = new DocumentManagementWebApplicationFactory(connectionString);
+        using var logCollector = new TestLogCollector();
+        factory.Services.GetRequiredService<ILoggerFactory>().AddProvider(logCollector);
         using var client = factory.CreateClient();
 
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -64,9 +68,12 @@ public sealed class LibraryCatalogHttpTests
         var searchResponse = await client.GetAsync(
             $"/api/biblioteca/buscar?q={Uri.EscapeDataString(uniqueNeedle)}&page=1&pageSize=10",
             cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
-
         var searchText = await searchResponse.Content.ReadAsStringAsync(cancellationToken);
+        Assert.True(
+            searchResponse.StatusCode == HttpStatusCode.OK,
+            $"La búsqueda de Biblioteca devolvió {(int)searchResponse.StatusCode} {searchResponse.StatusCode}. " +
+            $"Cuerpo: {searchText}{Environment.NewLine}Logs de error:{Environment.NewLine}{logCollector.Dump()}");
+
         Assert.Contains(historyDocumentId.ToString(), searchText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("objectKey", searchText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("sha256", searchText, StringComparison.OrdinalIgnoreCase);
@@ -210,5 +217,53 @@ public sealed class LibraryCatalogHttpTests
             new { targetStatus, sha256, scanReference },
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    private sealed class TestLogCollector : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<string> entries = new();
+
+        public ILogger CreateLogger(string categoryName) => new CollectorLogger(categoryName, entries);
+
+        public string Dump() => entries.IsEmpty
+            ? "(sin logs Error/Critical capturados)"
+            : string.Join(Environment.NewLine, entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CollectorLogger(
+            string categoryName,
+            ConcurrentQueue<string> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => NoopScope.Instance;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Error;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (!IsEnabled(logLevel)) return;
+
+                var message = $"[{logLevel}] {categoryName}: {formatter(state, exception)}";
+                if (exception is not null)
+                    message += Environment.NewLine + exception;
+                entries.Enqueue(message);
+            }
+        }
+
+        private sealed class NoopScope : IDisposable
+        {
+            public static NoopScope Instance { get; } = new();
+
+            public void Dispose()
+            {
+            }
+        }
     }
 }
