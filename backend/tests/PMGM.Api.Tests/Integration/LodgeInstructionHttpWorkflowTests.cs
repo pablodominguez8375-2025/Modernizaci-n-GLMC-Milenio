@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -153,7 +154,11 @@ public sealed class LodgeInstructionHttpWorkflowTests
         var correctedJson = await correctedHistory.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(1, correctedJson.GetProperty("total").GetInt32());
         var correctedItem = correctedJson.GetProperty("items")[0];
-        Assert.Equal(new DateOnly(2026, 9, 8), correctedItem.GetProperty("instructionDate").GetDateOnly());
+        var instructionDateText = correctedItem.GetProperty("instructionDate").GetString();
+        Assert.NotNull(instructionDateText);
+        Assert.Equal(
+            new DateOnly(2026, 9, 8),
+            DateOnly.ParseExact(instructionDateText!, "yyyy-MM-dd", CultureInfo.InvariantCulture));
         Assert.Equal(topic, correctedItem.GetProperty("topic").GetString());
         Assert.True(correctedItem.GetProperty("attended").GetBoolean());
         Assert.Equal(LodgeManagementCodes.InstructionAttendanceStatus.Present, correctedItem.GetProperty("status").GetString());
