@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Notifications.Entities;
 
@@ -19,6 +20,19 @@ public sealed class InstitutionalNotificationService(NotificationDbContext db) :
         if (string.IsNullOrWhiteSpace(command.IdempotencyKey))
         {
             throw new ArgumentException("La clave de idempotencia es obligatoria.", nameof(command));
+        }
+
+        if (string.IsNullOrWhiteSpace(command.TemplateCode) ||
+            string.IsNullOrWhiteSpace(command.TypeCode) ||
+            string.IsNullOrWhiteSpace(command.RecipientSubject))
+        {
+            throw new ArgumentException("Plantilla, tipo y destinatario son obligatorios.", nameof(command));
+        }
+
+        if (!string.IsNullOrWhiteSpace(command.ActionUrl) &&
+            (!command.ActionUrl.StartsWith('/', StringComparison.Ordinal) || command.ActionUrl.StartsWith("//", StringComparison.Ordinal)))
+        {
+            throw new ArgumentException("La URL de acción debe ser una ruta interna relativa a la aplicación.", nameof(command));
         }
 
         var existing = await db.NotificationMessages
@@ -113,8 +127,32 @@ public sealed class InstitutionalNotificationService(NotificationDbContext db) :
         }
 
         db.NotificationMessages.Add(message);
-        await db.SaveChangesAsync(cancellationToken);
-        return new QueueNotificationResult(message.Id, true);
+
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            return new QueueNotificationResult(message.Id, true);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation
+        })
+        {
+            // Dos productores pueden observar la ausencia de la misma clave al mismo tiempo.
+            // La restricción única es la autoridad final: tras perder la carrera, descartamos
+            // el grafo fallido y devolvemos el mensaje que ganó sin duplicar entregas.
+            db.ChangeTracker.Clear();
+            var winner = await db.NotificationMessages
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.IdempotencyKey == command.IdempotencyKey, cancellationToken);
+
+            if (winner is null)
+            {
+                throw;
+            }
+
+            return new QueueNotificationResult(winner.Id, false);
+        }
     }
 
     private static string Render(string template, IReadOnlyDictionary<string, string?> variables)
