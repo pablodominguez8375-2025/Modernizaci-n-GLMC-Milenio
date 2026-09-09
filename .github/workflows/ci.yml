@@ -193,6 +193,12 @@ jobs:
           docker run -d --name pmgm-api-placeholder --network pmgm-nginx-ci --network-alias api nginx:stable-alpine
           docker run --rm --network pmgm-nginx-ci pmgm-web-ci nginx -t
 
+      - name: Build standalone showcase container
+        run: docker build -f frontend/Dockerfile.showcase -t pmgm-showcase-ci frontend
+
+      - name: Validate showcase Nginx configuration
+        run: docker run --rm pmgm-showcase-ci nginx -t
+
   infrastructure-validate:
     name: Infrastructure configuration
     runs-on: ubuntu-latest
@@ -210,3 +216,6 @@ jobs:
           MINIO_ACCESS_KEY: ci_qa_storage
           MINIO_SECRET_KEY: ci_qa_storage_secret_only
         run: docker compose -f infrastructure/docker-compose.qa.yml config
+
+      - name: Validate standalone showcase Docker Compose
+        run: docker compose -f infrastructure/docker-compose.showcase.yml config
