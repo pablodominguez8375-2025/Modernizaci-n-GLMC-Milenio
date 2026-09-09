@@ -102,7 +102,9 @@ admin_members=$(json_get "$admin_token" "/api/members?organizationId=$LODGE23&li
 assert_transferred_degree "$admin_members" 'Gran Logia'
 printf '✓ Membresía / Ficha de Taller\n'
 assert_json_get "$admin_token" '/api/candidate-publications/active' 'Portal de insinuados'
-assert_json_get "$admin_token" '/api/biblioteca' 'Biblioteca Virtual'
+# MapGroup de Biblioteca usa la ruta canónica con barra final; no seguimos redirecciones
+# para que el smoke detecte cambios accidentales en el contrato HTTP.
+assert_json_get "$admin_token" '/api/biblioteca/' 'Biblioteca Virtual'
 assert_json_get "$admin_token" '/api/grand-archive/?status=active&limit=20' 'Gran Archivero'
 
 workshop_archive_status=$(curl -sS --max-time 20 -o /tmp/pmgm-workshop-archive.json -w '%{http_code}' \
