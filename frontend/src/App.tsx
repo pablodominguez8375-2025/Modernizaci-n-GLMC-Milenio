@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import CalendarPage from './CalendarPage'
 import CeremoniesPage from './CeremoniesPage'
 import DashboardPage from './DashboardPage'
+import DataQualityCaseQueuePage from './DataQualityCaseQueuePage'
 import DocumentManagementPage from './DocumentManagementPage'
 import ExecutiveReportingPage from './ExecutiveReportingPage'
 import GrandSecretariatPage from './GrandSecretariatPage'
@@ -15,6 +16,7 @@ import NotificationsPage from './NotificationsPage'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
 import { type CalendarApiClient } from './api/calendarApi'
+import { type DataQualityCaseApiClient } from './api/dataQualityCaseApi'
 import { type DocumentApiClient } from './api/documentApi'
 import { type InternalAffairsApiClient } from './api/internalAffairsApi'
 import { type LodgeApiClient } from './api/lodgeApi'
@@ -24,10 +26,10 @@ import { type OrganizationProfileApiClient } from './api/organizationProfileApi'
 import { type PmgmApiClient, type CandidatePublication, type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
 import { type ReportingApiClient } from './api/reportingApi'
 
-type View = 'dashboard' | 'candidates' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
+type View = 'dashboard' | 'candidates' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean }
 
-export default function App({ api, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, documentApi, calendarApi, notificationApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; membershipApi: MembershipApiClient; organizationProfileApi: OrganizationProfileApiClient; reportingApi: ReportingApiClient; internalAffairsApi: InternalAffairsApiClient; documentApi: DocumentApiClient; calendarApi: CalendarApiClient; notificationApi: NotificationApiClient; onLogout?: () => void }) {
+export default function App({ api, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, calendarApi, notificationApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; membershipApi: MembershipApiClient; organizationProfileApi: OrganizationProfileApiClient; reportingApi: ReportingApiClient; internalAffairsApi: InternalAffairsApiClient; dataQualityCaseApi: DataQualityCaseApiClient; documentApi: DocumentApiClient; calendarApi: CalendarApiClient; notificationApi: NotificationApiClient; onLogout?: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -38,10 +40,7 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
   useEffect(() => {
     let active = true
     Promise.all([api.getCandidatePortal(), api.getSystemInfo(), api.getSessionProfile()])
-      .then(([portalResponse, systemResponse, session]) => {
-        if (!active) return
-        setPortal(portalResponse); setSystemInfo(systemResponse); setProfile(session)
-      })
+      .then(([portalResponse, systemResponse, session]) => { if (!active) return; setPortal(portalResponse); setSystemInfo(systemResponse); setProfile(session) })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible cargar la plataforma.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -57,6 +56,7 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
   const canReporting = api.useMocks || canRegimen
   const canMemberControl = api.useMocks || canRegimen
   const canDataQuality = api.useMocks || canRegimen
+  const canCaseQueue = api.useMocks || canRegimen
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
@@ -65,17 +65,7 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
   const canDocuments = api.useMocks || (capabilities?.canManageDocuments ?? false)
 
   return <div className="app-shell">
-    <header className="topbar">
-      <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Ir al inicio"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button>
-      <div className="topbar-meta">
-        {api.useMocks && <span className="demo-badge">QA demostración</span>}
-        {profile && <span className="environment-badge">{profile.displayName}</span>}
-        {canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}
-        {onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}
-        <span className="environment-badge">{api.useMocks ? 'UI QA v0.27' : `API v${systemInfo?.version ?? '—'}`}</span>
-      </div>
-    </header>
-
+    <header className="topbar"><button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Ir al inicio"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button><div className="topbar-meta">{api.useMocks && <span className="demo-badge">QA demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.28' : `API v${systemInfo?.version ?? '—'}`}</span></div></header>
     <div className="workspace">
       <nav className="sidebar" aria-label="Navegación principal">
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('dashboard')}><span aria-hidden="true">⌂</span> Inicio</button>
@@ -86,6 +76,7 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
         <ModuleAccess icon="▧" label="Reportería Ejecutiva" allowed={canReporting} active={view === 'reporting'} onOpen={canReporting ? () => setView('reporting') : undefined} />
         <ModuleAccess icon="⊙" label="Control de miembros" allowed={canMemberControl} active={view === 'memberControl'} onOpen={canMemberControl ? () => setView('memberControl') : undefined} />
         <ModuleAccess icon="△" label="Calidad de datos" allowed={canDataQuality} active={view === 'dataQuality'} onOpen={canDataQuality ? () => setView('dataQuality') : undefined} />
+        <ModuleAccess icon="✓" label="Cola de corroboración" allowed={canCaseQueue} active={view === 'caseQueue'} onOpen={canCaseQueue ? () => setView('caseQueue') : undefined} />
         <ModuleAccess icon="▣" label="Calendario" allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="◉" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />
         <ModuleAccess icon="◇" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
@@ -99,7 +90,6 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
         <ModuleAccess icon="▥" label="Biblioteca Virtual" allowed={canLibrary} active={view === 'library'} onOpen={canLibrary ? () => setView('library') : undefined} />
         <ModuleAccess icon="▦" label="Gestor Documental" allowed={canDocuments} active={view === 'documents'} onOpen={canDocuments ? () => setView('documents') : undefined} />
       </nav>
-
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
         {view === 'dashboard' && <DashboardPage portal={portal} systemInfo={systemInfo} profile={profile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
@@ -108,7 +98,8 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
-        {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} />}
+        {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} caseApi={dataQualityCaseApi} onOpenCases={() => setView('caseQueue')} />}
+        {view === 'caseQueue' && canCaseQueue && <DataQualityCaseQueuePage api={api} caseApi={dataQualityCaseApi} />}
         {view === 'notifications' && canNotifications && <NotificationsPage notificationApi={notificationApi} />}
         {view === 'calendar' && canCalendar && <CalendarPage api={api} calendarApi={calendarApi} canManage={canSecretariat} />}
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
@@ -124,23 +115,9 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
   </div>
 }
 
-function ModuleAccess({ icon, label, allowed, active = false, onOpen }: { icon: string; label: string; allowed: boolean; active?: boolean; onOpen?: () => void }) {
-  if (allowed && onOpen) return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen}><span aria-hidden="true">{icon}</span> {label} <em>autorizado</em></button>
-  return <span className={allowed ? 'nav-item' : 'nav-item disabled'}><span aria-hidden="true">{icon}</span> {label} <em>{allowed ? 'autorizado' : 'sin acceso'}</em></span>
-}
-
-function CandidatePortal({ portal, loading }: { portal: CandidatePortalResponse | null; loading: boolean }) {
-  const [query, setQuery] = useState('')
-  const filtered = useMemo(() => { const normalized = normalize(query); return !normalized ? portal?.items ?? [] : (portal?.items ?? []).filter(item => normalize(`${item.displayName} ${item.workshopName} ${item.workshopNumber ?? ''}`).includes(normalized)) }, [portal, query])
-  return <><section className="page-heading"><div><p className="eyebrow">Transparencia institucional controlada</p><h1>Insinuados en período de publicación</h1><p>Publicaciones vigentes según el plazo configurado para solicitudes de iniciación.</p></div><span className="count-badge">{loading ? '…' : `${filtered.length} registros`}</span></section><section className="panel"><label className="search-field"><span>Buscar por nombre o Taller</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ej.: Taller 23" /></label>{loading ? <LoadingRows /> : filtered.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong></div> : <div className="candidate-list">{filtered.map(candidate => <CandidateCard key={`${candidate.displayName}-${candidate.publishedFromUtc}`} candidate={candidate} />)}</div>}</section></>
-}
-
-function CandidateCard({ candidate }: { candidate: CandidatePublication }) {
-  const percentage = Math.min(100, Math.round(candidate.elapsedDays / Math.max(1, candidate.requiredDays) * 100))
-  const complete = candidate.elapsedDays >= candidate.requiredDays
-  return <article className="candidate-card"><div className="candidate-avatar">{initials(candidate.displayName)}</div><div className="candidate-main"><div className="candidate-title-row"><div><h3>{candidate.displayName}</h3><p>{candidate.workshopName}{candidate.workshopNumber ? ` · Nº ${candidate.workshopNumber}` : ''}</p></div><span className={complete ? 'status-pill complete' : 'status-pill active'}>{complete ? 'Plazo cumplido' : 'En publicación'}</span></div><div className="progress-row"><div className="progress-track" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percentage}%` }} /></div><strong>{candidate.elapsedDays}/{candidate.requiredDays} días</strong></div><dl className="candidate-meta"><div><dt>Publicado</dt><dd>{formatDate(candidate.publishedFromUtc)}</dd></div><div><dt>Cumplimiento</dt><dd>{formatDate(candidate.complianceDateUtc)}</dd></div></dl></div></article>
-}
-
+function ModuleAccess({ icon, label, allowed, active = false, onOpen }: { icon: string; label: string; allowed: boolean; active?: boolean; onOpen?: () => void }) { if (allowed && onOpen) return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen}><span aria-hidden="true">{icon}</span> {label} <em>autorizado</em></button>; return <span className={allowed ? 'nav-item' : 'nav-item disabled'}><span aria-hidden="true">{icon}</span> {label} <em>{allowed ? 'autorizado' : 'sin acceso'}</em></span> }
+function CandidatePortal({ portal, loading }: { portal: CandidatePortalResponse | null; loading: boolean }) { const [query, setQuery] = useState(''); const filtered = useMemo(() => { const normalized = normalize(query); return !normalized ? portal?.items ?? [] : (portal?.items ?? []).filter(item => normalize(`${item.displayName} ${item.workshopName} ${item.workshopNumber ?? ''}`).includes(normalized)) }, [portal, query]); return <><section className="page-heading"><div><p className="eyebrow">Transparencia institucional controlada</p><h1>Insinuados en período de publicación</h1><p>Publicaciones vigentes según el plazo configurado para solicitudes de iniciación.</p></div><span className="count-badge">{loading ? '…' : `${filtered.length} registros`}</span></section><section className="panel"><label className="search-field"><span>Buscar por nombre o Taller</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ej.: Taller 23" /></label>{loading ? <LoadingRows /> : filtered.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong></div> : <div className="candidate-list">{filtered.map(candidate => <CandidateCard key={`${candidate.displayName}-${candidate.publishedFromUtc}`} candidate={candidate} />)}</div>}</section></> }
+function CandidateCard({ candidate }: { candidate: CandidatePublication }) { const percentage = Math.min(100, Math.round(candidate.elapsedDays / Math.max(1, candidate.requiredDays) * 100)); const complete = candidate.elapsedDays >= candidate.requiredDays; return <article className="candidate-card"><div className="candidate-avatar">{initials(candidate.displayName)}</div><div className="candidate-main"><div className="candidate-title-row"><div><h3>{candidate.displayName}</h3><p>{candidate.workshopName}{candidate.workshopNumber ? ` · Nº ${candidate.workshopNumber}` : ''}</p></div><span className={complete ? 'status-pill complete' : 'status-pill active'}>{complete ? 'Plazo cumplido' : 'En publicación'}</span></div><div className="progress-row"><div className="progress-track" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percentage}%` }} /></div><strong>{candidate.elapsedDays}/{candidate.requiredDays} días</strong></div><dl className="candidate-meta"><div><dt>Publicado</dt><dd>{formatDate(candidate.publishedFromUtc)}</dd></div><div><dt>Cumplimiento</dt><dd>{formatDate(candidate.complianceDateUtc)}</dd></div></dl></div></article> }
 function LoadingRows() { return <div className="loading-rows"><span /><span /><span /></div> }
 function ErrorBanner({ message }: { message: string }) { return <div className="error-banner" role="alert"><strong>No fue posible conectar con la información institucional.</strong><span>{message}</span></div> }
 function normalize(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
