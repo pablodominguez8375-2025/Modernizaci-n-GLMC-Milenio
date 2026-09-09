@@ -3,10 +3,35 @@ import { type DataQualityIssue, type DataQualityResponse, type InternalAffairsAp
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsDataQuality.css'
 
+const RULE_LABELS: Record<string, string> = {
+  invalid_membership_range: 'Rango de afiliación inválido',
+  multiple_current_memberships: 'Más de una afiliación vigente',
+  overlapping_workshop_memberships: 'Afiliaciones de Taller superpuestas',
+  active_status_without_current_membership: 'Estado activo sin afiliación vigente',
+  missing_initiation_before_wage_increase: 'Aumento sin iniciación registrada',
+  missing_wage_increase_before_exaltation: 'Exaltación sin aumento registrado',
+  wage_increase_before_initiation: 'Aumento anterior a iniciación',
+  exaltation_before_wage_increase: 'Exaltación anterior al aumento',
+  duplicate_degree_milestone: 'Hito de grado duplicado',
+  reinstatement_without_prior_withdrawal: 'Reintegro sin retiro previo',
+  consecutive_withdrawals_without_reinstatement: 'Retiros consecutivos sin reintegro',
+  status_event_after_death: 'Evento institucional posterior a defunción',
+  degree_event_after_death: 'Grado posterior a defunción',
+  office_after_death: 'Cargo posterior a defunción',
+  active_membership_after_death: 'Afiliación vigente tras defunción',
+  invalid_office_range: 'Período de cargo inválido',
+  transfer_same_source_and_target: 'Traslado con mismo origen y destino',
+  transfer_effective_before_request: 'Traslado efectivo antes de solicitud',
+  approved_transfer_before_request: 'Traslado aprobado antes de solicitud',
+  executed_transfer_without_target_membership: 'Traslado sin afiliación destino',
+  target_membership_date_mismatch: 'Fecha de destino no coincide con traslado',
+  transfer_outside_source_membership: 'Traslado fuera de afiliación origen',
+}
+
 export default function InternalAffairsDataQualityPage({ api, internalAffairsApi }: { api: PmgmApiClient; internalAffairsApi: InternalAffairsApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
-  const [asOf, setAsOf] = useState('2026-09-09')
+  const [asOf, setAsOf] = useState(todayInSantiago())
   const [severity, setSeverity] = useState('')
   const [code, setCode] = useState('')
   const [search, setSearch] = useState('')
@@ -101,5 +126,10 @@ function Metric({ label, value, detail, tone }: { label: string; value: string; 
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function dateLabel(value: string | null) { return value ? new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) : '—' }
-function ruleLabel(value: string) { return value.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') }
+function ruleLabel(value: string) { return RULE_LABELS[value] ?? value.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') }
+function todayInSantiago() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date())
+  const map = Object.fromEntries(parts.map(part => [part.type, part.value]))
+  return `${map.year}-${map.month}-${map.day}`
+}
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'No fue posible completar la operación.' }
