@@ -1,5 +1,5 @@
 {
-  "version": "0.2",
+  "version": "0.3",
   "law": "Chile Ley 21.719",
   "effectiveDate": "2026-12-01",
   "treatments": [
@@ -100,6 +100,17 @@
       "accessControlStatus": "document_purpose_rbac_minimized_library_projection",
       "containsSensitiveData": true,
       "owner": "Gestión Documental / Biblioteca Virtual",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-010",
+      "module": "Notificaciones institucionales",
+      "purpose": "Entregar avisos institucionales trazables al destinatario autorizado mediante bandeja interna y, cuando corresponda, correo institucional, minimizando datos y evitando duplicidades.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "recipient_subject_scope_and_grand_secretariat_rbac",
+      "containsSensitiveData": true,
+      "owner": "Gran Secretaría / Privacidad",
       "legalReviewRequired": true
     }
   ]
