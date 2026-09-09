@@ -16,6 +16,7 @@ public static class InstitutionalRoles
     public const string GranSecretaria = "grand_secretariat";
     public const string GranTesoreria = "grand_treasury";
     public const string GranHospitalaria = "grand_hospitalaria";
+    public const string GrandArchivist = "grand_archivist";
     public const string PrivacyOfficer = "privacy_officer";
     public const string DocumentManager = "document_manager";
     public const string TallerAdmin = "lodge_admin";
@@ -34,6 +35,7 @@ public interface IInstitutionalAccessService
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
     bool CanManageTreasuryRegularity(ClaimsPrincipal user);
     bool CanManageHospitalariaRegularity(ClaimsPrincipal user);
+    bool CanManageGrandArchive(ClaimsPrincipal user);
     bool CanReadInstitutionalRegularity(ClaimsPrincipal user);
     bool CanEvaluateCeremonies(ClaimsPrincipal user);
     bool CanReviewCeremonies(ClaimsPrincipal user, Guid organizationId);
@@ -68,6 +70,7 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
                 InstitutionalRoles.GranSecretaria,
                 InstitutionalRoles.GranTesoreria,
                 InstitutionalRoles.GranHospitalaria,
+                InstitutionalRoles.GrandArchivist,
                 InstitutionalRoles.PrivacyOfficer))
         {
             return true;
@@ -111,6 +114,10 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     public bool CanManageHospitalariaRegularity(ClaimsPrincipal user)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranHospitalaria);
+
+    public bool CanManageGrandArchive(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GrandArchivist);
 
     public bool CanReadInstitutionalRegularity(ClaimsPrincipal user)
         => HasOrderScope(user) &&

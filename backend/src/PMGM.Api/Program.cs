@@ -9,6 +9,7 @@ using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Core;
 using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.ExecutiveReporting;
+using PMGM.Api.Modules.GrandArchive;
 using PMGM.Api.Modules.GrandSecretariat;
 using PMGM.Api.Modules.Hospitalaria;
 using PMGM.Api.Modules.InstitutionalCalendar;
@@ -49,6 +50,7 @@ builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
     options.UseNpgsql(mainConnectionString)
         .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
 builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<GrandArchiveDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<RegimenInteriorDbContext>(options => options.UseNpgsql(mainConnectionString));
@@ -76,6 +78,7 @@ builder.Services.AddScoped<IExecutiveReportingService, ExecutiveReportingService
 builder.Services.AddScoped<IRegimenInteriorMemberControlService, RegimenInteriorMemberControlService>();
 builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
 builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
+builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
 
 var app = builder.Build();
 
@@ -84,6 +87,10 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
     await db.Database.MigrateAsync();
+    var documentDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+    await documentDb.Database.MigrateAsync();
+    var grandArchiveDb = scope.ServiceProvider.GetRequiredService<GrandArchiveDbContext>();
+    await grandArchiveDb.Database.MigrateAsync();
     var notificationDb = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
     await notificationDb.Database.MigrateAsync();
     var calendarDb = scope.ServiceProvider.GetRequiredService<CalendarDbContext>();
@@ -108,7 +115,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.28.0",
+    version = "0.29.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -141,6 +148,7 @@ app.MapDocumentContentEndpoints();
 app.MapDocumentContentRecoveryEndpoints();
 app.MapLibraryCatalogEndpoints();
 app.MapLibraryAccessPolicyEndpoints();
+app.MapGrandArchiveEndpoints();
 app.MapNotificationEndpoints();
 app.MapInstitutionalCalendarEndpoints();
 app.MapInstitutionalCalendarSourceEndpoints();

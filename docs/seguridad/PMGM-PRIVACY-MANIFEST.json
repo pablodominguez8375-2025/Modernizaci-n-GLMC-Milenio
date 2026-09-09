@@ -1,5 +1,5 @@
 {
-  "version": "0.4",
+  "version": "0.5",
   "law": "Chile Ley 21.719",
   "effectiveDate": "2026-12-01",
   "treatments": [
@@ -122,6 +122,17 @@
       "accessControlStatus": "rbac_scope_minimized_calendar_projection_and_authorized_ics_export",
       "containsSensitiveData": true,
       "owner": "Gran Secretaría / Privacidad",
+      "legalReviewRequired": true
+    },
+    {
+      "code": "PMGM-DPA-012",
+      "module": "Gran Archivero",
+      "purpose": "Conservar y gestionar el archivo histórico documental de Gran Logia mediante metadatos archivísticos y referencias a versiones documentales íntegras, sin duplicar archivos ni incorporar planchas de trabajo o documentación de Taller.",
+      "lawfulBasisStatus": "pending_legal_review",
+      "retentionPolicyStatus": "defined_in_system",
+      "accessControlStatus": "grand_archivist_order_scope_rbac",
+      "containsSensitiveData": true,
+      "owner": "Gran Archivero / Privacidad",
       "legalReviewRequired": true
     }
   ]
