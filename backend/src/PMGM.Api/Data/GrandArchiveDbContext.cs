@@ -22,6 +22,9 @@ public sealed class GrandArchiveDbContext(DbContextOptions<GrandArchiveDbContext
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.CreatedByDisplayName).HasMaxLength(320);
+            entity.Property(x => x.WithdrawnBySubject).HasMaxLength(320);
+            entity.Property(x => x.WithdrawnByDisplayName).HasMaxLength(320);
+            entity.Property(x => x.WithdrawalReason).HasMaxLength(500);
             entity.Property(x => x.ArchivedAtUtc).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.Property(x => x.UpdatedAtUtc).IsRequired();
