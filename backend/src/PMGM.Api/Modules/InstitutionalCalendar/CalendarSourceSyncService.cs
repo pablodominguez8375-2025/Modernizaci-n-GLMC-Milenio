@@ -57,9 +57,13 @@ public sealed class InstitutionalCalendarSourceSyncService(
         var ceremonies = await institutionalDb.CeremonyRequests.AsNoTracking().ToListAsync(cancellationToken);
         foreach (var ceremony in ceremonies)
         {
+            var sourceEntityId = ceremony.Id.ToString("N");
             if (ceremony.ProposedDate is null)
             {
-                skipped++;
+                var cancelledExisting = await CancelExistingProjectionAsync(
+                    "ceremonies", "ceremony-request", sourceEntityId, cancellationToken);
+                if (cancelledExisting) updated++;
+                else skipped++;
                 continue;
             }
 
@@ -67,7 +71,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
             var result = await UpsertAsync(
                 sourceModule: "ceremonies",
                 sourceEntityType: "ceremony-request",
-                sourceEntityId: ceremony.Id.ToString("N"),
+                sourceEntityId: sourceEntityId,
                 title: $"Ceremonia — {ceremony.CeremonyType}",
                 eventType: "ceremony_day",
                 startsAtUtc: startUtc,
@@ -192,6 +196,27 @@ public sealed class InstitutionalCalendarSourceSyncService(
         existing.OccupancyOnlyWhenRestricted = occupancyOnlyWhenRestricted;
         existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
         return false;
+    }
+
+    private async Task<bool> CancelExistingProjectionAsync(
+        string sourceModule,
+        string sourceEntityType,
+        string sourceEntityId,
+        CancellationToken cancellationToken)
+    {
+        var existing = await calendarDb.CalendarEvents.SingleOrDefaultAsync(
+            x => x.SourceModule == sourceModule &&
+                 x.SourceEntityType == sourceEntityType &&
+                 x.SourceEntityId == sourceEntityId,
+            cancellationToken);
+        if (existing is null)
+        {
+            return false;
+        }
+
+        existing.Status = CalendarCodes.Status.Cancelled;
+        existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        return true;
     }
 
     private static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) ToInstitutionalDay(DateOnly date)
