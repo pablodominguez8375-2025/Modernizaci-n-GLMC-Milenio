@@ -165,16 +165,18 @@ public static class LibraryCatalogEndpoints
                 on document.PublishedVersionId equals (Guid?)version.Id
             where version.DocumentId == document.Id &&
                   version.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Available
-            select new LibraryCatalogQueryRow(
-                document.Id,
-                document.Title,
-                document.DocumentType,
-                collection.Id,
-                collection.Name,
-                version.VersionNumber,
-                version.ContentType,
-                version.SizeBytes,
-                document.PublishedAtUtc!.Value);
+            select new LibraryCatalogQueryRow
+            {
+                Id = document.Id,
+                Title = document.Title,
+                DocumentType = document.DocumentType,
+                CollectionId = collection.Id,
+                CollectionName = collection.Name,
+                VersionNumber = version.VersionNumber,
+                ContentType = version.ContentType,
+                SizeBytes = version.SizeBytes,
+                PublishedAtUtc = document.PublishedAtUtc!.Value
+            };
     }
 
     private static HashSet<Guid> GetOrganizationIds(ClaimsPrincipal user)
@@ -195,16 +197,18 @@ public static class LibraryCatalogEndpoints
     private static bool IsValidYear(int? year)
         => year is null or >= 1600 and <= 2100;
 
-    private sealed record LibraryCatalogQueryRow(
-        Guid Id,
-        string Title,
-        string DocumentType,
-        Guid CollectionId,
-        string CollectionName,
-        int VersionNumber,
-        string ContentType,
-        long SizeBytes,
-        DateTimeOffset PublishedAtUtc);
+    private sealed class LibraryCatalogQueryRow
+    {
+        public Guid Id { get; init; }
+        public required string Title { get; init; }
+        public required string DocumentType { get; init; }
+        public Guid CollectionId { get; init; }
+        public required string CollectionName { get; init; }
+        public int VersionNumber { get; init; }
+        public required string ContentType { get; init; }
+        public long SizeBytes { get; init; }
+        public DateTimeOffset PublishedAtUtc { get; init; }
+    }
 }
 
 public sealed record LibraryCatalogItemDto(
