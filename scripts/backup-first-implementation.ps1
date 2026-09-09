@@ -17,10 +17,7 @@ function Import-PmgmEnv([string]$Path) {
 }
 
 function Invoke-Compose {
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Arguments
-    )
+    param([Parameter(Mandatory = $true)][string[]]$Arguments)
     & docker @script:composeArgs @Arguments
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose falló con código $LASTEXITCODE: $($Arguments -join ' ')"
@@ -72,19 +69,29 @@ New-Item -ItemType Directory -Path (Join-Path $OutputPath 'objects/pmgm-document
 try {
     if ($resume.Count -gt 0) {
         Write-Host 'Pausando escrituras (api/web)...'
-        Invoke-Compose stop @resume | Out-Null
+        Invoke-Compose -Arguments (@('stop') + @($resume)) | Out-Null
     }
 
     Write-Host 'Respaldando PostgreSQL...'
     $tmpDump = '/tmp/pmgm-first-backup.dump'
-    Invoke-Compose exec -T postgres rm -f $tmpDump | Out-Null
-    Invoke-Compose exec -T postgres pg_dump -U pmgm_app -d pmgm --format=custom --no-owner --no-privileges --file=$tmpDump | Out-Null
-    Invoke-Compose cp "postgres:$tmpDump" (Join-Path $OutputPath 'database/pmgm.dump') | Out-Null
-    Invoke-Compose exec -T postgres rm -f $tmpDump | Out-Null
+    Invoke-Compose -Arguments @('exec', '-T', 'postgres', 'rm', '-f', $tmpDump) | Out-Null
+    Invoke-Compose -Arguments @(
+        'exec', '-T', 'postgres', 'pg_dump',
+        '-U', 'pmgm_app', '-d', 'pmgm',
+        '--format=custom', '--no-owner', '--no-privileges', "--file=$tmpDump"
+    ) | Out-Null
+    Invoke-Compose -Arguments @('cp', "postgres:$tmpDump", (Join-Path $OutputPath 'database/pmgm.dump')) | Out-Null
+    Invoke-Compose -Arguments @('exec', '-T', 'postgres', 'rm', '-f', $tmpDump) | Out-Null
 
     Write-Host 'Respaldando documentos MinIO por API S3...'
     $objectsPath = Join-Path $OutputPath 'objects'
-    Invoke-Compose run --rm -T --no-deps -v "${objectsPath}:/backup" --entrypoint /bin/sh minio-init -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mkdir -p /backup/pmgm-documents; mc mirror --overwrite pmgm/pmgm-documents /backup/pmgm-documents' | Out-Null
+    $minioBackupScript = 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mkdir -p /backup/pmgm-documents; mc mirror --overwrite pmgm/pmgm-documents /backup/pmgm-documents'
+    Invoke-Compose -Arguments @(
+        'run', '--rm', '-T', '--no-deps',
+        '-v', "${objectsPath}:/backup",
+        '--entrypoint', '/bin/sh',
+        'minio-init', '-c', $minioBackupScript
+    ) | Out-Null
 
     $sourceCommit = 'unknown'
     try {
@@ -124,7 +131,7 @@ try {
 finally {
     if ($resume.Count -gt 0) {
         Write-Host 'Reanudando servicios...'
-        try { Invoke-Compose up -d @resume | Out-Null } catch { Write-Warning $_ }
+        try { Invoke-Compose -Arguments (@('up', '-d') + @($resume)) | Out-Null } catch { Write-Warning $_ }
     }
 }
 
