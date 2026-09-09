@@ -85,6 +85,11 @@ public sealed class CalendarSourceProjectionInterceptor(
                 var ceremony = entry.Entity;
                 if (ceremony.ProposedDate is null)
                 {
+                    snapshots.Add(SourceSnapshot.Cancel(
+                        "ceremonies",
+                        "ceremony-request",
+                        ceremony.Id.ToString("N"),
+                        ceremony.OrganizationId));
                     continue;
                 }
 
@@ -100,6 +105,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     ceremony.OrganizationId,
                     CalendarCodes.Visibility.Restricted,
                     MapCeremonyStatus(ceremony.Status),
+                    false,
                     false));
             }
         }
@@ -121,6 +127,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     meeting.OrganizationId,
                     CalendarCodes.Visibility.Lodge,
                     MapMeetingStatus(meeting.Status),
+                    false,
                     false));
             }
 
@@ -142,6 +149,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled
                         ? CalendarCodes.Status.Cancelled
                         : CalendarCodes.Status.Completed,
+                    false,
                     false));
             }
         }
@@ -169,14 +177,24 @@ public sealed class CalendarSourceProjectionInterceptor(
                          x.SourceEntityId == snapshot.SourceEntityId,
                     cancellationToken);
 
+                if (snapshot.CancelOnly)
+                {
+                    if (existing is not null)
+                    {
+                        existing.Status = CalendarCodes.Status.Cancelled;
+                        existing.UpdatedAtUtc = DateTimeOffset.UtcNow;
+                    }
+                    continue;
+                }
+
                 if (existing is null)
                 {
                     calendarDb.CalendarEvents.Add(new InstitutionalCalendarEvent
                     {
                         Title = snapshot.Title,
                         EventType = snapshot.EventType,
-                        StartsAtUtc = snapshot.StartsAtUtc,
-                        EndsAtUtc = snapshot.EndsAtUtc,
+                        StartsAtUtc = snapshot.StartsAtUtc!.Value,
+                        EndsAtUtc = snapshot.EndsAtUtc!.Value,
                         OrganizationId = snapshot.OrganizationId,
                         ScopeType = CalendarCodes.ScopeType.Lodge,
                         Visibility = snapshot.Visibility,
@@ -192,8 +210,8 @@ public sealed class CalendarSourceProjectionInterceptor(
                 {
                     existing.Title = snapshot.Title;
                     existing.EventType = snapshot.EventType;
-                    existing.StartsAtUtc = snapshot.StartsAtUtc;
-                    existing.EndsAtUtc = snapshot.EndsAtUtc;
+                    existing.StartsAtUtc = snapshot.StartsAtUtc!.Value;
+                    existing.EndsAtUtc = snapshot.EndsAtUtc!.Value;
                     existing.OrganizationId = snapshot.OrganizationId;
                     existing.ScopeType = CalendarCodes.ScopeType.Lodge;
                     existing.Visibility = snapshot.Visibility;
@@ -248,10 +266,31 @@ public sealed class CalendarSourceProjectionInterceptor(
         string SourceEntityId,
         string Title,
         string EventType,
-        DateTimeOffset StartsAtUtc,
-        DateTimeOffset EndsAtUtc,
+        DateTimeOffset? StartsAtUtc,
+        DateTimeOffset? EndsAtUtc,
         Guid OrganizationId,
         string Visibility,
         string Status,
-        bool OccupancyOnlyWhenRestricted);
+        bool OccupancyOnlyWhenRestricted,
+        bool CancelOnly)
+    {
+        public static SourceSnapshot Cancel(
+            string sourceModule,
+            string sourceEntityType,
+            string sourceEntityId,
+            Guid organizationId)
+            => new(
+                sourceModule,
+                sourceEntityType,
+                sourceEntityId,
+                string.Empty,
+                string.Empty,
+                null,
+                null,
+                organizationId,
+                CalendarCodes.Visibility.Restricted,
+                CalendarCodes.Status.Cancelled,
+                false,
+                true);
+    }
 }
