@@ -5,7 +5,6 @@ export interface DataQualityCaseEvent {
   action: string
   fromStatus: string | null
   toStatus: string
-  actorSubject: string
   actorDisplayName: string | null
   occurredAtUtc: string
 }
@@ -23,15 +22,13 @@ export interface DataQualityCase {
   primaryDate: string | null
   relatedDate: string | null
   status: string
-  assignedToSubject: string | null
   assignedToDisplayName: string | null
-  createdBySubject: string
+  assignedToCurrentUser: boolean
   createdByDisplayName: string | null
   createdAtUtc: string
   updatedAtUtc: string
   resolutionSummary: string | null
   evidenceReference: string | null
-  resolvedBySubject: string | null
   resolvedAtUtc: string | null
   events: DataQualityCaseEvent[]
 }
@@ -130,12 +127,11 @@ export function createDefaultDataQualityCaseApiClient(getAccessToken?: DataQuali
   return new DataQualityCaseApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized })
 }
 
-const QA_SUBJECT = 'qa-regimen-reviewer'
 let sequence = 10
 let mockCases: DataQualityCase[] = [
-  seedCase('case-qa-1', 'exaltation_before_wage_increase', 'error', '20202020-2020-2020-2020-202020202020', 'GLM-0230', 'Hermano Trasladado Demostrativo', '23232323-2323-2323-2323-232323232323', 'Taller Demostrativo Nº 23', 'open', null),
-  seedCase('case-qa-2', 'target_membership_date_mismatch', 'warning', '20202020-2020-2020-2020-202020202020', 'GLM-0230', 'Hermano Trasladado Demostrativo', '23232323-2323-2323-2323-232323232323', 'Taller Demostrativo Nº 23', 'under_review', QA_SUBJECT),
-  { ...seedCase('case-qa-3', 'duplicate_degree_milestone', 'warning', '40404040-4040-4040-4040-404040404040', 'GLM-0404', 'Hermano Histórico Demostrativo', '45454545-4545-4545-4545-454545454545', 'Taller Demostrativo Nº 45', 'resolved_confirmed', QA_SUBJECT), resolutionSummary: 'Se confirmó duplicidad de registro y quedó derivada para rectificación con respaldo.', evidenceReference: 'ACTA-QA-045-2026', resolvedBySubject: QA_SUBJECT, resolvedAtUtc: '2026-09-08T18:30:00Z' },
+  seedCase('case-qa-1', 'exaltation_before_wage_increase', 'error', '20202020-2020-2020-2020-202020202020', 'GLM-0230', 'Hermano Trasladado Demostrativo', '23232323-2323-2323-2323-232323232323', 'Taller Demostrativo Nº 23', 'open', false),
+  seedCase('case-qa-2', 'target_membership_date_mismatch', 'warning', '20202020-2020-2020-2020-202020202020', 'GLM-0230', 'Hermano Trasladado Demostrativo', '23232323-2323-2323-2323-232323232323', 'Taller Demostrativo Nº 23', 'under_review', true),
+  { ...seedCase('case-qa-3', 'duplicate_degree_milestone', 'warning', '40404040-4040-4040-4040-404040404040', 'GLM-0404', 'Hermano Histórico Demostrativo', '45454545-4545-4545-4545-454545454545', 'Taller Demostrativo Nº 45', 'resolved_confirmed', true), resolutionSummary: 'Se confirmó duplicidad de registro y quedó derivada para rectificación con respaldo.', evidenceReference: 'ACTA-QA-045-2026', resolvedAtUtc: '2026-09-08T18:30:00Z' },
 ]
 
 function mockList(filters: DataQualityCaseFilters): DataQualityCaseListResponse {
@@ -143,7 +139,7 @@ function mockList(filters: DataQualityCaseFilters): DataQualityCaseListResponse 
   if (filters.status) items = items.filter(x => x.status === filters.status)
   if (filters.ruleCode) items = items.filter(x => x.ruleCode === filters.ruleCode)
   if (filters.organizationId) items = items.filter(x => x.organizationId === filters.organizationId)
-  if (filters.assignedToMe) items = items.filter(x => x.assignedToSubject === QA_SUBJECT)
+  if (filters.assignedToMe) items = items.filter(x => x.assignedToCurrentUser)
   items.sort((a, b) => b.updatedAtUtc.localeCompare(a.updatedAtUtc))
   const total = items.length
   items = items.slice(0, Math.max(1, Math.min(filters.limit ?? 200, 500)))
@@ -158,9 +154,9 @@ function mockOpen({ detectionAsOf, issue }: OpenCaseInput): DataQualityCase {
     id: `case-qa-${++sequence}`,
     ruleCode: issue.code, severity: issue.severity, memberId: issue.memberId, institutionalNumber: issue.institutionalNumber,
     displayName: issue.displayName, organizationId: issue.organizationId, organizationName: issue.organizationName,
-    detectionAsOf, primaryDate: issue.primaryDate, relatedDate: issue.relatedDate, status: 'open', assignedToSubject: null, assignedToDisplayName: null,
-    createdBySubject: QA_SUBJECT, createdByDisplayName: 'Revisor QA', createdAtUtc: now, updatedAtUtc: now,
-    resolutionSummary: null, evidenceReference: null, resolvedBySubject: null, resolvedAtUtc: null,
+    detectionAsOf, primaryDate: issue.primaryDate, relatedDate: issue.relatedDate, status: 'open', assignedToDisplayName: null, assignedToCurrentUser: false,
+    createdByDisplayName: 'Revisor QA', createdAtUtc: now, updatedAtUtc: now,
+    resolutionSummary: null, evidenceReference: null, resolvedAtUtc: null,
     events: [event('opened', null, 'open', now)],
   }
   mockCases = [item, ...mockCases]
@@ -169,22 +165,23 @@ function mockOpen({ detectionAsOf, issue }: OpenCaseInput): DataQualityCase {
 
 function mockClaim(caseId: string): DataQualityCase {
   const item = required(caseId)
-  if (item.status === 'under_review' && item.assignedToSubject === QA_SUBJECT) return clone(item)
+  if (item.status === 'under_review' && item.assignedToCurrentUser) return clone(item)
   if (item.status !== 'open') throw new Error('Sólo un caso abierto puede ser tomado.')
-  const now = new Date().toISOString(); item.status = 'under_review'; item.assignedToSubject = QA_SUBJECT; item.assignedToDisplayName = 'Revisor QA'; item.updatedAtUtc = now; item.events.push(event('claimed', 'open', 'under_review', now)); return clone(item)
+  const now = new Date().toISOString(); item.status = 'under_review'; item.assignedToCurrentUser = true; item.assignedToDisplayName = 'Revisor QA'; item.updatedAtUtc = now; item.events.push(event('claimed', 'open', 'under_review', now)); return clone(item)
 }
 
 function mockResolve(caseId: string, input: ResolveCaseInput): DataQualityCase {
   const item = required(caseId)
   if (item.status !== 'under_review') throw new Error('El caso debe estar en revisión antes de resolverlo.')
+  if (!item.assignedToCurrentUser) throw new Error('El caso está asignado a otra persona.')
   const now = new Date().toISOString(); const target = input.outcome === 'confirmed' ? 'resolved_confirmed' : 'dismissed'
-  item.status = target; item.resolutionSummary = input.resolutionSummary; item.evidenceReference = input.evidenceReference || null; item.resolvedBySubject = QA_SUBJECT; item.resolvedAtUtc = now; item.updatedAtUtc = now; item.events.push(event(target, 'under_review', target, now)); return clone(item)
+  item.status = target; item.resolutionSummary = input.resolutionSummary; item.evidenceReference = input.evidenceReference || null; item.resolvedAtUtc = now; item.updatedAtUtc = now; item.events.push(event(target, 'under_review', target, now)); return clone(item)
 }
 
 function required(caseId: string) { const item = mockCases.find(x => x.id === caseId); if (!item) throw new Error('El caso no existe.'); return item }
-function seedCase(id: string, ruleCode: string, severity: string, memberId: string, institutionalNumber: string, displayName: string, organizationId: string, organizationName: string, status: string, assigned: string | null): DataQualityCase {
+function seedCase(id: string, ruleCode: string, severity: string, memberId: string, institutionalNumber: string, displayName: string, organizationId: string, organizationName: string, status: string, assignedToCurrentUser: boolean): DataQualityCase {
   const created = '2026-09-08T15:00:00Z'; const events = [event('opened', null, 'open', created)]; if (status !== 'open') events.push(event('claimed', 'open', 'under_review', '2026-09-08T16:00:00Z')); if (status === 'resolved_confirmed') events.push(event('resolved_confirmed', 'under_review', 'resolved_confirmed', '2026-09-08T18:30:00Z'))
-  return { id, ruleCode, severity, memberId, institutionalNumber, displayName, organizationId, organizationName, detectionAsOf: '2026-09-09', primaryDate: '2026-01-01', relatedDate: '2025-12-31', status, assignedToSubject: assigned, assignedToDisplayName: assigned ? 'Revisor QA' : null, createdBySubject: QA_SUBJECT, createdByDisplayName: 'Revisor QA', createdAtUtc: created, updatedAtUtc: status === 'resolved_confirmed' ? '2026-09-08T18:30:00Z' : status === 'under_review' ? '2026-09-08T16:00:00Z' : created, resolutionSummary: null, evidenceReference: null, resolvedBySubject: null, resolvedAtUtc: null, events }
+  return { id, ruleCode, severity, memberId, institutionalNumber, displayName, organizationId, organizationName, detectionAsOf: '2026-09-09', primaryDate: '2026-01-01', relatedDate: '2025-12-31', status, assignedToDisplayName: status === 'open' ? null : 'Revisor QA', assignedToCurrentUser, createdByDisplayName: 'Revisor QA', createdAtUtc: created, updatedAtUtc: status === 'resolved_confirmed' ? '2026-09-08T18:30:00Z' : status === 'under_review' ? '2026-09-08T16:00:00Z' : created, resolutionSummary: null, evidenceReference: null, resolvedAtUtc: null, events }
 }
-function event(action: string, fromStatus: string | null, toStatus: string, occurredAtUtc: string): DataQualityCaseEvent { return { id: `event-${++sequence}`, action, fromStatus, toStatus, actorSubject: QA_SUBJECT, actorDisplayName: 'Revisor QA', occurredAtUtc } }
+function event(action: string, fromStatus: string | null, toStatus: string, occurredAtUtc: string): DataQualityCaseEvent { return { id: `event-${++sequence}`, action, fromStatus, toStatus, actorDisplayName: 'Revisor QA', occurredAtUtc } }
 function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T }
