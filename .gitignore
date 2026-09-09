@@ -36,3 +36,6 @@ coverage/
 # Local data
 *.db
 *.sqlite
+
+# Pilot backups may contain institutional/personal data. Never version them.
+backups/
