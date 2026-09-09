@@ -37,3 +37,28 @@ public sealed class LodgeMinute
     public string? ApprovedBySubject { get; set; }
     public DateTimeOffset? ApprovedAtUtc { get; set; }
 }
+
+public sealed class LodgeInstructionSession
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public DateOnly InstructionDate { get; set; }
+    public required string Grade { get; set; }
+    public required string Topic { get; set; }
+    public required string ResponsibleOffice { get; set; }
+    public Guid? InstructorMemberId { get; set; }
+    public required string Status { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public required string CreatedBySubject { get; set; }
+}
+
+public sealed class LodgeInstructionAttendanceRecord
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid InstructionSessionId { get; set; }
+    public LodgeInstructionSession InstructionSession { get; set; } = null!;
+    public Guid MemberId { get; set; }
+    public required string Status { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public required string RecordedBySubject { get; set; }
+}
