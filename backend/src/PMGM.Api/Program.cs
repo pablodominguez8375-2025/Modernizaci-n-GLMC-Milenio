@@ -84,7 +84,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 {
     project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
-    version = "0.16.0",
+    version = "0.17.0",
     runtime = ".NET 10",
     culture = "es-CL",
     institutionalTimeZone = "America/Santiago",
@@ -106,6 +106,7 @@ app.MapGrandSecretariatEndpoints();
 app.MapGrandSecretariatQueryEndpoints();
 app.MapGrandSecretariatCeremonyQueueEndpoints();
 app.MapLodgeManagementEndpoints();
+app.MapLodgeInstructionEndpoints();
 app.MapDocumentManagementEndpoints();
 app.MapDocumentManagementQueryEndpoints();
 app.MapDocumentContentEndpoints();
