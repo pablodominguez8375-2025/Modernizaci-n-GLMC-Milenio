@@ -52,6 +52,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
+builder.Services.AddScoped<IInstitutionalMemberContextResolver, InstitutionalMemberContextResolver>();
 builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
 builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
 builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
@@ -70,6 +71,7 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
+app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "PMGM.Api" }));
@@ -109,6 +111,7 @@ app.MapDocumentManagementQueryEndpoints();
 app.MapDocumentContentEndpoints();
 app.MapDocumentContentRecoveryEndpoints();
 app.MapLibraryCatalogEndpoints();
+app.MapLibraryAccessPolicyEndpoints();
 app.MapPrivacyEndpoints();
 app.MapPrivacyRetentionEndpoints();
 app.MapPrivacyRiskEndpoints();
