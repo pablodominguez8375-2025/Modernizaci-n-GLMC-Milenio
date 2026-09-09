@@ -3,6 +3,7 @@ import App from '../App'
 import { createDefaultCalendarApiClient } from '../api/calendarApi'
 import { createDefaultDataQualityCaseApiClient } from '../api/dataQualityCaseApi'
 import { createDefaultDocumentApiClient } from '../api/documentApi'
+import { createDefaultGrandArchiveApiClient } from '../api/grandArchiveApi'
 import { createDefaultInternalAffairsApiClient } from '../api/internalAffairsApi'
 import { createDefaultLodgeApiClient } from '../api/lodgeApi'
 import { createDefaultMembershipApiClient } from '../api/membershipApi'
@@ -25,26 +26,27 @@ function createRuntime() {
     const internalAffairsApi = createDefaultInternalAffairsApiClient(session?.getAccessToken, session?.invalidate)
     const dataQualityCaseApi = createDefaultDataQualityCaseApiClient(session?.getAccessToken, session?.invalidate)
     const documentApi = createDefaultDocumentApiClient(session?.getAccessToken, session?.invalidate)
+    const grandArchiveApi = createDefaultGrandArchiveApiClient(session?.getAccessToken, session?.invalidate)
     const calendarApi = createDefaultCalendarApiClient(session?.getAccessToken, session?.invalidate)
     const notificationApi = createDefaultNotificationApiClient(session?.getAccessToken, session?.invalidate)
-    return { session, api, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, calendarApi, notificationApi, error: '' }
+    return { session, api, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, error: '' }
   } catch {
-    return { session: null, api: null, lodgeApi: null, membershipApi: null, organizationProfileApi: null, reportingApi: null, internalAffairsApi: null, dataQualityCaseApi: null, documentApi: null, calendarApi: null, notificationApi: null, error: 'El acceso institucional no está configurado. Contacte a la administración.' }
+    return { session: null, api: null, lodgeApi: null, membershipApi: null, organizationProfileApi: null, reportingApi: null, internalAffairsApi: null, dataQualityCaseApi: null, documentApi: null, grandArchiveApi: null, calendarApi: null, notificationApi: null, error: 'El acceso institucional no está configurado. Contacte a la administración.' }
   }
 }
 const runtime = createRuntime()
 
 export default function AuthRoot() {
-  if (!runtime.api || !runtime.lodgeApi || !runtime.membershipApi || !runtime.organizationProfileApi || !runtime.reportingApi || !runtime.internalAffairsApi || !runtime.dataQualityCaseApi || !runtime.documentApi || !runtime.calendarApi || !runtime.notificationApi) return <AccessScreen message={runtime.error} />
-  if (!runtime.session) return <App api={runtime.api} lodgeApi={runtime.lodgeApi} membershipApi={runtime.membershipApi} organizationProfileApi={runtime.organizationProfileApi} reportingApi={runtime.reportingApi} internalAffairsApi={runtime.internalAffairsApi} dataQualityCaseApi={runtime.dataQualityCaseApi} documentApi={runtime.documentApi} calendarApi={runtime.calendarApi} notificationApi={runtime.notificationApi} />
+  if (!runtime.api || !runtime.lodgeApi || !runtime.membershipApi || !runtime.organizationProfileApi || !runtime.reportingApi || !runtime.internalAffairsApi || !runtime.dataQualityCaseApi || !runtime.documentApi || !runtime.grandArchiveApi || !runtime.calendarApi || !runtime.notificationApi) return <AccessScreen message={runtime.error} />
+  if (!runtime.session) return <App api={runtime.api} lodgeApi={runtime.lodgeApi} membershipApi={runtime.membershipApi} organizationProfileApi={runtime.organizationProfileApi} reportingApi={runtime.reportingApi} internalAffairsApi={runtime.internalAffairsApi} dataQualityCaseApi={runtime.dataQualityCaseApi} documentApi={runtime.documentApi} grandArchiveApi={runtime.grandArchiveApi} calendarApi={runtime.calendarApi} notificationApi={runtime.notificationApi} />
   return <AuthenticatedApp session={runtime.session} />
 }
 
 function AuthenticatedApp({ session }: { session: OidcSession }) {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)
   useEffect(() => { void session.initialize() }, [session])
-  if (state.status === 'authenticated' && runtime.api && runtime.lodgeApi && runtime.membershipApi && runtime.organizationProfileApi && runtime.reportingApi && runtime.internalAffairsApi && runtime.dataQualityCaseApi && runtime.documentApi && runtime.calendarApi && runtime.notificationApi) {
-    return <App api={runtime.api} lodgeApi={runtime.lodgeApi} membershipApi={runtime.membershipApi} organizationProfileApi={runtime.organizationProfileApi} reportingApi={runtime.reportingApi} internalAffairsApi={runtime.internalAffairsApi} dataQualityCaseApi={runtime.dataQualityCaseApi} documentApi={runtime.documentApi} calendarApi={runtime.calendarApi} notificationApi={runtime.notificationApi} onLogout={() => { void session.logout() }} />
+  if (state.status === 'authenticated' && runtime.api && runtime.lodgeApi && runtime.membershipApi && runtime.organizationProfileApi && runtime.reportingApi && runtime.internalAffairsApi && runtime.dataQualityCaseApi && runtime.documentApi && runtime.grandArchiveApi && runtime.calendarApi && runtime.notificationApi) {
+    return <App api={runtime.api} lodgeApi={runtime.lodgeApi} membershipApi={runtime.membershipApi} organizationProfileApi={runtime.organizationProfileApi} reportingApi={runtime.reportingApi} internalAffairsApi={runtime.internalAffairsApi} dataQualityCaseApi={runtime.dataQualityCaseApi} documentApi={runtime.documentApi} grandArchiveApi={runtime.grandArchiveApi} calendarApi={runtime.calendarApi} notificationApi={runtime.notificationApi} onLogout={() => { void session.logout() }} />
   }
   return <AccessScreen message={state.message ?? (state.status === 'loading' ? 'Preparando acceso…' : 'Ingrese con su cuenta institucional.')} onLogin={state.status === 'loading' ? undefined : () => { void session.login() }} />
 }
