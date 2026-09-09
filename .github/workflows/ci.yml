@@ -199,6 +199,15 @@ jobs:
       - name: Validate showcase Nginx configuration
         run: docker run --rm pmgm-showcase-ci nginx -t
 
+      - name: Build first-implementation frontend configuration
+        run: >-
+          docker build
+          --build-arg VITE_USE_MOCKS=false
+          --build-arg VITE_OIDC_AUTHORITY=http://127.0.0.1:8180/realms/pmgm
+          --build-arg VITE_OIDC_CLIENT_ID=pmgm-web
+          --build-arg VITE_OIDC_ALLOW_HTTP_LOCAL=true
+          -t pmgm-first-web-ci frontend
+
   infrastructure-validate:
     name: Infrastructure configuration
     runs-on: ubuntu-latest
@@ -219,3 +228,9 @@ jobs:
 
       - name: Validate standalone showcase Docker Compose
         run: docker compose -f infrastructure/docker-compose.showcase.yml config
+
+      - name: Validate first-implementation Docker Compose
+        run: docker compose -f infrastructure/docker-compose.first.yml config
+
+      - name: Validate Keycloak QA realm JSON
+        run: python3 -m json.tool infrastructure/keycloak/pmgm-qa-realm.json >/dev/null
