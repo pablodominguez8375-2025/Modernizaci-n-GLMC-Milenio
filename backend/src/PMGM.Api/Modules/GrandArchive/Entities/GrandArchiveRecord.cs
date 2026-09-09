@@ -15,6 +15,10 @@ public sealed class GrandArchiveRecord
     public DateTimeOffset ArchivedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public string CreatedBySubject { get; set; } = string.Empty;
     public string? CreatedByDisplayName { get; set; }
+    public DateTimeOffset? WithdrawnAtUtc { get; set; }
+    public string? WithdrawnBySubject { get; set; }
+    public string? WithdrawnByDisplayName { get; set; }
+    public string? WithdrawalReason { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
