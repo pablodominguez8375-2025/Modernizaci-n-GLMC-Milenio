@@ -9,6 +9,8 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
     public DbSet<LodgeMeeting> LodgeMeetings => Set<LodgeMeeting>();
     public DbSet<LodgeAttendanceRecord> LodgeAttendanceRecords => Set<LodgeAttendanceRecord>();
     public DbSet<LodgeMinute> LodgeMinutes => Set<LodgeMinute>();
+    public DbSet<LodgeInstructionSession> LodgeInstructionSessions => Set<LodgeInstructionSession>();
+    public DbSet<LodgeInstructionAttendanceRecord> LodgeInstructionAttendanceRecords => Set<LodgeInstructionAttendanceRecord>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -51,6 +53,32 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
             entity.HasOne(x => x.Meeting).WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MeetingId, x.Version }).IsUnique();
             entity.HasIndex(x => new { x.MeetingId, x.Status });
+        });
+
+        modelBuilder.Entity<LodgeInstructionSession>(entity =>
+        {
+            entity.ToTable("lodge_instruction_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Grade).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Topic).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.ResponsibleOffice).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.InstructionDate });
+            entity.HasIndex(x => new { x.OrganizationId, x.Grade, x.InstructionDate });
+        });
+
+        modelBuilder.Entity<LodgeInstructionAttendanceRecord>(entity =>
+        {
+            entity.ToTable("lodge_instruction_attendance_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.InstructionSession).WithMany().HasForeignKey(x => x.InstructionSessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.InstructionSessionId, x.MemberId, x.RecordedAtUtc });
+            entity.HasIndex(x => new { x.MemberId, x.RecordedAtUtc });
         });
 
         modelBuilder.Entity<AuditEvent>(entity =>
