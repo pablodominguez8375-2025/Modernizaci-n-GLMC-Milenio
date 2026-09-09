@@ -122,7 +122,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .ToList();
 
             var currentMemberships = memberMemberships
-                .Where(IsCurrentMembership)
+                .Where(x => IsCurrentMembership(x, query.AsOf))
                 .OrderByDescending(x => x.StartDate)
                 .ToList();
             var currentMembership = currentMemberships.FirstOrDefault();
@@ -240,8 +240,10 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
         return new MemberControlResponse(query.AsOf, total, items.Count, items);
     }
 
-    private static bool IsCurrentMembership(MembershipRow row)
-        => row.Status == MembershipCodes.MembershipStatus.Active && row.EndDate == null;
+    private static bool IsCurrentMembership(MembershipRow row, DateOnly asOf)
+        => row.Status == MembershipCodes.MembershipStatus.Active &&
+           row.StartDate <= asOf &&
+           (row.EndDate == null || row.EndDate >= asOf);
 
     private static WorkshopRef Workshop(MembershipRow row)
         => new(row.OrganizationId, row.OrganizationName, row.OrganizationNumber, row.StartDate, row.EndDate);
