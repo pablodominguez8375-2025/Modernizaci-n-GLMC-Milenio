@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "releaseVersion": "1.0.0-rc1",
+  "releaseChannel": "release_candidate",
+  "target": "pilot_operational",
+  "sourceBranch": "release/v1.0-rc1",
+  "targetBranch": "dev",
+  "apiProject": "backend/src/PMGM.Api/PMGM.Api.csproj",
+  "pilotCompose": "infrastructure/docker-compose.pilot.yml",
+  "pilotRealm": "infrastructure/keycloak/pmgm-pilot-realm.json",
+  "bootstrapPackage": "docs/instalacion/PMGM-PILOT-BOOTSTRAP-V033.json",
+  "requiredCiJobs": [
+    "Backend build and tests",
+    "Frontend lint and build",
+    "Infrastructure configuration",
+    "First implementation authenticated smoke",
+    "Pilot operational HTTPS and recovery"
+  ],
+  "machineRequirements": {
+    "demoDataDisabledInPilot": true,
+    "oidcPkceS256": true,
+    "passwordGrantDisabled": true,
+    "pilotAdminRequiresPlatformSuperadmin": true,
+    "bootstrapContainsNoPersonalData": true,
+    "systemInfoVersionFromAssembly": true,
+    "privacyGateRequired": true,
+    "dataClassificationGateRequired": true,
+    "migrationSafetyGateRequired": true
+  },
+  "stablePromotionRequires": [
+    "CI verde sobre el mismo head candidato",
+    "UAT institucional aprobada por Sponsor/Product Owner",
+    "dominio/TLS definitivo del piloto validado",
+    "secretos operacionales provisionados fuera de Git y rotados",
+    "bootstrap institucional ejecutado con dry-run previo",
+    "backup y restauración verificados en el entorno objetivo",
+    "revisión legal/privacidad previa a carga de datos personales reales"
+  ],
+  "notes": "Release candidate técnica. No autoriza por sí sola carga de personas reales ni promoción automática a v1.0 estable."
+}
