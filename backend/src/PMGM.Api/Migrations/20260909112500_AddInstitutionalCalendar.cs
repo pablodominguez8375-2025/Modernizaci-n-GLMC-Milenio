@@ -12,6 +12,8 @@ public partial class AddInstitutionalCalendar : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.EnsureSchema(name: "core");
+
         migrationBuilder.CreateTable(
             name: "calendar_events",
             schema: "core",
