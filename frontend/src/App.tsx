@@ -5,6 +5,7 @@ import DashboardPage from './DashboardPage'
 import DataQualityCaseQueuePage from './DataQualityCaseQueuePage'
 import DocumentManagementPage from './DocumentManagementPage'
 import ExecutiveReportingPage from './ExecutiveReportingPage'
+import GrandArchivePage from './GrandArchivePage'
 import GrandSecretariatPage from './GrandSecretariatPage'
 import InternalAffairsDataQualityPage from './InternalAffairsDataQualityPage'
 import InternalAffairsMemberControlPage from './InternalAffairsMemberControlPage'
@@ -18,6 +19,7 @@ import RegularityPage from './RegularityPage'
 import { type CalendarApiClient } from './api/calendarApi'
 import { type DataQualityCaseApiClient } from './api/dataQualityCaseApi'
 import { type DocumentApiClient } from './api/documentApi'
+import { type GrandArchiveApiClient } from './api/grandArchiveApi'
 import { type InternalAffairsApiClient } from './api/internalAffairsApi'
 import { type LodgeApiClient } from './api/lodgeApi'
 import { type MembershipApiClient } from './api/membershipApi'
@@ -26,10 +28,10 @@ import { type OrganizationProfileApiClient } from './api/organizationProfileApi'
 import { type PmgmApiClient, type CandidatePublication, type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
 import { type ReportingApiClient } from './api/reportingApi'
 
-type View = 'dashboard' | 'candidates' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean }
+type View = 'dashboard' | 'candidates' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
 
-export default function App({ api, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, calendarApi, notificationApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; membershipApi: MembershipApiClient; organizationProfileApi: OrganizationProfileApiClient; reportingApi: ReportingApiClient; internalAffairsApi: InternalAffairsApiClient; dataQualityCaseApi: DataQualityCaseApiClient; documentApi: DocumentApiClient; calendarApi: CalendarApiClient; notificationApi: NotificationApiClient; onLogout?: () => void }) {
+export default function App({ api, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, onLogout }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; membershipApi: MembershipApiClient; organizationProfileApi: OrganizationProfileApiClient; reportingApi: ReportingApiClient; internalAffairsApi: InternalAffairsApiClient; dataQualityCaseApi: DataQualityCaseApiClient; documentApi: DocumentApiClient; grandArchiveApi: GrandArchiveApiClient; calendarApi: CalendarApiClient; notificationApi: NotificationApiClient; onLogout?: () => void }) {
   const [view, setView] = useState<View>('dashboard')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -63,9 +65,10 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
   const canLodge = api.useMocks || (capabilities?.canManageLodgeOperations ?? false)
   const canLibrary = api.useMocks || (capabilities?.canReadLibrary ?? false)
   const canDocuments = api.useMocks || (capabilities?.canManageDocuments ?? false)
+  const canGrandArchive = api.useMocks || (capabilities?.canManageGrandArchive ?? false)
 
   return <div className="app-shell">
-    <header className="topbar"><button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Ir al inicio"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button><div className="topbar-meta">{api.useMocks && <span className="demo-badge">QA demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.28' : `API v${systemInfo?.version ?? '—'}`}</span></div></header>
+    <header className="topbar"><button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Ir al inicio"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button><div className="topbar-meta">{api.useMocks && <span className="demo-badge">QA demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.29' : `API v${systemInfo?.version ?? '—'}`}</span></div></header>
     <div className="workspace">
       <nav className="sidebar" aria-label="Navegación principal">
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('dashboard')}><span aria-hidden="true">⌂</span> Inicio</button>
@@ -83,6 +86,7 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
         <ModuleAccess icon="◈" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
         <ModuleAccess icon="✧" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
         <ModuleAccess icon="▤" label="Gran Secretaría" allowed={canSecretariat} active={view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
+        <ModuleAccess icon="▨" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
         <div className="nav-section">Taller</div>
         <ModuleAccess icon="⌂" label="Ficha de Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
         <ModuleAccess icon="□" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />
@@ -107,6 +111,7 @@ export default function App({ api, lodgeApi, membershipApi, organizationProfileA
         {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
+        {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
         {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} />}
         {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
