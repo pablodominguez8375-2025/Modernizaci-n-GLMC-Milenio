@@ -94,7 +94,7 @@ function CaseCard({ item, caseApi, onChanged }: { item: DataQualityCase; caseApi
     <div className="case-card-top"><div><span className={`case-status ${item.status}`}>{STATUS_LABEL[item.status] ?? item.status}</span><span className={`case-severity ${item.severity}`}>{item.severity === 'error' ? 'Error' : 'Advertencia'}</span></div><code>{item.ruleCode}</code></div>
     <div className="case-card-main">
       <div><h3>{ruleLabel(item.ruleCode)}</h3><p><strong>{item.displayName}</strong>{item.institutionalNumber ? ` · ${item.institutionalNumber}` : ''}</p><small>{item.organizationName ?? 'Ámbito Orden'} · detectado al {dateLabel(item.detectionAsOf)}</small></div>
-      <dl><div><dt>Fecha observada</dt><dd>{dateLabel(item.primaryDate)}</dd></div><div><dt>Relacionada</dt><dd>{dateLabel(item.relatedDate)}</dd></div><div><dt>Asignación</dt><dd>{item.assignedToDisplayName ?? (item.assignedToSubject ? 'Revisor asignado' : 'Sin asignar')}</dd></div></dl>
+      <dl><div><dt>Fecha observada</dt><dd>{dateLabel(item.primaryDate)}</dd></div><div><dt>Relacionada</dt><dd>{dateLabel(item.relatedDate)}</dd></div><div><dt>Asignación</dt><dd>{item.assignedToDisplayName ?? 'Sin asignar'}</dd></div></dl>
     </div>
 
     {item.resolutionSummary && <div className="case-resolution"><small>Resolución</small><strong>{item.resolutionSummary}</strong>{item.evidenceReference && <span>Respaldo: {item.evidenceReference}</span>}</div>}
@@ -102,7 +102,8 @@ function CaseCard({ item, caseApi, onChanged }: { item: DataQualityCase; caseApi
 
     <div className="case-actions">
       {item.status === 'open' && <button type="button" disabled={busy} onClick={() => void claim()}>{busy ? 'Tomando…' : 'Tomar caso'}</button>}
-      {item.status === 'under_review' && <button type="button" disabled={busy} onClick={() => setResolving(value => !value)}>{resolving ? 'Cerrar resolución' : 'Resolver caso'}</button>}
+      {item.status === 'under_review' && item.assignedToCurrentUser && <button type="button" disabled={busy} onClick={() => setResolving(value => !value)}>{resolving ? 'Cerrar resolución' : 'Resolver caso'}</button>}
+      {item.status === 'under_review' && !item.assignedToCurrentUser && <small>En revisión por otro responsable.</small>}
       <span>{item.events.length > 0 ? `${item.events.length} movimientos registrados` : `Actualizado ${dateTimeLabel(item.updatedAtUtc)}`}</span>
     </div>
 
