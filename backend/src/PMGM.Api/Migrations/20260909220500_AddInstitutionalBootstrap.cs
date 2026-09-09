@@ -22,7 +22,6 @@ public partial class AddInstitutionalBootstrap : Migration
                 PackageVersion = table.Column<int>(type: "integer", nullable: false),
                 PayloadSha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                 Status = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
-                AppliedBySubject = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: true),
                 AppliedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                 SummaryJson = table.Column<string>(type: "jsonb", nullable: false)
             },
