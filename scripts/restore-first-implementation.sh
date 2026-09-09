@@ -121,7 +121,7 @@ if ! "${compose[@]}" run --rm -T --no-deps \
 fi
 
 local_object_count="$(find "$BACKUP_DIR/objects/pmgm-documents" -type f | wc -l | tr -d ' ')"
-remote_object_count="$("${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc find pmgm/pmgm-documents --type f | wc -l' | tr -d '[:space:]')"
+remote_object_count="$("${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mc ls --recursive pmgm/pmgm-documents | wc -l' | tr -d '[:space:]')"
 if [ "$local_object_count" != "$remote_object_count" ]; then
   echo "Conteo MinIO inconsistente tras restaurar: local=$local_object_count remoto=$remote_object_count. API/web permanecen detenidos." >&2
   exit 1
