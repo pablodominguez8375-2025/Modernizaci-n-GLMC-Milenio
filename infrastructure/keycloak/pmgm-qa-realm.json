@@ -38,16 +38,13 @@
         "http://127.0.0.1:8081/auth/callback",
         "http://localhost:8081/auth/callback"
       ],
-      "postLogoutRedirectUris": [
-        "http://127.0.0.1:8081/auth/logout",
-        "http://localhost:8081/auth/logout"
-      ],
       "webOrigins": [
         "http://127.0.0.1:8081",
         "http://localhost:8081"
       ],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://127.0.0.1:8081/auth/logout##http://localhost:8081/auth/logout"
       },
       "protocolMappers": [
         {
@@ -131,7 +128,7 @@
         "grand_archivist"
       ],
       "credentials": [
-        { "type": "password", "value": "Milenio-QA-2026!", "temporary": false }
+        { "type": "password", "value": "${PMGM_QA_USER_PASSWORD}", "temporary": false }
       ]
     },
     {
@@ -147,7 +144,7 @@
       },
       "realmRoles": ["lodge_admin", "lodge_secretariat"],
       "credentials": [
-        { "type": "password", "value": "Milenio-QA-2026!", "temporary": false }
+        { "type": "password", "value": "${PMGM_QA_USER_PASSWORD}", "temporary": false }
       ]
     }
   ]
