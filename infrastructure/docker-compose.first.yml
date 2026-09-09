@@ -63,7 +63,7 @@ services:
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HOSTNAME_STRICT: "true"
     volumes:
-      - ./keycloak/pmgm-qa-realm.json:/opt/keycloak/data/import/pmgm-qa-realm.json:ro
+      - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
       - pmgm_first_keycloak_data:/opt/keycloak/data
     ports:
       - "127.0.0.1:8180:8080"
