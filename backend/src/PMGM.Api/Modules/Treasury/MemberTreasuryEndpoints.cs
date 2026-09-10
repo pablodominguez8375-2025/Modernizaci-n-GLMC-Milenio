@@ -357,7 +357,8 @@ public static class MemberTreasuryStatementProjection
         var chargeItems = charges.Select(charge =>
         {
             var applied = appliedByCharge.GetValueOrDefault(charge.Id);
-            var outstanding = charge.Status == MemberTreasuryCodes.ChargeStatus.Void
+            var outstanding = charge.Status == MemberTreasuryCodes.ChargeStatus.Void ||
+                              charge.Status == MemberTreasuryCodes.ChargeStatus.Paid
                 ? 0m
                 : Math.Max(0m, charge.Amount - applied);
             return new MemberTreasuryChargeDto(
