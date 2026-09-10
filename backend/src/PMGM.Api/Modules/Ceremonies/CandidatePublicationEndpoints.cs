@@ -21,18 +21,31 @@ public static class CandidatePublicationEndpoints
     {
         var now = DateTimeOffset.UtcNow;
 
-        var result = await db.CandidatePublications
+        var rows = await db.CandidatePublications
             .AsNoTracking()
             .Where(x =>
                 x.Status == CeremonyCodes.PublicationStatus.Published &&
                 x.PublishedFromUtc <= now &&
                 (x.PublishedUntilUtc == null || x.PublishedUntilUtc >= now))
             .OrderBy(x => x.PublishedFromUtc)
-            .Select(x => new CandidatePublicationPublicDto(
-                DisplayName: string.Join(' ', new[] { x.Person.FirstNames, x.Person.LastNames }
-                    .Where(value => !string.IsNullOrWhiteSpace(value))),
-                WorkshopName: x.Organization.Name,
-                WorkshopNumber: x.Organization.Number,
+            .Select(x => new
+            {
+                x.Person.FirstNames,
+                x.Person.LastNames,
+                WorkshopName = x.Organization.Name,
+                WorkshopNumber = x.Organization.Number,
+                x.PublishedFromUtc,
+                x.PublishedUntilUtc,
+                x.RequiredDays,
+                x.RuleCode,
+                x.Status
+            })
+            .ToListAsync(cancellationToken);
+
+        var items = rows.Select(x => new CandidatePublicationPublicDto(
+                DisplayName: $"{x.FirstNames} {x.LastNames}".Trim(),
+                WorkshopName: x.WorkshopName,
+                WorkshopNumber: x.WorkshopNumber,
                 PublishedFromUtc: x.PublishedFromUtc,
                 PublishedUntilUtc: x.PublishedUntilUtc,
                 RequiredDays: x.RequiredDays,
@@ -40,14 +53,14 @@ public static class CandidatePublicationEndpoints
                 ComplianceDateUtc: x.PublishedFromUtc.AddDays(x.RequiredDays),
                 RuleCode: x.RuleCode,
                 Status: x.Status))
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         return Results.Ok(new
         {
             culture = "es-CL",
             portal = "Insinuados en período de publicación",
-            total = result.Count,
-            items = result
+            total = items.Count,
+            items
         });
     }
 }
