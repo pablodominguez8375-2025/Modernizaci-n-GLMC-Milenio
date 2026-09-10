@@ -9,14 +9,18 @@ public sealed record CeremonyEligibilityInput(
     DateTimeOffset? PublicationStartedAtUtc,
     DateTimeOffset? PublicationEndedAtUtc,
     int PublicationRequiredDays,
-    bool PublicationSuspended = false);
+    bool PublicationSuspended = false,
+    AdvancementThresholds? AdvancementThresholds = null,
+    AdvancementEvidence? AdvancementEvidence = null,
+    DispensationEvidence? Dispensation = null);
 
 public sealed record CeremonyEligibilityResult(
     bool IsEligible,
     string Status,
     IReadOnlyList<string> BlockingReasons,
     int? PublicationElapsedDays = null,
-    int? PublicationRequiredDays = null);
+    int? PublicationRequiredDays = null,
+    AdvancementEligibilityDecision? Advancement = null);
 
 public interface ICeremonyEligibilityService
 {
@@ -90,16 +94,42 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             .Select(x => $"{MapRequirementCodeToValidationType(x.Code)}: {x.Reason}")
             .ToList();
 
+        AdvancementEligibilityDecision? advancement = null;
+        if (input.AdvancementThresholds is not null && input.AdvancementEvidence is not null)
+        {
+            advancement = AdvancementEligibilityPolicy.Evaluate(
+                input.CeremonyType,
+                input.AdvancementThresholds,
+                input.AdvancementEvidence,
+                input.Dispensation);
+
+            if (advancement.Applies && !advancement.CanProceed)
+            {
+                blockingReasons.AddRange(
+                    advancement.Requirements
+                        .Where(x => !x.Complies)
+                        .Select(x => $"advancement.{x.Code}: alcanzado {x.Achieved}; mínimo {x.Minimum}."));
+
+                if (advancement.Dispensation is not null)
+                {
+                    blockingReasons.Add($"dispensation: {advancement.Dispensation.Reason}");
+                }
+            }
+        }
+
+        var isEligible = decision.CanAuthorize && (advancement?.CanProceed ?? true);
+
         return new CeremonyEligibilityResult(
-            IsEligible: decision.CanAuthorize,
-            Status: decision.CanAuthorize ? CeremonyCodes.RequestStatus.Eligible : CeremonyCodes.RequestStatus.Observed,
+            IsEligible: isEligible,
+            Status: isEligible ? CeremonyCodes.RequestStatus.Eligible : CeremonyCodes.RequestStatus.Observed,
             BlockingReasons: blockingReasons,
             PublicationElapsedDays: string.Equals(input.CeremonyType, CeremonyCodes.Type.Initiation, StringComparison.OrdinalIgnoreCase)
                 ? elapsedDays
                 : null,
             PublicationRequiredDays: string.Equals(input.CeremonyType, CeremonyCodes.Type.Initiation, StringComparison.OrdinalIgnoreCase)
                 ? input.PublicationRequiredDays
-                : null);
+                : null,
+            Advancement: advancement);
     }
 
     private static string? GetValidation(CeremonyEligibilityInput input, string validationType)
