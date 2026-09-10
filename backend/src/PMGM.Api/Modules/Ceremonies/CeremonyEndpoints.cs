@@ -262,7 +262,7 @@ public static class CeremonyEndpoints
             AuditResults.Success,
             new
             {
-                review.Decision,
+                decision = review.Status,
                 ceremony.Status,
                 review.AsOfDate
             });
@@ -310,9 +310,7 @@ public static class CeremonyEndpoints
 
         var candidateName = string.Join(' ', new[] { ceremony.CandidatePerson.FirstNames, ceremony.CandidatePerson.LastNames }
             .Where(value => !string.IsNullOrWhiteSpace(value)));
-        var workshopName = ceremony.Organization.Number is null
-            ? ceremony.Organization.Name
-            : $"{ceremony.Organization.Name} · Nº {ceremony.Organization.Number}";
+        var workshopName = ceremony.Organization.Name;
 
         var existingPublication = await db.CandidatePublications
             .AsNoTracking()
