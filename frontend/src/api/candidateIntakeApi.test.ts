@@ -15,6 +15,16 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(profile.photoAvailable).toBe(true)
   })
 
+  it('loads the transversal publication list with safe photo routes', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const portal = await api.getPublishedCandidates()
+
+    expect(portal.total).toBeGreaterThan(0)
+    expect(portal.items[0].displayName).toContain('Demostrativa')
+    expect(portal.items[0].photoUrl).toMatch(/^\/api\/candidate-publications\/[0-9a-f-]+\/photo$/i)
+    expect(portal.items.some(item => item.photoUrl === null)).toBe(true)
+  })
+
   it('records an observation and refreshes its state without publishing', async () => {
     const api = new CandidateIntakeApiClient({ useMocks: true })
     const queue = await api.getGrandSecretariatQueue('pending_grand_secretariat')
