@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.LodgeManagement;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -21,6 +22,7 @@ public static class MemberSelfEndpoints
     private static async Task<IResult> GetSelfProfileAsync(
         HttpContext httpContext,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
         IInstitutionalMemberContextResolver resolver,
         CancellationToken cancellationToken)
     {
@@ -118,6 +120,104 @@ public static class MemberSelfEndpoints
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var attendanceFrom = today.AddMonths(-12);
+        var attendanceRows = await lodgeDb.LodgeAttendanceRecords
+            .AsNoTracking()
+            .Where(x => x.MemberId == context.MemberId &&
+                        x.Meeting.MeetingDate >= attendanceFrom &&
+                        x.Meeting.MeetingDate <= today &&
+                        x.Meeting.Status != LodgeManagementCodes.MeetingStatus.Cancelled)
+            .Select(x => new
+            {
+                x.MeetingId,
+                x.Status,
+                x.RecordedAtUtc,
+                x.Meeting.MeetingDate,
+                x.Meeting.MeetingType,
+                x.Meeting.Grade,
+                x.Meeting.Title
+            })
+            .ToListAsync(cancellationToken);
+
+        var attendanceHistory = attendanceRows
+            .GroupBy(x => x.MeetingId)
+            .Select(group => group.OrderByDescending(x => x.RecordedAtUtc).First())
+            .OrderByDescending(x => x.MeetingDate)
+            .ThenByDescending(x => x.RecordedAtUtc)
+            .ToList();
+
+        var presentCount = attendanceHistory.Count(x => x.Status == LodgeManagementCodes.AttendanceStatus.Present);
+        var absentCount = attendanceHistory.Count(x => x.Status == LodgeManagementCodes.AttendanceStatus.Absent);
+        var excusedCount = attendanceHistory.Count(x => x.Status == LodgeManagementCodes.AttendanceStatus.Excused);
+        var attendanceTotal = attendanceHistory.Count;
+        var attendancePercentage = attendanceTotal == 0
+            ? (int?)null
+            : (int)Math.Round((double)presentCount * 100d / attendanceTotal, MidpointRounding.AwayFromZero);
+
+        var instructionRows = await lodgeDb.LodgeInstructionAttendanceRecords
+            .AsNoTracking()
+            .Where(x => x.MemberId == context.MemberId &&
+                        x.InstructionSession.Status == LodgeManagementCodes.InstructionStatus.Held)
+            .Select(x => new
+            {
+                x.InstructionSessionId,
+                x.Status,
+                x.RecordedAtUtc,
+                x.InstructionSession.InstructionDate,
+                x.InstructionSession.Grade,
+                x.InstructionSession.Topic,
+                x.InstructionSession.ResponsibleOffice
+            })
+            .ToListAsync(cancellationToken);
+
+        var instructionHistory = instructionRows
+            .GroupBy(x => x.InstructionSessionId)
+            .Select(group => group.OrderByDescending(x => x.RecordedAtUtc).First())
+            .OrderByDescending(x => x.InstructionDate)
+            .ThenByDescending(x => x.RecordedAtUtc)
+            .ToList();
+
+        var upcomingMeetings = Array.Empty<object>();
+        if (currentMembership is not null)
+        {
+            var meetingRows = await lodgeDb.LodgeMeetings
+                .AsNoTracking()
+                .Where(x => x.OrganizationId == currentMembership.OrganizationId &&
+                            x.MeetingDate >= today &&
+                            x.Status != LodgeManagementCodes.MeetingStatus.Cancelled &&
+                            (x.Status == LodgeManagementCodes.MeetingStatus.Scheduled ||
+                             x.Status == LodgeManagementCodes.MeetingStatus.Open))
+                .OrderBy(x => x.MeetingDate)
+                .ThenBy(x => x.CreatedAtUtc)
+                .Select(x => new
+                {
+                    x.Id,
+                    x.MeetingDate,
+                    x.MeetingType,
+                    x.Grade,
+                    x.Title,
+                    x.Status
+                })
+                .Take(24)
+                .ToListAsync(cancellationToken);
+
+            upcomingMeetings = meetingRows
+                .Where(x => IsMeetingVisibleToDegree(x.Grade, context.EffectiveDegree))
+                .Take(8)
+                .Select(x => (object)new
+                {
+                    x.Id,
+                    x.MeetingDate,
+                    x.MeetingType,
+                    x.Grade,
+                    x.Title,
+                    x.Status
+                })
+                .ToArray();
+        }
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
             member = new
@@ -150,6 +250,42 @@ public static class MemberSelfEndpoints
             {
                 financial,
                 hospitalaria
+            },
+            activity = new
+            {
+                attendance = new
+                {
+                    fromDate = attendanceFrom,
+                    throughDate = today,
+                    total = attendanceTotal,
+                    present = presentCount,
+                    absent = absentCount,
+                    excused = excusedCount,
+                    percentage = attendancePercentage,
+                    history = attendanceHistory.Take(12).Select(x => new
+                    {
+                        x.MeetingId,
+                        x.MeetingDate,
+                        x.MeetingType,
+                        x.Grade,
+                        x.Title,
+                        attendanceStatus = x.Status
+                    })
+                },
+                instruction = new
+                {
+                    total = instructionHistory.Count,
+                    history = instructionHistory.Take(20).Select(x => new
+                    {
+                        x.InstructionSessionId,
+                        x.InstructionDate,
+                        x.Grade,
+                        x.Topic,
+                        attendanceStatus = x.Status,
+                        x.ResponsibleOffice
+                    })
+                },
+                upcomingMeetings
             }
         });
     }
@@ -212,6 +348,7 @@ public static class MemberSelfEndpoints
 
         if (changedFields.Count == 0)
         {
+            httpContext.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(new { status = "unchanged", changedFields });
         }
 
@@ -225,6 +362,7 @@ public static class MemberSelfEndpoints
             metadata: new { ChangedFields = changedFields });
 
         await db.SaveChangesAsync(cancellationToken);
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { status = "updated", changedFields });
     }
 
@@ -238,6 +376,15 @@ public static class MemberSelfEndpoints
     {
         var at = value.IndexOf('@');
         return at > 0 && at < value.Length - 1 && value.IndexOf('.', at) > at + 1;
+    }
+
+    private static bool IsMeetingVisibleToDegree(string grade, int effectiveDegree)
+    {
+        if (grade == LodgeManagementCodes.Grade.All) return true;
+
+        var requiredDegree = LodgeManagementCodes.Grade.ToNumeric(grade)
+            ?? (int.TryParse(grade, out var numericGrade) ? numericGrade : int.MaxValue);
+        return requiredDegree <= effectiveDegree;
     }
 }
 
