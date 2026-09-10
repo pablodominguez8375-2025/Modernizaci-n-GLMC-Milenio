@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using PMGM.Api.Modules.CandidateIntake;
+using Xunit;
 
 namespace PMGM.Api.Tests.Ceremonies;
 
