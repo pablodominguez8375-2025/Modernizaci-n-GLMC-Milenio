@@ -86,6 +86,7 @@ Obligatorio:
 - Docker Engine;
 - Docker Compose v2 plugin;
 - Git;
+- Python 3;
 - curl;
 - OpenSSL;
 - herramientas estándar `tar`, `gzip`, `sha256sum`.
@@ -151,6 +152,8 @@ PMGM_PILOT_INSECURE_TLS=false
 Caddy obtiene/renueva TLS cuando el FQDN y la conectividad pública lo permiten. Si la organización usa una PKI o proxy TLS institucional, adaptar Caddy manteniendo HTTPS extremo a extremo y validar nuevamente el smoke.
 
 ## 11. Primera instalación
+
+La forma preferida para esta RC es usar el artefacto `PMGM-v1.0.0-rc1-definitive-deployment` y seguir `PMGM-PAQUETE-IMPLEMENTACION-V100.md`, porque incluye Git bundle y checksums. Como alternativa, si la VM tiene acceso autorizado al repositorio:
 
 ### 11.1 Obtener el candidato congelado
 
@@ -321,6 +324,7 @@ El proyecto no inventa plazos de retención: deben ser aprobados conforme a fina
 - [ ] VM 8 vCPU / 32 GB / 500 GB o capacidad aprobada.
 - [ ] Linux actualizado.
 - [ ] Docker Engine + Compose v2.
+- [ ] Python 3 y utilitarios obligatorios.
 - [ ] FQDN resuelve correctamente.
 - [ ] 80/443 disponibles.
 - [ ] SSH restringido.
