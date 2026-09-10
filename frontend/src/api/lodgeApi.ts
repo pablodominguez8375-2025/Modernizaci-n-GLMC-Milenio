@@ -3,6 +3,12 @@ export type LodgeGrade = 'apprentice' | 'fellowcraft' | 'master' | 'all'
 export type LodgeMeetingStatus = 'scheduled' | 'open' | 'closed' | 'cancelled'
 export type LodgeAttendanceStatus = 'present' | 'excused' | 'absent'
 export type LodgeMinuteStatus = 'draft' | 'approved' | 'superseded'
+export type LodgeCorrespondenceDirection = 'incoming' | 'outgoing'
+export type LodgeCorrespondenceChannel = 'email' | 'letter' | 'platform' | 'other'
+export type LodgeCorrespondenceStatus = 'registered' | 'processed' | 'archived'
+export type LodgeSecretariatPriority = 'low' | 'normal' | 'high'
+export type LodgeSecretariatTaskStatus = 'open' | 'done' | 'cancelled'
+export type LodgeAgendaStatus = 'pending' | 'addressed' | 'deferred'
 
 export interface LodgeMemberOption { id: string; displayName: string }
 export interface LodgeMemberOptionsResponse { total: number; items: LodgeMemberOption[] }
@@ -39,6 +45,69 @@ export interface LodgeMinute {
   approvedAtUtc: string | null
 }
 export interface LodgeMinutesResponse { total: number; items: LodgeMinute[] }
+
+export interface LodgeCorrespondenceRecord {
+  id: string
+  organizationId: string
+  folio: string
+  direction: LodgeCorrespondenceDirection
+  correspondenceDate: string
+  subject: string
+  counterparty: string
+  channel: LodgeCorrespondenceChannel
+  externalReference: string | null
+  status: LodgeCorrespondenceStatus
+  notes: string | null
+  createdAtUtc: string
+  updatedAtUtc: string | null
+}
+export interface LodgeCorrespondenceResponse { total: number; items: LodgeCorrespondenceRecord[] }
+export interface CreateLodgeCorrespondenceRequest {
+  folio: string
+  direction: LodgeCorrespondenceDirection
+  correspondenceDate: string
+  subject: string
+  counterparty: string
+  channel: LodgeCorrespondenceChannel
+  externalReference?: string | null
+  notes?: string | null
+}
+
+export interface LodgeSecretariatTask {
+  id: string
+  organizationId: string
+  title: string
+  detail: string | null
+  dueDate: string | null
+  priority: LodgeSecretariatPriority
+  responsibleLabel: string | null
+  status: LodgeSecretariatTaskStatus
+  createdAtUtc: string
+  completedAtUtc: string | null
+}
+export interface LodgeSecretariatTasksResponse { total: number; items: LodgeSecretariatTask[] }
+export interface CreateLodgeSecretariatTaskRequest {
+  title: string
+  detail?: string | null
+  dueDate?: string | null
+  priority: LodgeSecretariatPriority
+  responsibleLabel?: string | null
+}
+
+export interface LodgeMeetingAgendaItem {
+  id: string
+  meetingId: string
+  organizationId: string
+  position: number
+  title: string
+  detail: string | null
+  status: LodgeAgendaStatus
+  createdAtUtc: string
+  updatedAtUtc: string | null
+}
+export interface LodgeMeetingAgendaResponse { total: number; items: LodgeMeetingAgendaItem[] }
+export interface CreateLodgeMeetingAgendaItemRequest { title: string; detail?: string | null }
+
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
 interface LodgeApiClientOptions {
@@ -95,6 +164,48 @@ export const demoLodgeSeed = {
   } satisfies LodgeMinute,
 } as const
 
+export const demoLodgeSecretariatSeed = {
+  correspondence: [
+    {
+      id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, folio: 'SEC-2026-014', direction: 'incoming' as const,
+      correspondenceDate: '2026-09-08', subject: 'Circular institucional demostrativa', counterparty: 'Gran Secretaría · demo', channel: 'platform' as const,
+      externalReference: 'CIRC-DEMO-091', status: 'registered' as const, notes: 'Revisar en próxima reunión de Secretaría. Dato ficticio.',
+      createdAtUtc: '2026-09-08T14:30:00Z', updatedAtUtc: null,
+    },
+    {
+      id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, folio: 'SEC-2026-013', direction: 'outgoing' as const,
+      correspondenceDate: '2026-09-04', subject: 'Acuse de recibo demostrativo', counterparty: 'Órgano institucional · demo', channel: 'email' as const,
+      externalReference: null, status: 'processed' as const, notes: null, createdAtUtc: '2026-09-04T18:15:00Z', updatedAtUtc: '2026-09-04T19:10:00Z',
+    },
+  ] satisfies LodgeCorrespondenceRecord[],
+  tasks: [
+    {
+      id: 'ffffffff-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, title: 'Preparar tabla de la próxima Tenida · demo',
+      detail: 'Consolidar puntos administrativos e instrucción.', dueDate: '2026-09-11', priority: 'high' as const, responsibleLabel: 'Secretaría',
+      status: 'open' as const, createdAtUtc: '2026-09-07T16:00:00Z', completedAtUtc: null,
+    },
+    {
+      id: 'ffffffff-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, title: 'Confirmar recepción de correspondencia · demo',
+      detail: null, dueDate: '2026-09-15', priority: 'normal' as const, responsibleLabel: 'Secretaría', status: 'open' as const,
+      createdAtUtc: '2026-09-08T16:00:00Z', completedAtUtc: null,
+    },
+  ] satisfies LodgeSecretariatTask[],
+  agenda: [
+    {
+      id: 'abababab-0001-0001-0001-000000000001', meetingId: demoLodgeSeed.meetings[0].id, organizationId: DEMO_LODGE_23_ID,
+      position: 1, title: 'Apertura y lectura del acta anterior · demo', detail: null, status: 'pending' as const, createdAtUtc: '2026-09-08T17:00:00Z', updatedAtUtc: null,
+    },
+    {
+      id: 'abababab-0002-0002-0002-000000000002', meetingId: demoLodgeSeed.meetings[0].id, organizationId: DEMO_LODGE_23_ID,
+      position: 2, title: 'Cuenta de Secretaría · demo', detail: 'Correspondencia recibida y enviada de la semana.', status: 'pending' as const, createdAtUtc: '2026-09-08T17:02:00Z', updatedAtUtc: null,
+    },
+    {
+      id: 'abababab-0003-0003-0003-000000000003', meetingId: demoLodgeSeed.meetings[0].id, organizationId: DEMO_LODGE_23_ID,
+      position: 3, title: 'Punto de instrucción · demo', detail: 'Tema demostrativo sujeto a grado y permisos.', status: 'pending' as const, createdAtUtc: '2026-09-08T17:04:00Z', updatedAtUtc: null,
+    },
+  ] satisfies LodgeMeetingAgendaItem[],
+} as const
+
 export class LodgeApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: LodgeAccessTokenProvider
@@ -103,6 +214,9 @@ export class LodgeApiClient {
   private readonly mockMeetings: LodgeMeeting[] = demoLodgeSeed.meetings.map(item => ({ ...item }))
   private readonly mockAttendance = new Map<string, LodgeAttendanceCurrent[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.attendance.map(item => ({ ...item }))]])
   private readonly mockMinutes = new Map<string, LodgeMinute[]>([[demoLodgeSeed.meetings[2].id, [{ ...demoLodgeSeed.minute }]]])
+  private readonly mockCorrespondence: LodgeCorrespondenceRecord[] = demoLodgeSecretariatSeed.correspondence.map(item => ({ ...item }))
+  private readonly mockSecretariatTasks: LodgeSecretariatTask[] = demoLodgeSecretariatSeed.tasks.map(item => ({ ...item }))
+  private readonly mockAgenda = new Map<string, LodgeMeetingAgendaItem[]>([[demoLodgeSeed.meetings[0].id, demoLodgeSecretariatSeed.agenda.map(item => ({ ...item }))]])
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -135,15 +249,8 @@ export class LodgeApiClient {
   async createMeeting(organizationId: string, payload: CreateLodgeMeetingRequest): Promise<LodgeMeeting> {
     if (this.useMocks) {
       const meeting: LodgeMeeting = {
-        id: crypto.randomUUID(),
-        organizationId,
-        meetingDate: payload.meetingDate,
-        meetingType: payload.meetingType,
-        grade: payload.grade,
-        title: payload.title?.trim() || null,
-        status: 'scheduled',
-        createdAtUtc: new Date().toISOString(),
-        closedAtUtc: null,
+        id: crypto.randomUUID(), organizationId, meetingDate: payload.meetingDate, meetingType: payload.meetingType, grade: payload.grade,
+        title: payload.title?.trim() || null, status: 'scheduled', createdAtUtc: new Date().toISOString(), closedAtUtc: null,
       }
       this.mockMeetings.unshift(meeting)
       return { ...meeting }
@@ -220,6 +327,106 @@ export class LodgeApiClient {
       return { ...minute }
     }
     return this.request<LodgeMinute>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/actas/${encodeURIComponent(minuteId)}/aprobar`, { method: 'POST' })
+  }
+
+  async getCorrespondence(organizationId: string): Promise<LodgeCorrespondenceResponse> {
+    if (this.useMocks) {
+      const items = this.mockCorrespondence.filter(item => item.organizationId === organizationId)
+        .sort((a, b) => b.correspondenceDate.localeCompare(a.correspondenceDate)).map(item => ({ ...item }))
+      return { total: items.length, items }
+    }
+    return this.request<LodgeCorrespondenceResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/secretaria/correspondencia`)
+  }
+
+  async createCorrespondence(organizationId: string, payload: CreateLodgeCorrespondenceRequest): Promise<LodgeCorrespondenceRecord> {
+    if (this.useMocks) {
+      if (this.mockCorrespondence.some(item => item.organizationId === organizationId && item.folio === payload.folio.trim())) throw new Error('El folio ya existe en este Taller.')
+      const item: LodgeCorrespondenceRecord = {
+        id: crypto.randomUUID(), organizationId, folio: payload.folio.trim(), direction: payload.direction, correspondenceDate: payload.correspondenceDate,
+        subject: payload.subject.trim(), counterparty: payload.counterparty.trim(), channel: payload.channel,
+        externalReference: payload.externalReference?.trim() || null, status: 'registered', notes: payload.notes?.trim() || null,
+        createdAtUtc: new Date().toISOString(), updatedAtUtc: null,
+      }
+      this.mockCorrespondence.unshift(item)
+      return { ...item }
+    }
+    return this.postJson<LodgeCorrespondenceRecord>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/secretaria/correspondencia`, payload)
+  }
+
+  async updateCorrespondenceStatus(organizationId: string, recordId: string, status: LodgeCorrespondenceStatus): Promise<LodgeCorrespondenceRecord> {
+    if (this.useMocks) {
+      const item = this.mockCorrespondence.find(row => row.id === recordId && row.organizationId === organizationId)
+      if (!item) throw new Error('La correspondencia indicada no existe.')
+      item.status = status; item.updatedAtUtc = new Date().toISOString()
+      return { ...item }
+    }
+    return this.postJson<LodgeCorrespondenceRecord>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/secretaria/correspondencia/${encodeURIComponent(recordId)}/estado`, { status })
+  }
+
+  async getSecretariatTasks(organizationId: string): Promise<LodgeSecretariatTasksResponse> {
+    if (this.useMocks) {
+      const items = this.mockSecretariatTasks.filter(item => item.organizationId === organizationId)
+        .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')).map(item => ({ ...item }))
+      return { total: items.length, items }
+    }
+    return this.request<LodgeSecretariatTasksResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/secretaria/pendientes`)
+  }
+
+  async createSecretariatTask(organizationId: string, payload: CreateLodgeSecretariatTaskRequest): Promise<LodgeSecretariatTask> {
+    if (this.useMocks) {
+      const task: LodgeSecretariatTask = {
+        id: crypto.randomUUID(), organizationId, title: payload.title.trim(), detail: payload.detail?.trim() || null,
+        dueDate: payload.dueDate || null, priority: payload.priority, responsibleLabel: payload.responsibleLabel?.trim() || null,
+        status: 'open', createdAtUtc: new Date().toISOString(), completedAtUtc: null,
+      }
+      this.mockSecretariatTasks.unshift(task)
+      return { ...task }
+    }
+    return this.postJson<LodgeSecretariatTask>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/secretaria/pendientes`, payload)
+  }
+
+  async updateSecretariatTaskStatus(organizationId: string, taskId: string, status: LodgeSecretariatTaskStatus): Promise<LodgeSecretariatTask> {
+    if (this.useMocks) {
+      const item = this.mockSecretariatTasks.find(row => row.id === taskId && row.organizationId === organizationId)
+      if (!item) throw new Error('El pendiente indicado no existe.')
+      item.status = status; item.completedAtUtc = status === 'open' ? null : new Date().toISOString()
+      return { ...item }
+    }
+    return this.postJson<LodgeSecretariatTask>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/secretaria/pendientes/${encodeURIComponent(taskId)}/estado`, { status })
+  }
+
+  async getMeetingAgenda(meetingId: string): Promise<LodgeMeetingAgendaResponse> {
+    if (this.useMocks) {
+      const items = [...(this.mockAgenda.get(meetingId) ?? [])].sort((a, b) => a.position - b.position).map(item => ({ ...item }))
+      return { total: items.length, items }
+    }
+    return this.request<LodgeMeetingAgendaResponse>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/tabla`)
+  }
+
+  async createMeetingAgendaItem(meetingId: string, payload: CreateLodgeMeetingAgendaItemRequest): Promise<LodgeMeetingAgendaItem> {
+    if (this.useMocks) {
+      const meeting = this.requireMeeting(meetingId)
+      if (meeting.status === 'closed' || meeting.status === 'cancelled') throw new Error('No se puede modificar la tabla de una Tenida cerrada o cancelada.')
+      const items = this.mockAgenda.get(meetingId) ?? []
+      const item: LodgeMeetingAgendaItem = {
+        id: crypto.randomUUID(), meetingId, organizationId: meeting.organizationId, position: Math.max(0, ...items.map(row => row.position)) + 1,
+        title: payload.title.trim(), detail: payload.detail?.trim() || null, status: 'pending', createdAtUtc: new Date().toISOString(), updatedAtUtc: null,
+      }
+      items.push(item); this.mockAgenda.set(meetingId, items)
+      return { ...item }
+    }
+    return this.postJson<LodgeMeetingAgendaItem>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/tabla`, payload)
+  }
+
+  async updateMeetingAgendaStatus(meetingId: string, itemId: string, status: LodgeAgendaStatus): Promise<LodgeMeetingAgendaItem> {
+    if (this.useMocks) {
+      const items = this.mockAgenda.get(meetingId) ?? []
+      const item = items.find(row => row.id === itemId)
+      if (!item) throw new Error('El punto de tabla indicado no existe.')
+      item.status = status; item.updatedAtUtc = new Date().toISOString()
+      return { ...item }
+    }
+    return this.postJson<LodgeMeetingAgendaItem>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/tabla/${encodeURIComponent(itemId)}/estado`, { status })
   }
 
   private requireMeeting(id: string): LodgeMeeting {
