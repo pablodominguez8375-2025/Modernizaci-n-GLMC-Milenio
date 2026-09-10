@@ -4,6 +4,7 @@ import AuthRoot from './auth/AuthRoot'
 import './styles.css'
 import './calendar.css'
 import './showcase.css'
+import './member-portal.css'
 
 const root = document.getElementById('root')
 
