@@ -20,8 +20,10 @@ permissions:
   pages: write
   id-token: write
 
+# PR validation must never cancel an in-flight deployment from dev.
+# Each PR gets its own concurrency group; dev keeps a stable deployment group.
 concurrency:
-  group: pmgm-showcase-pages
+  group: pmgm-showcase-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
