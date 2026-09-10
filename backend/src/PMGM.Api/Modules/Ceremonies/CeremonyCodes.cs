@@ -25,6 +25,7 @@ public static class CeremonyCodes
         public const string Treasury = "treasury";
         public const string Hospitalaria = "hospitalaria";
         public const string CandidatePublication = "candidate_publication";
+        public const string CandidatePublicationReview = "candidate_publication_review";
         public const string SpaceAvailability = "space_availability";
     }
 
