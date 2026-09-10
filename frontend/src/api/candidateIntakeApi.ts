@@ -1,3 +1,5 @@
+import type { CandidatePortalResponse } from './pmgmApi'
+
 export type CandidateReviewStatus = 'pending_grand_secretariat' | 'observed' | 'rejected' | 'approved'
 
 export interface CandidateReviewQueueItem {
@@ -43,6 +45,8 @@ export interface CandidateIntakeProfile {
   updatedAtUtc: string
 }
 
+export type PublishedCandidate = CandidatePortalResponse['items'][number] & { photoUrl: string | null }
+export type PublishedCandidatePortalResponse = Omit<CandidatePortalResponse, 'items'> & { items: PublishedCandidate[] }
 export type CandidateReviewDecision = 'observed' | 'rejected'
 export type AccessTokenProvider = () => Promise<string | null>
 
@@ -112,6 +116,40 @@ const demoQueueSeed: CandidateReviewQueueItem[] = [
   },
 ]
 
+const demoPublishedCandidates: PublishedCandidatePortalResponse = {
+  culture: 'es-CL',
+  portal: 'Insinuados en período de publicación',
+  total: 2,
+  items: [
+    {
+      displayName: 'Persona Demostrativa Uno',
+      workshopName: 'Taller Demostrativo Nº 1',
+      workshopNumber: '1',
+      publishedFromUtc: '2026-08-25T15:00:00Z',
+      publishedUntilUtc: null,
+      requiredDays: 20,
+      elapsedDays: 13,
+      complianceDateUtc: '2026-09-14T15:00:00Z',
+      ruleCode: 'initiation.publication.minimum_days',
+      status: 'published',
+      photoUrl: '/api/candidate-publications/11111111-aaaa-4aaa-8aaa-111111111111/photo',
+    },
+    {
+      displayName: 'Persona Demostrativa Dos',
+      workshopName: 'Taller Demostrativo Nº 23',
+      workshopNumber: '23',
+      publishedFromUtc: '2026-08-15T18:00:00Z',
+      publishedUntilUtc: null,
+      requiredDays: 20,
+      elapsedDays: 23,
+      complianceDateUtc: '2026-09-04T18:00:00Z',
+      ruleCode: 'initiation.publication.minimum_days',
+      status: 'published',
+      photoUrl: null,
+    },
+  ],
+}
+
 export class CandidateIntakeApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
@@ -125,6 +163,13 @@ export class CandidateIntakeApiClient {
     this.getAccessToken = options.getAccessToken
     this.useMocks = options.useMocks ?? false
     this.onUnauthorized = options.onUnauthorized
+  }
+
+  async getPublishedCandidates(): Promise<PublishedCandidatePortalResponse> {
+    if (this.useMocks) {
+      return { ...demoPublishedCandidates, items: demoPublishedCandidates.items.map(item => ({ ...item })) }
+    }
+    return this.request<PublishedCandidatePortalResponse>('/api/candidate-publications/active')
   }
 
   async getGrandSecretariatQueue(status?: CandidateReviewStatus | string): Promise<CandidateReviewQueueResponse> {
