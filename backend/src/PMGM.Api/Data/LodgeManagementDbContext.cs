@@ -11,6 +11,9 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
     public DbSet<LodgeMinute> LodgeMinutes => Set<LodgeMinute>();
     public DbSet<LodgeInstructionSession> LodgeInstructionSessions => Set<LodgeInstructionSession>();
     public DbSet<LodgeInstructionAttendanceRecord> LodgeInstructionAttendanceRecords => Set<LodgeInstructionAttendanceRecord>();
+    public DbSet<LodgeCorrespondenceRecord> LodgeCorrespondenceRecords => Set<LodgeCorrespondenceRecord>();
+    public DbSet<LodgeSecretariatTask> LodgeSecretariatTasks => Set<LodgeSecretariatTask>();
+    public DbSet<LodgeMeetingAgendaItem> LodgeMeetingAgendaItems => Set<LodgeMeetingAgendaItem>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -79,6 +82,56 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
             entity.HasOne(x => x.InstructionSession).WithMany().HasForeignKey(x => x.InstructionSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.InstructionSessionId, x.MemberId, x.RecordedAtUtc });
             entity.HasIndex(x => new { x.MemberId, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<LodgeCorrespondenceRecord>(entity =>
+        {
+            entity.ToTable("lodge_correspondence_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Folio).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Direction).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Counterparty).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.Channel).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ExternalReference).HasMaxLength(240);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.UpdatedBySubject).HasMaxLength(320);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Folio }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.CorrespondenceDate });
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+
+        modelBuilder.Entity<LodgeSecretariatTask>(entity =>
+        {
+            entity.ToTable("lodge_secretariat_tasks");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(2000);
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ResponsibleLabel).HasMaxLength(160);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.CompletedBySubject).HasMaxLength(320);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.DueDate });
+        });
+
+        modelBuilder.Entity<LodgeMeetingAgendaItem>(entity =>
+        {
+            entity.ToTable("lodge_meeting_agenda_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(3000);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.UpdatedBySubject).HasMaxLength(320);
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasOne(x => x.Meeting).WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.MeetingId, x.Position }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
         });
 
         modelBuilder.Entity<AuditEvent>(entity =>
