@@ -33,7 +33,8 @@ public sealed class CandidatePublicationProjectionTests
             "ElapsedDays",
             "ComplianceDateUtc",
             "RuleCode",
-            "Status"
+            "Status",
+            "PhotoUrl"
         };
 
         var actual = typeof(CandidatePublicationPublicDto)

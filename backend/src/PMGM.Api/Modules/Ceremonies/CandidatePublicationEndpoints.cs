@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
-using PMGM.Api.Modules.Authorization;
 
 namespace PMGM.Api.Modules.Ceremonies;
 
@@ -17,9 +16,7 @@ public static class CandidatePublicationEndpoints
     }
 
     private static async Task<IResult> GetActivePublicationsAsync(
-        HttpContext httpContext,
         PmgmDbContext db,
-        IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -33,7 +30,7 @@ public static class CandidatePublicationEndpoints
             .OrderBy(x => x.PublishedFromUtc)
             .Select(x => new
             {
-                OrganizationId = x.Organization.Id,
+                x.Id,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 WorkshopName = x.Organization.Name,
@@ -46,10 +43,8 @@ public static class CandidatePublicationEndpoints
             })
             .ToListAsync(cancellationToken);
 
-        var result = rows
-            .Where(x => access.CanReadOrganization(httpContext.User, x.OrganizationId))
-            .Select(x => new CandidatePublicationPublicDto(
-                DisplayName: string.Join(' ', new[] { x.FirstNames, x.LastNames }.Where(value => !string.IsNullOrWhiteSpace(value))),
+        var items = rows.Select(x => new CandidatePublicationPublicDto(
+                DisplayName: $"{x.FirstNames} {x.LastNames}".Trim(),
                 WorkshopName: x.WorkshopName,
                 WorkshopNumber: x.WorkshopNumber,
                 PublishedFromUtc: x.PublishedFromUtc,
@@ -58,9 +53,16 @@ public static class CandidatePublicationEndpoints
                 ElapsedDays: Math.Max(0, (int)Math.Floor((now - x.PublishedFromUtc).TotalDays)),
                 ComplianceDateUtc: x.PublishedFromUtc.AddDays(x.RequiredDays),
                 RuleCode: x.RuleCode,
-                Status: x.Status))
+                Status: x.Status,
+                PhotoUrl: $"/api/candidate-publications/{x.Id:D}/photo"))
             .ToList();
 
-        return Results.Ok(result);
+        return Results.Ok(new
+        {
+            culture = "es-CL",
+            portal = "Insinuados en período de publicación",
+            total = items.Count,
+            items
+        });
     }
 }

@@ -67,6 +67,48 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
+    public void LodgeSecretariat_CannotApproveCandidatePublication()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerSecretaria),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.False(_service.CanManageCandidatePublications(user, organization));
+    }
+
+    [Fact]
+    public void RegimenInterior_CannotApproveCandidatePublication()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.RegimenInterior));
+
+        Assert.False(_service.CanManageCandidatePublications(user, organization));
+    }
+
+    [Fact]
+    public void GrandSecretariat_WithOrderScope_CanApproveCandidatePublication()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
+
+        Assert.True(_service.CanManageCandidatePublications(user, organization));
+    }
+
+    [Fact]
+    public void GrandSecretariat_WithoutOrderScope_CannotApproveCandidatePublication()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
+
+        Assert.False(_service.CanManageCandidatePublications(user, organization));
+    }
+
+    [Fact]
     public void GrandSecretariat_CannotApproveTransfers()
     {
         var user = CreateUser(

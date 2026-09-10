@@ -1,3 +1,4 @@
+using System.Data;
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
@@ -5,6 +6,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
+using PMGM.Api.Modules.Notifications;
 using PMGM.Api.Modules.Treasury;
 using PMGM.Api.Modules.Treasury.Entities;
 
@@ -22,6 +24,8 @@ public static class CeremonyEndpoints
 
         group.MapPost("/solicitudes", CreateRequestAsync);
         group.MapPost("/solicitudes/{requestId:guid}/validaciones/regimen-interior", SetInternalAffairsValidationAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/revision-publicacion-insinuado", ReviewCandidatePublicationAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/aprobar-publicacion-insinuado", PublishCandidateAsync);
         group.MapPost("/solicitudes/{requestId:guid}/publicacion-insinuado", PublishCandidateAsync);
         group.MapGet("/solicitudes/{requestId:guid}/elegibilidad", GetEligibilityAsync);
         group.MapPost("/solicitudes/{requestId:guid}/autorizar", AuthorizeAsync);
@@ -195,16 +199,98 @@ public static class CeremonyEndpoints
         });
     }
 
-    private static async Task<IResult> PublishCandidateAsync(
+    private static async Task<IResult> ReviewCandidatePublicationAsync(
         Guid requestId,
+        CandidatePublicationReviewRequest request,
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
     {
+        if (!access.HasOrderScope(httpContext.User) ||
+            !access.HasRole(httpContext.User, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranSecretaria))
+        {
+            return Results.Forbid();
+        }
+
+        if (request.Decision is not CeremonyCodes.ValidationStatus.Observed and not CeremonyCodes.ValidationStatus.Rejected)
+        {
+            return Results.BadRequest(new { message = "La revisión de publicación sólo admite observar o rechazar. Para aprobar utilice la acción de aprobación de Gran Secretaría." });
+        }
+
+        var ceremony = await db.CeremonyRequests.SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+        if (ceremony is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (ceremony.CeremonyType != CeremonyCodes.Type.Initiation || ceremony.CandidatePersonId is null)
+        {
+            return Results.BadRequest(new { message = "La revisión de publicación sólo aplica a fichas de insinuados para iniciación." });
+        }
+
+        var alreadyPublished = await db.CandidatePublications.AnyAsync(
+            x => x.CeremonyRequestId == requestId && x.Status == CeremonyCodes.PublicationStatus.Published,
+            cancellationToken);
+        if (alreadyPublished)
+        {
+            return Results.Conflict(new { message = "La ficha ya fue aprobada y publicada; no puede observarse o rechazarse por este flujo." });
+        }
+
+        var review = new CeremonyValidation
+        {
+            CeremonyRequestId = requestId,
+            ValidationType = CeremonyCodes.ValidationType.CandidatePublicationReview,
+            Status = request.Decision,
+            AsOfDate = ChileToday(),
+            SourceReference = request.SourceReference,
+            Notes = request.Notes
+        };
+
+        ceremony.Status = request.Decision == CeremonyCodes.ValidationStatus.Observed
+            ? CeremonyCodes.RequestStatus.Observed
+            : CeremonyCodes.RequestStatus.Rejected;
+
+        db.CeremonyValidations.Add(review);
+        audit.Add(
+            httpContext,
+            "ceremony.candidate_publication.reviewed",
+            nameof(CeremonyRequest),
+            ceremony.Id.ToString(),
+            ceremony.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                decision = review.Status,
+                ceremony.Status,
+                review.AsOfDate
+            });
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            ceremony.Id,
+            ceremony.Status,
+            reviewId = review.Id,
+            decision = review.Status,
+            review.AsOfDate
+        });
+    }
+
+    private static async Task<IResult> PublishCandidateAsync(
+        Guid requestId,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        IInstitutionalNotificationService notifications,
+        CancellationToken cancellationToken)
+    {
         var ceremony = await db.CeremonyRequests
-            .AsNoTracking()
+            .Include(x => x.CandidatePerson)
+            .Include(x => x.Organization)
             .SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
 
         if (ceremony is null)
@@ -212,7 +298,7 @@ public static class CeremonyEndpoints
             return Results.NotFound();
         }
 
-        if (ceremony.CeremonyType != CeremonyCodes.Type.Initiation || ceremony.CandidatePersonId is null)
+        if (ceremony.CeremonyType != CeremonyCodes.Type.Initiation || ceremony.CandidatePersonId is null || ceremony.CandidatePerson is null)
         {
             return Results.BadRequest(new { message = "La publicación de insinuado sólo aplica a solicitudes de iniciación." });
         }
@@ -222,15 +308,41 @@ public static class CeremonyEndpoints
             return Results.Forbid();
         }
 
-        var alreadyPublished = await db.CandidatePublications.AnyAsync(
-            x => x.CeremonyRequestId == requestId &&
-                 x.Status == CeremonyCodes.PublicationStatus.Published &&
-                 x.PublishedUntilUtc == null,
-            cancellationToken);
+        var candidateName = string.Join(' ', new[] { ceremony.CandidatePerson.FirstNames, ceremony.CandidatePerson.LastNames }
+            .Where(value => !string.IsNullOrWhiteSpace(value)));
+        var workshopName = ceremony.Organization.Name;
 
-        if (alreadyPublished)
+        var existingPublication = await db.CandidatePublications
+            .AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId && x.Status == CeremonyCodes.PublicationStatus.Published)
+            .OrderByDescending(x => x.PublishedFromUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (existingPublication is not null)
         {
-            return Results.Conflict(new { message = "La solicitud ya tiene una publicación vigente del insinuado." });
+            var reconciled = await QueueCandidatePublicationNotificationsAsync(
+                existingPublication,
+                candidateName,
+                workshopName,
+                httpContext,
+                db,
+                notifications,
+                cancellationToken);
+
+            return Results.Ok(new
+            {
+                existingPublication.Id,
+                existingPublication.CeremonyRequestId,
+                existingPublication.PersonId,
+                existingPublication.OrganizationId,
+                existingPublication.PublishedFromUtc,
+                existingPublication.RequiredDays,
+                existingPublication.RuleCode,
+                existingPublication.Status,
+                alreadyPublished = true,
+                notificationRecipients = reconciled.Recipients,
+                notificationsCreated = reconciled.Created
+            });
         }
 
         var today = ChileToday();
@@ -247,10 +359,22 @@ public static class CeremonyEndpoints
             Status = CeremonyCodes.PublicationStatus.Published
         };
 
+        var review = new CeremonyValidation
+        {
+            CeremonyRequestId = requestId,
+            ValidationType = CeremonyCodes.ValidationType.CandidatePublicationReview,
+            Status = CeremonyCodes.ValidationStatus.Approved,
+            AsOfDate = today,
+            SourceReference = publication.Id.ToString(),
+            Notes = "Ficha aprobada por Gran Secretaría para publicación institucional."
+        };
+
+        ceremony.Status = CeremonyCodes.RequestStatus.UnderReview;
         db.CandidatePublications.Add(publication);
+        db.CeremonyValidations.Add(review);
         audit.Add(
             httpContext,
-            "ceremony.candidate_publication.started",
+            "ceremony.candidate_publication.approved_by_grand_secretariat",
             nameof(CandidatePublication),
             publication.Id.ToString(),
             publication.OrganizationId,
@@ -260,12 +384,37 @@ public static class CeremonyEndpoints
                 publication.PublishedFromUtc,
                 publication.RequiredDays,
                 publication.RuleCode,
-                publication.Status
+                publication.Status,
+                reviewId = review.Id
             });
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.Created($"/api/ceremonias/solicitudes/{requestId}/publicacion-insinuado", new
+        var dispatch = await QueueCandidatePublicationNotificationsAsync(
+            publication,
+            candidateName,
+            workshopName,
+            httpContext,
+            db,
+            notifications,
+            cancellationToken);
+
+        audit.Add(
+            httpContext,
+            "ceremony.candidate_publication.notifications_queued",
+            nameof(CandidatePublication),
+            publication.Id.ToString(),
+            publication.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                dispatch.Recipients,
+                dispatch.Created,
+                channel = NotificationCodes.Channel.Internal
+            });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.Created($"/api/ceremonias/solicitudes/{requestId}/aprobar-publicacion-insinuado", new
         {
             publication.Id,
             publication.CeremonyRequestId,
@@ -274,8 +423,92 @@ public static class CeremonyEndpoints
             publication.PublishedFromUtc,
             publication.RequiredDays,
             publication.RuleCode,
-            publication.Status
+            publication.Status,
+            alreadyPublished = false,
+            notificationRecipients = dispatch.Recipients,
+            notificationsCreated = dispatch.Created
         });
+    }
+
+    private static async Task<NotificationDispatchResult> QueueCandidatePublicationNotificationsAsync(
+        CandidatePublication publication,
+        string candidateName,
+        string workshopName,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalNotificationService notifications,
+        CancellationToken cancellationToken)
+    {
+        var subjects = await GetActiveMemberNotificationSubjectsAsync(db, cancellationToken);
+        var correlationId = httpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
+                            ?? httpContext.TraceIdentifier;
+        var created = 0;
+
+        foreach (var subject in subjects)
+        {
+            var result = await notifications.QueueAsync(new QueueNotificationCommand(
+                NotificationCodes.Template.CandidatePublicationApproved,
+                1,
+                NotificationCodes.Type.CandidatePublicationApproved,
+                subject,
+                null,
+                new[] { NotificationCodes.Channel.Internal },
+                new Dictionary<string, string?>
+                {
+                    ["candidateName"] = candidateName,
+                    ["workshopName"] = workshopName
+                },
+                $"candidate-publication:{publication.Id}:subject:{subject}",
+                correlationId,
+                publication.Id.ToString(),
+                "/candidates",
+                false,
+                null), cancellationToken);
+
+            if (result.Created) created++;
+        }
+
+        return new NotificationDispatchResult(subjects.Count, created);
+    }
+
+    private static async Task<IReadOnlyList<string>> GetActiveMemberNotificationSubjectsAsync(
+        PmgmDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose) await connection.OpenAsync(cancellationToken);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT DISTINCT mil."Subject"
+                FROM core.member_identity_links AS mil
+                WHERE mil."RevokedAtUtc" IS NULL
+                  AND EXISTS (
+                      SELECT 1
+                      FROM core.memberships AS ms
+                      WHERE ms."MemberId" = mil."MemberId"
+                        AND ms."EndDate" IS NULL
+                        AND lower(ms."Status") = 'active'
+                  )
+                ORDER BY mil."Subject";
+                """;
+
+            var subjects = new List<string>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                if (!reader.IsDBNull(0)) subjects.Add(reader.GetString(0));
+            }
+
+            return subjects;
+        }
+        finally
+        {
+            if (shouldClose) await connection.CloseAsync();
+        }
     }
 
     private static async Task<IResult> GetEligibilityAsync(
@@ -407,9 +640,7 @@ public static class CeremonyEndpoints
     }
 
     private static async Task<IResult> GetCandidatePortalAsync(
-        HttpContext httpContext,
         PmgmDbContext db,
-        IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -436,7 +667,6 @@ public static class CeremonyEndpoints
             .ToListAsync(cancellationToken);
 
         var visible = rows
-            .Where(x => access.CanReadOrganization(httpContext.User, x.OrganizationId))
             .Select(x => new CandidatePublicationPublicDto(
                 DisplayName: $"{x.FirstNames} {x.LastNames}".Trim(),
                 WorkshopName: x.WorkshopName,
@@ -747,6 +977,8 @@ public static class CeremonyEndpoints
         string RuleCode,
         DateTimeOffset PublishedFromUtc,
         DateTimeOffset? PublishedUntilUtc);
+
+    private sealed record NotificationDispatchResult(int Recipients, int Created);
 }
 
 public sealed record CreateCeremonyRequest(
@@ -759,6 +991,11 @@ public sealed record CreateCeremonyRequest(
 
 public sealed record CeremonyValidationRequest(
     string Status,
+    string? SourceReference,
+    string? Notes);
+
+public sealed record CandidatePublicationReviewRequest(
+    string Decision,
     string? SourceReference,
     string? Notes);
 

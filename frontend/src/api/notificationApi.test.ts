@@ -33,3 +33,14 @@ it('demo mode exposes a populated inbox and persists read state in-memory', asyn
   expect(unreadAfter.length).toBe(unreadBefore.length - 1)
   expect(fetch).not.toHaveBeenCalled()
 })
+
+it('demo mode includes the Gran Secretaría approval notice linked to published candidates', async () => {
+  const client = new NotificationApiClient({ useMocks: true })
+  const inbox = await client.getMine()
+  const approval = inbox.find(item => item.typeCode === 'candidate.publication.approved')
+
+  expect(approval).toBeDefined()
+  expect(approval?.subject).toBe('Nueva insinuación publicada')
+  expect(approval?.actionUrl).toBe('/candidates')
+  expect(approval?.body).toContain('Gran Secretaría aprobó la ficha')
+})

@@ -28,6 +28,17 @@ class NotificationApiHttpError extends Error {
 
 const demoInbox: NotificationInboxItem[] = [
   {
+    id: '9a000006-0000-0000-0000-000000000006',
+    typeCode: 'candidate.publication.approved',
+    subject: 'Nueva insinuación publicada',
+    body: 'Gran Secretaría aprobó la ficha de Persona Demostrativa Uno, presentada por Taller Demostrativo Nº 1. Revise la publicación institucional.',
+    actionUrl: '/candidates',
+    classification: 'internal',
+    mandatory: false,
+    createdAtUtc: '2026-09-10T15:05:00Z',
+    readAtUtc: null,
+  },
+  {
     id: '9a000001-0000-0000-0000-000000000001',
     typeCode: 'ceremony.authorized',
     subject: 'Ceremonia autorizada',

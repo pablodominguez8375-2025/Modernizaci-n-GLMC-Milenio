@@ -1,0 +1,52 @@
+.workshop-intake-page { display: grid; gap: 18px; }
+.workshop-intake-scope { display: inline-flex; align-items: center; min-height: 38px; padding: 0 12px; border-radius: 999px; background: var(--gold-soft); color: #7b5d23; font-size: 11px; font-weight: 800; }
+.workshop-intake-layout { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.workshop-intake-queue { position: sticky; top: 92px; }
+.workshop-intake-list { display: grid; gap: 9px; }
+.workshop-intake-list button { width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); padding: 13px; color: var(--ink); }
+.workshop-intake-list button:hover { border-color: #c9b06f; }
+.workshop-intake-list button.active { background: var(--gold-soft); border-color: #d8be78; box-shadow: inset 3px 0 0 var(--gold); }
+.workshop-intake-list strong, .workshop-intake-list span, .workshop-intake-list small { display: block; }
+.workshop-intake-list strong { font-size: 13px; }
+.workshop-intake-list span { color: var(--muted); font-size: 11px; margin-top: 4px; }
+.workshop-intake-list small { color: #7e8799; font-size: 10px; margin-top: 7px; line-height: 1.35; }
+.workshop-intake-main { display: grid; gap: 16px; min-width: 0; }
+.workshop-intake-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.workshop-intake-summary > div { padding: 12px 14px; border-radius: 12px; background: var(--surface-soft); border: 1px solid #e8ebf1; }
+.workshop-intake-summary small, .workshop-intake-summary strong { display: block; }
+.workshop-intake-summary small { color: var(--muted); font-size: 10px; margin-bottom: 5px; }
+.workshop-intake-summary strong { font-size: 12px; line-height: 1.35; }
+.workshop-status { color: #8b6725; }
+.workshop-status.approved { color: var(--success); }
+.workshop-status.rejected { color: var(--danger); }
+.workshop-status.observed { color: #a56624; }
+.workshop-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.workshop-field { display: grid; gap: 6px; min-width: 0; }
+.workshop-field.wide { grid-column: 1 / -1; }
+.workshop-field > span, .workshop-photo-version > span { color: #526078; font-size: 11px; font-weight: 800; }
+.workshop-field input, .workshop-field textarea, .workshop-photo-version input { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #fff; outline: none; resize: vertical; }
+.workshop-field input:focus, .workshop-field textarea:focus, .workshop-photo-version input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.workshop-field input:disabled, .workshop-field textarea:disabled, .workshop-photo-version input:disabled { background: #f0f2f6; color: #7e8798; cursor: not-allowed; }
+.workshop-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.workshop-form-actions small { max-width: 620px; color: var(--muted); line-height: 1.45; }
+.workshop-photo-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 22px; align-items: start; }
+.workshop-photo-layout p { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.workshop-photo-placeholder { width: 100%; aspect-ratio: 3 / 4; display: grid; place-items: center; border-radius: 10px; background: #eef1f6; color: #8b94a6; font-size: 12px; font-weight: 800; }
+.workshop-photo-version { display: grid; gap: 6px; margin-bottom: 11px; }
+.workshop-help { display: block; margin-top: 9px; color: var(--muted); }
+.workshop-config-note p { margin-bottom: 0; color: var(--muted); line-height: 1.6; }
+
+@media (max-width: 1100px) {
+  .workshop-intake-layout { grid-template-columns: 1fr; }
+  .workshop-intake-queue { position: static; }
+  .workshop-intake-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .workshop-intake-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .workshop-intake-list, .workshop-intake-summary, .workshop-form-grid { grid-template-columns: 1fr; }
+  .workshop-field.wide { grid-column: auto; }
+  .workshop-form-actions { align-items: stretch; flex-direction: column; }
+  .workshop-photo-layout { grid-template-columns: 1fr; }
+  .workshop-photo-layout .candidate-passport-photo { max-width: 150px; }
+}

@@ -53,7 +53,7 @@ export default function CeremoniesPage({ api }: { api: PmgmApiClient }) {
       <div>
         <p className="eyebrow">Flujo institucional</p>
         <h1>Ceremonias</h1>
-        <p>Revisión de solicitudes y requisitos habilitantes, con acciones definidas por el rol institucional.</p>
+        <p>Revisión de solicitudes, fichas de insinuados y requisitos habilitantes, con acciones definidas por el rol institucional.</p>
       </div>
       <div className="ceremony-heading-metrics"><span className="count-badge">{ready} listas</span><span className="count-badge">{blocked} con pendientes</span></div>
     </section>
@@ -114,7 +114,7 @@ function CeremonyCard({ item, api, working, execute }: {
 
     {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || item.actions.canAuthorize) && <div className="ceremony-actions">
       {item.actions.canValidateInternalAffairs && <InternalAffairsForm item={item} api={api} working={working} execute={execute} />}
-      {item.actions.canPublishCandidate && <button className="secondary-action" type="button" disabled={working} onClick={() => void execute(() => api.publishCeremonyCandidate(item.id), 'Publicación del insinuado iniciada y auditada.')}>Publicar insinuado</button>}
+      {item.actions.canPublishCandidate && <button className="secondary-action" type="button" disabled={working} title="Gran Secretaría aprueba la ficha, la hace visible y notifica a los Hermanos." onClick={() => void execute(() => api.publishCeremonyCandidate(item.id), 'Ficha aprobada por Gran Secretaría. La insinuación quedó publicada y se generaron las notificaciones institucionales.')}>Aprobar ficha y publicar</button>}
       {item.actions.canAuthorize && <button className="primary-action" type="button" disabled={working || !item.eligibility.canAuthorize} title={item.eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
     </div>}
   </article>

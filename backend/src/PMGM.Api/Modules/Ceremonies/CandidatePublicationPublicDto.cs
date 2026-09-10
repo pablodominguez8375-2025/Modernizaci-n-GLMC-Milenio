@@ -10,4 +10,5 @@ public sealed record CandidatePublicationPublicDto(
     int ElapsedDays,
     DateTimeOffset ComplianceDateUtc,
     string RuleCode,
-    string Status);
+    string Status,
+    string? PhotoUrl = null);

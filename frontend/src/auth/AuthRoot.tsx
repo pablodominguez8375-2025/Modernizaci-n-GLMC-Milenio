@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import App from '../App'
 import { createDefaultBootstrapApiClient } from '../api/bootstrapApi'
 import { createDefaultCalendarApiClient } from '../api/calendarApi'
+import { createDefaultCandidateIntakeApiClient } from '../api/candidateIntakeApi'
 import { createDefaultDataQualityCaseApiClient } from '../api/dataQualityCaseApi'
 import { createDefaultDocumentApiClient } from '../api/documentApi'
 import { createDefaultGrandArchiveApiClient } from '../api/grandArchiveApi'
@@ -31,20 +32,21 @@ function createRuntime() {
     const grandArchiveApi = createDefaultGrandArchiveApiClient(session?.getAccessToken, session?.invalidate)
     const calendarApi = createDefaultCalendarApiClient(session?.getAccessToken, session?.invalidate)
     const notificationApi = createDefaultNotificationApiClient(session?.getAccessToken, session?.invalidate)
-    return { session, api, bootstrapApi, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, error: '' }
+    const candidateIntakeApi = createDefaultCandidateIntakeApiClient(session?.getAccessToken, session?.invalidate)
+    return { session, api, bootstrapApi, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, candidateIntakeApi, error: '' }
   } catch {
-    return { session: null, api: null, bootstrapApi: null, lodgeApi: null, membershipApi: null, organizationProfileApi: null, reportingApi: null, internalAffairsApi: null, dataQualityCaseApi: null, documentApi: null, grandArchiveApi: null, calendarApi: null, notificationApi: null, error: 'El acceso institucional no está configurado. Contacte a la administración.' }
+    return { session: null, api: null, bootstrapApi: null, lodgeApi: null, membershipApi: null, organizationProfileApi: null, reportingApi: null, internalAffairsApi: null, dataQualityCaseApi: null, documentApi: null, grandArchiveApi: null, calendarApi: null, notificationApi: null, candidateIntakeApi: null, error: 'El acceso institucional no está configurado. Contacte a la administración.' }
   }
 }
 const runtime = createRuntime()
 
 function runtimeReady() {
-  return runtime.api && runtime.bootstrapApi && runtime.lodgeApi && runtime.membershipApi && runtime.organizationProfileApi && runtime.reportingApi && runtime.internalAffairsApi && runtime.dataQualityCaseApi && runtime.documentApi && runtime.grandArchiveApi && runtime.calendarApi && runtime.notificationApi
+  return runtime.api && runtime.bootstrapApi && runtime.lodgeApi && runtime.membershipApi && runtime.organizationProfileApi && runtime.reportingApi && runtime.internalAffairsApi && runtime.dataQualityCaseApi && runtime.documentApi && runtime.grandArchiveApi && runtime.calendarApi && runtime.notificationApi && runtime.candidateIntakeApi
 }
 
 export default function AuthRoot() {
   if (!runtimeReady()) return <AccessScreen message={runtime.error} />
-  if (!runtime.session) return <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} />
+  if (!runtime.session) return <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} candidateIntakeApi={runtime.candidateIntakeApi!} />
   return <AuthenticatedApp session={runtime.session} />
 }
 
@@ -52,11 +54,11 @@ function AuthenticatedApp({ session }: { session: OidcSession }) {
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)
   useEffect(() => { void session.initialize() }, [session])
   if (state.status === 'authenticated' && runtimeReady()) {
-    return <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} onLogout={() => { void session.logout() }} />
+    return <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} candidateIntakeApi={runtime.candidateIntakeApi!} onLogout={() => { void session.logout() }} />
   }
   return <AccessScreen message={state.message ?? (state.status === 'loading' ? 'Preparando acceso…' : 'Ingrese con su cuenta institucional.')} onLogin={state.status === 'loading' ? undefined : () => { void session.login() }} />
 }
 
 function AccessScreen({ message, onLogin }: { message: string; onLogin?: () => void }) {
-  return <main className="content"><section className="panel"><h1>Proyecto Milenio</h1><p role="status">{message}</p>{onLogin && <button type="button" onClick={onLogin}>Ingresar</button>}</section></main>
+  return <main className="content"><section className="panel"><h1>Proyecto Centenario</h1><p role="status">{message}</p>{onLogin && <button type="button" onClick={onLogin}>Ingresar</button>}</section></main>
 }
