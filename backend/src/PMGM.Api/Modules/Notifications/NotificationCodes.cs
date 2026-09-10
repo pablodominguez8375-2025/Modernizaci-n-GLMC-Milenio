@@ -40,4 +40,14 @@ public static class NotificationCodes
         public static bool IsValid(string value)
             => value is Internal or Confidential or Restricted;
     }
+
+    public static class Template
+    {
+        public const string CandidatePublicationApproved = "candidate.publication.approved";
+    }
+
+    public static class Type
+    {
+        public const string CandidatePublicationApproved = "candidate.publication.approved";
+    }
 }
