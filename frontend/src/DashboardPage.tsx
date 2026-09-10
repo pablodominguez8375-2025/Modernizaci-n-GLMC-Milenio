@@ -50,7 +50,7 @@ export default function DashboardPage(props: DashboardPageProps) {
   return <>
     <section className="hero-panel executive-hero">
       <div>
-        <p className="eyebrow">Centro de mando · Proyecto Milenio</p>
+        <p className="eyebrow">Centro de mando · Proyecto Centenario</p>
         <h1>Visión institucional en una sola plataforma</h1>
         <p className="lead">Seguimiento de personas, Talleres, ceremonias, agenda, comunicaciones y documentos con trazabilidad y control de acceso.</p>
         <div className="hero-assurance" aria-label="Controles activos">
