@@ -1,0 +1,121 @@
+name: PMGM Deployment Package
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - '.github/workflows/deployment-package.yml'
+      - 'docs/instalacion/PMGM-VM-DEFINITIVA-V100.md'
+      - 'docs/instalacion/PMGM-PAQUETE-IMPLEMENTACION-V100.md'
+      - 'release/PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json'
+      - 'scripts/preflight-definitive-host.sh'
+      - 'scripts/update-definitive.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build immutable deployment package
+    runs-on: ubuntu-latest
+    env:
+      RC_SHA: 739ba0b3a8d89087177b1edabd61c2981eed08a2
+      PACKAGE_ROOT: PMGM-v1.0.0-rc1
+      ZIP_NAME: PMGM-v1.0.0-rc1-definitive-deployment.zip
+
+    steps:
+      - name: Checkout repository with history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate package metadata and operator scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "${RC_SHA}^{commit}"
+          python3 -m json.tool release/PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json >/dev/null
+          bash -n scripts/preflight-definitive-host.sh
+          bash -n scripts/update-definitive.sh
+          python3 - <<'PY'
+          import json
+          p=json.load(open('release/PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json'))
+          assert p['applicationSourceSha']=='739ba0b3a8d89087177b1edabd61c2981eed08a2'
+          assert p['releaseVersion']=='1.0.0-rc1'
+          assert p['uatPromotionGate']['requiredCases']==20
+          PY
+
+      - name: Build deployment bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/pmgm-package"
+          PKG="$OUT/$PACKAGE_ROOT"
+          mkdir -p "$PKG/repository" "$PKG/operator/scripts"
+
+          git branch -f pmgm-package-rc1 "$RC_SHA"
+          git bundle create "$PKG/repository/PMGM-v1.0.0-rc1.bundle" pmgm-package-rc1
+          git bundle verify "$PKG/repository/PMGM-v1.0.0-rc1.bundle"
+          git branch -D pmgm-package-rc1
+
+          cp docs/instalacion/PMGM-VM-DEFINITIVA-V100.md "$PKG/operator/"
+          cp docs/instalacion/PMGM-PAQUETE-IMPLEMENTACION-V100.md "$PKG/operator/"
+          cp docs/instalacion/PMGM-PILOT-OPERACIONAL-V032.md "$PKG/operator/"
+          cp docs/qa/PMGM-UAT-V100-RC1.md "$PKG/operator/"
+          cp release/PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json "$PKG/operator/"
+          cp release/PMGM-UAT-1.0.0-rc1.template.json "$PKG/operator/"
+          cp scripts/preflight-definitive-host.sh "$PKG/operator/scripts/"
+          cp scripts/update-definitive.sh "$PKG/operator/scripts/"
+
+          printf '%s\n' "$RC_SHA" > "$PKG/APPLICATION-SOURCE-SHA.txt"
+
+          cat > "$PKG/README-INSTALAR.txt" <<'EOF'
+          PROYECTO MILENIO — PAQUETE DE IMPLEMENTACION v1.0.0-rc1
+
+          1. Verifique CHECKSUMS-SHA256.txt.
+          2. Lea operator/PMGM-PAQUETE-IMPLEMENTACION-V100.md.
+          3. Clone repository/PMGM-v1.0.0-rc1.bundle en /opt/pmgm/app.
+          4. Compruebe que HEAD coincide con APPLICATION-SOURCE-SHA.txt.
+          5. Configure /etc/pmgm/pmgm.env fuera del repositorio.
+          6. Ejecute preflight, start, smoke y backup inicial.
+          7. Copie el backup verificado fuera de la VM.
+          8. Ejecute UAT-001..UAT-020.
+          9. No cargue datos personales reales ni promueva estable antes de los gates y aprobación institucional.
+
+          La VM es persistente; las versiones se actualizan de forma controlada.
+          EOF
+
+          (
+            cd "$PKG"
+            find . -type f ! -name CHECKSUMS-SHA256.txt -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > CHECKSUMS-SHA256.txt
+          )
+
+          mkdir -p "$GITHUB_WORKSPACE/artifacts"
+          (
+            cd "$OUT"
+            zip -q -r "$GITHUB_WORKSPACE/artifacts/$ZIP_NAME" "$PACKAGE_ROOT"
+          )
+          sha256sum "$GITHUB_WORKSPACE/artifacts/$ZIP_NAME" > "$GITHUB_WORKSPACE/artifacts/$ZIP_NAME.sha256"
+
+      - name: Verify generated ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "artifacts/$ZIP_NAME"
+          sha256sum -c "artifacts/$ZIP_NAME.sha256"
+          unzip -l "artifacts/$ZIP_NAME" | grep -q 'PMGM-v1.0.0-rc1/repository/PMGM-v1.0.0-rc1.bundle'
+          unzip -l "artifacts/$ZIP_NAME" | grep -q 'PMGM-v1.0.0-rc1/CHECKSUMS-SHA256.txt'
+          unzip -l "artifacts/$ZIP_NAME" | grep -q 'PMGM-v1.0.0-rc1/operator/PMGM-UAT-V100-RC1.md'
+
+      - name: Upload deployment package
+        uses: actions/upload-artifact@v4
+        with:
+          name: PMGM-v1.0.0-rc1-definitive-deployment
+          path: |
+            artifacts/PMGM-v1.0.0-rc1-definitive-deployment.zip
+            artifacts/PMGM-v1.0.0-rc1-definitive-deployment.zip.sha256
+          if-no-files-found: error
+          retention-days: 90
