@@ -25,6 +25,63 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(portal.items.some(item => item.photoUrl === null)).toBe(true)
   })
 
+  it('lets Taller Secretaría complete a pending private ficha without publishing it', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const before = await api.getWorkshopQueue()
+    const pending = before.items.find(item => !item.profileAvailable)
+    expect(pending).toBeDefined()
+
+    const saved = await api.saveProfile(pending!.ceremonyRequestId, {
+      firstNames: 'Persona',
+      paternalSurname: 'QA',
+      maternalSurname: 'Taller',
+      rutOrInstitutionalId: 'DEMO-01',
+      birthDate: '1992-05-10',
+      nationality: 'Chilena · demo',
+      civilStatus: 'Demo',
+      occupation: 'Profesión ficticia',
+      phone: '+56 9 0000 0000',
+      email: 'taller.qa@ejemplo.cl',
+      address: 'Dirección ficticia',
+      city: 'Santiago · demo',
+      orient: 'Santiago',
+      presenters: ['H∴ Presentante QA'],
+      insinuationDate: '2026-09-01',
+      interviewSummary: 'Entrevista ficticia.',
+      internalObservations: 'Sólo QA.',
+    })
+
+    const after = await api.getWorkshopQueue()
+    const row = after.items.find(item => item.ceremonyRequestId === pending!.ceremonyRequestId)
+    expect(saved.reviewStatus).toBe('pending_grand_secretariat')
+    expect(row?.profileAvailable).toBe(true)
+    expect(row?.reviewStatus).toBe('pending_grand_secretariat')
+
+    const published = await api.getPublishedCandidates()
+    expect(published.items.some(item => item.displayName === saved.firstNames)).toBe(false)
+  })
+
+  it('links a processed passport-photo version and keeps the ficha pending for Gran Secretaría', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const queue = await api.getWorkshopQueue()
+    const pending = queue.items.find(item => !item.profileAvailable)!
+
+    await api.saveProfile(pending.ceremonyRequestId, {
+      firstNames: 'Persona Foto',
+      paternalSurname: 'QA',
+      presenters: ['H∴ Presentante QA'],
+      insinuationDate: '2026-09-01',
+    })
+    await api.attachPhotoVersion(pending.ceremonyRequestId, '11111111-2222-4333-8444-555555555555')
+
+    const profile = await api.getProfile(pending.ceremonyRequestId)
+    const refreshed = await api.getWorkshopQueue()
+    const row = refreshed.items.find(item => item.ceremonyRequestId === pending.ceremonyRequestId)
+    expect(profile.photoAvailable).toBe(true)
+    expect(profile.reviewStatus).toBe('pending_grand_secretariat')
+    expect(row?.photoAvailable).toBe(true)
+  })
+
   it('records an observation and refreshes its state without publishing', async () => {
     const api = new CandidateIntakeApiClient({ useMocks: true })
     const queue = await api.getGrandSecretariatQueue('pending_grand_secretariat')
