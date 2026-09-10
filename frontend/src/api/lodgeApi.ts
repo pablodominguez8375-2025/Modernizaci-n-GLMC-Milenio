@@ -55,20 +55,54 @@ class LodgeApiHttpError extends Error {
   }
 }
 
+const DEMO_LODGE_1_ID = '11111111-1111-1111-1111-111111111111'
+const DEMO_LODGE_23_ID = '23232323-2323-2323-2323-232323232323'
+
 const demoMembers: LodgeMemberOption[] = [
   { id: 'aaaaaaaa-1111-1111-1111-111111111111', displayName: 'Hermana Demostrativa Uno' },
   { id: 'aaaaaaaa-2222-2222-2222-222222222222', displayName: 'Hermano Demostrativo Dos' },
   { id: 'aaaaaaaa-3333-3333-3333-333333333333', displayName: 'Hermana Demostrativa Tres' },
 ]
 
+export const demoLodgeSeed = {
+  meetings: [
+    {
+      id: 'bbbbbbbb-2309-0012-0000-000000000001', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-12', meetingType: 'regular' as const,
+      grade: 'all' as const, title: 'Tenida Ordinaria · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-01T15:00:00Z', closedAtUtc: null,
+    },
+    {
+      id: 'bbbbbbbb-2309-0026-0000-000000000002', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-26', meetingType: 'instruction' as const,
+      grade: 'all' as const, title: 'Tenida de Instrucción · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-02T15:00:00Z', closedAtUtc: null,
+    },
+    {
+      id: 'bbbbbbbb-2309-0005-0000-000000000003', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-05', meetingType: 'regular' as const,
+      grade: 'all' as const, title: 'Tenida Ordinaria anterior · demo', status: 'closed' as const, createdAtUtc: '2026-08-25T15:00:00Z', closedAtUtc: '2026-09-06T01:20:00Z',
+    },
+    {
+      id: 'bbbbbbbb-0109-0019-0000-000000000004', organizationId: DEMO_LODGE_1_ID, meetingDate: '2026-09-19', meetingType: 'solemn' as const,
+      grade: 'all' as const, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', closedAtUtc: null,
+    },
+  ] satisfies LodgeMeeting[],
+  attendance: [
+    { recordId: 'cccccccc-0001-0001-0001-000000000001', memberId: demoMembers[0].id, displayName: demoMembers[0].displayName, status: 'present' as const, excuseReason: null, recordedAtUtc: '2026-09-05T23:05:00Z' },
+    { recordId: 'cccccccc-0002-0002-0002-000000000002', memberId: demoMembers[1].id, displayName: demoMembers[1].displayName, status: 'present' as const, excuseReason: null, recordedAtUtc: '2026-09-05T23:06:00Z' },
+    { recordId: 'cccccccc-0003-0003-0003-000000000003', memberId: demoMembers[2].id, displayName: demoMembers[2].displayName, status: 'excused' as const, excuseReason: 'Justificación demostrativa', recordedAtUtc: '2026-09-05T23:07:00Z' },
+  ] satisfies LodgeAttendanceCurrent[],
+  minute: {
+    id: 'dddddddd-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1,
+    content: 'Acta demostrativa: contenido ficticio para validar versionado, aprobación y navegación del módulo de Gestión Logial.',
+    status: 'approved' as const, createdAtUtc: '2026-09-06T01:25:00Z', approvedAtUtc: '2026-09-06T01:40:00Z',
+  } satisfies LodgeMinute,
+} as const
+
 export class LodgeApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: LodgeAccessTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
-  private readonly mockMeetings: LodgeMeeting[] = []
-  private readonly mockAttendance = new Map<string, LodgeAttendanceCurrent[]>()
-  private readonly mockMinutes = new Map<string, LodgeMinute[]>()
+  private readonly mockMeetings: LodgeMeeting[] = demoLodgeSeed.meetings.map(item => ({ ...item }))
+  private readonly mockAttendance = new Map<string, LodgeAttendanceCurrent[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.attendance.map(item => ({ ...item }))]])
+  private readonly mockMinutes = new Map<string, LodgeMinute[]>([[demoLodgeSeed.meetings[2].id, [{ ...demoLodgeSeed.minute }]]])
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
