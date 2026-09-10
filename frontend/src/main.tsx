@@ -5,6 +5,7 @@ import './styles.css'
 import './calendar.css'
 import './showcase.css'
 import './member-portal.css'
+import './candidate-profile.css'
 
 const root = document.getElementById('root')
 
