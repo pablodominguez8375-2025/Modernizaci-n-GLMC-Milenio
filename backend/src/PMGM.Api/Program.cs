@@ -164,6 +164,7 @@ app.MapTreasuryEndpoints();
 app.MapHospitalariaEndpoints();
 app.MapInstitutionalRegularityProjectionEndpoints();
 app.MapCandidateIntakeEndpoints();
+app.MapCandidateWorkshopIntakeEndpoints();
 app.MapCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
 app.MapCeremonyReviewQueueEndpoints();
