@@ -7,6 +7,7 @@ public sealed class MemberCharge
     public Guid MemberId { get; set; }
     public string Concept { get; set; } = string.Empty;
     public string? Period { get; set; }
+    public string ChargeType { get; set; } = MemberTreasuryCodes.ChargeType.OrdinaryDue;
     public DateOnly IssuedDate { get; set; }
     public DateOnly DueDate { get; set; }
     public decimal Amount { get; set; }
