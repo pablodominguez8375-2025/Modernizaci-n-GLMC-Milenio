@@ -20,6 +20,53 @@ type EditablePersonalData = {
   address: string
 }
 
+type MemberAttendanceActivity = {
+  fromDate: string
+  throughDate: string
+  total: number
+  present: number
+  absent: number
+  excused: number
+  percentage: number | null
+  history: Array<{
+    meetingId: string
+    meetingDate: string
+    meetingType: string
+    grade: string
+    title: string | null
+    attendanceStatus: string
+  }>
+}
+
+type MemberInstructionActivity = {
+  total: number
+  history: Array<{
+    instructionSessionId: string
+    instructionDate: string
+    grade: string
+    topic: string
+    attendanceStatus: string
+    responsibleOffice: string
+  }>
+}
+
+type MemberUpcomingMeeting = {
+  id: string
+  meetingDate: string
+  meetingType: string
+  grade: string
+  title: string | null
+  status: string
+}
+
+type MemberSelfOperationalProfile = MemberSelfProfile & {
+  activity?: {
+    attendance: MemberAttendanceActivity
+    instruction: MemberInstructionActivity
+    upcomingMeetings: MemberUpcomingMeeting[]
+  }
+}
+
 export const editableMemberFields = ['email', 'phone', 'address'] as const
 
 export const memberPortalDemoData = {
@@ -120,6 +167,8 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
     }
   }
 
+  const operationalProfile = selfProfile as MemberSelfOperationalProfile | null
+  const activity = useMocks ? undefined : operationalProfile?.activity
   const fullName = useMocks
     ? memberPortalDemoData.fullName
     : selfProfile
@@ -198,12 +247,20 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
     <section className="member-insight-grid">
       <article className="member-card member-attendance-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Participación</p><h2>Asistencia a tenidas</h2><p>Últimos 12 meses</p></div></div>
-        {useMocks ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${memberPortalDemoData.attendance.percentage}%` } as CSSProperties}><div><strong>{memberPortalDemoData.attendance.percentage}%</strong><small>{memberPortalDemoData.attendance.attended} de {memberPortalDemoData.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{memberPortalDemoData.attendance.attended}</strong></li><li><span className="dot danger" />Inasistencias <strong>{memberPortalDemoData.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{memberPortalDemoData.attendance.excused}</strong></li></ul></div> : <PortalPendingData text="El resumen personal se alimentará del registro de asistencia de Gestión Logial. No se muestran cifras ficticias en producción." />}
+        {useMocks
+          ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${memberPortalDemoData.attendance.percentage}%` } as CSSProperties}><div><strong>{memberPortalDemoData.attendance.percentage}%</strong><small>{memberPortalDemoData.attendance.attended} de {memberPortalDemoData.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{memberPortalDemoData.attendance.attended}</strong></li><li><span className="dot danger" />Inasistencias <strong>{memberPortalDemoData.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{memberPortalDemoData.attendance.excused}</strong></li></ul></div>
+          : activity?.attendance && activity.attendance.total > 0
+            ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${activity.attendance.percentage ?? 0}%` } as CSSProperties}><div><strong>{activity.attendance.percentage ?? 0}%</strong><small>{activity.attendance.present} de {activity.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{activity.attendance.present}</strong></li><li><span className="dot danger" />Inasistencias <strong>{activity.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{activity.attendance.excused}</strong></li></ul></div>
+            : <PortalPendingData text="Aún no existen registros personales de asistencia dentro de los últimos 12 meses." />}
       </article>
 
       <article className="member-card member-instruction-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Historial de instrucciones</h2><p>Sesiones y asistencia registradas por los encargados de instrucción del Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-        {useMocks ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></> : <PortalPendingData text="El historial se conectará al registro de Docencia por grado; esta vista nunca sustituye el dato real por contenido de demostración." />}
+        {useMocks
+          ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></>
+          : activity?.instruction && activity.instruction.history.length > 0
+            ? <><div className="member-instruction-summary"><strong>{activity.instruction.total} sesiones registradas</strong><span>Historial real proveniente de Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{activity.instruction.history.map(item => <div className="member-instruction-row" role="row" key={item.instructionSessionId}><span data-label="Fecha">{formatShortDate(item.instructionDate)}</span><span data-label="Grado">{formatLodgeGrade(item.grade)}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={`member-instruction-status ${attendanceStatusClass(item.attendanceStatus)}`}>{formatAttendanceStatus(item.attendanceStatus)}</span><span data-label="Encargado">{formatResponsibleOffice(item.responsibleOffice)}</span></div>)}</div></>
+            : <PortalPendingData text="Aún no existen sesiones de instrucción registradas para tu ficha." />}
       </article>
 
       <div className="member-status-stack">
@@ -220,7 +277,11 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
     <section className="member-lower-grid">
       <article className="member-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda personal</p><h2>Próximas tenidas</h2></div>{onOpenLodge && <button className="member-inline-button" type="button" onClick={onOpenLodge}>Ver Taller</button>}</div>
-        {useMocks ? <div className="member-meeting-list">{memberPortalDemoData.meetings.map(meeting => <div key={`${meeting.date}-${meeting.title}`}><div className="member-date-block"><strong>{meeting.date}</strong><small>{meeting.time}</small></div><div><strong>{meeting.title}</strong><span>{meeting.lodge}</span></div><span className="member-state-pill">{meeting.status}</span></div>)}</div> : <PortalPendingData text="Las próximas tenidas deben provenir del calendario institucional; no se muestran eventos ficticios." />}
+        {useMocks
+          ? <div className="member-meeting-list">{memberPortalDemoData.meetings.map(meeting => <div key={`${meeting.date}-${meeting.title}`}><div className="member-date-block"><strong>{meeting.date}</strong><small>{meeting.time}</small></div><div><strong>{meeting.title}</strong><span>{meeting.lodge}</span></div><span className="member-state-pill">{meeting.status}</span></div>)}</div>
+          : activity?.upcomingMeetings && activity.upcomingMeetings.length > 0
+            ? <div className="member-meeting-list">{activity.upcomingMeetings.map(meeting => <div key={meeting.id}><div className="member-date-block"><strong>{formatShortDate(meeting.meetingDate)}</strong><small>{formatLodgeGrade(meeting.grade)}</small></div><div><strong>{meeting.title || formatMeetingType(meeting.meetingType)}</strong><span>{lodge} · {formatMeetingType(meeting.meetingType)}</span></div><span className="member-state-pill">{formatMeetingStatus(meeting.status)}</span></div>)}</div>
+            : <PortalPendingData text="No hay próximas tenidas registradas para tu Taller y grado en este momento." />}
       </article>
       <article className="member-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Centro de avisos</p><h2>Notificaciones recientes</h2></div><button className="member-inline-button" type="button" onClick={onOpenNotifications}>Ver todas</button></div>
@@ -250,12 +311,24 @@ function formatDateOnly(value?: string | null) {
   return new Intl.DateTimeFormat('es-CL', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12)))
 }
 
+function formatShortDate(value?: string | null) {
+  if (!value) return 'Sin fecha'
+  const parts = value.split('-').map(Number)
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return value
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12))).replace('.', '')
+}
+
 function formatDegree(effectiveDegree?: number, storedDegree?: string) {
   const degree = effectiveDegree || Number.parseInt(storedDegree ?? '', 10)
   if (degree === 1) return 'Aprendiz (1°)'
   if (degree === 2) return 'Compañero (2°)'
   if (degree === 3) return 'Maestro (3°)'
   return storedDegree || 'Sin registro'
+}
+
+function formatLodgeGrade(value: string) {
+  const labels: Record<string, string> = { apprentice: '1°', fellowcraft: '2°', master: '3°', all: 'Todos' }
+  return labels[value] ?? value
 }
 
 function formatInstitutionalStatus(value?: string | null) {
@@ -268,4 +341,41 @@ function formatRegularity(value: string | undefined, kind: 'tesorería' | 'hospi
   if (value === 'delinquent' || value === 'overdue') return { status: 'Pendiente', detail: kind === 'tesorería' ? 'Existen obligaciones por regularizar' : 'Existen reposiciones u obligaciones por regularizar' }
   if (value === 'exempt') return { status: 'Exento', detail: 'Condición institucional registrada' }
   return { status: 'Sin información', detail: 'No existe una regularidad vigente registrada' }
+}
+
+function formatAttendanceStatus(value: string) {
+  const labels: Record<string, string> = { present: 'Presente', absent: 'Ausente', excused: 'Justificada' }
+  return labels[value] ?? value
+}
+
+function attendanceStatusClass(value: string) {
+  if (value === 'present') return 'present'
+  if (value === 'excused') return 'excused'
+  return 'absent'
+}
+
+function formatResponsibleOffice(value: string) {
+  const labels: Record<string, string> = {
+    second_warden: 'Segundo Vigilante',
+    first_warden: 'Primer Vigilante',
+    immediate_past_master: 'Inmediato Ex Venerable Maestro',
+  }
+  return labels[value] ?? value
+}
+
+function formatMeetingType(value: string) {
+  const labels: Record<string, string> = {
+    regular: 'Tenida Ordinaria',
+    solemn: 'Tenida Solemne',
+    instruction: 'Tenida de Instrucción',
+    anniversary: 'Tenida de Aniversario',
+    funeral: 'Tenida Fúnebre',
+    special: 'Tenida Especial',
+  }
+  return labels[value] ?? value
+}
+
+function formatMeetingStatus(value: string) {
+  const labels: Record<string, string> = { scheduled: 'Programada', open: 'En curso', closed: 'Cerrada', cancelled: 'Cancelada' }
+  return labels[value] ?? value
 }
