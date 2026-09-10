@@ -22,6 +22,7 @@ public partial class AddMemberTreasuryLedger : Migration
                 MemberId = table.Column<Guid>(type: "uuid", nullable: false),
                 Concept = table.Column<string>(type: "character varying(240)", maxLength: 240, nullable: false),
                 Period = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: true),
+                ChargeType = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                 IssuedDate = table.Column<DateOnly>(type: "date", nullable: false),
                 DueDate = table.Column<DateOnly>(type: "date", nullable: false),
                 Amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
@@ -130,6 +131,12 @@ public partial class AddMemberTreasuryLedger : Migration
             schema: "core",
             table: "member_charges",
             columns: new[] { "MemberId", "Status" });
+
+        migrationBuilder.CreateIndex(
+            name: "IX_member_charges_MemberId_ChargeType_IssuedDate",
+            schema: "core",
+            table: "member_charges",
+            columns: new[] { "MemberId", "ChargeType", "IssuedDate" });
 
         migrationBuilder.CreateIndex(
             name: "IX_member_payments_OrganizationId_MemberId_PaymentDate",
