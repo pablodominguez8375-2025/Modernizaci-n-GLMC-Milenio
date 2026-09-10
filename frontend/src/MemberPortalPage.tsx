@@ -10,6 +10,13 @@ interface MemberPortalPageProps {
   onOpenLodge?: () => void
 }
 
+type EditablePersonalData = {
+  email: string
+  phone: string
+  city: string
+  address: string
+}
+
 export const editableMemberFields = ['email', 'phone', 'city', 'address'] as const
 
 export const memberPortalDemoData = {
@@ -57,7 +64,7 @@ export const memberPortalDemoData = {
 
 export default function MemberPortalPage({ profile, useMocks, onOpenCalendar, onOpenNotifications, onOpenLibrary, onOpenLodge }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
-  const [personal, setPersonal] = useState({ ...memberPortalDemoData.personal })
+  const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const fullName = useMocks ? memberPortalDemoData.fullName : (profile?.displayName ?? 'Hermano')
   const personalValue = (value: string) => useMocks ? value : 'Disponible al integrar expediente personal'
 
