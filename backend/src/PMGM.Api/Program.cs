@@ -8,6 +8,7 @@ using PMGM.Api.Infrastructure;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Bootstrap;
+using PMGM.Api.Modules.CandidateIntake;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Core;
 using PMGM.Api.Modules.DocumentManagement;
@@ -58,6 +59,7 @@ builder.Services.AddDbContext<GrandArchiveDbContext>(options => options.UseNpgsq
 builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<RegimenInteriorDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<CandidateIntakeDbContext>(options => options.UseNpgsql(mainConnectionString));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -106,6 +108,8 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await calendarDb.Database.MigrateAsync();
     var regimenInteriorDb = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
     await regimenInteriorDb.Database.MigrateAsync();
+    var candidateIntakeDb = scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>();
+    await candidateIntakeDb.Database.MigrateAsync();
 }
 
 if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
@@ -137,7 +141,7 @@ app.MapGet("/health/ready", async (PmgmDbContext db, CancellationToken cancellat
 
 app.MapGet("/api/system/info", () => Results.Ok(new
 {
-    project = "Proyecto Milenio — Modernización Gran Logia Mixta de Chile",
+    project = "Proyecto Centenario — Modernización Gran Logia Mixta de Chile",
     api = "PMGM.Api",
     version = apiVersion,
     runtime = ".NET 10",
@@ -159,6 +163,7 @@ app.MapExecutiveReportingEndpoints();
 app.MapTreasuryEndpoints();
 app.MapHospitalariaEndpoints();
 app.MapInstitutionalRegularityProjectionEndpoints();
+app.MapCandidateIntakeEndpoints();
 app.MapCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
 app.MapCeremonyReviewQueueEndpoints();
