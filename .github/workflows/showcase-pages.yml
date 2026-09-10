@@ -1,0 +1,90 @@
+name: PMGM Showcase Demo
+
+on:
+  push:
+    branches: [dev]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/showcase-pages.yml'
+      - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/showcase-pages.yml'
+      - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pmgm-showcase-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build showcase for GitHub Pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend --no-audit --no-fund
+
+      - name: Test frontend
+        run: npm test --prefix frontend
+
+      - name: Lint frontend
+        run: npm run lint --prefix frontend
+
+      - name: Build public testing showcase
+        env:
+          VITE_USE_MOCKS: 'true'
+          VITE_BASE_PATH: '/Modernizaci-n-GLMC-Milenio/'
+          VITE_API_BASE_URL: ''
+          VITE_OIDC_AUTHORITY: ''
+          VITE_OIDC_CLIENT_ID: ''
+        run: npm run build --prefix frontend
+
+      - name: Validate generated showcase
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s frontend/dist/index.html
+          grep -q '/Modernizaci-n-GLMC-Milenio/assets/' frontend/dist/index.html
+          if grep -R -E '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9]+|sk-proj-[A-Za-z0-9_-]+|Authorization: Bearer)' frontend/dist; then
+            echo 'Se detectó un patrón sensible en el showcase generado.' >&2
+            exit 1
+          fi
+          printf 'SHOWCASE BUILD OK\n'
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    name: Deploy testing showcase
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy showcase
+        id: deployment
+        uses: actions/deploy-pages@v5
