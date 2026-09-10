@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from 'react'
-import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
+import type { MembershipApiClient, MemberSelfProfile, MemberSelfTreasuryResponse } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import './memberPortalInstruction.css'
+import './memberTreasury.css'
 
 interface MemberPortalPageProps {
   profile: SessionProfile | null
@@ -97,7 +98,7 @@ export const memberPortalDemoData = {
     { date: '18 jul 2026', degree: '3°', topic: 'Historia de la Orden', attendance: 'Justificada', responsible: 'Inmediato Ex Venerable Maestro' },
     { date: '04 jul 2026', degree: '3°', topic: 'Ritual y simbolismo', attendance: 'Presente', responsible: 'Inmediato Ex Venerable Maestro' },
   ],
-  treasury: { status: 'Al día', detail: 'Sin cuotas pendientes' },
+  treasury: { status: 'Al día', detail: 'Regularidad vigente; puede existir un cargo aún no vencido' },
   hospitalaria: { status: 'Activo', detail: 'Situación hospitalaria vigente' },
   meetings: [
     { date: '12 sep', time: '19:00', title: 'Tenida Ordinaria', lodge: 'Taller Demostrativo Nº 23', status: 'Confirmada' },
@@ -116,8 +117,11 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
+  const [treasuryStatement, setTreasuryStatement] = useState<MemberSelfTreasuryResponse | null>(null)
   const [loadingSelf, setLoadingSelf] = useState(!useMocks)
+  const [loadingTreasury, setLoadingTreasury] = useState(true)
   const [selfError, setSelfError] = useState<string | null>(null)
+  const [treasuryError, setTreasuryError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -151,6 +155,19 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
     return () => { active = false }
   }, [membershipApi, useMocks])
 
+  useEffect(() => {
+    let active = true
+    setLoadingTreasury(true)
+    setTreasuryError(null)
+    membershipApi.getSelfTreasury()
+      .then(result => { if (active) setTreasuryStatement(result) })
+      .catch((reason: unknown) => {
+        if (active) setTreasuryError(reason instanceof Error ? reason.message : 'No fue posible cargar tu estado de cuenta personal.')
+      })
+      .finally(() => { if (active) setLoadingTreasury(false) })
+    return () => { active = false }
+  }, [membershipApi, useMocks])
+
   const savePersonalData = async () => {
     setSaving(true)
     setSaveMessage(null)
@@ -169,6 +186,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
 
   const operationalProfile = selfProfile as MemberSelfOperationalProfile | null
   const activity = useMocks ? undefined : operationalProfile?.activity
+  const ledger = treasuryStatement?.statement ?? null
   const fullName = useMocks
     ? memberPortalDemoData.fullName
     : selfProfile
@@ -191,7 +209,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
       <div>
         <p className="member-breadcrumb">Portal del Hermano <span>›</span> Mi ficha</p>
         <h1>Mi ficha</h1>
-        <p>Tu información personal, masónica y de participación en un solo lugar.</p>
+        <p>Tu información personal, masónica, financiera y de participación en un solo lugar.</p>
       </div>
       <button className="member-primary-action" type="button" disabled={!canEdit || loadingSelf || saving} onClick={() => setEditing(value => !value)}>{editing ? 'Cerrar edición' : 'Editar mis datos'}</button>
     </section>
@@ -264,14 +282,60 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
       </article>
 
       <div className="member-status-stack">
-        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={treasury.status === 'Al día' ? 'member-success-text' : undefined}>{treasury.status}</strong><p>{treasury.detail}</p></div><button type="button">Ver detalle</button></article>
-        <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
+        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Regularidad de tesorería</small><strong className={treasury.status === 'Al día' ? 'member-success-text' : undefined}>{treasury.status}</strong><p>{treasury.detail}</p></div><button type="button" onClick={() => document.getElementById('estado-cuenta')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Ver estado de cuenta</button></article>
+        <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div></article>
       </div>
 
       <article className="member-card member-calendar-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda</p><h2>{useMocks ? 'Septiembre 2026' : 'Calendario institucional'}</h2></div><button className="member-inline-button" type="button" onClick={onOpenCalendar}>Ver calendario</button></div>
         {useMocks ? <><div className="member-calendar-week"><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span><span>Do</span></div><div className="member-calendar-days">{Array.from({ length: 30 }, (_, index) => index + 1).map(day => <span key={day} className={day === 12 ? 'meeting' : day === 26 ? 'instruction' : ''}>{day}</span>)}</div><div className="member-calendar-legend"><span><i className="meeting" />Tenida</span><span><i className="instruction" />Instrucción</span></div></> : <PortalPendingData text="Abre Mi calendario para consultar únicamente los eventos autorizados por grado, rol y ámbito." />}
       </article>
+    </section>
+
+    <section id="estado-cuenta" className="member-card member-treasury-detail" aria-labelledby="member-treasury-title">
+      <div className="member-card-title-row member-treasury-heading">
+        <div><p className="member-card-kicker">Tesorería personal</p><h2 id="member-treasury-title">Mi estado de cuenta</h2><p>{treasuryStatement ? `${treasuryStatement.organization.name} · cargos, pagos y abonos registrados` : 'Cargos, pagos y abonos registrados por Tesorería Logial.'}</p></div>
+        <span className="member-lock-badge">{useMocks ? 'Datos ficticios QA' : 'Sólo consulta'}</span>
+      </div>
+      {loadingTreasury && <div className="member-live-notice">Cargando tu estado de cuenta…</div>}
+      {treasuryError && <div className="member-treasury-error" role="alert"><strong>Estado de cuenta no disponible</strong><span>{treasuryError}</span></div>}
+      {!loadingTreasury && !treasuryError && ledger && <>
+        <div className="member-treasury-summary">
+          <TreasuryMetric label="Cargos" value={formatCurrency(ledger.summary.totalCharges, ledger.currency)} />
+          <TreasuryMetric label="Pagos registrados" value={formatCurrency(ledger.summary.totalPayments, ledger.currency)} />
+          <TreasuryMetric label="Saldo por pagar" value={formatCurrency(Math.max(0, ledger.summary.netBalance), ledger.currency)} emphasize={ledger.summary.netBalance > 0} />
+          <TreasuryMetric label="Crédito disponible" value={formatCurrency(ledger.summary.availableCredit, ledger.currency)} />
+          <TreasuryMetric label="Cargos pendientes" value={String(ledger.summary.pendingChargeCount)} />
+          <TreasuryMetric label="Vencidos" value={String(ledger.summary.overdueChargeCount)} danger={ledger.summary.overdueChargeCount > 0} />
+        </div>
+        <div className="member-treasury-columns">
+          <div className="member-treasury-table-wrap">
+            <div className="member-treasury-subheading"><h3>Cargos y abonos</h3><span>{ledger.charges.length} movimientos</span></div>
+            {ledger.charges.length === 0 ? <PortalPendingData text="No existen cargos registrados en tu estado de cuenta." /> : <div className="member-treasury-table" role="table" aria-label="Cargos y abonos personales">
+              <div className="member-treasury-row member-treasury-header" role="row"><span>Concepto</span><span>Vence</span><span>Cargo</span><span>Abonado</span><span>Saldo</span><span>Estado</span></div>
+              {ledger.charges.map(charge => <div className="member-treasury-row" role="row" key={charge.id}>
+                <div data-label="Concepto"><strong>{charge.concept}</strong><small>{charge.period || 'Sin período'}</small></div>
+                <span data-label="Vence">{formatDateOnly(charge.dueDate)}</span>
+                <span data-label="Cargo">{formatCurrency(charge.amount, charge.currency)}</span>
+                <span data-label="Abonado">{formatCurrency(charge.appliedAmount, charge.currency)}</span>
+                <strong data-label="Saldo">{formatCurrency(charge.outstandingAmount, charge.currency)}</strong>
+                <span data-label="Estado" className={`member-treasury-pill ${charge.status}`}>{formatChargeStatus(charge.status)}</span>
+              </div>)}
+            </div>}
+          </div>
+          <div className="member-treasury-table-wrap">
+            <div className="member-treasury-subheading"><h3>Pagos y comprobantes</h3><span>{ledger.payments.length} pagos</span></div>
+            {ledger.payments.length === 0 ? <PortalPendingData text="No existen pagos registrados en tu estado de cuenta." /> : <div className="member-payment-list">
+              {ledger.payments.map(payment => <div className="member-payment-item" key={payment.id}>
+                <div className="member-payment-date"><strong>{formatShortDate(payment.paymentDate)}</strong><small>{formatPaymentMethod(payment.method)}</small></div>
+                <div className="member-payment-amount"><strong>{formatCurrency(payment.amount, payment.currency)}</strong><small>Aplicado {formatCurrency(payment.allocatedAmount, payment.currency)}{payment.unappliedAmount > 0 ? ` · crédito ${formatCurrency(payment.unappliedAmount, payment.currency)}` : ''}</small></div>
+                <div className="member-payment-receipt"><span className={payment.receiptAvailable ? 'receipt-ready' : 'receipt-missing'}>{payment.receiptAvailable ? 'Comprobante disponible' : 'Sin archivo'}</span><small>{payment.receiptNumber || 'Sin número'}</small></div>
+              </div>)}
+            </div>}
+          </div>
+        </div>
+        <p className="member-treasury-footnote">La regularidad financiera institucional y el estado de cuenta son conceptos distintos. Los comprobantes se exponen sólo cuando existe un documento asociado y autorizado.</p>
+      </>}
     </section>
 
     <section className="member-lower-grid">
@@ -300,6 +364,10 @@ function MemberInput({ label, value, onChange }: { label: string; value: string;
   return <label className="member-input"><span>{label}</span><input value={value} onChange={event => onChange(event.target.value)} /></label>
 }
 
+function TreasuryMetric({ label, value, emphasize = false, danger = false }: { label: string; value: string; emphasize?: boolean; danger?: boolean }) {
+  return <div className={`member-treasury-metric${emphasize ? ' emphasize' : ''}${danger ? ' danger' : ''}`}><small>{label}</small><strong>{value}</strong></div>
+}
+
 function PortalPendingData({ text }: { text: string }) {
   return <div className="empty-state"><strong>Información institucional</strong><span>{text}</span></div>
 }
@@ -316,6 +384,20 @@ function formatShortDate(value?: string | null) {
   const parts = value.split('-').map(Number)
   if (parts.length !== 3 || parts.some(Number.isNaN)) return value
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12))).replace('.', '')
+}
+
+function formatCurrency(value: number, currency = 'CLP') {
+  return new Intl.NumberFormat('es-CL', { style: 'currency', currency, maximumFractionDigits: currency === 'CLP' ? 0 : 2 }).format(value)
+}
+
+function formatChargeStatus(value: string) {
+  const labels: Record<string, string> = { open: 'Pendiente', paid: 'Pagado', void: 'Anulado' }
+  return labels[value] ?? value
+}
+
+function formatPaymentMethod(value: string) {
+  const labels: Record<string, string> = { cash: 'Efectivo', transfer: 'Transferencia', card: 'Tarjeta', other: 'Otro medio' }
+  return labels[value] ?? value
 }
 
 function formatDegree(effectiveDegree?: number, storedDegree?: string) {
