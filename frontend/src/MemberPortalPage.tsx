@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { SessionProfile } from './api/pmgmApi'
+import './memberPortalInstruction.css'
 
 interface MemberPortalPageProps {
   profile: SessionProfile | null
@@ -42,10 +43,10 @@ export const memberPortalDemoData = {
   },
   attendance: { percentage: 87, attended: 26, absent: 3, excused: 1, total: 30 },
   instruction: [
-    { label: 'Ritual y simbolismo', progress: 100 },
-    { label: 'Historia de la Orden', progress: 80 },
-    { label: 'Ética y filosofía', progress: 70 },
-    { label: 'Trabajo en Taller', progress: 90 },
+    { date: '22 ago 2026', degree: '3°', topic: 'Ética y filosofía', attendance: 'Presente', responsible: 'Inmediato Ex Venerable Maestro' },
+    { date: '08 ago 2026', degree: '3°', topic: 'Trabajo en Taller', attendance: 'Presente', responsible: 'Inmediato Ex Venerable Maestro' },
+    { date: '18 jul 2026', degree: '3°', topic: 'Historia de la Orden', attendance: 'Justificada', responsible: 'Inmediato Ex Venerable Maestro' },
+    { date: '04 jul 2026', degree: '3°', topic: 'Ritual y simbolismo', attendance: 'Presente', responsible: 'Inmediato Ex Venerable Maestro' },
   ],
   treasury: { status: 'Al día', detail: 'Sin cuotas pendientes' },
   hospitalaria: { status: 'Activo', detail: 'Situación hospitalaria vigente' },
@@ -100,7 +101,7 @@ export default function MemberPortalPage({ profile, useMocks, onOpenCalendar, on
 
       <article className="member-card member-institutional-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Datos masónicos</p><h2>Información institucional</h2></div><span className="member-lock-badge">Sólo lectura</span></div>
-        <div className="member-lodge-line"><span className="member-lodge-seal">M</span><div><small>Taller</small><strong>{useMocks ? memberPortalDemoData.institutional.lodge : 'Según expediente institucional'}</strong><span>{useMocks ? memberPortalDemoData.institutional.orient : 'Ámbito autenticado'}</span></div></div>
+        <div className="member-lodge-line"><span className="member-lodge-seal">C</span><div><small>Taller</small><strong>{useMocks ? memberPortalDemoData.institutional.lodge : 'Según expediente institucional'}</strong><span>{useMocks ? memberPortalDemoData.institutional.orient : 'Ámbito autenticado'}</span></div></div>
         <div className="member-institutional-summary">
           <MemberDatum label="Grado" value={useMocks ? memberPortalDemoData.institutional.degree : 'Según expediente'} />
           <MemberDatum label="Estado" value={useMocks ? memberPortalDemoData.institutional.status : 'Según expediente'} success />
@@ -110,7 +111,7 @@ export default function MemberPortalPage({ profile, useMocks, onOpenCalendar, on
         </div>
       </article>
 
-      <aside className="member-quote-card"><span className="member-quote-mark">“</span><p>Que nuestras acciones sean testimonio de los principios que profesamos.</p><span className="member-quote-rule" /><strong>Proyecto Milenio</strong><small>Libertad · Igualdad · Fraternidad</small></aside>
+      <aside className="member-quote-card"><span className="member-quote-mark">“</span><p>Que nuestras acciones sean testimonio de los principios que profesamos.</p><span className="member-quote-rule" /><strong>Proyecto Centenario</strong><small>Libertad · Igualdad · Fraternidad</small></aside>
     </section>
 
     {editing && <section className="member-card member-edit-card">
@@ -131,8 +132,18 @@ export default function MemberPortalPage({ profile, useMocks, onOpenCalendar, on
       </article>
 
       <article className="member-card member-instruction-card">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Progreso de instrucción</h2><p>Plan formativo del grado</p></div></div>
-        <div className="member-progress-list">{memberPortalDemoData.instruction.map(item => <div key={item.label}><div><span>{item.label}</span><strong>{item.progress}%</strong></div><div className="member-progress-track"><span style={{ width: `${item.progress}%` }} /></div></div>)}</div>
+        <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Historial de instrucciones</h2><p>Sesiones y asistencia registradas por los encargados de instrucción del Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
+        <div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div>
+        <div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones">
+          <div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>
+          {memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}>
+            <span data-label="Fecha">{item.date}</span>
+            <span data-label="Grado">{item.degree}</span>
+            <strong data-label="Tema">{item.topic}</strong>
+            <span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span>
+            <span data-label="Encargado">{item.responsible}</span>
+          </div>)}
+        </div>
       </article>
 
       <div className="member-status-stack">
