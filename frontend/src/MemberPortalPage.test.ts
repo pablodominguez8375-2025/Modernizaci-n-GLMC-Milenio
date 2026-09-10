@@ -3,10 +3,16 @@ import { editableMemberFields, memberPortalDemoData } from './MemberPortalPage'
 
 describe('MemberPortalPage contract', () => {
   it('keeps institutional identity fields outside member-editable fields', () => {
-    expect(editableMemberFields).toEqual(['email', 'phone', 'city', 'address'])
+    expect(editableMemberFields).toEqual(['email', 'phone', 'address'])
     expect(editableMemberFields).not.toContain('degree')
     expect(editableMemberFields).not.toContain('lodge')
     expect(editableMemberFields).not.toContain('status')
+    expect(editableMemberFields).not.toContain('city')
+  })
+
+  it('keeps city as fictitious presentation data until a versioned configurable field exists', () => {
+    expect(memberPortalDemoData.personal.city).toContain('demo')
+    expect(editableMemberFields).not.toContain('city')
   })
 
   it('includes the agreed personal operational summary', () => {
