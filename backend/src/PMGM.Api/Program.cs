@@ -54,6 +54,7 @@ builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseN
 builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
     options.UseNpgsql(mainConnectionString)
         .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
+builder.Services.AddDbContext<TreasuryLedgerDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<GrandArchiveDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
@@ -98,6 +99,8 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await db.Database.MigrateAsync();
     var bootstrapDb = scope.ServiceProvider.GetRequiredService<BootstrapDbContext>();
     await bootstrapDb.Database.MigrateAsync();
+    var treasuryLedgerDb = scope.ServiceProvider.GetRequiredService<TreasuryLedgerDbContext>();
+    await treasuryLedgerDb.Database.MigrateAsync();
     var documentDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
     await documentDb.Database.MigrateAsync();
     var grandArchiveDb = scope.ServiceProvider.GetRequiredService<GrandArchiveDbContext>();
@@ -156,6 +159,7 @@ app.MapBootstrapEndpoints();
 app.MapOrganizationEndpoints();
 app.MapMembershipEndpoints();
 app.MapMemberSelfEndpoints();
+app.MapMemberSelfTreasuryEndpoints();
 app.MapTransferEndpoints();
 app.MapRegimenInteriorEndpoints();
 app.MapRegimenInteriorMemberControlEndpoints();
@@ -163,6 +167,7 @@ app.MapRegimenInteriorDataQualityEndpoints();
 app.MapDataQualityCaseEndpoints();
 app.MapExecutiveReportingEndpoints();
 app.MapTreasuryEndpoints();
+app.MapMemberTreasuryEndpoints();
 app.MapHospitalariaEndpoints();
 app.MapInstitutionalRegularityProjectionEndpoints();
 app.MapCandidateIntakeEndpoints();
