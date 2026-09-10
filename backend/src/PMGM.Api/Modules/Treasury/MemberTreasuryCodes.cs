@@ -11,6 +11,15 @@ public static class MemberTreasuryCodes
             => string.Equals(value, Clp, StringComparison.OrdinalIgnoreCase);
     }
 
+    public static class ChargeType
+    {
+        public const string OrdinaryDue = "ordinary_due";
+        public const string Other = "other";
+
+        public static bool IsValid(string value)
+            => value is OrdinaryDue or Other;
+    }
+
     public static class ChargeStatus
     {
         public const string Open = "open";
