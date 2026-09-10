@@ -13,7 +13,10 @@ PMGM-v1.0.0-rc1/
 │   ├── PMGM-PILOT-OPERACIONAL-V032.md
 │   ├── PMGM-UAT-V100-RC1.md
 │   ├── PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json
-│   └── PMGM-UAT-1.0.0-rc1.template.json
+│   ├── PMGM-UAT-1.0.0-rc1.template.json
+│   └── scripts/
+│       ├── preflight-definitive-host.sh
+│       └── update-definitive.sh
 ├── APPLICATION-SOURCE-SHA.txt
 ├── README-INSTALAR.txt
 └── CHECKSUMS-SHA256.txt
@@ -53,7 +56,7 @@ Clonar desde el bundle:
 
 ```bash
 cd /opt/pmgm
-git clone /ruta/al/paquete/PMGM-v1.0.0-rc1/repository/PMGM-v1.0.0-rc1.bundle app
+git clone --branch pmgm-package-rc1 /ruta/al/paquete/PMGM-v1.0.0-rc1/repository/PMGM-v1.0.0-rc1.bundle app
 cd app
 git checkout 739ba0b3a8d89087177b1edabd61c2981eed08a2
 test "$(git rev-parse HEAD)" = "$(cat /ruta/al/paquete/PMGM-v1.0.0-rc1/APPLICATION-SOURCE-SHA.txt)"
