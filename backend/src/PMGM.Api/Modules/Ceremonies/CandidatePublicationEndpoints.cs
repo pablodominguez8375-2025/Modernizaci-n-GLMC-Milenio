@@ -30,6 +30,7 @@ public static class CandidatePublicationEndpoints
             .OrderBy(x => x.PublishedFromUtc)
             .Select(x => new
             {
+                x.Id,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 WorkshopName = x.Organization.Name,
@@ -52,7 +53,8 @@ public static class CandidatePublicationEndpoints
                 ElapsedDays: Math.Max(0, (int)Math.Floor((now - x.PublishedFromUtc).TotalDays)),
                 ComplianceDateUtc: x.PublishedFromUtc.AddDays(x.RequiredDays),
                 RuleCode: x.RuleCode,
-                Status: x.Status))
+                Status: x.Status,
+                PhotoUrl: $"/api/candidate-publications/{x.Id:D}/photo"))
             .ToList();
 
         return Results.Ok(new
