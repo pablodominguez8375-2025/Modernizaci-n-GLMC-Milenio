@@ -107,14 +107,20 @@ jobs:
             cd "$OUT"
             zip -q -r "$GITHUB_WORKSPACE/artifacts/$ZIP_NAME" "$PACKAGE_ROOT"
           )
-          sha256sum "$GITHUB_WORKSPACE/artifacts/$ZIP_NAME" > "$GITHUB_WORKSPACE/artifacts/$ZIP_NAME.sha256"
+          (
+            cd "$GITHUB_WORKSPACE/artifacts"
+            sha256sum "$ZIP_NAME" > "$ZIP_NAME.sha256"
+          )
 
       - name: Verify generated ZIP
         shell: bash
         run: |
           set -euo pipefail
           test -s "artifacts/$ZIP_NAME"
-          sha256sum -c "artifacts/$ZIP_NAME.sha256"
+          (
+            cd artifacts
+            sha256sum -c "$ZIP_NAME.sha256"
+          )
           unzip -l "artifacts/$ZIP_NAME" | grep -q 'PMGM-v1.0.0-rc1/repository/PMGM-v1.0.0-rc1.bundle'
           unzip -l "artifacts/$ZIP_NAME" | grep -q 'PMGM-v1.0.0-rc1/CHECKSUMS-SHA256.txt'
           unzip -l "artifacts/$ZIP_NAME" | grep -q 'PMGM-v1.0.0-rc1/operator/PMGM-UAT-V100-RC1.md'
