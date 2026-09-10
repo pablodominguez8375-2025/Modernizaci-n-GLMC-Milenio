@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type NotificationApiClient, type NotificationInboxItem } from './api/notificationApi'
 
-export default function NotificationsPage({ notificationApi }: { notificationApi: NotificationApiClient }) {
+interface NotificationsPageProps {
+  notificationApi: NotificationApiClient
+  onAction?: (actionUrl: string) => void
+}
+
+export default function NotificationsPage({ notificationApi, onAction }: NotificationsPageProps) {
   const [items, setItems] = useState<NotificationInboxItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -28,16 +33,24 @@ export default function NotificationsPage({ notificationApi }: { notificationApi
   }), [filter, items])
 
   const markRead = async (item: NotificationInboxItem) => {
-    if (item.readAtUtc) return
+    if (item.readAtUtc) return true
     setBusyId(item.id)
     try {
       await notificationApi.markRead(item.id)
       setItems(current => current.map(value => value.id === item.id ? { ...value, readAtUtc: new Date().toISOString() } : value))
+      return true
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'No fue posible actualizar la notificación.')
+      return false
     } finally {
       setBusyId(null)
     }
+  }
+
+  const openAction = async (item: NotificationInboxItem) => {
+    if (!item.actionUrl || !onAction) return
+    const updated = await markRead(item)
+    if (updated) onAction(item.actionUrl)
   }
 
   return <>
@@ -65,12 +78,12 @@ export default function NotificationsPage({ notificationApi }: { notificationApi
     </section>
 
     <section className="notification-list" aria-live="polite">
-      {loading ? <div className="panel"><div className="loading-rows"><span /><span /><span /></div></div> : filtered.length === 0 ? <div className="panel empty-state"><strong>No hay avisos para este filtro.</strong><span>La bandeja está al día.</span></div> : filtered.map(item => <NotificationCard key={item.id} item={item} busy={busyId === item.id} onRead={() => { void markRead(item) }} />)}
+      {loading ? <div className="panel"><div className="loading-rows"><span /><span /><span /></div></div> : filtered.length === 0 ? <div className="panel empty-state"><strong>No hay avisos para este filtro.</strong><span>La bandeja está al día.</span></div> : filtered.map(item => <NotificationCard key={item.id} item={item} busy={busyId === item.id} onRead={() => { void markRead(item) }} onAction={item.actionUrl && onAction ? () => { void openAction(item) } : undefined} />)}
     </section>
   </>
 }
 
-function NotificationCard({ item, busy, onRead }: { item: NotificationInboxItem; busy: boolean; onRead: () => void }) {
+function NotificationCard({ item, busy, onRead, onAction }: { item: NotificationInboxItem; busy: boolean; onRead: () => void; onAction?: () => void }) {
   const unread = item.readAtUtc === null
   return <article className={`panel notification-card${unread ? ' unread' : ''}${item.mandatory ? ' mandatory' : ''}`}>
     <div className="notification-icon" aria-hidden="true">{notificationIcon(item.typeCode)}</div>
@@ -89,14 +102,27 @@ function NotificationCard({ item, busy, onRead }: { item: NotificationInboxItem;
       <p>{item.body}</p>
       <div className="notification-footer">
         <span>{typeLabel(item.typeCode)}</span>
-        {unread ? <button type="button" onClick={onRead} disabled={busy}>{busy ? 'Actualizando…' : 'Marcar como leído'}</button> : <span className="read-confirmation">✓ Leído</span>}
+        <div className="notification-actions">
+          {onAction && <button className="secondary-button" type="button" onClick={onAction} disabled={busy}>{busy ? 'Abriendo…' : actionLabel(item.actionUrl)}</button>}
+          {unread ? <button type="button" onClick={onRead} disabled={busy}>{busy ? 'Actualizando…' : 'Marcar como leído'}</button> : <span className="read-confirmation">✓ Leído</span>}
+        </div>
       </div>
     </div>
   </article>
 }
 
+function actionLabel(actionUrl: string | null) {
+  if (actionUrl === '/candidates') return 'Ver insinuados'
+  if (actionUrl === '/calendar') return 'Ver calendario'
+  if (actionUrl === '/ceremonies') return 'Ver ceremonias'
+  if (actionUrl === '/lodge') return 'Ir a Gestión Logial'
+  if (actionUrl === '/documents') return 'Ver documentos'
+  return 'Abrir'
+}
+
 function notificationIcon(typeCode: string) {
   if (typeCode.includes('ceremony')) return '◉'
+  if (typeCode.includes('candidate')) return '◎'
   if (typeCode.includes('calendar')) return '▣'
   if (typeCode.includes('privacy')) return '◇'
   if (typeCode.includes('lodge')) return '□'
@@ -104,8 +130,8 @@ function notificationIcon(typeCode: string) {
 }
 
 function typeLabel(typeCode: string) {
-  if (typeCode.includes('ceremony')) return 'Ceremonias'
   if (typeCode.includes('candidate')) return 'Insinuados'
+  if (typeCode.includes('ceremony')) return 'Ceremonias'
   if (typeCode.includes('calendar')) return 'Calendario'
   if (typeCode.includes('privacy')) return 'Privacidad'
   if (typeCode.includes('lodge')) return 'Gestión Logial'
