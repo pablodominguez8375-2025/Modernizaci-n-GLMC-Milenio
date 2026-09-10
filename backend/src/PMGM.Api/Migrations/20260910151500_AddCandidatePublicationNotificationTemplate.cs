@@ -10,19 +10,17 @@ namespace PMGM.Api.Migrations;
 [Migration("20260910151500_AddCandidatePublicationNotificationTemplate")]
 public partial class AddCandidatePublicationNotificationTemplate : Migration
 {
-    private const string TemplateId = "53a81b10-3ba9-4d5e-a8fd-9b28ad31c081";
-
     protected override void Up(MigrationBuilder migrationBuilder)
     {
         // Raw SQL is intentional here: this migration is discovered through the
         // migrations assembly before the model snapshot contains the seeded row.
-        // ON CONFLICT also keeps local/QA upgrades idempotent.
-        migrationBuilder.Sql($$"""
+        // ON CONFLICT keeps local/QA upgrades idempotent.
+        migrationBuilder.Sql("""
             INSERT INTO core.notification_templates
                 ("Id", "Code", "Version", "Name", "SubjectTemplate", "BodyTemplate",
                  "AllowedVariablesJson", "Sensitivity", "Status", "EffectiveFromUtc", "CreatedAtUtc")
             VALUES
-                ('{{TemplateId}}'::uuid,
+                ('53a81b10-3ba9-4d5e-a8fd-9b28ad31c081'::uuid,
                  'candidate.publication.approved',
                  1,
                  'Nueva insinuación publicada',
@@ -39,9 +37,9 @@ public partial class AddCandidatePublicationNotificationTemplate : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.Sql($$"""
+        migrationBuilder.Sql("""
             DELETE FROM core.notification_templates
-            WHERE "Id" = '{{TemplateId}}'::uuid;
+            WHERE "Id" = '53a81b10-3ba9-4d5e-a8fd-9b28ad31c081'::uuid;
             """);
     }
 }
