@@ -102,6 +102,53 @@ public sealed class CeremonyEligibilityServiceTests
         Assert.True(result.IsEligible);
     }
 
+    [Fact]
+    public void WageIncrease_IsBlocked_WhenAdvancementRequirementsDoNotComply()
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.WageIncrease,
+                FullyApprovedValidations(),
+                null,
+                null,
+                20,
+                AdvancementThresholds: new AdvancementThresholds(8, 4, 2, "rule-v1"),
+                AdvancementEvidence: new AdvancementEvidence(7, 3, 1)),
+            Now);
+
+        Assert.False(result.IsEligible);
+        Assert.NotNull(result.Advancement);
+        Assert.Equal(1, result.Advancement!.SourceDegree);
+        Assert.Equal(AdvancementEligibilityModes.Blocked, result.Advancement.Mode);
+        Assert.Contains(result.BlockingReasons, x => x.Contains("advancement.meeting_attendance"));
+    }
+
+    [Fact]
+    public void Exaltation_CanProceedByDispensationOnlyAfterInternalAffairsApproval()
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.Exaltation,
+                FullyApprovedValidations(),
+                null,
+                null,
+                20,
+                AdvancementThresholds: new AdvancementThresholds(10, 5, 2, "rule-v2"),
+                AdvancementEvidence: new AdvancementEvidence(8, 4, 1),
+                Dispensation: new DispensationEvidence(
+                    CouncilApproved: true,
+                    CouncilRecordReference: "ACTA-DEMO-010",
+                    InternalAffairsStatus: CeremonyCodes.ValidationStatus.ExceptionApproved,
+                    InternalAffairsResolutionReference: "RI-DEMO-010")),
+            Now);
+
+        Assert.True(result.IsEligible);
+        Assert.NotNull(result.Advancement);
+        Assert.Equal(2, result.Advancement!.SourceDegree);
+        Assert.Equal(AdvancementEligibilityModes.Dispensation, result.Advancement.Mode);
+        Assert.Equal(AdvancementDispensationStatuses.Approved, result.Advancement.Dispensation?.Status);
+    }
+
     private static Dictionary<string, string> FullyApprovedValidations()
         => new()
         {
