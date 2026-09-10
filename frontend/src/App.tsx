@@ -92,8 +92,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
 
   return <div className="app-shell">
     <header className="topbar">
-      <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Ir a Mi ficha"><span className="brand-mark" aria-hidden="true">M</span><span><strong>Proyecto Milenio</strong><small>Gran Logia Mixta de Chile</small></span></button>
-      <span className="product-motto">Tradición · Igualdad · Humanismo</span>
+      <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Ir a Mi ficha"><span className="brand-mark" aria-hidden="true">C</span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
+      <span className="product-motto">100 años de historia · Un legado hacia el futuro</span>
       <div className="topbar-meta">{api.useMocks && <span className="demo-badge">QA demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.35' : `API v${systemInfo?.version ?? '—'}`}</span></div>
     </header>
     <div className="workspace">
