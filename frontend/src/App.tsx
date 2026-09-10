@@ -17,6 +17,7 @@ import LodgeProfilePage from './LodgeProfilePage'
 import MemberDirectoryPage from './MemberDirectoryPage'
 import MemberPortalPage from './MemberPortalPage'
 import NotificationsPage from './NotificationsPage'
+import PublishedCandidatePhoto from './PublishedCandidatePhoto'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
 import { type BootstrapApiClient } from './api/bootstrapApi'
@@ -63,12 +64,12 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
 
   useEffect(() => {
     let active = true
-    Promise.all([api.getCandidatePortal(), api.getSystemInfo(), api.getSessionProfile()])
+    Promise.all([candidateIntakeApi.getPublishedCandidates(), api.getSystemInfo(), api.getSessionProfile()])
       .then(([portalResponse, systemResponse, session]) => { if (!active) return; setPortal(portalResponse); setSystemInfo(systemResponse); setProfile(session) })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible cargar la plataforma.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [api])
+  }, [api, candidateIntakeApi])
 
   const capabilities = profile?.capabilities as ExtendedCapabilities | undefined
   const canMemberPortal = api.useMocks || profile !== null
@@ -105,7 +106,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Ir a Mi ficha"><span className="brand-mark" aria-hidden="true">C</span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
       <span className="product-motto">100 años de historia · Un legado hacia el futuro</span>
-      <div className="topbar-meta">{api.useMocks && <span className="demo-badge">QA demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.36' : `API v${systemInfo?.version ?? '—'}`}</span></div>
+      <div className="topbar-meta">{api.useMocks && <span className="demo-badge">QA demostración</span>}{profile && <span className="environment-badge">{profile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}>✦</button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.37' : `API v${systemInfo?.version ?? '—'}`}</span></div>
     </header>
     <div className="workspace">
       <nav className="sidebar" aria-label="Navegación principal">
@@ -142,7 +143,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={profile} useMocks={api.useMocks} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage portal={portal} systemInfo={systemInfo} profile={profile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'bootstrap' && canBootstrap && <BootstrapPage bootstrapApi={bootstrapApi} />}
-        {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} />}
+        {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} />}
         {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} />}
@@ -171,23 +172,22 @@ function ModuleAccess({ icon, label, allowed, active = false, onOpen }: { icon: 
   return <span className={allowed ? 'nav-item' : 'nav-item disabled'}><span aria-hidden="true">{icon}</span> {label}{!allowed && <em>sin acceso</em>}</span>
 }
 
-function CandidatePortal({ portal, loading }: { portal: CandidatePortalResponse | null; loading: boolean }) {
+function CandidatePortal({ portal, loading, api }: { portal: CandidatePortalResponse | null; loading: boolean; api: CandidateIntakeApiClient }) {
   const [query, setQuery] = useState('')
   const filtered = useMemo(() => {
     const normalized = normalize(query)
     return !normalized ? portal?.items ?? [] : (portal?.items ?? []).filter(item => normalize(`${item.displayName} ${item.workshopName} ${item.workshopNumber ?? ''}`).includes(normalized))
   }, [portal, query])
-  return <><section className="page-heading"><div><p className="eyebrow">Transparencia institucional controlada</p><h1>Insinuados en período de publicación</h1><p>Publicaciones vigentes según el plazo configurado para solicitudes de iniciación.</p></div><span className="count-badge">{loading ? '…' : `${filtered.length} registros`}</span></section><section className="panel"><label className="search-field"><span>Buscar por nombre o Taller</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ej.: Taller 23" /></label>{loading ? <LoadingRows /> : filtered.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong></div> : <div className="candidate-list">{filtered.map(candidate => <CandidateCard key={`${candidate.displayName}-${candidate.publishedFromUtc}`} candidate={candidate} />)}</div>}</section></>
+  return <><section className="page-heading"><div><p className="eyebrow">Transparencia institucional controlada</p><h1>Insinuados en período de publicación</h1><p>Publicaciones vigentes según el plazo configurado para solicitudes de iniciación.</p></div><span className="count-badge">{loading ? '…' : `${filtered.length} registros`}</span></section><section className="panel"><label className="search-field"><span>Buscar por nombre o Taller</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Ej.: Taller 23" /></label>{loading ? <LoadingRows /> : filtered.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong></div> : <div className="candidate-list">{filtered.map(candidate => <CandidateCard key={`${candidate.displayName}-${candidate.publishedFromUtc}`} candidate={candidate} api={api} />)}</div>}</section></>
 }
 
-function CandidateCard({ candidate }: { candidate: CandidatePublication }) {
+function CandidateCard({ candidate, api }: { candidate: CandidatePublication; api: CandidateIntakeApiClient }) {
   const percentage = Math.min(100, Math.round(candidate.elapsedDays / Math.max(1, candidate.requiredDays) * 100))
   const complete = candidate.elapsedDays >= candidate.requiredDays
-  return <article className="candidate-card"><div className="candidate-avatar">{initials(candidate.displayName)}</div><div className="candidate-main"><div className="candidate-title-row"><div><h3>{candidate.displayName}</h3><p>{candidate.workshopName}{candidate.workshopNumber ? ` · Nº ${candidate.workshopNumber}` : ''}</p></div><span className={complete ? 'status-pill complete' : 'status-pill active'}>{complete ? 'Plazo cumplido' : 'En publicación'}</span></div><div className="progress-row"><div className="progress-track" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percentage}%` }} /></div><strong>{candidate.elapsedDays}/{candidate.requiredDays} días</strong></div><dl className="candidate-meta"><div><dt>Publicado</dt><dd>{formatDate(candidate.publishedFromUtc)}</dd></div><div><dt>Cumplimiento</dt><dd>{formatDate(candidate.complianceDateUtc)}</dd></div></dl></div></article>
+  return <article className="candidate-card"><div className="candidate-avatar" style={{ overflow: 'hidden' }}><PublishedCandidatePhoto candidate={candidate} api={api} /></div><div className="candidate-main"><div className="candidate-title-row"><div><h3>{candidate.displayName}</h3><p>{candidate.workshopName}{candidate.workshopNumber ? ` · Nº ${candidate.workshopNumber}` : ''}</p></div><span className={complete ? 'status-pill complete' : 'status-pill active'}>{complete ? 'Plazo cumplido' : 'En publicación'}</span></div><div className="progress-row"><div className="progress-track" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percentage}%` }} /></div><strong>{candidate.elapsedDays}/{candidate.requiredDays} días</strong></div><dl className="candidate-meta"><div><dt>Publicado</dt><dd>{formatDate(candidate.publishedFromUtc)}</dd></div><div><dt>Cumplimiento</dt><dd>{formatDate(candidate.complianceDateUtc)}</dd></div></dl></div></article>
 }
 
 function LoadingRows() { return <div className="loading-rows"><span /><span /><span /></div> }
 function ErrorBanner({ message }: { message: string }) { return <div className="error-banner" role="alert"><strong>No fue posible conectar con la información institucional.</strong><span>{message}</span></div> }
 function normalize(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
-function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]?.toUpperCase() ?? '').join('') }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(date) }
