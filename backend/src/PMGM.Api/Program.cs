@@ -126,6 +126,7 @@ app.UseRequestLocalization();
 app.UseAuthentication();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseAuthorization();
+app.UseMiddleware<CandidatePublishedLockMiddleware>();
 
 var apiVersion = typeof(Program).Assembly
     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
