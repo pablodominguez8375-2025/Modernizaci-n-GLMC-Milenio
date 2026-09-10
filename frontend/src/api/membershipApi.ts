@@ -61,6 +61,54 @@ export interface MemberSelfProfile {
   }
 }
 
+export interface MemberTreasurySummary {
+  totalCharges: number
+  totalPayments: number
+  totalAllocated: number
+  outstandingCharges: number
+  availableCredit: number
+  netBalance: number
+  pendingChargeCount: number
+  overdueChargeCount: number
+}
+
+export interface MemberTreasuryCharge {
+  id: string
+  concept: string
+  period: string | null
+  issuedDate: string
+  dueDate: string
+  amount: number
+  appliedAmount: number
+  outstandingAmount: number
+  currency: string
+  status: string
+}
+
+export interface MemberTreasuryPayment {
+  id: string
+  paymentDate: string
+  amount: number
+  allocatedAmount: number
+  unappliedAmount: number
+  currency: string
+  method: string
+  receiptNumber: string | null
+  receiptAvailable: boolean
+}
+
+export interface MemberSelfTreasuryResponse {
+  organization: { id: string; name: string; number: string | null }
+  statement: {
+    organizationId: string
+    memberId: string
+    currency: string
+    summary: MemberTreasurySummary
+    charges: MemberTreasuryCharge[]
+    payments: MemberTreasuryPayment[]
+  }
+}
+
 export interface UpdateMemberSelfContactRequest { email?: string | null; phone?: string | null; address?: string | null }
 export interface UpdateMemberSelfContactResponse { status: 'updated' | 'unchanged'; changedFields: string[] }
 
@@ -90,6 +138,34 @@ const demoSelfProfile: MemberSelfProfile = {
   regularity: {
     financial: { status: 'up_to_date', asOfDate: '2026-09-08', scope: 'member' },
     hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08' },
+  },
+}
+
+export const memberTreasuryDemoStatement: MemberSelfTreasuryResponse = {
+  organization: { id: org23, name: 'Taller Demostrativo Nº 23', number: '23' },
+  statement: {
+    organizationId: org23,
+    memberId: 'demo-self-member',
+    currency: 'CLP',
+    summary: {
+      totalCharges: 150000,
+      totalPayments: 110000,
+      totalAllocated: 110000,
+      outstandingCharges: 40000,
+      availableCredit: 0,
+      netBalance: 40000,
+      pendingChargeCount: 1,
+      overdueChargeCount: 0,
+    },
+    charges: [
+      { id: 'demo-charge-anniversary', concept: 'Actividad aniversario', period: 'Septiembre 2026', issuedDate: '2026-09-01', dueDate: '2026-09-30', amount: 60000, appliedAmount: 20000, outstandingAmount: 40000, currency: 'CLP', status: 'open' },
+      { id: 'demo-charge-september', concept: 'Cuota ordinaria', period: 'Septiembre 2026', issuedDate: '2026-09-01', dueDate: '2026-09-10', amount: 45000, appliedAmount: 45000, outstandingAmount: 0, currency: 'CLP', status: 'paid' },
+      { id: 'demo-charge-august', concept: 'Cuota ordinaria', period: 'Agosto 2026', issuedDate: '2026-08-01', dueDate: '2026-08-10', amount: 45000, appliedAmount: 45000, outstandingAmount: 0, currency: 'CLP', status: 'paid' },
+    ],
+    payments: [
+      { id: 'demo-payment-1', paymentDate: '2026-09-08', amount: 65000, allocatedAmount: 65000, unappliedAmount: 0, currency: 'CLP', method: 'transfer', receiptNumber: 'DEMO-REC-0908', receiptAvailable: true },
+      { id: 'demo-payment-2', paymentDate: '2026-08-08', amount: 45000, allocatedAmount: 45000, unappliedAmount: 0, currency: 'CLP', method: 'transfer', receiptNumber: 'DEMO-REC-0808', receiptAvailable: true },
+    ],
   },
 }
 
@@ -134,6 +210,22 @@ export class MembershipApiClient {
   async getSelfProfile(): Promise<MemberSelfProfile> {
     if (this.useMocks) return { ...demoSelfProfile, contact: { ...this.mockSelfContact } }
     return this.request<MemberSelfProfile>('/api/member-self/profile')
+  }
+
+  async getSelfTreasury(): Promise<MemberSelfTreasuryResponse> {
+    if (this.useMocks) {
+      return {
+        ...memberTreasuryDemoStatement,
+        organization: { ...memberTreasuryDemoStatement.organization },
+        statement: {
+          ...memberTreasuryDemoStatement.statement,
+          summary: { ...memberTreasuryDemoStatement.statement.summary },
+          charges: memberTreasuryDemoStatement.statement.charges.map(item => ({ ...item })),
+          payments: memberTreasuryDemoStatement.statement.payments.map(item => ({ ...item })),
+        },
+      }
+    }
+    return this.request<MemberSelfTreasuryResponse>('/api/member-self/treasury')
   }
 
   async updateSelfContact(request: UpdateMemberSelfContactRequest): Promise<UpdateMemberSelfContactResponse> {
