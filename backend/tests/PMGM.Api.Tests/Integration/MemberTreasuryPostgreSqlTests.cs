@@ -152,14 +152,14 @@ public sealed class MemberTreasuryPostgreSqlTests
         Assert.Equal(1, statement.Summary.PendingChargeCount);
         Assert.Equal(0, statement.Summary.OverdueChargeCount);
 
-        var projectedPartial = Assert.Single(statement.Charges.Where(x => x.Id == partialCharge.Id));
+        var projectedPartial = Assert.Single(statement.Charges, x => x.Id == partialCharge.Id);
         Assert.Equal(40_000m, projectedPartial.AppliedAmount);
         Assert.Equal(60_000m, projectedPartial.OutstandingAmount);
 
-        var projectedPaid = Assert.Single(statement.Charges.Where(x => x.Id == paidCharge.Id));
+        var projectedPaid = Assert.Single(statement.Charges, x => x.Id == paidCharge.Id);
         Assert.Equal(0m, projectedPaid.OutstandingAmount);
 
-        var projectedPartialPayment = Assert.Single(statement.Payments.Where(x => x.Id == partialPayment.Id));
+        var projectedPartialPayment = Assert.Single(statement.Payments, x => x.Id == partialPayment.Id);
         Assert.Equal(0m, projectedPartialPayment.UnappliedAmount);
         Assert.False(projectedPartialPayment.ReceiptAvailable);
     }
