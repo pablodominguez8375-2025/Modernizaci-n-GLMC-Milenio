@@ -19,6 +19,7 @@ public sealed class TreasuryLedgerDbContext(DbContextOptions<TreasuryLedgerDbCon
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Concept).HasMaxLength(240).IsRequired();
             entity.Property(x => x.Period).HasMaxLength(40);
+            entity.Property(x => x.ChargeType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Amount).HasPrecision(18, 2);
             entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
@@ -28,6 +29,7 @@ public sealed class TreasuryLedgerDbContext(DbContextOptions<TreasuryLedgerDbCon
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasIndex(x => new { x.OrganizationId, x.MemberId, x.DueDate });
             entity.HasIndex(x => new { x.MemberId, x.Status });
+            entity.HasIndex(x => new { x.MemberId, x.ChargeType, x.IssuedDate });
         });
 
         modelBuilder.Entity<MemberPayment>(entity =>
