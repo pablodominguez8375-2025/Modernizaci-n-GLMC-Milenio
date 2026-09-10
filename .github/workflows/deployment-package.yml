@@ -10,6 +10,15 @@ on:
       - 'release/PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json'
       - 'scripts/preflight-definitive-host.sh'
       - 'scripts/update-definitive.sh'
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/deployment-package.yml'
+      - 'docs/instalacion/PMGM-VM-DEFINITIVA-V100.md'
+      - 'docs/instalacion/PMGM-PAQUETE-IMPLEMENTACION-V100.md'
+      - 'release/PMGM-DEPLOYMENT-PACKAGE-1.0.0-rc1.json'
+      - 'scripts/preflight-definitive-host.sh'
+      - 'scripts/update-definitive.sh'
   workflow_dispatch:
 
 permissions:
