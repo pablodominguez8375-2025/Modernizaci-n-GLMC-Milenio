@@ -18,6 +18,26 @@ export interface CandidateReviewQueueResponse {
   items: CandidateReviewQueueItem[]
 }
 
+export interface CandidateWorkshopQueueItem {
+  ceremonyRequestId: string
+  firstNames: string
+  lastNames: string
+  displayName: string
+  workshopName: string
+  workshopNumber: string | null
+  proposedDate: string | null
+  requestStatus: string
+  profileAvailable: boolean
+  photoAvailable: boolean
+  reviewStatus: CandidateReviewStatus | string
+  createdAtUtc: string
+}
+
+export interface CandidateWorkshopQueueResponse {
+  total: number
+  items: CandidateWorkshopQueueItem[]
+}
+
 export interface CandidateIntakeProfile {
   ceremonyRequestId: string
   firstNames: string
@@ -45,6 +65,26 @@ export interface CandidateIntakeProfile {
   updatedAtUtc: string
 }
 
+export interface CandidateIntakeUpsertPayload {
+  firstNames: string
+  paternalSurname: string
+  maternalSurname?: string | null
+  rutOrInstitutionalId?: string | null
+  birthDate?: string | null
+  nationality?: string | null
+  civilStatus?: string | null
+  occupation?: string | null
+  phone?: string | null
+  email?: string | null
+  address?: string | null
+  city?: string | null
+  orient?: string | null
+  presenters: string[]
+  insinuationDate: string
+  interviewSummary?: string | null
+  internalObservations?: string | null
+}
+
 export type PublishedCandidate = CandidatePortalResponse['items'][number] & { photoUrl: string | null }
 export type PublishedCandidatePortalResponse = Omit<CandidatePortalResponse, 'items'> & { items: PublishedCandidate[] }
 export type CandidateReviewDecision = 'observed' | 'rejected'
@@ -65,6 +105,7 @@ class CandidateIntakeApiHttpError extends Error {
 }
 
 const demoRequestId = 'eeeeeeee-2222-2222-2222-222222222222'
+const demoSecondRequestId = 'eeeeeeee-3333-3333-3333-333333333333'
 
 const demoProfile: CandidateIntakeProfile = {
   ceremonyRequestId: demoRequestId,
@@ -105,7 +146,7 @@ const demoQueueSeed: CandidateReviewQueueItem[] = [
     reviewStatus: 'pending_grand_secretariat',
   },
   {
-    ceremonyRequestId: 'eeeeeeee-3333-3333-3333-333333333333',
+    ceremonyRequestId: demoSecondRequestId,
     displayName: 'Persona Demostrativa Dos',
     workshopName: 'Taller Demostrativo Nº 1',
     workshopNumber: '1',
@@ -113,6 +154,37 @@ const demoQueueSeed: CandidateReviewQueueItem[] = [
     submittedAtUtc: '2026-09-09T17:15:00Z',
     photoAvailable: false,
     reviewStatus: 'observed',
+  },
+]
+
+const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
+  {
+    ceremonyRequestId: demoRequestId,
+    firstNames: 'Tomás Ignacio',
+    lastNames: 'Valdés Riquelme',
+    displayName: 'Tomás Ignacio Valdés Riquelme',
+    workshopName: 'Taller Demostrativo Nº 23',
+    workshopNumber: '23',
+    proposedDate: '2026-10-03',
+    requestStatus: 'under_review',
+    profileAvailable: true,
+    photoAvailable: true,
+    reviewStatus: 'pending_grand_secretariat',
+    createdAtUtc: '2026-09-08T13:15:00Z',
+  },
+  {
+    ceremonyRequestId: demoSecondRequestId,
+    firstNames: 'Persona Demostrativa',
+    lastNames: 'Dos',
+    displayName: 'Persona Demostrativa Dos',
+    workshopName: 'Taller Demostrativo Nº 23',
+    workshopNumber: '23',
+    proposedDate: null,
+    requestStatus: 'under_review',
+    profileAvailable: false,
+    photoAvailable: false,
+    reviewStatus: 'pending_grand_secretariat',
+    createdAtUtc: '2026-09-10T12:00:00Z',
   },
 ]
 
@@ -156,6 +228,7 @@ export class CandidateIntakeApiClient {
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
   private readonly mockQueue = demoQueueSeed.map(item => ({ ...item }))
+  private readonly mockWorkshopQueue = demoWorkshopQueueSeed.map(item => ({ ...item }))
   private readonly mockProfiles = new Map<string, CandidateIntakeProfile>([[demoRequestId, { ...demoProfile, presenters: [...demoProfile.presenters] }]])
 
   constructor(options: CandidateIntakeApiClientOptions = {}) {
@@ -172,6 +245,11 @@ export class CandidateIntakeApiClient {
     return this.request<PublishedCandidatePortalResponse>('/api/candidate-publications/active')
   }
 
+  async getWorkshopQueue(): Promise<CandidateWorkshopQueueResponse> {
+    if (this.useMocks) return { total: this.mockWorkshopQueue.length, items: this.mockWorkshopQueue.map(item => ({ ...item })) }
+    return this.request<CandidateWorkshopQueueResponse>('/api/insinuados/taller/solicitudes')
+  }
+
   async getGrandSecretariatQueue(status?: CandidateReviewStatus | string): Promise<CandidateReviewQueueResponse> {
     if (this.useMocks) {
       const items = status ? this.mockQueue.filter(item => item.reviewStatus === status) : this.mockQueue
@@ -184,10 +262,79 @@ export class CandidateIntakeApiClient {
 
   async getProfile(requestId: string): Promise<CandidateIntakeProfile> {
     if (this.useMocks) {
-      const profile = this.mockProfiles.get(requestId) ?? { ...demoProfile, ceremonyRequestId: requestId, photoAvailable: false }
+      const profile = this.mockProfiles.get(requestId)
+      if (!profile) throw new CandidateIntakeApiHttpError(404, 'La ficha aún no ha sido ingresada.')
       return { ...profile, presenters: [...profile.presenters] }
     }
     return this.request<CandidateIntakeProfile>(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/ficha`)
+  }
+
+  async saveProfile(requestId: string, payload: CandidateIntakeUpsertPayload): Promise<CandidateIntakeProfile> {
+    if (this.useMocks) {
+      const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (!queueItem) throw new CandidateIntakeApiHttpError(404, 'La solicitud demostrativa no existe.')
+      const now = new Date().toISOString()
+      const existing = this.mockProfiles.get(requestId)
+      const profile: CandidateIntakeProfile = {
+        ceremonyRequestId: requestId,
+        firstNames: payload.firstNames.trim(),
+        paternalSurname: payload.paternalSurname.trim(),
+        maternalSurname: payload.maternalSurname?.trim() || null,
+        rutOrInstitutionalId: payload.rutOrInstitutionalId?.trim() || null,
+        birthDate: payload.birthDate || null,
+        nationality: payload.nationality?.trim() || null,
+        civilStatus: payload.civilStatus?.trim() || null,
+        occupation: payload.occupation?.trim() || null,
+        phone: payload.phone?.trim() || null,
+        email: payload.email?.trim() || null,
+        address: payload.address?.trim() || null,
+        city: payload.city?.trim() || null,
+        workshopName: queueItem.workshopName,
+        workshopNumber: queueItem.workshopNumber,
+        orient: payload.orient?.trim() || null,
+        presenters: payload.presenters.map(value => value.trim()).filter(Boolean),
+        insinuationDate: payload.insinuationDate,
+        reviewStatus: 'pending_grand_secretariat',
+        photoAvailable: existing?.photoAvailable ?? false,
+        interviewSummary: payload.interviewSummary?.trim() || null,
+        internalObservations: payload.internalObservations?.trim() || null,
+        submittedAtUtc: existing?.submittedAtUtc ?? now,
+        updatedAtUtc: now,
+      }
+      this.mockProfiles.set(requestId, profile)
+      queueItem.firstNames = profile.firstNames
+      queueItem.lastNames = [profile.paternalSurname, profile.maternalSurname].filter(Boolean).join(' ')
+      queueItem.displayName = [profile.firstNames, queueItem.lastNames].filter(Boolean).join(' ')
+      queueItem.profileAvailable = true
+      queueItem.reviewStatus = 'pending_grand_secretariat'
+      return { ...profile, presenters: [...profile.presenters] }
+    }
+    return this.request<CandidateIntakeProfile>(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/ficha`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async attachPhotoVersion(requestId: string, photoVersionId: string): Promise<void> {
+    if (this.useMocks) {
+      const profile = this.mockProfiles.get(requestId)
+      if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero debe registrar la ficha del insinuado.')
+      profile.photoAvailable = true
+      profile.reviewStatus = 'pending_grand_secretariat'
+      profile.updatedAtUtc = new Date().toISOString()
+      const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (queueItem) {
+        queueItem.photoAvailable = true
+        queueItem.reviewStatus = 'pending_grand_secretariat'
+      }
+      return
+    }
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/foto`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photoVersionId }),
+    })
   }
 
   async review(requestId: string, decision: CandidateReviewDecision, notes?: string): Promise<void> {
@@ -200,6 +347,8 @@ export class CandidateIntakeApiClient {
         profile.updatedAtUtc = new Date().toISOString()
         profile.internalObservations = notes?.trim() || profile.internalObservations
       }
+      const workshopItem = this.mockWorkshopQueue.find(value => value.ceremonyRequestId === requestId)
+      if (workshopItem) workshopItem.reviewStatus = decision
       return
     }
     await this.request(`/api/ceremonias/solicitudes/${encodeURIComponent(requestId)}/revision-publicacion-insinuado`, {
@@ -218,6 +367,8 @@ export class CandidateIntakeApiClient {
         profile.reviewStatus = 'approved'
         profile.updatedAtUtc = new Date().toISOString()
       }
+      const workshopItem = this.mockWorkshopQueue.find(value => value.ceremonyRequestId === requestId)
+      if (workshopItem) workshopItem.reviewStatus = 'approved'
       return
     }
     await this.request(`/api/ceremonias/solicitudes/${encodeURIComponent(requestId)}/aprobar-publicacion-insinuado`, { method: 'POST' })
@@ -263,7 +414,7 @@ export class CandidateIntakeApiClient {
       const body = await response.clone().json() as { message?: string }
       message = typeof body.message === 'string' ? body.message : ''
     } catch { /* respuesta sin JSON */ }
-    if (response.status === 403) message = 'Su cuenta no tiene permiso para revisar este expediente.'
+    if (response.status === 403) message = 'Su cuenta no tiene permiso para acceder a este expediente.'
     return new CandidateIntakeApiHttpError(response.status, message || `La API respondió ${response.status} ${response.statusText}.`)
   }
 }
