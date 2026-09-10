@@ -90,6 +90,15 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canDocuments = api.useMocks || (capabilities?.canManageDocuments ?? false)
   const canGrandArchive = api.useMocks || (capabilities?.canManageGrandArchive ?? false)
 
+  const openNotificationAction = (actionUrl: string) => {
+    const path = actionUrl.split(/[?#]/, 1)[0]
+    if (path === '/candidates') return setView('candidates')
+    if (path === '/calendar' && canCalendar) return setView('calendar')
+    if (path === '/ceremonies' && canCeremonies) return setView('ceremonies')
+    if (path === '/lodge' && canLodge) return setView('lodge')
+    if (path === '/documents' && canDocuments) return setView('documents')
+  }
+
   return <div className="app-shell">
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Ir a Mi ficha"><span className="brand-mark" aria-hidden="true">C</span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
@@ -139,7 +148,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
         {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} caseApi={dataQualityCaseApi} onOpenCases={() => setView('caseQueue')} />}
         {view === 'caseQueue' && canCaseQueue && <DataQualityCaseQueuePage api={api} caseApi={dataQualityCaseApi} />}
-        {view === 'notifications' && canNotifications && <NotificationsPage notificationApi={notificationApi} />}
+        {view === 'notifications' && canNotifications && <NotificationsPage notificationApi={notificationApi} onAction={openNotificationAction} />}
         {view === 'calendar' && canCalendar && <CalendarPage api={api} calendarApi={calendarApi} canManage={canSecretariat} />}
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
