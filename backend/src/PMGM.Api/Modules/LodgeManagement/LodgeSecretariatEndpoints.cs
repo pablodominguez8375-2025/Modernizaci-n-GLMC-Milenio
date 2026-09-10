@@ -242,7 +242,7 @@ public static class LodgeSecretariatEndpoints
             return Results.Conflict(new { message = "El pendiente ya se encuentra en un estado final." });
 
         task.Status = next;
-        if (next is LodgeSecretariatCodes.TaskStatus.Done or LodgeSecretariatCodes.TaskStatus.Cancelled)
+        if (next == LodgeSecretariatCodes.TaskStatus.Done || next == LodgeSecretariatCodes.TaskStatus.Cancelled)
         {
             task.CompletedAtUtc = DateTimeOffset.UtcNow;
             task.CompletedBySubject = GetSubject(httpContext.User);
@@ -292,7 +292,7 @@ public static class LodgeSecretariatEndpoints
         var meeting = await db.LodgeMeetings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null) return Results.NotFound();
         if (!access.CanManageOrganization(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
-        if (meeting.Status is LodgeManagementCodes.MeetingStatus.Closed or LodgeManagementCodes.MeetingStatus.Cancelled)
+        if (meeting.Status == LodgeManagementCodes.MeetingStatus.Closed || meeting.Status == LodgeManagementCodes.MeetingStatus.Cancelled)
             return Results.Conflict(new { message = "No se puede modificar la tabla de una Tenida cerrada o cancelada." });
         if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > 500)
             return Results.BadRequest(new { message = "El título del punto es obligatorio y admite hasta 500 caracteres." });
@@ -415,7 +415,7 @@ public static class LodgeSecretariatCodes
     {
         public const string Incoming = "incoming";
         public const string Outgoing = "outgoing";
-        public static bool IsValid(string value) => value is Incoming or Outgoing;
+        public static bool IsValid(string value) => value == Incoming || value == Outgoing;
     }
 
     public static class Channel
@@ -424,7 +424,7 @@ public static class LodgeSecretariatCodes
         public const string Letter = "letter";
         public const string Platform = "platform";
         public const string Other = "other";
-        public static bool IsValid(string value) => value is Email or Letter or Platform or Other;
+        public static bool IsValid(string value) => value == Email || value == Letter || value == Platform || value == Other;
     }
 
     public static class CorrespondenceStatus
@@ -432,9 +432,11 @@ public static class LodgeSecretariatCodes
         public const string Registered = "registered";
         public const string Processed = "processed";
         public const string Archived = "archived";
-        public static bool IsValid(string value) => value is Registered or Processed or Archived;
+        public static bool IsValid(string value) => value == Registered || value == Processed || value == Archived;
         public static bool CanTransition(string current, string next)
-            => current == next || current == Registered && next is Processed or Archived || current == Processed && next == Archived;
+            => current == next
+               || (current == Registered && (next == Processed || next == Archived))
+               || (current == Processed && next == Archived);
     }
 
     public static class Priority
@@ -442,7 +444,7 @@ public static class LodgeSecretariatCodes
         public const string Low = "low";
         public const string Normal = "normal";
         public const string High = "high";
-        public static bool IsValid(string value) => value is Low or Normal or High;
+        public static bool IsValid(string value) => value == Low || value == Normal || value == High;
     }
 
     public static class TaskStatus
@@ -450,8 +452,9 @@ public static class LodgeSecretariatCodes
         public const string Open = "open";
         public const string Done = "done";
         public const string Cancelled = "cancelled";
-        public static bool IsValid(string value) => value is Open or Done or Cancelled;
-        public static bool CanTransition(string current, string next) => current == next || current == Open && next is Done or Cancelled;
+        public static bool IsValid(string value) => value == Open || value == Done || value == Cancelled;
+        public static bool CanTransition(string current, string next)
+            => current == next || (current == Open && (next == Done || next == Cancelled));
     }
 
     public static class AgendaStatus
@@ -459,8 +462,9 @@ public static class LodgeSecretariatCodes
         public const string Pending = "pending";
         public const string Addressed = "addressed";
         public const string Deferred = "deferred";
-        public static bool IsValid(string value) => value is Pending or Addressed or Deferred;
-        public static bool CanTransition(string current, string next) => current == next || current == Pending && next is Addressed or Deferred;
+        public static bool IsValid(string value) => value == Pending || value == Addressed || value == Deferred;
+        public static bool CanTransition(string current, string next)
+            => current == next || (current == Pending && (next == Addressed || next == Deferred));
     }
 }
 
