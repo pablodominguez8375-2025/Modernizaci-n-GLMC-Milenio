@@ -166,6 +166,7 @@ app.MapGrandSecretariatEndpoints();
 app.MapGrandSecretariatQueryEndpoints();
 app.MapGrandSecretariatCeremonyQueueEndpoints();
 app.MapLodgeManagementEndpoints();
+app.MapLodgeSecretariatEndpoints();
 app.MapLodgeInstructionEndpoints();
 app.MapDocumentManagementEndpoints();
 app.MapDocumentManagementQueryEndpoints();
