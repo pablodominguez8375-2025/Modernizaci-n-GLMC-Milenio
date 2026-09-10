@@ -18,6 +18,23 @@ describe('MemberPortalPage contract', () => {
     expect(memberPortalDemoData.notifications.length).toBeGreaterThan(0)
   })
 
+  it('represents instructions as attendance history, never thematic progress', () => {
+    for (const item of memberPortalDemoData.instruction) {
+      expect(item.date).toBeTruthy()
+      expect(item.degree).toBeTruthy()
+      expect(item.topic).toBeTruthy()
+      expect(item.attendance).toBeTruthy()
+      expect(item.responsible).toBeTruthy()
+      expect('progress' in item).toBe(false)
+    }
+  })
+
+  it('keeps realistic attendance states in the fictitious instruction history', () => {
+    const statuses = memberPortalDemoData.instruction.map(item => item.attendance)
+    expect(statuses).toContain('Presente')
+    expect(statuses).toContain('Justificada')
+  })
+
   it('uses only explicitly fictitious public showcase data', () => {
     expect(memberPortalDemoData.fullName.toLowerCase()).toContain('demostrativo')
     expect(memberPortalDemoData.memberId).toContain('DEMO')
