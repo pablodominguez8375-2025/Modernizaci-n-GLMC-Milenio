@@ -1,0 +1,77 @@
+name: Proyecto Centenario Pre-UAT Installable
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - dev
+      - 'feat/**'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build self-contained installable package
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify source identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+
+      - name: Validate deployable compose definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose --env-file infrastructure/first.env.example -f infrastructure/docker-compose.first.yml config --quiet
+          docker compose --env-file infrastructure/pilot.env.example -f infrastructure/docker-compose.pilot.yml config --quiet
+
+      - name: Build package from exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_root="artifacts/Proyecto-Centenario-preUAT-installable"
+          mkdir -p "$package_root"
+
+          git archive --format=tar "$GITHUB_SHA" | tar -xf - -C "$package_root"
+          git bundle create "$package_root/pmgm-repository.bundle" --all
+
+          cat > "$package_root/BUILD-INFO.txt" <<EOF
+          PRODUCT=Proyecto Centenario - Gran Logia Mixta de Chile
+          CHANNEL=pre-UAT
+          SOURCE_SHA=$GITHUB_SHA
+          SOURCE_REF=$GITHUB_REF
+          BUILD_RUN_ID=$GITHUB_RUN_ID
+          BUILD_RUN_NUMBER=$GITHUB_RUN_NUMBER
+          BUILD_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          NOTE=No contiene secretos ni datos institucionales reales. Requiere configuracion local antes de uso.
+          EOF
+
+          (
+            cd "$package_root"
+            find . -type f ! -name MANIFEST.sha256 -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > MANIFEST.sha256
+          )
+
+          cp "$package_root/docs/installation/PREUAT-INSTALL.md" "$package_root/LEAME-INSTALACION.md"
+          (cd artifacts && zip -qr Proyecto-Centenario-preUAT-installable.zip Proyecto-Centenario-preUAT-installable)
+          sha256sum artifacts/Proyecto-Centenario-preUAT-installable.zip > artifacts/Proyecto-Centenario-preUAT-installable.zip.sha256
+
+      - name: Upload installable package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proyecto-Centenario-preUAT-installable
+          path: |
+            artifacts/Proyecto-Centenario-preUAT-installable.zip
+            artifacts/Proyecto-Centenario-preUAT-installable.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
