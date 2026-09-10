@@ -228,6 +228,10 @@ internal sealed class PmgmWebApplicationFactory(string connectionString) : WebAp
             services.RemoveAll<DbContextOptions<PmgmDbContext>>();
             services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(connectionString));
 
+            services.RemoveAll<LodgeManagementDbContext>();
+            services.RemoveAll<DbContextOptions<LodgeManagementDbContext>>();
+            services.AddDbContext<LodgeManagementDbContext>(options => options.UseNpgsql(connectionString));
+
             services.AddAuthentication(options =>
                 {
                     options.DefaultAuthenticateScheme = TestAuthenticationHandler.SchemeName;
