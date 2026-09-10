@@ -45,6 +45,25 @@ export interface MemberStatusEvent { id: string; eventType: string; effectiveDat
 export interface MemberTransfer { id: string; sourceOrganizationId: string; sourceOrganization: string; targetOrganizationId: string; targetOrganization: string; requestedDate: string; proposedEffectiveDate: string; approvedEffectiveDate: string | null; status: string; reason: string | null; resolution: string | null; evidenceReference: string | null; executedAtUtc: string | null }
 export interface Regularity { status: string; asOfDate: string; scope?: string; sourceReference: string | null }
 
+export interface MemberSelfProfile {
+  member: { id: string; institutionalNumber: string | null; firstNames: string; lastNames: string }
+  contact: { email: string | null; phone: string | null; address: string | null }
+  current: {
+    membership: { organizationId: string; organization: string; organizationNumber: string | null; organizationType: string; membershipType: string; startDate: string; status: string } | null
+    degree: { degree: string; eventType: string; effectiveDate: string; organizationId: string; organization: string } | null
+    effectiveDegree: number
+    institutionalStatus: { eventType: string; effectiveDate: string } | null
+  }
+  milestones: { initiation: string | null; wageIncrease: string | null; exaltation: string | null }
+  regularity: {
+    financial: { status: string; asOfDate: string; scope: string } | null
+    hospitalaria: { status: string; asOfDate: string } | null
+  }
+}
+
+export interface UpdateMemberSelfContactRequest { email?: string | null; phone?: string | null; address?: string | null }
+export interface UpdateMemberSelfContactResponse { status: 'updated' | 'unchanged'; changedFields: string[] }
+
 export type MembershipAccessTokenProvider = () => Promise<string | null>
 interface MembershipApiClientOptions { baseUrl?: string; getAccessToken?: MembershipAccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
@@ -58,11 +77,28 @@ const demoMembers: MemberDirectoryItem[] = [
   { memberId: 'aaaaaaaa-6666-6666-6666-666666666666', displayName: 'Patricio Mendoza Silva', institutionalNumber: 'GLMC-01298', membershipStatus: 'transferred', membershipType: 'regular', startDate: '2014-04-18', endDate: '2026-06-30', currentDegree: 'master', institutionalStatus: 'workshop_transfer' },
 ]
 
+const demoSelfProfile: MemberSelfProfile = {
+  member: { id: 'demo-self-member', institutionalNumber: 'DEMO-0001', firstNames: 'Hermano', lastNames: 'Demostrativo' },
+  contact: { email: 'hermano.demo@ejemplo.cl', phone: '+56 9 0000 0000', address: 'Dirección ficticia para demostración' },
+  current: {
+    membership: { organizationId: org23, organization: 'Taller Demostrativo Nº 23', organizationNumber: '23', organizationType: 'workshop', membershipType: 'regular', startDate: '2013-10-12', status: 'active' },
+    degree: { degree: '3', eventType: 'exaltation', effectiveDate: '2017-05-21', organizationId: org23, organization: 'Taller Demostrativo Nº 23' },
+    effectiveDegree: 3,
+    institutionalStatus: { eventType: 'active', effectiveDate: '2013-10-12' },
+  },
+  milestones: { initiation: '2013-10-12', wageIncrease: '2015-06-18', exaltation: '2017-05-21' },
+  regularity: {
+    financial: { status: 'up_to_date', asOfDate: '2026-09-08', scope: 'member' },
+    hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08' },
+  },
+}
+
 export class MembershipApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: MembershipAccessTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
+  private readonly mockSelfContact = { ...demoSelfProfile.contact }
 
   constructor(options: MembershipApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -95,16 +131,43 @@ export class MembershipApiClient {
     return this.request<MemberProfile>(`/api/members/${encodeURIComponent(memberId)}/profile`)
   }
 
-  private async request<T>(path: string): Promise<T> {
-    const headers = new Headers({ Accept: 'application/json' })
+  async getSelfProfile(): Promise<MemberSelfProfile> {
+    if (this.useMocks) return { ...demoSelfProfile, contact: { ...this.mockSelfContact } }
+    return this.request<MemberSelfProfile>('/api/member-self/profile')
+  }
+
+  async updateSelfContact(request: UpdateMemberSelfContactRequest): Promise<UpdateMemberSelfContactResponse> {
+    if (this.useMocks) {
+      const changedFields: string[] = []
+      for (const key of ['email', 'phone', 'address'] as const) {
+        const next = request[key] ?? null
+        if (this.mockSelfContact[key] !== next) {
+          this.mockSelfContact[key] = next
+          changedFields.push(key)
+        }
+      }
+      return { status: changedFields.length ? 'updated' : 'unchanged', changedFields }
+    }
+    return this.request<UpdateMemberSelfContactResponse>('/api/member-self/contact', {
+      method: 'PUT',
+      body: JSON.stringify(request),
+    })
+  }
+
+  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const headers = new Headers(init.headers)
+    headers.set('Accept', 'application/json')
+    if (init.body !== undefined && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
     const token = await this.getAccessToken?.()
     if (!token) throw new Error('Debe ingresar para consultar fichas institucionales.')
     headers.set('Authorization', `Bearer ${token}`)
-    const response = await fetch(`${this.baseUrl}${path}`, { credentials: 'omit', redirect: 'error', cache: 'no-store', headers })
+    const response = await fetch(`${this.baseUrl}${path}`, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', headers })
     if (!response.ok) {
       if (response.status === 401) await this.onUnauthorized?.()
-      if (response.status === 403) throw new Error('Su cuenta no tiene permiso para consultar esta ficha institucional.')
-      throw new Error(`La API respondió ${response.status} ${response.statusText}.`)
+      if (response.status === 403) throw new Error('Su cuenta no tiene permiso para consultar o modificar esta ficha institucional.')
+      if (response.status === 404) throw new Error('Su identidad autenticada todavía no está vinculada a una ficha de Hermano.')
+      const problem = await response.json().catch(() => null) as { message?: string } | null
+      throw new Error(problem?.message ?? `La API respondió ${response.status} ${response.statusText}.`)
     }
     return response.json() as Promise<T>
   }

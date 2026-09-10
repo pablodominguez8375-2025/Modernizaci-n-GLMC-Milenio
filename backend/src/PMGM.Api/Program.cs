@@ -155,6 +155,7 @@ app.MapSessionEndpoints();
 app.MapBootstrapEndpoints();
 app.MapOrganizationEndpoints();
 app.MapMembershipEndpoints();
+app.MapMemberSelfEndpoints();
 app.MapTransferEndpoints();
 app.MapRegimenInteriorEndpoints();
 app.MapRegimenInteriorMemberControlEndpoints();
