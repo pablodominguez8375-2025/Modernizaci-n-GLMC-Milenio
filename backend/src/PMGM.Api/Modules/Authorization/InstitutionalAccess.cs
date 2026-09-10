@@ -162,16 +162,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranSecretaria);
 
     public bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId)
-    {
-        if (HasOrderScope(user) &&
-            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria))
-        {
-            return true;
-        }
-
-        return HasOrganizationClaim(user, organizationId) &&
-               HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
-    }
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranSecretaria);
 
     public bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId)
     {
