@@ -64,10 +64,13 @@ public static class MemberTreasuryEndpoints
         var concept = Normalize(request.Concept);
         var period = Normalize(request.Period);
         var currency = NormalizeCurrency(request.Currency);
+        var chargeType = Normalize(request.ChargeType)?.ToLowerInvariant() ?? MemberTreasuryCodes.ChargeType.OrdinaryDue;
         if (concept is null || concept.Length > 240)
             return Results.BadRequest(new { message = "El concepto del cargo es obligatorio y no puede superar 240 caracteres." });
         if (period is { Length: > 40 })
             return Results.BadRequest(new { message = "El período no puede superar 40 caracteres." });
+        if (!MemberTreasuryCodes.ChargeType.IsValid(chargeType))
+            return Results.BadRequest(new { message = "El tipo de cargo indicado no es válido." });
         if (request.Amount <= 0)
             return Results.BadRequest(new { message = "El monto del cargo debe ser mayor que cero." });
         if (!MemberTreasuryCodes.Currency.IsValid(currency))
@@ -77,12 +80,35 @@ public static class MemberTreasuryEndpoints
         if (Normalize(request.SourceReference) is { Length: > 500 } || Normalize(request.Notes) is { Length: > 2000 })
             return Results.BadRequest(new { message = "La referencia u observación supera el máximo permitido." });
 
+        if (chargeType == MemberTreasuryCodes.ChargeType.OrdinaryDue)
+        {
+            var institutionalStatus = await db.InstitutionalStatusEvents
+                .AsNoTracking()
+                .Where(x => x.MemberId == memberId && x.EffectiveDate <= request.IssuedDate)
+                .OrderByDescending(x => x.EffectiveDate)
+                .ThenByDescending(x => x.RecordedAtUtc)
+                .Select(x => x.EventType)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (BlocksOrdinaryDues(institutionalStatus))
+            {
+                return Results.Conflict(new
+                {
+                    message = institutionalStatus == MembershipCodes.InstitutionalStatus.PastActive
+                        ? "No corresponde generar cuota o mensualidad ordinaria: el Hermano se encuentra Past Activo para la fecha indicada."
+                        : "No corresponde generar cuota o mensualidad ordinaria para la condición institucional del Hermano en la fecha indicada.",
+                    institutionalStatus
+                });
+            }
+        }
+
         var charge = new MemberCharge
         {
             OrganizationId = organizationId,
             MemberId = memberId,
             Concept = concept,
             Period = period,
+            ChargeType = chargeType,
             IssuedDate = request.IssuedDate,
             DueDate = request.DueDate,
             Amount = request.Amount,
@@ -103,7 +129,7 @@ public static class MemberTreasuryEndpoints
             charge.Id.ToString(),
             organizationId,
             AuditResults.Success,
-            new { charge.MemberId, charge.IssuedDate, charge.DueDate, charge.Amount, charge.Currency, charge.Status });
+            new { charge.MemberId, charge.ChargeType, charge.IssuedDate, charge.DueDate, charge.Amount, charge.Currency, charge.Status });
         await db.SaveChangesAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -116,6 +142,7 @@ public static class MemberTreasuryEndpoints
                 charge.MemberId,
                 charge.Concept,
                 charge.Period,
+                charge.ChargeType,
                 charge.IssuedDate,
                 charge.DueDate,
                 charge.Amount,
@@ -291,6 +318,13 @@ public static class MemberTreasuryEndpoints
                access.HasRole(user, InstitutionalRoles.TallerAdmin, MemberTreasuryCodes.LodgeTreasuryRole);
     }
 
+    internal static bool BlocksOrdinaryDues(string? institutionalStatus)
+        => institutionalStatus is MembershipCodes.InstitutionalStatus.PastActive
+            or MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal
+            or MembershipCodes.InstitutionalStatus.ForcedWithdrawal
+            or MembershipCodes.InstitutionalStatus.Deceased
+            or MembershipCodes.InstitutionalStatus.Inactive;
+
     private static Task<bool> HasMembershipAsync(
         PmgmDbContext db,
         Guid organizationId,
@@ -365,6 +399,7 @@ public static class MemberTreasuryStatementProjection
                 charge.Id,
                 charge.Concept,
                 charge.Period,
+                charge.ChargeType,
                 charge.IssuedDate,
                 charge.DueDate,
                 charge.Amount,
@@ -431,7 +466,8 @@ public sealed record CreateMemberChargeRequest(
     decimal Amount,
     string? Currency,
     string? SourceReference,
-    string? Notes);
+    string? Notes,
+    string? ChargeType = null);
 
 public sealed record MemberPaymentAllocationRequest(Guid ChargeId, decimal Amount);
 
@@ -468,6 +504,7 @@ public sealed record MemberTreasuryChargeDto(
     Guid Id,
     string Concept,
     string? Period,
+    string ChargeType,
     DateOnly IssuedDate,
     DateOnly DueDate,
     decimal Amount,
