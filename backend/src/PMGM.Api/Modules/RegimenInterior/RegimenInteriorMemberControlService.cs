@@ -76,13 +76,6 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 x.RecordedAtUtc))
             .ToListAsync(cancellationToken);
 
-        var pastActiveIds = await db.OfficeAssignments
-            .AsNoTracking()
-            .Where(x => relatedMemberIds.Contains(x.MemberId) && x.EndDate != null && x.EndDate < query.AsOf)
-            .Select(x => x.MemberId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
         var transfers = await db.MemberTransfers
             .AsNoTracking()
             .Where(x => relatedMemberIds.Contains(x.MemberId) && x.RequestedDate <= query.AsOf)
@@ -125,8 +118,8 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .Where(x => IsCurrentMembership(x, query.AsOf))
                 .OrderByDescending(x => x.StartDate)
                 .ToList();
-            var currentMembership = currentMemberships.FirstOrDefault();
-            var lastMembership = currentMembership ?? memberMemberships.First();
+            var storedCurrentMembership = currentMemberships.FirstOrDefault();
+            var lastMembership = storedCurrentMembership ?? memberMemberships.First();
 
             var memberStatuses = statusEvents
                 .Where(x => x.MemberId == person.MemberId)
@@ -135,9 +128,17 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .ToList();
             var latestStatus = memberStatuses.FirstOrDefault();
             var currentStatus = latestStatus?.Status ??
-                                (currentMembership is not null
+                                (storedCurrentMembership is not null
                                     ? MembershipCodes.InstitutionalStatus.Active
                                     : MembershipCodes.InstitutionalStatus.Inactive);
+
+            // Past Activo y Retiro voluntario / En sueño se determinan exclusivamente
+            // por el último estado institucional. Haber terminado un cargo no convierte
+            // a un Hermano en Past Activo.
+            var pastActive = InstitutionalStatusPolicy.IsPastActive(currentStatus);
+            var keepsWorkshopRosterMembership = storedCurrentMembership is not null &&
+                                                InstitutionalStatusPolicy.KeepsWorkshopRosterMembership(currentStatus);
+            var currentMembership = keepsWorkshopRosterMembership ? storedCurrentMembership : null;
 
             var memberDegrees = degreeEvents
                 .Where(x => x.MemberId == person.MemberId)
@@ -155,19 +156,18 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
             var pendingTransfer = memberTransfers.Any(x =>
                 x.Status is MembershipCodes.TransferStatus.Requested or MembershipCodes.TransferStatus.Approved);
 
-            FinancialRow? financial = null;
-            if (currentMembership is not null)
-            {
-                financial = financialRows
-                    .Where(x => x.MemberId == person.MemberId && x.OrganizationId == currentMembership.OrganizationId)
-                    .OrderByDescending(x => x.AsOfDate)
-                    .ThenByDescending(x => x.RecordedAtUtc)
-                    .FirstOrDefault();
-            }
+            // La regularidad histórica no se borra al entrar en Past Activo o En sueño.
+            // Se consulta contra la última membresía almacenada para conservar trazabilidad
+            // de obligaciones anteriores; la generación de nuevas cuotas se rige por
+            // InstitutionalStatusPolicy.GeneratesOrdinaryDues(...).
+            var financial = financialRows
+                .Where(x => x.MemberId == person.MemberId && x.OrganizationId == lastMembership.OrganizationId)
+                .OrderByDescending(x => x.AsOfDate)
+                .ThenByDescending(x => x.RecordedAtUtc)
+                .FirstOrDefault();
 
             var withdrawal = memberStatuses
-                .Where(x => x.Status is MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal or MembershipCodes.InstitutionalStatus.ForcedWithdrawal)
-                .FirstOrDefault();
+                .FirstOrDefault(x => x.Status is MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal or MembershipCodes.InstitutionalStatus.ForcedWithdrawal);
             var reinstatement = memberStatuses
                 .FirstOrDefault(x => x.Status == MembershipCodes.InstitutionalStatus.Reinstated);
             var death = memberStatuses
@@ -175,7 +175,9 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
 
             var relation = query.OrganizationId is null
                 ? (currentMembership is null ? "historical" : "current")
-                : currentMemberships.Any(x => x.OrganizationId == query.OrganizationId.Value) ? "current" : "historical";
+                : currentMembership is not null && currentMembership.OrganizationId == query.OrganizationId.Value
+                    ? "current"
+                    : "historical";
 
             rows.Add(new MemberControlRow(
                 person.MemberId,
@@ -197,7 +199,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                     death?.EffectiveDate,
                     latestTransfer is null ? null : latestTransfer.ApprovedEffectiveDate ?? latestTransfer.ProposedEffectiveDate),
                 financial?.Status,
-                pastActiveIds.Contains(person.MemberId),
+                pastActive,
                 pendingTransfer,
                 memberMemberships.Count));
         }
