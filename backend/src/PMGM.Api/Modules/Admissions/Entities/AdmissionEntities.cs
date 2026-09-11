@@ -13,6 +13,8 @@ public sealed class AdmissionCase
     public string? OriginLodgeNumber { get; set; }
     public string? OriginObedience { get; set; }
     public string? Degree { get; set; }
+    public bool WageIncreaseEvidenceApplies { get; set; }
+    public bool ExaltationEvidenceApplies { get; set; }
     public bool? HasPeaceAndFriendshipPact { get; set; }
     public DateOnly? PreviousRejectionDate { get; set; }
     public bool? RejectionCausesRemedied { get; set; }
