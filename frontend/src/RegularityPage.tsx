@@ -104,8 +104,8 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
 
   const selectedOrganization = organizations.find(item => item.id === organizationId)
 
-  return <>
-    <section className="page-heading">
+  return <div className={`regularity-page ${kind}`}>
+    <section className="page-heading regularity-heading">
       <div><p className="eyebrow">{config.eyebrow}</p><h1>{config.title}</h1><p>{config.description}</p></div>
       <span className="count-badge">{loading ? 'cargando…' : `${organizations.length} Talleres visibles`}</span>
     </section>
@@ -114,7 +114,7 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
     {message && <div className="regularity-success" role="status">{message}</div>}
 
     <section className="regularity-grid">
-      <article className="panel">
+      <article className="panel regularity-consult-panel">
         <p className="eyebrow">Estado vigente</p><h2>Consultar Taller</h2>
         <div className="regularity-form">
           <Field label="Taller / organización"><select required value={organizationId} onChange={event => { setOrganizationId(event.target.value); setCurrent(null); setMessage(null) }}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></Field>
@@ -133,7 +133,7 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
         </div>
       </article>
 
-      <article className="panel">
+      <article className="panel regularity-update-panel">
         <p className="eyebrow">Nuevo registro</p><h2>Actualizar regularidad</h2>
         <form className="regularity-form" onSubmit={submit}>
           <Field label="Estado"><select value={status} onChange={event => setStatus(event.target.value)}>{config.statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
@@ -144,12 +144,12 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
         </form>
       </article>
 
-      <article className="panel regularity-wide">
+      <article className="panel regularity-wide regularity-integration-panel">
         <p className="eyebrow">Integración institucional</p><h2>Uso en autorización de ceremonias</h2>
         <p className="regularity-note">{config.ceremonyNote} La referencia y las observaciones quedan restringidas a la administración de esta área y no se proyectan al Portal de Insinuados.</p>
       </article>
     </section>
-  </>
+  </div>
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="regularity-field"><span>{label}</span>{children}</label> }
