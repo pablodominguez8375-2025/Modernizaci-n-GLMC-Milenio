@@ -4,6 +4,7 @@ import {
   type PmgmApiClient,
   type WorkshopRegularitySnapshot,
 } from './api/pmgmApi'
+import RegularityDashboard from './RegularityDashboard'
 import './regularity.css'
 
 type RegularityKind = 'treasury' | 'hospitalaria'
@@ -112,6 +113,8 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
 
     {error && <div className="error-banner" role="alert"><strong>Operación no completada.</strong><span>{error}</span></div>}
     {message && <div className="regularity-success" role="status">{message}</div>}
+
+    <RegularityDashboard api={api} kind={kind} organizations={organizations} asOfDate={asOfDate} />
 
     <section className="regularity-grid">
       <article className="panel regularity-consult-panel">
