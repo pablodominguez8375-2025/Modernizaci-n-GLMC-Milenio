@@ -7,6 +7,7 @@ import './showcase.css'
 import './member-portal.css'
 import './candidate-profile.css'
 import './institutional-theme.css'
+import './ppt-fidelity.css'
 
 const root = document.getElementById('root')
 
