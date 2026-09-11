@@ -3,6 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership.Entities;
+using MembershipEntity = PMGM.Api.Modules.Membership.Entities.Membership;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -112,8 +113,8 @@ public static class InstitutionalStatusEndpoints
             });
         }
 
-        Membership? closedMembership = null;
-        Membership? createdMembership = null;
+        MembershipEntity? closedMembership = null;
+        MembershipEntity? createdMembership = null;
         Guid? sourceOrganizationId = latestStatus?.OrganizationId;
         var targetOrganizationId = request.OrganizationId;
 
@@ -216,7 +217,7 @@ public static class InstitutionalStatusEndpoints
             }
 
             sourceOrganizationId = previousMembership.OrganizationId;
-            createdMembership = new Membership
+            createdMembership = new MembershipEntity
             {
                 MemberId = memberId,
                 OrganizationId = request.OrganizationId,
