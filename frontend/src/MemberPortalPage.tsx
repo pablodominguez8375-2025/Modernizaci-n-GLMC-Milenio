@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
+import { institutionalStatusLabel } from './institutionalStatus'
 import './memberPortalInstruction.css'
 
 interface MemberPortalPageProps {
@@ -86,6 +87,7 @@ export const memberPortalDemoData = {
     orient: 'Santiago',
     degree: 'Maestro (3°)',
     status: 'Activo',
+    statusSince: '12 de octubre de 2013',
     initiation: '12 de octubre de 2013',
     wageIncrease: '18 de junio de 2015',
     exaltation: '21 de mayo de 2017',
@@ -178,7 +180,8 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
   const orient = useMocks ? memberPortalDemoData.institutional.orient : 'Según expediente institucional'
   const degree = useMocks ? memberPortalDemoData.institutional.degree : formatDegree(selfProfile?.current.effectiveDegree, selfProfile?.current.degree?.degree)
-  const status = useMocks ? memberPortalDemoData.institutional.status : formatInstitutionalStatus(selfProfile?.current.institutionalStatus?.eventType)
+  const status = useMocks ? memberPortalDemoData.institutional.status : institutionalStatusLabel(selfProfile?.current.institutionalStatus?.eventType)
+  const statusSince = useMocks ? memberPortalDemoData.institutional.statusSince : formatDateOnly(selfProfile?.current.institutionalStatus?.effectiveDate)
   const initiation = useMocks ? memberPortalDemoData.institutional.initiation : formatDateOnly(selfProfile?.milestones.initiation)
   const wageIncrease = useMocks ? memberPortalDemoData.institutional.wageIncrease : formatDateOnly(selfProfile?.milestones.wageIncrease)
   const exaltation = useMocks ? memberPortalDemoData.institutional.exaltation : formatDateOnly(selfProfile?.milestones.exaltation)
@@ -224,6 +227,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
         <div className="member-institutional-summary">
           <MemberDatum label="Grado" value={degree} />
           <MemberDatum label="Estado" value={status} success={status === 'Activo'} />
+          <MemberDatum label="Estado desde" value={statusSince} />
           <MemberDatum label="Iniciación" value={initiation} />
           <MemberDatum label="Aumento de salario" value={wageIncrease} />
           <MemberDatum label="Exaltación" value={exaltation} />
@@ -329,11 +333,6 @@ function formatDegree(effectiveDegree?: number, storedDegree?: string) {
 function formatLodgeGrade(value: string) {
   const labels: Record<string, string> = { apprentice: '1°', fellowcraft: '2°', master: '3°', all: 'Todos' }
   return labels[value] ?? value
-}
-
-function formatInstitutionalStatus(value?: string | null) {
-  const labels: Record<string, string> = { active: 'Activo', inactive: 'Inactivo', voluntary_withdrawal: 'Retiro voluntario', forced_withdrawal: 'Retiro forzoso', reinstated: 'Reintegrado', deceased: 'Fallecido', workshop_transfer: 'Cambio de Taller' }
-  return value ? (labels[value] ?? value) : 'Sin registro'
 }
 
 function formatRegularity(value: string | undefined, kind: 'tesorería' | 'hospitalaria') {
