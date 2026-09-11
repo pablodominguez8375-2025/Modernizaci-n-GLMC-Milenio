@@ -154,6 +154,18 @@ async function openModule(label) {
   await delay(650)
 }
 
+async function assertNoGlobalHorizontalOverflow(label, viewport) {
+  const metrics = await evaluate(`(() => {
+    const root = document.documentElement;
+    const body = document.body;
+    const scrollWidth = Math.max(root?.scrollWidth || 0, body?.scrollWidth || 0);
+    return { scrollWidth, innerWidth: window.innerWidth };
+  })()`)
+  if (!metrics || metrics.scrollWidth > metrics.innerWidth + 1) {
+    throw new Error(`Global horizontal overflow in ${label} at ${viewport}: scrollWidth=${metrics?.scrollWidth ?? 'unknown'}, innerWidth=${metrics?.innerWidth ?? 'unknown'}`)
+  }
+}
+
 async function capture(filePath) {
   await evaluate("window.scrollTo(0, 0); document.documentElement.scrollLeft = 0; document.body.scrollLeft = 0;")
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false })
@@ -195,6 +207,7 @@ try {
       await resetPage(viewport.width, viewport.height)
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
+      await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const filePath = path.join(outputDir, `${scenario.slug}-${viewport.suffix}.png`)
       await capture(filePath)
       console.log(`captured ${path.basename(filePath)}`)
