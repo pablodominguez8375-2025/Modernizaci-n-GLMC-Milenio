@@ -74,7 +74,14 @@ public static class CandidateWorkflowEndpoints
             });
 
         await coreDb.SaveChangesAsync(cancellationToken);
-        return Results.Ok(new { validation.Id, validation.Status, decision.Code, decision.Reason, ceremony.Status });
+        return Results.Ok(new
+        {
+            validation.Id,
+            validationStatus = validation.Status,
+            decision.Code,
+            decision.Reason,
+            ceremonyStatus = ceremony.Status
+        });
     }
 
     private static async Task<IResult> RecordThirdDegreeReviewAsync(
@@ -234,7 +241,13 @@ public static class CandidateWorkflowEndpoints
             });
 
         await coreDb.SaveChangesAsync(cancellationToken);
-        return Results.Ok(new { validation.Id, validation.Status, validation.AsOfDate, ceremony.Status });
+        return Results.Ok(new
+        {
+            validation.Id,
+            validationStatus = validation.Status,
+            validation.AsOfDate,
+            ceremonyStatus = ceremony.Status
+        });
     }
 
     private static async Task<IResult> GetWorkflowAsync(
