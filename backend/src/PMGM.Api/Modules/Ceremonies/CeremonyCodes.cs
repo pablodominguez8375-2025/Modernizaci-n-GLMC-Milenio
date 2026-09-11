@@ -27,6 +27,11 @@ public static class CeremonyCodes
         public const string GrandMaster = "grand_master";
         public const string CandidatePublication = "candidate_publication";
         public const string CandidatePublicationReview = "candidate_publication_review";
+        public const string CandidateInitialDeliberation = "candidate_initial_deliberation";
+        public const string CandidateInterviewPackage = "candidate_interview_package";
+        public const string CandidateThirdDegreeReview = "candidate_third_degree_review";
+        public const string CandidateFinalBallot = "candidate_final_ballot";
+        public const string CandidateRepresentationReview = "candidate_representation_review";
         public const string SpaceAvailability = "space_availability";
     }
 
