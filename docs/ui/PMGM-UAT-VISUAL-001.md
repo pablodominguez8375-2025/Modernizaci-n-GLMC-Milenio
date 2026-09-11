@@ -7,11 +7,13 @@
 
 - Pull Request: `#62 · UI: alinear frontend con mockups PPT y reforzar responsividad`.
 - Rama: `feat/ui-ppt-responsive`.
-- SHA de código visual candidato: `f0fcd19ec84b0d44cab1bc4806366fb471125aac`.
-- Gates técnicos exact-head: `PMGM CI #843` y `PMGM Showcase Demo #167`, ambos exitosos.
-- Paquete instalable exact-head: `Proyecto Centenario Pre-UAT Installable #142`, exitoso y verificado externamente.
+- SHA de código visual candidato: `0112fd86f21f4f6c3be6036cc45e002594d8729f`.
+- Gates técnicos exact-head: `PMGM CI #847` y `PMGM Showcase Demo #171`, ambos exitosos.
+- Paquete instalable exact-head: `Proyecto Centenario Pre-UAT Installable #146`, exitoso.
 - Artefacto visual: `pmgm-responsive-visual-evidence`, 21 PNG.
+- Digest evidencia visual: `sha256:48755eddc5660247dec2ca1366b08808c703c058f987e3e17696198fd83ec4d7`.
 - Artefacto instalable: `Proyecto-Centenario-preUAT-installable`.
+- Digest artefacto instalable: `sha256:dee074fbad3b22b100ff96b1c653ba96247db93c782d76bc4135ba91f0ecbb87`.
 - Fuente visual contractual: `Proyecto_Milenio_Mapa_QA_Mockups.pptx` y `Proyecto_Milenio_QA_Ejecutivo_v0_22_actualizado.pptx`.
 
 > La aceptación visual se aplica al SHA de código visual identificado arriba. Los commits posteriores que modifiquen únicamente actas o documentación de aprobación no cambian por sí solos el candidato visual. Cualquier modificación posterior de frontend, CSS, iconografía o automatización que altere la evidencia requiere nueva validación y actualización de este SHA.
@@ -31,6 +33,7 @@ Para cada pantalla se debe verificar:
 - [ ] Estados funcionales identificables sin depender sólo del color.
 - [ ] Contenido principal visible sin que la navegación móvil consuma la pantalla completa.
 - [ ] Demo identificada inequívocamente: etiqueta completa + SHA en escritorio y forma compacta `Demo · <SHA>` en móvil.
+- [ ] Biblioteca Virtual accesible de forma visible desde Mi ficha y con alcance acumulativo por grado: 1° = General+1°; 2° = General+1°+2°; 3° = General+1°+2°+3°/todo lo autorizado.
 - [ ] Apariencia suficientemente fiel a la PPT como para reconocer la misma línea institucional.
 
 ## 3. Pantallas representativas de aceptación
@@ -66,7 +69,8 @@ La vista `Mi ficha` actúa como pantalla patrón para validar todos los tamaños
 2. **Navegación móvil demasiado alta** para perfiles con muchos módulos. Se compactó la navegación a una zona de altura controlada y scroll vertical propio; el contenido de Gestión Logial, Tesorería, Hospitalaria, Secretaría y Gran Archivero queda visible inmediatamente debajo.
 3. **Identificación de versión en Showcase de PR.** El build inicialmente mostraba el SHA del merge temporal creado por GitHub. Se corrigió para mostrar el SHA real del head del PR y mantener el SHA real de `dev` en publicaciones por push.
 4. **Identificación móvil de la demo.** El rótulo completo se compactó a `Demo · <SHA>` en pantallas estrechas para conservar trazabilidad sin saturar la cabecera.
-5. **Regresión del paquete instalable entre ramas.** El candidato visual absorbió el instalador guiado, checklist, manifest portable y documentación de #61. El ZIP #142 fue descargado y validado fuera del runner: checksum externo OK, manifest interno OK, `INSTALAR.sh --help` OK y `SOURCE_SHA=f0fcd19...`.
+5. **Regresión del paquete instalable entre ramas.** El candidato visual absorbió el instalador guiado, checklist, manifest portable y documentación de #61.
+6. **UV-OBS-001 — Biblioteca Virtual por grado poco visible en Mi ficha.** La maqueta establece Biblioteca como acceso principal y la regla acumulativa `1°→1°`, `2°→1°+2°`, `3°→1°+2°+3°`. El acceso fue movido a la tarjeta de Información institucional, inmediatamente bajo el grado, se reemplazó el glifo anterior por icono SVG institucional y se muestra el alcance acumulativo vigente. El backend conserva el filtrado real por grado efectivo para catálogo, facetas, detalle y descarga. Evidencia #171 revisada en móvil, tablet y escritorio.
 
 Estos puntos deben volver a revisarse como casos de regresión dentro del UAT.
 
