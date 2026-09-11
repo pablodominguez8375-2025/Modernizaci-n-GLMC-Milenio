@@ -127,6 +127,7 @@ app.UseAuthentication();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();
+app.UseMiddleware<GrandMasterCeremonyAuthorizationGuardMiddleware>();
 
 var apiVersion = typeof(Program).Assembly
     .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
@@ -168,6 +169,7 @@ app.MapInstitutionalRegularityProjectionEndpoints();
 app.MapCandidateIntakeEndpoints();
 app.MapCandidateWorkshopIntakeEndpoints();
 app.MapCeremonyEndpoints();
+app.MapGrandMasterCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
 app.MapCeremonyReviewQueueEndpoints();
 app.MapGrandSecretariatEndpoints();
