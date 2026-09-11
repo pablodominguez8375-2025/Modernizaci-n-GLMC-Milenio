@@ -18,6 +18,7 @@ public static class TreasuryEndpoints
         group.MapGet("/talleres/{organizationId:guid}/regularidad", GetWorkshopRegularityAsync);
         group.MapPost("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", SetMemberRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", GetMemberRegularityAsync);
+        group.MapGet("/talleres/{organizationId:guid}/miembros/{memberId:guid}/cuotas-ordinarias/elegibilidad", GetOrdinaryDuesEligibilityAsync);
 
         return endpoints;
     }
@@ -204,6 +205,32 @@ public static class TreasuryEndpoints
         }
 
         return Results.Ok(ToMinimalProjection(snapshot));
+    }
+
+    private static async Task<IResult> GetOrdinaryDuesEligibilityAsync(
+        Guid organizationId,
+        Guid memberId,
+        DateOnly? asOf,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanReadInstitutionalRegularity(httpContext.User) &&
+            !access.CanReadOrganization(httpContext.User, organizationId))
+        {
+            return Results.Forbid();
+        }
+
+        var cutoff = asOf ?? TodayInChile();
+        var service = new TreasuryOrdinaryDuesEligibilityService(db);
+        var eligibility = await service.GetAsync(organizationId, memberId, cutoff, cancellationToken);
+        if (eligibility is null)
+        {
+            return Results.NotFound(new { message = "El Hermano no registra relación histórica con el Taller indicado." });
+        }
+
+        return Results.Ok(eligibility);
     }
 
     private static FinancialRegularityProjectionDto ToMinimalProjection(FinancialRegularitySnapshot snapshot)
