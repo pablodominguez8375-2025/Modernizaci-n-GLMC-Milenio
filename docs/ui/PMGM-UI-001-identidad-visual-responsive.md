@@ -33,7 +33,8 @@ Referencias principales:
 4. **Navegación**
    - Escritorio: navegación lateral azul oscuro, activa en dorado.
    - Tablet: navegación compacta en rejilla de tres columnas, sin desplazamiento horizontal de la página.
-   - Móvil: navegación táctil en rejilla de dos columnas, con desplazamiento vertical contenido dentro de la navegación cuando la cantidad de módulos lo requiera.
+   - Móvil: navegación táctil en rejilla de dos columnas dentro de una zona de altura acotada y desplazamiento vertical propio cuando la cantidad de módulos lo requiera.
+   - El contenido principal debe ser visible inmediatamente debajo de la navegación en pantallas pequeñas, incluso para perfiles con muchos módulos como Gran Logia.
    - Ningún módulo debe quedar inaccesible por depender de arrastre horizontal.
 
 5. **Tarjetas y paneles**
@@ -62,6 +63,7 @@ Una pantalla se considera aprobable sólo si:
 - conserva la paleta, jerarquía y lenguaje visual de los mockups;
 - no presenta scroll horizontal global;
 - navegación y acciones principales siguen accesibles en móvil;
+- el menú móvil no desplaza innecesariamente el contenido crítico fuera de la primera pantalla;
 - textos no se cortan ni se superponen;
 - tarjetas cambian de columnas a filas cuando corresponde;
 - tablas quedan contenidas y desplazables internamente;
@@ -76,19 +78,32 @@ El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas glob
 
 El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación y acciones institucionales. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
 
-Las capas `ppt-fidelity.css`, `dashboard-ppt-fidelity.css`, `archive-ppt-fidelity.css`, `regularity-ppt-fidelity.css` y `secretariat-ppt-fidelity.css` refinan pantallas específicas contra los mockups aprobados sin modificar reglas de negocio. `member-responsive-fix.css` contiene correcciones de composición detectadas mediante evidencia visual en tablet y notebook pequeño.
+Las capas `ppt-fidelity.css`, `dashboard-ppt-fidelity.css`, `archive-ppt-fidelity.css`, `regularity-ppt-fidelity.css` y `secretariat-ppt-fidelity.css` refinan pantallas específicas contra los mockups aprobados sin modificar reglas de negocio. `member-responsive-fix.css` contiene correcciones de composición detectadas mediante evidencia visual en tablet y notebook pequeño. `mobile-nav-compact.css` limita la altura de la navegación institucional en tablet y móvil, manteniendo disponibles todos los módulos mediante scroll vertical propio y sin alterar la lógica RBAC.
 
 El archivo `frontend/src/institutional-theme.test.ts` actúa como gate automatizado del contrato PMGM-UI-001 dentro del `npm test` del CI. Verifica paleta, breakpoints, prevención de scroll horizontal global, tablas contenidas, controles táctiles y preferencia de reducción de movimiento.
 
-El workflow `PMGM Showcase Demo` levanta el build demostrativo y genera automáticamente evidencia PNG de la pantalla inicial en los siete tamaños de aceptación: 360 × 800, 390 × 844, 768 × 1024, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080. Las capturas se publican como artefacto `pmgm-responsive-visual-evidence` con retención temporal para revisión de PR/UAT.
+El workflow `PMGM Showcase Demo` levanta el build demostrativo y publica el artefacto `pmgm-responsive-visual-evidence`. La captura multipantalla se ejecuta mediante `.github/scripts/capture-showcase-views.mjs`, que controla Chrome por DevTools, cambia el perfil QA desde el selector real y abre cada módulo mediante la navegación real sin introducir rutas ni parámetros exclusivos de testing en el runtime del producto.
+
+## Matriz de evidencia automática
+
+El artefacto visual contiene actualmente **21 capturas PNG**:
+
+- **Mi ficha:** matriz completa en 360 × 800, 390 × 844, 768 × 1024, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080.
+- **Matriz representativa móvil/escritorio:** 390 × 844 y 1440 × 900 para Inicio, Biblioteca Virtual, Gestión Logial, Gran Tesorería, Gran Hospitalaria, Gran Secretaría y Gran Archivero.
+
+El workflow exige que las 21 evidencias existan antes de considerar satisfactoria la validación visual automática. Los PNG se conservan temporalmente como artefacto de GitHub Actions para revisión de PR y UAT.
 
 ## Validación visual observada
 
-La revisión de la primera matriz completa detectó un solapamiento entre la ficha personal e institucional en 768 × 1024 y 1024 × 768. La corrección adaptativa se incorporó y una nueva matriz de capturas confirmó que ambos tamaños quedan sin invasión entre tarjetas, manteniendo navegación y legibilidad correctas.
+La evidencia automática ya produjo hallazgos concretos y correcciones verificables:
+
+1. La primera matriz completa detectó solapamiento entre la ficha personal e institucional en 768 × 1024 y 1024 × 768. `member-responsive-fix.css` corrigió la composición y una nueva ejecución confirmó ausencia de invasión entre tarjetas.
+2. La matriz multipantalla detectó que, en 390 × 844 y con perfil de Gran Logia, la cantidad de módulos consumía una proporción excesiva de la primera pantalla antes de mostrar el contenido. `mobile-nav-compact.css` redujo la navegación a una zona scrollable de altura controlada; la revisión posterior confirmó que el contenido de Gestión Logial, Tesorería, Hospitalaria, Secretaría y Gran Archivero aparece inmediatamente debajo sin perder acceso a los módulos.
+3. Sobre el código corregido, `PMGM CI #825` y `PMGM Showcase Demo #149` finalizaron satisfactoriamente.
 
 ## Avance de comparación contra PPT
 
-Con capa de fidelidad específica:
+Con fidelidad específica aplicada y evidencia visual representativa:
 - Dashboard / Inicio.
 - Mi ficha del hermano.
 - Biblioteca Virtual.
@@ -96,11 +111,11 @@ Con capa de fidelidad específica:
 - Gran Tesorería.
 - Gran Hospitalaria.
 - Gran Secretaría.
-
-Gestión Logial ya cuenta con cockpit institucional azul/dorado y comportamiento responsive; se mantiene en revisión fina para evitar cambios visuales innecesarios.
+- Gestión Logial, cuyo cockpit institucional azul/dorado fue preservado y revisado en móvil/escritorio sin rediseño innecesario.
 
 ## Pendientes antes de aprobación visual institucional
 
-- Completar revisión fina de Gestión Logial y vistas administrativas restantes.
-- Extender la evidencia automática a más pantallas, no sólo a la vista inicial.
-- Definir baseline de comparación visual cuando el Product Owner apruebe la versión institucional de referencia.
+- Completar revisión fina de las vistas administrativas no cubiertas todavía por la matriz representativa.
+- Definir el baseline visual institucional una vez que el Product Owner apruebe esta versión como referencia.
+- Ejecutar UAT visual institucional sobre el Showcase publicado desde `dev` después de integrar el PR aprobado.
+- Ampliar la matriz representativa a tablet para módulos específicos sólo si el UAT detecta una necesidad adicional; los siete tamaños de aceptación ya se mantienen cubiertos por Mi ficha.
