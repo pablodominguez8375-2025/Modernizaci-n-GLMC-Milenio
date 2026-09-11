@@ -10,7 +10,11 @@ export default function DemoProfileSwitcher({ value, onChange }: DemoProfileSwit
   const showcaseSha = (import.meta.env.VITE_SHOWCASE_SHA ?? '').trim()
   const shortSha = showcaseSha ? showcaseSha.slice(0, 7) : ''
 
-  return <label className="demo-profile-switcher" title="Demo pública de Proyecto Centenario. Usa exclusivamente datos ficticios y no está conectada a la VM institucional.">
+  return <label
+    className="demo-profile-switcher"
+    data-showcase-sha={showcaseSha || undefined}
+    title="Demo pública de Proyecto Centenario. Usa exclusivamente datos ficticios y no está conectada a la VM institucional."
+  >
     <span className="demo-public-label">Demo pública · datos ficticios{shortSha ? ` · ${shortSha}` : ''}</span>
     <span className="demo-profile-label">Perfil QA</span>
     <select value={value} onChange={event => onChange(event.target.value as DemoProfileKey)} aria-label="Seleccionar perfil de demostración">
