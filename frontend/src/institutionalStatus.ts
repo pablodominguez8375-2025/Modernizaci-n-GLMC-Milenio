@@ -10,7 +10,9 @@ export const institutionalStatusOptions = [
 
 export function institutionalStatusLabel(value?: string | null) {
   if (!value) return 'Sin registro'
-  if (value === 'workshop_transfer') return 'Cambio de Taller'
+  // workshop_transfer es un hito histórico; con el segmento destino vigente la
+  // condición institucional presentada al usuario sigue siendo Activo.
+  if (value === 'workshop_transfer') return 'Activo'
   return institutionalStatusOptions.find(([code]) => code === value)?.[1] ?? value
 }
 
