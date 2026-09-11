@@ -41,6 +41,7 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
         var regimenStatus = GetValidation(input, CeremonyCodes.ValidationType.InternalAffairs);
         var treasuryValidation = GetValidation(input, CeremonyCodes.ValidationType.Treasury);
         var hospitalariaValidation = GetValidation(input, CeremonyCodes.ValidationType.Hospitalaria);
+        var grandMasterStatus = GetValidation(input, CeremonyCodes.ValidationType.GrandMaster);
 
         var treasuryStatus = treasuryValidation is null
             ? null
@@ -87,6 +88,7 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             regimenStatus,
             treasuryStatus,
             hospitalariaStatus,
+            grandMasterStatus,
             publication);
 
         var blockingReasons = decision.Requirements
@@ -141,6 +143,7 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             "regimen_interior" => CeremonyCodes.ValidationType.InternalAffairs,
             "gran_tesoreria" => CeremonyCodes.ValidationType.Treasury,
             "gran_hospitalaria" => CeremonyCodes.ValidationType.Hospitalaria,
+            "gran_maestria" => CeremonyCodes.ValidationType.GrandMaster,
             "publicacion_insinuado" => CeremonyCodes.ValidationType.CandidatePublication,
             _ => code
         };
