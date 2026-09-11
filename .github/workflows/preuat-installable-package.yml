@@ -65,6 +65,7 @@ jobs:
           EOF
 
           cp "$package_root/docs/installation/PREUAT-INSTALL.md" "$package_root/LEAME-INSTALACION.md"
+          cp "$package_root/docs/installation/VM-IMPLEMENTATION-CHECKLIST.md" "$package_root/CHECKLIST-IMPLEMENTACION.md"
 
           cat > "$package_root/INSTALAR.sh" <<'EOF'
           #!/usr/bin/env bash
@@ -87,6 +88,10 @@ jobs:
 
           ENTRADA DE INSTALACION:
           ./INSTALAR.sh --help
+
+          DOCUMENTOS DE ARRANQUE:
+          LEAME-INSTALACION.md
+          CHECKLIST-IMPLEMENTACION.md
 
           IMPORTANTE:
           - configure secretos fuera de Git;
@@ -115,6 +120,7 @@ jobs:
           (cd artifacts && sha256sum -c Proyecto-Centenario-preUAT-installable.zip.sha256)
           unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/INSTALAR.sh'
           unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/LEAME-INSTALACION.md'
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/CHECKLIST-IMPLEMENTACION.md'
           unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/MANIFEST.sha256'
           unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/BUILD-INFO.txt'
           unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/ESTADO-PAQUETE.txt'
@@ -126,6 +132,7 @@ jobs:
             cd "$verify_dir/Proyecto-Centenario-preUAT-installable"
             sha256sum -c MANIFEST.sha256 >/dev/null
             bash ./INSTALAR.sh --help >/dev/null
+            test -s CHECKLIST-IMPLEMENTACION.md
           )
 
       - name: Upload installable package
