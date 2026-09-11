@@ -127,14 +127,14 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .ThenByDescending(x => x.RecordedAtUtc)
                 .ToList();
             var latestStatus = memberStatuses.FirstOrDefault();
-            var currentStatus = latestStatus?.Status ??
-                                (storedCurrentMembership is not null
-                                    ? MembershipCodes.InstitutionalStatus.Active
-                                    : MembershipCodes.InstitutionalStatus.Inactive);
+            var currentStatus = InstitutionalStatusPolicy.ResolveCurrentStatus(
+                latestStatus?.Status,
+                storedCurrentMembership is not null);
 
             // Past Activo y Retiro voluntario / En sueño se determinan exclusivamente
-            // por el último estado institucional. Haber terminado un cargo no convierte
-            // a un Hermano en Past Activo.
+            // por el último estado institucional efectivo. Un traslado conserva estado
+            // Activo si existe un segmento vigente en el Taller destino. Haber terminado
+            // un cargo tampoco convierte a un Hermano en Past Activo.
             var pastActive = InstitutionalStatusPolicy.IsPastActive(currentStatus);
             var keepsWorkshopRosterMembership = storedCurrentMembership is not null &&
                                                 InstitutionalStatusPolicy.KeepsWorkshopRosterMembership(currentStatus);
