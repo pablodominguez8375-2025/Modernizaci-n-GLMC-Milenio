@@ -28,6 +28,8 @@ public partial class AddAdmissionCases : Migration
                 OriginLodgeNumber = table.Column<string>(type: "character varying(80)", maxLength: 80, nullable: true),
                 OriginObedience = table.Column<string>(type: "character varying(240)", maxLength: 240, nullable: true),
                 Degree = table.Column<string>(type: "character varying(120)", maxLength: 120, nullable: true),
+                WageIncreaseEvidenceApplies = table.Column<bool>(type: "boolean", nullable: false),
+                ExaltationEvidenceApplies = table.Column<bool>(type: "boolean", nullable: false),
                 HasPeaceAndFriendshipPact = table.Column<bool>(type: "boolean", nullable: true),
                 PreviousRejectionDate = table.Column<DateOnly>(type: "date", nullable: true),
                 RejectionCausesRemedied = table.Column<bool>(type: "boolean", nullable: true),
