@@ -1,6 +1,6 @@
 # PMGM-UI-BASELINE-001 · Registro de baseline visual institucional
 
-**Estado actual:** PENDIENTE DE APROBACIÓN UAT VISUAL  
+**Estado actual:** APROBADO
 **Regla:** este documento no debe marcarse como `APROBADO` hasta que exista aceptación explícita del Product Owner conforme a `PMGM-UAT-VISUAL-001`.
 
 ## 1. Propósito
@@ -27,16 +27,16 @@ Escribir o actualizar el acta UAT no obliga a cambiar el SHA de código visual a
 
 | Campo | Valor |
 |---|---|
-| Estado | Candidato, no aprobado |
+| Estado | Aprobado por Product Owner |
 | Pull Request | #62 |
 | Rama | `feat/ui-ppt-responsive` |
-| SHA de código visual candidato | `0112fd86f21f4f6c3be6036cc45e002594d8729f` |
-| SHA de validación técnica del código visual | `0112fd86f21f4f6c3be6036cc45e002594d8729f` |
-| PMGM CI | #847 · success |
-| Showcase | #171 · success |
-| Paquete Pre-UAT | #146 · success |
+| SHA de código visual candidato | `3f964e9764acdcc07b12ed626ca8f8aa005b9a4b` |
+| SHA de validación técnica del código visual | `a648ae6fab5180122462da11ccfd020818274196` |
+| PMGM CI | #869 · success |
+| Showcase | #193 · success |
+| Paquete Pre-UAT | #168 · success |
 | Artefacto visual | `pmgm-responsive-visual-evidence` · 21 PNG |
-| Digest artefacto visual | `sha256:48755eddc5660247dec2ca1366b08808c703c058f987e3e17696198fd83ec4d7` |
+| Digest artefacto visual | `sha256:4831db547fe98e0c37066ac66e8d2d1c702fb5e9aa9e3de5cb580ee0ccd80e95` |
 | Artefacto instalable | `Proyecto-Centenario-preUAT-installable` |
 | Digest artifact instalable | `sha256:dee074fbad3b22b100ff96b1c653ba96247db93c782d76bc4135ba91f0ecbb87` |
 | Observación UAT corregida | `UV-OBS-001 · acceso visible y acumulativo a Biblioteca por grado` |
@@ -52,15 +52,15 @@ Completar únicamente después de la aprobación institucional.
 
 | Campo | Valor aprobado |
 |---|---|
-| Estado | PENDIENTE |
-| SHA de código visual aprobado | PENDIENTE |
-| SHA de validación aprobado | PENDIENTE |
-| Fecha aprobación | PENDIENTE |
-| Product Owner | PENDIENTE |
-| Run PMGM CI | PENDIENTE |
-| Run Showcase | PENDIENTE |
-| Run paquete instalable | PENDIENTE |
-| Digest/identificador de evidencia | PENDIENTE |
+| Estado | APROBADO |
+| SHA de código visual aprobado | `3f964e9764acdcc07b12ed626ca8f8aa005b9a4b` |
+| SHA de validación aprobado | `a648ae6fab5180122462da11ccfd020818274196` |
+| Fecha aprobación | `2026-09-11` |
+| Product Owner | Pablo Domínguez |
+| Run PMGM CI | #869 · success |
+| Run Showcase | #193 · success |
+| Run paquete instalable | #168 · success |
+| Digest/identificador de evidencia | `sha256:4831db547fe98e0c37066ac66e8d2d1c702fb5e9aa9e3de5cb580ee0ccd80e95` |
 | PR integrado | PENDIENTE |
 | Commit en `dev` | PENDIENTE |
 | GitHub Pages verificada | PENDIENTE |
