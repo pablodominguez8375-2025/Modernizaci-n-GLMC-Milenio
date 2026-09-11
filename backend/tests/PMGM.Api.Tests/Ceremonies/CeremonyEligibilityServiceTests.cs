@@ -18,7 +18,8 @@ public sealed class CeremonyEligibilityServiceTests
                 {
                     [CeremonyCodes.ValidationType.InternalAffairs] = CeremonyCodes.ValidationStatus.Approved,
                     [CeremonyCodes.ValidationType.Treasury] = CeremonyCodes.ValidationStatus.Rejected,
-                    [CeremonyCodes.ValidationType.Hospitalaria] = CeremonyCodes.ValidationStatus.Approved
+                    [CeremonyCodes.ValidationType.Hospitalaria] = CeremonyCodes.ValidationStatus.Approved,
+                    [CeremonyCodes.ValidationType.GrandMaster] = CeremonyCodes.ValidationStatus.Approved
                 },
                 null,
                 null,
@@ -39,7 +40,8 @@ public sealed class CeremonyEligibilityServiceTests
                 {
                     [CeremonyCodes.ValidationType.InternalAffairs] = CeremonyCodes.ValidationStatus.Approved,
                     [CeremonyCodes.ValidationType.Treasury] = CeremonyCodes.ValidationStatus.Approved,
-                    [CeremonyCodes.ValidationType.Hospitalaria] = CeremonyCodes.ValidationStatus.Observed
+                    [CeremonyCodes.ValidationType.Hospitalaria] = CeremonyCodes.ValidationStatus.Observed,
+                    [CeremonyCodes.ValidationType.GrandMaster] = CeremonyCodes.ValidationStatus.Approved
                 },
                 null,
                 null,
@@ -48,6 +50,25 @@ public sealed class CeremonyEligibilityServiceTests
 
         Assert.False(result.IsEligible);
         Assert.Contains(result.BlockingReasons, x => x.Contains(CeremonyCodes.ValidationType.Hospitalaria));
+    }
+
+    [Fact]
+    public void Ceremony_IsBlocked_WhileGrandMasterApprovalIsMissing()
+    {
+        var validations = FullyApprovedValidations();
+        validations.Remove(CeremonyCodes.ValidationType.GrandMaster);
+
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.Exaltation,
+                validations,
+                null,
+                null,
+                20),
+            Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Contains(result.BlockingReasons, x => x.Contains(CeremonyCodes.ValidationType.GrandMaster));
     }
 
     [Fact]
@@ -155,6 +176,7 @@ public sealed class CeremonyEligibilityServiceTests
             [CeremonyCodes.ValidationType.InternalAffairs] = CeremonyCodes.ValidationStatus.Approved,
             [CeremonyCodes.ValidationType.Treasury] = CeremonyCodes.ValidationStatus.Approved,
             [CeremonyCodes.ValidationType.Hospitalaria] = CeremonyCodes.ValidationStatus.Approved,
+            [CeremonyCodes.ValidationType.GrandMaster] = CeremonyCodes.ValidationStatus.Approved,
             [CeremonyCodes.ValidationType.CandidatePublication] = CeremonyCodes.ValidationStatus.Approved
         };
 }
