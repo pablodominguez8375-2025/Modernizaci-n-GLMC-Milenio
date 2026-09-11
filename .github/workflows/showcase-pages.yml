@@ -6,12 +6,14 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/showcase-pages.yml'
+      - '.github/scripts/capture-showcase-views.mjs'
       - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
   pull_request:
     branches: [dev]
     paths:
       - 'frontend/**'
       - '.github/workflows/showcase-pages.yml'
+      - '.github/scripts/capture-showcase-views.mjs'
       - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
   workflow_dispatch:
 
@@ -112,6 +114,7 @@ jobs:
             test -s "frontend/visual-evidence/$file"
           }
 
+          # Full acceptance matrix for the initial member view.
           capture 360,800 mi-ficha-360x800.png
           capture 390,844 mi-ficha-390x844.png
           capture 768,1024 mi-ficha-768x1024.png
@@ -119,6 +122,14 @@ jobs:
           capture 1366,768 mi-ficha-1366x768.png
           capture 1440,900 mi-ficha-1440x900.png
           capture 1920,1080 mi-ficha-1920x1080.png
+
+          # Representative module matrix: browser automation changes QA profile and module exactly as a user would.
+          node .github/scripts/capture-showcase-views.mjs \
+            "$BROWSER" \
+            http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ \
+            frontend/visual-evidence
+
+          test "$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)" -ge 21
           printf 'RESPONSIVE VISUAL EVIDENCE OK\n'
 
       - name: Upload responsive visual evidence
