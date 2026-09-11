@@ -55,6 +55,8 @@ jobs:
           VITE_API_BASE_URL: ''
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
+          VITE_SHOWCASE_SHA: '${{ github.sha }}'
+          VITE_SHOWCASE_CHANNEL: 'dev-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase
@@ -63,11 +65,12 @@ jobs:
           set -euo pipefail
           test -s frontend/dist/index.html
           grep -q '/Modernizaci-n-GLMC-Milenio/assets/' frontend/dist/index.html
+          grep -R -q "${GITHUB_SHA:0:7}" frontend/dist
           if grep -R -E '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9]+|sk-proj-[A-Za-z0-9_-]+|Authorization: Bearer)' frontend/dist; then
             echo 'Se detectó un patrón sensible en el showcase generado.' >&2
             exit 1
           fi
-          printf 'SHOWCASE BUILD OK\n'
+          printf 'SHOWCASE BUILD OK — SHA %s\n' "${GITHUB_SHA:0:7}"
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'
