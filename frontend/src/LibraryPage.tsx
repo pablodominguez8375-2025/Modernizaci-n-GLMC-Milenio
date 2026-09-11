@@ -7,9 +7,9 @@ import './library-ppt-enhancement.css'
 const pageSize = 12
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [], degrees: [], topics: [], officialDocumentTypes: [] }
 const catalogCategories = [
-  { value: 'work_paper', label: 'Planchas de Trabajo' },
-  { value: 'book', label: 'Libros' },
-  { value: 'official_document', label: 'Documentos Oficiales' },
+  { value: 'work_paper', label: 'Planchas de Trabajo', future: false },
+  { value: 'book', label: 'Libros', future: false },
+  { value: 'official_document', label: 'Documentos Oficiales', future: false },
   { value: 'video', label: 'Videos', future: true },
 ] as const
 
