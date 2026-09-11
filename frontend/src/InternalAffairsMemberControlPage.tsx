@@ -95,7 +95,7 @@ function MemberRow({ row }: { row: MemberControlRow }) {
     <td><span className={statusClass(row.currentStatus)}>{institutionalStatusLabel(row.currentStatus)}</span>{row.statusEffectiveDate && <small>desde {formatDate(row.statusEffectiveDate)}</small>}{row.pendingTransfer && <span className="internal-control-pill attention">Traslado pendiente</span>}</td>
     <td><strong>{degreeLabel(row.currentDegree)}</strong>{row.pastActive && <span className="internal-control-pill accent">Past Activo</span>}</td>
     <td><Milestone label="Iniciación" value={row.milestones.initiation} /><Milestone label="Aumento" value={row.milestones.wageIncrease} /><Milestone label="Exaltación" value={row.milestones.exaltation} /></td>
-    <td><Milestone label={withdrawalLabel(row.milestones.withdrawalType)} value={row.milestones.withdrawal} /><Milestone label="Reintegro" value={row.milestones.reinstatement} /><Milestone label="Defunción" value={row.milestones.death} /><Milestone label="Traslado" value={row.milestones.transfer} /></td>
+    <td><Milestone label={withdrawalLabel(row.milestones.withdrawalType)} value={row.milestones.withdrawal} /><Milestone label="Reintegro" value={row.milestones.reinstatement} />{row.reinstatementMovement && <ReinstatementMovement movement={row.reinstatementMovement} />}<Milestone label="Defunción" value={row.milestones.death} /><Milestone label="Traslado" value={row.milestones.transfer} /></td>
     <td><FinancialStatus value={row.financialStatus} /></td>
     <td><strong>{row.membershipHistoryCount}</strong><small>afiliación(es) registradas</small></td>
   </tr>
@@ -103,6 +103,7 @@ function MemberRow({ row }: { row: MemberControlRow }) {
 
 function Summary({ label, value, attention }: { label: string; value: number; attention?: boolean }) { return <article className={attention ? 'panel internal-control-summary-card attention' : 'panel internal-control-summary-card'}><span>{label}</span><strong>{value}</strong></article> }
 function Milestone({ label, value }: { label: string; value: string | null }) { if (!value) return null; return <span className="internal-control-date"><small>{label}</small>{formatDate(value)}</span> }
+function ReinstatementMovement({ movement }: { movement: NonNullable<MemberControlRow['reinstatementMovement']> }) { return <span className="internal-control-date"><small>Origen → destino</small>{movement.sourceOrganizationName || 'Sin origen registrado'} → {movement.destinationOrganizationName || 'Sin destino registrado'}</span> }
 function FinancialStatus({ value }: { value: string | null }) { const good = value === 'up_to_date' || value === 'exempt'; return <span className={good ? 'internal-control-pill good' : value ? 'internal-control-pill attention' : 'internal-control-pill neutral'}>{financialLabel(value)}</span> }
 
 function statusClass(value: string) {
