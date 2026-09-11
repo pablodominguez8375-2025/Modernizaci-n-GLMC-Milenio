@@ -132,6 +132,7 @@ app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();
 app.UseMiddleware<CandidateInitiationAuthorizationGuardMiddleware>();
+app.UseMiddleware<AdmissionCeremonyAuthorizationGuardMiddleware>();
 app.UseMiddleware<GrandMasterCeremonyAuthorizationGuardMiddleware>();
 
 var apiVersion = typeof(Program).Assembly
@@ -176,6 +177,7 @@ app.MapCandidateWorkshopIntakeEndpoints();
 app.MapCandidateWorkflowEndpoints();
 app.MapAdmissionEndpoints();
 app.MapAdmissionLodgeDecisionEndpoints();
+app.MapAdmissionCeremonyEndpoints();
 app.MapCeremonyEndpoints();
 app.MapGrandMasterCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
