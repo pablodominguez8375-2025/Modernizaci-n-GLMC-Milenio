@@ -13,7 +13,7 @@ namespace PMGM.Api.Tests.Integration;
 public sealed class RegimenInteriorMemberControlPostgreSqlTests
 {
     [Fact]
-    public async Task Historical_workshop_query_keeps_current_workshop_and_member_milestones()
+    public async Task Historical_workshop_query_keeps_current_workshop_and_member_milestones_for_explicit_past_active()
     {
         var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connectionString)) return;
@@ -55,7 +55,8 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
             new DegreeEvent { Member = member, Organization = source, Degree = "master", EventType = MembershipCodes.DegreeEvent.Exaltation, EffectiveDate = new DateOnly(2020, 4, 3) });
         db.InstitutionalStatusEvents.AddRange(
             new InstitutionalStatusEvent { Member = member, Organization = source, EventType = MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal, EffectiveDate = new DateOnly(2024, 1, 15) },
-            new InstitutionalStatusEvent { Member = member, Organization = source, EventType = MembershipCodes.InstitutionalStatus.Reinstated, EffectiveDate = new DateOnly(2024, 3, 15) });
+            new InstitutionalStatusEvent { Member = member, Organization = source, EventType = MembershipCodes.InstitutionalStatus.Reinstated, EffectiveDate = new DateOnly(2024, 3, 15) },
+            new InstitutionalStatusEvent { Member = member, Organization = target, EventType = MembershipCodes.InstitutionalStatus.PastActive, EffectiveDate = new DateOnly(2026, 7, 1), Reason = "Condición institucional de prueba" });
         db.OfficeAssignments.Add(new OfficeAssignment
         {
             Member = member,
@@ -84,7 +85,8 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
             Member = member,
             Scope = "member",
             Status = "delinquent",
-            AsOfDate = new DateOnly(2026, 9, 1)
+            AsOfDate = new DateOnly(2026, 6, 30),
+            Notes = "Obligación histórica previa a Past Activo"
         });
         await db.SaveChangesAsync(cancellationToken);
 
@@ -92,7 +94,7 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
         var response = await service.QueryAsync(new MemberControlQuery(
             new DateOnly(2026, 9, 9),
             source.Id,
-            MembershipCodes.InstitutionalStatus.Reinstated,
+            MembershipCodes.InstitutionalStatus.PastActive,
             "master",
             "delinquent",
             suffix,
@@ -103,6 +105,8 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
         var row = Assert.Single(response.Items);
         Assert.Equal("historical", row.Relation);
         Assert.Equal(target.Id, row.CurrentWorkshop?.Id);
+        Assert.Equal(MembershipCodes.InstitutionalStatus.PastActive, row.CurrentStatus);
+        Assert.Equal(new DateOnly(2026, 7, 1), row.StatusEffectiveDate);
         Assert.Equal("master", row.CurrentDegree);
         Assert.Equal(new DateOnly(2018, 2, 1), row.Milestones.Initiation);
         Assert.Equal(new DateOnly(2019, 3, 2), row.Milestones.WageIncrease);
@@ -114,5 +118,80 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
         Assert.Equal("delinquent", row.FinancialStatus);
         Assert.True(row.PastActive);
         Assert.False(row.PendingTransfer);
+    }
+
+    [Fact]
+    public async Task Completed_office_does_not_make_an_active_member_past_active()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = new DbContextOptionsBuilder<PmgmDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+        await using var db = new PmgmDbContext(options);
+        await db.Database.MigrateAsync(cancellationToken);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var workshop = new Organization { Name = $"Taller Activo {suffix}", Number = $"5{suffix[..2]}", Type = "workshop" };
+        var person = new Person { FirstNames = "Hermano", LastNames = $"Cargo Histórico {suffix}" };
+        var member = new Member { Person = person, InstitutionalNumber = $"ACTIVE-{suffix}" };
+        var membership = new Membership
+        {
+            Member = member,
+            Organization = workshop,
+            MembershipType = "regular",
+            StartDate = new DateOnly(2015, 1, 1),
+            Status = MembershipCodes.MembershipStatus.Active
+        };
+
+        db.AddRange(workshop, person, member, membership);
+        db.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
+        {
+            Member = member,
+            Organization = workshop,
+            EventType = MembershipCodes.InstitutionalStatus.Active,
+            EffectiveDate = new DateOnly(2015, 1, 1)
+        });
+        db.OfficeAssignments.Add(new OfficeAssignment
+        {
+            Member = member,
+            Organization = workshop,
+            OfficeType = "worshipful_master",
+            Period = "2020",
+            StartDate = new DateOnly(2020, 1, 1),
+            EndDate = new DateOnly(2020, 12, 31)
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        var service = new RegimenInteriorMemberControlService(db);
+        var response = await service.QueryAsync(new MemberControlQuery(
+            new DateOnly(2026, 9, 9),
+            workshop.Id,
+            null,
+            null,
+            null,
+            suffix,
+            false,
+            false,
+            50), cancellationToken);
+
+        var row = Assert.Single(response.Items);
+        Assert.Equal(MembershipCodes.InstitutionalStatus.Active, row.CurrentStatus);
+        Assert.Equal("current", row.Relation);
+        Assert.False(row.PastActive);
+
+        var pastActiveOnly = await service.QueryAsync(new MemberControlQuery(
+            new DateOnly(2026, 9, 9),
+            workshop.Id,
+            null,
+            null,
+            null,
+            suffix,
+            true,
+            false,
+            50), cancellationToken);
+        Assert.Empty(pastActiveOnly.Items);
     }
 }

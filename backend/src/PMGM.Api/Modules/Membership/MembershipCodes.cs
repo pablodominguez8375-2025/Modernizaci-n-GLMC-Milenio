@@ -22,6 +22,7 @@ public static class MembershipCodes
     {
         public const string Active = "active";
         public const string Inactive = "inactive";
+        public const string PastActive = "past_active";
         public const string VoluntaryWithdrawal = "voluntary_withdrawal";
         public const string ForcedWithdrawal = "forced_withdrawal";
         public const string Reinstated = "reinstated";

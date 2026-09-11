@@ -17,6 +17,14 @@ export interface MemberControlMilestones {
   transfer: string | null
 }
 
+export interface MemberWorkshopMovement {
+  sourceOrganizationId: string | null
+  sourceOrganizationName: string | null
+  destinationOrganizationId: string | null
+  destinationOrganizationName: string | null
+  effectiveDate: string
+}
+
 export interface MemberControlRow {
   memberId: string
   institutionalNumber: string | null
@@ -28,6 +36,7 @@ export interface MemberControlRow {
   statusEffectiveDate: string | null
   currentDegree: string | null
   milestones: MemberControlMilestones
+  reinstatementMovement: MemberWorkshopMovement | null
   financialStatus: string | null
   pastActive: boolean
   pendingTransfer: boolean
@@ -181,22 +190,29 @@ const demoRows: MemberControlRow[] = [
   {
     memberId: '10101010-1010-1010-1010-101010101010', institutionalNumber: 'GLM-0101', displayName: 'Hermana Demostrativa Uno', relation: 'current',
     currentWorkshop: workshop(ORG_1, 'Taller Demostrativo Nº 1', '1', '2018-03-12'), lastWorkshop: workshop(ORG_1, 'Taller Demostrativo Nº 1', '1', '2018-03-12'),
-    currentStatus: 'active', statusEffectiveDate: '2025-01-10', currentDegree: 'master', milestones: milestones('2018-03-12', '2019-05-20', '2020-08-14'), financialStatus: 'up_to_date', pastActive: true, pendingTransfer: false, membershipHistoryCount: 1,
+    currentStatus: 'active', statusEffectiveDate: '2025-01-10', currentDegree: 'master', milestones: milestones('2018-03-12', '2019-05-20', '2020-08-14'), reinstatementMovement: null, financialStatus: 'up_to_date', pastActive: false, pendingTransfer: false, membershipHistoryCount: 1,
   },
   {
-    memberId: '20202020-2020-2020-2020-202020202020', institutionalNumber: 'GLM-0230', displayName: 'Hermano Trasladado Demostrativo', relation: 'historical',
+    memberId: '20202020-2020-2020-2020-202020202020', institutionalNumber: 'GLM-0230', displayName: 'Hermano Past Activo Demostrativo', relation: 'current',
     currentWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2026-01-01'), lastWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2026-01-01'),
-    currentStatus: 'reinstated', statusEffectiveDate: '2024-03-15', currentDegree: 'master', milestones: { ...milestones('2017-04-08', '2018-06-11', '2019-09-21'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2024-01-15', reinstatement: '2024-03-15', transfer: '2026-01-01' }, financialStatus: 'delinquent', pastActive: true, pendingTransfer: false, membershipHistoryCount: 2,
+    currentStatus: 'past_active', statusEffectiveDate: '2026-07-01', currentDegree: 'master', milestones: { ...milestones('2017-04-08', '2018-06-11', '2019-09-21'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2024-01-15', reinstatement: '2024-03-15', transfer: '2026-01-01' }, reinstatementMovement: null, financialStatus: 'delinquent', pastActive: true, pendingTransfer: false, membershipHistoryCount: 2,
   },
   {
     memberId: '30303030-3030-3030-3030-303030303030', institutionalNumber: 'GLM-0303', displayName: 'Hermana Inactiva Demostrativa', relation: 'current',
     currentWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2021-07-02'), lastWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2021-07-02'),
-    currentStatus: 'inactive', statusEffectiveDate: '2026-06-01', currentDegree: 'fellowcraft', milestones: milestones('2021-07-02', '2023-03-18', null), financialStatus: 'pending', pastActive: false, pendingTransfer: true, membershipHistoryCount: 1,
+    currentStatus: 'inactive', statusEffectiveDate: '2026-06-01', currentDegree: 'fellowcraft', milestones: milestones('2021-07-02', '2023-03-18', null), reinstatementMovement: null, financialStatus: 'pending', pastActive: false, pendingTransfer: true, membershipHistoryCount: 1,
   },
   {
-    memberId: '40404040-4040-4040-4040-404040404040', institutionalNumber: 'GLM-0404', displayName: 'Hermano Histórico Demostrativo', relation: 'historical', currentWorkshop: null,
-    lastWorkshop: { ...workshop(ORG_45, 'Taller Demostrativo Nº 45', '45', '2012-02-04'), endDate: '2025-10-15' },
-    currentStatus: 'voluntary_withdrawal', statusEffectiveDate: '2025-10-15', currentDegree: 'master', milestones: { ...milestones('2012-02-04', '2013-05-12', '2014-08-23'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2025-10-15' }, financialStatus: null, pastActive: true, pendingTransfer: false, membershipHistoryCount: 1,
+    memberId: '40404040-4040-4040-4040-404040404040', institutionalNumber: 'GLM-0404', displayName: 'Hermano en Sueño Demostrativo', relation: 'historical', currentWorkshop: null,
+    lastWorkshop: { ...workshop(ORG_45, 'Taller Demostrativo Nº 45', '45', '2012-02-04'), endDate: '2025-10-14' },
+    currentStatus: 'voluntary_withdrawal', statusEffectiveDate: '2025-10-15', currentDegree: 'master', milestones: { ...milestones('2012-02-04', '2013-05-12', '2014-08-23'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2025-10-15' }, reinstatementMovement: null, financialStatus: null, pastActive: false, pendingTransfer: false, membershipHistoryCount: 1,
+  },
+  {
+    memberId: '50505050-5050-5050-5050-505050505050', institutionalNumber: 'GLM-0505', displayName: 'Hermana Reintegrada Demostrativa', relation: 'current',
+    currentWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2026-08-01'), lastWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2026-08-01'),
+    currentStatus: 'reinstated', statusEffectiveDate: '2026-08-01', currentDegree: 'master', milestones: { ...milestones('2010-05-10', '2011-06-11', '2012-07-12'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2025-12-01', reinstatement: '2026-08-01' },
+    reinstatementMovement: { sourceOrganizationId: ORG_45, sourceOrganizationName: 'Taller Demostrativo Nº 45', destinationOrganizationId: ORG_23, destinationOrganizationName: 'Taller Demostrativo Nº 23', effectiveDate: '2026-08-01' },
+    financialStatus: 'up_to_date', pastActive: false, pendingTransfer: false, membershipHistoryCount: 2,
   },
 ]
 
@@ -211,7 +227,7 @@ const demoQualityIssues: DataQualityIssue[] = [
 
 function mockMemberResponse(filters: MemberControlFilters): MemberControlResponse {
   let items = demoRows.map(row => JSON.parse(JSON.stringify(row)) as MemberControlRow)
-  if (filters.organizationId) items = items.filter(row => row.currentWorkshop?.id === filters.organizationId || row.lastWorkshop.id === filters.organizationId)
+  if (filters.organizationId) items = items.filter(row => row.currentWorkshop?.id === filters.organizationId || row.lastWorkshop.id === filters.organizationId || row.reinstatementMovement?.sourceOrganizationId === filters.organizationId || row.reinstatementMovement?.destinationOrganizationId === filters.organizationId)
   if (filters.status) items = items.filter(row => row.currentStatus === filters.status)
   if (filters.degree) items = items.filter(row => row.currentDegree === filters.degree)
   if (filters.financialStatus) items = items.filter(row => filters.financialStatus === 'no_status' ? row.financialStatus === null : row.financialStatus === filters.financialStatus)
@@ -219,7 +235,7 @@ function mockMemberResponse(filters: MemberControlFilters): MemberControlRespons
   if (filters.pendingTransferOnly) items = items.filter(row => row.pendingTransfer)
   if (filters.search?.trim()) {
     const term = normalize(filters.search)
-    items = items.filter(row => normalize(`${row.displayName} ${row.institutionalNumber ?? ''} ${row.currentWorkshop?.name ?? ''} ${row.lastWorkshop.name}`).includes(term))
+    items = items.filter(row => normalize(`${row.displayName} ${row.institutionalNumber ?? ''} ${row.currentWorkshop?.name ?? ''} ${row.lastWorkshop.name} ${row.reinstatementMovement?.sourceOrganizationName ?? ''} ${row.reinstatementMovement?.destinationOrganizationName ?? ''}`).includes(term))
   }
   const total = items.length
   const limit = Math.max(1, Math.min(filters.limit ?? 250, 1000))
