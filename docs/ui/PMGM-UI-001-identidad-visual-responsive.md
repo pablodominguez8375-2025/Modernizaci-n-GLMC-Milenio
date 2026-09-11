@@ -32,8 +32,9 @@ Referencias principales:
 
 4. **Navegación**
    - Escritorio: navegación lateral azul oscuro, activa en dorado.
-   - Tablet: navegación compacta y desplazable sin pérdida de funciones.
-   - Móvil: navegación táctil, legible y usable sin zoom ni desbordes horizontales de la página.
+   - Tablet: navegación compacta en rejilla de tres columnas, sin desplazamiento horizontal de la página.
+   - Móvil: navegación táctil en rejilla de dos columnas, con desplazamiento vertical contenido dentro de la navegación cuando la cantidad de módulos lo requiera.
+   - Ningún módulo debe quedar inaccesible por depender de arrastre horizontal.
 
 5. **Tarjetas y paneles**
    - Superficies blancas, bordes finos, sombras suaves y radios moderados.
@@ -75,7 +76,9 @@ El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas glob
 
 El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
 
+El archivo `frontend/src/institutional-theme.test.ts` actúa como gate automatizado del contrato PMGM-UI-001 dentro del `npm test` del CI. Verifica paleta, breakpoints, prevención de scroll horizontal global, tablas contenidas, controles táctiles y preferencia de reducción de movimiento.
+
 ## Pendientes antes de aprobación visual institucional
 
 - Ejecutar revisión visual pantalla por pantalla contra los mockups PPT.
-- Añadir pruebas de viewport / captura para tamaños críticos dentro del pipeline de UI.
+- Añadir capturas automáticas por viewport para comparación visual de regresiones.
