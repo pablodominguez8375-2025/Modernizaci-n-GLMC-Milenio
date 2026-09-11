@@ -19,6 +19,8 @@ public static class AdmissionCodes
         public const string AffiliationMode = "affiliation_mode";
         public const string WithdrawalLetter = "withdrawal_letter";
         public const string WithdrawalLetterHandwrittenSignature = "withdrawal_letter_handwritten_signature";
+        public const string LodgeThirdDegreeApproval = "lodge_third_degree_approval";
+        public const string LodgeFirstDegreeBallot = "lodge_first_degree_ballot";
         public const string LegalizedInitiationEvidence = "legalized_initiation_evidence";
         public const string LegalizedWageIncreaseEvidence = "legalized_wage_increase_evidence";
         public const string LegalizedExaltationEvidence = "legalized_exaltation_evidence";
@@ -34,6 +36,8 @@ public sealed record AdmissionEligibilityInput(
     string? AffiliationMode,
     bool WithdrawalLetterAttached,
     bool WithdrawalLetterHandwrittenSignatureVerified,
+    bool LodgeThirdDegreeApproved,
+    bool LodgeFirstDegreeBallotApproved,
     bool LegalizedInitiationEvidenceAttached = false,
     bool WageIncreaseEvidenceApplies = false,
     bool LegalizedWageIncreaseEvidenceAttached = false,
@@ -46,10 +50,7 @@ public sealed record AdmissionEligibilityInput(
     DateOnly? NewPresentationDate = null,
     bool? RejectionCausesRemedied = null);
 
-public sealed record AdmissionRequirementResult(
-    string Code,
-    string Status,
-    string Reason);
+public sealed record AdmissionRequirementResult(string Code, string Status, string Reason);
 
 public sealed record AdmissionEligibilityDecision(
     bool CanProceed,
@@ -80,6 +81,18 @@ public static class AdmissionEligibilityPolicy
             "Se registró verificación humana de la firma original de puño y letra.",
             "Debe verificarse que el original de la Carta de Retiro Voluntario esté firmado de puño y letra; una firma digitalizada o una imagen insertada no cumple este requisito."));
 
+        requirements.Add(EvaluateRequiredBoolean(
+            AdmissionCodes.Requirement.LodgeThirdDegreeApproval,
+            input.LodgeThirdDegreeApproved,
+            "La aprobación del Taller en tercer grado está registrada.",
+            "Debe constar la aprobación del Taller en tercer grado y su referencia de acta."));
+
+        requirements.Add(EvaluateRequiredBoolean(
+            AdmissionCodes.Requirement.LodgeFirstDegreeBallot,
+            input.LodgeFirstDegreeBallotApproved,
+            "El balotaje de primer grado está aprobado y registrado.",
+            "Debe constar el balotaje aprobado de primer grado y su referencia de acta."));
+
         if (input.AdmissionType == CeremonyCodes.Type.Affiliation)
             AddRePresentationRequirementIfNeeded(input, requirements);
         else
@@ -87,16 +100,9 @@ public static class AdmissionEligibilityPolicy
 
         var rejected = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Rejected);
         var observed = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Observed);
-        var status = rejected
-            ? "does_not_comply"
-            : observed
-                ? "observed"
-                : "complies";
+        var status = rejected ? "does_not_comply" : observed ? "observed" : "complies";
 
-        return new AdmissionEligibilityDecision(
-            CanProceed: status == "complies",
-            Status: status,
-            Requirements: requirements);
+        return new AdmissionEligibilityDecision(status == "complies", status, requirements);
     }
 
     private static AdmissionRequirementResult EvaluateAffiliationMode(string? mode)
@@ -115,22 +121,18 @@ public static class AdmissionEligibilityPolicy
             "La incorporación requiere documento legalizado que acredite fecha, logia y Obediencia de la iniciación."));
 
         if (input.WageIncreaseEvidenceApplies)
-        {
             requirements.Add(EvaluateRequiredBoolean(
                 AdmissionCodes.Requirement.LegalizedWageIncreaseEvidence,
                 input.LegalizedWageIncreaseEvidenceAttached,
                 "Consta antecedente legalizado de aumento de salario.",
                 "Debe adjuntarse el antecedente legalizado de aumento de salario cuando corresponda."));
-        }
 
         if (input.ExaltationEvidenceApplies)
-        {
             requirements.Add(EvaluateRequiredBoolean(
                 AdmissionCodes.Requirement.LegalizedExaltationEvidence,
                 input.LegalizedExaltationEvidenceAttached,
                 "Consta antecedente legalizado de exaltación.",
                 "Debe adjuntarse el antecedente legalizado de exaltación cuando corresponda."));
-        }
 
         requirements.Add(EvaluateRequiredBoolean(
             AdmissionCodes.Requirement.DegreeEvidence,
@@ -153,23 +155,21 @@ public static class AdmissionEligibilityPolicy
                 : "Se registró que no existe Pacto de Paz y Amistad con la Obediencia de origen."));
 
         if (!input.HasPeaceAndFriendshipPact.Value)
-        {
             requirements.Add(EvaluateRequiredBoolean(
                 AdmissionCodes.Requirement.GrandMasterSpecialAcceptance,
                 input.GrandMasterSpecialAcceptanceApproved,
                 "Gran Maestría registró la aceptación especial de la incorporación.",
                 "Cuando no existe Pacto de Paz y Amistad, la aceptación de la incorporación debe ser resuelta por Gran Maestría."));
-        }
     }
 
     private static void AddRePresentationRequirementIfNeeded(
         AdmissionEligibilityInput input,
         ICollection<AdmissionRequirementResult> requirements)
     {
-        var anyRePresentationData = input.PreviousRejectionDate is not null ||
-                                    input.NewPresentationDate is not null ||
-                                    input.RejectionCausesRemedied is not null;
-        if (!anyRePresentationData) return;
+        var anyData = input.PreviousRejectionDate is not null ||
+                      input.NewPresentationDate is not null ||
+                      input.RejectionCausesRemedied is not null;
+        if (!anyData) return;
 
         if (input.PreviousRejectionDate is null || input.NewPresentationDate is null || input.RejectionCausesRemedied is null)
         {
@@ -195,10 +195,7 @@ public static class AdmissionEligibilityPolicy
     }
 
     private static AdmissionRequirementResult EvaluateRequiredBoolean(
-        string code,
-        bool complies,
-        string approvedReason,
-        string rejectedReason)
+        string code, bool complies, string approvedReason, string rejectedReason)
         => complies ? Approved(code, approvedReason) : Rejected(code, rejectedReason);
 
     private static AdmissionRequirementResult Approved(string code, string reason)
