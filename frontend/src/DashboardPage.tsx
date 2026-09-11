@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 import { type CalendarApiClient, type CalendarEvent } from './api/calendarApi'
 import { type NotificationApiClient, type NotificationInboxItem } from './api/notificationApi'
 import { type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
@@ -47,16 +48,16 @@ export default function DashboardPage(props: DashboardPageProps) {
   const pending = notifications.filter(item => item.readAtUtc === null).slice(0, 4)
   const capabilities = profile ? Object.values(profile.capabilities).filter(Boolean).length : 0
 
-  return <>
+  return <div className="dashboard-page">
     <section className="hero-panel executive-hero">
       <div>
         <p className="eyebrow">Centro de mando · Proyecto Centenario</p>
         <h1>Visión institucional en una sola plataforma</h1>
         <p className="lead">Seguimiento de personas, Talleres, ceremonias, agenda, comunicaciones y documentos con trazabilidad y control de acceso.</p>
         <div className="hero-assurance" aria-label="Controles activos">
-          <span>✓ Ley 21.719 incorporada</span>
-          <span>✓ Auditoría persistente</span>
-          <span>✓ Acceso por rol y ámbito</span>
+          <Assurance label="Ley 21.719 incorporada" />
+          <Assurance label="Auditoría persistente" />
+          <Assurance label="Acceso por rol y ámbito" />
         </div>
       </div>
       <div className="executive-status-card">
@@ -75,11 +76,11 @@ export default function DashboardPage(props: DashboardPageProps) {
     <section className="quick-actions panel">
       <div className="panel-heading"><div><p className="eyebrow">Acciones rápidas</p><h2>Operación diaria</h2></div><span className="count-badge">QA ejecutivo</span></div>
       <div className="quick-action-grid">
-        <QuickAction icon="▣" title="Revisar agenda" detail="Tenidas, ceremonias y reservas" onClick={props.onOpenCalendar} />
-        <QuickAction icon="✦" title="Ver notificaciones" detail={`${unread} avisos pendientes`} onClick={props.onOpenNotifications} badge={unread > 0 ? String(unread) : undefined} />
-        <QuickAction icon="◎" title="Portal de insinuados" detail="Plazos y publicaciones vigentes" onClick={props.onOpenCandidates} />
-        {props.onOpenSecretariat && <QuickAction icon="▤" title="Gran Secretaría" detail="Reservas y autorizaciones" onClick={props.onOpenSecretariat} />}
-        {props.onOpenLodge && <QuickAction icon="□" title="Gestión Logial" detail="Tenidas, asistencia y actas" onClick={props.onOpenLodge} />}
+        <QuickAction icon="calendar" title="Revisar agenda" detail="Tenidas, ceremonias y reservas" onClick={props.onOpenCalendar} />
+        <QuickAction icon="bell" title="Ver notificaciones" detail={`${unread} avisos pendientes`} onClick={props.onOpenNotifications} badge={unread > 0 ? String(unread) : undefined} />
+        <QuickAction icon="candidate" title="Portal de insinuados" detail="Plazos y publicaciones vigentes" onClick={props.onOpenCandidates} />
+        {props.onOpenSecretariat && <QuickAction icon="secretariat" title="Gran Secretaría" detail="Reservas y autorizaciones" onClick={props.onOpenSecretariat} />}
+        {props.onOpenLodge && <QuickAction icon="lodge" title="Gestión Logial" detail="Tenidas, asistencia y actas" onClick={props.onOpenLodge} />}
       </div>
     </section>
 
@@ -116,15 +117,19 @@ export default function DashboardPage(props: DashboardPageProps) {
         <div className="maturity-tags"><span>Miembros</span><span>Ceremonias</span><span>Secretaría</span><span>Gestión Logial</span><span>Calendario</span><span>Notificaciones</span><span>Documentos</span><span>Biblioteca</span></div>
       </article>
     </section>
-  </>
+  </div>
+}
+
+function Assurance({ label }: { label: string }) {
+  return <span><InstitutionalIcon name="check" size={14} />{label}</span>
 }
 
 function MetricCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: 'attention' | 'success' }) {
   return <article className={`metric-card${tone ? ` metric-${tone}` : ''}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article>
 }
 
-function QuickAction({ icon, title, detail, onClick, badge }: { icon: string; title: string; detail: string; onClick: () => void; badge?: string }) {
-  return <button className="quick-action" type="button" onClick={onClick}><span className="quick-action-icon" aria-hidden="true">{icon}</span><span><strong>{title}</strong><small>{detail}</small></span>{badge && <em>{badge}</em>}</button>
+function QuickAction({ icon, title, detail, onClick, badge }: { icon: InstitutionalIconName; title: string; detail: string; onClick: () => void; badge?: string }) {
+  return <button className="quick-action" type="button" onClick={onClick}><span className="quick-action-icon" aria-hidden="true"><InstitutionalIcon name={icon} size={20} /></span><span><strong>{title}</strong><small>{detail}</small></span>{badge && <em>{badge}</em>}</button>
 }
 
 function UpcomingEvent({ event }: { event: CalendarEvent }) {
@@ -135,11 +140,11 @@ function UpcomingEvent({ event }: { event: CalendarEvent }) {
 }
 
 function DashboardAlert({ item }: { item: NotificationInboxItem }) {
-  return <div className={`dashboard-alert${item.mandatory ? ' mandatory' : ''}`}><span aria-hidden="true">{item.mandatory ? '!' : '•'}</span><div><strong>{item.subject}</strong><small>{truncate(item.body, 112)}</small></div><time dateTime={item.createdAtUtc}>{new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', timeZone: 'America/Santiago' }).format(new Date(item.createdAtUtc))}</time></div>
+  return <div className={`dashboard-alert${item.mandatory ? ' mandatory' : ''}`}><span aria-hidden="true"><InstitutionalIcon name={item.mandatory ? 'dataQuality' : 'bell'} size={14} /></span><div><strong>{item.subject}</strong><small>{truncate(item.body, 112)}</small></div><time dateTime={item.createdAtUtc}>{new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', timeZone: 'America/Santiago' }).format(new Date(item.createdAtUtc))}</time></div>
 }
 
 function ControlState({ title, detail }: { title: string; detail: string }) {
-  return <div className="control-state"><span aria-hidden="true">✓</span><div><strong>{title}</strong><small>{detail}</small></div></div>
+  return <div className="control-state"><span aria-hidden="true"><InstitutionalIcon name="check" size={15} /></span><div><strong>{title}</strong><small>{detail}</small></div></div>
 }
 
 function EmptyState({ title, detail }: { title: string; detail: string }) { return <div className="empty-state compact"><strong>{title}</strong><span>{detail}</span></div> }
