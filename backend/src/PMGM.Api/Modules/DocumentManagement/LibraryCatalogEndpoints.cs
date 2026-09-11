@@ -23,6 +23,9 @@ public static class LibraryCatalogEndpoints
         string? q,
         Guid? collectionId,
         string? documentType,
+        int? degree,
+        string? topic,
+        string? officialDocumentType,
         int? fromYear,
         int? toYear,
         int? page,
@@ -39,6 +42,8 @@ public static class LibraryCatalogEndpoints
             return Results.BadRequest(new { message = "La página debe ser mayor o igual a 1." });
         if (currentPageSize is < 1 or > 50)
             return Results.BadRequest(new { message = "El tamaño de página debe estar entre 1 y 50." });
+        if (degree is < 1 or > 3)
+            return Results.BadRequest(new { message = "El grado debe ser 1, 2 o 3." });
         if (!IsValidYear(fromYear) || !IsValidYear(toYear))
             return Results.BadRequest(new { message = "El año de publicación debe estar entre 1600 y 2100." });
         if (fromYear is not null && toYear is not null && fromYear > toYear)
@@ -52,6 +57,14 @@ public static class LibraryCatalogEndpoints
         if (documentType is not null && normalizedDocumentType is null)
             return Results.BadRequest(new { message = "El tipo documental excede el máximo permitido." });
 
+        var normalizedTopic = NormalizeOptional(topic, 240);
+        if (topic is not null && normalizedTopic is null)
+            return Results.BadRequest(new { message = "El tema excede el máximo permitido." });
+
+        var normalizedOfficialDocumentType = NormalizeOptional(officialDocumentType, 120);
+        if (officialDocumentType is not null && normalizedOfficialDocumentType is null)
+            return Results.BadRequest(new { message = "El tipo de documento oficial excede el máximo permitido." });
+
         var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
         var effectiveDegree = memberContext?.EffectiveDegree;
         var query = BuildVisibleCatalogQuery(httpContext.User, db, access, effectiveDegree);
@@ -60,9 +73,21 @@ public static class LibraryCatalogEndpoints
             query = query.Where(x => x.CollectionId == collectionId.Value);
 
         if (normalizedDocumentType is not null)
+            query = ApplyCatalogTypeFilter(query, normalizedDocumentType);
+
+        if (degree is not null)
+            query = query.Where(x => x.MinimumDegreeRequired == degree.Value);
+
+        if (normalizedTopic is not null)
         {
-            var documentTypeNeedle = normalizedDocumentType.ToLowerInvariant();
-            query = query.Where(x => x.DocumentType.ToLower() == documentTypeNeedle);
+            var topicNeedle = normalizedTopic.ToLowerInvariant();
+            query = query.Where(x => x.Topic != null && x.Topic.ToLower() == topicNeedle);
+        }
+
+        if (normalizedOfficialDocumentType is not null)
+        {
+            var officialNeedle = normalizedOfficialDocumentType.ToLowerInvariant();
+            query = query.Where(x => x.OfficialDocumentType != null && x.OfficialDocumentType.ToLower() == officialNeedle);
         }
 
         if (normalizedQuery is not null)
@@ -71,7 +96,14 @@ public static class LibraryCatalogEndpoints
             query = query.Where(x =>
                 x.Title.ToLower().Contains(searchNeedle) ||
                 x.CollectionName.ToLower().Contains(searchNeedle) ||
-                x.DocumentType.ToLower().Contains(searchNeedle));
+                x.DocumentType.ToLower().Contains(searchNeedle) ||
+                (x.AuthorName != null && x.AuthorName.ToLower().Contains(searchNeedle)) ||
+                (x.AuthorLodgeName != null && x.AuthorLodgeName.ToLower().Contains(searchNeedle)) ||
+                (x.Topic != null && x.Topic.ToLower().Contains(searchNeedle)) ||
+                (x.Edition != null && x.Edition.ToLower().Contains(searchNeedle)) ||
+                (x.ShortDescription != null && x.ShortDescription.ToLower().Contains(searchNeedle)) ||
+                (x.AbstractText != null && x.AbstractText.ToLower().Contains(searchNeedle)) ||
+                (x.OfficialDocumentType != null && x.OfficialDocumentType.ToLower().Contains(searchNeedle)));
         }
 
         if (fromYear is not null)
@@ -101,7 +133,16 @@ public static class LibraryCatalogEndpoints
                 x.VersionNumber,
                 x.ContentType,
                 x.SizeBytes,
-                x.PublishedAtUtc))
+                x.PublishedAtUtc,
+                x.MinimumDegreeRequired,
+                x.AuthorName,
+                x.AuthorLodgeName,
+                x.DocumentDate,
+                x.Topic,
+                x.Edition,
+                x.ShortDescription,
+                x.AbstractText,
+                x.OfficialDocumentType))
             .ToListAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -121,46 +162,100 @@ public static class LibraryCatalogEndpoints
 
         var collectionRows = await query
             .GroupBy(x => new { x.CollectionId, x.CollectionName })
-            .Select(group => new
-            {
-                Value = group.Key.CollectionId,
-                Label = group.Key.CollectionName,
-                Count = group.Count()
-            })
+            .Select(group => new { Value = group.Key.CollectionId, Label = group.Key.CollectionName, Count = group.Count() })
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Label)
             .Take(200)
             .ToListAsync(cancellationToken);
 
         var collections = collectionRows
-            .Select(x => new LibraryFacetItemDto(
-                x.Value.ToString(),
-                x.Label,
-                x.Count))
+            .Select(x => new LibraryFacetItemDto(x.Value.ToString(), x.Label, x.Count))
             .ToList();
 
         var documentTypeRows = await query
             .GroupBy(x => x.DocumentType)
-            .Select(group => new
-            {
-                Value = group.Key,
-                Label = group.Key,
-                Count = group.Count()
-            })
+            .Select(group => new { Value = group.Key, Label = group.Key, Count = group.Count() })
             .OrderByDescending(x => x.Count)
             .ThenBy(x => x.Label)
             .Take(200)
             .ToListAsync(cancellationToken);
 
         var documentTypes = documentTypeRows
+            .Select(x => new LibraryFacetItemDto(x.Value, x.Label, x.Count))
+            .ToList();
+
+        var topicRows = await query
+            .Where(x => x.Topic != null)
+            .GroupBy(x => x.Topic!)
+            .Select(group => new { Value = group.Key, Count = group.Count() })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Value)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var topics = topicRows
+            .Select(x => new LibraryFacetItemDto(x.Value, x.Value, x.Count))
+            .ToList();
+
+        var officialTypeRows = await query
+            .Where(x => x.OfficialDocumentType != null)
+            .GroupBy(x => x.OfficialDocumentType!)
+            .Select(group => new { Value = group.Key, Count = group.Count() })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Value)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var officialDocumentTypes = officialTypeRows
+            .Select(x => new LibraryFacetItemDto(x.Value, x.Value, x.Count))
+            .ToList();
+
+        var degreeRows = await query
+            .GroupBy(x => x.MinimumDegreeRequired)
+            .Select(group => new { Value = group.Key, Count = group.Count() })
+            .OrderBy(x => x.Value)
+            .ToListAsync(cancellationToken);
+
+        var degrees = degreeRows
             .Select(x => new LibraryFacetItemDto(
-                x.Value,
-                x.Label,
+                x.Value?.ToString() ?? "general",
+                x.Value is null ? "General" : $"{x.Value}° grado",
                 x.Count))
             .ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new LibraryFacetsResponse(collections, documentTypes));
+        return Results.Ok(new LibraryFacetsResponse(collections, documentTypes, degrees, topics, officialDocumentTypes));
+    }
+
+    private static IQueryable<LibraryCatalogQueryRow> ApplyCatalogTypeFilter(
+        IQueryable<LibraryCatalogQueryRow> query,
+        string documentType)
+    {
+        var normalized = documentType.ToLowerInvariant();
+        return normalized switch
+        {
+            "work_paper" => query.Where(x =>
+                x.DocumentType.ToLower() == "work_paper" ||
+                x.DocumentType.ToLower() == "working_paper" ||
+                x.DocumentType.ToLower() == "plancha" ||
+                x.DocumentType.ToLower() == "plancha_de_trabajo"),
+            "book" => query.Where(x =>
+                x.DocumentType.ToLower() == "book" ||
+                x.DocumentType.ToLower() == "books" ||
+                x.DocumentType.ToLower() == "libro" ||
+                x.DocumentType.ToLower() == "libros"),
+            "official_document" => query.Where(x =>
+                x.DocumentType.ToLower() == "official_document" ||
+                x.DocumentType.ToLower() == "documento_oficial" ||
+                x.DocumentType.ToLower() == "regulation" ||
+                x.DocumentType.ToLower() == "reglamento" ||
+                x.DocumentType.ToLower() == "constitution" ||
+                x.DocumentType.ToLower() == "constitucion" ||
+                x.DocumentType.ToLower() == "ritual"),
+            "video" => query.Where(x =>
+                x.DocumentType.ToLower() == "video" || x.DocumentType.ToLower() == "videos"),
+            _ => query.Where(x => x.DocumentType.ToLower() == normalized)
+        };
     }
 
     private static IQueryable<LibraryCatalogQueryRow> BuildVisibleCatalogQuery(
@@ -202,7 +297,16 @@ public static class LibraryCatalogEndpoints
                 VersionNumber = version.VersionNumber,
                 ContentType = version.ContentType,
                 SizeBytes = version.SizeBytes,
-                PublishedAtUtc = document.PublishedAtUtc!.Value
+                PublishedAtUtc = document.PublishedAtUtc!.Value,
+                MinimumDegreeRequired = document.MinimumDegreeRequired,
+                AuthorName = document.AuthorName,
+                AuthorLodgeName = document.AuthorLodgeName,
+                DocumentDate = document.DocumentDate,
+                Topic = document.Topic,
+                Edition = document.Edition,
+                ShortDescription = document.ShortDescription,
+                AbstractText = document.AbstractText,
+                OfficialDocumentType = document.OfficialDocumentType
             };
     }
 
@@ -235,6 +339,15 @@ public static class LibraryCatalogEndpoints
         public required string ContentType { get; init; }
         public long SizeBytes { get; init; }
         public DateTimeOffset PublishedAtUtc { get; init; }
+        public int? MinimumDegreeRequired { get; init; }
+        public string? AuthorName { get; init; }
+        public string? AuthorLodgeName { get; init; }
+        public DateOnly? DocumentDate { get; init; }
+        public string? Topic { get; init; }
+        public string? Edition { get; init; }
+        public string? ShortDescription { get; init; }
+        public string? AbstractText { get; init; }
+        public string? OfficialDocumentType { get; init; }
     }
 }
 
@@ -247,7 +360,16 @@ public sealed record LibraryCatalogItemDto(
     int VersionNumber,
     string ContentType,
     long SizeBytes,
-    DateTimeOffset PublishedAtUtc);
+    DateTimeOffset PublishedAtUtc,
+    int? MinimumDegreeRequired,
+    string? AuthorName,
+    string? AuthorLodgeName,
+    DateOnly? DocumentDate,
+    string? Topic,
+    string? Edition,
+    string? ShortDescription,
+    string? AbstractText,
+    string? OfficialDocumentType);
 
 public sealed record LibraryCatalogResponse(
     int Total,
@@ -259,4 +381,7 @@ public sealed record LibraryFacetItemDto(string Value, string Label, int Count);
 
 public sealed record LibraryFacetsResponse(
     IReadOnlyCollection<LibraryFacetItemDto> Collections,
-    IReadOnlyCollection<LibraryFacetItemDto> DocumentTypes);
+    IReadOnlyCollection<LibraryFacetItemDto> DocumentTypes,
+    IReadOnlyCollection<LibraryFacetItemDto> Degrees,
+    IReadOnlyCollection<LibraryFacetItemDto> Topics,
+    IReadOnlyCollection<LibraryFacetItemDto> OfficialDocumentTypes);
