@@ -13,6 +13,7 @@ public static class InstitutionalRoles
 {
     public const string PlatformSuperAdmin = "platform_superadmin";
     public const string GranLogiaAdmin = "grand_lodge_admin";
+    public const string GranMaestria = "grand_master";
     public const string RegimenInterior = "internal_affairs";
     public const string GranSecretaria = "grand_secretariat";
     public const string GranTesoreria = "grand_treasury";
@@ -42,6 +43,7 @@ public interface IInstitutionalAccessService
     bool CanEvaluateCeremonies(ClaimsPrincipal user);
     bool CanReviewCeremonies(ClaimsPrincipal user, Guid organizationId);
     bool CanValidateCeremonyInternalAffairs(ClaimsPrincipal user);
+    bool CanProvideGrandMasterApproval(ClaimsPrincipal user);
     bool CanAuthorizeCeremonies(ClaimsPrincipal user);
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
     bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId);
@@ -75,6 +77,7 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         if (HasOrderScope(user) && HasRole(
                 user,
                 InstitutionalRoles.GranLogiaAdmin,
+                InstitutionalRoles.GranMaestria,
                 InstitutionalRoles.RegimenInterior,
                 InstitutionalRoles.GranSecretaria,
                 InstitutionalRoles.GranTesoreria,
@@ -133,6 +136,7 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            HasRole(
                user,
                InstitutionalRoles.GranLogiaAdmin,
+               InstitutionalRoles.GranMaestria,
                InstitutionalRoles.RegimenInterior,
                InstitutionalRoles.GranSecretaria,
                InstitutionalRoles.GranTesoreria,
@@ -140,7 +144,12 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
     public bool CanEvaluateCeremonies(ClaimsPrincipal user)
         => HasOrderScope(user) &&
-           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria);
+           HasRole(
+               user,
+               InstitutionalRoles.GranLogiaAdmin,
+               InstitutionalRoles.GranMaestria,
+               InstitutionalRoles.RegimenInterior,
+               InstitutionalRoles.GranSecretaria);
 
     public bool CanReviewCeremonies(ClaimsPrincipal user, Guid organizationId)
     {
@@ -156,6 +165,10 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     public bool CanValidateCeremonyInternalAffairs(ClaimsPrincipal user)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
+
+    public bool CanProvideGrandMasterApproval(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranMaestria);
 
     public bool CanAuthorizeCeremonies(ClaimsPrincipal user)
         => HasOrderScope(user) &&
