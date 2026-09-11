@@ -181,12 +181,12 @@ const demoRows: MemberControlRow[] = [
   {
     memberId: '10101010-1010-1010-1010-101010101010', institutionalNumber: 'GLM-0101', displayName: 'Hermana Demostrativa Uno', relation: 'current',
     currentWorkshop: workshop(ORG_1, 'Taller Demostrativo Nº 1', '1', '2018-03-12'), lastWorkshop: workshop(ORG_1, 'Taller Demostrativo Nº 1', '1', '2018-03-12'),
-    currentStatus: 'active', statusEffectiveDate: '2025-01-10', currentDegree: 'master', milestones: milestones('2018-03-12', '2019-05-20', '2020-08-14'), financialStatus: 'up_to_date', pastActive: true, pendingTransfer: false, membershipHistoryCount: 1,
+    currentStatus: 'active', statusEffectiveDate: '2025-01-10', currentDegree: 'master', milestones: milestones('2018-03-12', '2019-05-20', '2020-08-14'), financialStatus: 'up_to_date', pastActive: false, pendingTransfer: false, membershipHistoryCount: 1,
   },
   {
-    memberId: '20202020-2020-2020-2020-202020202020', institutionalNumber: 'GLM-0230', displayName: 'Hermano Trasladado Demostrativo', relation: 'historical',
+    memberId: '20202020-2020-2020-2020-202020202020', institutionalNumber: 'GLM-0230', displayName: 'Hermano Past Activo Demostrativo', relation: 'current',
     currentWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2026-01-01'), lastWorkshop: workshop(ORG_23, 'Taller Demostrativo Nº 23', '23', '2026-01-01'),
-    currentStatus: 'reinstated', statusEffectiveDate: '2024-03-15', currentDegree: 'master', milestones: { ...milestones('2017-04-08', '2018-06-11', '2019-09-21'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2024-01-15', reinstatement: '2024-03-15', transfer: '2026-01-01' }, financialStatus: 'delinquent', pastActive: true, pendingTransfer: false, membershipHistoryCount: 2,
+    currentStatus: 'past_active', statusEffectiveDate: '2026-07-01', currentDegree: 'master', milestones: { ...milestones('2017-04-08', '2018-06-11', '2019-09-21'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2024-01-15', reinstatement: '2024-03-15', transfer: '2026-01-01' }, financialStatus: 'delinquent', pastActive: true, pendingTransfer: false, membershipHistoryCount: 2,
   },
   {
     memberId: '30303030-3030-3030-3030-303030303030', institutionalNumber: 'GLM-0303', displayName: 'Hermana Inactiva Demostrativa', relation: 'current',
@@ -194,9 +194,9 @@ const demoRows: MemberControlRow[] = [
     currentStatus: 'inactive', statusEffectiveDate: '2026-06-01', currentDegree: 'fellowcraft', milestones: milestones('2021-07-02', '2023-03-18', null), financialStatus: 'pending', pastActive: false, pendingTransfer: true, membershipHistoryCount: 1,
   },
   {
-    memberId: '40404040-4040-4040-4040-404040404040', institutionalNumber: 'GLM-0404', displayName: 'Hermano Histórico Demostrativo', relation: 'historical', currentWorkshop: null,
+    memberId: '40404040-4040-4040-4040-404040404040', institutionalNumber: 'GLM-0404', displayName: 'Hermano en Sueño Demostrativo', relation: 'historical', currentWorkshop: null,
     lastWorkshop: { ...workshop(ORG_45, 'Taller Demostrativo Nº 45', '45', '2012-02-04'), endDate: '2025-10-15' },
-    currentStatus: 'voluntary_withdrawal', statusEffectiveDate: '2025-10-15', currentDegree: 'master', milestones: { ...milestones('2012-02-04', '2013-05-12', '2014-08-23'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2025-10-15' }, financialStatus: null, pastActive: true, pendingTransfer: false, membershipHistoryCount: 1,
+    currentStatus: 'voluntary_withdrawal', statusEffectiveDate: '2025-10-15', currentDegree: 'master', milestones: { ...milestones('2012-02-04', '2013-05-12', '2014-08-23'), withdrawalType: 'voluntary_withdrawal', withdrawal: '2025-10-15' }, financialStatus: null, pastActive: false, pendingTransfer: false, membershipHistoryCount: 1,
   },
 ]
 
