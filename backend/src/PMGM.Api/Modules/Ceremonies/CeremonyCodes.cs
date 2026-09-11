@@ -27,6 +27,7 @@ public static class CeremonyCodes
         public const string Treasury = "treasury";
         public const string Hospitalaria = "hospitalaria";
         public const string GrandMaster = "grand_master";
+        public const string AdmissionProcedure = "admission_procedure";
         public const string CandidatePublication = "candidate_publication";
         public const string CandidatePublicationReview = "candidate_publication_review";
         public const string CandidateInitialDeliberation = "candidate_initial_deliberation";
