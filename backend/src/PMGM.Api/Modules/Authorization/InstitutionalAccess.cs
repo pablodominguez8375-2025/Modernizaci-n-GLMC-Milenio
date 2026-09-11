@@ -34,6 +34,7 @@ public interface IInstitutionalAccessService
     bool CanManageLodgeOperations(ClaimsPrincipal user);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
+    bool CanManageInstitutionalStatuses(ClaimsPrincipal user);
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
     bool CanManageTreasuryRegularity(ClaimsPrincipal user);
     bool CanManageHospitalariaRegularity(ClaimsPrincipal user);
@@ -109,6 +110,10 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
 
     public bool CanRunRegimenInteriorReports(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
+
+    public bool CanManageInstitutionalStatuses(ClaimsPrincipal user)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
 
