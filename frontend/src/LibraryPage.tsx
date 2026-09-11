@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
 import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
+import './library-ppt-enhancement.css'
 
 const pageSize = 12
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [] }
@@ -76,12 +77,22 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
   return <div className="library-page">
     <section className="page-heading library-heading">
       <div><p className="eyebrow">Conocimiento institucional</p><h1>Biblioteca Virtual</h1><p>Documentos publicados expresamente para su consulta según alcance y política de acceso.</p></div>
-      <span className="count-badge">{loading ? 'cargando…' : `${total} publicaciones`}</span>
+      <span className="count-badge">{loading ? 'cargando…' : publicationCountLabel(total)}</span>
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
     <section className="panel library-panel">
+      <nav className="library-category-rail" aria-label="Categorías de Biblioteca Virtual">
+        <button type="button" className={documentType === '' ? 'active' : ''} aria-pressed={documentType === ''} onClick={() => { setDocumentType(''); setPage(1) }}>Todos <span>{facets.documentTypes.reduce((sum, item) => sum + item.count, 0) || total}</span></button>
+        {facets.documentTypes.map(item => <button key={item.value} type="button" className={documentType === item.value ? 'active' : ''} aria-pressed={documentType === item.value} onClick={() => { setDocumentType(item.value); setPage(1) }}>{typeLabel(item.label)} <span>{item.count}</span></button>)}
+      </nav>
+
+      <div className="library-access-band">
+        <span className="library-access-band-icon" aria-hidden="true"><InstitutionalIcon name="shield" size={20} /></span>
+        <div><strong>Catálogo protegido por grado</strong><span>La Biblioteca ya llega filtrada desde el backend: sólo aparecen publicaciones autorizadas para tu grado institucional vigente y sus grados inferiores.</span></div>
+      </div>
+
       <div className="library-toolbar">
         <label className="search-field"><span>Buscar en Biblioteca</span><input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} placeholder="Título, colección o tipo documental" /></label>
         <div className="library-filters">
@@ -104,16 +115,44 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
 }
 
 function LibraryCard({ item, downloading, onDownload }: { item: LibraryCatalogItem; downloading: boolean; onDownload: () => void }) {
-  return <article className="library-card">
-    <div className="library-icon" aria-hidden="true"><InstitutionalIcon name="library" size={24} /></div>
-    <div><span className="document-chip">{typeLabel(item.documentType)}</span><h3>{item.title}</h3><p>{item.collectionName}</p></div>
+  const label = typeLabel(item.documentType)
+  return <article className={`library-card library-card-${typeTone(item.documentType)}`}>
+    <div className="library-card-cover" aria-hidden="true"><div className="library-icon"><InstitutionalIcon name="library" size={24} /></div><small>{label}</small></div>
+    <div><span className="document-chip">{label}</span><h3>{item.title}</h3><p>{item.collectionName}</p></div>
     <dl><div><dt>Versión</dt><dd>v{item.versionNumber}</dd></div><div><dt>Formato</dt><dd>{contentTypeLabel(item.contentType)}</dd></div><div><dt>Tamaño</dt><dd>{formatBytes(item.sizeBytes)}</dd></div></dl>
     <small>Publicado {formatChile(item.publishedAtUtc)}</small>
     <div className="library-card-action"><button type="button" className="document-primary compact" disabled={downloading} onClick={onDownload}>{downloading ? 'Preparando…' : 'Descargar'}</button></div>
   </article>
 }
 
-function typeLabel(value: string) { return value.replaceAll('_', ' ') }
+const documentTypeLabels: Record<string, string> = {
+  book: 'Libros',
+  books: 'Libros',
+  historical_publication: 'Historia',
+  history: 'Historia',
+  work_paper: 'Plancha de trabajo',
+  working_paper: 'Plancha de trabajo',
+  instruction_material: 'Docencia',
+  instructional_material: 'Docencia',
+  study_material: 'Material de estudio',
+  publication: 'Publicación',
+}
+
+function typeLabel(value: string) {
+  const normalized = value.trim().toLowerCase()
+  return documentTypeLabels[normalized] ?? normalized.replaceAll('_', ' ').replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+function typeTone(value: string) {
+  const normalized = value.toLowerCase()
+  if (normalized.includes('histor') || normalized === 'history') return 'history'
+  if (normalized.includes('work') || normalized.includes('plancha')) return 'work'
+  if (normalized.includes('instruction') || normalized.includes('docencia')) return 'instruction'
+  if (normalized.includes('book') || normalized.includes('libro')) return 'books'
+  return 'general'
+}
+
+function publicationCountLabel(total: number) { return `${total} ${total === 1 ? 'publicación' : 'publicaciones'}` }
 function contentTypeLabel(value: string) { return value === 'application/pdf' ? 'PDF' : value.includes('wordprocessingml') ? 'Word' : value.includes('spreadsheetml') ? 'Excel' : value.includes('presentationml') ? 'PowerPoint' : value.split('/').at(-1)?.toUpperCase() ?? value }
 function formatBytes(value: number) { if (value < 1024) return `${value} B`; if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`; return `${(value / 1024 / 1024).toFixed(1)} MB` }
 function formatChile(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(new Date(value)) }
