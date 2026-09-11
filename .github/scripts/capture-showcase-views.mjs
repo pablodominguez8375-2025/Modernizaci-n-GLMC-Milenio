@@ -160,6 +160,32 @@ async function capture(filePath) {
   await writeFile(filePath, Buffer.from(screenshot.data, 'base64'))
 }
 
+async function stopChromeAndClean() {
+  if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) socket.close()
+
+  if (chrome.exitCode === null) {
+    chrome.kill('SIGTERM')
+    await Promise.race([
+      new Promise(resolve => chrome.once('exit', resolve)),
+      delay(2500),
+    ])
+  }
+
+  if (chrome.exitCode === null) {
+    chrome.kill('SIGKILL')
+    await Promise.race([
+      new Promise(resolve => chrome.once('exit', resolve)),
+      delay(1000),
+    ])
+  }
+
+  try {
+    await rm(userDataDir, { recursive: true, force: true, maxRetries: 8, retryDelay: 120 })
+  } catch (error) {
+    console.warn(`Temporary Chrome data could not be removed cleanly: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
 try {
   await cdp('Page.enable')
   await cdp('Runtime.enable')
@@ -175,7 +201,5 @@ try {
     }
   }
 } finally {
-  socket.close()
-  chrome.kill('SIGTERM')
-  await rm(userDataDir, { recursive: true, force: true })
+  await stopChromeAndClean()
 }
