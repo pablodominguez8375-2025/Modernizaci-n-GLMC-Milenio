@@ -27,12 +27,20 @@ jobs:
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test -z "$(git status --porcelain)"
 
-      - name: Validate deployable compose definitions
+      - name: Validate deployable compose definitions and installer
         shell: bash
         run: |
           set -euo pipefail
           docker compose --env-file infrastructure/first.env.example -f infrastructure/docker-compose.first.yml config --quiet
           docker compose --env-file infrastructure/pilot.env.example -f infrastructure/docker-compose.pilot.yml config --quiet
+          bash -n scripts/install-pilot.sh
+          bash scripts/install-pilot.sh --help >/dev/null
+          bash -n scripts/preflight-definitive-host.sh
+          bash -n scripts/preflight-pilot.sh
+          bash -n scripts/start-pilot.sh
+          bash -n scripts/smoke-pilot.sh
+          bash -n scripts/backup-pilot.sh
+          bash -n scripts/verify-pilot-backup.sh
 
       - name: Build package from exact SHA
         shell: bash
@@ -52,7 +60,43 @@ jobs:
           BUILD_RUN_ID=$GITHUB_RUN_ID
           BUILD_RUN_NUMBER=$GITHUB_RUN_NUMBER
           BUILD_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          PUBLIC_DEMO=https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
           NOTE=No contiene secretos ni datos institucionales reales. Requiere configuracion local antes de uso.
+          EOF
+
+          cp "$package_root/docs/installation/PREUAT-INSTALL.md" "$package_root/LEAME-INSTALACION.md"
+          cp "$package_root/docs/installation/VM-IMPLEMENTATION-CHECKLIST.md" "$package_root/CHECKLIST-IMPLEMENTACION.md"
+
+          cat > "$package_root/INSTALAR.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          ROOT="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+          exec bash "$ROOT/scripts/install-pilot.sh" "$@"
+          EOF
+          chmod +x "$package_root/INSTALAR.sh" "$package_root/scripts/install-pilot.sh"
+
+          cat > "$package_root/ESTADO-PAQUETE.txt" <<EOF
+          PROYECTO CENTENARIO — PAQUETE PRE-UAT
+
+          Este ZIP es un candidato instalable construido desde un SHA exacto.
+          SOURCE_SHA=$GITHUB_SHA
+          BUILD_RUN_NUMBER=$GITHUB_RUN_NUMBER
+
+          DEMO PUBLICA:
+          https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
+          La demo usa datos ficticios y no sustituye la instalacion de VM.
+
+          ENTRADA DE INSTALACION:
+          ./INSTALAR.sh --help
+
+          DOCUMENTOS DE ARRANQUE:
+          LEAME-INSTALACION.md
+          CHECKLIST-IMPLEMENTACION.md
+
+          IMPORTANTE:
+          - configure secretos fuera de Git;
+          - ejecute UAT antes de promocion estable;
+          - no cargue datos personales reales sólo por haber instalado este paquete.
           EOF
 
           (
@@ -62,9 +106,34 @@ jobs:
               | xargs -0 sha256sum > MANIFEST.sha256
           )
 
-          cp "$package_root/docs/installation/PREUAT-INSTALL.md" "$package_root/LEAME-INSTALACION.md"
-          (cd artifacts && zip -qr Proyecto-Centenario-preUAT-installable.zip Proyecto-Centenario-preUAT-installable)
-          sha256sum artifacts/Proyecto-Centenario-preUAT-installable.zip > artifacts/Proyecto-Centenario-preUAT-installable.zip.sha256
+          (
+            cd artifacts
+            zip -qr Proyecto-Centenario-preUAT-installable.zip Proyecto-Centenario-preUAT-installable
+            sha256sum Proyecto-Centenario-preUAT-installable.zip > Proyecto-Centenario-preUAT-installable.zip.sha256
+          )
+
+      - name: Verify generated installable ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s artifacts/Proyecto-Centenario-preUAT-installable.zip
+          (cd artifacts && sha256sum -c Proyecto-Centenario-preUAT-installable.zip.sha256)
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/INSTALAR.sh'
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/LEAME-INSTALACION.md'
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/CHECKLIST-IMPLEMENTACION.md'
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/MANIFEST.sha256'
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/BUILD-INFO.txt'
+          unzip -l artifacts/Proyecto-Centenario-preUAT-installable.zip | grep -q 'Proyecto-Centenario-preUAT-installable/ESTADO-PAQUETE.txt'
+
+          verify_dir="$RUNNER_TEMP/verify-package"
+          mkdir -p "$verify_dir"
+          unzip -q artifacts/Proyecto-Centenario-preUAT-installable.zip -d "$verify_dir"
+          (
+            cd "$verify_dir/Proyecto-Centenario-preUAT-installable"
+            sha256sum -c MANIFEST.sha256 >/dev/null
+            bash ./INSTALAR.sh --help >/dev/null
+            test -s CHECKLIST-IMPLEMENTACION.md
+          )
 
       - name: Upload installable package
         uses: actions/upload-artifact@v4
