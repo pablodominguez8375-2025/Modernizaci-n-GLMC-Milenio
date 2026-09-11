@@ -27,7 +27,7 @@ Referencias principales:
 3. **Iconografía**
    - Producción usa iconos SVG lineales, consistentes en tamaño, trazo y estilo.
    - Objetivo: 20–24 px, trazo visual homogéneo, color heredado del contexto.
-   - La navegación principal y las notificaciones utilizan el componente reutilizable `InstitutionalIcon`.
+   - La navegación principal, el Dashboard y los avisos utilizan el componente reutilizable `InstitutionalIcon` cuando corresponde.
    - No usar emojis ni glifos Unicode dependientes del sistema operativo como iconografía de producto.
 
 4. **Navegación**
@@ -72,13 +72,31 @@ Una pantalla se considera aprobable sólo si:
 
 ## Implementación
 
-El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas globales de adaptación. Se carga al final de `frontend/src/main.tsx` para actuar como capa institucional sobre estilos de módulos existentes.
+El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas globales de adaptación. Se carga al final de los estilos base para actuar como capa institucional sobre módulos existentes.
 
-El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
+El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación y acciones institucionales. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
+
+Las capas `ppt-fidelity.css`, `dashboard-ppt-fidelity.css`, `archive-ppt-fidelity.css`, `regularity-ppt-fidelity.css` y `secretariat-ppt-fidelity.css` refinan pantallas específicas contra los mockups aprobados sin modificar reglas de negocio.
 
 El archivo `frontend/src/institutional-theme.test.ts` actúa como gate automatizado del contrato PMGM-UI-001 dentro del `npm test` del CI. Verifica paleta, breakpoints, prevención de scroll horizontal global, tablas contenidas, controles táctiles y preferencia de reducción de movimiento.
 
+El workflow `PMGM Showcase Demo` levanta el build demostrativo y genera automáticamente evidencia PNG de la pantalla inicial en 390 × 844, 768 × 1024 y 1440 × 900. Las capturas se publican como artefacto `pmgm-responsive-visual-evidence` con retención temporal para revisión de PR/UAT.
+
+## Avance de comparación contra PPT
+
+Con capa de fidelidad específica:
+- Dashboard / Inicio.
+- Mi ficha del hermano.
+- Biblioteca Virtual.
+- Gran Archivero.
+- Gran Tesorería.
+- Gran Hospitalaria.
+- Gran Secretaría.
+
+Gestión Logial ya cuenta con cockpit institucional azul/dorado y comportamiento responsive; se mantiene en revisión fina para evitar cambios visuales innecesarios.
+
 ## Pendientes antes de aprobación visual institucional
 
-- Ejecutar revisión visual pantalla por pantalla contra los mockups PPT.
-- Añadir capturas automáticas por viewport para comparación visual de regresiones.
+- Completar revisión fina de Gestión Logial y vistas administrativas restantes.
+- Extender la evidencia automática a más pantallas, no sólo a la vista inicial.
+- Definir baseline de comparación visual cuando el Product Owner apruebe la versión institucional de referencia.
