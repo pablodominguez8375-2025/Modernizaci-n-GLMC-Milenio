@@ -22,6 +22,7 @@ public sealed class InstitutionalAccessServiceTests
         Assert.True(_service.CanApproveTransfers(user));
         Assert.True(_service.CanManageGrandSecretariat(user));
         Assert.True(_service.CanManageGrandArchive(user));
+        Assert.True(_service.CanProvideGrandMasterApproval(user));
         Assert.True(_service.CanManagePrivacy(user));
     }
 
@@ -106,6 +107,27 @@ public sealed class InstitutionalAccessServiceTests
         var user = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
 
         Assert.False(_service.CanManageCandidatePublications(user, organization));
+    }
+
+    [Fact]
+    public void GrandMaster_WithOrderScope_CanProvideGrandMasterApproval()
+    {
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranMaestria));
+
+        Assert.True(_service.CanProvideGrandMasterApproval(user));
+        Assert.True(_service.CanEvaluateCeremonies(user));
+    }
+
+    [Fact]
+    public void GrandSecretariat_CannotProvideGrandMasterApproval()
+    {
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
+
+        Assert.False(_service.CanProvideGrandMasterApproval(user));
     }
 
     [Fact]
