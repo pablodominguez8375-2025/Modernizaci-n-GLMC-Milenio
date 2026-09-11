@@ -20,6 +20,7 @@ public sealed class InstitutionalAccessServiceTests
         Assert.True(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
         Assert.True(_service.CanManageOrganization(user, organization));
         Assert.True(_service.CanApproveTransfers(user));
+        Assert.True(_service.CanManageInstitutionalStatuses(user));
         Assert.True(_service.CanManageGrandSecretariat(user));
         Assert.True(_service.CanManageGrandArchive(user));
         Assert.True(_service.CanManagePrivacy(user));
@@ -35,22 +36,24 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
-    public void RegimenInterior_WithOrderScope_CanRunReports()
+    public void RegimenInterior_WithOrderScope_CanRunReports_AndManageInstitutionalStatuses()
     {
         var user = CreateUser(
             new Claim(InstitutionalClaims.Scope, "order"),
             new Claim(InstitutionalClaims.Role, InstitutionalRoles.RegimenInterior));
 
         Assert.True(_service.CanRunRegimenInteriorReports(user));
+        Assert.True(_service.CanManageInstitutionalStatuses(user));
     }
 
     [Fact]
-    public void RegimenInterior_WithoutOrderScope_CannotRunReports()
+    public void RegimenInterior_WithoutOrderScope_CannotRunReports_OrManageInstitutionalStatuses()
     {
         var user = CreateUser(
             new Claim(InstitutionalClaims.Role, InstitutionalRoles.RegimenInterior));
 
         Assert.False(_service.CanRunRegimenInteriorReports(user));
+        Assert.False(_service.CanManageInstitutionalStatuses(user));
     }
 
     [Fact]
@@ -64,6 +67,7 @@ public sealed class InstitutionalAccessServiceTests
 
         Assert.True(_service.CanManageOrganization(user, ownOrganization));
         Assert.False(_service.CanManageOrganization(user, otherOrganization));
+        Assert.False(_service.CanManageInstitutionalStatuses(user));
     }
 
     [Fact]
@@ -109,23 +113,25 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
-    public void GrandSecretariat_CannotApproveTransfers()
+    public void GrandSecretariat_CannotApproveTransfers_OrManageInstitutionalStatuses()
     {
         var user = CreateUser(
             new Claim(InstitutionalClaims.Scope, "order"),
             new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
 
         Assert.False(_service.CanApproveTransfers(user));
+        Assert.False(_service.CanManageInstitutionalStatuses(user));
     }
 
     [Fact]
-    public void GrandLodgeAdministrator_WithOrderScope_CanApproveTransfers()
+    public void GrandLodgeAdministrator_WithOrderScope_CanApproveTransfers_AndManageInstitutionalStatuses()
     {
         var user = CreateUser(
             new Claim(InstitutionalClaims.Scope, "order"),
             new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin));
 
         Assert.True(_service.CanApproveTransfers(user));
+        Assert.True(_service.CanManageInstitutionalStatuses(user));
     }
 
     private static ClaimsPrincipal CreateUser(params Claim[] claims)
