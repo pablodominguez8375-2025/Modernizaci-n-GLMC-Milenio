@@ -11,6 +11,7 @@ import './ppt-fidelity.css'
 import './archive-ppt-fidelity.css'
 import './regularity-ppt-fidelity.css'
 import './dashboard-ppt-fidelity.css'
+import './secretariat-ppt-fidelity.css'
 
 const root = document.getElementById('root')
 
