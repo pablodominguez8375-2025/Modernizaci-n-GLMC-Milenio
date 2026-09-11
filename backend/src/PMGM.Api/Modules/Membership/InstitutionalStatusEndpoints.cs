@@ -10,6 +10,7 @@ public static class InstitutionalStatusEndpoints
 {
     private static readonly HashSet<string> SupportedTransitions = new(StringComparer.OrdinalIgnoreCase)
     {
+        MembershipCodes.InstitutionalStatus.Active,
         MembershipCodes.InstitutionalStatus.PastActive,
         MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
         MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
@@ -39,6 +40,11 @@ public static class InstitutionalStatusEndpoints
             return Results.Forbid();
         }
 
+        if (string.IsNullOrWhiteSpace(request.EventType))
+        {
+            return Results.BadRequest(new { message = "Debe indicar el estado institucional." });
+        }
+
         var eventType = request.EventType.Trim().ToLowerInvariant();
         if (!SupportedTransitions.Contains(eventType))
         {
@@ -47,6 +53,10 @@ public static class InstitutionalStatusEndpoints
                 message = "La transición institucional indicada no está habilitada por este flujo."
             });
         }
+
+        var reason = NormalizeOptional(request.Reason);
+        var evidenceReference = NormalizeOptional(request.EvidenceReference);
+        var notes = NormalizeOptional(request.Notes);
 
         var memberExists = await db.Members
             .AsNoTracking()
@@ -94,15 +104,23 @@ public static class InstitutionalStatusEndpoints
             .ThenByDescending(x => x.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+        if (activeMemberships.Count > 1)
+        {
+            return Results.Conflict(new
+            {
+                message = "El Hermano registra múltiples pertenencias vigentes. Régimen Interior debe regularizar esa inconsistencia antes de cambiar su estado."
+            });
+        }
+
         Membership? closedMembership = null;
         Membership? createdMembership = null;
         Guid? sourceOrganizationId = latestStatus?.OrganizationId;
-        Guid targetOrganizationId = request.OrganizationId;
+        var targetOrganizationId = request.OrganizationId;
 
         if (eventType == MembershipCodes.InstitutionalStatus.PastActive)
         {
-            var activeMembership = activeMemberships.FirstOrDefault(x => x.OrganizationId == request.OrganizationId);
-            if (activeMembership is null)
+            var activeMembership = activeMemberships.SingleOrDefault();
+            if (activeMembership is null || activeMembership.OrganizationId != request.OrganizationId)
             {
                 return Results.Conflict(new
                 {
@@ -112,12 +130,34 @@ public static class InstitutionalStatusEndpoints
 
             sourceOrganizationId = activeMembership.OrganizationId;
         }
+        else if (eventType == MembershipCodes.InstitutionalStatus.Active)
+        {
+            if (latestStatus is null ||
+                !string.Equals(latestStatus.EventType, MembershipCodes.InstitutionalStatus.PastActive, StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Conflict(new
+                {
+                    message = "El retorno a Activo por este flujo sólo procede desde Past Activo mediante una modificación institucional autorizada."
+                });
+            }
+
+            var activeMembership = activeMemberships.SingleOrDefault();
+            if (activeMembership is null || activeMembership.OrganizationId != request.OrganizationId)
+            {
+                return Results.Conflict(new
+                {
+                    message = "El retorno desde Past Activo debe conservar la pertenencia vigente al mismo Taller."
+                });
+            }
+
+            sourceOrganizationId = activeMembership.OrganizationId;
+        }
         else if (eventType is MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal or
                  MembershipCodes.InstitutionalStatus.ForcedWithdrawal or
                  MembershipCodes.InstitutionalStatus.Deceased)
         {
-            var activeMembership = activeMemberships.FirstOrDefault(x => x.OrganizationId == request.OrganizationId);
-            if (activeMembership is null)
+            var activeMembership = activeMemberships.SingleOrDefault();
+            if (activeMembership is null || activeMembership.OrganizationId != request.OrganizationId)
             {
                 return Results.Conflict(new
                 {
@@ -136,14 +176,14 @@ public static class InstitutionalStatusEndpoints
             activeMembership.EndDate = request.EffectiveDate.AddDays(-1);
             activeMembership.Status = MembershipCodes.MembershipStatus.Closed;
             activeMembership.EndReason = eventType;
-            activeMembership.EvidenceReference = request.EvidenceReference ?? activeMembership.EvidenceReference;
+            activeMembership.EvidenceReference = evidenceReference ?? activeMembership.EvidenceReference;
             closedMembership = activeMembership;
             sourceOrganizationId = activeMembership.OrganizationId;
         }
         else if (eventType == MembershipCodes.InstitutionalStatus.Reinstated)
         {
             if (latestStatus is null ||
-                latestStatus.EventType != MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal)
+                !string.Equals(latestStatus.EventType, MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal, StringComparison.OrdinalIgnoreCase))
             {
                 return Results.Conflict(new
                 {
@@ -183,7 +223,7 @@ public static class InstitutionalStatusEndpoints
                 MembershipType = previousMembership.MembershipType,
                 StartDate = request.EffectiveDate,
                 Status = MembershipCodes.MembershipStatus.Active,
-                EvidenceReference = request.EvidenceReference
+                EvidenceReference = evidenceReference
             };
             db.Memberships.Add(createdMembership);
         }
@@ -193,10 +233,10 @@ public static class InstitutionalStatusEndpoints
             MemberId = memberId,
             EventType = eventType,
             EffectiveDate = request.EffectiveDate,
-            Reason = NormalizeOptional(request.Reason),
+            Reason = reason,
             OrganizationId = request.OrganizationId,
-            EvidenceReference = NormalizeOptional(request.EvidenceReference),
-            Notes = NormalizeOptional(request.Notes)
+            EvidenceReference = evidenceReference,
+            Notes = notes
         };
         db.InstitutionalStatusEvents.Add(statusEvent);
 
@@ -214,6 +254,8 @@ public static class InstitutionalStatusEndpoints
                 request.EffectiveDate,
                 SourceOrganizationId = sourceOrganizationId,
                 TargetOrganizationId = targetOrganizationId,
+                Reason = reason,
+                EvidenceReference = evidenceReference,
                 ClosedMembershipSegment = closedMembership?.Id,
                 CreatedMembershipSegment = createdMembership?.Id
             });
