@@ -5,8 +5,10 @@ public static class CeremonyCodes
     public static class Type
     {
         public const string Initiation = "initiation";
+        public const string Affiliation = "affiliation";
         public const string WageIncrease = "wage_increase";
         public const string Exaltation = "exaltation";
+        public const string Incorporation = "incorporation";
     }
 
     public static class RequestStatus
