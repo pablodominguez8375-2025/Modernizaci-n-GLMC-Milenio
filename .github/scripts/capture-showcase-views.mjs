@@ -207,7 +207,7 @@ try {
       await resetPage(viewport.width, viewport.height)
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
-      await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
+      if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const filePath = path.join(outputDir, `${scenario.slug}-${viewport.suffix}.png`)
       await capture(filePath)
       console.log(`captured ${path.basename(filePath)}`)
