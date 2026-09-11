@@ -36,8 +36,8 @@ public sealed record AdmissionEligibilityInput(
     string? AffiliationMode,
     bool WithdrawalLetterAttached,
     bool WithdrawalLetterHandwrittenSignatureVerified,
-    bool LodgeThirdDegreeApproved,
-    bool LodgeFirstDegreeBallotApproved,
+    bool? LodgeThirdDegreeApproved = null,
+    bool? LodgeFirstDegreeBallotApproved = null,
     bool LegalizedInitiationEvidenceAttached = false,
     bool WageIncreaseEvidenceApplies = false,
     bool LegalizedWageIncreaseEvidenceAttached = false,
@@ -81,17 +81,19 @@ public static class AdmissionEligibilityPolicy
             "Se registró verificación humana de la firma original de puño y letra.",
             "Debe verificarse que el original de la Carta de Retiro Voluntario esté firmado de puño y letra; una firma digitalizada o una imagen insertada no cumple este requisito."));
 
-        requirements.Add(EvaluateRequiredBoolean(
+        requirements.Add(EvaluateDecision(
             AdmissionCodes.Requirement.LodgeThirdDegreeApproval,
             input.LodgeThirdDegreeApproved,
             "La aprobación del Taller en tercer grado está registrada.",
-            "Debe constar la aprobación del Taller en tercer grado y su referencia de acta."));
+            "La aprobación del Taller en tercer grado aún no ha sido registrada.",
+            "La decisión registrada en tercer grado no es aprobatoria."));
 
-        requirements.Add(EvaluateRequiredBoolean(
+        requirements.Add(EvaluateDecision(
             AdmissionCodes.Requirement.LodgeFirstDegreeBallot,
             input.LodgeFirstDegreeBallotApproved,
             "El balotaje de primer grado está aprobado y registrado.",
-            "Debe constar el balotaje aprobado de primer grado y su referencia de acta."));
+            "El balotaje de primer grado aún no ha sido registrado.",
+            "El balotaje de primer grado registrado no es aprobatorio."));
 
         if (input.AdmissionType == CeremonyCodes.Type.Affiliation)
             AddRePresentationRequirementIfNeeded(input, requirements);
@@ -109,6 +111,19 @@ public static class AdmissionEligibilityPolicy
         => AdmissionCodes.AffiliationMode.IsValid(mode)
             ? Approved(AdmissionCodes.Requirement.AffiliationMode, "Se indicó la modalidad de afiliación simple o con activación.")
             : Rejected(AdmissionCodes.Requirement.AffiliationMode, "Debe indicarse si la afiliación es simple o con activación.");
+
+    private static AdmissionRequirementResult EvaluateDecision(
+        string code,
+        bool? approved,
+        string approvedReason,
+        string pendingReason,
+        string rejectedReason)
+        => approved switch
+        {
+            true => Approved(code, approvedReason),
+            false => Rejected(code, rejectedReason),
+            null => Observed(code, pendingReason)
+        };
 
     private static void AddIncorporationRequirements(
         AdmissionEligibilityInput input,
