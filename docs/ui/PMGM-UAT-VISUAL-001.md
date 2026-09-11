@@ -1,6 +1,6 @@
 # PMGM-UAT-VISUAL-001 · Aceptación visual institucional
 
-**Estado:** Preparado para UAT — pendiente de decisión del Product Owner  
+**Estado:** UAT en curso — aprobación parcial registrada por Product Owner  
 **Objetivo:** registrar la aceptación visual y responsiva del frontend de Proyecto Centenario antes de integrar la versión aprobada a `dev`.
 
 ## 1. Identificación de la versión a revisar
@@ -33,7 +33,7 @@ Para cada pantalla se debe verificar:
 - [ ] Estados funcionales identificables sin depender sólo del color.
 - [ ] Contenido principal visible sin que la navegación móvil consuma la pantalla completa.
 - [ ] Demo identificada inequívocamente: etiqueta completa + SHA en escritorio y forma compacta `Demo · <SHA>` en móvil.
-- [ ] Biblioteca Virtual accesible de forma visible desde Mi ficha y con alcance acumulativo por grado: 1° = General+1°; 2° = General+1°+2°; 3° = General+1°+2°+3°/todo lo autorizado.
+- [x] Biblioteca Virtual accesible de forma visible desde Mi ficha y con alcance acumulativo por grado: 1° = General+1°; 2° = General+1°+2°; 3° = General+1°+2°+3°/todo lo autorizado. **APROBADO por Product Owner el 2026-09-11 para este candidato visual.**
 - [ ] Apariencia suficientemente fiel a la PPT como para reconocer la misma línea institucional.
 
 ## 3. Pantallas representativas de aceptación
@@ -41,7 +41,7 @@ Para cada pantalla se debe verificar:
 | ID | Pantalla | Perfil QA | Móvil 390×844 | Escritorio 1440×900 | Resultado |
 |---|---|---|---|---|---|
 | UV-01 | Inicio / Dashboard | Hermano | [ ] | [ ] | Pendiente |
-| UV-02 | Mi ficha | Hermano | [ ] | [ ] | Pendiente |
+| UV-02 | Mi ficha | Hermano | [ ] | [ ] | Parcial: acceso a Biblioteca aprobado |
 | UV-03 | Biblioteca Virtual | Hermano | [ ] | [ ] | Pendiente |
 | UV-04 | Gestión Logial | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
 | UV-05 | Gran Tesorería | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
@@ -56,11 +56,11 @@ La vista `Mi ficha` actúa como pantalla patrón para validar todos los tamaños
 | Resolución | Tipo | Aprobado | Observación |
 |---|---|---|---|
 | 360×800 | celular pequeño | [ ] | |
-| 390×844 | celular típico | [ ] | |
-| 768×1024 | tablet vertical | [ ] | |
+| 390×844 | celular típico | [ ] | Acceso Biblioteca aceptado; resto de la pantalla pendiente |
+| 768×1024 | tablet vertical | [ ] | Acceso Biblioteca aceptado; resto de la pantalla pendiente |
 | 1024×768 | tablet horizontal / notebook pequeño | [ ] | |
 | 1366×768 | notebook estándar | [ ] | |
-| 1440×900 | escritorio | [ ] | |
+| 1440×900 | escritorio | [ ] | Acceso Biblioteca aceptado; resto de la pantalla pendiente |
 | 1920×1080 | Full HD | [ ] | |
 
 ## 5. Hallazgos técnicos ya corregidos antes del UAT
@@ -70,7 +70,7 @@ La vista `Mi ficha` actúa como pantalla patrón para validar todos los tamaños
 3. **Identificación de versión en Showcase de PR.** El build inicialmente mostraba el SHA del merge temporal creado por GitHub. Se corrigió para mostrar el SHA real del head del PR y mantener el SHA real de `dev` en publicaciones por push.
 4. **Identificación móvil de la demo.** El rótulo completo se compactó a `Demo · <SHA>` en pantallas estrechas para conservar trazabilidad sin saturar la cabecera.
 5. **Regresión del paquete instalable entre ramas.** El candidato visual absorbió el instalador guiado, checklist, manifest portable y documentación de #61.
-6. **UV-OBS-001 — Biblioteca Virtual por grado poco visible en Mi ficha.** La maqueta establece Biblioteca como acceso principal y la regla acumulativa `1°→1°`, `2°→1°+2°`, `3°→1°+2°+3°`. El acceso fue movido a la tarjeta de Información institucional, inmediatamente bajo el grado, se reemplazó el glifo anterior por icono SVG institucional y se muestra el alcance acumulativo vigente. El backend conserva el filtrado real por grado efectivo para catálogo, facetas, detalle y descarga. Evidencia #171 revisada en móvil, tablet y escritorio.
+6. **UV-OBS-001 — Biblioteca Virtual por grado poco visible en Mi ficha.** La maqueta establece Biblioteca como acceso principal y la regla acumulativa `1°→1°`, `2°→1°+2°`, `3°→1°+2°+3°`. El acceso fue movido a la tarjeta de Información institucional, inmediatamente bajo el grado, se reemplazó el glifo anterior por icono SVG institucional y se muestra el alcance acumulativo vigente. El backend conserva el filtrado real por grado efectivo para catálogo, facetas, detalle y descarga. Evidencia #171 revisada en móvil, tablet y escritorio. **Estado UAT: ACEPTADO por Product Owner el 2026-09-11.**
 
 Estos puntos deben volver a revisarse como casos de regresión dentro del UAT.
 
@@ -92,23 +92,38 @@ Cada observación debe registrar al menos:
 
 Una observación **Bloqueante** o **Alta** impide fijar baseline hasta que exista decisión explícita del Product Owner.
 
+### 6.1 Aprobación parcial registrada
+
+- ID: `UV-OBS-001`.
+- Componente: `Mi ficha → acceso a Biblioteca Virtual por grado`.
+- Decisión: **APROBADO / ACEPTADO**.
+- Product Owner / Sponsor: Pablo Domínguez.
+- Fecha: `2026-09-11`.
+- SHA visual sobre el que se concede la aprobación: `0112fd86f21f4f6c3be6036cc45e002594d8729f`.
+- Regla funcional aceptada: `1°→1°`, `2°→1°+2°`, `3°→1°+2°+3°`, además del contenido general que corresponda según política de acceso.
+- Referencia visual: tarjeta destacada `SEGÚN TU GRADO / Biblioteca Virtual / Abrir Biblioteca` de la maqueta revisada durante UAT.
+- Alcance: esta aprobación **no equivale a aprobar toda Mi ficha, toda Biblioteca Virtual ni el UAT visual completo**.
+- Regla de versiones: si una versión posterior cambia diseño, posición, icono, texto, navegación, responsividad o lógica de acceso de este componente, deberá ejecutarse **una nueva revisión y aprobación**. La aprobación actual se conserva como antecedente histórico de esta versión.
+
 ## 7. Resultado de UAT visual
 
-Seleccionar una sola opción:
+Seleccionar una sola opción al cierre global:
 
 - [ ] **APROBADO** — puede fijarse como baseline visual institucional e integrarse a `dev`.
 - [ ] **APROBADO CON OBSERVACIONES** — puede integrarse sólo con observaciones aceptadas y registradas.
 - [ ] **RECHAZADO** — requiere correcciones y nueva evidencia antes de integrar.
 
-### Aprobación
+**Estado global actual:** PENDIENTE. Existe una aprobación parcial del componente `Mi ficha → Biblioteca Virtual`, pero todavía no se ha aprobado el conjunto del frontend.
+
+### Aprobación global
 
 - Product Owner / Sponsor: ______________________________
 - Fecha: ______________________________
 - SHA de código visual aprobado: ______________________________
 - Evidencia / run de Showcase: ______________________________
-- Observaciones aceptadas: ______________________________
+- Observaciones aceptadas: `UV-OBS-001` aprobado parcialmente; otras según avance UAT.
 
-## 8. Acciones posteriores a la aprobación
+## 8. Acciones posteriores a la aprobación global
 
 1. Registrar el SHA aprobado en `PMGM-UI-BASELINE-001.md`.
 2. Integrar PR #62 a `dev` sólo si el código visual aprobado mantiene sus gates técnicos verdes y no existen cambios visuales posteriores sin revisar.
@@ -121,3 +136,5 @@ Seleccionar una sola opción:
 ## 9. Regla de gobierno
 
 **CI verde significa técnicamente validado; UAT visual aprobado significa institucionalmente aceptado. Son estados distintos y ambos son necesarios para fijar una baseline.**
+
+Las aprobaciones pueden registrarse por componente durante el UAT. Cada aprobación queda ligada al SHA visual revisado y debe repetirse si una versión posterior modifica materialmente ese componente.
