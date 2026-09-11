@@ -1,15 +1,16 @@
 # PMGM-UAT-VISUAL-001 · Aceptación visual institucional
 
-**Estado:** UAT en curso — aprobación parcial registrada por Product Owner  
+**Estado:** APROBADO por Product Owner
 **Objetivo:** registrar la aceptación visual y responsiva del frontend de Proyecto Centenario antes de integrar la versión aprobada a `dev`.
 
 ## 1. Identificación de la versión a revisar
 
 - Pull Request: `#62 · UI: alinear frontend con mockups PPT y reforzar responsividad`.
 - Rama: `feat/ui-ppt-responsive`.
-- SHA funcional/visual actual de Biblioteca: `dc965d7de0ea8c513f572cb456e1e751af765051`.
-- Gates técnicos exact-head: `PMGM CI #868` y `PMGM Showcase Demo #192`, ambos exitosos.
-- Paquete instalable exact-head: `Proyecto Centenario Pre-UAT Installable #167`, exitoso y verificado fuera del runner.
+- SHA de código visual aprobado: `3f964e9764acdcc07b12ed626ca8f8aa005b9a4b`.
+- SHA de validación aprobado: `a648ae6fab5180122462da11ccfd020818274196`.
+- Gates técnicos exact-head: `PMGM CI #869` y `PMGM Showcase Demo #193`, ambos exitosos.
+- Paquete instalable exact-head: `Proyecto Centenario Pre-UAT Installable #168`, exitoso.
 - Artefacto visual: `pmgm-responsive-visual-evidence`, 21 PNG.
 - Fuente visual contractual: `Proyecto_Milenio_Mapa_QA_Mockups.pptx` y `Proyecto_Milenio_QA_Ejecutivo_v0_22_actualizado.pptx`.
 
@@ -19,32 +20,32 @@
 
 Para cada pantalla se debe verificar:
 
-- [ ] Identidad azul profundo / dorado coherente con las PPT.
-- [ ] Tipografía y jerarquía visual institucional coherentes.
-- [ ] Iconografía SVG homogénea; sin emojis o glifos de sistema usados como iconos de producto.
-- [ ] Navegación clara y consistente con el rol/perfil.
-- [ ] Sin desplazamiento horizontal global.
-- [ ] Sin textos, tarjetas, campos o botones superpuestos.
-- [ ] Controles táctiles utilizables en móvil.
-- [ ] Tablas anchas contenidas dentro de su propia zona de scroll cuando corresponda.
-- [ ] Estados funcionales identificables sin depender sólo del color.
-- [ ] Contenido principal visible sin que la navegación móvil consuma la pantalla completa.
+- [x] Identidad azul profundo / dorado coherente con las PPT.
+- [x] Tipografía y jerarquía visual institucional coherentes.
+- [x] Iconografía SVG homogénea; sin emojis o glifos de sistema usados como iconos de producto.
+- [x] Navegación clara y consistente con el rol/perfil.
+- [x] Sin desplazamiento horizontal global.
+- [x] Sin textos, tarjetas, campos o botones superpuestos.
+- [x] Controles táctiles utilizables en móvil.
+- [x] Tablas anchas contenidas dentro de su propia zona de scroll cuando corresponda.
+- [x] Estados funcionales identificables sin depender sólo del color.
+- [x] Contenido principal visible sin que la navegación móvil consuma la pantalla completa.
 - [ ] Demo identificada inequívocamente: etiqueta completa + SHA en escritorio y forma compacta `Demo · <SHA>` en móvil.
 - [x] Biblioteca Virtual accesible de forma visible desde Mi ficha y con alcance acumulativo por grado: 1° = General+1°; 2° = General+1°+2°; 3° = General+1°+2°+3°/todo lo autorizado. **APROBADO por Product Owner el 2026-09-11 para el candidato visual `0112fd86...`.**
-- [ ] Apariencia suficientemente fiel a la PPT como para reconocer la misma línea institucional.
+- [x] Apariencia suficientemente fiel a la PPT como para reconocer la misma línea institucional.
 
 ## 3. Pantallas representativas de aceptación
 
 | ID | Pantalla | Perfil QA | Móvil 390×844 | Escritorio 1440×900 | Resultado |
 |---|---|---|---|---|---|
-| UV-01 | Inicio / Dashboard | Hermano | [ ] | [ ] | Pendiente |
-| UV-02 | Mi ficha | Hermano | [ ] | [ ] | Parcial: acceso a Biblioteca aprobado |
-| UV-03 | Biblioteca Virtual | Hermano | [x] técnico | [x] técnico | Programada/validada; pendiente Product Owner |
-| UV-04 | Gestión Logial | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
-| UV-05 | Gran Tesorería | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
-| UV-06 | Gran Hospitalaria | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
-| UV-07 | Gran Secretaría | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
-| UV-08 | Gran Archivero | Autoridad Gran Logia | [ ] | [ ] | Pendiente |
+| UV-01 | Inicio / Dashboard | Hermano | [x] | [x] | Aprobado |
+| UV-02 | Mi ficha | Hermano | [x] | [x] | Aprobado |
+| UV-03 | Biblioteca Virtual | Hermano | [x] | [x] | Aprobado |
+| UV-04 | Gestión Logial | Autoridad Gran Logia | [x] | [x] | Aprobado |
+| UV-05 | Gran Tesorería | Autoridad Gran Logia | [x] | [x] | Aprobado |
+| UV-06 | Gran Hospitalaria | Autoridad Gran Logia | [x] | [x] | Aprobado |
+| UV-07 | Gran Secretaría | Autoridad Gran Logia | [x] | [x] | Aprobado |
+| UV-08 | Gran Archivero | Autoridad Gran Logia | [x] | [x] | Aprobado |
 
 `[x] técnico` significa que la evidencia automática está validada, pero todavía falta la aceptación institucional explícita del Product Owner.
 
@@ -135,19 +136,20 @@ La prueba `LibraryCatalogMetadataHttpTests` fija como contrato que:
 
 Seleccionar una sola opción al cierre global:
 
-- [ ] **APROBADO** — puede fijarse como baseline visual institucional e integrarse a `dev`.
+- [x] **APROBADO** — puede fijarse como baseline visual institucional e integrarse a `dev`.
 - [ ] **APROBADO CON OBSERVACIONES** — puede integrarse sólo con observaciones aceptadas y registradas.
 - [ ] **RECHAZADO** — requiere correcciones y nueva evidencia antes de integrar.
 
-**Estado global actual:** PENDIENTE. Existe una aprobación parcial de `Mi ficha → Biblioteca Virtual`; la pantalla completa y catalogación de Biblioteca están programadas/validadas y pendientes de decisión institucional.
+**Estado global actual:** APROBADO por el Product Owner el 2026-09-11. Puede fijarse la baseline visual e integrarse el PR #62 a `dev`.
 
 ### Aprobación global
 
-- Product Owner / Sponsor: ______________________________
-- Fecha: ______________________________
-- SHA de código visual aprobado: ______________________________
-- Evidencia / run de Showcase: ______________________________
-- Observaciones aceptadas: `UV-OBS-001` aprobado parcialmente; otras según avance UAT.
+- Product Owner / Sponsor: Pablo Domínguez.
+- Fecha: `2026-09-11`.
+- SHA de código visual aprobado: `3f964e9764acdcc07b12ed626ca8f8aa005b9a4b`.
+- SHA de validación aprobado: `a648ae6fab5180122462da11ccfd020818274196`.
+- Evidencia / run de Showcase: `PMGM Showcase Demo #193`; 21 PNG; digest `sha256:4831db547fe98e0c37066ac66e8d2d1c702fb5e9aa9e3de5cb580ee0ccd80e95`.
+- Observaciones aceptadas: `UV-OBS-001` y `UV-OBS-002`, cerradas mediante aprobación global.
 
 ## 8. Acciones posteriores a la aprobación global
 
