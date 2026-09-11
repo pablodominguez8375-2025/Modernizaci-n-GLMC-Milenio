@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import InstitutionalIcon from './InstitutionalIcon'
 import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 
@@ -72,15 +73,15 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
     }
   }
 
-  return <>
-    <section className="page-heading">
+  return <div className="library-page">
+    <section className="page-heading library-heading">
       <div><p className="eyebrow">Conocimiento institucional</p><h1>Biblioteca Virtual</h1><p>Documentos publicados expresamente para su consulta según alcance y política de acceso.</p></div>
       <span className="count-badge">{loading ? 'cargando…' : `${total} publicaciones`}</span>
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
-    <section className="panel">
+    <section className="panel library-panel">
       <div className="library-toolbar">
         <label className="search-field"><span>Buscar en Biblioteca</span><input type="search" value={query} onChange={event => { setQuery(event.target.value); setPage(1) }} placeholder="Título, colección o tipo documental" /></label>
         <div className="library-filters">
@@ -99,12 +100,12 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
     </section>
 
     <section className="document-info-strip"><strong>Acceso controlado</strong><span>La búsqueda y las facetas se calculan sólo sobre publicaciones autorizadas. La descarga usa el backend institucional y nunca expone una URL pública de Object Storage.</span></section>
-  </>
+  </div>
 }
 
 function LibraryCard({ item, downloading, onDownload }: { item: LibraryCatalogItem; downloading: boolean; onDownload: () => void }) {
   return <article className="library-card">
-    <div className="library-icon" aria-hidden="true">▥</div>
+    <div className="library-icon" aria-hidden="true"><InstitutionalIcon name="library" size={24} /></div>
     <div><span className="document-chip">{typeLabel(item.documentType)}</span><h3>{item.title}</h3><p>{item.collectionName}</p></div>
     <dl><div><dt>Versión</dt><dd>v{item.versionNumber}</dd></div><div><dt>Formato</dt><dd>{contentTypeLabel(item.contentType)}</dd></div><div><dt>Tamaño</dt><dd>{formatBytes(item.sizeBytes)}</dd></div></dl>
     <small>Publicado {formatChile(item.publishedAtUtc)}</small>
