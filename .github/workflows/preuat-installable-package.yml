@@ -101,8 +101,11 @@ jobs:
               | xargs -0 sha256sum > MANIFEST.sha256
           )
 
-          (cd artifacts && zip -qr Proyecto-Centenario-preUAT-installable.zip Proyecto-Centenario-preUAT-installable)
-          sha256sum artifacts/Proyecto-Centenario-preUAT-installable.zip > artifacts/Proyecto-Centenario-preUAT-installable.zip.sha256
+          (
+            cd artifacts
+            zip -qr Proyecto-Centenario-preUAT-installable.zip Proyecto-Centenario-preUAT-installable
+            sha256sum Proyecto-Centenario-preUAT-installable.zip > Proyecto-Centenario-preUAT-installable.zip.sha256
+          )
 
       - name: Verify generated installable ZIP
         shell: bash
