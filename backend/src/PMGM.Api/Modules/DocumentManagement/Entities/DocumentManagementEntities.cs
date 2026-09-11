@@ -24,6 +24,19 @@ public sealed class InstitutionalDocument
     public string Classification { get; set; } = DocumentManagementCodes.Classification.Internal;
     public string AccessPolicy { get; set; } = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated;
     public int? MinimumDegreeRequired { get; set; }
+
+    // Metadatos de catálogo. Son opcionales a nivel de entidad para conservar
+    // compatibilidad con documentos históricos; el endpoint de metadatos aplica
+    // reglas específicas según el tipo de publicación.
+    public string? AuthorName { get; set; }
+    public string? AuthorLodgeName { get; set; }
+    public DateOnly? DocumentDate { get; set; }
+    public string? Topic { get; set; }
+    public string? Edition { get; set; }
+    public string? ShortDescription { get; set; }
+    public string? AbstractText { get; set; }
+    public string? OfficialDocumentType { get; set; }
+
     public string Status { get; set; } = DocumentManagementCodes.DocumentStatus.Draft;
     public Guid? PublishedVersionId { get; set; }
     public DateTimeOffset? PublishedAtUtc { get; set; }

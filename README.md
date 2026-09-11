@@ -6,6 +6,31 @@ Repositorio central del proyecto de modernización digital de la Gran Logia Mixt
 
 Construir una plataforma institucional unificada con acceso único, base maestra de datos, trazabilidad, seguridad, gestión logial, Régimen Interior, Gran Secretaría, Gran Tesorería, Gran Hospitalaria, Biblioteca Virtual, Gran Archivero y servicios digitales para los miembros.
 
+## Demo pública y paquete instalable
+
+**Demo oficial:**
+
+`https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/`
+
+La demo de GitHub Pages utiliza exclusivamente datos ficticios y frontend estático. No está conectada a la futura VM, PostgreSQL, Keycloak, MinIO ni datos institucionales reales. La cabecera de la demo identifica el entorno y el SHA corto del build publicado para facilitar soporte y trazabilidad.
+
+**Paquete instalable pre-UAT:**
+
+GitHub Actions genera `Proyecto-Centenario-preUAT-installable.zip` desde un SHA exacto. El ZIP incorpora código, infraestructura, documentación, manifest SHA-256, Git bundle y una entrada de instalación guiada `INSTALAR.sh` para preflight, arranque, smoke y respaldo inicial.
+
+La demo sirve para **mostrar y revisar la experiencia**; el paquete pre-UAT sirve para **instalar y validar el sistema completo en una VM**. Ninguno de los dos autoriza por sí solo la carga de datos personales reales ni una promoción a producción estable.
+
+Documentos principales:
+
+- `docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md` — funcionamiento, versionado visible, evidencia responsive y límites de la demo pública.
+- `docs/installation/PREUAT-INSTALL.md` — guía del paquete instalable actual.
+- `docs/installation/VM-IMPLEMENTATION-CHECKLIST.md` — checklist de implementación y evidencia de la VM.
+- `docs/ui/PMGM-UI-001-identidad-visual-responsive.md` — contrato visual y responsive basado en las PPT aprobadas.
+- `docs/ui/PMGM-UAT-VISUAL-001.md` — acta/checklist de aceptación visual institucional.
+- `docs/ui/PMGM-UI-BASELINE-001.md` — registro de la baseline visual aprobada.
+- `docs/instalacion/PMGM-VM-DEFINITIVA-V100.md` — diseño y requisitos de la VM definitiva.
+- `docs/instalacion/PMGM-PAQUETE-IMPLEMENTACION-V100.md` — paquete RC1 congelado y procedimiento de implementación.
+
 ## Estado actual
 
 Proyecto Milenio se encuentra en preparación de **v1.0.0-rc1 — Piloto Operacional**. La rama `dev` concentra la integración estable y `release/v1.0-rc1` congela la Release Candidate para validar versión, seguridad, infraestructura, backup/restauración y UAT institucional.
@@ -114,11 +139,15 @@ PMGM CI mantiene cinco jobs críticos: backend, frontend, infraestructura, first
 
 La RC agrega `tests/release_gate.py`, que comprueba coherencia entre el manifest, la versión del assembly, la infraestructura piloto, OIDC, bootstrap y los jobs requeridos. `/api/system/info` obtiene su versión desde el assembly para evitar discrepancias entre binario y release validada.
 
+El workflow `Proyecto Centenario Pre-UAT Installable` construye además un ZIP reproducible del SHA actual y verifica que `INSTALAR.sh`, `LEAME-INSTALACION.md`, `CHECKLIST-IMPLEMENTACION.md`, `BUILD-INFO.txt`, `ESTADO-PAQUETE.txt` y `MANIFEST.sha256` estén presentes y sean íntegros antes de publicar el artifact.
+
+El workflow `PMGM Showcase Demo` valida también la identidad del SHA visible y genera una matriz automática de evidencia responsive antes de considerar aprobable el frontend de demostración.
+
 ## Flujo de trabajo
 
 - `main`: rama estable.
 - `dev`: integración.
-- ramas `feature/*`: cambios funcionales.
+- ramas `feature/*` / `feat/*`: cambios funcionales.
 - ramas `release/*`: congelamiento y preparación de candidatos.
 - requisito → diseño → desarrollo → pruebas → documentación → PR → CI exact-head → merge.
 
@@ -126,6 +155,12 @@ No se fusiona un PR con CI fallando, incompleto o correspondiente a un SHA anter
 
 ## Documentación de referencia
 
+- `docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md` — demo pública de GitHub Pages.
+- `docs/installation/PREUAT-INSTALL.md` — paquete instalable pre-UAT.
+- `docs/installation/VM-IMPLEMENTATION-CHECKLIST.md` — evidencia de implementación VM.
+- `docs/ui/PMGM-UI-001-identidad-visual-responsive.md` — identidad visual/responsive.
+- `docs/ui/PMGM-UAT-VISUAL-001.md` — UAT visual institucional.
+- `docs/ui/PMGM-UI-BASELINE-001.md` — baseline visual.
 - `docs/instalacion/PMGM-PILOT-OPERACIONAL-V032.md` — despliegue del piloto.
 - `docs/instalacion/PMGM-PILOT-BOOTSTRAP-V033.json` — paquete de bootstrap inicial.
 - `docs/instalacion/PMGM-RELEASE-CANDIDATE-V100-RC1.md` — criterios de RC, UAT, promoción y rollback.

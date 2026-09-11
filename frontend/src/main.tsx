@@ -6,6 +6,14 @@ import './calendar.css'
 import './showcase.css'
 import './member-portal.css'
 import './candidate-profile.css'
+import './institutional-theme.css'
+import './ppt-fidelity.css'
+import './archive-ppt-fidelity.css'
+import './regularity-ppt-fidelity.css'
+import './dashboard-ppt-fidelity.css'
+import './secretariat-ppt-fidelity.css'
+import './member-responsive-fix.css'
+import './mobile-nav-compact.css'
 
 const root = document.getElementById('root')
 

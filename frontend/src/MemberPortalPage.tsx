@@ -1,7 +1,9 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import InstitutionalIcon from './InstitutionalIcon'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import './memberPortalInstruction.css'
+import './memberLibraryShortcut.css'
 
 interface MemberPortalPageProps {
   profile: SessionProfile | null
@@ -177,7 +179,9 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
   const memberId = useMocks ? memberPortalDemoData.memberId : (selfProfile?.member.institutionalNumber ?? 'Sin número institucional')
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
   const orient = useMocks ? memberPortalDemoData.institutional.orient : 'Según expediente institucional'
+  const effectiveDegree = useMocks ? 3 : (selfProfile?.current.effectiveDegree ?? Number.parseInt(selfProfile?.current.degree?.degree ?? '', 10))
   const degree = useMocks ? memberPortalDemoData.institutional.degree : formatDegree(selfProfile?.current.effectiveDegree, selfProfile?.current.degree?.degree)
+  const libraryAccess = libraryAccessForDegree(effectiveDegree)
   const status = useMocks ? memberPortalDemoData.institutional.status : formatInstitutionalStatus(selfProfile?.current.institutionalStatus?.eventType)
   const initiation = useMocks ? memberPortalDemoData.institutional.initiation : formatDateOnly(selfProfile?.milestones.initiation)
   const wageIncrease = useMocks ? memberPortalDemoData.institutional.wageIncrease : formatDateOnly(selfProfile?.milestones.wageIncrease)
@@ -228,6 +232,11 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
           <MemberDatum label="Aumento de salario" value={wageIncrease} />
           <MemberDatum label="Exaltación" value={exaltation} />
         </div>
+        {onOpenLibrary && <button className="member-degree-library-link" type="button" onClick={onOpenLibrary} aria-label={`Abrir Biblioteca Virtual. ${libraryAccess.title}. ${libraryAccess.detail}`}>
+          <span className="member-degree-library-icon" aria-hidden="true"><InstitutionalIcon name="library" size={24} /></span>
+          <span className="member-degree-library-copy"><small>Biblioteca Virtual · acceso por grado</small><strong>{libraryAccess.title}</strong><span>{libraryAccess.detail}</span></span>
+          <span className="member-degree-library-action">Abrir</span>
+        </button>}
       </article>
 
       <aside className="member-quote-card"><span className="member-quote-mark">“</span><p>Que nuestras acciones sean testimonio de los principios que profesamos.</p><span className="member-quote-rule" /><strong>Proyecto Centenario</strong><small>Libertad · Igualdad · Fraternidad</small></aside>
@@ -287,7 +296,6 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
         <div className="member-card-title-row"><div><p className="member-card-kicker">Centro de avisos</p><h2>Notificaciones recientes</h2></div><button className="member-inline-button" type="button" onClick={onOpenNotifications}>Ver todas</button></div>
         {useMocks ? <div className="member-notification-list">{memberPortalDemoData.notifications.map(item => <div key={item.title}><span className="member-notification-dot" /><div><strong>{item.title}</strong><p>{item.detail}</p></div><small>{item.age}</small></div>)}</div> : <PortalPendingData text="Abre Notificaciones para consultar avisos institucionales dirigidos a tu identidad autenticada." />}
       </article>
-      <aside className="member-card member-library-callout"><span className="member-callout-icon">▥</span><p className="member-card-kicker">Según tu grado</p><h2>Biblioteca Virtual</h2><p>Accede solamente al material autorizado para tu grado institucional vigente.</p><button type="button" onClick={onOpenLibrary}>Abrir Biblioteca</button></aside>
     </section>
   </div>
 }
@@ -302,6 +310,13 @@ function MemberInput({ label, value, onChange }: { label: string; value: string;
 
 function PortalPendingData({ text }: { text: string }) {
   return <div className="empty-state"><strong>Información institucional</strong><span>{text}</span></div>
+}
+
+function libraryAccessForDegree(degree?: number) {
+  if (degree === 1) return { title: 'Acceso de 1° grado', detail: 'General · 1°' }
+  if (degree === 2) return { title: 'Acceso hasta 2° grado', detail: 'General · 1° · 2°' }
+  if (degree !== undefined && degree >= 3) return { title: 'Acceso hasta 3° grado', detail: 'General · 1° · 2° · 3°' }
+  return { title: 'Acceso según grado vigente', detail: 'La Biblioteca mostrará sólo contenidos autorizados para tu grado e inferiores.' }
 }
 
 function formatDateOnly(value?: string | null) {

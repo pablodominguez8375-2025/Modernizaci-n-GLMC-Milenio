@@ -35,7 +35,7 @@ export default function GrandArchivePage({ archiveApi }: { archiveApi: GrandArch
   const activeCount = useMemo(() => items.filter(x => x.status === 'active').length, [items])
   const refresh = () => setRefreshKey(value => value + 1)
 
-  return <>
+  return <div className="archive-page">
     <section className="page-heading archive-heading">
       <div><p className="eyebrow">Patrimonio documental · Gran Logia</p><h1>Gran Archivero</h1><p>Catálogo histórico institucional separado de Biblioteca Virtual. Referencia versiones documentales verificadas sin duplicar archivos.</p></div>
       <button type="button" onClick={() => setShowRegister(value => !value)}>{showRegister ? 'Cerrar incorporación' : 'Incorporar documento'}</button>
@@ -52,11 +52,11 @@ export default function GrandArchivePage({ archiveApi }: { archiveApi: GrandArch
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible consultar Gran Archivero.</strong><span>{error}</span></div>}
-    <section className="panel">
+    <section className="panel archive-catalog">
       <div className="panel-heading"><div><p className="eyebrow">Catálogo archivístico</p><h2>Documentos históricos</h2></div><span className="count-badge">{loading ? '…' : items.length}</span></div>
       {loading ? <div className="loading-rows"><span /><span /><span /></div> : items.length === 0 ? <div className="empty-state"><strong>No hay registros para los filtros seleccionados.</strong></div> : <div className="archive-list">{items.map(item => <ArchiveCard key={item.id} item={item} archiveApi={archiveApi} onChanged={refresh} />)}</div>}
     </section>
-  </>
+  </div>
 }
 
 function RegisterPanel({ archiveApi, candidates, onCreated }: { archiveApi: GrandArchiveApiClient; candidates: GrandArchiveCandidate[]; onCreated: () => void }) {

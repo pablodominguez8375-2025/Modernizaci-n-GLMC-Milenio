@@ -6,12 +6,14 @@ on:
     paths:
       - 'frontend/**'
       - '.github/workflows/showcase-pages.yml'
+      - '.github/scripts/capture-showcase-views.mjs'
       - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
   pull_request:
     branches: [dev]
     paths:
       - 'frontend/**'
       - '.github/workflows/showcase-pages.yml'
+      - '.github/scripts/capture-showcase-views.mjs'
       - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
   workflow_dispatch:
 
@@ -55,19 +57,93 @@ jobs:
           VITE_API_BASE_URL: ''
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
+          VITE_SHOWCASE_SHA: '${{ github.event.pull_request.head.sha || github.sha }}'
+          VITE_SHOWCASE_CHANNEL: 'dev-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase
         shell: bash
+        env:
+          EXPECTED_SHOWCASE_SHA: '${{ github.event.pull_request.head.sha || github.sha }}'
         run: |
           set -euo pipefail
           test -s frontend/dist/index.html
           grep -q '/Modernizaci-n-GLMC-Milenio/assets/' frontend/dist/index.html
+          grep -R -q "${EXPECTED_SHOWCASE_SHA:0:7}" frontend/dist
           if grep -R -E '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9]+|sk-proj-[A-Za-z0-9_-]+|Authorization: Bearer)' frontend/dist; then
             echo 'Se detectó un patrón sensible en el showcase generado.' >&2
             exit 1
           fi
-          printf 'SHOWCASE BUILD OK\n'
+          printf 'SHOWCASE BUILD OK — SHA %s\n' "${EXPECTED_SHOWCASE_SHA:0:7}"
+
+      - name: Capture responsive visual evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
+          if [ -z "$BROWSER" ]; then
+            echo 'No se encontró un navegador Chromium/Chrome para generar evidencia visual.' >&2
+            exit 1
+          fi
+
+          SITE_ROOT="$(mktemp -d)"
+          mkdir -p "$SITE_ROOT/Modernizaci-n-GLMC-Milenio" frontend/visual-evidence
+          cp -R frontend/dist/. "$SITE_ROOT/Modernizaci-n-GLMC-Milenio/"
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory "$SITE_ROOT" >/tmp/pmgm-showcase-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$SITE_ROOT"' EXIT
+
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 20 ]; then
+              cat /tmp/pmgm-showcase-http.log >&2 || true
+              exit 1
+            fi
+            sleep 0.5
+          done
+
+          capture() {
+            local size="$1"
+            local file="$2"
+            "$BROWSER" \
+              --headless=new \
+              --disable-gpu \
+              --no-sandbox \
+              --hide-scrollbars \
+              --virtual-time-budget=5000 \
+              --window-size="$size" \
+              --screenshot="frontend/visual-evidence/$file" \
+              http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/
+            test -s "frontend/visual-evidence/$file"
+          }
+
+          # Full acceptance matrix for the initial member view.
+          capture 360,800 mi-ficha-360x800.png
+          capture 390,844 mi-ficha-390x844.png
+          capture 768,1024 mi-ficha-768x1024.png
+          capture 1024,768 mi-ficha-1024x768.png
+          capture 1366,768 mi-ficha-1366x768.png
+          capture 1440,900 mi-ficha-1440x900.png
+          capture 1920,1080 mi-ficha-1920x1080.png
+
+          # Representative module matrix: browser automation changes QA profile and module exactly as a user would.
+          node .github/scripts/capture-showcase-views.mjs \
+            "$BROWSER" \
+            http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ \
+            frontend/visual-evidence
+
+          test "$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)" -ge 21
+          printf 'RESPONSIVE VISUAL EVIDENCE OK\n'
+
+      - name: Upload responsive visual evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-responsive-visual-evidence
+          path: frontend/visual-evidence/*.png
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

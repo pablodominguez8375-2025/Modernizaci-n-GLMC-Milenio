@@ -16,15 +16,64 @@ export interface DocumentVersion {
   id: string; documentId: string; versionNumber: number; originalFileName: string; contentType: string; sizeBytes: number; processingStatus: DocumentProcessingStatus; hasIntegrityHash: boolean; scanEvidenceRecorded: boolean; createdAtUtc: string
 }
 export interface InstitutionalDocument extends DocumentListItem { collectionCode: string; versions: DocumentVersion[] }
+
 export interface LibraryDocument {
-  id: string; title: string; documentType: string; collectionName: string; versionNumber: number; contentType: string; sizeBytes: number; publishedAtUtc: string
+  id: string
+  title: string
+  documentType: string
+  collectionName: string
+  versionNumber: number
+  contentType: string
+  sizeBytes: number
+  publishedAtUtc: string
+  minimumDegreeRequired?: number | null
+  authorName?: string | null
+  authorLodgeName?: string | null
+  documentDate?: string | null
+  topic?: string | null
+  edition?: string | null
+  shortDescription?: string | null
+  abstractText?: string | null
+  officialDocumentType?: string | null
 }
 export interface LibraryDocumentsResponse { total: number; items: LibraryDocument[] }
 export interface LibraryCatalogItem extends LibraryDocument { collectionId: string }
 export interface LibraryCatalogResponse { total: number; page: number; pageSize: number; items: LibraryCatalogItem[] }
 export interface LibraryFacetItem { value: string; label: string; count: number }
-export interface LibraryFacetsResponse { collections: LibraryFacetItem[]; documentTypes: LibraryFacetItem[] }
-export interface LibrarySearchParams { q?: string; collectionId?: string; documentType?: string; fromYear?: number; toYear?: number; page?: number; pageSize?: number }
+export interface LibraryFacetsResponse {
+  collections: LibraryFacetItem[]
+  documentTypes: LibraryFacetItem[]
+  degrees: LibraryFacetItem[]
+  topics: LibraryFacetItem[]
+  officialDocumentTypes: LibraryFacetItem[]
+}
+export interface LibrarySearchParams {
+  q?: string
+  collectionId?: string
+  documentType?: string
+  degree?: number
+  topic?: string
+  officialDocumentType?: string
+  fromYear?: number
+  toYear?: number
+  page?: number
+  pageSize?: number
+}
+export interface LibraryCatalogMetadataRequest {
+  minimumDegreeRequired: number | null
+  authorName?: string | null
+  authorLodgeName?: string | null
+  documentDate?: string | null
+  topic?: string | null
+  edition?: string | null
+  shortDescription?: string | null
+  abstractText?: string | null
+  officialDocumentType?: string | null
+}
+export interface LibraryCatalogMetadata extends LibraryCatalogMetadataRequest {
+  documentId: string
+  catalogKind: string
+}
 export interface CreateDocumentCollectionRequest { code: string; name: string; description?: string | null; scope: DocumentScope; organizationId?: string | null }
 export interface CreateInstitutionalDocumentRequest { title: string; documentType: string; classification: DocumentClassification; accessPolicy: DocumentAccessPolicy }
 export interface CreateDocumentVersionRequest { originalFileName: string; contentType: string; sizeBytes: number }
@@ -36,9 +85,72 @@ class DocumentApiHttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = 'DocumentApiHttpError' }
 }
 
-const demoCollection: DocumentCollection = { id: 'dddddddd-1111-1111-1111-111111111111', code: 'BIB-HIST', name: 'Historia y formación', description: 'Publicaciones institucionales demostrativas', scope: 'order', organizationId: null, status: 'active' }
+const demoCollection: DocumentCollection = {
+  id: 'dddddddd-1111-1111-1111-111111111111',
+  code: 'BIB-VIRTUAL',
+  name: 'Biblioteca Virtual',
+  description: 'Catálogo institucional demostrativo',
+  scope: 'order',
+  organizationId: null,
+  status: 'active',
+}
 const demoLibrary: LibraryDocument[] = [
-  { id: 'eeeeeeee-1111-1111-1111-111111111111', title: 'Historia institucional — documento demostrativo', documentType: 'historical_publication', collectionName: demoCollection.name, versionNumber: 2, contentType: 'application/pdf', sizeBytes: 485000, publishedAtUtc: '2026-09-08T15:00:00Z' },
+  {
+    id: 'eeeeeeee-1111-1111-1111-111111111111',
+    title: 'El simbolismo de la piedra bruta',
+    documentType: 'work_paper',
+    collectionName: demoCollection.name,
+    versionNumber: 1,
+    contentType: 'application/pdf',
+    sizeBytes: 385000,
+    publishedAtUtc: '2026-09-08T15:00:00Z',
+    minimumDegreeRequired: 1,
+    authorName: 'Hno. Andrés Pérez',
+    authorLodgeName: 'R∴L∴S∴ Aurora N° 12',
+    documentDate: '2026-08-21',
+    shortDescription: 'Reflexión breve sobre el trabajo interior del Aprendiz y el valor simbólico de la piedra bruta.',
+  },
+  {
+    id: 'eeeeeeee-2222-2222-2222-222222222222',
+    title: 'Historia de la masonería simbólica en Chile',
+    documentType: 'book',
+    collectionName: demoCollection.name,
+    versionNumber: 2,
+    contentType: 'application/pdf',
+    sizeBytes: 2485000,
+    publishedAtUtc: '2026-09-07T15:00:00Z',
+    minimumDegreeRequired: 1,
+    authorName: 'Autor demostrativo',
+    topic: 'Historia masónica',
+    edition: '2ª edición',
+    abstractText: 'Síntesis histórica demostrativa sobre el desarrollo de la masonería simbólica, sus instituciones y principales procesos en Chile.',
+  },
+  {
+    id: 'eeeeeeee-3333-3333-3333-333333333333',
+    title: 'Constitución de la Gran Logia Mixta',
+    documentType: 'official_document',
+    collectionName: demoCollection.name,
+    versionNumber: 4,
+    contentType: 'application/pdf',
+    sizeBytes: 920000,
+    publishedAtUtc: '2026-09-06T15:00:00Z',
+    minimumDegreeRequired: null,
+    documentDate: '2026-01-01',
+    officialDocumentType: 'Constitución',
+  },
+  {
+    id: 'eeeeeeee-4444-4444-4444-444444444444',
+    title: 'Ritual de Segundo Grado',
+    documentType: 'official_document',
+    collectionName: demoCollection.name,
+    versionNumber: 3,
+    contentType: 'application/pdf',
+    sizeBytes: 1120000,
+    publishedAtUtc: '2026-09-05T15:00:00Z',
+    minimumDegreeRequired: 2,
+    documentDate: '2026-03-15',
+    officialDocumentType: 'Ritual',
+  },
 ]
 
 export class DocumentApiClient {
@@ -66,13 +178,30 @@ export class DocumentApiClient {
     if (this.useMocks) {
       const query = normalizeSearch(params.q)
       let items = this.mockLibrary.map(item => this.toCatalogItem(item))
-      if (query) items = items.filter(item => normalizeSearch(`${item.title} ${item.documentType} ${item.collectionName}`).includes(query))
+      if (query) {
+        items = items.filter(item => normalizeSearch([
+          item.title,
+          item.documentType,
+          item.collectionName,
+          item.authorName,
+          item.authorLodgeName,
+          item.topic,
+          item.edition,
+          item.shortDescription,
+          item.abstractText,
+          item.officialDocumentType,
+        ].filter(Boolean).join(' ')).includes(query))
+      }
       if (params.collectionId) items = items.filter(item => item.collectionId === params.collectionId)
-      if (params.documentType) items = items.filter(item => item.documentType.toLowerCase() === params.documentType?.trim().toLowerCase())
+      if (params.documentType) items = items.filter(item => catalogTypeMatches(item.documentType, params.documentType!))
+      if (params.degree) items = items.filter(item => item.minimumDegreeRequired === params.degree)
+      if (params.topic) items = items.filter(item => normalizeSearch(item.topic ?? '') === normalizeSearch(params.topic))
+      if (params.officialDocumentType) items = items.filter(item => normalizeSearch(item.officialDocumentType ?? '') === normalizeSearch(params.officialDocumentType))
       if (params.fromYear) items = items.filter(item => new Date(item.publishedAtUtc).getUTCFullYear() >= params.fromYear!)
       if (params.toYear) items = items.filter(item => new Date(item.publishedAtUtc).getUTCFullYear() <= params.toYear!)
       items.sort((a, b) => b.publishedAtUtc.localeCompare(a.publishedAtUtc) || a.title.localeCompare(b.title, 'es'))
-      const page = Math.max(1, params.page ?? 1), pageSize = Math.min(50, Math.max(1, params.pageSize ?? 24))
+      const page = Math.max(1, params.page ?? 1)
+      const pageSize = Math.min(50, Math.max(1, params.pageSize ?? 24))
       return { total: items.length, page, pageSize, items: items.slice((page - 1) * pageSize, page * pageSize).map(item => ({ ...item })) }
     }
 
@@ -80,6 +209,9 @@ export class DocumentApiClient {
     if (params.q?.trim()) query.set('q', params.q.trim())
     if (params.collectionId) query.set('collectionId', params.collectionId)
     if (params.documentType?.trim()) query.set('documentType', params.documentType.trim())
+    if (params.degree) query.set('degree', String(params.degree))
+    if (params.topic?.trim()) query.set('topic', params.topic.trim())
+    if (params.officialDocumentType?.trim()) query.set('officialDocumentType', params.officialDocumentType.trim())
     if (params.fromYear) query.set('fromYear', String(params.fromYear))
     if (params.toYear) query.set('toYear', String(params.toYear))
     if (params.page) query.set('page', String(params.page))
@@ -92,15 +224,44 @@ export class DocumentApiClient {
       const catalog = this.mockLibrary.map(item => this.toCatalogItem(item))
       const collectionCounts = new Map<string, LibraryFacetItem>()
       const typeCounts = new Map<string, LibraryFacetItem>()
+      const degreeCounts = new Map<string, LibraryFacetItem>()
+      const topicCounts = new Map<string, LibraryFacetItem>()
+      const officialTypeCounts = new Map<string, LibraryFacetItem>()
       for (const item of catalog) {
         const collection = collectionCounts.get(item.collectionId)
         collectionCounts.set(item.collectionId, { value: item.collectionId, label: item.collectionName, count: (collection?.count ?? 0) + 1 })
-        const type = typeCounts.get(item.documentType)
-        typeCounts.set(item.documentType, { value: item.documentType, label: item.documentType, count: (type?.count ?? 0) + 1 })
+
+        const canonicalType = canonicalCatalogType(item.documentType)
+        const type = typeCounts.get(canonicalType)
+        typeCounts.set(canonicalType, { value: canonicalType, label: canonicalType, count: (type?.count ?? 0) + 1 })
+
+        const degreeValue = item.minimumDegreeRequired?.toString() ?? 'general'
+        const degree = degreeCounts.get(degreeValue)
+        degreeCounts.set(degreeValue, { value: degreeValue, label: item.minimumDegreeRequired ? `${item.minimumDegreeRequired}° grado` : 'General', count: (degree?.count ?? 0) + 1 })
+
+        if (item.topic) {
+          const topic = topicCounts.get(item.topic)
+          topicCounts.set(item.topic, { value: item.topic, label: item.topic, count: (topic?.count ?? 0) + 1 })
+        }
+        if (item.officialDocumentType) {
+          const officialType = officialTypeCounts.get(item.officialDocumentType)
+          officialTypeCounts.set(item.officialDocumentType, { value: item.officialDocumentType, label: item.officialDocumentType, count: (officialType?.count ?? 0) + 1 })
+        }
       }
-      return { collections: [...collectionCounts.values()], documentTypes: [...typeCounts.values()] }
+      return {
+        collections: [...collectionCounts.values()],
+        documentTypes: [...typeCounts.values()],
+        degrees: [...degreeCounts.values()],
+        topics: [...topicCounts.values()],
+        officialDocumentTypes: [...officialTypeCounts.values()],
+      }
     }
     return this.request<LibraryFacetsResponse>('/api/biblioteca/facetas')
+  }
+
+  async setLibraryCatalogMetadata(documentId: string, payload: LibraryCatalogMetadataRequest): Promise<LibraryCatalogMetadata> {
+    if (this.useMocks) return { documentId, catalogKind: 'Mock', ...payload }
+    return this.putJson<LibraryCatalogMetadata>(`/api/documentos/${encodeURIComponent(documentId)}/metadatos-biblioteca`, payload)
   }
 
   async downloadLibraryDocument(documentId: string): Promise<Blob> {
@@ -191,6 +352,7 @@ export class DocumentApiClient {
   }
 
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
+  private putJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.authorizedFetch(path, init, 'application/json')
@@ -222,5 +384,14 @@ export function createDefaultDocumentApiClient(getAccessToken?: DocumentAccessTo
 }
 
 function normalizeSearch(value?: string) { return (value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
+function canonicalCatalogType(value: string) {
+  const normalized = normalizeSearch(value).replace(/\s+/g, '_')
+  if (['work_paper', 'working_paper', 'plancha', 'plancha_de_trabajo'].includes(normalized)) return 'work_paper'
+  if (['book', 'books', 'libro', 'libros'].includes(normalized)) return 'book'
+  if (['official_document', 'documento_oficial', 'regulation', 'reglamento', 'constitution', 'constitucion', 'ritual'].includes(normalized)) return 'official_document'
+  if (['video', 'videos'].includes(normalized)) return 'video'
+  return normalized
+}
+function catalogTypeMatches(value: string, requested: string) { return canonicalCatalogType(value) === canonicalCatalogType(requested) }
 function cloneDocument(value: InstitutionalDocument): InstitutionalDocument { return { ...value, versions: value.versions.map(item => ({ ...item })) } }
 function toListItem(value: InstitutionalDocument): DocumentListItem { return { id: value.id, collectionId: value.collectionId, organizationId: value.organizationId, title: value.title, documentType: value.documentType, classification: value.classification, accessPolicy: value.accessPolicy, status: value.status, publishedVersionId: value.publishedVersionId, publishedAtUtc: value.publishedAtUtc } }

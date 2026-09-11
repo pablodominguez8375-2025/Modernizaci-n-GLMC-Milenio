@@ -39,6 +39,14 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.Property(x => x.Classification).HasMaxLength(40).IsRequired();
             entity.Property(x => x.AccessPolicy).HasMaxLength(80).IsRequired();
             entity.Property(x => x.MinimumDegreeRequired);
+            entity.Property(x => x.AuthorName).HasMaxLength(320);
+            entity.Property(x => x.AuthorLodgeName).HasMaxLength(320);
+            entity.Property(x => x.DocumentDate).HasColumnType("date");
+            entity.Property(x => x.Topic).HasMaxLength(240);
+            entity.Property(x => x.Edition).HasMaxLength(120);
+            entity.Property(x => x.ShortDescription).HasMaxLength(1000);
+            entity.Property(x => x.AbstractText).HasMaxLength(4000);
+            entity.Property(x => x.OfficialDocumentType).HasMaxLength(120);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();
@@ -47,6 +55,7 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
             entity.HasIndex(x => x.PublishedVersionId);
             entity.HasIndex(x => new { x.Status, x.MinimumDegreeRequired });
+            entity.HasIndex(x => new { x.DocumentType, x.MinimumDegreeRequired });
         });
 
         modelBuilder.Entity<DocumentVersion>(entity =>
