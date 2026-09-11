@@ -15,7 +15,11 @@ export default function DemoProfileSwitcher({ value, onChange }: DemoProfileSwit
     data-showcase-sha={showcaseSha || undefined}
     title="Demo pública de Proyecto Centenario. Usa exclusivamente datos ficticios y no está conectada a la VM institucional."
   >
-    <span className="demo-public-label">Demo pública · datos ficticios{shortSha ? ` · ${shortSha}` : ''}</span>
+    <span className="demo-public-label">
+      <span className="demo-public-long">Demo pública · datos ficticios</span>
+      <span className="demo-public-short">Demo</span>
+      {shortSha && <span className="demo-public-sha"> · {shortSha}</span>}
+    </span>
     <span className="demo-profile-label">Perfil QA</span>
     <select value={value} onChange={event => onChange(event.target.value as DemoProfileKey)} aria-label="Seleccionar perfil de demostración">
       <option value="brother">Hermano</option>
