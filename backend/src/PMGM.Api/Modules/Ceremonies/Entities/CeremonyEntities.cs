@@ -13,6 +13,7 @@ public sealed class CeremonyRequest
     public Member? Member { get; set; }
     public Guid? CandidatePersonId { get; set; }
     public Person? CandidatePerson { get; set; }
+    public Guid? AdmissionCaseId { get; set; }
     public DateOnly? ProposedDate { get; set; }
     public required string Status { get; set; }
     public string? Notes { get; set; }
