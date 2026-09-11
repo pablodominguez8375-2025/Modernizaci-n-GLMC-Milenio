@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Infrastructure;
+using PMGM.Api.Modules.Admissions;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Bootstrap;
@@ -60,6 +61,7 @@ builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsq
 builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<RegimenInteriorDbContext>(options => options.UseNpgsql(mainConnectionString));
 builder.Services.AddDbContext<CandidateIntakeDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<AdmissionsDbContext>(options => options.UseNpgsql(mainConnectionString));
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -110,6 +112,8 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await regimenInteriorDb.Database.MigrateAsync();
     var candidateIntakeDb = scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>();
     await candidateIntakeDb.Database.MigrateAsync();
+    var admissionsDb = scope.ServiceProvider.GetRequiredService<AdmissionsDbContext>();
+    await admissionsDb.Database.MigrateAsync();
 }
 
 if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
@@ -170,6 +174,7 @@ app.MapInstitutionalRegularityProjectionEndpoints();
 app.MapCandidateIntakeEndpoints();
 app.MapCandidateWorkshopIntakeEndpoints();
 app.MapCandidateWorkflowEndpoints();
+app.MapAdmissionEndpoints();
 app.MapCeremonyEndpoints();
 app.MapGrandMasterCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
