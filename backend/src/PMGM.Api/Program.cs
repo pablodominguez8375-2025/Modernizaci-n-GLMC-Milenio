@@ -181,6 +181,7 @@ app.MapDocumentContentEndpoints();
 app.MapDocumentContentRecoveryEndpoints();
 app.MapLibraryCatalogEndpoints();
 app.MapLibraryAccessPolicyEndpoints();
+app.MapLibraryCatalogMetadataEndpoints();
 app.MapGrandArchiveEndpoints();
 app.MapNotificationEndpoints();
 app.MapInstitutionalCalendarEndpoints();
