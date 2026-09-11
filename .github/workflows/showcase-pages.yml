@@ -112,9 +112,13 @@ jobs:
             test -s "frontend/visual-evidence/$file"
           }
 
+          capture 360,800 mi-ficha-360x800.png
           capture 390,844 mi-ficha-390x844.png
           capture 768,1024 mi-ficha-768x1024.png
+          capture 1024,768 mi-ficha-1024x768.png
+          capture 1366,768 mi-ficha-1366x768.png
           capture 1440,900 mi-ficha-1440x900.png
+          capture 1920,1080 mi-ficha-1920x1080.png
           printf 'RESPONSIVE VISUAL EVIDENCE OK\n'
 
       - name: Upload responsive visual evidence
