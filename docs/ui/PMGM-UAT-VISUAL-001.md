@@ -1,18 +1,20 @@
 # PMGM-UAT-VISUAL-001 · Aceptación visual institucional
 
-**Estado:** Preparado para UAT  
+**Estado:** Preparado para UAT — pendiente de decisión del Product Owner  
 **Objetivo:** registrar la aceptación visual y responsiva del frontend de Proyecto Centenario antes de integrar la versión aprobada a `dev`.
 
 ## 1. Identificación de la versión a revisar
 
 - Pull Request: `#62 · UI: alinear frontend con mockups PPT y reforzar responsividad`.
 - Rama: `feat/ui-ppt-responsive`.
-- SHA técnico validado antes de apertura formal de UAT: `46e786ae0ef6a7af200b9c093b9c62107607769f`.
-- Gates técnicos de referencia: `PMGM CI #827` y `PMGM Showcase Demo #151`, ambos exitosos.
-- Artefacto esperado: `pmgm-responsive-visual-evidence`.
+- SHA de código visual candidato: `f0fcd19ec84b0d44cab1bc4806366fb471125aac`.
+- Gates técnicos exact-head: `PMGM CI #843` y `PMGM Showcase Demo #167`, ambos exitosos.
+- Paquete instalable exact-head: `Proyecto Centenario Pre-UAT Installable #142`, exitoso y verificado externamente.
+- Artefacto visual: `pmgm-responsive-visual-evidence`, 21 PNG.
+- Artefacto instalable: `Proyecto-Centenario-preUAT-installable`.
 - Fuente visual contractual: `Proyecto_Milenio_Mapa_QA_Mockups.pptx` y `Proyecto_Milenio_QA_Ejecutivo_v0_22_actualizado.pptx`.
 
-> Si el SHA cambia antes de la aprobación, esta identificación debe actualizarse y los gates deben volver a quedar verdes. La aceptación visual se aplica al SHA exacto revisado, no al nombre de la rama.
+> La aceptación visual se aplica al SHA de código visual identificado arriba. Los commits posteriores que modifiquen únicamente actas o documentación de aprobación no cambian por sí solos el candidato visual. Cualquier modificación posterior de frontend, CSS, iconografía o automatización que altere la evidencia requiere nueva validación y actualización de este SHA.
 
 ## 2. Criterios generales obligatorios
 
@@ -28,6 +30,7 @@ Para cada pantalla se debe verificar:
 - [ ] Tablas anchas contenidas dentro de su propia zona de scroll cuando corresponda.
 - [ ] Estados funcionales identificables sin depender sólo del color.
 - [ ] Contenido principal visible sin que la navegación móvil consuma la pantalla completa.
+- [ ] Demo identificada inequívocamente: etiqueta completa + SHA en escritorio y forma compacta `Demo · <SHA>` en móvil.
 - [ ] Apariencia suficientemente fiel a la PPT como para reconocer la misma línea institucional.
 
 ## 3. Pantallas representativas de aceptación
@@ -61,6 +64,9 @@ La vista `Mi ficha` actúa como pantalla patrón para validar todos los tamaños
 
 1. **Solapamiento en Mi ficha** a 768×1024 y 1024×768. Se corrigió la composición y las capturas posteriores confirmaron separación correcta entre ficha personal e institucional.
 2. **Navegación móvil demasiado alta** para perfiles con muchos módulos. Se compactó la navegación a una zona de altura controlada y scroll vertical propio; el contenido de Gestión Logial, Tesorería, Hospitalaria, Secretaría y Gran Archivero queda visible inmediatamente debajo.
+3. **Identificación de versión en Showcase de PR.** El build inicialmente mostraba el SHA del merge temporal creado por GitHub. Se corrigió para mostrar el SHA real del head del PR y mantener el SHA real de `dev` en publicaciones por push.
+4. **Identificación móvil de la demo.** El rótulo completo se compactó a `Demo · <SHA>` en pantallas estrechas para conservar trazabilidad sin saturar la cabecera.
+5. **Regresión del paquete instalable entre ramas.** El candidato visual absorbió el instalador guiado, checklist, manifest portable y documentación de #61. El ZIP #142 fue descargado y validado fuera del runner: checksum externo OK, manifest interno OK, `INSTALAR.sh --help` OK y `SOURCE_SHA=f0fcd19...`.
 
 Estos puntos deben volver a revisarse como casos de regresión dentro del UAT.
 
@@ -94,18 +100,19 @@ Seleccionar una sola opción:
 
 - Product Owner / Sponsor: ______________________________
 - Fecha: ______________________________
-- SHA aprobado: ______________________________
+- SHA de código visual aprobado: ______________________________
 - Evidencia / run de Showcase: ______________________________
 - Observaciones aceptadas: ______________________________
 
 ## 8. Acciones posteriores a la aprobación
 
 1. Registrar el SHA aprobado en `PMGM-UI-BASELINE-001.md`.
-2. Integrar PR #62 a `dev` sólo si el SHA aprobado continúa con CI y Showcase verdes.
+2. Integrar PR #62 a `dev` sólo si el código visual aprobado mantiene sus gates técnicos verdes y no existen cambios visuales posteriores sin revisar.
 3. Esperar el despliegue exitoso de GitHub Pages desde `dev`.
 4. Validar la URL oficial de testing: `https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/`.
-5. Generar nuevamente evidencia del SHA ya integrado.
-6. Utilizar el baseline aprobado como referencia de regresión para desarrollos posteriores.
+5. Confirmar que el SHA corto visible corresponde a la versión integrada.
+6. Generar nuevamente evidencia del SHA ya integrado.
+7. Utilizar la baseline aprobada como referencia de regresión para desarrollos posteriores y para el frontend de la VM institucional.
 
 ## 9. Regla de gobierno
 
