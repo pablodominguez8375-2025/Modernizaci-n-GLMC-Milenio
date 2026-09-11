@@ -99,7 +99,7 @@ La evidencia automática ya produjo hallazgos concretos y correcciones verificab
 
 1. La primera matriz completa detectó solapamiento entre la ficha personal e institucional en 768 × 1024 y 1024 × 768. `member-responsive-fix.css` corrigió la composición y una nueva ejecución confirmó ausencia de invasión entre tarjetas.
 2. La matriz multipantalla detectó que, en 390 × 844 y con perfil de Gran Logia, la cantidad de módulos consumía una proporción excesiva de la primera pantalla antes de mostrar el contenido. `mobile-nav-compact.css` redujo la navegación a una zona scrollable de altura controlada; la revisión posterior confirmó que el contenido de Gestión Logial, Tesorería, Hospitalaria, Secretaría y Gran Archivero aparece inmediatamente debajo sin perder acceso a los módulos.
-3. Sobre el código corregido, `PMGM CI #825` y `PMGM Showcase Demo #149` finalizaron satisfactoriamente.
+3. El frente quedó posteriormente validado de extremo a extremo con `PMGM CI #827` y `PMGM Showcase Demo #151` sobre el SHA técnico que abrió el UAT.
 
 ## Avance de comparación contra PPT
 
@@ -113,9 +113,19 @@ Con fidelidad específica aplicada y evidencia visual representativa:
 - Gran Secretaría.
 - Gestión Logial, cuyo cockpit institucional azul/dorado fue preservado y revisado en móvil/escritorio sin rediseño innecesario.
 
+## Gobierno de aprobación visual
+
+La aprobación técnica y la aprobación institucional son estados distintos:
+
+- `PMGM-UAT-VISUAL-001.md` define la revisión visual formal, la matriz de pantallas, el registro de observaciones y la decisión del Product Owner.
+- `PMGM-UI-BASELINE-001.md` registra el SHA, evidencia y decisión que pasan a ser referencia institucional una vez aprobado el UAT.
+- Una ejecución verde de CI/Showcase **no** marca por sí sola la baseline como aprobada.
+- Si el SHA cambia antes de la aceptación, la nueva cabeza debe volver a quedar técnicamente validada y el acta debe identificar el SHA realmente aprobado.
+
 ## Pendientes antes de aprobación visual institucional
 
-- Completar revisión fina de las vistas administrativas no cubiertas todavía por la matriz representativa.
-- Definir el baseline visual institucional una vez que el Product Owner apruebe esta versión como referencia.
-- Ejecutar UAT visual institucional sobre el Showcase publicado desde `dev` después de integrar el PR aprobado.
+- Completar la decisión del Product Owner en `PMGM-UAT-VISUAL-001.md`.
+- Registrar observaciones visuales institucionales, si existen, con severidad y decisión.
+- Fijar el SHA aprobado en `PMGM-UI-BASELINE-001.md`.
+- Integrar el PR aprobado a `dev` y verificar el despliegue real de GitHub Pages.
 - Ampliar la matriz representativa a tablet para módulos específicos sólo si el UAT detecta una necesidad adicional; los siete tamaños de aceptación ya se mantienen cubiertos por Mi ficha.
