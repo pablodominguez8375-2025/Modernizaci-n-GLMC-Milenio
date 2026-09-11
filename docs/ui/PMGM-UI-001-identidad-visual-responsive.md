@@ -25,10 +25,10 @@ Referencias principales:
    - No utilizar tipografías decorativas que rompan la sobriedad institucional.
 
 3. **Iconografía**
-   - Producción debe usar iconos SVG lineales, consistentes en tamaño, trazo y estilo.
+   - Producción usa iconos SVG lineales, consistentes en tamaño, trazo y estilo.
    - Objetivo: 20–24 px, trazo visual homogéneo, color heredado del contexto.
-   - Los símbolos Unicode actuales son temporales de QA y deben ser reemplazados antes de aprobación visual institucional.
-   - No usar emojis como iconografía de producto.
+   - La navegación principal y las notificaciones utilizan el componente reutilizable `InstitutionalIcon`.
+   - No usar emojis ni glifos Unicode dependientes del sistema operativo como iconografía de producto.
 
 4. **Navegación**
    - Escritorio: navegación lateral azul oscuro, activa en dorado.
@@ -73,8 +73,9 @@ Una pantalla se considera aprobable sólo si:
 
 El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas globales de adaptación. Se carga al final de `frontend/src/main.tsx` para actuar como capa institucional sobre estilos de módulos existentes.
 
-## Deuda explícita antes de aprobación institucional
+El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
 
-- Reemplazar símbolos Unicode de navegación y acciones por componentes SVG reutilizables.
+## Pendientes antes de aprobación visual institucional
+
 - Ejecutar revisión visual pantalla por pantalla contra los mockups PPT.
 - Añadir pruebas de viewport / captura para tamaños críticos dentro del pipeline de UI.
