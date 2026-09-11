@@ -175,6 +175,7 @@ app.MapCandidateIntakeEndpoints();
 app.MapCandidateWorkshopIntakeEndpoints();
 app.MapCandidateWorkflowEndpoints();
 app.MapAdmissionEndpoints();
+app.MapAdmissionLodgeDecisionEndpoints();
 app.MapCeremonyEndpoints();
 app.MapGrandMasterCeremonyEndpoints();
 app.MapCandidatePublicationEndpoints();
