@@ -172,6 +172,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .FirstOrDefault(x => x.Status == MembershipCodes.InstitutionalStatus.Reinstated);
             var death = memberStatuses
                 .FirstOrDefault(x => x.Status == MembershipCodes.InstitutionalStatus.Deceased);
+            var reinstatementMovement = BuildReinstatementMovement(reinstatement, memberMemberships);
 
             var relation = query.OrganizationId is null
                 ? (currentMembership is null ? "historical" : "current")
@@ -198,6 +199,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                     reinstatement?.EffectiveDate,
                     death?.EffectiveDate,
                     latestTransfer is null ? null : latestTransfer.ApprovedEffectiveDate ?? latestTransfer.ProposedEffectiveDate),
+                reinstatementMovement,
                 financial?.Status,
                 pastActive,
                 pendingTransfer,
@@ -230,7 +232,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var term = Normalize(query.Search);
-            filtered = filtered.Where(x => Normalize($"{x.DisplayName} {x.InstitutionalNumber} {x.CurrentWorkshop?.Name} {x.LastWorkshop.Name}").Contains(term, StringComparison.Ordinal));
+            filtered = filtered.Where(x => Normalize($"{x.DisplayName} {x.InstitutionalNumber} {x.CurrentWorkshop?.Name} {x.LastWorkshop.Name} {x.ReinstatementMovement?.SourceOrganizationName} {x.ReinstatementMovement?.DestinationOrganizationName}").Contains(term, StringComparison.Ordinal));
         }
 
         var ordered = filtered
@@ -240,6 +242,30 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
         var total = ordered.Count;
         var items = ordered.Take(query.Limit).ToList();
         return new MemberControlResponse(query.AsOf, total, items.Count, items);
+    }
+
+    private static MemberWorkshopMovement? BuildReinstatementMovement(StatusRow? reinstatement, IReadOnlyCollection<MembershipRow> memberships)
+    {
+        if (reinstatement is null) return null;
+
+        var source = memberships
+            .Where(x => x.EndDate is not null && x.EndDate.Value < reinstatement.EffectiveDate)
+            .OrderByDescending(x => x.EndDate)
+            .ThenByDescending(x => x.StartDate)
+            .FirstOrDefault();
+
+        var destination = memberships
+            .Where(x => x.StartDate <= reinstatement.EffectiveDate &&
+                        (x.EndDate == null || x.EndDate >= reinstatement.EffectiveDate))
+            .OrderByDescending(x => x.StartDate)
+            .FirstOrDefault();
+
+        return new MemberWorkshopMovement(
+            source?.OrganizationId,
+            source?.OrganizationName,
+            destination?.OrganizationId,
+            destination?.OrganizationName,
+            reinstatement.EffectiveDate);
     }
 
     private static bool IsCurrentMembership(MembershipRow row, DateOnly asOf)
@@ -299,6 +325,7 @@ public sealed record MemberControlRow(
     DateOnly? StatusEffectiveDate,
     string? CurrentDegree,
     MemberMilestones Milestones,
+    MemberWorkshopMovement? ReinstatementMovement,
     string? FinancialStatus,
     bool PastActive,
     bool PendingTransfer,
@@ -310,6 +337,13 @@ public sealed record WorkshopRef(
     string? Number,
     DateOnly StartDate,
     DateOnly? EndDate);
+
+public sealed record MemberWorkshopMovement(
+    Guid? SourceOrganizationId,
+    string? SourceOrganizationName,
+    Guid? DestinationOrganizationId,
+    string? DestinationOrganizationName,
+    DateOnly EffectiveDate);
 
 public sealed record MemberMilestones(
     DateOnly? Initiation,
