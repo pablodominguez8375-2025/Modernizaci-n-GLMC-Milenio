@@ -35,7 +35,7 @@ public sealed class HonorInstitutionalEffectService(HonorTribunalDbContext db) :
         var hasRights = sanctions.All(x => !x.TotalLossOfRights);
         var attendanceRestricted = !hasRights || sanctions.Any(x => x.AffectsAttendance);
         var votingRestricted = !hasRights || sanctions.Any(x => x.AffectsVoting);
-        var reference = string.Join(',', sanctions.Select(x => x.Id));
+        var reference = string.Join(",", sanctions.Select(x => x.Id));
 
         return new HonorInstitutionalEffect(
             hasRights,
