@@ -19,8 +19,14 @@
 }
 
 .demo-profile-switcher .demo-public-label {
+  display: inline-flex;
+  align-items: center;
   color: #fff3c7;
   letter-spacing: .04em;
+}
+
+.demo-profile-switcher .demo-public-short {
+  display: none;
 }
 
 .demo-profile-switcher select {
@@ -50,10 +56,31 @@
 }
 
 @media (max-width: 620px) {
-  .demo-profile-switcher .demo-public-label { display: none; }
+  .demo-profile-switcher {
+    gap: 5px;
+    padding-left: 7px;
+  }
+
+  .demo-profile-switcher .demo-public-long { display: none; }
+  .demo-profile-switcher .demo-public-short { display: inline; }
+  .demo-profile-switcher .demo-public-sha { letter-spacing: .02em; }
 }
 
 @media (max-width: 520px) {
-  .demo-profile-switcher { padding: 3px; }
-  .demo-profile-switcher select { min-width: 96px; max-width: 106px; font-size: 10px; padding-right: 18px; }
+  .demo-profile-switcher {
+    padding: 3px 4px 3px 6px;
+    gap: 4px;
+  }
+
+  .demo-profile-switcher .demo-public-label {
+    font-size: 7px;
+    letter-spacing: .02em;
+  }
+
+  .demo-profile-switcher select {
+    min-width: 82px;
+    max-width: 90px;
+    font-size: 10px;
+    padding: 5px 16px 5px 8px;
+  }
 }
