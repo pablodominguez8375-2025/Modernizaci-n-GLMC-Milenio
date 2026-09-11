@@ -12,6 +12,7 @@ import './archive-ppt-fidelity.css'
 import './regularity-ppt-fidelity.css'
 import './dashboard-ppt-fidelity.css'
 import './secretariat-ppt-fidelity.css'
+import './member-responsive-fix.css'
 
 const root = document.getElementById('root')
 
