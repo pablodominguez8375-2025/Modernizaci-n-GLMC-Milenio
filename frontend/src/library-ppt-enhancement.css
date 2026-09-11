@@ -1,9 +1,53 @@
 /* Biblioteca Virtual · refinamiento UAT basado en el mockup de PMGM-UI-001. */
+.library-page,
+.library-page .library-panel,
+.library-page .library-heading,
+.library-page .library-heading > div,
+.library-page .library-toolbar,
+.library-page .library-filters,
+.library-page .library-access-band,
+.library-page .library-access-band > div,
+.library-page .document-library-grid,
+.library-page .library-card {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.library-page {
+  width: 100%;
+  overflow-x: clip;
+}
+
+.library-page .library-panel {
+  width: 100%;
+  overflow: hidden;
+}
+
+.library-page .library-heading > div,
+.library-page .library-access-band > div,
+.library-page .library-card {
+  overflow-wrap: anywhere;
+}
+
+.library-page .search-field,
+.library-page .document-field,
+.library-page .search-field input,
+.library-page .document-field select {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
 .library-category-rail {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   gap: 8px;
   margin-bottom: 14px;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   padding: 2px 1px 6px;
   scrollbar-width: thin;
   scrollbar-color: rgba(180, 138, 55, .55) transparent;
@@ -185,12 +229,29 @@
 }
 
 @media (max-width: 760px) {
+  .library-page .library-heading {
+    width: 100%;
+  }
+
+  .library-page .library-heading .count-badge {
+    align-self: flex-start;
+  }
+
   .library-category-rail {
-    margin-inline: -2px;
+    margin-inline: 0;
   }
 
   .library-category-rail button {
     min-height: 44px;
+  }
+
+  .library-access-band {
+    align-items: start;
+  }
+
+  .library-page .library-toolbar,
+  .library-page .library-filters {
+    width: 100%;
   }
 
   .library-page .library-card {
