@@ -1,0 +1,209 @@
+/* Biblioteca Virtual · refinamiento UAT basado en el mockup de PMGM-UI-001. */
+.library-category-rail {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  overflow-x: auto;
+  padding: 2px 1px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(180, 138, 55, .55) transparent;
+}
+
+.library-category-rail button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  border: 1px solid #dce3ec;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #fff;
+  color: #42536c;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.library-category-rail button:hover,
+.library-category-rail button:focus-visible {
+  border-color: #b48a37;
+  color: #102c54;
+}
+
+.library-category-rail button:focus-visible {
+  outline: 3px solid rgba(199, 157, 69, .35);
+  outline-offset: 2px;
+}
+
+.library-category-rail button.active {
+  border-color: #b48a37;
+  background: #102c54;
+  color: #fff;
+  box-shadow: inset 0 -3px 0 #c79d45;
+}
+
+.library-category-rail button span {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0 5px;
+  background: #eef2f7;
+  color: #687790;
+  font-size: 9px;
+}
+
+.library-category-rail button.active span {
+  background: rgba(255, 255, 255, .14);
+  color: #f4df9f;
+}
+
+.library-access-band {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #eadbb8;
+  border-left: 3px solid #b48a37;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #fffaf0, #fff);
+  color: #5b6880;
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.library-access-band strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #102c54;
+  font-size: 11px;
+}
+
+.library-access-band-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #102c54;
+  color: #d9b85f;
+}
+
+.library-page .library-card {
+  min-height: 295px;
+  padding-top: 0;
+}
+
+.library-page .library-card::before {
+  display: none;
+}
+
+.library-card-cover {
+  min-height: 78px;
+  margin: 0 -14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(120deg, #102c54, #225f92);
+  color: #fff;
+}
+
+.library-card-cover::after {
+  content: '';
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  right: -24px;
+  top: -52px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 50%;
+  box-shadow: 0 0 0 20px rgba(255, 255, 255, .035);
+}
+
+.library-card-history .library-card-cover {
+  background: linear-gradient(120deg, #173b6e, #6c542d);
+}
+
+.library-card-work .library-card-cover {
+  background: linear-gradient(120deg, #15375f, #7d5f28);
+}
+
+.library-card-instruction .library-card-cover {
+  background: linear-gradient(120deg, #15375f, #366d72);
+}
+
+.library-card-books .library-card-cover {
+  background: linear-gradient(120deg, #102c54, #5d446f);
+}
+
+.library-card-cover .library-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-color: rgba(255, 255, 255, .3);
+  background: rgba(10, 31, 58, .78);
+  color: #f0cf77;
+  box-shadow: none;
+}
+
+.library-card-cover small {
+  position: relative;
+  z-index: 1;
+  margin-left: auto;
+  color: #f4e4b3 !important;
+  font-size: 9px !important;
+  font-weight: 900;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  text-align: right;
+}
+
+.library-page .library-card > div:nth-child(2) {
+  padding-top: 2px;
+}
+
+.library-page .document-chip {
+  background: #f7f0df;
+  color: #7f6023;
+}
+
+.library-page .library-card h3 {
+  min-height: 38px;
+}
+
+.library-page .library-card p {
+  min-height: 28px;
+}
+
+@media (max-width: 760px) {
+  .library-category-rail {
+    margin-inline: -2px;
+  }
+
+  .library-category-rail button {
+    min-height: 44px;
+  }
+
+  .library-page .library-card {
+    min-height: 0;
+  }
+
+  .library-card-cover {
+    min-height: 72px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .library-category-rail button {
+    transition: none;
+  }
+}
