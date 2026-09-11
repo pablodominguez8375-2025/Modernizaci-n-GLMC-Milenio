@@ -14,4 +14,8 @@ describe('institutional status semantics', () => {
     expect(isVoluntaryWithdrawalStatus('voluntary_withdrawal')).toBe(true)
     expect(isVoluntaryWithdrawalStatus('past_active')).toBe(false)
   })
+
+  it('presents workshop transfer as continued active status', () => {
+    expect(institutionalStatusLabel('workshop_transfer')).toBe('Activo')
+  })
 })
