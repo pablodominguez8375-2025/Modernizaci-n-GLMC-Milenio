@@ -48,10 +48,9 @@ public sealed class TreasuryOrdinaryDuesEligibilityService(PmgmDbContext db) : I
             .Select(x => new { x.EventType, x.EffectiveDate })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var institutionalStatus = latestStatus?.EventType ??
-                                  (hasMembershipSegment
-                                      ? MembershipCodes.InstitutionalStatus.Active
-                                      : MembershipCodes.InstitutionalStatus.Inactive);
+        var institutionalStatus = InstitutionalStatusPolicy.ResolveCurrentStatus(
+            latestStatus?.EventType,
+            hasMembershipSegment);
 
         var generatesOrdinaryDues = InstitutionalStatusPolicy.GeneratesOrdinaryDues(
             institutionalStatus,
