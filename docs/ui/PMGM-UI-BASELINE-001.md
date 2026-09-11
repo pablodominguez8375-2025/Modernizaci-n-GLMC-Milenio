@@ -18,7 +18,7 @@ La baseline no es sólo una captura: es la combinación de **versión visual de 
 Para evitar una referencia circular, se distinguen tres identificadores:
 
 1. **SHA de código visual:** último commit que modifica frontend, estilos o automatización visual y cuyo resultado es objeto de UAT.
-2. **SHA de validación:** commit posterior que puede incluir documentación y sobre el cual CI/Showcase se ejecutaron satisfactoriamente sin modificar el resultado visual respecto del SHA de código.
+2. **SHA de validación:** commit sobre el cual CI/Showcase/paquete fueron validados con exactamente ese código visual; commits posteriores sólo documentales no cambian el candidato visual.
 3. **Commit integrado en `dev`:** commit final resultante de la promoción aprobada.
 
 Escribir o actualizar el acta UAT no obliga a cambiar el SHA de código visual aprobado si esos commits posteriores sólo modifican documentación.
@@ -30,11 +30,16 @@ Escribir o actualizar el acta UAT no obliga a cambiar el SHA de código visual a
 | Estado | Candidato, no aprobado |
 | Pull Request | #62 |
 | Rama | `feat/ui-ppt-responsive` |
-| SHA de código visual candidato | `dc3ecd96a15154d8b93e47d8232f4ad903c4d755` |
-| SHA de validación que abrió UAT | `46e786ae0ef6a7af200b9c093b9c62107607769f` |
-| PMGM CI de referencia | #827 · success |
-| Showcase de referencia | #151 · success |
-| Artefacto visual | `pmgm-responsive-visual-evidence` |
+| SHA de código visual candidato | `f0fcd19ec84b0d44cab1bc4806366fb471125aac` |
+| SHA de validación técnica | `f0fcd19ec84b0d44cab1bc4806366fb471125aac` |
+| PMGM CI | #843 · success |
+| Showcase | #167 · success |
+| Paquete Pre-UAT | #142 · success |
+| Artefacto visual | `pmgm-responsive-visual-evidence` · 21 PNG |
+| Digest artefacto visual | `sha256:c9e3d60409fb9d6ddccc938e2906ecc8fd16dd9d8a27e75062afd4ebb3d41fd5` |
+| Artefacto instalable | `Proyecto-Centenario-preUAT-installable` |
+| Digest artifact instalable | `sha256:202500221f5cc50a100e2a43aeee044d089aa6f10ab99f38d1dc40d17f797ce9` |
+| Verificación externa ZIP | OK: checksum externo, manifest 484 entradas, instalador `--help`, UAT/baseline presentes |
 | Especificación | `PMGM-UI-001-identidad-visual-responsive.md` |
 | Acta UAT | `PMGM-UAT-VISUAL-001.md` |
 | Seguimiento | Issue #63 |
@@ -54,6 +59,7 @@ Completar únicamente después de la aprobación institucional.
 | Product Owner | PENDIENTE |
 | Run PMGM CI | PENDIENTE |
 | Run Showcase | PENDIENTE |
+| Run paquete instalable | PENDIENTE |
 | Digest/identificador de evidencia | PENDIENTE |
 | PR integrado | PENDIENTE |
 | Commit en `dev` | PENDIENTE |
@@ -67,6 +73,7 @@ Una vez aprobada, los cambios posteriores deben conservar o justificar explícit
 - tipografía y jerarquía de títulos, etiquetas y contenido;
 - familia de iconos SVG institucionales;
 - topbar, navegación lateral de escritorio y navegación compacta móvil/tablet;
+- identificación inequívoca de la demo pública y SHA visible, completa en escritorio y compacta en móvil;
 - composición de Dashboard, Mi ficha, Biblioteca Virtual, Gestión Logial, Gran Tesorería, Gran Hospitalaria, Gran Secretaría y Gran Archivero;
 - reglas responsive y ausencia de scroll horizontal global;
 - comportamiento de tablas, formularios y objetivos táctiles;
@@ -80,6 +87,7 @@ La baseline debe estar respaldada por:
 - capturas 390×844 y 1440×900 de Inicio, Biblioteca Virtual, Gestión Logial, Gran Tesorería, Gran Hospitalaria, Gran Secretaría y Gran Archivero;
 - al menos 21 PNG en el artefacto `pmgm-responsive-visual-evidence`;
 - CI y Showcase verdes sobre una validación que contenga exactamente el código visual aprobado;
+- paquete instalable construido desde el mismo código y verificado en integridad;
 - acta `PMGM-UAT-VISUAL-001` con resultado APROBADO o APROBADO CON OBSERVACIONES.
 
 ## 7. Política de regresión
@@ -91,6 +99,7 @@ Después de fijar la baseline:
 3. Si la evidencia automática muestra cortes, superposición, pérdida de navegación o divergencia importante, el cambio no debe promoverse hasta ser revisado.
 4. Cambios institucionales de identidad visual requieren nueva aprobación del Product Owner y una nueva revisión de este registro.
 5. La baseline anterior no se elimina: queda como referencia histórica mediante Git.
+6. La demo publicada y el frontend incluido en el paquete/VM deben provenir de la misma línea visual aprobada; no se aceptan variantes visuales paralelas no trazadas.
 
 ## 8. Relación con la demo y la VM
 
