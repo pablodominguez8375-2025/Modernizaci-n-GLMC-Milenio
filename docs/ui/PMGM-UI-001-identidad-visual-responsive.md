@@ -76,11 +76,15 @@ El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas glob
 
 El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación y acciones institucionales. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
 
-Las capas `ppt-fidelity.css`, `dashboard-ppt-fidelity.css`, `archive-ppt-fidelity.css`, `regularity-ppt-fidelity.css` y `secretariat-ppt-fidelity.css` refinan pantallas específicas contra los mockups aprobados sin modificar reglas de negocio.
+Las capas `ppt-fidelity.css`, `dashboard-ppt-fidelity.css`, `archive-ppt-fidelity.css`, `regularity-ppt-fidelity.css` y `secretariat-ppt-fidelity.css` refinan pantallas específicas contra los mockups aprobados sin modificar reglas de negocio. `member-responsive-fix.css` contiene correcciones de composición detectadas mediante evidencia visual en tablet y notebook pequeño.
 
 El archivo `frontend/src/institutional-theme.test.ts` actúa como gate automatizado del contrato PMGM-UI-001 dentro del `npm test` del CI. Verifica paleta, breakpoints, prevención de scroll horizontal global, tablas contenidas, controles táctiles y preferencia de reducción de movimiento.
 
-El workflow `PMGM Showcase Demo` levanta el build demostrativo y genera automáticamente evidencia PNG de la pantalla inicial en 390 × 844, 768 × 1024 y 1440 × 900. Las capturas se publican como artefacto `pmgm-responsive-visual-evidence` con retención temporal para revisión de PR/UAT.
+El workflow `PMGM Showcase Demo` levanta el build demostrativo y genera automáticamente evidencia PNG de la pantalla inicial en los siete tamaños de aceptación: 360 × 800, 390 × 844, 768 × 1024, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080. Las capturas se publican como artefacto `pmgm-responsive-visual-evidence` con retención temporal para revisión de PR/UAT.
+
+## Validación visual observada
+
+La revisión de la primera matriz completa detectó un solapamiento entre la ficha personal e institucional en 768 × 1024 y 1024 × 768. La corrección adaptativa se incorporó y una nueva matriz de capturas confirmó que ambos tamaños quedan sin invasión entre tarjetas, manteniendo navegación y legibilidad correctas.
 
 ## Avance de comparación contra PPT
 
