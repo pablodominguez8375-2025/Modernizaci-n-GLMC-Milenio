@@ -14,6 +14,29 @@ public static class InstitutionalStatusPolicy
         => Is(institutionalStatus, MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal);
 
     /// <summary>
+    /// Un traslado es un hito de la trayectoria, no un estado terminal. Si existe un
+    /// segmento vigente después del traslado, el estado efectivo continúa siendo Activo.
+    /// </summary>
+    public static string ResolveCurrentStatus(string? latestEventType, bool hasCurrentMembership)
+    {
+        if (Is(latestEventType, MembershipCodes.InstitutionalStatus.WorkshopTransfer))
+        {
+            return hasCurrentMembership
+                ? MembershipCodes.InstitutionalStatus.Active
+                : MembershipCodes.InstitutionalStatus.Inactive;
+        }
+
+        if (string.IsNullOrWhiteSpace(latestEventType))
+        {
+            return hasCurrentMembership
+                ? MembershipCodes.InstitutionalStatus.Active
+                : MembershipCodes.InstitutionalStatus.Inactive;
+        }
+
+        return latestEventType;
+    }
+
+    /// <summary>
     /// Indica si el estado institucional conserva al Hermano en el cuadro del Taller.
     /// Past Activo conserva pertenencia; En sueño no constituye vínculo operativo vigente.
     /// </summary>
@@ -24,11 +47,13 @@ public static class InstitutionalStatusPolicy
 
     /// <summary>
     /// Activo operativo para labores regulares. Past Activo permanece en el cuadro,
-    /// pero no se contabiliza como activo operacional.
+    /// pero no se contabiliza como activo operacional. WorkshopTransfer se acepta como
+    /// activo por compatibilidad defensiva con registros históricos aún no normalizados.
     /// </summary>
     public static bool IsOperationallyActive(string? institutionalStatus)
         => Is(institutionalStatus, MembershipCodes.InstitutionalStatus.Active) ||
-           Is(institutionalStatus, MembershipCodes.InstitutionalStatus.Reinstated);
+           Is(institutionalStatus, MembershipCodes.InstitutionalStatus.Reinstated) ||
+           Is(institutionalStatus, MembershipCodes.InstitutionalStatus.WorkshopTransfer);
 
     /// <summary>
     /// Regla que debe usar el generador de obligaciones ordinarias: sólo genera cuotas
