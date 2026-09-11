@@ -5,18 +5,36 @@ namespace PMGM.Api.Modules.Ceremonies;
 
 public static class CeremonyEligibilityPolicy
 {
+    // Sobrecarga de compatibilidad para consumidores antiguos. Los flujos institucionales
+    // nuevos deben utilizar la firma que recibe explícitamente grandMasterStatus.
     public static CeremonyEligibilityDecision Evaluate(
         string ceremonyType,
         string? regimenInteriorStatus,
         string? treasuryStatus,
         string? hospitalariaStatus,
         CandidatePublicationEvidence? publication)
+        => Evaluate(
+            ceremonyType,
+            regimenInteriorStatus,
+            treasuryStatus,
+            hospitalariaStatus,
+            CeremonyCodes.ValidationStatus.Approved,
+            publication);
+
+    public static CeremonyEligibilityDecision Evaluate(
+        string ceremonyType,
+        string? regimenInteriorStatus,
+        string? treasuryStatus,
+        string? hospitalariaStatus,
+        string? grandMasterStatus,
+        CandidatePublicationEvidence? publication)
     {
         var requirements = new List<CeremonyRequirementResult>
         {
             EvaluateRegimenInterior(regimenInteriorStatus),
             EvaluateTreasury(treasuryStatus),
-            EvaluateHospitalaria(hospitalariaStatus)
+            EvaluateHospitalaria(hospitalariaStatus),
+            EvaluateGrandMaster(grandMasterStatus)
         };
 
         if (ceremonyType == CeremonyCodes.Type.Initiation)
@@ -75,6 +93,24 @@ public static class CeremonyEligibilityPolicy
             status is null
                 ? "No existe validación de regularidad del Taller en Gran Hospitalaria."
                 : "El Taller presenta reposiciones u obligaciones hospitalarias pendientes.");
+    }
+
+    private static CeremonyRequirementResult EvaluateGrandMaster(string? status)
+    {
+        if (status == CeremonyCodes.ValidationStatus.Approved)
+        {
+            return new("gran_maestria", "Gran Maestría", CeremonyCodes.ValidationStatus.Approved,
+                "Visto bueno de Gran Maestría registrado.");
+        }
+
+        if (status is null or CeremonyCodes.ValidationStatus.Pending or CeremonyCodes.ValidationStatus.Observed)
+        {
+            return new("gran_maestria", "Gran Maestría", CeremonyCodes.ValidationStatus.Observed,
+                "El visto bueno de Gran Maestría está pendiente o presenta observaciones.");
+        }
+
+        return new("gran_maestria", "Gran Maestría", CeremonyCodes.ValidationStatus.Rejected,
+            "Gran Maestría no ha otorgado un visto bueno habilitante para la ceremonia.");
     }
 
     private static CeremonyRequirementResult EvaluatePublication(CandidatePublicationEvidence? publication)
