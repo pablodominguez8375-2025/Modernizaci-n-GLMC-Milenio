@@ -30,16 +30,16 @@ Escribir o actualizar el acta UAT no obliga a cambiar el SHA de código visual a
 | Estado | Candidato, no aprobado |
 | Pull Request | #62 |
 | Rama | `feat/ui-ppt-responsive` |
-| SHA de código visual candidato | `f0fcd19ec84b0d44cab1bc4806366fb471125aac` |
-| SHA de validación técnica | `f0fcd19ec84b0d44cab1bc4806366fb471125aac` |
-| PMGM CI | #843 · success |
-| Showcase | #167 · success |
-| Paquete Pre-UAT | #142 · success |
+| SHA de código visual candidato | `0112fd86f21f4f6c3be6036cc45e002594d8729f` |
+| SHA de validación técnica del código visual | `0112fd86f21f4f6c3be6036cc45e002594d8729f` |
+| PMGM CI | #847 · success |
+| Showcase | #171 · success |
+| Paquete Pre-UAT | #146 · success |
 | Artefacto visual | `pmgm-responsive-visual-evidence` · 21 PNG |
-| Digest artefacto visual | `sha256:c9e3d60409fb9d6ddccc938e2906ecc8fd16dd9d8a27e75062afd4ebb3d41fd5` |
+| Digest artefacto visual | `sha256:48755eddc5660247dec2ca1366b08808c703c058f987e3e17696198fd83ec4d7` |
 | Artefacto instalable | `Proyecto-Centenario-preUAT-installable` |
-| Digest artifact instalable | `sha256:202500221f5cc50a100e2a43aeee044d089aa6f10ab99f38d1dc40d17f797ce9` |
-| Verificación externa ZIP | OK: checksum externo, manifest 484 entradas, instalador `--help`, UAT/baseline presentes |
+| Digest artifact instalable | `sha256:dee074fbad3b22b100ff96b1c653ba96247db93c782d76bc4135ba91f0ecbb87` |
+| Observación UAT corregida | `UV-OBS-001 · acceso visible y acumulativo a Biblioteca por grado` |
 | Especificación | `PMGM-UI-001-identidad-visual-responsive.md` |
 | Acta UAT | `PMGM-UAT-VISUAL-001.md` |
 | Seguimiento | Issue #63 |
@@ -75,6 +75,7 @@ Una vez aprobada, los cambios posteriores deben conservar o justificar explícit
 - topbar, navegación lateral de escritorio y navegación compacta móvil/tablet;
 - identificación inequívoca de la demo pública y SHA visible, completa en escritorio y compacta en móvil;
 - composición de Dashboard, Mi ficha, Biblioteca Virtual, Gestión Logial, Gran Tesorería, Gran Hospitalaria, Gran Secretaría y Gran Archivero;
+- acceso visible a Biblioteca Virtual desde Mi ficha y regla acumulativa por grado: 1° General+1°, 2° General+1°+2°, 3° General+1°+2°+3°/todo lo autorizado;
 - reglas responsive y ausencia de scroll horizontal global;
 - comportamiento de tablas, formularios y objetivos táctiles;
 - coherencia de escritorio, tablet y móvil con las PPT aprobadas.
