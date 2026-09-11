@@ -189,22 +189,26 @@ textarea:focus-visible {
     position: sticky;
     top: 72px;
     z-index: 9;
-    flex-direction: row;
-    align-items: center;
-    overflow-x: auto;
-    overscroll-behavior-inline: contain;
-    scroll-snap-type: x proximity;
-    scrollbar-width: thin;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 6px;
+    max-height: 46vh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-block: contain;
     padding: 8px 12px;
     border-bottom: 1px solid rgba(199, 157, 69, .35);
     box-shadow: 0 7px 22px rgba(11, 31, 58, .1);
   }
 
   .sidebar .nav-item {
-    width: auto;
-    min-width: max-content;
+    width: 100%;
+    min-width: 0;
     min-height: 46px;
-    scroll-snap-align: start;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.2;
   }
 
   .sidebar .nav-item.active {
@@ -269,6 +273,8 @@ textarea:focus-visible {
 
   .sidebar {
     top: 64px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: 50vh;
   }
 
   .content {
@@ -335,11 +341,12 @@ textarea:focus-visible {
 
   .sidebar {
     padding-inline: 8px;
+    gap: 5px;
   }
 
   .sidebar .nav-item {
     min-height: 44px;
-    padding-inline: 10px;
+    padding-inline: 9px;
     font-size: 12px;
   }
 
