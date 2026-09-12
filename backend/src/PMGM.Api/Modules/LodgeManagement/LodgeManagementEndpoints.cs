@@ -24,6 +24,7 @@ public static class LodgeManagementEndpoints
         group.MapGet("/tenidas/{meetingId:guid}/asistencia", GetCurrentAttendanceAsync);
         group.MapPost("/tenidas/{meetingId:guid}/votaciones", RecordAnonymousBallotAsync);
         group.MapGet("/tenidas/{meetingId:guid}/votaciones", GetAnonymousBallotsAsync);
+        group.MapGet("/tenidas/{meetingId:guid}/extracto-acta", GenerateMinuteExtractAsync);
         group.MapPost("/tenidas/{meetingId:guid}/actas", CreateMinuteVersionAsync);
         group.MapGet("/tenidas/{meetingId:guid}/actas", GetMinutesAsync);
         group.MapPost("/tenidas/{meetingId:guid}/actas/{minuteId:guid}/aprobar", ApproveMinuteAsync);
@@ -330,6 +331,58 @@ public static class LodgeManagementEndpoints
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new LodgeAnonymousBallotsResponse(items.Count, items.Select(ToBallotDto).ToList()));
     }
+
+    private static async Task<IResult> GenerateMinuteExtractAsync(
+        Guid meetingId, HttpContext httpContext, PmgmDbContext institutionalDb, LodgeManagementDbContext db,
+        IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        var meeting = await db.LodgeMeetings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+        if (meeting is null) return Results.NotFound();
+        if (!access.CanManageOrganization(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
+
+        var organization = await institutionalDb.Organizations.AsNoTracking()
+            .Where(x => x.Id == meeting.OrganizationId).Select(x => new { x.Name, x.Number }).SingleAsync(cancellationToken);
+        var attendanceHistory = await db.LodgeAttendanceRecords.AsNoTracking().Where(x => x.MeetingId == meetingId)
+            .OrderByDescending(x => x.RecordedAtUtc).ThenByDescending(x => x.Id).ToListAsync(cancellationToken);
+        var attendance = attendanceHistory.GroupBy(x => x.MemberId).Select(x => x.First()).ToList();
+        var memberIds = attendance.Select(x => x.MemberId).ToArray();
+        var names = await institutionalDb.Members.AsNoTracking().Where(x => memberIds.Contains(x.Id))
+            .Select(x => new { x.Id, Name = (x.Person.FirstNames + " " + x.Person.LastNames).Trim() })
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var ballots = await db.LodgeAnonymousBallots.AsNoTracking()
+            .Where(x => x.MeetingId == meetingId && x.Status == LodgeManagementCodes.BallotStatus.Closed)
+            .OrderBy(x => x.RecordedAtUtc).ToListAsync(cancellationToken);
+
+        var present = attendance.Where(x => x.Status == LodgeManagementCodes.AttendanceStatus.Present).ToList();
+        var absent = attendance.Where(x => x.Status == LodgeManagementCodes.AttendanceStatus.Absent).ToList();
+        var excused = attendance.Where(x => x.Status == LodgeManagementCodes.AttendanceStatus.Excused).ToList();
+        var ballotLines = ballots.Count == 0 ? "Sin balotajes o votaciones registrados."
+            : string.Join(Environment.NewLine, ballots.Select((x, index) =>
+                $"{index + 1}. {x.Subject}: {BallotPositiveLabel(x.BallotType)} {x.PositiveCount}; {BallotNegativeLabel(x.BallotType)} {x.NegativeCount}; habilitados {x.EligibleCount}; contabilizados {x.PositiveCount + x.NegativeCount}." +
+                (string.IsNullOrWhiteSpace(x.RecountObservation) ? "" : $" Observación: {x.RecountObservation}")));
+        var content = $"EXTRACTO DE ACTA{Environment.NewLine}" +
+            $"Taller: {organization.Name}{(organization.Number is null ? "" : $" N.º {organization.Number}")}{Environment.NewLine}" +
+            $"Fecha: {meeting.MeetingDate:dd-MM-yyyy} · Tipo: {meeting.MeetingType} · Grado: {meeting.Grade}{Environment.NewLine}{Environment.NewLine}" +
+            $"ASISTENCIA{Environment.NewLine}Presentes: {present.Count} · Inasistentes: {absent.Count} · Excusados: {excused.Count} · Total registrado: {attendance.Count}{Environment.NewLine}" +
+            $"Presentes: {JoinNames(present, names)}{Environment.NewLine}Excusas: {JoinNames(excused, names)}{Environment.NewLine}{Environment.NewLine}" +
+            $"BALOTAJE Y VOTACIONES{Environment.NewLine}{ballotLines}{Environment.NewLine}{Environment.NewLine}" +
+            "Apertura: __________ · Acta anterior: __________ · Correspondencia: __________ · Decretos: __________" + Environment.NewLine +
+            "Trabajo presentado: __________ · Aportes: __________ · Bien general: __________" + Environment.NewLine +
+            "Tronco de beneficencia: __________ · Clausura: __________ · Cierre de cadena: __________" + Environment.NewLine +
+            "Firmas: Venerable Maestro/a · Secretario/a · Orador/a";
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { meetingId, attendeeCount = present.Count, absentCount = absent.Count, excusedCount = excused.Count, ballotCount = ballots.Count, content });
+    }
+
+    private static string JoinNames(IEnumerable<LodgeAttendanceRecord> rows, IReadOnlyDictionary<Guid, string> names)
+    {
+        var values = rows.Select(x => names.GetValueOrDefault(x.MemberId, "Hermano no disponible")).ToArray();
+        return values.Length == 0 ? "Sin registros" : string.Join(", ", values);
+    }
+
+    private static string BallotPositiveLabel(string type) => type == LodgeManagementCodes.BallotType.WhiteBlack ? "blancas" : "positivos";
+    private static string BallotNegativeLabel(string type) => type == LodgeManagementCodes.BallotType.WhiteBlack ? "negras" : "negativos";
 
     private static async Task<IResult> CreateMinuteVersionAsync(
         Guid meetingId,
