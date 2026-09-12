@@ -61,8 +61,8 @@ Completar únicamente después de la aprobación institucional.
 | Run Showcase | #193 · success |
 | Run paquete instalable | #168 · success |
 | Digest/identificador de evidencia | `sha256:4831db547fe98e0c37066ac66e8d2d1c702fb5e9aa9e3de5cb580ee0ccd80e95` |
-| PR integrado | PENDIENTE |
-| Commit en `dev` | PENDIENTE |
+| PR integrado | #62 · integrado el `2026-09-11` |
+| Commit en `dev` | `31b23aec5c25c65bb6e523e4224cc18676908aad` |
 | GitHub Pages verificada | PENDIENTE |
 
 ## 5. Elementos protegidos por la baseline
