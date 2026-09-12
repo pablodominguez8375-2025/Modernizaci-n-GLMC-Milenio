@@ -261,8 +261,11 @@ No se implementa CENDOC como módulo, dependencia ni sustituto de Biblioteca Vir
 - es gestionada por los Vigilantes y el Ex Venerable Maestro, con asignaciones configurables conforme a la normativa institucional;
 - instrucciones por grado;
 - registro de cada instrucción con fecha, tema, grado, responsable y material asociado;
+- programación previa de instrucciones y Tenidas, proyectadas automáticamente al calendario;
+- estados diferenciados: programada, realizada/cerrada y cancelada;
 - Segundo Vigilante para Aprendices, Primer Vigilante para Compañeros y Ex Venerable Maestro para Maestros, salvo regla institucional posterior parametrizada;
-- asistencia individual específica a cada instrucción, con presente, ausente o justificada, separada de la asistencia general a Tenida aunque pueda vincularse a ella;
+- asistencia individual específica a cada instrucción, con presente o ausente en el MVP, separada de la asistencia general a Tenida aunque pueda vincularse a ella;
+- registro y corrección de asistencia sólo después de la ejecución de la instrucción o Tenida;
 - historial formativo simple por hermano; evaluaciones y rúbricas quedan fuera del MVP;
 - planchas asociadas al historial del hermano cuando corresponda;
 - publicación en Biblioteca sólo cuando exista autorización y permisos compatibles;
@@ -270,6 +273,10 @@ No se implementa CENDOC como módulo, dependencia ni sustituto de Biblioteca Vir
 
 ### 4.13 Calendario y Notificaciones
 
+- una Tenida o instrucción programada se refleja automáticamente sin volver a digitarla;
+- calendario personal: reúne los eventos que el usuario puede ver según pertenencia, grado, cargo y permisos;
+- calendario del Taller: muestra las actividades programadas del Taller a sus integrantes autorizados;
+- calendario de la Orden: vista consolidada para perfiles institucionales habilitados, respetando visibilidad y minimización;
 - notificaciones con plantillas, bandeja, cola, idempotencia y auditoría;
 - calendario en vistas agenda/mes;
 - exportación/sincronización cuando corresponda;

@@ -76,6 +76,7 @@ it('demo mode preserves corrections and minute versions without token or network
   const client = new LodgeApiClient({ useMocks: true, getAccessToken: token })
   const meeting = await client.createMeeting('o1', { meetingDate: '2026-09-08', meetingType: 'regular', grade: 'all' })
   const members = await client.getMemberOptions('o1')
+  await client.closeMeeting(meeting.id)
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'present' })
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'excused', excuseReason: 'Rectificación' })
   const attendance = await client.getAttendance(meeting.id)
@@ -92,6 +93,8 @@ it('demo mode preserves corrections and minute versions without token or network
   expect(minutes.items.find(item => item.version === 2)?.status).toBe('approved')
 
   const instruction = await client.createInstruction('23232323-2323-2323-2323-232323232323', { instructionDate: '2026-09-12', grade: 'master', topic: 'Docencia de Maestros' })
+  expect(instruction.status).toBe('scheduled')
+  await client.completeInstruction(instruction.id)
   await client.recordInstructionAttendance(instruction.id, [{ memberId: members.items[0].id, status: 'present' }])
   const instructions = await client.getInstructions('23232323-2323-2323-2323-232323232323')
   expect(instructions.items.some(item => item.id === instruction.id)).toBe(true)

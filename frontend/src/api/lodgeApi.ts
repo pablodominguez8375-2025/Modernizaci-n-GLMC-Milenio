@@ -46,7 +46,7 @@ export interface LodgeInstruction {
   topic: string
   responsibleOffice: 'second_warden' | 'first_warden' | 'immediate_past_master'
   instructorMemberId: string | null
-  status: 'held' | 'cancelled'
+  status: 'scheduled' | 'held' | 'cancelled'
 }
 export interface LodgeInstructionsResponse { total: number; items: LodgeInstruction[] }
 export interface CreateLodgeInstructionRequest {
@@ -113,7 +113,7 @@ export const demoLodgeSeed = {
   } satisfies LodgeMinute,
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
-    { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-08-22', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'held' as const },
+    { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
   ] satisfies LodgeInstruction[],
 } as const
 
@@ -199,7 +199,7 @@ export class LodgeApiClient {
   async recordAttendance(meetingId: string, payload: LodgeAttendanceRequest): Promise<unknown> {
     if (this.useMocks) {
       const meeting = this.requireMeeting(meetingId)
-      if (meeting.status === 'closed' || meeting.status === 'cancelled') throw new Error('No se puede registrar asistencia en una tenida cerrada o cancelada.')
+      if (meeting.status !== 'closed') throw new Error('La asistencia sólo puede registrarse después de cerrar la tenida realizada.')
       const member = demoMembers.find(item => item.id === payload.memberId)
       if (!member) throw new Error('El hermano indicado no pertenece al Taller.')
       const row: LodgeAttendanceCurrent = {
@@ -257,16 +257,29 @@ export class LodgeApiClient {
   async createInstruction(organizationId: string, payload: CreateLodgeInstructionRequest): Promise<LodgeInstruction> {
     if (this.useMocks) {
       const responsibleOffice = payload.grade === 'apprentice' ? 'second_warden' : payload.grade === 'fellowcraft' ? 'first_warden' : 'immediate_past_master'
-      const instruction: LodgeInstruction = { id: crypto.randomUUID(), organizationId, instructionDate: payload.instructionDate, grade: payload.grade, topic: payload.topic.trim(), responsibleOffice, instructorMemberId: payload.instructorMemberId ?? null, status: 'held' }
+      const instruction: LodgeInstruction = { id: crypto.randomUUID(), organizationId, instructionDate: payload.instructionDate, grade: payload.grade, topic: payload.topic.trim(), responsibleOffice, instructorMemberId: payload.instructorMemberId ?? null, status: 'scheduled' }
       this.mockInstructions.unshift(instruction)
       return { ...instruction }
     }
     return this.postJson<LodgeInstruction>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/instrucciones`, payload)
   }
 
+  async completeInstruction(instructionId: string): Promise<LodgeInstruction> {
+    if (this.useMocks) {
+      const instruction = this.mockInstructions.find(item => item.id === instructionId)
+      if (!instruction) throw new Error('La instrucción indicada no existe.')
+      if (instruction.status !== 'scheduled') throw new Error('La instrucción no se encuentra programada.')
+      instruction.status = 'held'
+      return { ...instruction }
+    }
+    return this.request<LodgeInstruction>(`/api/gestion-logial/instrucciones/${encodeURIComponent(instructionId)}/realizar`, { method: 'POST' })
+  }
+
   async recordInstructionAttendance(instructionId: string, items: LodgeInstructionAttendanceItem[]): Promise<{ instructionId: string; recorded: number }> {
     if (this.useMocks) {
-      if (!this.mockInstructions.some(item => item.id === instructionId)) throw new Error('La instrucción indicada no existe.')
+      const instruction = this.mockInstructions.find(item => item.id === instructionId)
+      if (!instruction) throw new Error('La instrucción indicada no existe.')
+      if (instruction.status !== 'held') throw new Error('La asistencia sólo puede registrarse después de realizar la instrucción.')
       this.mockInstructionAttendance.set(instructionId, items.map(item => ({ ...item })))
       return { instructionId, recorded: items.length }
     }

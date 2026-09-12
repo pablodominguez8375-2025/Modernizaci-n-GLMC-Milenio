@@ -171,8 +171,8 @@ public static class LodgeManagementEndpoints
         var meeting = await db.LodgeMeetings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null) return Results.NotFound();
         if (!access.CanManageOrganization(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
-        if (meeting.Status is LodgeManagementCodes.MeetingStatus.Closed or LodgeManagementCodes.MeetingStatus.Cancelled)
-            return Results.Conflict(new { message = "No se puede registrar asistencia en una tenida cerrada o cancelada." });
+        if (meeting.Status != LodgeManagementCodes.MeetingStatus.Closed)
+            return Results.Conflict(new { message = "La asistencia sólo puede registrarse después de cerrar la tenida realizada." });
 
         var memberBelongs = await institutionalDb.Memberships
             .AsNoTracking()

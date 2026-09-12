@@ -146,9 +146,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     endUtc,
                     instruction.OrganizationId,
                     CalendarCodes.Visibility.Lodge,
-                    instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled
-                        ? CalendarCodes.Status.Cancelled
-                        : CalendarCodes.Status.Completed,
+                    MapInstructionStatus(instruction.Status),
                     false,
                     false));
             }
@@ -159,6 +157,15 @@ public sealed class CalendarSourceProjectionInterceptor(
             _pending[context] = snapshots;
         }
     }
+
+    private static string MapInstructionStatus(string status)
+        => status switch
+        {
+            LodgeManagementCodes.InstructionStatus.Scheduled => CalendarCodes.Status.Confirmed,
+            LodgeManagementCodes.InstructionStatus.Held => CalendarCodes.Status.Completed,
+            LodgeManagementCodes.InstructionStatus.Cancelled => CalendarCodes.Status.Cancelled,
+            _ => CalendarCodes.Status.Tentative
+        };
 
     private async Task FlushAsync(DbContext? context, CancellationToken cancellationToken)
     {

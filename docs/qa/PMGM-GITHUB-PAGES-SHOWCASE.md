@@ -182,6 +182,8 @@ Paquete instalable
 
 La demo sirve para revisar, probar y recepcionar funcionalidad y apariencia con datos ficticios. Una función sólo se presenta como operativa en la demo cuando existe en el instalable o utiliza un adaptador ficticio con el mismo contrato que el backend desarrollado. La conformidad de la demo no reemplaza las pruebas de infraestructura de la VM.
 
+Para Tenidas y Docencia, tanto demo como instalable deben respetar el mismo ciclo: **programar → proyectar al calendario → marcar realizada/cerrada → registrar o corregir asistencia**. La misma fuente alimenta el calendario personal, el calendario del Taller y la vista consolidada de la Orden, filtrada por permisos.
+
 ## Procedimiento para una demostración institucional
 
 Antes de una presentación:

@@ -60,3 +60,6 @@
 
 @media (max-width: 900px) { .lodge-instruction-workspace-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .lodge-instruction-heading { flex-direction: column; } .lodge-instruction-form { grid-template-columns: 1fr; } .lodge-instruction-topic, .lodge-instruction-responsible, .lodge-instruction-form fieldset, .lodge-instruction-form button { grid-column: auto; } .lodge-instruction-member { grid-template-columns: 1fr; } }
+.lodge-instruction-attendance { display: grid; gap: 10px; padding: 16px; border: 1px solid #d8e3ef; border-radius: 12px; background: #f7fbff; }
+.lodge-instruction-attendance h3 { margin: 0; color: #14325d; font-size: 15px; }
+.lodge-instruction-attendance > button { justify-self: start; }

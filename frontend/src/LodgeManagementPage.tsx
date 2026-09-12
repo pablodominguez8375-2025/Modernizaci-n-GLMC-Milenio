@@ -80,6 +80,7 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const [instructionTopic, setInstructionTopic] = useState('')
   const [instructionAttendance, setInstructionAttendance] = useState<Record<string, 'present' | 'absent'>>({})
   const [instructionConfirmation, setInstructionConfirmation] = useState<string | null>(null)
+  const [selectedInstructionId, setSelectedInstructionId] = useState('')
 
   const [meetingDate, setMeetingDate] = useState(todayInChile())
   const [meetingType, setMeetingType] = useState<LodgeMeetingType>('regular')
@@ -241,7 +242,8 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
       .finally(() => setWorking(false))
   }
 
-  const meetingClosed = selectedMeeting?.status === 'closed' || selectedMeeting?.status === 'cancelled'
+  const meetingFinalized = selectedMeeting?.status === 'closed' || selectedMeeting?.status === 'cancelled'
+  const canRecordMeetingAttendance = selectedMeeting?.status === 'closed'
   const lodgeName = api.useMocks ? lodgeCockpitDemoData.lodge.name : selectedOrganization ? organizationLabel(selectedOrganization) : 'Taller autorizado'
   const memberCount = api.useMocks ? lodgeCockpitDemoData.members.active : members.length
   const instructionResponsible = instructionResponsibilityByGrade[instructionGrade]
@@ -252,13 +254,26 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
     setWorking(true); setError(null); setInstructionConfirmation(null)
     try {
       const instruction = await lodgeApi.createInstruction(organizationId, { instructionDate, grade: instructionGrade, topic: instructionTopic })
-      const items = members.map(member => ({ memberId: member.id, status: instructionAttendance[member.id] ?? 'present' as const }))
-      await lodgeApi.recordInstructionAttendance(instruction.id, items)
       const response = await lodgeApi.getInstructions(organizationId)
       setInstructions(response.items)
-      const present = items.filter(item => item.status === 'present').length
-      setInstructionConfirmation(`Instrucción registrada · ${gradeLabel(instructionGrade)} · ${present} asistentes · responsable: ${instructionResponsible}.`)
+      setSelectedInstructionId(instruction.id)
+      setInstructionConfirmation(`Instrucción programada · ${gradeLabel(instructionGrade)} · responsable: ${instructionResponsible}. Ya está disponible para calendario.`)
       setInstructionTopic('')
+    } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
+  }
+
+  const completeInstructionAndRecordAttendance = async () => {
+    if (!selectedInstructionId) return
+    setWorking(true); setError(null); setInstructionConfirmation(null)
+    try {
+      await lodgeApi.completeInstruction(selectedInstructionId)
+      const items = members.map(member => ({ memberId: member.id, status: instructionAttendance[member.id] ?? 'present' as const }))
+      await lodgeApi.recordInstructionAttendance(selectedInstructionId, items)
+      const response = await lodgeApi.getInstructions(organizationId)
+      setInstructions(response.items)
+      setInstructionConfirmation(`Instrucción realizada · ${items.filter(item => item.status === 'present').length} asistentes registrados.`)
+      setSelectedInstructionId('')
+      setInstructionAttendance({})
     } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
   }
 
@@ -311,11 +326,11 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
           <label><span>Grado</span><select value={instructionGrade} onChange={event => setInstructionGrade(event.target.value as Exclude<LodgeGrade, 'all'>)}><option value="apprentice">Aprendices</option><option value="fellowcraft">Compañeros</option><option value="master">Maestros</option></select></label>
           <label className="lodge-instruction-topic"><span>Tema de la instrucción</span><input value={instructionTopic} onChange={event => setInstructionTopic(event.target.value)} placeholder="Ej.: Simbología del grado" required /></label>
           <div className="lodge-instruction-responsible"><small>Responsable asignado</small><strong>{instructionResponsible}</strong><span>{instructionGrade === 'apprentice' ? 'Instrucción de Aprendices' : instructionGrade === 'fellowcraft' ? 'Instrucción de Compañeros' : 'Instrucción de Maestros'}</span></div>
-          <fieldset><legend>Asistencia a la instrucción</legend>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}</fieldset>
-          <button className="lodge-blue-button" type="submit" disabled={working || members.length === 0}>{working ? 'Guardando…' : 'Guardar instrucción y asistencia'}</button>
+          <button className="lodge-blue-button" type="submit" disabled={working}>{working ? 'Guardando…' : 'Programar instrucción'}</button>
         </form>
-        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Historial</p><h2>Últimas instrucciones registradas</h2></div></div>{instructions.map(instruction => <div className="lodge-instruction-history-row" key={instruction.id}><div><strong>{instruction.topic}</strong><span>{formatDateOnly(instruction.instructionDate)} · {gradeLabel(instruction.grade)}</span></div><div><small>{instructionOfficeLabel(instruction.responsibleOffice)}</small><em>{instruction.status === 'held' ? 'Realizada' : 'Cancelada'}</em></div></div>)}</article>
+        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Agenda e historial</p><h2>Instrucciones del Taller</h2></div></div>{instructions.map(instruction => <div className="lodge-instruction-history-row" key={instruction.id}><div><strong>{instruction.topic}</strong><span>{formatDateOnly(instruction.instructionDate)} · {gradeLabel(instruction.grade)}</span></div><div><small>{instructionOfficeLabel(instruction.responsibleOffice)}</small><em>{instruction.status === 'scheduled' ? 'Programada' : instruction.status === 'held' ? 'Realizada' : 'Cancelada'}</em>{instruction.status === 'scheduled' && <button className="lodge-secondary-button" type="button" onClick={() => setSelectedInstructionId(instruction.id)}>Registrar ejecución</button>}</div></div>)}</article>
       </div>
+      {selectedInstructionId && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Después de la ejecución</p><h3>Registrar asistencia de la instrucción</h3></div>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || members.length === 0} onClick={completeInstructionAndRecordAttendance}>Marcar realizada y guardar asistencia</button></section>}
     </section>
 
     <section className="lodge-insight-grid">
@@ -349,8 +364,8 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
         </article>
 
         <article className="panel lodge-detail lodge-operation-panel">
-          {!selectedMeeting ? <div className="empty-state"><strong>Seleccione o cree una Tenida para operar asistencia y actas.</strong></div> : <><div className="panel-heading"><div><p className="eyebrow">Tenida seleccionada</p><h2>{selectedMeeting.title || meetingTypeLabel(selectedMeeting.meetingType)}</h2><p>{formatDateOnly(selectedMeeting.meetingDate)} · {meetingTypeLabel(selectedMeeting.meetingType)} · {gradeLabel(selectedMeeting.grade)}</p></div><button className="regularity-secondary" type="button" disabled={working || meetingClosed} onClick={closeMeeting}>Cerrar Tenida</button></div>
-            <section className="lodge-section"><div><p className="eyebrow">Registro vigente</p><h3>Asistencia</h3></div><form className="regularity-form" onSubmit={recordAttendance}><label className="regularity-field"><span>Hermano/a</span><select required value={memberId} disabled={meetingClosed} onChange={event => setMemberId(event.target.value)}><option value="">Seleccione…</option>{members.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label><div className="lodge-form-row"><label className="regularity-field"><span>Estado</span><select value={attendanceStatus} disabled={meetingClosed} onChange={event => setAttendanceStatus(event.target.value as LodgeAttendanceStatus)}>{attendanceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{attendanceStatus === 'excused' && <label className="regularity-field"><span>Justificación</span><input maxLength={1000} value={excuseReason} disabled={meetingClosed} onChange={event => setExcuseReason(event.target.value)} /></label>}</div><button className="regularity-primary" type="submit" disabled={working || meetingClosed || !memberId}>Registrar asistencia</button></form><div className="lodge-attendance-list">{attendance.length === 0 ? <small>Sin asistencia registrada.</small> : attendance.map(item => <div key={item.memberId}><div><strong>{item.displayName}</strong>{item.excuseReason && <small>{item.excuseReason}</small>}</div><span className={attendanceClass(item.status)}>{attendanceLabel(item.status)}</span></div>)}</div></section>
+          {!selectedMeeting ? <div className="empty-state"><strong>Seleccione o cree una Tenida para operar asistencia y actas.</strong></div> : <><div className="panel-heading"><div><p className="eyebrow">Tenida seleccionada</p><h2>{selectedMeeting.title || meetingTypeLabel(selectedMeeting.meetingType)}</h2><p>{formatDateOnly(selectedMeeting.meetingDate)} · {meetingTypeLabel(selectedMeeting.meetingType)} · {gradeLabel(selectedMeeting.grade)}</p></div><button className="regularity-secondary" type="button" disabled={working || meetingFinalized} onClick={closeMeeting}>Marcar realizada y cerrar</button></div>
+            <section className="lodge-section"><div><p className="eyebrow">Después de la ejecución</p><h3>Asistencia</h3><small>{canRecordMeetingAttendance ? 'La Tenida está realizada: puede registrar o corregir su asistencia.' : 'Primero marque la Tenida como realizada y cerrada.'}</small></div><form className="regularity-form" onSubmit={recordAttendance}><label className="regularity-field"><span>Hermano/a</span><select required value={memberId} disabled={!canRecordMeetingAttendance} onChange={event => setMemberId(event.target.value)}><option value="">Seleccione…</option>{members.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label><div className="lodge-form-row"><label className="regularity-field"><span>Estado</span><select value={attendanceStatus} disabled={!canRecordMeetingAttendance} onChange={event => setAttendanceStatus(event.target.value as LodgeAttendanceStatus)}>{attendanceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{attendanceStatus === 'excused' && <label className="regularity-field"><span>Justificación</span><input maxLength={1000} value={excuseReason} disabled={!canRecordMeetingAttendance} onChange={event => setExcuseReason(event.target.value)} /></label>}</div><button className="regularity-primary" type="submit" disabled={working || !canRecordMeetingAttendance || !memberId}>Registrar asistencia</button></form><div className="lodge-attendance-list">{attendance.length === 0 ? <small>Sin asistencia registrada.</small> : attendance.map(item => <div key={item.memberId}><div><strong>{item.displayName}</strong>{item.excuseReason && <small>{item.excuseReason}</small>}</div><span className={attendanceClass(item.status)}>{attendanceLabel(item.status)}</span></div>)}</div></section>
             <section className="lodge-section"><div><p className="eyebrow">Documento histórico</p><h3>Actas versionadas</h3></div><form className="regularity-form" onSubmit={createMinute}><label className="regularity-field"><span>Nueva versión del acta</span><textarea rows={7} maxLength={20000} value={minuteContent} onChange={event => setMinuteContent(event.target.value)} placeholder="Redacte el contenido de la nueva versión…" /></label><button className="regularity-primary" type="submit" disabled={working || !minuteContent.trim()}>Crear nueva versión</button></form><div className="lodge-minute-list">{minutes.length === 0 ? <small>Sin versiones de acta.</small> : minutes.map(minute => <article key={minute.id}><div className="lodge-minute-heading"><strong>Versión {minute.version}</strong><span className={minute.status === 'approved' ? 'regularity-status good' : minute.status === 'superseded' ? 'regularity-status blocked' : 'regularity-status pending'}>{minuteStatusLabel(minute.status)}</span></div><p>{minute.content}</p><small>Creada {formatChile(minute.createdAtUtc)}{minute.approvedAtUtc ? ` · aprobada ${formatChile(minute.approvedAtUtc)}` : ''}</small>{minute.status === 'draft' && <button className="regularity-secondary" type="button" disabled={working} onClick={() => approveMinute(minute.id)}>Aprobar esta versión</button>}</article>)}</div></section>
           </>}
         </article>

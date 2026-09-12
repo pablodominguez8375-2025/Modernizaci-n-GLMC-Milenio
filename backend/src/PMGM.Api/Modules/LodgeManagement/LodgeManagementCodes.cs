@@ -62,6 +62,7 @@ public static class LodgeManagementCodes
 
     public static class InstructionStatus
     {
+        public const string Scheduled = "scheduled";
         public const string Held = "held";
         public const string Cancelled = "cancelled";
     }
