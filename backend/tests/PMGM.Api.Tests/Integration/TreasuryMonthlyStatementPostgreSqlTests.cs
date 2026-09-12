@@ -38,7 +38,25 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 MembershipType = "regular", StartDate = new DateOnly(2026, 1, 1), Status = MembershipCodes.MembershipStatus.Active
             };
-            db.AddRange(organization, person, member, membership);
+            var degree = new DegreeEvent
+            {
+                Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
+                Degree = TreasuryCodes.Degree.Master, EventType = MembershipCodes.DegreeEvent.Exaltation,
+                EffectiveDate = new DateOnly(2025, 6, 1), EvidenceReference = "ACTA-EXALTACION-CI"
+            };
+            var office = new OfficeAssignment
+            {
+                Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
+                OfficeType = "treasurer", Period = "2026", StartDate = new DateOnly(2026, 1, 1)
+            };
+            var adjustment = new PMGM.Api.Modules.Treasury.Entities.TreasuryAdjustment
+            {
+                Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
+                AdjustmentType = "student", EffectiveFrom = new DateOnly(2026, 1, 1),
+                EffectiveUntil = new DateOnly(2026, 12, 31), Amount = -13_000m,
+                AuthorizationReference = "PLANCHA-CI-001", Status = TreasuryCodes.AdjustmentStatus.Active
+            };
+            db.AddRange(organization, person, member, membership, degree, office, adjustment);
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             memberId = member.Id;
@@ -52,20 +70,24 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         Assert.Equal(HttpStatusCode.Created, create.StatusCode);
         var statementId = (await create.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken)).GetProperty("id").GetGuid();
 
-        var line = await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/lineas", new
+        var line = await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/generar-lineas", new
         {
-            memberId, membershipId, degreeCodeAtCutoff = "master",
-            officeCodeAtCutoff = "treasurer", baseAmount = 21000m, adjustmentAmount = 0m,
-            adjustmentType = (string?)null, authorizationReference = (string?)null,
-            observation = (string?)null, identityMatchStatus = TreasuryCodes.IdentityMatchStatus.Matched
+            apprenticeAmount = 21_000m, fellowcraftAmount = 21_000m, masterAmount = 21_000m
         }, cancellationToken);
-        Assert.Equal(HttpStatusCode.Created, line.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, line.StatusCode);
+        var generated = await line.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(8_000m, generated.GetProperty("expectedAmount").GetDecimal());
+        var generatedLine = Assert.Single(generated.GetProperty("lines").EnumerateArray());
+        Assert.Equal(memberId, generatedLine.GetProperty("memberId").GetGuid());
+        Assert.Equal(membershipId, generatedLine.GetProperty("membershipId").GetGuid());
+        Assert.Equal("treasurer", generatedLine.GetProperty("officeCodeAtCutoff").GetString());
+        Assert.Equal("PLANCHA-CI-001", generatedLine.GetProperty("authorizationReference").GetString());
 
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/pagos", new
         {
             paymentMethod = TreasuryCodes.PaymentMethod.Transfer, paymentDate = new DateOnly(2026, 7, 10),
-            amount = 20000m, payerDisplayName = "Tesorero", payerRut = (string?)null, reference = "TRX-1"
+            amount = 7000m, payerDisplayName = "Tesorero", payerRut = (string?)null, reference = "TRX-1"
         }, cancellationToken)).StatusCode);
 
         var blocked = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/conciliar", null, cancellationToken);

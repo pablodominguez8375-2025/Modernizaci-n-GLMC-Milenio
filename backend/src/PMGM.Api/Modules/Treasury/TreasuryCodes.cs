@@ -29,6 +29,20 @@ public static class TreasuryCodes
         public static bool IsValid(string value) => value is Matched or Pending or Observed;
     }
 
+    public static class AdjustmentStatus
+    {
+        public const string Active = "active";
+        public const string Expired = "expired";
+        public const string Revoked = "revoked";
+    }
+
+    public static class Degree
+    {
+        public const string Apprentice = "apprentice";
+        public const string Fellowcraft = "fellowcraft";
+        public const string Master = "master";
+    }
+
     public static class RegularityScope
     {
         public const string Order = "order";

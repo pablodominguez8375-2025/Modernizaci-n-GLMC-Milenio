@@ -218,3 +218,18 @@ Esto mantiene a Gran Tesorería como fuente de verdad y elimina duplicación doc
 - Ceremonias reutiliza esa regularidad sin pedir evidencia duplicada;
 - auditoría y permisos cubiertos por pruebas;
 - migración, PostgreSQL, API y pruebas integrales verdes antes de integrar a `dev`.
+
+## 12. Estado de implementación posterior a RC1
+
+La rama `feature/treasury-payment-table-v1`, aislada del candidato UAT, implementa:
+
+- creación, carga manual, envío, consulta y conciliación del cuadro mensual;
+- generación automática de líneas desde pertenencias vigentes a la fecha de corte;
+- selección del último grado conocido y del cargo vigente para cada miembro;
+- aplicación de un ajuste activo y autorizado por persona;
+- bloqueo por grado faltante, ajustes activos simultáneos, cuota resultante negativa, diferencia de conciliación o identidad pendiente;
+- pagos parciales por transferencia y depósito;
+- emisión de regularidad y auditoría al conciliar;
+- pruebas unitarias e integración HTTP/PostgreSQL.
+
+Las cuotas base por grado se suministran al generar el cuadro. No se consideran una regla permanente hasta que exista un tarifario institucional versionado y aprobado.

@@ -12,11 +12,97 @@ public static class TreasuryStatementEndpoints
     {
         group.MapPost("/talleres/{organizationId:guid}/cuadros", CreateAsync);
         group.MapPost("/cuadros/{statementId:guid}/lineas", AddLineAsync);
+        group.MapPost("/cuadros/{statementId:guid}/generar-lineas", GenerateLinesAsync);
         group.MapPost("/cuadros/{statementId:guid}/pagos", AddPaymentAsync);
         group.MapPost("/cuadros/{statementId:guid}/enviar", SubmitAsync);
         group.MapPost("/cuadros/{statementId:guid}/conciliar", ReconcileAsync);
         group.MapGet("/cuadros/{statementId:guid}", GetAsync);
         return group;
+    }
+
+    private static async Task<IResult> GenerateLinesAsync(Guid statementId, GenerateTreasuryStatementLinesRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (request.ApprenticeAmount < 0 || request.FellowcraftAmount < 0 || request.MasterAmount < 0)
+            return Results.BadRequest(new { message = "Las cuotas base no pueden ser negativas." });
+
+        var statement = await db.TreasuryMonthlyStatements.Include(x => x.Lines)
+            .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
+        if (statement is null) return Results.NotFound();
+        if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count != 0)
+            return Results.Conflict(new { message = "La generación automática requiere un cuadro vacío en borrador." });
+
+        var cutoff = statement.CutoffDate;
+        var memberships = await db.Memberships.AsNoTracking()
+            .Where(x => x.OrganizationId == statement.OrganizationId && x.StartDate <= cutoff &&
+                        (x.EndDate == null || x.EndDate >= cutoff))
+            .OrderBy(x => x.StartDate)
+            .ToListAsync(cancellationToken);
+        if (memberships.Count == 0)
+            return Results.Conflict(new { message = "El Taller no tiene miembros vigentes a la fecha de corte." });
+
+        var memberIds = memberships.Select(x => x.MemberId).Distinct().ToArray();
+        var degreeEvents = await db.DegreeEvents.AsNoTracking()
+            .Where(x => x.OrganizationId == statement.OrganizationId && memberIds.Contains(x.MemberId) && x.EffectiveDate <= cutoff)
+            .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.RecordedAtUtc)
+            .ToListAsync(cancellationToken);
+        var offices = await db.OfficeAssignments.AsNoTracking()
+            .Where(x => x.OrganizationId == statement.OrganizationId && memberIds.Contains(x.MemberId) &&
+                        x.StartDate <= cutoff && (x.EndDate == null || x.EndDate >= cutoff))
+            .OrderByDescending(x => x.StartDate).ThenByDescending(x => x.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+        var adjustments = await db.TreasuryAdjustments.AsNoTracking()
+            .Where(x => memberIds.Contains(x.MemberId) && x.Status == TreasuryCodes.AdjustmentStatus.Active &&
+                        (x.OrganizationId == null || x.OrganizationId == statement.OrganizationId) &&
+                        x.EffectiveFrom <= cutoff && (x.EffectiveUntil == null || x.EffectiveUntil >= cutoff))
+            .OrderByDescending(x => x.EffectiveFrom)
+            .ToListAsync(cancellationToken);
+
+        var missingDegreeMembers = memberships
+            .Where(x => degreeEvents.All(d => d.MemberId != x.MemberId))
+            .Select(x => x.MemberId).Distinct().ToArray();
+        var multipleAdjustmentMembers = adjustments.GroupBy(x => x.MemberId)
+            .Where(x => x.Count() > 1).Select(x => x.Key).ToArray();
+        if (missingDegreeMembers.Length != 0 || multipleAdjustmentMembers.Length != 0)
+            return Results.Conflict(new
+            {
+                message = "No fue posible generar líneas por antecedentes incompletos o incompatibles.",
+                missingDegreeMembers,
+                multipleAdjustmentMembers
+            });
+
+        foreach (var membership in memberships)
+        {
+            var degree = degreeEvents.First(x => x.MemberId == membership.MemberId).Degree;
+            var baseAmount = request.AmountFor(degree);
+            if (baseAmount is null)
+                return Results.BadRequest(new { message = $"El grado '{degree}' no tiene una cuota base configurada." });
+            var office = offices.FirstOrDefault(x => x.MemberId == membership.MemberId);
+            var adjustment = adjustments.FirstOrDefault(x => x.MemberId == membership.MemberId);
+            var adjustmentAmount = adjustment?.Amount ?? 0m;
+            if (baseAmount.Value + adjustmentAmount < 0)
+                return Results.Conflict(new { message = "Un ajuste deja una cuota individual negativa.", memberId = membership.MemberId });
+
+            statement.Lines.Add(new TreasuryMonthlyStatementLine
+            {
+                MemberId = membership.MemberId,
+                MembershipId = membership.Id,
+                DegreeCodeAtCutoff = degree,
+                OfficeCodeAtCutoff = office?.OfficeType,
+                BaseAmount = baseAmount.Value,
+                AdjustmentAmount = adjustmentAmount,
+                AdjustmentType = adjustment?.AdjustmentType,
+                AuthorizationReference = adjustment?.AuthorizationReference,
+                IdentityMatchStatus = TreasuryCodes.IdentityMatchStatus.Matched
+            });
+        }
+
+        audit.Add(context, "treasury.statement.lines_generated", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
+            statement.OrganizationId, AuditResults.Success, new { cutoff, lines = statement.Lines.Count });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(ToResponse(statement));
     }
 
     private static async Task<IResult> CreateAsync(Guid organizationId, CreateTreasuryStatementRequest request,
@@ -223,3 +309,13 @@ public sealed record AddTreasuryStatementLineRequest(Guid? MemberId, Guid? Membe
     string? AuthorizationReference, string? Observation, string IdentityMatchStatus);
 public sealed record AddTreasuryPaymentRequest(string PaymentMethod, DateOnly PaymentDate, decimal Amount,
     string PayerDisplayName, string? PayerRut, string? Reference);
+public sealed record GenerateTreasuryStatementLinesRequest(decimal ApprenticeAmount, decimal FellowcraftAmount, decimal MasterAmount)
+{
+    public decimal? AmountFor(string degree) => degree switch
+    {
+        TreasuryCodes.Degree.Apprentice => ApprenticeAmount,
+        TreasuryCodes.Degree.Fellowcraft => FellowcraftAmount,
+        TreasuryCodes.Degree.Master => MasterAmount,
+        _ => null
+    };
+}
