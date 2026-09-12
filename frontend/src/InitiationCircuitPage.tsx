@@ -21,12 +21,9 @@ const stages = [
 ] as const
 
 export default function InitiationCircuitPage({ api, demoProfileKey }: { api: PmgmApiClient; demoProfileKey?: DemoProfileKey }) {
-  const [completed, setCompleted] = useState(() => {
-    if (!api.useMocks || typeof window === 'undefined') return 0
-    const stored = Number(window.localStorage.getItem('centenario.demo.initiation.completed') ?? '0')
-    return Number.isInteger(stored) ? Math.max(0, Math.min(stored, stages.length)) : 0
-  })
-  const [selected, setSelected] = useState(0)
+  const initialCompleted = readDemoProgress(api.useMocks)
+  const [completed, setCompleted] = useState(initialCompleted)
+  const [selected, setSelected] = useState(Math.min(initialCompleted, stages.length - 1))
   const [history, setHistory] = useState<string[]>([])
   const [decision, setDecision] = useState<'approved' | 'rejected' | 'observed' | null>(null)
   const [working, setWorking] = useState(false)
@@ -99,4 +96,10 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
     <section className="initiation-audit"><div><p className="eyebrow">Trazabilidad</p><h2>Bitácora del expediente</h2></div>{history.length === 0 ? <p>Aún no hay etapas registradas en esta ejecución de prueba.</p> : <ul>{history.map((item, index) => <li key={`${item}-${index}`}><span>✓</span>{item}</li>)}</ul>}</section>
     <p className="initiation-rule"><strong>Regla de integridad:</strong> candidato aprobado ≠ ceremonia autorizada ≠ hermano iniciado. La membresía y el grado Aprendiz sólo nacen al registrar la ceremonia efectivamente realizada.</p>
   </div>
+}
+
+function readDemoProgress(useMocks: boolean) {
+  if (!useMocks || typeof window === 'undefined') return 0
+  const stored = Number(window.localStorage.getItem('centenario.demo.initiation.completed') ?? '0')
+  return Number.isInteger(stored) ? Math.max(0, Math.min(stored, stages.length)) : 0
 }
