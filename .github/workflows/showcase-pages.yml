@@ -22,8 +22,8 @@ permissions:
   pages: write
   id-token: write
 
-# PR validation must never cancel an in-flight deployment from dev.
-# Each PR gets its own concurrency group; dev keeps a stable deployment group.
+# PR validation must never cancel an in-flight deployment.
+# Each source keeps an independent deployment group.
 concurrency:
   group: pmgm-showcase-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -156,7 +156,7 @@ jobs:
     name: Deploy testing showcase
     needs: build
     environment:
-      name: github-pages
+      name: ${{ github.ref_name == 'dev' && 'github-pages' || 'github-pages-postrc' }}
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
