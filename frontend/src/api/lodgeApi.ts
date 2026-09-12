@@ -57,6 +57,10 @@ export interface CreateLodgeInstructionRequest {
 }
 export interface LodgeInstructionAttendanceItem { memberId: string; status: 'present' | 'absent' }
 export interface LodgeMinutesResponse { total: number; items: LodgeMinute[] }
+export type LodgeBallotType = 'white_black' | 'positive_negative' | 'candidate'
+export interface LodgeAnonymousBallot { id: string; meetingId: string; version: number; ballotType: LodgeBallotType; subject: string; attendeeCount: number; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation: string | null; status: 'closed' | 'superseded'; recordedAtUtc: string }
+export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; subject: string; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation?: string | null }
+export interface LodgeAnonymousBallotsResponse { total: number; items: LodgeAnonymousBallot[] }
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
 interface LodgeApiClientOptions {
@@ -111,6 +115,7 @@ export const demoLodgeSeed = {
     content: 'Acta demostrativa: contenido ficticio para validar versionado, aprobación y navegación del módulo de Gestión Logial.',
     status: 'approved' as const, createdAtUtc: '2026-09-06T01:25:00Z', approvedAtUtc: '2026-09-06T01:40:00Z',
   } satisfies LodgeMinute,
+  ballots: [{ id: 'ffffffff-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1, ballotType: 'white_black' as const, subject: 'Admisión de Persona Demostrativa', attendeeCount: 2, eligibleCount: 2, positiveCount: 2, negativeCount: 0, recountObservation: null, status: 'closed' as const, recordedAtUtc: '2026-09-06T01:15:00Z' }] satisfies LodgeAnonymousBallot[],
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
@@ -125,6 +130,7 @@ export class LodgeApiClient {
   private readonly mockMeetings: LodgeMeeting[] = demoLodgeSeed.meetings.map(item => ({ ...item }))
   private readonly mockAttendance = new Map<string, LodgeAttendanceCurrent[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.attendance.map(item => ({ ...item }))]])
   private readonly mockMinutes = new Map<string, LodgeMinute[]>([[demoLodgeSeed.meetings[2].id, [{ ...demoLodgeSeed.minute }]]])
+  private readonly mockBallots = new Map<string, LodgeAnonymousBallot[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.ballots.map(item => ({ ...item }))]])
   private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
   private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
 
@@ -244,6 +250,24 @@ export class LodgeApiClient {
       return { ...minute }
     }
     return this.request<LodgeMinute>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/actas/${encodeURIComponent(minuteId)}/aprobar`, { method: 'POST' })
+  }
+
+  async getAnonymousBallots(meetingId: string): Promise<LodgeAnonymousBallotsResponse> {
+    if (this.useMocks) { const items = [...(this.mockBallots.get(meetingId) ?? [])].sort((a, b) => b.recordedAtUtc.localeCompare(a.recordedAtUtc)); return { total: items.length, items: items.map(item => ({ ...item })) } }
+    return this.request<LodgeAnonymousBallotsResponse>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/votaciones`)
+  }
+
+  async recordAnonymousBallot(meetingId: string, payload: LodgeAnonymousBallotRequest): Promise<LodgeAnonymousBallot> {
+    if (this.useMocks) {
+      const meeting = this.requireMeeting(meetingId); if (meeting.status !== 'closed') throw new Error('El escrutinio sólo puede registrarse después de cerrar la Tenida realizada.')
+      const attendeeCount = (await this.getAttendance(meetingId)).items.filter(item => item.status === 'present').length
+      if (payload.eligibleCount > attendeeCount) throw new Error('Las personas habilitadas no pueden superar a las asistentes presentes.')
+      if (payload.positiveCount + payload.negativeCount !== payload.eligibleCount && !payload.recountObservation?.trim()) throw new Error('La diferencia del recuento debe explicarse en el acta.')
+      const rows = this.mockBallots.get(meetingId) ?? []; const same = rows.filter(item => item.subject === payload.subject.trim()); same.filter(item => item.status === 'closed').forEach(item => { item.status = 'superseded' })
+      const item: LodgeAnonymousBallot = { id: crypto.randomUUID(), meetingId, version: Math.max(0, ...same.map(value => value.version)) + 1, ...payload, subject: payload.subject.trim(), attendeeCount, recountObservation: payload.recountObservation?.trim() || null, status: 'closed', recordedAtUtc: new Date().toISOString() }
+      rows.push(item); this.mockBallots.set(meetingId, rows); return { ...item }
+    }
+    return this.postJson<LodgeAnonymousBallot>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/votaciones`, payload)
   }
 
   async getInstructions(organizationId: string): Promise<LodgeInstructionsResponse> {
