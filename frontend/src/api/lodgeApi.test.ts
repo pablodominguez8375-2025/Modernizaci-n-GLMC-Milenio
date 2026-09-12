@@ -88,6 +88,9 @@ it('demo mode preserves corrections and minute versions without token or network
   expect(ballot.attendeeCount).toBe(1)
   expect(ballot.positiveCount).toBe(1)
   expect(JSON.stringify(ballot)).not.toContain('memberId')
+  const extract = await client.generateMinuteExtract(meeting.id)
+  expect(extract.content).toContain('BALOTAJE Y VOTACIONES')
+  expect(extract.content).toContain('Admisión QA: blancas 1; negras 0')
 
   const v1 = await client.createMinute(meeting.id, 'Versión uno')
   await client.approveMinute(meeting.id, v1.id)
