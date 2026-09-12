@@ -67,7 +67,7 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.RecordedAtUtc).IsRequired();
             entity.HasOne(x => x.Meeting).WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.MeetingId, x.Subject, x.Version }).IsUnique();
+            entity.HasIndex(x => new { x.MeetingId, x.Subject, x.ProcedureNumber, x.Version }).IsUnique();
             entity.HasIndex(x => new { x.MeetingId, x.Status });
         });
 
