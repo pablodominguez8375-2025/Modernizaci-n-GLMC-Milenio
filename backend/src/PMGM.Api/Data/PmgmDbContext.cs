@@ -20,6 +20,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<DegreeEvent> DegreeEvents => Set<DegreeEvent>();
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
     public DbSet<FinancialRegularitySnapshot> FinancialRegularitySnapshots => Set<FinancialRegularitySnapshot>();
+    public DbSet<TreasuryMonthlyStatement> TreasuryMonthlyStatements => Set<TreasuryMonthlyStatement>();
+    public DbSet<TreasuryMonthlyStatementLine> TreasuryMonthlyStatementLines => Set<TreasuryMonthlyStatementLine>();
+    public DbSet<TreasuryPayment> TreasuryPayments => Set<TreasuryPayment>();
+    public DbSet<TreasuryAdjustment> TreasuryAdjustments => Set<TreasuryAdjustment>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
@@ -163,6 +167,63 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.MemberId, x.AsOfDate });
+        });
+
+        modelBuilder.Entity<TreasuryMonthlyStatement>(entity =>
+        {
+            entity.ToTable("treasury_monthly_statements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.RectifiesStatement).WithMany().HasForeignKey(x => x.RectifiesStatementId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth })
+                .IsUnique()
+                .HasFilter("\"RectifiesStatementId\" IS NULL");
+        });
+
+        modelBuilder.Entity<TreasuryMonthlyStatementLine>(entity =>
+        {
+            entity.ToTable("treasury_monthly_statement_lines");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DegreeCodeAtCutoff).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.OfficeCodeAtCutoff).HasMaxLength(120);
+            entity.Property(x => x.BaseAmount).HasPrecision(18, 2);
+            entity.Property(x => x.AdjustmentAmount).HasPrecision(18, 2);
+            entity.Property(x => x.AdjustmentType).HasMaxLength(80);
+            entity.Property(x => x.AuthorizationReference).HasMaxLength(500);
+            entity.Property(x => x.Observation).HasMaxLength(2000);
+            entity.Property(x => x.IdentityMatchStatus).HasMaxLength(40).IsRequired();
+            entity.Ignore(x => x.PayableAmount);
+            entity.HasOne(x => x.Statement).WithMany(x => x.Lines).HasForeignKey(x => x.StatementId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Membership).WithMany().HasForeignKey(x => x.MembershipId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.StatementId, x.MemberId });
+        });
+
+        modelBuilder.Entity<TreasuryPayment>(entity =>
+        {
+            entity.ToTable("treasury_payments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.PayerDisplayName).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.PayerRut).HasMaxLength(40);
+            entity.Property(x => x.Reference).HasMaxLength(500);
+            entity.HasOne(x => x.Statement).WithMany(x => x.Payments).HasForeignKey(x => x.StatementId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<TreasuryAdjustment>(entity =>
+        {
+            entity.ToTable("treasury_adjustments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AdjustmentType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.AuthorizationReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.MemberId, x.OrganizationId, x.EffectiveFrom });
         });
 
         modelBuilder.Entity<HospitalariaRegularitySnapshot>(entity =>
