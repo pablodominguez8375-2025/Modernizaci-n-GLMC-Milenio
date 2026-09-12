@@ -103,14 +103,14 @@ public partial class AddTreasuryMonthlyStatements : Migration
                 table.ForeignKey(name: "FK_treasury_payments_treasury_monthly_statements_StatementId", column: x => x.StatementId, principalSchema: "core", principalTable: "treasury_monthly_statements", principalColumn: "Id", onDelete: ReferentialAction.Cascade);
             });
 
-        migrationBuilder.CreateIndex("IX_treasury_adjustments_MemberId_OrganizationId_EffectiveFrom", "core", "treasury_adjustments", new[] { "MemberId", "OrganizationId", "EffectiveFrom" });
-        migrationBuilder.CreateIndex("IX_treasury_adjustments_OrganizationId", "core", "treasury_adjustments", "OrganizationId");
-        migrationBuilder.CreateIndex("IX_treasury_monthly_statement_lines_MemberId", "core", "treasury_monthly_statement_lines", "MemberId");
-        migrationBuilder.CreateIndex("IX_treasury_monthly_statement_lines_MembershipId", "core", "treasury_monthly_statement_lines", "MembershipId");
-        migrationBuilder.CreateIndex("IX_treasury_monthly_statement_lines_StatementId_MemberId", "core", "treasury_monthly_statement_lines", new[] { "StatementId", "MemberId" });
-        migrationBuilder.CreateIndex("IX_treasury_monthly_statements_OrganizationId_PeriodYear_PeriodMonth", "core", "treasury_monthly_statements", new[] { "OrganizationId", "PeriodYear", "PeriodMonth" }, unique: true, filter: "\"RectifiesStatementId\" IS NULL");
-        migrationBuilder.CreateIndex("IX_treasury_monthly_statements_RectifiesStatementId", "core", "treasury_monthly_statements", "RectifiesStatementId");
-        migrationBuilder.CreateIndex("IX_treasury_payments_StatementId", "core", "treasury_payments", "StatementId");
+        migrationBuilder.CreateIndex(name: "IX_treasury_adjustments_MemberId_OrganizationId_EffectiveFrom", schema: "core", table: "treasury_adjustments", columns: new[] { "MemberId", "OrganizationId", "EffectiveFrom" });
+        migrationBuilder.CreateIndex(name: "IX_treasury_adjustments_OrganizationId", schema: "core", table: "treasury_adjustments", column: "OrganizationId");
+        migrationBuilder.CreateIndex(name: "IX_treasury_monthly_statement_lines_MemberId", schema: "core", table: "treasury_monthly_statement_lines", column: "MemberId");
+        migrationBuilder.CreateIndex(name: "IX_treasury_monthly_statement_lines_MembershipId", schema: "core", table: "treasury_monthly_statement_lines", column: "MembershipId");
+        migrationBuilder.CreateIndex(name: "IX_treasury_monthly_statement_lines_StatementId_MemberId", schema: "core", table: "treasury_monthly_statement_lines", columns: new[] { "StatementId", "MemberId" });
+        migrationBuilder.CreateIndex(name: "IX_treasury_monthly_statements_OrganizationId_PeriodYear_PeriodMonth", schema: "core", table: "treasury_monthly_statements", columns: new[] { "OrganizationId", "PeriodYear", "PeriodMonth" }, unique: true, filter: "\"RectifiesStatementId\" IS NULL");
+        migrationBuilder.CreateIndex(name: "IX_treasury_monthly_statements_RectifiesStatementId", schema: "core", table: "treasury_monthly_statements", column: "RectifiesStatementId");
+        migrationBuilder.CreateIndex(name: "IX_treasury_payments_StatementId", schema: "core", table: "treasury_payments", column: "StatementId");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
