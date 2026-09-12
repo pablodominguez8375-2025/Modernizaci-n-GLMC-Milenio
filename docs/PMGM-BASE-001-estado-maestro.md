@@ -159,6 +159,7 @@ Flujo institucional consolidado desde el Protocolo 2026:
 - Cuestionario Confidencial y autobiografía;
 - revisión/votación de 3.er grado;
 - balotaje en 1.er grado después de cumplir publicación y antecedentes;
+- balotaje, votación y sufragio siempre anónimos: se conserva por separado la asistencia o padrón de habilitados y únicamente el recuento agregado de balotas blancas/negras, votos positivos/negativos o totales por candidatura; nunca existe vínculo entre persona y voto, conforme a `PMGM-ARCH-006`;
 - rechazo con fecha, etapa y causas;
 - nueva presentación sólo cuando se cumpla el plazo reglamentario y conste subsanación.
 
