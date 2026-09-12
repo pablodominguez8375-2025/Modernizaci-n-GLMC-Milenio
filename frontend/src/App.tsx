@@ -109,6 +109,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
 
   const openNotificationAction = (actionUrl: string) => {
     const path = actionUrl.split(/[?#]/, 1)[0]
+    if (path === '/initiation-circuit') return setView('initiationCircuit')
     if (path === '/candidates') return setView('candidates')
     if (path === '/calendar' && canCalendar) return setView('calendar')
     if (path === '/ceremonies' && canCeremonies) return setView('ceremonies')
