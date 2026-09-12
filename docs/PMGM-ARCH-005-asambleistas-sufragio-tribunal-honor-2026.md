@@ -198,6 +198,8 @@ Antes de cada Asamblea, Régimen Interior deberá poder generar un padrón con:
 
 El padrón deberá poder cerrarse en una fecha de corte y conservarse como **snapshot inmutable**, de modo que posteriormente pueda auditarse quién estaba habilitado para sufragar en esa Asamblea y por qué.
 
+El padrón y la asistencia no deben vincularse al sentido del voto. El sufragio es anónimo: Centenario conserva únicamente resultados agregados positivos/negativos o totales por candidatura. No se almacena un voto individual ni se genera una auditoría que permita atribuirlo o inferirlo. Las reglas completas se establecen en `PMGM-ARCH-006`.
+
 ## 11. Seguridad y confidencialidad
 
 Los expedientes del Tribunal de Honor deberán manejarse con un nivel de acceso especialmente restringido. El resto del sistema no deberá exponer el contenido de una investigación; únicamente recibirá el efecto institucional necesario, por ejemplo: `inhabilitado para sufragio hasta fecha X` o `sin derechos masónicos vigentes`.
