@@ -38,6 +38,24 @@ export interface LodgeMinute {
   createdAtUtc: string
   approvedAtUtc: string | null
 }
+export interface LodgeInstruction {
+  id: string
+  organizationId: string
+  instructionDate: string
+  grade: Exclude<LodgeGrade, 'all'>
+  topic: string
+  responsibleOffice: 'second_warden' | 'first_warden' | 'immediate_past_master'
+  instructorMemberId: string | null
+  status: 'held' | 'cancelled'
+}
+export interface LodgeInstructionsResponse { total: number; items: LodgeInstruction[] }
+export interface CreateLodgeInstructionRequest {
+  instructionDate: string
+  grade: Exclude<LodgeGrade, 'all'>
+  topic: string
+  instructorMemberId?: string | null
+}
+export interface LodgeInstructionAttendanceItem { memberId: string; status: 'present' | 'absent' }
 export interface LodgeMinutesResponse { total: number; items: LodgeMinute[] }
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
@@ -93,6 +111,10 @@ export const demoLodgeSeed = {
     content: 'Acta demostrativa: contenido ficticio para validar versionado, aprobación y navegación del módulo de Gestión Logial.',
     status: 'approved' as const, createdAtUtc: '2026-09-06T01:25:00Z', approvedAtUtc: '2026-09-06T01:40:00Z',
   } satisfies LodgeMinute,
+  instructions: [
+    { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
+    { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-08-22', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'held' as const },
+  ] satisfies LodgeInstruction[],
 } as const
 
 export class LodgeApiClient {
@@ -103,6 +125,8 @@ export class LodgeApiClient {
   private readonly mockMeetings: LodgeMeeting[] = demoLodgeSeed.meetings.map(item => ({ ...item }))
   private readonly mockAttendance = new Map<string, LodgeAttendanceCurrent[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.attendance.map(item => ({ ...item }))]])
   private readonly mockMinutes = new Map<string, LodgeMinute[]>([[demoLodgeSeed.meetings[2].id, [{ ...demoLodgeSeed.minute }]]])
+  private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
+  private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -220,6 +244,33 @@ export class LodgeApiClient {
       return { ...minute }
     }
     return this.request<LodgeMinute>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/actas/${encodeURIComponent(minuteId)}/aprobar`, { method: 'POST' })
+  }
+
+  async getInstructions(organizationId: string): Promise<LodgeInstructionsResponse> {
+    if (this.useMocks) {
+      const items = this.mockInstructions.filter(item => item.organizationId === organizationId).sort((a, b) => b.instructionDate.localeCompare(a.instructionDate)).map(item => ({ ...item }))
+      return { total: items.length, items }
+    }
+    return this.request<LodgeInstructionsResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/instrucciones`)
+  }
+
+  async createInstruction(organizationId: string, payload: CreateLodgeInstructionRequest): Promise<LodgeInstruction> {
+    if (this.useMocks) {
+      const responsibleOffice = payload.grade === 'apprentice' ? 'second_warden' : payload.grade === 'fellowcraft' ? 'first_warden' : 'immediate_past_master'
+      const instruction: LodgeInstruction = { id: crypto.randomUUID(), organizationId, instructionDate: payload.instructionDate, grade: payload.grade, topic: payload.topic.trim(), responsibleOffice, instructorMemberId: payload.instructorMemberId ?? null, status: 'held' }
+      this.mockInstructions.unshift(instruction)
+      return { ...instruction }
+    }
+    return this.postJson<LodgeInstruction>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/instrucciones`, payload)
+  }
+
+  async recordInstructionAttendance(instructionId: string, items: LodgeInstructionAttendanceItem[]): Promise<{ instructionId: string; recorded: number }> {
+    if (this.useMocks) {
+      if (!this.mockInstructions.some(item => item.id === instructionId)) throw new Error('La instrucción indicada no existe.')
+      this.mockInstructionAttendance.set(instructionId, items.map(item => ({ ...item })))
+      return { instructionId, recorded: items.length }
+    }
+    return this.postJson<{ instructionId: string; recorded: number }>(`/api/gestion-logial/instrucciones/${encodeURIComponent(instructionId)}/asistencia`, { items })
   }
 
   private requireMeeting(id: string): LodgeMeeting {

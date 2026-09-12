@@ -5,6 +5,7 @@ import {
   type LodgeAttendanceCurrent,
   type LodgeAttendanceStatus,
   type LodgeGrade,
+  type LodgeInstruction,
   type LodgeMeeting,
   type LodgeMeetingType,
   type LodgeMemberOption,
@@ -46,15 +47,6 @@ export const lodgeCockpitDemoData = {
     ['Ética y filosofía', 70],
     ['Trabajo en Taller', 50],
   ],
-  instructionMembers: [
-    ['demo-aprendiz-1', 'H∴ Andrea Demostrativa'],
-    ['demo-aprendiz-2', 'H∴ Bruno Demostrativo'],
-    ['demo-aprendiz-3', 'H∴ Camila Demostrativa'],
-  ],
-  instructionHistory: [
-    ['5 de septiembre de 2026', 'Aprendices', 'Segundo Vigilante', 'Simbología del grado', '3 de 3'],
-    ['22 de agosto de 2026', 'Compañeros', 'Primer Vigilante', 'Las artes liberales', '2 de 3'],
-  ],
   tasks: { pending: 5, inProgress: 3, completed: 18 },
   notifications: [
     'Nueva circular demostrativa disponible',
@@ -77,6 +69,7 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const [members, setMembers] = useState<LodgeMemberOption[]>([])
   const [attendance, setAttendance] = useState<LodgeAttendanceCurrent[]>([])
   const [minutes, setMinutes] = useState<LodgeMinute[]>([])
+  const [instructions, setInstructions] = useState<LodgeInstruction[]>([])
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -85,7 +78,7 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const [instructionDate, setInstructionDate] = useState(todayInChile())
   const [instructionGrade, setInstructionGrade] = useState<Exclude<LodgeGrade, 'all'>>('apprentice')
   const [instructionTopic, setInstructionTopic] = useState('')
-  const [instructionAttendance, setInstructionAttendance] = useState<Record<string, LodgeAttendanceStatus>>(() => Object.fromEntries(lodgeCockpitDemoData.instructionMembers.map(([id]) => [id, 'present'])))
+  const [instructionAttendance, setInstructionAttendance] = useState<Record<string, 'present' | 'absent'>>({})
   const [instructionConfirmation, setInstructionConfirmation] = useState<string | null>(null)
 
   const [meetingDate, setMeetingDate] = useState(todayInChile())
@@ -129,11 +122,12 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
     if (!organizationId) { setMeetings([]); setMembers([]); setSelectedMeetingId(''); return }
     let active = true
     setWorking(true); setError(null)
-    Promise.all([lodgeApi.getMeetings(organizationId), lodgeApi.getMemberOptions(organizationId)])
-      .then(([meetingResponse, memberResponse]) => {
+    Promise.all([lodgeApi.getMeetings(organizationId), lodgeApi.getMemberOptions(organizationId), lodgeApi.getInstructions(organizationId)])
+      .then(([meetingResponse, memberResponse, instructionResponse]) => {
         if (!active) return
         setMeetings(meetingResponse.items)
         setMembers(memberResponse.items)
+        setInstructions(instructionResponse.items)
         setMemberId(memberResponse.items[0]?.id ?? '')
         setSelectedMeetingId(current => meetingResponse.items.some(item => item.id === current) ? current : meetingResponse.items[0]?.id ?? '')
       })
@@ -252,10 +246,20 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const memberCount = api.useMocks ? lodgeCockpitDemoData.members.active : members.length
   const instructionResponsible = instructionResponsibilityByGrade[instructionGrade]
 
-  const saveDemoInstruction = (event: FormEvent) => {
+  const saveInstruction = async (event: FormEvent) => {
     event.preventDefault()
-    const present = Object.values(instructionAttendance).filter(status => status === 'present').length
-    setInstructionConfirmation(`Instrucción registrada · ${gradeLabel(instructionGrade)} · ${present} asistentes · responsable: ${instructionResponsible}.`)
+    if (!organizationId || !instructionTopic.trim() || members.length === 0) return
+    setWorking(true); setError(null); setInstructionConfirmation(null)
+    try {
+      const instruction = await lodgeApi.createInstruction(organizationId, { instructionDate, grade: instructionGrade, topic: instructionTopic })
+      const items = members.map(member => ({ memberId: member.id, status: instructionAttendance[member.id] ?? 'present' as const }))
+      await lodgeApi.recordInstructionAttendance(instruction.id, items)
+      const response = await lodgeApi.getInstructions(organizationId)
+      setInstructions(response.items)
+      const present = items.filter(item => item.status === 'present').length
+      setInstructionConfirmation(`Instrucción registrada · ${gradeLabel(instructionGrade)} · ${present} asistentes · responsable: ${instructionResponsible}.`)
+      setInstructionTopic('')
+    } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
   }
 
   return <div className="lodge-product-page">
@@ -302,15 +306,15 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">Demostración con datos ficticios</span></div>
       {instructionConfirmation && <div className="regularity-success" role="status">{instructionConfirmation}</div>}
       <div className="lodge-instruction-workspace-grid">
-        <form className="lodge-instruction-form" onSubmit={saveDemoInstruction}>
+        <form className="lodge-instruction-form" onSubmit={saveInstruction}>
           <label><span>Fecha</span><input type="date" value={instructionDate} onChange={event => setInstructionDate(event.target.value)} required /></label>
           <label><span>Grado</span><select value={instructionGrade} onChange={event => setInstructionGrade(event.target.value as Exclude<LodgeGrade, 'all'>)}><option value="apprentice">Aprendices</option><option value="fellowcraft">Compañeros</option><option value="master">Maestros</option></select></label>
           <label className="lodge-instruction-topic"><span>Tema de la instrucción</span><input value={instructionTopic} onChange={event => setInstructionTopic(event.target.value)} placeholder="Ej.: Simbología del grado" required /></label>
           <div className="lodge-instruction-responsible"><small>Responsable asignado</small><strong>{instructionResponsible}</strong><span>{instructionGrade === 'apprentice' ? 'Instrucción de Aprendices' : instructionGrade === 'fellowcraft' ? 'Instrucción de Compañeros' : 'Instrucción de Maestros'}</span></div>
-          <fieldset><legend>Asistencia a la instrucción</legend>{lodgeCockpitDemoData.instructionMembers.map(([id, name]) => <div className="lodge-instruction-member" key={id}><strong>{name}</strong><select aria-label={`Asistencia de ${name}`} value={instructionAttendance[id]} onChange={event => setInstructionAttendance(current => ({ ...current, [id]: event.target.value as LodgeAttendanceStatus }))}><option value="present">Presente</option><option value="excused">Justificado</option><option value="absent">Ausente</option></select></div>)}</fieldset>
-          <button className="lodge-blue-button" type="submit">Guardar instrucción y asistencia</button>
+          <fieldset><legend>Asistencia a la instrucción</legend>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}</fieldset>
+          <button className="lodge-blue-button" type="submit" disabled={working || members.length === 0}>{working ? 'Guardando…' : 'Guardar instrucción y asistencia'}</button>
         </form>
-        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Historial</p><h2>Últimas instrucciones registradas</h2></div></div>{lodgeCockpitDemoData.instructionHistory.map(([date, gradeName, responsible, topic, attendance]) => <div className="lodge-instruction-history-row" key={`${date}-${gradeName}`}><div><strong>{topic}</strong><span>{date} · {gradeName}</span></div><div><small>{responsible}</small><em>{attendance}</em></div></div>)}</article>
+        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Historial</p><h2>Últimas instrucciones registradas</h2></div></div>{instructions.map(instruction => <div className="lodge-instruction-history-row" key={instruction.id}><div><strong>{instruction.topic}</strong><span>{formatDateOnly(instruction.instructionDate)} · {gradeLabel(instruction.grade)}</span></div><div><small>{instructionOfficeLabel(instruction.responsibleOffice)}</small><em>{instruction.status === 'held' ? 'Realizada' : 'Cancelada'}</em></div></div>)}</article>
       </div>
     </section>
 
@@ -319,7 +323,7 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
 
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Asistencia última tenida</p><h2>{attendanceSummary.percentage}%</h2></div></div><div className="lodge-attendance-overview"><div className="lodge-attendance-ring" style={{ '--lodge-attendance': `${attendanceSummary.percentage}%` } as React.CSSProperties}><span>{attendanceSummary.percentage}%</span></div><div>{api.useMocks && attendanceSummary.total === 0 ? <><LodgeCount label="Presentes" value={33} tone="green" /><LodgeCount label="Ausentes" value={3} tone="red" /><LodgeCount label="Justificados" value={1} tone="blue" /></> : <><LodgeCount label="Presentes" value={attendanceSummary.present} tone="green" /><LodgeCount label="Ausentes" value={attendanceSummary.absent} tone="red" /><LodgeCount label="Justificados" value={attendanceSummary.excused} tone="blue" /></>}</div></div></article>
 
-      <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Docencia</p><h2>Plan de estudio del Taller</h2></div><span className="lodge-demo-only">{api.useMocks ? 'Preview' : 'Integración pendiente'}</span></div><div className="lodge-instruction-list">{lodgeCockpitDemoData.instruction.map(([label, progress]) => <div key={label}><div><span>{label}</span><strong>{progress}%</strong></div><div className="lodge-progress-track"><span style={{ width: `${progress}%` }} /></div></div>)}</div></article>
+      <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Docencia</p><h2>Plan de estudio del Taller</h2></div><span className="lodge-demo-only">{api.useMocks ? 'Datos ficticios' : 'Operativo'}</span></div><div className="lodge-instruction-list">{lodgeCockpitDemoData.instruction.map(([label, progress]) => <div key={label}><div><span>{label}</span><strong>{progress}%</strong></div><div className="lodge-progress-track"><span style={{ width: `${progress}%` }} /></div></div>)}</div></article>
 
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Tareas y pendientes</p><h2>Seguimiento operativo</h2></div></div><div className="lodge-task-list"><LodgeCount label="Por completar" value={lodgeCockpitDemoData.tasks.pending} tone="red" /><LodgeCount label="En proceso" value={lodgeCockpitDemoData.tasks.inProgress} tone="gold" /><LodgeCount label="Completadas" value={lodgeCockpitDemoData.tasks.completed} tone="green" /></div></article>
     </section>
@@ -371,6 +375,7 @@ const attendanceOptions = [['present', 'Presente'], ['excused', 'Justificado'], 
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function meetingTypeLabel(value: LodgeMeetingType) { return meetingTypeOptions.find(([key]) => key === value)?.[1] ?? value }
 function gradeLabel(value: LodgeGrade) { return gradeOptions.find(([key]) => key === value)?.[1] ?? value }
+function instructionOfficeLabel(value: LodgeInstruction['responsibleOffice']) { return value === 'second_warden' ? 'Segundo Vigilante' : value === 'first_warden' ? 'Primer Vigilante' : 'Ex Venerable Maestro' }
 function attendanceLabel(value: LodgeAttendanceStatus) { return attendanceOptions.find(([key]) => key === value)?.[1] ?? value }
 function meetingStatusLabel(value: string) { return value === 'closed' ? 'Cerrada' : value === 'open' ? 'Abierta' : value === 'cancelled' ? 'Cancelada' : 'Programada' }
 function minuteStatusLabel(value: string) { return value === 'approved' ? 'Aprobada' : value === 'superseded' ? 'Reemplazada' : 'Borrador' }

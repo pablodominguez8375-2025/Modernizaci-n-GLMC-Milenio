@@ -170,17 +170,17 @@ El workflow busca patrones sensibles básicos dentro del `dist` antes de permiti
 
 ## Relación con el paquete instalable
 
-La demo y el paquete pre-UAT son dos productos distintos del mismo código:
+La demo y el paquete instalable son **la misma aplicación funcional construida desde el mismo código y SHA**. No constituyen productos funcionalmente separados. La demo reemplaza exclusivamente las integraciones de infraestructura por adaptadores de datos ficticios que respetan los mismos contratos de operación:
 
 ```text
 GitHub Pages
-= frontend estático + mocks + acceso público
+= misma interfaz y mismos flujos + adaptadores ficticios + acceso público
 
-Paquete pre-UAT
-= frontend + backend + PostgreSQL + Keycloak + MinIO + infraestructura + scripts + documentación
+Paquete instalable
+= misma interfaz y mismos flujos + API + PostgreSQL + Keycloak + MinIO + infraestructura
 ```
 
-La demo sirve para **mostrar**. El paquete sirve para **instalar y validar integralmente**.
+La demo sirve para revisar, probar y recepcionar funcionalidad y apariencia con datos ficticios. Una función sólo se presenta como operativa en la demo cuando existe en el instalable o utiliza un adaptador ficticio con el mismo contrato que el backend desarrollado. La conformidad de la demo no reemplaza las pruebas de infraestructura de la VM.
 
 ## Procedimiento para una demostración institucional
 

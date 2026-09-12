@@ -48,6 +48,28 @@ it('routes attendance and minute operations through dedicated lodge endpoints', 
   ])
 })
 
+it('uses the same instruction contract for list, creation and attendance', async () => {
+  const instruction = { id: 'i1', organizationId: 'o1', instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos', responsibleOffice: 'second_warden', instructorMemberId: null, status: 'held' }
+  const responses = [
+    new Response(JSON.stringify({ total: 0, items: [] })),
+    new Response(JSON.stringify(instruction), { status: 201 }),
+    new Response(JSON.stringify({ instructionId: 'i1', recorded: 1 })),
+  ]
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+  vi.stubGlobal('fetch', fetch)
+  const client = new LodgeApiClient({ getAccessToken: async () => 'token' })
+
+  await client.getInstructions('o1')
+  await client.createInstruction('o1', { instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos' })
+  await client.recordInstructionAttendance('i1', [{ memberId: 'm1', status: 'present' }])
+
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/gestion-logial/talleres/o1/instrucciones',
+    '/api/gestion-logial/talleres/o1/instrucciones',
+    '/api/gestion-logial/instrucciones/i1/asistencia',
+  ])
+})
+
 it('demo mode preserves corrections and minute versions without token or network', async () => {
   const fetch = vi.fn(), token = vi.fn()
   vi.stubGlobal('fetch', fetch)
@@ -68,6 +90,11 @@ it('demo mode preserves corrections and minute versions without token or network
   expect(minutes.total).toBe(2)
   expect(minutes.items.find(item => item.version === 1)?.status).toBe('superseded')
   expect(minutes.items.find(item => item.version === 2)?.status).toBe('approved')
+
+  const instruction = await client.createInstruction('23232323-2323-2323-2323-232323232323', { instructionDate: '2026-09-12', grade: 'master', topic: 'Docencia de Maestros' })
+  await client.recordInstructionAttendance(instruction.id, [{ memberId: members.items[0].id, status: 'present' }])
+  const instructions = await client.getInstructions('23232323-2323-2323-2323-232323232323')
+  expect(instructions.items.some(item => item.id === instruction.id)).toBe(true)
   expect(fetch).not.toHaveBeenCalled()
   expect(token).not.toHaveBeenCalled()
 })

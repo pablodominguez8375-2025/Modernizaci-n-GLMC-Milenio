@@ -27,8 +27,6 @@ describe('Gestión Logial product cockpit', () => {
       fellowcraft: 'Primer Vigilante',
       master: 'Ex Venerable Maestro',
     })
-    expect(lodgeCockpitDemoData.instructionMembers.length).toBeGreaterThanOrEqual(3)
-    expect(lodgeCockpitDemoData.instructionHistory.every(record => record.length === 5)).toBe(true)
   })
 
   it('starts the public showcase with operational fictitious meetings', async () => {
