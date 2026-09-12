@@ -20,6 +20,7 @@ export default function InitiationCircuitPage({ api }: { api: PmgmApiClient }) {
   const [completed, setCompleted] = useState(0)
   const [selected, setSelected] = useState(0)
   const [history, setHistory] = useState<string[]>([])
+  const [decision, setDecision] = useState<'approved' | 'rejected' | 'observed' | null>(null)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const current = stages[selected]
@@ -33,13 +34,28 @@ export default function InitiationCircuitPage({ api }: { api: PmgmApiClient }) {
     try {
       if (completed === 10) await api.registerInitiation('eeeeeeee-2222-2222-2222-222222222222', '2026-09-12', 'ACTA-INI-DEMO-2026-001')
     const stage = stages[completed]
+    setDecision('approved')
     setHistory(items => [`${stage.title} — evidencia registrada`, ...items])
     setCompleted(value => value + 1)
     setSelected(Math.min(completed + 1, stages.length - 1))
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'No fue posible registrar la etapa.') } finally { setWorking(false) }
   }
 
-  const restart = () => { setCompleted(0); setSelected(0); setHistory([]) }
+  const reject = () => {
+    if (selected !== completed || finished) return
+    const stage = stages[selected]
+    setDecision('rejected')
+    setHistory(items => [`${stage.title} — rechazado por el aprobante; el expediente queda detenido`, ...items])
+  }
+
+  const observe = () => {
+    if (selected !== completed || finished) return
+    const stage = stages[selected]
+    setDecision('observed')
+    setHistory(items => [`${stage.title} — observado; se solicita subsanar antecedentes`, ...items])
+  }
+
+  const restart = () => { setCompleted(0); setSelected(0); setHistory([]); setDecision(null) }
 
   return <div className="initiation-circuit">
     <header className="initiation-hero">
@@ -57,11 +73,12 @@ export default function InitiationCircuitPage({ api }: { api: PmgmApiClient }) {
       <section className="initiation-detail">
         {error && <div className="error-banner" role="alert">{error}</div>}
         <p className="eyebrow">Etapa {selected + 1}</p><h2>{current.title}</h2>
-        <dl><div><dt>Responsable</dt><dd>{current.owner}</dd></div><div><dt>Evidencia exigida</dt><dd>{current.evidence}</dd></div><div><dt>Estado</dt><dd>{selected < completed ? 'Completada' : selected === completed ? 'Lista para operar' : 'Bloqueada por etapa anterior'}</dd></div></dl>
+        <dl><div><dt>Responsable / aprobante</dt><dd>{current.owner}</dd></div><div><dt>Evidencia exigida</dt><dd>{current.evidence}</dd></div><div><dt>Estado</dt><dd>{selected < completed ? 'Completada' : selected === completed ? (decision === 'rejected' ? 'Rechazada · requiere corrección' : decision === 'observed' ? 'Observada · pendiente de subsanar' : 'Pendiente de decisión') : 'Bloqueada por etapa anterior'}</dd></div></dl>
+        {selected === completed && !finished && <div className="initiation-approval-note"><strong>Esta etapa requiere aprobación</strong><span>El aprobante revisa el expediente completo, actividad, tenidas y documentos antes de resolver.</span></div>}
         {selected === 0 && <div className="initiation-fields"><label>Insinuado<input value="Persona Demostrativa Centenario" readOnly /></label><label>Taller<input value="Taller Demostrativo Nº 23" readOnly /></label><label>Fecha de ingreso<input value="12-09-2026" readOnly /></label><label>Secretario responsable<input value="Secretario Demostrativo" readOnly /></label></div>}
         {selected === 9 && <div className="initiation-document"><span>PLANCHA</span><strong>{completed > 9 ? 'AUT-CER-DEMO-2026-001' : 'Se genera únicamente tras el visto bueno'}</strong><small>Permanece vinculada al expediente y a las validaciones congeladas.</small></div>}
         {selected === 10 && <div className="initiation-member"><strong>{finished ? 'Aprendiz activado' : 'Activación todavía bloqueada'}</strong><span>{finished ? 'Persona Demostrativa Centenario · Miembro activo · 1.er grado' : 'La autorización no convierte por sí sola al candidato en hermano.'}</span></div>}
-        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed} onClick={advance}>{working ? 'Registrando…' : completed === 9 ? 'Emitir Plancha y programar' : completed === 10 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button><button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
+        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected'} onClick={advance}>{working ? 'Registrando…' : completed === 9 ? 'Aprobar y emitir Plancha' : completed === 10 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 10 && <><button type="button" className="regularity-secondary" disabled={working} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
       </section>
     </div>
 
