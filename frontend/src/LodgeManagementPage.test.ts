@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lodgeCockpitDemoData } from './LodgeManagementPage'
+import { instructionResponsibilityByGrade, lodgeCockpitDemoData } from './LodgeManagementPage'
 import { demoLodgeSeed, LodgeApiClient } from './api/lodgeApi'
 
 const lodge23 = '23232323-2323-2323-2323-232323232323'
@@ -19,6 +19,16 @@ describe('Gestión Logial product cockpit', () => {
     expect(lodgeCockpitDemoData.managementAreas.find(([area]) => area === 'Docencia e instrucción')?.[1]).toBe('Vigilantes y Ex Venerable Maestro')
     expect(lodgeCockpitDemoData.instruction.length).toBeGreaterThanOrEqual(4)
     expect(lodgeCockpitDemoData.notifications.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('assigns instruction by grade and exposes attendance-ready demo members', () => {
+    expect(instructionResponsibilityByGrade).toEqual({
+      apprentice: 'Segundo Vigilante',
+      fellowcraft: 'Primer Vigilante',
+      master: 'Ex Venerable Maestro',
+    })
+    expect(lodgeCockpitDemoData.instructionMembers.length).toBeGreaterThanOrEqual(3)
+    expect(lodgeCockpitDemoData.instructionHistory.every(record => record.length === 5)).toBe(true)
   })
 
   it('starts the public showcase with operational fictitious meetings', async () => {

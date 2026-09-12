@@ -260,7 +260,10 @@ No se implementa CENDOC como módulo, dependencia ni sustituto de Biblioteca Vir
 - forma parte de la Gestión Logial de cada Taller;
 - es gestionada por los Vigilantes y el Ex Venerable Maestro, con asignaciones configurables conforme a la normativa institucional;
 - instrucciones por grado;
-- asistencia;
+- registro de cada instrucción con fecha, tema, grado, responsable y material asociado;
+- Segundo Vigilante para Aprendices, Primer Vigilante para Compañeros y Ex Venerable Maestro para Maestros, salvo regla institucional posterior parametrizada;
+- asistencia individual específica a cada instrucción, con presente, ausente o justificada, separada de la asistencia general a Tenida aunque pueda vincularse a ella;
+- historial formativo simple por hermano; evaluaciones y rúbricas quedan fuera del MVP;
 - planchas asociadas al historial del hermano cuando corresponda;
 - publicación en Biblioteca sólo cuando exista autorización y permisos compatibles;
 - filtros por grado y Taller/contexto según política.

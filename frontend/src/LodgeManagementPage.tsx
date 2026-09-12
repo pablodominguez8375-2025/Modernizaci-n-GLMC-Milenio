@@ -46,12 +46,27 @@ export const lodgeCockpitDemoData = {
     ['Ética y filosofía', 70],
     ['Trabajo en Taller', 50],
   ],
+  instructionMembers: [
+    ['demo-aprendiz-1', 'H∴ Andrea Demostrativa'],
+    ['demo-aprendiz-2', 'H∴ Bruno Demostrativo'],
+    ['demo-aprendiz-3', 'H∴ Camila Demostrativa'],
+  ],
+  instructionHistory: [
+    ['5 de septiembre de 2026', 'Aprendices', 'Segundo Vigilante', 'Simbología del grado', '3 de 3'],
+    ['22 de agosto de 2026', 'Compañeros', 'Primer Vigilante', 'Las artes liberales', '2 de 3'],
+  ],
   tasks: { pending: 5, inProgress: 3, completed: 18 },
   notifications: [
     'Nueva circular demostrativa disponible',
     'Material de docencia autorizado',
     'Recordatorio de preparación de tenida',
   ],
+} as const
+
+export const instructionResponsibilityByGrade = {
+  apprentice: 'Segundo Vigilante',
+  fellowcraft: 'Primer Vigilante',
+  master: 'Ex Venerable Maestro',
 } as const
 
 export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiClient; lodgeApi: LodgeApiClient }) {
@@ -67,6 +82,11 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showOperations, setShowOperations] = useState(false)
+  const [instructionDate, setInstructionDate] = useState(todayInChile())
+  const [instructionGrade, setInstructionGrade] = useState<Exclude<LodgeGrade, 'all'>>('apprentice')
+  const [instructionTopic, setInstructionTopic] = useState('')
+  const [instructionAttendance, setInstructionAttendance] = useState<Record<string, LodgeAttendanceStatus>>(() => Object.fromEntries(lodgeCockpitDemoData.instructionMembers.map(([id]) => [id, 'present'])))
+  const [instructionConfirmation, setInstructionConfirmation] = useState<string | null>(null)
 
   const [meetingDate, setMeetingDate] = useState(todayInChile())
   const [meetingType, setMeetingType] = useState<LodgeMeetingType>('regular')
@@ -230,6 +250,13 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const meetingClosed = selectedMeeting?.status === 'closed' || selectedMeeting?.status === 'cancelled'
   const lodgeName = api.useMocks ? lodgeCockpitDemoData.lodge.name : selectedOrganization ? organizationLabel(selectedOrganization) : 'Taller autorizado'
   const memberCount = api.useMocks ? lodgeCockpitDemoData.members.active : members.length
+  const instructionResponsible = instructionResponsibilityByGrade[instructionGrade]
+
+  const saveDemoInstruction = (event: FormEvent) => {
+    event.preventDefault()
+    const present = Object.values(instructionAttendance).filter(status => status === 'present').length
+    setInstructionConfirmation(`Instrucción registrada · ${gradeLabel(instructionGrade)} · ${present} asistentes · responsable: ${instructionResponsible}.`)
+  }
 
   return <div className="lodge-product-page">
     <section className="lodge-product-heading">
@@ -269,6 +296,22 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
     <section className="lodge-management-section">
       <div className="lodge-management-heading"><div><p className="lodge-kicker">Administración propia</p><h2>Gestión Logial de cada Taller</h2></div><p>Estas funciones pertenecen al Taller y se integran, sin confundirse, con los órganos correspondientes de la Gran Logia.</p></div>
       <div className="lodge-management-grid">{lodgeCockpitDemoData.managementAreas.map(([area, responsible, summary]) => <article className="lodge-management-area" key={area}><span>{area[0]}</span><div><h3>{area}</h3><strong>{responsible}</strong><p>{summary}</p></div></article>)}</div>
+    </section>
+
+    <section className="lodge-instruction-workspace">
+      <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">Demostración con datos ficticios</span></div>
+      {instructionConfirmation && <div className="regularity-success" role="status">{instructionConfirmation}</div>}
+      <div className="lodge-instruction-workspace-grid">
+        <form className="lodge-instruction-form" onSubmit={saveDemoInstruction}>
+          <label><span>Fecha</span><input type="date" value={instructionDate} onChange={event => setInstructionDate(event.target.value)} required /></label>
+          <label><span>Grado</span><select value={instructionGrade} onChange={event => setInstructionGrade(event.target.value as Exclude<LodgeGrade, 'all'>)}><option value="apprentice">Aprendices</option><option value="fellowcraft">Compañeros</option><option value="master">Maestros</option></select></label>
+          <label className="lodge-instruction-topic"><span>Tema de la instrucción</span><input value={instructionTopic} onChange={event => setInstructionTopic(event.target.value)} placeholder="Ej.: Simbología del grado" required /></label>
+          <div className="lodge-instruction-responsible"><small>Responsable asignado</small><strong>{instructionResponsible}</strong><span>{instructionGrade === 'apprentice' ? 'Instrucción de Aprendices' : instructionGrade === 'fellowcraft' ? 'Instrucción de Compañeros' : 'Instrucción de Maestros'}</span></div>
+          <fieldset><legend>Asistencia a la instrucción</legend>{lodgeCockpitDemoData.instructionMembers.map(([id, name]) => <div className="lodge-instruction-member" key={id}><strong>{name}</strong><select aria-label={`Asistencia de ${name}`} value={instructionAttendance[id]} onChange={event => setInstructionAttendance(current => ({ ...current, [id]: event.target.value as LodgeAttendanceStatus }))}><option value="present">Presente</option><option value="excused">Justificado</option><option value="absent">Ausente</option></select></div>)}</fieldset>
+          <button className="lodge-blue-button" type="submit">Guardar instrucción y asistencia</button>
+        </form>
+        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Historial</p><h2>Últimas instrucciones registradas</h2></div></div>{lodgeCockpitDemoData.instructionHistory.map(([date, gradeName, responsible, topic, attendance]) => <div className="lodge-instruction-history-row" key={`${date}-${gradeName}`}><div><strong>{topic}</strong><span>{date} · {gradeName}</span></div><div><small>{responsible}</small><em>{attendance}</em></div></div>)}</article>
+      </div>
     </section>
 
     <section className="lodge-insight-grid">

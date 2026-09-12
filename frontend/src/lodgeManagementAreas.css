@@ -31,3 +31,32 @@
 
 @media (max-width: 1100px) { .lodge-management-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 700px) { .lodge-management-heading { align-items: start; flex-direction: column; gap: 8px; } .lodge-management-grid { grid-template-columns: 1fr; } }
+
+.lodge-instruction-workspace { display: grid; gap: 16px; padding: 20px; border: 1px solid #dce4ee; border-radius: 16px; background: #fff; box-shadow: 0 8px 26px rgba(27,43,73,.055); }
+.lodge-instruction-heading { display: flex; align-items: start; justify-content: space-between; gap: 20px; }
+.lodge-instruction-heading h2 { margin: 0; color: #14325d; font-size: 20px; }
+.lodge-instruction-heading p:last-child { margin: 6px 0 0; color: #68768b; font-size: 11px; }
+.lodge-instruction-workspace-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 18px; align-items: start; }
+.lodge-instruction-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; border-radius: 12px; background: #f7f9fc; }
+.lodge-instruction-form label { display: grid; gap: 5px; }
+.lodge-instruction-form label > span, .lodge-instruction-responsible small { color: #6c7890; font-size: 9px; font-weight: 800; }
+.lodge-instruction-form input, .lodge-instruction-form select { width: 100%; border: 1px solid #d9e0e9; border-radius: 8px; background: #fff; padding: 10px; color: #2c405f; }
+.lodge-instruction-topic, .lodge-instruction-responsible, .lodge-instruction-form fieldset, .lodge-instruction-form button { grid-column: 1 / -1; }
+.lodge-instruction-responsible { display: grid; gap: 3px; padding: 11px 13px; border-left: 3px solid #b48a37; border-radius: 8px; background: #fff8e8; }
+.lodge-instruction-responsible strong { color: #173b6e; font-size: 12px; }
+.lodge-instruction-responsible span { color: #756746; font-size: 9px; }
+.lodge-instruction-form fieldset { display: grid; gap: 8px; margin: 0; border: 0; padding: 0; }
+.lodge-instruction-form legend { margin-bottom: 8px; color: #14325d; font-size: 11px; font-weight: 900; }
+.lodge-instruction-member { display: grid; grid-template-columns: 1fr 130px; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid #e2e7ee; border-radius: 8px; background: #fff; }
+.lodge-instruction-member strong { color: #3e506b; font-size: 10px; }
+.lodge-instruction-history { padding: 16px; border: 1px solid #e1e6ef; border-radius: 12px; }
+.lodge-instruction-history-row { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 12px 0; border-top: 1px solid #edf0f5; }
+.lodge-instruction-history-row:first-of-type { margin-top: 10px; }
+.lodge-instruction-history-row > div { display: grid; gap: 4px; }
+.lodge-instruction-history-row > div:last-child { justify-items: end; }
+.lodge-instruction-history-row strong { color: #30425e; font-size: 10px; }
+.lodge-instruction-history-row span, .lodge-instruction-history-row small { color: #7c899c; font-size: 8px; }
+.lodge-instruction-history-row em { padding: 4px 7px; border-radius: 999px; background: #e8f5ed; color: #28785a; font-size: 8px; font-style: normal; font-weight: 900; }
+
+@media (max-width: 900px) { .lodge-instruction-workspace-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .lodge-instruction-heading { flex-direction: column; } .lodge-instruction-form { grid-template-columns: 1fr; } .lodge-instruction-topic, .lodge-instruction-responsible, .lodge-instruction-form fieldset, .lodge-instruction-form button { grid-column: auto; } .lodge-instruction-member { grid-template-columns: 1fr; } }
