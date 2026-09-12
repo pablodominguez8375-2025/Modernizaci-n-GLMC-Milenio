@@ -821,6 +821,13 @@ public static class CeremonyEndpoints
             .OrderByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
+        var grandMaster = await db.CeremonyValidations
+            .AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId &&
+                        x.ValidationType == CeremonyCodes.ValidationType.GrandMaster)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+
         var treasury = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == ceremony.OrganizationId &&
@@ -882,9 +889,10 @@ public static class CeremonyEndpoints
             internalAffairs?.Status,
             treasury?.Status,
             hospitalaria?.Status,
+            grandMaster?.Status,
             evidence);
 
-        return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, publicationSnapshot, decision, today);
+        return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot, decision, today);
     }
 
     private static object ToEligibilityResponse(EligibilityContext context) => new
@@ -901,6 +909,7 @@ public static class CeremonyEndpoints
             regimenInteriorValidationId = context.InternalAffairs?.Id,
             treasurySnapshotId = context.Treasury?.Id,
             hospitalariaSnapshotId = context.Hospitalaria?.Id,
+            granMaestriaValidationId = context.GrandMaster?.Id,
             publication = context.Publication
         }
     };
@@ -965,6 +974,7 @@ public static class CeremonyEndpoints
         CeremonyValidation? InternalAffairs,
         FinancialRegularitySnapshot? Treasury,
         HospitalariaRegularitySnapshot? Hospitalaria,
+        CeremonyValidation? GrandMaster,
         CandidatePublicationSnapshot? Publication,
         CeremonyEligibilityDecision Decision,
         DateOnly AsOfDate);
