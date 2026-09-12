@@ -45,6 +45,7 @@ public sealed class LodgeAnonymousBallot
     public LodgeMeeting Meeting { get; set; } = null!;
     public int Version { get; set; }
     public required string BallotType { get; set; }
+    public int? ProcedureNumber { get; set; }
     public required string Subject { get; set; }
     public int AttendeeCount { get; set; }
     public int EligibleCount { get; set; }
