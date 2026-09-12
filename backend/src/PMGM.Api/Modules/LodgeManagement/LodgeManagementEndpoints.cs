@@ -282,6 +282,8 @@ public static class LodgeManagementEndpoints
             return Results.Conflict(new { message = "El escrutinio sólo puede registrarse después de cerrar la Tenida realizada." });
         if (!LodgeManagementCodes.BallotType.IsValid(request.BallotType) || string.IsNullOrWhiteSpace(request.Subject))
             return Results.BadRequest(new { message = "La modalidad y el asunto de la votación son obligatorios." });
+        if (request.BallotType == LodgeManagementCodes.BallotType.WhiteBlack && request.ProcedureNumber is not (1 or 2 or 3))
+            return Results.BadRequest(new { message = "El balotaje B/N debe indicar primer, segundo o tercer trámite." });
         if (request.EligibleCount < 0 || request.PositiveCount < 0 || request.NegativeCount < 0)
             return Results.BadRequest(new { message = "Las cantidades del escrutinio no pueden ser negativas." });
 
@@ -300,13 +302,13 @@ public static class LodgeManagementEndpoints
 
         var subject = request.Subject.Trim();
         var previous = await db.LodgeAnonymousBallots
-            .Where(x => x.MeetingId == meetingId && x.Subject == subject && x.Status == LodgeManagementCodes.BallotStatus.Closed)
+            .Where(x => x.MeetingId == meetingId && x.Subject == subject && x.ProcedureNumber == request.ProcedureNumber && x.Status == LodgeManagementCodes.BallotStatus.Closed)
             .ToListAsync(cancellationToken);
         foreach (var item in previous) item.Status = LodgeManagementCodes.BallotStatus.Superseded;
         var version = previous.Count == 0 ? 1 : previous.Max(x => x.Version) + 1;
         var ballot = new LodgeAnonymousBallot
         {
-            MeetingId = meetingId, Version = version, BallotType = request.BallotType, Subject = subject,
+            MeetingId = meetingId, Version = version, BallotType = request.BallotType, ProcedureNumber = request.ProcedureNumber, Subject = subject,
             AttendeeCount = attendeeCount, EligibleCount = request.EligibleCount,
             PositiveCount = request.PositiveCount, NegativeCount = request.NegativeCount,
             RecountObservation = NormalizeOptional(request.RecountObservation), Status = LodgeManagementCodes.BallotStatus.Closed,
@@ -314,7 +316,7 @@ public static class LodgeManagementEndpoints
         };
         db.LodgeAnonymousBallots.Add(ballot);
         db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "lodge.anonymous_ballot.recorded", nameof(LodgeAnonymousBallot), ballot.Id.ToString(), meeting.OrganizationId, AuditResults.Success,
-            new { ballot.MeetingId, ballot.Version, ballot.BallotType, ballot.Subject, ballot.AttendeeCount, ballot.EligibleCount, ballot.PositiveCount, ballot.NegativeCount, counted, hasDifference }));
+            new { ballot.MeetingId, ballot.Version, ballot.BallotType, ballot.ProcedureNumber, ballot.Subject, ballot.AttendeeCount, ballot.EligibleCount, ballot.PositiveCount, ballot.NegativeCount, counted, hasDifference }));
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/gestion-logial/tenidas/{meetingId}/votaciones/{ballot.Id}", ToBallotDto(ballot));
     }
@@ -351,14 +353,14 @@ public static class LodgeManagementEndpoints
             .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
         var ballots = await db.LodgeAnonymousBallots.AsNoTracking()
             .Where(x => x.MeetingId == meetingId && x.Status == LodgeManagementCodes.BallotStatus.Closed)
-            .OrderBy(x => x.RecordedAtUtc).ToListAsync(cancellationToken);
+            .OrderBy(x => x.ProcedureNumber).ThenBy(x => x.RecordedAtUtc).ToListAsync(cancellationToken);
 
         var present = attendance.Where(x => x.Status == LodgeManagementCodes.AttendanceStatus.Present).ToList();
         var absent = attendance.Where(x => x.Status == LodgeManagementCodes.AttendanceStatus.Absent).ToList();
         var excused = attendance.Where(x => x.Status == LodgeManagementCodes.AttendanceStatus.Excused).ToList();
         var ballotLines = ballots.Count == 0 ? "Sin balotajes o votaciones registrados."
             : string.Join(Environment.NewLine, ballots.Select((x, index) =>
-                $"{index + 1}. {x.Subject}: {BallotPositiveLabel(x.BallotType)} {x.PositiveCount}; {BallotNegativeLabel(x.BallotType)} {x.NegativeCount}; habilitados {x.EligibleCount}; contabilizados {x.PositiveCount + x.NegativeCount}." +
+                $"{index + 1}. {BallotProcedureLabel(x)}{x.Subject}: {BallotPositiveLabel(x.BallotType)} {x.PositiveCount}; {BallotNegativeLabel(x.BallotType)} {x.NegativeCount}; habilitados {x.EligibleCount}; contabilizados {x.PositiveCount + x.NegativeCount}." +
                 (string.IsNullOrWhiteSpace(x.RecountObservation) ? "" : $" Observación: {x.RecountObservation}")));
         var content = $"EXTRACTO DE ACTA{Environment.NewLine}" +
             $"Taller: {organization.Name}{(organization.Number is null ? "" : $" N.º {organization.Number}")}{Environment.NewLine}" +
@@ -383,6 +385,7 @@ public static class LodgeManagementEndpoints
 
     private static string BallotPositiveLabel(string type) => type == LodgeManagementCodes.BallotType.WhiteBlack ? "blancas" : "positivos";
     private static string BallotNegativeLabel(string type) => type == LodgeManagementCodes.BallotType.WhiteBlack ? "negras" : "negativos";
+    private static string BallotProcedureLabel(LodgeAnonymousBallot ballot) => ballot.BallotType != LodgeManagementCodes.BallotType.WhiteBlack ? "" : ballot.ProcedureNumber switch { 1 => "Primer trámite · ", 2 => "Segundo trámite · ", 3 => "Tercer trámite · ", _ => "" };
 
     private static async Task<IResult> CreateMinuteVersionAsync(
         Guid meetingId,
@@ -499,7 +502,7 @@ public static class LodgeManagementEndpoints
         => new(minute.Id, minute.MeetingId, minute.Version, minute.Content, minute.Status, minute.CreatedAtUtc, minute.ApprovedAtUtc);
 
     private static LodgeAnonymousBallotDto ToBallotDto(LodgeAnonymousBallot ballot)
-        => new(ballot.Id, ballot.MeetingId, ballot.Version, ballot.BallotType, ballot.Subject, ballot.AttendeeCount,
+        => new(ballot.Id, ballot.MeetingId, ballot.Version, ballot.BallotType, ballot.ProcedureNumber, ballot.Subject, ballot.AttendeeCount,
             ballot.EligibleCount, ballot.PositiveCount, ballot.NegativeCount, ballot.RecountObservation, ballot.Status, ballot.RecordedAtUtc);
 
     private static string GetSubject(ClaimsPrincipal user)
@@ -523,7 +526,7 @@ public sealed record LodgeAttendanceRequest(
     string? ExcuseReason);
 
 public sealed record LodgeMinuteVersionRequest(string Content);
-public sealed record LodgeAnonymousBallotRequest(string BallotType, string Subject, int EligibleCount, int PositiveCount, int NegativeCount, string? RecountObservation);
+public sealed record LodgeAnonymousBallotRequest(string BallotType, int? ProcedureNumber, string Subject, int EligibleCount, int PositiveCount, int NegativeCount, string? RecountObservation);
 
 public sealed record LodgeMemberOptionDto(Guid Id, string DisplayName);
 public sealed record LodgeMemberOptionsResponse(int Total, IReadOnlyList<LodgeMemberOptionDto> Items);
@@ -558,6 +561,6 @@ public sealed record LodgeMinuteDto(
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ApprovedAtUtc);
 public sealed record LodgeMinutesResponse(int Total, IReadOnlyList<LodgeMinuteDto> Items);
-public sealed record LodgeAnonymousBallotDto(Guid Id, Guid MeetingId, int Version, string BallotType, string Subject,
+public sealed record LodgeAnonymousBallotDto(Guid Id, Guid MeetingId, int Version, string BallotType, int? ProcedureNumber, string Subject,
     int AttendeeCount, int EligibleCount, int PositiveCount, int NegativeCount, string? RecountObservation, string Status, DateTimeOffset RecordedAtUtc);
 public sealed record LodgeAnonymousBallotsResponse(int Total, IReadOnlyList<LodgeAnonymousBallotDto> Items);
