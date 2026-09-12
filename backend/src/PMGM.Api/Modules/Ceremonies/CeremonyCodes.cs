@@ -19,6 +19,7 @@ public static class CeremonyCodes
         public const string Observed = "observed";
         public const string Rejected = "rejected";
         public const string Authorized = "authorized";
+        public const string Completed = "completed";
     }
 
     public static class ValidationType
