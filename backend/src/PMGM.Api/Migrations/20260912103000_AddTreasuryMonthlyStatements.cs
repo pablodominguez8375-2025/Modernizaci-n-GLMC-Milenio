@@ -30,8 +30,8 @@ public partial class AddTreasuryMonthlyStatements : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_treasury_adjustments", x => x.Id);
-                table.ForeignKey("FK_treasury_adjustments_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_treasury_adjustments_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_treasury_adjustments_members_MemberId", column: x => x.MemberId, principalSchema: "core", principalTable: "members", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_treasury_adjustments_organizations_OrganizationId", column: x => x.OrganizationId, principalSchema: "core", principalTable: "organizations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -54,8 +54,8 @@ public partial class AddTreasuryMonthlyStatements : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_treasury_monthly_statements", x => x.Id);
-                table.ForeignKey("FK_treasury_monthly_statements_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_treasury_monthly_statements_treasury_monthly_statements_RectifiesStatementId", x => x.RectifiesStatementId, "core", "treasury_monthly_statements", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_treasury_monthly_statements_organizations_OrganizationId", column: x => x.OrganizationId, principalSchema: "core", principalTable: "organizations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_treasury_monthly_statements_treasury_monthly_statements_RectifiesStatementId", column: x => x.RectifiesStatementId, principalSchema: "core", principalTable: "treasury_monthly_statements", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -78,9 +78,9 @@ public partial class AddTreasuryMonthlyStatements : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_treasury_monthly_statement_lines", x => x.Id);
-                table.ForeignKey("FK_treasury_monthly_statement_lines_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_treasury_monthly_statement_lines_memberships_MembershipId", x => x.MembershipId, "core", "memberships", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_treasury_monthly_statement_lines_treasury_monthly_statements_StatementId", x => x.StatementId, "core", "treasury_monthly_statements", "Id", onDelete: ReferentialAction.Cascade);
+                table.ForeignKey(name: "FK_treasury_monthly_statement_lines_members_MemberId", column: x => x.MemberId, principalSchema: "core", principalTable: "members", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_treasury_monthly_statement_lines_memberships_MembershipId", column: x => x.MembershipId, principalSchema: "core", principalTable: "memberships", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_treasury_monthly_statement_lines_treasury_monthly_statements_StatementId", column: x => x.StatementId, principalSchema: "core", principalTable: "treasury_monthly_statements", principalColumn: "Id", onDelete: ReferentialAction.Cascade);
             });
 
         migrationBuilder.CreateTable(
@@ -100,7 +100,7 @@ public partial class AddTreasuryMonthlyStatements : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_treasury_payments", x => x.Id);
-                table.ForeignKey("FK_treasury_payments_treasury_monthly_statements_StatementId", x => x.StatementId, "core", "treasury_monthly_statements", "Id", onDelete: ReferentialAction.Cascade);
+                table.ForeignKey(name: "FK_treasury_payments_treasury_monthly_statements_StatementId", column: x => x.StatementId, principalSchema: "core", principalTable: "treasury_monthly_statements", principalColumn: "Id", onDelete: ReferentialAction.Cascade);
             });
 
         migrationBuilder.CreateIndex("IX_treasury_adjustments_MemberId_OrganizationId_EffectiveFrom", "core", "treasury_adjustments", new[] { "MemberId", "OrganizationId", "EffectiveFrom" });
