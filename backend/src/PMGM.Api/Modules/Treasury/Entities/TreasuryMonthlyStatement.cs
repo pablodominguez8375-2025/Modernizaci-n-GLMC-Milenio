@@ -1,5 +1,6 @@
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership.Entities;
+using MembershipEntity = PMGM.Api.Modules.Membership.Entities.Membership;
 
 namespace PMGM.Api.Modules.Treasury.Entities;
 
@@ -31,7 +32,7 @@ public sealed class TreasuryMonthlyStatementLine
     public Guid? MemberId { get; set; }
     public Member? Member { get; set; }
     public Guid? MembershipId { get; set; }
-    public Membership? Membership { get; set; }
+    public MembershipEntity? Membership { get; set; }
     public required string DegreeCodeAtCutoff { get; set; }
     public string? OfficeCodeAtCutoff { get; set; }
     public decimal BaseAmount { get; set; }
