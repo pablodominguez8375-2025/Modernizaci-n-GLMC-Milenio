@@ -12,13 +12,6 @@ public partial class LinkAdmissionCaseToCeremony : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.AddColumn<Guid>(
-            name: "AdmissionCaseId",
-            schema: "core",
-            table: "ceremony_requests",
-            type: "uuid",
-            nullable: true);
-
         migrationBuilder.CreateIndex(
             name: "IX_ceremony_requests_AdmissionCaseId",
             schema: "core",
@@ -49,9 +42,5 @@ public partial class LinkAdmissionCaseToCeremony : Migration
             schema: "core",
             table: "ceremony_requests");
 
-        migrationBuilder.DropColumn(
-            name: "AdmissionCaseId",
-            schema: "core",
-            table: "ceremony_requests");
     }
 }
