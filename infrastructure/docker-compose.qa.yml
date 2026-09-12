@@ -29,7 +29,7 @@ services:
       - pmgm_qa_internal
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on:
       - minio
     restart: "no"
