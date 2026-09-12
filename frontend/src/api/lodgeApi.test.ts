@@ -79,9 +79,15 @@ it('demo mode preserves corrections and minute versions without token or network
   await client.closeMeeting(meeting.id)
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'present' })
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'excused', excuseReason: 'Rectificación' })
+  await client.recordAttendance(meeting.id, { memberId: members.items[1].id, status: 'present' })
   const attendance = await client.getAttendance(meeting.id)
-  expect(attendance.total).toBe(1)
-  expect(attendance.items[0].status).toBe('excused')
+  expect(attendance.total).toBe(2)
+  expect(attendance.items.find(item => item.memberId === members.items[0].id)?.status).toBe('excused')
+
+  const ballot = await client.recordAnonymousBallot(meeting.id, { ballotType: 'white_black', subject: 'Admisión QA', eligibleCount: 1, positiveCount: 1, negativeCount: 0 })
+  expect(ballot.attendeeCount).toBe(1)
+  expect(ballot.positiveCount).toBe(1)
+  expect(JSON.stringify(ballot)).not.toContain('memberId')
 
   const v1 = await client.createMinute(meeting.id, 'Versión uno')
   await client.approveMinute(meeting.id, v1.id)
