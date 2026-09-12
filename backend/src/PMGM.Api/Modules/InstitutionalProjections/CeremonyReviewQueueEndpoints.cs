@@ -100,6 +100,18 @@ public static class CeremonyReviewQueueEndpoints
             .GroupBy(x => x.CeremonyRequestId)
             .ToDictionary(x => x.Key, x => x.First().Status);
 
+        var grandMasterRows = await db.CeremonyValidations
+            .AsNoTracking()
+            .Where(x => requestIds.Contains(x.CeremonyRequestId) &&
+                        x.ValidationType == CeremonyCodes.ValidationType.GrandMaster)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(x => new { x.CeremonyRequestId, x.Status, x.RecordedAtUtc })
+            .ToListAsync(cancellationToken);
+
+        var grandMasterByRequest = grandMasterRows
+            .GroupBy(x => x.CeremonyRequestId)
+            .ToDictionary(x => x.Key, x => x.First().Status);
+
         var treasuryRows = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => organizationIds.Contains(x.OrganizationId) &&
@@ -147,6 +159,7 @@ public static class CeremonyReviewQueueEndpoints
         var items = ceremonies.Select(ceremony =>
         {
             internalAffairsByRequest.TryGetValue(ceremony.Id, out var regimenStatus);
+            grandMasterByRequest.TryGetValue(ceremony.Id, out var grandMasterStatus);
             treasuryByOrganization.TryGetValue(ceremony.OrganizationId, out var treasuryStatus);
             hospitalariaByOrganization.TryGetValue(ceremony.OrganizationId, out var hospitalariaStatus);
             publicationByRequest.TryGetValue(ceremony.Id, out var publication);
@@ -182,6 +195,7 @@ public static class CeremonyReviewQueueEndpoints
                 regimenStatus,
                 treasuryStatus,
                 hospitalariaStatus,
+                grandMasterStatus,
                 publicationEvidence);
 
             var isFinal = ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected;
