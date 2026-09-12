@@ -80,7 +80,7 @@ public static class CeremonyEndpoints
         var evidence = $"{authorization.DocumentCode}; {request.MinuteReference.Trim()}";
         var member = new Member { PersonId = ceremony.CandidatePersonId.Value };
         db.Members.Add(member);
-        db.Memberships.Add(new Membership { Member = member, OrganizationId = ceremony.OrganizationId, MembershipType = "regular", StartDate = request.CeremonyDate, Status = MembershipCodes.MembershipStatus.Active, EvidenceReference = evidence });
+        db.Memberships.Add(new PMGM.Api.Modules.Membership.Entities.Membership { Member = member, OrganizationId = ceremony.OrganizationId, MembershipType = "regular", StartDate = request.CeremonyDate, Status = MembershipCodes.MembershipStatus.Active, EvidenceReference = evidence });
         db.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent { Member = member, OrganizationId = ceremony.OrganizationId, EventType = MembershipCodes.InstitutionalStatus.Active, EffectiveDate = request.CeremonyDate, EvidenceReference = evidence, Reason = "Activación por ceremonia de Iniciación realizada." });
         db.DegreeEvents.Add(new DegreeEvent { Member = member, OrganizationId = ceremony.OrganizationId, Degree = "apprentice", EventType = MembershipCodes.DegreeEvent.Initiation, EffectiveDate = request.CeremonyDate, EvidenceReference = evidence });
         ceremony.Member = member;
