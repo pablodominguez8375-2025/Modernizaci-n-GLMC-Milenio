@@ -1,0 +1,49 @@
+/* PMGM-UI-001 · Corrective responsive rules validated against generated screenshots. */
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .member-identity-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .member-avatar-wrap {
+    justify-self: start;
+  }
+
+  .member-data-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .member-datum strong,
+  .member-datum span {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (min-width: 761px) and (max-width: 900px) {
+  .member-profile-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .member-quote-card {
+    grid-column: auto;
+  }
+
+  .member-identity-card {
+    grid-template-columns: 90px minmax(0, 1fr);
+  }
+
+  .member-avatar-wrap {
+    width: 82px;
+    height: 82px;
+    justify-self: start;
+  }
+
+  .member-data-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .member-datum strong,
+  .member-datum span {
+    overflow-wrap: anywhere;
+  }
+}
