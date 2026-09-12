@@ -9,6 +9,14 @@ describe('Gestión Logial product cockpit', () => {
     expect(lodgeCockpitDemoData.lodge.name).toContain('Demostrativo')
     expect(lodgeCockpitDemoData.members.active).toBeGreaterThan(0)
     expect(lodgeCockpitDemoData.officers.length).toBeGreaterThanOrEqual(6)
+    expect(lodgeCockpitDemoData.officers.some(([role]) => role === 'Ex Venerable Maestro')).toBe(true)
+    expect(lodgeCockpitDemoData.managementAreas.map(([area]) => area)).toEqual([
+      'Secretaría del Taller',
+      'Tesorería del Taller',
+      'Hospitalaria del Taller',
+      'Docencia e instrucción',
+    ])
+    expect(lodgeCockpitDemoData.managementAreas.find(([area]) => area === 'Docencia e instrucción')?.[1]).toBe('Vigilantes y Ex Venerable Maestro')
     expect(lodgeCockpitDemoData.instruction.length).toBeGreaterThanOrEqual(4)
     expect(lodgeCockpitDemoData.notifications.length).toBeGreaterThanOrEqual(3)
   })

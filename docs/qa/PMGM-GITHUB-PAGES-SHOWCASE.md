@@ -1,4 +1,4 @@
-# Proyecto Milenio — demo pública y Showcase de testing en GitHub Pages
+# Proyecto Centenario — demo pública y Showcase de testing en GitHub Pages
 
 ## Objetivo
 
@@ -15,7 +15,7 @@ La URL de un Pull Request de GitHub no es una URL de demostración: sirve exclus
 ## Naturaleza del entorno
 
 - Entorno: demostración/testing público.
-- Fuente publicada: rama `dev` después de pasar el workflow de GitHub Pages.
+- Fuente estable: rama `dev`. Durante el incremento post-RC de Gestión Logial, la rama controlada `feature/treasury-payment-table-v1` puede publicar la demo sin modificar la RC1 congelada.
 - Frontend: React + TypeScript + Vite.
 - Datos: exclusivamente mocks/datos ficticios.
 - Autenticación real: deshabilitada.
@@ -67,6 +67,8 @@ La demo es adecuada para revisar:
 - Tesorería/Hospitalaria a nivel de experiencia de usuario;
 - Gran Secretaría;
 - Gestión Logial;
+- Secretaría, Tesorería y Hospitalaria propias de cada Taller;
+- Docencia/Instrucción del Taller bajo responsabilidad de los Vigilantes y el Ex Venerable Maestro;
 - Biblioteca Virtual y Gran Archivero;
 - insinuados publicados;
 - calendario y notificaciones;
@@ -103,7 +105,7 @@ Nombre en GitHub Actions:
 
 El workflow se ejecuta:
 - en pull requests hacia `dev` que afectan frontend/showcase, para validar build y evidencia visual sin publicar el PR;
-- en push a `dev`, para construir, validar y publicar la demo;
+- en push a `dev` o a la rama post-RC controlada, para construir, validar y publicar la demo;
 - manualmente mediante `workflow_dispatch`.
 
 ## Secuencia de publicación

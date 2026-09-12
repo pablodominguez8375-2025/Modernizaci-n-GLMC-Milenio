@@ -2,7 +2,7 @@ name: PMGM Showcase Demo
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, feature/treasury-payment-table-v1]
     paths:
       - 'frontend/**'
       - '.github/workflows/showcase-pages.yml'
@@ -58,7 +58,7 @@ jobs:
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
           VITE_SHOWCASE_SHA: '${{ github.event.pull_request.head.sha || github.sha }}'
-          VITE_SHOWCASE_CHANNEL: 'dev-public-showcase'
+          VITE_SHOWCASE_CHANNEL: 'post-rc-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase

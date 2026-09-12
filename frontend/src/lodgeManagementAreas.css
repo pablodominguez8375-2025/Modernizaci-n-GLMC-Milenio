@@ -1,0 +1,33 @@
+.lodge-management-section {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #dce4ee;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #f8fbff, #f7f2e7);
+}
+
+.lodge-management-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.lodge-management-heading h2,
+.lodge-management-area h3 {
+  margin: 0;
+  color: #14325d;
+}
+
+.lodge-management-heading h2 { font-size: 19px; }
+.lodge-management-heading > p { max-width: 620px; margin: 0; color: #66758b; font-size: 11px; line-height: 1.5; }
+.lodge-management-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.lodge-management-area { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 14px; border: 1px solid #e1e6ef; border-radius: 12px; background: #fff; }
+.lodge-management-area > span { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #edf4fb; color: #31547f; font-weight: 900; }
+.lodge-management-area h3 { font-size: 12px; }
+.lodge-management-area strong { display: block; margin-top: 4px; color: #9a7428; font-size: 9px; }
+.lodge-management-area p { margin: 7px 0 0; color: #68768b; font-size: 9px; line-height: 1.45; }
+
+@media (max-width: 1100px) { .lodge-management-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 700px) { .lodge-management-heading { align-items: start; flex-direction: column; gap: 8px; } .lodge-management-grid { grid-template-columns: 1fr; } }

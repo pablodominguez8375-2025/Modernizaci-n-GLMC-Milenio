@@ -107,6 +107,12 @@ Una plancha de autorización sólo puede emitirse después de cumplir la matriz 
 
 ### 4.4 Gestión Logial
 
+La Gestión Logial es el ámbito de administración propio de cada Taller. Incluye, como mínimo, **Secretaría del Taller, Tesorería del Taller, Hospitalaria del Taller y Docencia/Instrucción**. Estas funciones locales se integran con Gran Secretaría, Gran Tesorería y Gran Hospitalaria, pero no se confunden con ellas ni transfieren automáticamente sus atribuciones.
+
+- Secretaría del Taller: tenidas, asistencia, actas, correspondencia, comunicaciones y tramitación de solicitudes;
+- Tesorería del Taller: cuotas, aportes, pagos parciales, comprobantes, libro mayor, conciliación y rendición a Gran Tesorería;
+- Hospitalaria del Taller: bolso, ayudas, aportes, reposiciones, transferencias y rendición a Gran Hospitalaria;
+- Docencia/Instrucción: planificación por grado, sesiones, asistencia y seguimiento, bajo responsabilidad de los Vigilantes y del Ex Venerable Maestro conforme a sus cargos y a la normativa aplicable;
 - ficha del Taller;
 - cargos y períodos;
 - tenidas por grado/tipo;
@@ -117,7 +123,7 @@ Una plancha de autorización sólo puede emitirse después de cumplir la matriz 
 - dashboard operativo del Taller;
 - repositorio operativo del Taller dentro de los límites definidos.
 
-### 4.5 Tesorería
+### 4.5 Gran Tesorería
 
 - estado financiero por hermano y por Taller;
 - cuadro de pagos institucional;
@@ -251,6 +257,8 @@ No se implementa CENDOC como módulo, dependencia ni sustituto de Biblioteca Vir
 
 ### 4.12 Docencia
 
+- forma parte de la Gestión Logial de cada Taller;
+- es gestionada por los Vigilantes y el Ex Venerable Maestro, con asignaciones configurables conforme a la normativa institucional;
 - instrucciones por grado;
 - asistencia;
 - planchas asociadas al historial del hermano cuando corresponda;

@@ -12,6 +12,7 @@ import {
 } from './api/lodgeApi'
 import './regularity.css'
 import './lodgeManagement.css'
+import './lodgeManagementAreas.css'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -26,11 +27,18 @@ export const lodgeCockpitDemoData = {
   members: { active: 37, masters: 16, fellowcraft: 12, apprentices: 7, honorary: 2 },
   officers: [
     ['Venerable Maestro', 'H∴ Autoridad Demo'],
+    ['Ex Venerable Maestro', 'H∴ Consejero Demo'],
     ['Primer Vigilante', 'H∴ Primer Vigilante Demo'],
     ['Segundo Vigilante', 'H∴ Segundo Vigilante Demo'],
     ['Secretaría', 'H∴ Secretaría Demo'],
     ['Tesorería', 'H∴ Tesorería Demo'],
     ['Hospitalaria', 'H∴ Hospitalaria Demo'],
+  ],
+  managementAreas: [
+    ['Secretaría del Taller', 'Secretario/a', 'Tenidas, asistencia, actas, correspondencia y solicitudes.'],
+    ['Tesorería del Taller', 'Tesorero/a', 'Cuotas, abonos, comprobantes, libro mayor y rendición a Gran Tesorería.'],
+    ['Hospitalaria del Taller', 'Hospitalario/a', 'Bolso, ayudas, aportes, reposiciones y rendición a Gran Hospitalaria.'],
+    ['Docencia e instrucción', 'Vigilantes y Ex Venerable Maestro', 'Plan por grado, sesiones, asistencia y seguimiento formativo.'],
   ],
   instruction: [
     ['Simbología y rito', 80],
@@ -255,7 +263,12 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
         <div className="lodge-officer-list">{lodgeCockpitDemoData.officers.map(([role, name]) => <div key={role}><span className="lodge-officer-avatar">{role[0]}</span><div><strong>{role}</strong><small>{api.useMocks ? name : 'Disponible al integrar cuadro de cargos'}</small></div><em>Activo</em></div>)}</div>
       </article>
 
-      <aside className="lodge-inspiration-card"><span>“</span><p>El verdadero Taller se construye cada día, con trabajo, estudio y fraternidad.</p><i /><strong>Proyecto Milenio</strong><small>Gestión institucional integrada</small></aside>
+      <aside className="lodge-inspiration-card"><span>“</span><p>El verdadero Taller se construye cada día, con trabajo, estudio y fraternidad.</p><i /><strong>Proyecto Centenario</strong><small>Gestión institucional integrada</small></aside>
+    </section>
+
+    <section className="lodge-management-section">
+      <div className="lodge-management-heading"><div><p className="lodge-kicker">Administración propia</p><h2>Gestión Logial de cada Taller</h2></div><p>Estas funciones pertenecen al Taller y se integran, sin confundirse, con los órganos correspondientes de la Gran Logia.</p></div>
+      <div className="lodge-management-grid">{lodgeCockpitDemoData.managementAreas.map(([area, responsible, summary]) => <article className="lodge-management-area" key={area}><span>{area[0]}</span><div><h3>{area}</h3><strong>{responsible}</strong><p>{summary}</p></div></article>)}</div>
     </section>
 
     <section className="lodge-insight-grid">
