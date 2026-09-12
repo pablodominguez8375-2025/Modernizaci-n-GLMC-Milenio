@@ -11,8 +11,10 @@ Modelar en Proyecto Milenio la calidad de asambleísta, la habilitación para as
 
 Una persona podrá tener calidad de **asambleísta** cuando se encuentre en una de las siguientes condiciones institucionales:
 
-1. **Ex Venerable Maestro habilitado:** Hermano/a que cumplió su período de Venerable Maestro en su Taller y, por ello, adquiere derecho a participar como asambleísta, sujeto a las reglas de habilitación vigentes.
-2. **Representante:** Hermano/a que se encuentra cumpliendo su **primer período de Venerable Maestro** en su Taller y actúa como representante de dicho Taller ante la Asamblea General de la Orden.
+1. **Asambleísta permanente:** Hermano/a que cumplió al menos un período de Venerable Maestro. Conserva esta calidad histórica si deja el cargo y también si posteriormente vuelve a ser elegido Venerable Maestro.
+2. **Representante:** Hermano/a que se encuentra cumpliendo su **primer período de Venerable Maestro** y todavía no ha completado un período anterior. Representa a su Taller ante la Asamblea General de la Orden.
+
+Un Venerable Maestro reelegido no vuelve a la categoría de representante: continúa siendo asambleísta permanente. Las categorías son mutuamente excluyentes para una misma fecha de corte.
 
 La calidad histórica de asambleísta no debe confundirse con la habilitación efectiva para una Asamblea específica. El sistema deberá determinar ambas por separado.
 
@@ -114,7 +116,7 @@ Esto evita que una sanción temporal destruya el historial institucional de la p
 - id
 - person_id
 - lodge_id
-- categoria: `EX_VENERABLE_MAESTRO` | `REPRESENTANTE`
+- categoria: `ASAMBLEISTA_PERMANENTE` | `REPRESENTANTE`
 - fecha_desde
 - fecha_hasta
 - fuente_cargo_id
@@ -188,7 +190,7 @@ Antes de cada Asamblea, Régimen Interior deberá poder generar un padrón con:
 
 - nombre del asambleísta;
 - Taller;
-- categoría: ex Venerable Maestro o representante;
+- categoría: asambleísta permanente o representante;
 - calidad de Venerable Maestro actual, cuando corresponda;
 - estado financiero del Taller;
 - habilitado para asistir: sí/no;
