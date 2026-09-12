@@ -9,6 +9,7 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
     public DbSet<LodgeMeeting> LodgeMeetings => Set<LodgeMeeting>();
     public DbSet<LodgeAttendanceRecord> LodgeAttendanceRecords => Set<LodgeAttendanceRecord>();
     public DbSet<LodgeMinute> LodgeMinutes => Set<LodgeMinute>();
+    public DbSet<LodgeAnonymousBallot> LodgeAnonymousBallots => Set<LodgeAnonymousBallot>();
     public DbSet<LodgeInstructionSession> LodgeInstructionSessions => Set<LodgeInstructionSession>();
     public DbSet<LodgeInstructionAttendanceRecord> LodgeInstructionAttendanceRecords => Set<LodgeInstructionAttendanceRecord>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
@@ -52,6 +53,21 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasOne(x => x.Meeting).WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MeetingId, x.Version }).IsUnique();
+            entity.HasIndex(x => new { x.MeetingId, x.Status });
+        });
+
+        modelBuilder.Entity<LodgeAnonymousBallot>(entity =>
+        {
+            entity.ToTable("lodge_anonymous_ballots");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.BallotType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RecountObservation).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.Meeting).WithMany().HasForeignKey(x => x.MeetingId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.MeetingId, x.Subject, x.Version }).IsUnique();
             entity.HasIndex(x => new { x.MeetingId, x.Status });
         });
 
