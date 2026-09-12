@@ -12,6 +12,9 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     const profile = await api.getProfile(queue.items[0].ceremonyRequestId)
     expect(profile.rutOrInstitutionalId).toContain('DEMO')
     expect(profile.email).toContain('ejemplo.cl')
+    expect(profile.employerName).toContain('Demostrativa')
+    expect(profile.firstDegreePresentationDate).toBe('2026-08-28')
+    expect(profile.responsibleSecretaryName).toContain('Demostrativo')
     expect(profile.photoAvailable).toBe(true)
   })
 
@@ -40,6 +43,10 @@ describe('CandidateIntakeApiClient demo workflow', () => {
       nationality: 'Chilena · demo',
       civilStatus: 'Demo',
       occupation: 'Profesión ficticia',
+      employerName: 'Empresa ficticia',
+      workAddress: 'Dirección laboral ficticia',
+      workPosition: 'Cargo ficticio',
+      workPhone: '+56 2 2000 0000',
       phone: '+56 9 0000 0000',
       email: 'taller.qa@ejemplo.cl',
       address: 'Dirección ficticia',
@@ -47,6 +54,8 @@ describe('CandidateIntakeApiClient demo workflow', () => {
       orient: 'Santiago',
       presenters: ['H∴ Presentante QA'],
       insinuationDate: '2026-09-01',
+      firstDegreePresentationDate: '2026-09-05',
+      responsibleSecretaryName: 'H∴ Secretario QA',
       interviewSummary: 'Entrevista ficticia.',
       internalObservations: 'Sólo QA.',
     })
@@ -56,6 +65,8 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(saved.reviewStatus).toBe('pending_grand_secretariat')
     expect(row?.profileAvailable).toBe(true)
     expect(row?.reviewStatus).toBe('pending_grand_secretariat')
+    expect(saved.workPosition).toBe('Cargo ficticio')
+    expect(saved.responsibleSecretaryName).toBe('H∴ Secretario QA')
 
     const published = await api.getPublishedCandidates()
     expect(published.items.some(item => item.displayName === saved.firstNames)).toBe(false)

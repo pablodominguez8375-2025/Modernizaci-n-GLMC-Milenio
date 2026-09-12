@@ -91,10 +91,16 @@ public static class CandidateIntakeEndpoints
         profile.Nationality = Normalize(request.Nationality);
         profile.CivilStatus = Normalize(request.CivilStatus);
         profile.Occupation = Normalize(request.Occupation);
+        profile.EmployerName = Normalize(request.EmployerName);
+        profile.WorkAddress = Normalize(request.WorkAddress);
+        profile.WorkPosition = Normalize(request.WorkPosition);
+        profile.WorkPhone = Normalize(request.WorkPhone);
         profile.City = Normalize(request.City);
         profile.Orient = Normalize(request.Orient);
         profile.PresentersJson = JsonSerializer.Serialize(presenters);
         profile.InsinuationDate = request.InsinuationDate;
+        profile.FirstDegreePresentationDate = request.FirstDegreePresentationDate;
+        profile.ResponsibleSecretaryName = Normalize(request.ResponsibleSecretaryName);
         profile.InterviewSummary = Normalize(request.InterviewSummary);
         profile.InternalObservations = Normalize(request.InternalObservations);
         profile.UpdatedBySubject = subject;
@@ -268,6 +274,8 @@ public static class CandidateIntakeEndpoints
             return Results.Conflict(new { message = "La fotografía debe completar carga y análisis antivirus antes de ser vinculada." });
         if (!CandidateIntakeCodes.PhotoContentType.IsAllowed(version.ContentType))
             return Results.BadRequest(new { message = "La foto tipo pasaporte debe ser JPEG o PNG." });
+        if (version.SizeBytes > 100 * 1024)
+            return Results.BadRequest(new { message = "La foto tipo pasaporte no puede superar 100 KB." });
 
         profile.PhotoVersionId = version.Id;
         profile.UpdatedBySubject = GetSubject(httpContext.User);
@@ -377,6 +385,10 @@ public static class CandidateIntakeEndpoints
             profile.Nationality,
             profile.CivilStatus,
             profile.Occupation,
+            profile.EmployerName,
+            profile.WorkAddress,
+            profile.WorkPosition,
+            profile.WorkPhone,
             person.Phone,
             person.Email,
             person.Address,
@@ -386,6 +398,8 @@ public static class CandidateIntakeEndpoints
             profile.Orient,
             JsonSerializer.Deserialize<string[]>(profile.PresentersJson) ?? [],
             profile.InsinuationDate,
+            profile.FirstDegreePresentationDate,
+            profile.ResponsibleSecretaryName,
             published ? CandidateIntakeCodes.ReviewStatus.Approved : MapReviewStatus(latestReview),
             profile.PhotoVersionId is not null,
             profile.InterviewSummary,
@@ -410,8 +424,12 @@ public static class CandidateIntakeEndpoints
         if (request.MaternalSurname?.Length > 160) return "El apellido materno no puede exceder 160 caracteres.";
         if (request.RutOrInstitutionalId?.Length > 80) return "El RUT/ID no puede exceder 80 caracteres.";
         if (request.Email?.Length > 320 || request.Phone?.Length > 80 || request.Address?.Length > 500) return "Uno de los datos de contacto excede el máximo permitido.";
+        if (request.EmployerName?.Length > 240 || request.WorkAddress?.Length > 500 || request.WorkPosition?.Length > 240 || request.WorkPhone?.Length > 80) return "Uno de los antecedentes laborales excede el máximo permitido.";
         if (request.Presenters.Count is < 1 or > 8 || request.Presenters.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 200)) return "Debe registrar entre 1 y 8 presentantes válidos.";
         if (request.InsinuationDate > ChileToday()) return "La fecha de insinuación no puede estar en el futuro.";
+        if (request.FirstDegreePresentationDate is not null && request.FirstDegreePresentationDate > ChileToday()) return "La presentación en 1.er grado no puede estar en el futuro.";
+        if (request.FirstDegreePresentationDate is not null && request.FirstDegreePresentationDate < request.InsinuationDate) return "La presentación en 1.er grado no puede ser anterior al ingreso de la insinuación.";
+        if (request.ResponsibleSecretaryName?.Length > 240) return "El nombre del secretario responsable no puede exceder 240 caracteres.";
         if (request.BirthDate is not null && request.BirthDate > ChileToday()) return "La fecha de nacimiento no puede estar en el futuro.";
         if (request.InterviewSummary?.Length > 4000 || request.InternalObservations?.Length > 4000) return "Las observaciones no pueden exceder 4000 caracteres.";
         return null;
@@ -439,6 +457,10 @@ public sealed record CandidateIntakeUpsertRequest(
     string? Nationality,
     string? CivilStatus,
     string? Occupation,
+    string? EmployerName,
+    string? WorkAddress,
+    string? WorkPosition,
+    string? WorkPhone,
     string? Phone,
     string? Email,
     string? Address,
@@ -446,6 +468,8 @@ public sealed record CandidateIntakeUpsertRequest(
     string? Orient,
     IReadOnlyList<string> Presenters,
     DateOnly InsinuationDate,
+    DateOnly? FirstDegreePresentationDate,
+    string? ResponsibleSecretaryName,
     string? InterviewSummary,
     string? InternalObservations);
 
@@ -461,6 +485,10 @@ public sealed record CandidateIntakeProfileDto(
     string? Nationality,
     string? CivilStatus,
     string? Occupation,
+    string? EmployerName,
+    string? WorkAddress,
+    string? WorkPosition,
+    string? WorkPhone,
     string? Phone,
     string? Email,
     string? Address,
@@ -470,6 +498,8 @@ public sealed record CandidateIntakeProfileDto(
     string? Orient,
     IReadOnlyList<string> Presenters,
     DateOnly InsinuationDate,
+    DateOnly? FirstDegreePresentationDate,
+    string? ResponsibleSecretaryName,
     string ReviewStatus,
     bool PhotoAvailable,
     string? InterviewSummary,

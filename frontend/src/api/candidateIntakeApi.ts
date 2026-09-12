@@ -48,6 +48,10 @@ export interface CandidateIntakeProfile {
   nationality: string | null
   civilStatus: string | null
   occupation: string | null
+  employerName: string | null
+  workAddress: string | null
+  workPosition: string | null
+  workPhone: string | null
   phone: string | null
   email: string | null
   address: string | null
@@ -57,6 +61,8 @@ export interface CandidateIntakeProfile {
   orient: string | null
   presenters: string[]
   insinuationDate: string
+  firstDegreePresentationDate: string | null
+  responsibleSecretaryName: string | null
   reviewStatus: CandidateReviewStatus | string
   photoAvailable: boolean
   interviewSummary: string | null
@@ -74,6 +80,10 @@ export interface CandidateIntakeUpsertPayload {
   nationality?: string | null
   civilStatus?: string | null
   occupation?: string | null
+  employerName?: string | null
+  workAddress?: string | null
+  workPosition?: string | null
+  workPhone?: string | null
   phone?: string | null
   email?: string | null
   address?: string | null
@@ -81,6 +91,8 @@ export interface CandidateIntakeUpsertPayload {
   orient?: string | null
   presenters: string[]
   insinuationDate: string
+  firstDegreePresentationDate?: string | null
+  responsibleSecretaryName?: string | null
   interviewSummary?: string | null
   internalObservations?: string | null
 }
@@ -117,6 +129,10 @@ const demoProfile: CandidateIntakeProfile = {
   nationality: 'Chilena · demo',
   civilStatus: 'Soltero · demo',
   occupation: 'Profesional · dato ficticio',
+  employerName: 'Organización Demostrativa SpA',
+  workAddress: 'Avenida Ficticia 1000, Santiago',
+  workPosition: 'Coordinador de proyectos · demo',
+  workPhone: '+56 2 2000 0000',
   phone: '+56 9 0000 4321',
   email: 'insinuado.demo@ejemplo.cl',
   address: 'Dirección ficticia 2345, Depto. 702',
@@ -126,6 +142,8 @@ const demoProfile: CandidateIntakeProfile = {
   orient: 'Santiago',
   presenters: ['H∴ Presentante Uno · demo', 'H∴ Presentante Dos · demo'],
   insinuationDate: '2026-08-12',
+  firstDegreePresentationDate: '2026-08-28',
+  responsibleSecretaryName: 'H∴ Secretario Demostrativo',
   reviewStatus: 'pending_grand_secretariat',
   photoAvailable: true,
   interviewSummary: 'Registro demostrativo: la entrevista evidencia interés por el conocimiento, el servicio y el perfeccionamiento personal.',
@@ -285,6 +303,10 @@ export class CandidateIntakeApiClient {
         nationality: payload.nationality?.trim() || null,
         civilStatus: payload.civilStatus?.trim() || null,
         occupation: payload.occupation?.trim() || null,
+        employerName: payload.employerName?.trim() || null,
+        workAddress: payload.workAddress?.trim() || null,
+        workPosition: payload.workPosition?.trim() || null,
+        workPhone: payload.workPhone?.trim() || null,
         phone: payload.phone?.trim() || null,
         email: payload.email?.trim() || null,
         address: payload.address?.trim() || null,
@@ -294,6 +316,8 @@ export class CandidateIntakeApiClient {
         orient: payload.orient?.trim() || null,
         presenters: payload.presenters.map(value => value.trim()).filter(Boolean),
         insinuationDate: payload.insinuationDate,
+        firstDegreePresentationDate: payload.firstDegreePresentationDate || null,
+        responsibleSecretaryName: payload.responsibleSecretaryName?.trim() || null,
         reviewStatus: 'pending_grand_secretariat',
         photoAvailable: existing?.photoAvailable ?? false,
         interviewSummary: payload.interviewSummary?.trim() || null,

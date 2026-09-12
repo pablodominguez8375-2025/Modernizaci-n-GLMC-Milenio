@@ -226,6 +226,10 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
                 <CandidateField label="Nacionalidad" value={profile.nationality} />
                 <CandidateField label="Estado civil" value={profile.civilStatus} />
                 <CandidateField label="Profesión u oficio" value={profile.occupation} />
+                <CandidateField label="Empleador" value={profile.employerName} />
+                <CandidateField label="Cargo o función" value={profile.workPosition} />
+                <CandidateField label="Teléfono laboral" value={profile.workPhone} />
+                <CandidateField label="Dirección laboral" value={profile.workAddress} />
                 <CandidateField label="Teléfono" value={profile.phone} />
                 <CandidateField label="Correo" value={profile.email} />
                 <CandidateField label="Dirección" value={profile.address} />
@@ -241,6 +245,8 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
           <div className="candidate-lodge-fields">
             <CandidateField label="Oriente" value={profile.orient} />
             <CandidateField label="Fecha de insinuación" value={formatDateOnly(profile.insinuationDate)} />
+            <CandidateField label="Presentación en 1.er grado" value={formatDateOnly(profile.firstDegreePresentationDate)} />
+            <CandidateField label="Secretario responsable" value={profile.responsibleSecretaryName} />
             <CandidateField label="Grado objetivo" value="Iniciación (Aprendiz)" />
             <CandidateField label="Estado de revisión" value={reviewStatusLabel(profile.reviewStatus)} status />
           </div>

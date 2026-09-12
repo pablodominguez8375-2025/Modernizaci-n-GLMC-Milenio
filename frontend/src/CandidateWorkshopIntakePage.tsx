@@ -16,6 +16,10 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
   nationality: null,
   civilStatus: null,
   occupation: null,
+  employerName: null,
+  workAddress: null,
+  workPosition: null,
+  workPhone: null,
   phone: null,
   email: null,
   address: null,
@@ -23,6 +27,8 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
   orient: null,
   presenters: [],
   insinuationDate: chileToday(),
+  firstDegreePresentationDate: null,
+  responsibleSecretaryName: null,
   interviewSummary: null,
   internalObservations: null,
 })
@@ -226,11 +232,21 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Fecha de nacimiento"><input type="date" value={form.birthDate ?? ''} disabled={locked} onChange={event => setForm({ ...form, birthDate: event.target.value || null })} /></Field>
               <Field label="Nacionalidad"><input value={form.nationality ?? ''} disabled={locked} onChange={event => setForm({ ...form, nationality: event.target.value || null })} /></Field>
               <Field label="Estado civil"><input value={form.civilStatus ?? ''} disabled={locked} onChange={event => setForm({ ...form, civilStatus: event.target.value || null })} /></Field>
-              <Field label="Profesión u oficio"><input value={form.occupation ?? ''} disabled={locked} onChange={event => setForm({ ...form, occupation: event.target.value || null })} /></Field>
               <Field label="Teléfono"><input type="tel" value={form.phone ?? ''} disabled={locked} onChange={event => setForm({ ...form, phone: event.target.value || null })} /></Field>
               <Field label="Correo"><input type="email" value={form.email ?? ''} disabled={locked} onChange={event => setForm({ ...form, email: event.target.value || null })} /></Field>
               <Field label="Dirección" wide><input value={form.address ?? ''} disabled={locked} onChange={event => setForm({ ...form, address: event.target.value || null })} /></Field>
               <Field label="Ciudad"><input value={form.city ?? ''} disabled={locked} onChange={event => setForm({ ...form, city: event.target.value || null })} /></Field>
+            </div>
+          </section>
+
+          <section className="candidate-product-card">
+            <div className="candidate-section-title"><span>▦</span><h2>Antecedentes laborales</h2><em>Formulario 2026</em></div>
+            <div className="workshop-form-grid">
+              <Field label="Actividad, profesión u oficio"><input value={form.occupation ?? ''} disabled={locked} onChange={event => setForm({ ...form, occupation: event.target.value || null })} /></Field>
+              <Field label="Empleador"><input value={form.employerName ?? ''} disabled={locked} onChange={event => setForm({ ...form, employerName: event.target.value || null })} /></Field>
+              <Field label="Cargo o función"><input value={form.workPosition ?? ''} disabled={locked} onChange={event => setForm({ ...form, workPosition: event.target.value || null })} /></Field>
+              <Field label="Teléfono laboral"><input type="tel" value={form.workPhone ?? ''} disabled={locked} onChange={event => setForm({ ...form, workPhone: event.target.value || null })} /></Field>
+              <Field label="Dirección laboral" wide><input value={form.workAddress ?? ''} disabled={locked} onChange={event => setForm({ ...form, workAddress: event.target.value || null })} /></Field>
             </div>
           </section>
 
@@ -240,6 +256,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Logia/Taller que presenta"><input value={`${selected.workshopName}${selected.workshopNumber ? ` · Nº ${selected.workshopNumber}` : ''}`} disabled /></Field>
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
+              <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
+              <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
               <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" /></Field>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
               <Field label="Observaciones internas" wide><textarea rows={4} value={form.internalObservations ?? ''} disabled={locked} onChange={event => setForm({ ...form, internalObservations: event.target.value || null })} /></Field>
@@ -255,7 +273,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             <div className="workshop-photo-layout">
               <div className="candidate-passport-photo">{photoSrc ? <img src={photoSrc} alt="Foto tipo pasaporte del expediente" /> : <div className="workshop-photo-placeholder">Sin foto</div>}<small>{profile?.photoAvailable ? 'Fotografía vinculada' : 'Pendiente'}</small></div>
               <div>
-                <p>La foto se vincula desde una versión documental JPEG/PNG que ya haya completado el análisis antivirus. El objeto original permanece privado y nunca se publica con una URL permanente.</p>
+                <p>La foto se vincula desde una versión documental JPEG/PNG, mínimo 500 × 500 píxeles y máximo 100 KB, que ya haya completado el análisis antivirus. El objeto original permanece privado y nunca se publica con una URL permanente.</p>
                 <label className="workshop-photo-version"><span>ID de versión documental procesada</span><input value={photoVersionId} disabled={!profile || busy || locked} onChange={event => setPhotoVersionId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label>
                 <button className="candidate-secondary-button" type="button" disabled={!profile || busy || locked} onClick={() => void linkPhoto()}>Vincular fotografía</button>
                 {!profile && <small className="workshop-help">Primero guarde la ficha antes de vincular la fotografía.</small>}
@@ -287,6 +305,10 @@ function profileToPayload(profile: CandidateIntakeProfile): CandidateIntakeUpser
     nationality: profile.nationality,
     civilStatus: profile.civilStatus,
     occupation: profile.occupation,
+    employerName: profile.employerName,
+    workAddress: profile.workAddress,
+    workPosition: profile.workPosition,
+    workPhone: profile.workPhone,
     phone: profile.phone,
     email: profile.email,
     address: profile.address,
@@ -294,6 +316,8 @@ function profileToPayload(profile: CandidateIntakeProfile): CandidateIntakeUpser
     orient: profile.orient,
     presenters: [...profile.presenters],
     insinuationDate: profile.insinuationDate,
+    firstDegreePresentationDate: profile.firstDegreePresentationDate,
+    responsibleSecretaryName: profile.responsibleSecretaryName,
     interviewSummary: profile.interviewSummary,
     internalObservations: profile.internalObservations,
   }
