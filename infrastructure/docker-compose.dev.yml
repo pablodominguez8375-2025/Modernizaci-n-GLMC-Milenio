@@ -32,7 +32,7 @@ services:
       - pmgm_minio_data:/data
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: pmgm-minio-init
     depends_on:
       - minio
