@@ -7,6 +7,12 @@ on:
     paths:
       - scripts/apply-ceremony-eligibility-fix.py
       - .github/workflows/apply-ceremony-eligibility-fix.yml
+  pull_request:
+    branches:
+      - dev
+    paths:
+      - scripts/apply-ceremony-eligibility-fix.py
+      - .github/workflows/apply-ceremony-eligibility-fix.yml
 
 permissions:
   contents: write
