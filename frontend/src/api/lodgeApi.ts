@@ -61,6 +61,7 @@ export type LodgeBallotType = 'white_black' | 'positive_negative' | 'candidate'
 export interface LodgeAnonymousBallot { id: string; meetingId: string; version: number; ballotType: LodgeBallotType; subject: string; attendeeCount: number; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation: string | null; status: 'closed' | 'superseded'; recordedAtUtc: string }
 export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; subject: string; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation?: string | null }
 export interface LodgeAnonymousBallotsResponse { total: number; items: LodgeAnonymousBallot[] }
+export interface LodgeMinuteExtract { meetingId: string; attendeeCount: number; absentCount: number; excusedCount: number; ballotCount: number; content: string }
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
 interface LodgeApiClientOptions {
@@ -268,6 +269,17 @@ export class LodgeApiClient {
       rows.push(item); this.mockBallots.set(meetingId, rows); return { ...item }
     }
     return this.postJson<LodgeAnonymousBallot>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/votaciones`, payload)
+  }
+
+  async generateMinuteExtract(meetingId: string): Promise<LodgeMinuteExtract> {
+    if (this.useMocks) {
+      const meeting = this.requireMeeting(meetingId); const attendance = (await this.getAttendance(meetingId)).items; const ballots = (await this.getAnonymousBallots(meetingId)).items.filter(item => item.status === 'closed')
+      const present = attendance.filter(item => item.status === 'present'), absent = attendance.filter(item => item.status === 'absent'), excused = attendance.filter(item => item.status === 'excused')
+      const ballotLines = ballots.length ? ballots.map((item, index) => `${index + 1}. ${item.subject}: ${item.ballotType === 'white_black' ? 'blancas' : 'positivos'} ${item.positiveCount}; ${item.ballotType === 'white_black' ? 'negras' : 'negativos'} ${item.negativeCount}; habilitados ${item.eligibleCount}; contabilizados ${item.positiveCount + item.negativeCount}.`).join('\n') : 'Sin balotajes o votaciones registrados.'
+      const content = `EXTRACTO DE ACTA\nTaller: Taller Demostrativo Nº 23\nFecha: ${meeting.meetingDate} · Tipo: ${meeting.meetingType} · Grado: ${meeting.grade}\n\nASISTENCIA\nPresentes: ${present.length} · Inasistentes: ${absent.length} · Excusados: ${excused.length} · Total registrado: ${attendance.length}\nPresentes: ${present.map(item => item.displayName).join(', ') || 'Sin registros'}\nExcusas: ${excused.map(item => item.displayName).join(', ') || 'Sin registros'}\n\nBALOTAJE Y VOTACIONES\n${ballotLines}\n\nApertura: __________ · Acta anterior: __________ · Correspondencia: __________ · Decretos: __________\nTrabajo presentado: __________ · Aportes: __________ · Bien general: __________\nTronco de beneficencia: __________ · Clausura: __________ · Cierre de cadena: __________\nFirmas: Venerable Maestro/a · Secretario/a · Orador/a`
+      return { meetingId, attendeeCount: present.length, absentCount: absent.length, excusedCount: excused.length, ballotCount: ballots.length, content }
+    }
+    return this.request<LodgeMinuteExtract>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/extracto-acta`)
   }
 
   async getInstructions(organizationId: string): Promise<LodgeInstructionsResponse> {
