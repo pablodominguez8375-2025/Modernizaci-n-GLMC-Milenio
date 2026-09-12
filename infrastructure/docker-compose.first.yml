@@ -27,7 +27,7 @@ services:
     networks: [pmgm_first_internal]
 
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     depends_on: [minio]
     restart: "no"
     environment:
