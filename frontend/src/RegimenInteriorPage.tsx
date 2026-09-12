@@ -40,7 +40,22 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
       <button className="primary-action" disabled={loading}>Actualizar reporte</button>
     </form></section>
     {loading && !summary ? <div className="panel"><p>Cargando reporte institucional…</p></div> : summary && <Report summary={summary} />}
+    {api.useMocks && <AssemblyRosterDemo />}
   </>
+}
+
+const assemblyRosterDemo = [
+  { name: 'Persona Demostrativa A', lodge: 'Taller Demostrativo Nº 1', category: 'Asambleísta permanente', history: 'Período 2022 completado', alert: 'Sin observaciones', attend: true, vote: true },
+  { name: 'Persona Demostrativa B', lodge: 'Taller Demostrativo Nº 23', category: 'Representante', history: 'Primer período vigente', alert: 'Taller moroso · Gran Tesorería', attend: true, vote: false },
+  { name: 'Persona Demostrativa C', lodge: 'Taller Demostrativo Nº 8', category: 'Asambleísta permanente', history: 'Reelecto como Venerable Maestro', alert: 'Inhabilidad vigente de asistencia y sufragio', attend: false, vote: false },
+  { name: 'Persona Demostrativa D', lodge: 'Taller Demostrativo Nº 14', category: 'Asambleísta permanente', history: 'Período 2024 completado', alert: 'Designación pendiente de validar', attend: false, vote: false },
+] as const
+
+function AssemblyRosterDemo() {
+  return <section className="panel report-wide"><div className="panel-heading"><div><p className="eyebrow">Gran Asamblea · datos ficticios</p><h2>Padrón preliminar de asambleístas</h2><p>Clasificación automática y alertas revisadas por Régimen Interior antes del cierre inmutable.</p></div><span className="count-badge">4 registros</span></div>
+    <div className="table-wrap"><table><thead><tr><th>Integrante</th><th>Calidad calculada</th><th>Historial de Venerable Maestro</th><th>Alerta u observación</th><th>Asiste</th><th>Vota</th></tr></thead><tbody>{assemblyRosterDemo.map(item => <tr key={item.name}><td><strong>{item.name}</strong><small>{item.lodge}</small></td><td>{item.category}</td><td>{item.history}</td><td>{item.alert}</td><td><span className={item.attend ? 'status-pill complete' : 'status-pill attention'}>{item.attend ? 'Sí' : 'No'}</span></td><td><span className={item.vote ? 'status-pill complete' : 'status-pill attention'}>{item.vote ? 'Sí' : 'No'}</span></td></tr>)}</tbody></table></div>
+    <p className="report-footnote">El padrón identifica quién puede asistir y sufragar, pero nunca registra ni permite reconstruir cómo votó una persona.</p>
+  </section>
 }
 
 function Report({ summary }: { summary: RegimenInteriorSummary }) {
