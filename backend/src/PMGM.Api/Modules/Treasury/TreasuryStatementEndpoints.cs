@@ -85,8 +85,9 @@ public static class TreasuryStatementEndpoints
             if (baseAmount.Value + adjustmentAmount < 0)
                 return Results.Conflict(new { message = "Un ajuste deja una cuota individual negativa.", memberId = membership.MemberId });
 
-            statement.Lines.Add(new TreasuryMonthlyStatementLine
+            var line = new TreasuryMonthlyStatementLine
             {
+                StatementId = statement.Id,
                 MemberId = membership.MemberId,
                 MembershipId = membership.Id,
                 DegreeCodeAtCutoff = degree,
@@ -96,7 +97,8 @@ public static class TreasuryStatementEndpoints
                 AdjustmentType = adjustment?.AdjustmentType,
                 AuthorizationReference = adjustment?.AuthorizationReference,
                 IdentityMatchStatus = TreasuryCodes.IdentityMatchStatus.Matched
-            });
+            };
+            db.TreasuryMonthlyStatementLines.Add(line);
         }
 
         audit.Add(context, "treasury.statement.lines_generated", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
