@@ -1,0 +1,23 @@
+name: UAT Evidence RC1 3ffb64c7
+
+on:
+  push:
+    branches:
+      - docs/uat-execution-3ffb64c7
+    paths:
+      - release/PMGM-UAT-1.0.0-rc1-3ffb64c7-evidence.json
+      - tests/uat_evidence_gate.py
+      - .github/workflows/uat-evidence-3ffb64c7.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-pending-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout evidence branch
+        uses: actions/checkout@v4
+      - name: Validate 20-case UAT structure and guardrails
+        run: python3 tests/uat_evidence_gate.py release/PMGM-UAT-1.0.0-rc1-3ffb64c7-evidence.json --allow-pending
