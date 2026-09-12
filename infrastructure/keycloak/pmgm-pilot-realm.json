@@ -1,0 +1,139 @@
+{
+  "realm": "pmgm",
+  "displayName": "Proyecto Milenio Piloto",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "roles": {
+    "realm": [
+      { "name": "platform_superadmin" },
+      { "name": "grand_lodge_admin" },
+      { "name": "internal_affairs" },
+      { "name": "grand_secretariat" },
+      { "name": "grand_treasury" },
+      { "name": "grand_hospitalaria" },
+      { "name": "privacy_officer" },
+      { "name": "document_manager" },
+      { "name": "grand_archivist" },
+      { "name": "lodge_admin" },
+      { "name": "lodge_secretariat" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "pmgm-web",
+      "name": "Proyecto Milenio Web Piloto",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "redirectUris": [
+        "${PMGM_PILOT_PUBLIC_URL}/auth/callback"
+      ],
+      "webOrigins": [
+        "${PMGM_PILOT_PUBLIC_URL}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PMGM_PILOT_PUBLIC_URL}/auth/logout"
+      },
+      "protocolMappers": [
+        {
+          "name": "pmgm-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "pmgm-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "pmgm-realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "usermodel.realmRoleMapping.rolePrefix": "",
+            "multivalued": "true",
+            "claim.name": "pmgm_role",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "pmgm-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "pmgm_scope",
+            "claim.name": "pmgm_scope",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "pmgm-organization",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "pmgm_org",
+            "claim.name": "pmgm_org",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "${PMGM_PILOT_ADMIN_USERNAME}",
+      "enabled": true,
+      "firstName": "Administración",
+      "lastName": "Proyecto Milenio",
+      "email": "${PMGM_PILOT_ADMIN_EMAIL}",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": ["order"]
+      },
+      "realmRoles": [
+        "platform_superadmin",
+        "grand_lodge_admin",
+        "internal_affairs",
+        "grand_secretariat",
+        "grand_treasury",
+        "grand_hospitalaria",
+        "privacy_officer",
+        "document_manager",
+        "grand_archivist"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_PILOT_ADMIN_PASSWORD}",
+          "temporary": true
+        }
+      ]
+    }
+  ]
+}

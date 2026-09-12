@@ -1,0 +1,41 @@
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.pfx
+*.key
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node/frontend future
+node_modules/
+dist/
+coverage/
+
+# Local data
+*.db
+*.sqlite
+
+# Pilot backups may contain institutional/personal data. Never version them.
+backups/

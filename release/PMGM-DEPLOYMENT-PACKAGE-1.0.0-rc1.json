@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "packageName": "PMGM-v1.0.0-rc1-definitive-deployment",
+  "releaseVersion": "1.0.0-rc1",
+  "applicationSourceSha": "739ba0b3a8d89087177b1edabd61c2981eed08a2",
+  "applicationSourceBranch": "uat/v1.0.0-rc1-739ba0b3",
+  "deploymentMode": "persistent-institutional-vm-preproduction-then-in-place-stable-promotion",
+  "composeFile": "infrastructure/docker-compose.pilot.yml",
+  "environmentTemplate": "infrastructure/pilot.env.example",
+  "requiredHostCommands": [
+    "docker",
+    "git",
+    "curl",
+    "openssl",
+    "python3",
+    "sha256sum",
+    "tar"
+  ],
+  "recommendedVm": {
+    "os": "Linux x86_64; Ubuntu Server 24.04 LTS or equivalent supported Docker host",
+    "vcpu": 8,
+    "memoryGiB": 32,
+    "storageGiB": 500,
+    "storageExpandable": true,
+    "backupMustBeOffHost": true
+  },
+  "minimumUatVm": {
+    "vcpu": 4,
+    "memoryGiB": 16,
+    "storageGiB": 150
+  },
+  "publicPorts": [80, 443],
+  "administrativePorts": [22],
+  "neverExposeDirectly": [5432, 9000, 9001, 3310, 8080],
+  "requiredOperatorDocuments": [
+    "docs/instalacion/PMGM-VM-DEFINITIVA-V100.md",
+    "docs/instalacion/PMGM-PILOT-OPERACIONAL-V032.md",
+    "docs/qa/PMGM-UAT-V100-RC1.md",
+    "release/PMGM-UAT-1.0.0-rc1.template.json"
+  ],
+  "requiredOperationalScripts": [
+    "scripts/preflight-definitive-host.sh",
+    "scripts/preflight-pilot.sh",
+    "scripts/start-pilot.sh",
+    "scripts/smoke-pilot.sh",
+    "scripts/backup-pilot.sh",
+    "scripts/verify-pilot-backup.sh",
+    "scripts/restore-pilot.sh",
+    "scripts/update-definitive.sh"
+  ],
+  "persistentComponents": [
+    "PostgreSQL pmgm",
+    "PostgreSQL pmgm_keycloak",
+    "MinIO pmgm-documents",
+    "ClamAV database cache",
+    "Caddy certificate/configuration volumes"
+  ],
+  "uatPromotionGate": {
+    "requiredCases": 20,
+    "requiredResult": "20/20 PASS",
+    "sponsorApprovalRequired": true,
+    "realPersonalDataAllowedBeforeGate": false
+  },
+  "safetyRules": [
+    "Repository must not contain operational secrets",
+    "Do not use docker compose down -v on the institutional VM",
+    "Create and verify an application backup before every version update",
+    "Keep at least one protected backup copy outside the VM",
+    "Do not deploy dev automatically to the institutional VM",
+    "A failed schema-changing deployment may require restoring the pre-update backup"
+  ]
+}
