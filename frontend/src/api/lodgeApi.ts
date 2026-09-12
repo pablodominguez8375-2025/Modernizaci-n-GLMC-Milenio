@@ -58,8 +58,8 @@ export interface CreateLodgeInstructionRequest {
 export interface LodgeInstructionAttendanceItem { memberId: string; status: 'present' | 'absent' }
 export interface LodgeMinutesResponse { total: number; items: LodgeMinute[] }
 export type LodgeBallotType = 'white_black' | 'positive_negative' | 'candidate'
-export interface LodgeAnonymousBallot { id: string; meetingId: string; version: number; ballotType: LodgeBallotType; subject: string; attendeeCount: number; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation: string | null; status: 'closed' | 'superseded'; recordedAtUtc: string }
-export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; subject: string; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation?: string | null }
+export interface LodgeAnonymousBallot { id: string; meetingId: string; version: number; ballotType: LodgeBallotType; procedureNumber: 1 | 2 | 3 | null; subject: string; attendeeCount: number; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation: string | null; status: 'closed' | 'superseded'; recordedAtUtc: string }
+export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; procedureNumber?: 1 | 2 | 3 | null; subject: string; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation?: string | null }
 export interface LodgeAnonymousBallotsResponse { total: number; items: LodgeAnonymousBallot[] }
 export interface LodgeMinuteExtract { meetingId: string; attendeeCount: number; absentCount: number; excusedCount: number; ballotCount: number; content: string }
 export type LodgeAccessTokenProvider = () => Promise<string | null>
@@ -116,7 +116,7 @@ export const demoLodgeSeed = {
     content: 'Acta demostrativa: contenido ficticio para validar versionado, aprobación y navegación del módulo de Gestión Logial.',
     status: 'approved' as const, createdAtUtc: '2026-09-06T01:25:00Z', approvedAtUtc: '2026-09-06T01:40:00Z',
   } satisfies LodgeMinute,
-  ballots: [{ id: 'ffffffff-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1, ballotType: 'white_black' as const, subject: 'Admisión de Persona Demostrativa', attendeeCount: 2, eligibleCount: 2, positiveCount: 2, negativeCount: 0, recountObservation: null, status: 'closed' as const, recordedAtUtc: '2026-09-06T01:15:00Z' }] satisfies LodgeAnonymousBallot[],
+  ballots: [{ id: 'ffffffff-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1, ballotType: 'white_black' as const, procedureNumber: 1 as const, subject: 'Admisión de Persona Demostrativa', attendeeCount: 2, eligibleCount: 2, positiveCount: 2, negativeCount: 0, recountObservation: null, status: 'closed' as const, recordedAtUtc: '2026-09-06T01:15:00Z' }] satisfies LodgeAnonymousBallot[],
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
@@ -264,8 +264,10 @@ export class LodgeApiClient {
       const attendeeCount = (await this.getAttendance(meetingId)).items.filter(item => item.status === 'present').length
       if (payload.eligibleCount > attendeeCount) throw new Error('Las personas habilitadas no pueden superar a las asistentes presentes.')
       if (payload.positiveCount + payload.negativeCount !== payload.eligibleCount && !payload.recountObservation?.trim()) throw new Error('La diferencia del recuento debe explicarse en el acta.')
-      const rows = this.mockBallots.get(meetingId) ?? []; const same = rows.filter(item => item.subject === payload.subject.trim()); same.filter(item => item.status === 'closed').forEach(item => { item.status = 'superseded' })
-      const item: LodgeAnonymousBallot = { id: crypto.randomUUID(), meetingId, version: Math.max(0, ...same.map(value => value.version)) + 1, ...payload, subject: payload.subject.trim(), attendeeCount, recountObservation: payload.recountObservation?.trim() || null, status: 'closed', recordedAtUtc: new Date().toISOString() }
+      if (payload.ballotType === 'white_black' && !payload.procedureNumber) throw new Error('El balotaje B/N debe indicar primer, segundo o tercer trámite.')
+      const procedureNumber = payload.ballotType === 'white_black' ? payload.procedureNumber ?? null : null
+      const rows = this.mockBallots.get(meetingId) ?? []; const same = rows.filter(item => item.subject === payload.subject.trim() && item.procedureNumber === procedureNumber); same.filter(item => item.status === 'closed').forEach(item => { item.status = 'superseded' })
+      const item: LodgeAnonymousBallot = { id: crypto.randomUUID(), meetingId, version: Math.max(0, ...same.map(value => value.version)) + 1, ...payload, procedureNumber, subject: payload.subject.trim(), attendeeCount, recountObservation: payload.recountObservation?.trim() || null, status: 'closed', recordedAtUtc: new Date().toISOString() }
       rows.push(item); this.mockBallots.set(meetingId, rows); return { ...item }
     }
     return this.postJson<LodgeAnonymousBallot>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/votaciones`, payload)
@@ -275,7 +277,7 @@ export class LodgeApiClient {
     if (this.useMocks) {
       const meeting = this.requireMeeting(meetingId); const attendance = (await this.getAttendance(meetingId)).items; const ballots = (await this.getAnonymousBallots(meetingId)).items.filter(item => item.status === 'closed')
       const present = attendance.filter(item => item.status === 'present'), absent = attendance.filter(item => item.status === 'absent'), excused = attendance.filter(item => item.status === 'excused')
-      const ballotLines = ballots.length ? ballots.map((item, index) => `${index + 1}. ${item.subject}: ${item.ballotType === 'white_black' ? 'blancas' : 'positivos'} ${item.positiveCount}; ${item.ballotType === 'white_black' ? 'negras' : 'negativos'} ${item.negativeCount}; habilitados ${item.eligibleCount}; contabilizados ${item.positiveCount + item.negativeCount}.`).join('\n') : 'Sin balotajes o votaciones registrados.'
+      const ballotLines = ballots.length ? ballots.map((item, index) => `${index + 1}. ${procedureLabel(item.procedureNumber)}${item.subject}: ${item.ballotType === 'white_black' ? 'blancas' : 'positivos'} ${item.positiveCount}; ${item.ballotType === 'white_black' ? 'negras' : 'negativos'} ${item.negativeCount}; habilitados ${item.eligibleCount}; contabilizados ${item.positiveCount + item.negativeCount}.`).join('\n') : 'Sin balotajes o votaciones registrados.'
       const content = `EXTRACTO DE ACTA\nTaller: Taller Demostrativo Nº 23\nFecha: ${meeting.meetingDate} · Tipo: ${meeting.meetingType} · Grado: ${meeting.grade}\n\nASISTENCIA\nPresentes: ${present.length} · Inasistentes: ${absent.length} · Excusados: ${excused.length} · Total registrado: ${attendance.length}\nPresentes: ${present.map(item => item.displayName).join(', ') || 'Sin registros'}\nExcusas: ${excused.map(item => item.displayName).join(', ') || 'Sin registros'}\n\nBALOTAJE Y VOTACIONES\n${ballotLines}\n\nApertura: __________ · Acta anterior: __________ · Correspondencia: __________ · Decretos: __________\nTrabajo presentado: __________ · Aportes: __________ · Bien general: __________\nTronco de beneficencia: __________ · Clausura: __________ · Cierre de cadena: __________\nFirmas: Venerable Maestro/a · Secretario/a · Orador/a`
       return { meetingId, attendeeCount: present.length, absentCount: absent.length, excusedCount: excused.length, ballotCount: ballots.length, content }
     }
@@ -356,3 +358,5 @@ export function createDefaultLodgeApiClient(getAccessToken?: LodgeAccessTokenPro
   if (url.origin !== window.location.origin || url.username || url.password || url.search || url.hash) throw new Error('Gestión Logial debe usar el mismo origen mediante el proxy institucional.')
   return new LodgeApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized })
 }
+
+function procedureLabel(value: 1 | 2 | 3 | null) { return value === 1 ? 'Primer trámite · ' : value === 2 ? 'Segundo trámite · ' : value === 3 ? 'Tercer trámite · ' : '' }
