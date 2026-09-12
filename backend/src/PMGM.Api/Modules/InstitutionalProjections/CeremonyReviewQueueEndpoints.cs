@@ -210,7 +210,7 @@ public static class CeremonyReviewQueueEndpoints
                                      ceremony.CeremonyType == CeremonyCodes.Type.Initiation &&
                                      !activePublication &&
                                      access.CanManageCandidatePublications(user, ceremony.OrganizationId),
-                CanAuthorize: !isFinal && access.CanAuthorizeCeremonies(user));
+                CanAuthorize: !isFinal && decision.CanAuthorize && access.CanAuthorizeCeremonies(user));
 
             var eligibility = new CeremonyQueueEligibilityDto(
                 decision.Status,

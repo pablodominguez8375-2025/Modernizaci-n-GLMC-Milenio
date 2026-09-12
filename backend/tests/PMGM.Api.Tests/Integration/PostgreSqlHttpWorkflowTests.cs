@@ -137,13 +137,13 @@ public sealed class PostgreSqlHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, validationResponse.StatusCode);
 
-        var eligibilityResponse = await client.GetAsync(
+        var eligibilityBeforeGrandMasterResponse = await client.GetAsync(
             $"/api/ceremonias/solicitudes/{ceremonyId}/elegibilidad",
             cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, eligibilityResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, eligibilityBeforeGrandMasterResponse.StatusCode);
 
-        var eligibilityJson = await eligibilityResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.True(eligibilityJson.GetProperty("canAuthorize").GetBoolean());
+        var eligibilityBeforeGrandMasterJson = await eligibilityBeforeGrandMasterResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.False(eligibilityBeforeGrandMasterJson.GetProperty("canAuthorize").GetBoolean());
 
         var queueBeforeResponse = await client.GetAsync(
             "/api/institutional/ceremonias/bandeja",
@@ -162,15 +162,44 @@ public sealed class PostgreSqlHttpWorkflowTests
         Assert.Equal("Hermano Integración", queueBeforeItem.GetProperty("subjectDisplayName").GetString());
         Assert.Equal(CeremonyCodes.Type.WageIncrease, queueBeforeItem.GetProperty("ceremonyType").GetString());
         Assert.Equal(CeremonyCodes.RequestStatus.UnderReview, queueBeforeItem.GetProperty("status").GetString());
-        Assert.True(queueBeforeItem.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
+        Assert.False(queueBeforeItem.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
         Assert.True(queueBeforeItem.GetProperty("actions").GetProperty("canValidateInternalAffairs").GetBoolean());
-        Assert.True(queueBeforeItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
+        Assert.False(queueBeforeItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
         Assert.False(queueBeforeItem.GetProperty("actions").GetProperty("canPublishCandidate").GetBoolean());
         Assert.False(queueBeforeItem.TryGetProperty("memberId", out _));
         Assert.False(queueBeforeItem.TryGetProperty("candidatePersonId", out _));
         Assert.False(queueBeforeItem.TryGetProperty("notes", out _));
         Assert.False(queueBeforeItem.TryGetProperty("email", out _));
         Assert.False(queueBeforeItem.TryGetProperty("institutionalNumber", out _));
+
+        var grandMasterResponse = await client.PostAsJsonAsync(
+            $"/api/ceremonias/solicitudes/{ceremonyId}/validaciones/gran-maestria",
+            new
+            {
+                status = CeremonyCodes.ValidationStatus.Approved,
+                sourceReference = "CI-HTTP-GM",
+                notes = "Visto bueno institucional de integración."
+            },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, grandMasterResponse.StatusCode);
+
+        var eligibilityAfterGrandMasterResponse = await client.GetAsync(
+            $"/api/ceremonias/solicitudes/{ceremonyId}/elegibilidad",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, eligibilityAfterGrandMasterResponse.StatusCode);
+        var eligibilityAfterGrandMasterJson = await eligibilityAfterGrandMasterResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.True(eligibilityAfterGrandMasterJson.GetProperty("canAuthorize").GetBoolean());
+
+        var queueReadyResponse = await client.GetAsync(
+            "/api/institutional/ceremonias/bandeja",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, queueReadyResponse.StatusCode);
+        var queueReadyJson = await queueReadyResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var queueReadyItem = queueReadyJson.GetProperty("items")
+            .EnumerateArray()
+            .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
+        Assert.True(queueReadyItem.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
+        Assert.True(queueReadyItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
 
         var authorizeResponse = await client.PostAsync(
             $"/api/ceremonias/solicitudes/{ceremonyId}/autorizar",
@@ -212,6 +241,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             Assert.Contains("hospitalaria.workshop_regularity.recorded", auditActions);
             Assert.Contains("ceremony.request.created", auditActions);
             Assert.Contains("ceremony.internal_affairs_validation.recorded", auditActions);
+            Assert.Contains("ceremony.grand_master_validation.recorded", auditActions);
             Assert.Contains("ceremony.authorization.approved", auditActions);
         }
     }
