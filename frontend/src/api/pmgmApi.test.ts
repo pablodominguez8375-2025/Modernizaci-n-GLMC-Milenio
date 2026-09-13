@@ -156,3 +156,18 @@ it('uploads interview Word or PDF with summary and favorable/desfavorable result
   const [url, options] = fetch.mock.calls[0]
   expect(url).toBe('/api/insinuados/solicitudes/c1/entrevistas/i1/contenido'); expect(options.method).toBe('PUT'); expect(options.headers.get('X-Interview-Result')).toBe('desfavorable'); expect(decodeURIComponent(options.headers.get('X-Interview-Summary'))).toBe('Resumen reservado')
 })
+
+it('validates and records only aggregate third-degree open-vote results', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  await expect(client.recordThirdDegreeReview('c1', { reviewDate: '2026-10-12', presentVoters: 12, votesInFavor: 10, votesAgainst: 1, abstentions: 0, openVoteApproved: true, sourceReference: 'EXTRACTO-10' })).rejects.toThrow('coincidir')
+  const result = await client.recordThirdDegreeReview('c1', { reviewDate: '2026-10-12', presentVoters: 12, votesInFavor: 10, votesAgainst: 2, abstentions: 0, openVoteApproved: true, sourceReference: 'EXTRACTO-10' })
+  expect(result.thirdDegree).toMatchObject({ status: 'approved', code: 'third_degree_review.approved' })
+})
+
+it('posts the third-degree extract reference and aggregate vote to the protected endpoint', async () => {
+  const response = { thirdDegree: { id: 'v3', status: 'approved', code: 'third_degree_review.approved', reason: 'Aprobada' }, status: 'under_review' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).recordThirdDegreeReview('c1', { reviewDate: '2026-10-12', presentVoters: 12, votesInFavor: 10, votesAgainst: 2, abstentions: 0, openVoteApproved: true, sourceReference: 'EXTRACTO-10' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/revision-tercer-grado'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 10, votesAgainst: 2, sourceReference: 'EXTRACTO-10' })
+})

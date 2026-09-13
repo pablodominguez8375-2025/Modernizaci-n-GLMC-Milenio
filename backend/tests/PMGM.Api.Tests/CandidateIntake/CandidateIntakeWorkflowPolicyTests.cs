@@ -62,6 +62,19 @@ public sealed class CandidateIntakeWorkflowPolicyTests
     }
 
     [Fact]
+    public void ThirdDegreeOpenVote_RequiresConsistentAggregateTotals()
+    {
+        var invalid = CandidateIntakeWorkflowPolicy.EvaluateThirdDegreeOpenVote(12, 10, 1, 0, approved: true);
+        var favorable = CandidateIntakeWorkflowPolicy.EvaluateThirdDegreeOpenVote(12, 10, 2, 0, approved: true);
+        var unfavorable = CandidateIntakeWorkflowPolicy.EvaluateThirdDegreeOpenVote(12, 5, 7, 0, approved: false);
+
+        Assert.False(invalid.CanProceed);
+        Assert.Equal("third_degree_review.vote_totals", invalid.Code);
+        Assert.True(favorable.CanProceed);
+        Assert.True(unfavorable.IsRejected);
+    }
+
+    [Fact]
     public void FinalBallot_IsBlocked_BeforeTwentyPublicationDays()
     {
         var decision = CandidateIntakeWorkflowPolicy.EvaluateFinalBallot(

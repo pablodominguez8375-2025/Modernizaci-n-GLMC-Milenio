@@ -59,6 +59,8 @@ export interface CandidateInterviewEvidence { interviewDate: string; interviewer
 export interface InterviewPackageRequest { asOfDate: string; interviews: CandidateInterviewEvidence[]; confidentialQuestionnaireAvailable: boolean; confidentialQuestionnaireReference: string | null; autobiographyAvailable: boolean; autobiographyReference: string | null }
 export interface InterviewPackageResponse { id: string; validationStatus: 'approved' | 'observed' | 'rejected'; code: string; reason: string; completedInterviews: number; ceremonyStatus: string }
 export interface InterviewDocumentResponse { interviewId: string; documentVersionId: string; fileName: string; result: CandidateInterviewResult; summary: string; sizeBytes: number }
+export interface ThirdDegreeReviewRequest { reviewDate: string; presentVoters: number; votesInFavor: number; votesAgainst: number; abstentions: number; openVoteApproved: boolean; sourceReference: string }
+export interface ThirdDegreeReviewResponse { thirdDegree: { id: string; status: 'approved' | 'observed' | 'rejected'; code: string; reason: string }; status: string }
 export interface RegimenInteriorSummary {
   scope: 'order' | 'organization'; organizationId: string | null; asOf: string; period: { from: string; to: string }
   members: { totalRelated: number; currentlyAffiliated: number; active: number; inactive: number; currentWithBlockingStatus: number }
@@ -241,6 +243,15 @@ export class PmgmApiClient {
       return { id: ceremonyRequestId, validationStatus: 'approved', code: 'third_degree_review.package_complete', reason: `El expediente contiene ${payload.interviews.length} entrevistas y los antecedentes requeridos.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
     }
     return this.postJson<InterviewPackageResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/antecedentes`, payload)
+  }
+  async recordThirdDegreeReview(ceremonyRequestId: string, payload: ThirdDegreeReviewRequest): Promise<ThirdDegreeReviewResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.presentVoters <= 0 || payload.votesInFavor < 0 || payload.votesAgainst < 0 || payload.abstentions < 0 || payload.votesInFavor + payload.votesAgainst + payload.abstentions !== payload.presentVoters) throw new Error('La suma de votos debe coincidir con la asistencia registrada.')
+      const status = payload.openVoteApproved ? 'approved' : 'rejected'
+      return { thirdDegree: { id: ceremonyRequestId, status, code: `third_degree_review.${status}`, reason: payload.openVoteApproved ? 'La votación abierta de tercer grado fue favorable.' : 'La votación abierta de tercer grado no fue favorable.' }, status: payload.openVoteApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<ThirdDegreeReviewResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/revision-tercer-grado`, payload)
   }
 
   async getTreasuryWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {

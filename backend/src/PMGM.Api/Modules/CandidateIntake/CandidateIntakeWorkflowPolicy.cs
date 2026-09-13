@@ -76,14 +76,26 @@ public static class CandidateIntakeWorkflowPolicy
             $"El expediente contiene {completedInterviews} entrevistas, el Cuestionario Confidencial y la autobiografía.");
     }
 
-    public static CandidateWorkflowDecision EvaluateThirdDegreeOpenVote(bool approved)
-        => approved
+    public static CandidateWorkflowDecision EvaluateThirdDegreeOpenVote(
+        int presentVoters,
+        int votesInFavor,
+        int votesAgainst,
+        int abstentions,
+        bool approved)
+    {
+        if (presentVoters <= 0)
+            return CandidateWorkflowDecision.Blocked("third_degree_review.quorum", "Debe registrarse al menos una persona presente en la votación abierta.");
+        if (votesInFavor < 0 || votesAgainst < 0 || abstentions < 0 || votesInFavor + votesAgainst + abstentions != presentVoters)
+            return CandidateWorkflowDecision.Blocked("third_degree_review.vote_totals", "La suma de votos favorables, desfavorables y abstenciones debe coincidir con la asistencia registrada.");
+
+        return approved
             ? CandidateWorkflowDecision.Allowed(
                 "third_degree_review.approved",
                 "La votación abierta de tercer grado fue favorable.")
             : CandidateWorkflowDecision.Rejected(
                 "third_degree_review.rejected",
                 "La votación abierta de tercer grado no fue favorable.");
+    }
 
     public static CandidateWorkflowDecision EvaluateFinalBallot(
         DateOnly publicationDate,

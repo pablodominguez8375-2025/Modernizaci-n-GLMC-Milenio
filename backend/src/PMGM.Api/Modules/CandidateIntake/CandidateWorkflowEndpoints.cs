@@ -296,34 +296,20 @@ public static class CandidateWorkflowEndpoints
         if (!hasPublication)
             return Results.Conflict(new { message = "La insinuación debe haber sido publicada antes de registrar la revisión de tercer grado." });
 
-        var packageDecision = CandidateIntakeWorkflowPolicy.EvaluateInterviewPackage(
-            request.CompletedInterviews,
-            request.ConfidentialQuestionnaireAvailable,
-            request.AutobiographyAvailable);
+        var interviewPackageStatus = await GetLatestValidationStatusAsync(
+            coreDb, requestId, CeremonyCodes.ValidationType.CandidateInterviewPackage, cancellationToken);
+        if (interviewPackageStatus != CeremonyCodes.ValidationStatus.Approved)
+            return Results.Conflict(new { message = "Las entrevistas y antecedentes deben estar validados antes de la revisión de tercer grado." });
+        if (string.IsNullOrWhiteSpace(request.SourceReference))
+            return Results.BadRequest(new { message = "Debe indicar la referencia del extracto de acta." });
+        if (request.SourceReference.Trim().Length > 240)
+            return Results.BadRequest(new { message = "La referencia documental no puede superar 240 caracteres." });
 
-        var packageStatus = ToValidationStatus(packageDecision);
-        var packageValidation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateInterviewPackage,
-            packageStatus, request.ReviewDate, request.SourceReference, packageDecision.Reason);
-
-        if (!packageDecision.CanProceed)
-        {
-            audit.Add(httpContext, "candidate.workflow.interview_package.observed", nameof(CeremonyValidation),
-                packageValidation.Id.ToString(), ceremony.OrganizationId, AuditResults.Rejected,
-                new
-                {
-                    request.CompletedInterviews,
-                    request.ConfidentialQuestionnaireAvailable,
-                    request.AutobiographyAvailable,
-                    packageDecision.Code
-                });
-            await coreDb.SaveChangesAsync(cancellationToken);
-            return Results.Conflict(new { packageValidation.Id, packageValidation.Status, packageDecision.Code, packageDecision.Reason });
-        }
-
-        var voteDecision = CandidateIntakeWorkflowPolicy.EvaluateThirdDegreeOpenVote(request.OpenVoteApproved);
+        var voteDecision = CandidateIntakeWorkflowPolicy.EvaluateThirdDegreeOpenVote(
+            request.PresentVoters, request.VotesInFavor, request.VotesAgainst, request.Abstentions, request.OpenVoteApproved);
         var voteStatus = ToValidationStatus(voteDecision);
         var voteValidation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateThirdDegreeReview,
-            voteStatus, request.ReviewDate, request.SourceReference, voteDecision.Reason);
+            voteStatus, request.ReviewDate, request.SourceReference.Trim(), voteDecision.Reason);
 
         ceremony.Status = voteDecision.IsRejected
             ? CeremonyCodes.RequestStatus.Rejected
@@ -334,9 +320,10 @@ public static class CandidateWorkflowEndpoints
             voteDecision.IsRejected ? AuditResults.Rejected : AuditResults.Success,
             new
             {
-                request.CompletedInterviews,
-                request.ConfidentialQuestionnaireAvailable,
-                request.AutobiographyAvailable,
+                request.PresentVoters,
+                request.VotesInFavor,
+                request.VotesAgainst,
+                request.Abstentions,
                 request.OpenVoteApproved,
                 voteDecision.Code,
                 voteStatus
@@ -345,7 +332,6 @@ public static class CandidateWorkflowEndpoints
         await coreDb.SaveChangesAsync(cancellationToken);
         return Results.Ok(new
         {
-            package = new { packageValidation.Id, packageValidation.Status },
             thirdDegree = new { voteValidation.Id, voteValidation.Status, voteDecision.Code, voteDecision.Reason },
             ceremony.Status
         });
@@ -591,9 +577,10 @@ public sealed record CandidateInterviewEvidenceRequest(
 
 public sealed record ThirdDegreeReviewRequest(
     DateOnly ReviewDate,
-    int CompletedInterviews,
-    bool ConfidentialQuestionnaireAvailable,
-    bool AutobiographyAvailable,
+    int PresentVoters,
+    int VotesInFavor,
+    int VotesAgainst,
+    int Abstentions,
     bool OpenVoteApproved,
     string? SourceReference);
 
