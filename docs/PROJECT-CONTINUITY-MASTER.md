@@ -54,6 +54,27 @@ La verificación pendiente consiste en contrastar esta matriz con cada formulari
 10. Biblioteca Virtual y Gran Archivero son ámbitos separados; el Gran Archivero no forma parte del alcance operativo actual.
 11. El diseño considera minimización, trazabilidad, control de acceso y retención conforme a la Ley 21.719.
 
+## Cargos del Taller: separación obligatoria
+
+### Gestión logial y firmantes administrativos
+
+En cada Taller, la gestión logial propia y sus documentos administrativos deben identificar, según el acto, a:
+
+- **Venerable Maestro:** autoridad principal del Taller; autoriza los actos administrativos que requieren decisión del Taller, incluidos los egresos de Tesorería y Hospitalaria.
+- **Secretario:** lleva la gestión documental, actas, comunicaciones, solicitudes y trámites del Taller.
+- **Orador:** revisa y firma los documentos en que interviene institucionalmente, incluyendo la carta de retiro cuando corresponda.
+- **Tesorero:** administra ingresos, egresos, cuotas, pagos y rendición económica del Taller; sus actos quedan sujetos a la autorización del Venerable cuando corresponda.
+
+### Cargos docentes del Taller
+
+La docencia y el seguimiento formativo se asignan separadamente a:
+
+- **Primer Vigilante:** responsabilidad docente y seguimiento de Compañeros.
+- **Segundo Vigilante:** responsabilidad docente y seguimiento de Aprendices.
+- **Ex Venerable Maestro:** apoyo docente, experiencia institucional y acompañamiento formativo.
+
+Estos cargos no deben reemplazarse entre sí en los permisos, formularios, firmas, circuitos de aprobación ni reportes. La matriz definitiva debe contrastarse con cada documento oficial de la carpeta Google Drive **Proyecto Centenario** antes del cierre de v1.0.
+
 ## Estado de la demo QA
 
 - UI QA v0.56 publicada en GitHub Pages.
