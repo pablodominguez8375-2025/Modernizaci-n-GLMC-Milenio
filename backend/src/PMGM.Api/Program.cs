@@ -172,6 +172,7 @@ app.MapDataQualityCaseEndpoints();
 app.MapExecutiveReportingEndpoints();
 app.MapTreasuryEndpoints();
 app.MapLodgeTreasuryEndpoints();
+app.MapLodgeHospitalariaEndpoints();
 app.MapHospitalariaEndpoints();
 app.MapInstitutionalRegularityProjectionEndpoints();
 app.MapCandidateIntakeEndpoints();

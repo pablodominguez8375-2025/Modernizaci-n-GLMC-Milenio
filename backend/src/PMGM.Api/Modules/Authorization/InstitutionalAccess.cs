@@ -35,6 +35,7 @@ public interface IInstitutionalAccessService
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeOperations(ClaimsPrincipal user);
     bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId);
+    bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
@@ -113,6 +114,11 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranTesoreria)) ||
            (HasOrganizationClaim(user, organizationId) &&
             HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerTesoreria));
+
+    public bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId)
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranHospitalaria)) ||
+           (HasOrganizationClaim(user, organizationId) &&
+            HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria, "lodge_hospitalaria"));
 
     public bool CanApproveTransfers(ClaimsPrincipal user)
         => HasOrderScope(user) &&
