@@ -66,6 +66,7 @@ public static class CandidateWorkshopIntakeEndpoints
             {
                 x.Id,
                 x.OrganizationId,
+                x.CandidatePersonId,
                 WorkshopName = x.Organization.Name,
                 WorkshopNumber = x.Organization.Number,
                 FirstNames = x.CandidatePerson != null ? x.CandidatePerson.FirstNames : "",
