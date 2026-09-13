@@ -65,6 +65,8 @@ export interface CandidateIntakeProfile {
   responsibleSecretaryName: string | null
   reviewStatus: CandidateReviewStatus | string
   photoAvailable: boolean
+  completenessPercent: number
+  missingRequirements: string[]
   interviewSummary: string | null
   internalObservations: string | null
   submittedAtUtc: string
@@ -146,6 +148,8 @@ const demoProfile: CandidateIntakeProfile = {
   responsibleSecretaryName: 'H∴ Secretario Demostrativo',
   reviewStatus: 'pending_grand_secretariat',
   photoAvailable: true,
+  completenessPercent: 100,
+  missingRequirements: [],
   interviewSummary: 'Registro demostrativo: la entrevista evidencia interés por el conocimiento, el servicio y el perfeccionamiento personal.',
   internalObservations: 'Expediente ficticio utilizado exclusivamente para QA y demostración.',
   submittedAtUtc: '2026-09-10T14:30:00Z',
@@ -321,11 +325,15 @@ export class CandidateIntakeApiClient {
         responsibleSecretaryName: payload.responsibleSecretaryName?.trim() || null,
         reviewStatus: 'pending_grand_secretariat',
         photoAvailable: existing?.photoAvailable ?? false,
+        completenessPercent: 0,
+        missingRequirements: [],
         interviewSummary: payload.interviewSummary?.trim() || null,
         internalObservations: payload.internalObservations?.trim() || null,
         submittedAtUtc: existing?.submittedAtUtc ?? now,
         updatedAtUtc: now,
       }
+      profile.missingRequirements = candidateMissingRequirements(profile)
+      profile.completenessPercent = Math.floor(((20 - profile.missingRequirements.length) * 100) / 20)
       this.mockProfiles.set(requestId, profile)
       queueItem.firstNames = profile.firstNames
       queueItem.lastNames = [profile.paternalSurname, profile.maternalSurname].filter(Boolean).join(' ')
@@ -346,6 +354,8 @@ export class CandidateIntakeApiClient {
       const profile = this.mockProfiles.get(requestId)
       if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero debe registrar la ficha del insinuado.')
       profile.photoAvailable = true
+      profile.missingRequirements = candidateMissingRequirements(profile)
+      profile.completenessPercent = Math.floor(((20 - profile.missingRequirements.length) * 100) / 20)
       profile.reviewStatus = 'pending_grand_secretariat'
       profile.updatedAtUtc = new Date().toISOString()
       const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
@@ -370,6 +380,8 @@ export class CandidateIntakeApiClient {
       profile.photoAvailable = true
       profile.reviewStatus = 'pending_grand_secretariat'
       profile.updatedAtUtc = new Date().toISOString()
+      profile.missingRequirements = candidateMissingRequirements(profile)
+      profile.completenessPercent = Math.floor(((20 - profile.missingRequirements.length) * 100) / 20)
       const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
       if (queueItem) { queueItem.photoAvailable = true; queueItem.reviewStatus = 'pending_grand_secretariat' }
       return
@@ -405,9 +417,10 @@ export class CandidateIntakeApiClient {
 
   async approveAndPublish(requestId: string): Promise<void> {
     if (this.useMocks) {
+      const profile = this.mockProfiles.get(requestId)
+      if (profile?.missingRequirements.length) throw new CandidateIntakeApiHttpError(409, `La ficha no está completa: ${profile.missingRequirements.join(', ')}.`)
       const item = this.mockQueue.find(value => value.ceremonyRequestId === requestId)
       if (item) item.reviewStatus = 'approved'
-      const profile = this.mockProfiles.get(requestId)
       if (profile) {
         profile.reviewStatus = 'approved'
         profile.updatedAtUtc = new Date().toISOString()
@@ -472,4 +485,16 @@ export function createDefaultCandidateIntakeApiClient(getAccessToken?: AccessTok
     throw new Error('La API debe usar el mismo origen mediante el proxy institucional.')
   }
   return new CandidateIntakeApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized })
+}
+
+function candidateMissingRequirements(profile: CandidateIntakeProfile): string[] {
+  return [
+    [profile.firstNames, 'Nombres'], [profile.paternalSurname, 'Apellido paterno'], [profile.rutOrInstitutionalId, 'RUT o identificación'],
+    [profile.birthDate, 'Fecha de nacimiento'], [profile.nationality, 'Nacionalidad'], [profile.civilStatus, 'Estado civil'],
+    [profile.phone, 'Teléfono personal'], [profile.email, 'Correo electrónico'], [profile.address, 'Dirección personal'], [profile.city, 'Ciudad'],
+    [profile.occupation, 'Actividad, profesión u oficio'], [profile.employerName, 'Empleador'], [profile.workAddress, 'Dirección laboral'],
+    [profile.workPosition, 'Cargo o función'], [profile.workPhone, 'Teléfono laboral'], [profile.orient, 'Oriente'],
+    [profile.presenters.length ? 'sí' : '', 'Presentantes'], [profile.firstDegreePresentationDate, 'Fecha de presentación en primer grado'],
+    [profile.responsibleSecretaryName, 'Secretario responsable'], [profile.photoAvailable ? 'sí' : '', 'Fotografía tipo pasaporte'],
+  ].filter(([value]) => !value).map(([, label]) => label as string)
 }

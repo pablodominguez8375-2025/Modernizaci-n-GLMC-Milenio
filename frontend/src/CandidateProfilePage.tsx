@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateReviewDecision, type CandidateReviewQueueItem } from './api/candidateIntakeApi'
+import './candidate-completeness.css'
 
 export const candidateCoreFields = [
   'passportPhoto',
@@ -166,6 +167,10 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
 
   async function approveAndPublish() {
     if (!profile || busy) return
+    if (profile.missingRequirements.length) {
+      setError(`La ficha no puede publicarse: faltan ${profile.missingRequirements.join(', ')}.`)
+      return
+    }
     setBusy(true)
     setError(null)
     setMessage(null)
@@ -278,10 +283,19 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
           <div className="candidate-section-title"><span>▦</span><h2>Control de expediente</h2></div>
           <CandidateSummary label="Estado" value={reviewStatusLabel(profile.reviewStatus)} status />
           <CandidateSummary label="Foto" value={profile.photoAvailable ? 'Disponible' : 'Pendiente'} />
+          <CandidateSummary label="Completitud" value={`${profile.completenessPercent}%`} />
           <CandidateSummary label="Presentantes" value={String(profile.presenters.length)} />
           <CandidateSummary label="Ingresado" value={formatDateTime(profile.submittedAtUtc)} />
           <CandidateSummary label="Actualizado" value={formatDateTime(profile.updatedAtUtc)} />
         </aside>
+      </section>
+
+      <section className="candidate-product-card candidate-completeness-card">
+        <div className="candidate-section-title"><span>✓</span><h2>Control de completitud para publicación</h2><em>{profile.completenessPercent}%</em></div>
+        <div className="candidate-completeness-progress"><span style={{ width: `${profile.completenessPercent}%` }} /></div>
+        {profile.missingRequirements.length === 0
+          ? <div className="candidate-protected-notice"><strong>Expediente completo.</strong> Gran Secretaría puede resolver su publicación.</div>
+          : <><p>La aprobación permanece bloqueada hasta que Secretaría Logial corrija estos antecedentes en la misma ficha:</p><ul className="candidate-missing-list">{profile.missingRequirements.map(item => <li key={item}>{item}</li>)}</ul></>}
       </section>
 
       {canReview && profile.reviewStatus !== 'approved' && <section className="candidate-product-card candidate-history-card">
@@ -291,7 +305,7 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
         <div className="candidate-heading-actions" style={{ justifyContent: 'flex-start', marginTop: '1rem' }}>
           <button className="candidate-secondary-button" type="button" disabled={busy} onClick={() => { void runReview('observed') }}>Observar</button>
           <button className="candidate-secondary-button" type="button" disabled={busy} onClick={() => { void runReview('rejected') }}>Rechazar</button>
-          <button className="candidate-primary-button" type="button" disabled={busy} onClick={() => { void approveAndPublish() }}>{busy ? 'Procesando…' : 'Aprobar y publicar'}</button>
+          <button className="candidate-primary-button" type="button" disabled={busy || profile.missingRequirements.length > 0} onClick={() => { void approveAndPublish() }}>{busy ? 'Procesando…' : 'Aprobar y publicar'}</button>
         </div>
       </section>}
 

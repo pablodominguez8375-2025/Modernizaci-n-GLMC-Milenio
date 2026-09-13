@@ -16,6 +16,8 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(profile.firstDegreePresentationDate).toBe('2026-08-28')
     expect(profile.responsibleSecretaryName).toContain('Demostrativo')
     expect(profile.photoAvailable).toBe(true)
+    expect(profile.completenessPercent).toBe(100)
+    expect(profile.missingRequirements).toEqual([])
   })
 
   it('loads the transversal publication list with safe photo routes', async () => {
@@ -130,5 +132,20 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     const profile = await api.getProfile(requestId)
     expect(approved.items.some(item => item.ceremonyRequestId === requestId)).toBe(true)
     expect(profile.reviewStatus).toBe('approved')
+  })
+
+  it('blocks publication when the official profile is incomplete', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const pending = (await api.getWorkshopQueue()).items.find(item => !item.profileAvailable)!
+    const profile = await api.saveProfile(pending.ceremonyRequestId, {
+      firstNames: 'Persona Incompleta',
+      paternalSurname: 'QA',
+      presenters: ['H∴ Presentante QA'],
+      insinuationDate: '2026-09-01',
+    })
+
+    expect(profile.completenessPercent).toBeLessThan(100)
+    expect(profile.missingRequirements).toContain('Fotografía tipo pasaporte')
+    await expect(api.approveAndPublish(pending.ceremonyRequestId)).rejects.toThrow('La ficha no está completa')
   })
 })

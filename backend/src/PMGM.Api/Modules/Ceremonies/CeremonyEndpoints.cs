@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.CandidateIntake;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
@@ -340,6 +341,7 @@ public static class CeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        CandidateIntakeDbContext intakeDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         IInstitutionalNotificationService notifications,
@@ -401,6 +403,18 @@ public static class CeremonyEndpoints
                 notificationsCreated = reconciled.Created
             });
         }
+
+        var intakeProfile = await intakeDb.CandidateIntakeProfiles.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
+        if (intakeProfile is null) return Results.Conflict(new { message = "Debe completar la ficha privada del insinuado antes de aprobar su publicación." });
+        var completeness = CandidateIntakeCompletenessPolicy.Evaluate(
+            intakeProfile,
+            ceremony.CandidatePerson.FirstNames,
+            ceremony.CandidatePerson.Phone,
+            ceremony.CandidatePerson.Email,
+            ceremony.CandidatePerson.Address);
+        if (!completeness.IsComplete)
+            return Results.Conflict(new { message = "La ficha no está completa para publicación.", missingRequirements = completeness.MissingRequirements });
 
         var today = ChileToday();
         var requiredDays = await GetMinimumPublicationDaysAsync(db, today, cancellationToken);

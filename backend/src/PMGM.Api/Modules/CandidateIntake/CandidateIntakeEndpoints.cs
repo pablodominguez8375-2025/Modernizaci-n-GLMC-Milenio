@@ -445,6 +445,7 @@ public static class CandidateIntakeEndpoints
             .FirstOrDefaultAsync(cancellationToken);
         var published = await coreDb.CandidatePublications.AsNoTracking()
             .AnyAsync(x => x.CeremonyRequestId == profile.CeremonyRequestId && x.Status == CeremonyCodes.PublicationStatus.Published, cancellationToken);
+        var completeness = CandidateIntakeCompletenessPolicy.Evaluate(profile, person.FirstNames, person.Phone, person.Email, person.Address);
 
         return new CandidateIntakeProfileDto(
             profile.CeremonyRequestId,
@@ -473,6 +474,8 @@ public static class CandidateIntakeEndpoints
             profile.ResponsibleSecretaryName,
             published ? CandidateIntakeCodes.ReviewStatus.Approved : MapReviewStatus(latestReview),
             profile.PhotoVersionId is not null,
+            completeness.Percent,
+            completeness.MissingRequirements,
             profile.InterviewSummary,
             profile.InternalObservations,
             profile.SubmittedAtUtc,
@@ -573,6 +576,8 @@ public sealed record CandidateIntakeProfileDto(
     string? ResponsibleSecretaryName,
     string ReviewStatus,
     bool PhotoAvailable,
+    int CompletenessPercent,
+    IReadOnlyList<string> MissingRequirements,
     string? InterviewSummary,
     string? InternalObservations,
     DateTimeOffset SubmittedAtUtc,
