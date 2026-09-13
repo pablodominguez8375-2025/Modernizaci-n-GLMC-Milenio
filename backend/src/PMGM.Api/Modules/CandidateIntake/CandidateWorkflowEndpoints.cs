@@ -559,7 +559,7 @@ public static class CandidateWorkflowEndpoints
         return DateOnly.FromDateTime(chile.DateTime);
     }
 
-    private static string DecodeHeader(string encoded, string fallback)
+    private static string DecodeHeader(string? encoded, string fallback)
     {
         if (string.IsNullOrWhiteSpace(encoded)) return fallback;
         try { return Uri.UnescapeDataString(encoded).Trim(); }
