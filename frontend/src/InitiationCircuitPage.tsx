@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { PmgmApiClient } from './api/pmgmApi'
 import type { DemoProfileKey } from './demoProfiles'
 import './initiationCircuit.css'
+import './initiationDeliberation.css'
 
 const stages = [
   { title: 'Ingreso del insinuado', owner: 'Secretaría del Taller', profile: 'lodge', evidence: 'Ficha 2026, fotografía, fecha de ingreso y secretario responsable' },
@@ -28,6 +29,10 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
   const [decision, setDecision] = useState<'approved' | 'rejected' | 'observed' | null>(null)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [deliberationDate, setDeliberationDate] = useState('2026-09-20')
+  const [presentVoters, setPresentVoters] = useState(12)
+  const [votesInFavor, setVotesInFavor] = useState(12)
+  const [deliberationSource, setDeliberationSource] = useState('ACTA-1G-DEMO-2026-001')
   const current = stages[selected]
   const canDecideCurrent = !demoProfileKey || demoProfileKey === 'grandLodge' || demoProfileKey === current.profile
   const finished = completed === stages.length
@@ -39,6 +44,14 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
     setWorking(true); setError(null)
     try {
       if (!canDecideCurrent) throw new Error(`Esta etapa corresponde a ${current.owner}. Cambie al perfil aprobante indicado.`)
+      if (completed === 1) {
+        const result = await api.recordInitialDeliberation('eeeeeeee-2222-2222-2222-222222222222', { deliberationDate, presentVoters, votesInFavor, minimumWaitingDays: 7, sourceReference: deliberationSource })
+        if (result.validationStatus !== 'approved') {
+          setDecision(result.validationStatus)
+          setHistory(items => [`${stages[completed].title} — ${result.reason} · respaldo ${deliberationSource || 'sin referencia'}`, ...items])
+          return
+        }
+      }
       if (completed === stages.length - 1) await api.registerInitiation('eeeeeeee-2222-2222-2222-222222222222', '2026-09-12', 'ACTA-INI-DEMO-2026-001')
     const stage = stages[completed]
     setDecision('approved')
@@ -87,9 +100,10 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
         {selected === completed && !finished && <div className="initiation-approval-note"><strong>Esta etapa requiere aprobación</strong><span>El aprobante revisa el expediente completo, actividad, tenidas y documentos antes de resolver.</span></div>}
         {selected === completed && !finished && !canDecideCurrent && <div className="error-banner" role="status"><strong>Cambio de perfil requerido.</strong><span>Seleccione “{current.owner}” en Perfil QA para resolver esta tarea.</span></div>}
         {selected === 0 && <div className="initiation-fields"><label>Insinuado<input value="Persona Demostrativa Centenario" readOnly /></label><label>Taller<input value="Taller Demostrativo Nº 23" readOnly /></label><label>Fecha de ingreso<input value="12-09-2026" readOnly /></label><label>Secretario responsable<input value="Secretario Demostrativo" readOnly /></label></div>}
+        {selected === 1 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Reglas automáticas</strong><span>Presentación: 12-09-2026 · espera mínima: 7 días · aprobación: unanimidad</span></div><div className="initiation-fields"><label>Fecha de deliberación<input type="date" value={deliberationDate} onChange={event => setDeliberationDate(event.target.value)} /></label><label>Asambleístas presentes<input type="number" min="1" value={presentVoters} onChange={event => setPresentVoters(Number(event.target.value))} /></label><label>Votos favorables<input type="number" min="0" max={presentVoters} value={votesInFavor} onChange={event => setVotesInFavor(Number(event.target.value))} /></label><label>Acta o extracto de respaldo<input value={deliberationSource} required maxLength={240} onChange={event => setDeliberationSource(event.target.value)} /></label></div><p className="initiation-vote-summary"><strong>{votesInFavor === presentVoters && presentVoters > 0 ? 'Unanimidad registrada' : 'La votación no es unánime'}</strong><span>{votesInFavor} de {presentVoters} votos favorables</span></p></div>}
         {selected === 12 && <div className="initiation-document"><span>PLANCHA</span><strong>{completed > 12 ? 'AUT-CER-DEMO-2026-001' : 'Se genera únicamente tras el visto bueno'}</strong><small>Permanece vinculada al expediente y a las validaciones congeladas.</small></div>}
         {selected === 13 && <div className="initiation-member"><strong>{finished ? 'Aprendiz activado' : 'Activación todavía bloqueada'}</strong><span>{finished ? 'Persona Demostrativa Centenario · Miembro activo · 1.er grado' : 'La autorización no convierte por sí sola al candidato en hermano.'}</span></div>}
-        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
+        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 1 ? 'Registrar deliberación inicial' : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
       </section>
     </div>
 

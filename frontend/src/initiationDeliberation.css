@@ -1,0 +1,5 @@
+.initiation-deliberation{display:grid;gap:14px;margin-top:18px}
+.initiation-rule-check{display:grid;gap:4px;padding:13px 15px;border-radius:10px;background:#edf7f3;border-left:4px solid #27745d;color:#31584d}
+.initiation-rule-check span,.initiation-vote-summary span{font-size:.82rem;color:#61766f}
+.initiation-vote-summary{display:flex;justify-content:space-between;gap:12px;margin:0;padding:12px 14px;border:1px solid #d8e5df;border-radius:10px;background:#fafcfb;color:#234d41}
+@media(max-width:900px){.initiation-vote-summary{display:grid}}

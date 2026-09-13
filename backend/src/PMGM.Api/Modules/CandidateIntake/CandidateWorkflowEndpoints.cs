@@ -44,6 +44,10 @@ public static class CandidateWorkflowEndpoints
         if (profile is null) return Results.Conflict(new { message = "Debe existir una ficha privada de insinuación antes de registrar la deliberación." });
         if (request.DeliberationDate > ChileToday())
             return Results.BadRequest(new { message = "La deliberación no puede registrarse con fecha futura." });
+        if (string.IsNullOrWhiteSpace(request.SourceReference))
+            return Results.BadRequest(new { message = "Debe indicar la referencia del acta o extracto que respalda la deliberación." });
+        if (request.SourceReference.Trim().Length > 240)
+            return Results.BadRequest(new { message = "La referencia documental no puede superar 240 caracteres." });
 
         var decision = CandidateIntakeWorkflowPolicy.EvaluateInitialDeliberation(
             profile.InsinuationDate,
@@ -54,7 +58,7 @@ public static class CandidateWorkflowEndpoints
 
         var status = ToValidationStatus(decision);
         var validation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateInitialDeliberation,
-            status, request.DeliberationDate, request.SourceReference, decision.Reason);
+            status, request.DeliberationDate, request.SourceReference.Trim(), decision.Reason);
 
         ceremony.Status = decision.IsRejected
             ? CeremonyCodes.RequestStatus.Rejected

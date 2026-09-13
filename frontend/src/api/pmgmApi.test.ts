@@ -117,3 +117,21 @@ it('demo does not request token or network', async () => {
   await client.getSystemInfo(); await client.getRegimenInteriorSummary(); await client.getCeremonyReviewQueue(); await client.getTreasuryWorkshopRegularity('11111111-1111-1111-1111-111111111111'); await client.getHospitalariaWorkshopRegularity('11111111-1111-1111-1111-111111111111'); await client.getSecretariatAvailability('2026-09-08T18:00:00Z', '2026-09-08T20:00:00Z'); await client.getSecretariatCeremonyQueue()
   expect(fetch).not.toHaveBeenCalled(); expect(token).not.toHaveBeenCalled()
 })
+
+it('applies the seven-day and unanimity contract to demo initial deliberation', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const observed = await client.recordInitialDeliberation('c1', { deliberationDate: '2026-09-18', presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-1' })
+  const rejected = await client.recordInitialDeliberation('c1', { deliberationDate: '2026-09-19', presentVoters: 12, votesInFavor: 11, sourceReference: 'ACTA-2' })
+  const approved = await client.recordInitialDeliberation('c1', { deliberationDate: '2026-09-19', presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-3' })
+  expect(observed).toMatchObject({ validationStatus: 'observed', code: 'initial_deliberation.waiting_period' })
+  expect(rejected).toMatchObject({ validationStatus: 'rejected', code: 'initial_deliberation.unanimity' })
+  expect(approved).toMatchObject({ validationStatus: 'approved', code: 'initial_deliberation.approved' })
+})
+
+it('posts initial deliberation evidence to the protected workflow endpoint', async () => {
+  const response = { id: 'v1', validationStatus: 'approved', code: 'initial_deliberation.approved', reason: 'Aprobada', ceremonyStatus: 'under_review' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).recordInitialDeliberation('c1', { deliberationDate: '2026-09-19', presentVoters: 12, votesInFavor: 12, minimumWaitingDays: 7, sourceReference: 'ACTA-1' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/deliberacion-inicial'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-1' })
+})
