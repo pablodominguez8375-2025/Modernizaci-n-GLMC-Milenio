@@ -140,3 +140,19 @@ it('publishes the circuit demo candidate with the configured twenty-day rule', a
   const result = await new PmgmApiClient({ useMocks: true }).publishCeremonyCandidate('eeeeeeee-2222-2222-2222-222222222222')
   expect(result).toMatchObject({ status: 'published', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', notificationsCreated: 34 })
 })
+
+it('accepts more than three interviews when every interview has private evidence', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const interviews = Array.from({ length: 4 }, (_, index) => ({ interviewDate: `2026-09-${23 + index}`, interviewerDisplayName: `Entrevistador ${index + 1}`, summary: `Resumen ${index + 1}`, result: 'favorable' as const, documentVersionId: `version-${index + 1}` }))
+  const result = await client.recordInterviewPackage('c1', { asOfDate: '2026-09-26', interviews, confidentialQuestionnaireAvailable: true, confidentialQuestionnaireReference: 'CUEST-1', autobiographyAvailable: true, autobiographyReference: 'AUTO-1' })
+  expect(result).toMatchObject({ validationStatus: 'approved', completedInterviews: 4 })
+})
+
+it('uploads interview Word or PDF with summary and favorable/desfavorable result metadata', async () => {
+  const response = { interviewId: 'i1', documentVersionId: 'v1', fileName: 'entrevista.pdf', result: 'desfavorable', summary: 'Resumen reservado', sizeBytes: 4 }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  const file = new File(['%PDF'], 'entrevista.pdf', { type: 'application/pdf' })
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).uploadInterviewDocument('c1', 'i1', file, { interviewDate: '2026-09-23', interviewerDisplayName: 'Entrevistador Uno', summary: 'Resumen reservado', result: 'desfavorable' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/entrevistas/i1/contenido'); expect(options.method).toBe('PUT'); expect(options.headers.get('X-Interview-Result')).toBe('desfavorable'); expect(decodeURIComponent(options.headers.get('X-Interview-Summary'))).toBe('Resumen reservado')
+})

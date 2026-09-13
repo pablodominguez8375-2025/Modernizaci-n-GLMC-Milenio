@@ -50,11 +50,11 @@ public static class CandidateIntakeWorkflowPolicy
         if (completedInterviews < 0)
             throw new ArgumentOutOfRangeException(nameof(completedInterviews));
 
-        if (completedInterviews != 3)
+        if (completedInterviews < 3)
         {
             return CandidateWorkflowDecision.Blocked(
                 "third_degree_review.interviews",
-                $"El expediente requiere tres entrevistas completas; actualmente registra {completedInterviews}.");
+                $"El expediente requiere al menos tres entrevistas completas; actualmente registra {completedInterviews}.");
         }
 
         if (!confidentialQuestionnaireAvailable)
@@ -73,7 +73,7 @@ public static class CandidateIntakeWorkflowPolicy
 
         return CandidateWorkflowDecision.Allowed(
             "third_degree_review.package_complete",
-            "El expediente contiene las tres entrevistas, el Cuestionario Confidencial y la autobiografía.");
+            $"El expediente contiene {completedInterviews} entrevistas, el Cuestionario Confidencial y la autobiografía.");
     }
 
     public static CandidateWorkflowDecision EvaluateThirdDegreeOpenVote(bool approved)

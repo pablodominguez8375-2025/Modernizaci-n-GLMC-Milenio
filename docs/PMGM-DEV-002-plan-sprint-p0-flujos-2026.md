@@ -24,7 +24,7 @@
    - deliberación y unanimidad;
    - publicación;
    - 20 días corridos;
-   - tres entrevistas;
+   - mínimo tres entrevistas, permitiendo adicionales solicitadas por el Venerable Maestro;
    - antecedentes complementarios;
    - votación de 3.er grado;
    - balotaje de 1.er grado;

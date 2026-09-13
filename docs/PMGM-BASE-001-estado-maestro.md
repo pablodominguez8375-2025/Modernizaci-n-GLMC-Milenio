@@ -155,7 +155,7 @@ Flujo institucional consolidado desde el Protocolo 2026:
 - fotografía con validaciones del protocolo;
 - posibilidad de observación/corrección sin duplicar expediente;
 - permanencia publicada mínima: **20 días corridos**, parametrizable si la normativa cambia;
-- tres entrevistas;
+- mínimo tres entrevistas, ampliables por decisión del Venerable Maestro, con resumen, resultado y Word/PDF privado;
 - Cuestionario Confidencial y autobiografía;
 - revisión/votación de 3.er grado;
 - balotaje en 1.er grado después de cumplir publicación y antecedentes;

@@ -46,16 +46,18 @@ public sealed class CandidateIntakeWorkflowPolicyTests
     }
 
     [Fact]
-    public void ThirdDegreePackage_RequiresExactlyThreeInterviews_Questionnaire_AndAutobiography()
+    public void ThirdDegreePackage_RequiresAtLeastThreeInterviews_Questionnaire_AndAutobiography()
     {
         var missingInterview = CandidateIntakeWorkflowPolicy.EvaluateInterviewPackage(2, true, true);
         var missingQuestionnaire = CandidateIntakeWorkflowPolicy.EvaluateInterviewPackage(3, false, true);
         var missingAutobiography = CandidateIntakeWorkflowPolicy.EvaluateInterviewPackage(3, true, false);
+        var additionalInterview = CandidateIntakeWorkflowPolicy.EvaluateInterviewPackage(4, true, true);
         var complete = CandidateIntakeWorkflowPolicy.EvaluateInterviewPackage(3, true, true);
 
         Assert.False(missingInterview.CanProceed);
         Assert.False(missingQuestionnaire.CanProceed);
         Assert.False(missingAutobiography.CanProceed);
+        Assert.True(additionalInterview.CanProceed);
         Assert.True(complete.CanProceed);
     }
 

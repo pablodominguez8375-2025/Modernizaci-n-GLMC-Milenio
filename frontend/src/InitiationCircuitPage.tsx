@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { CandidatePublicationWorkflowResponse, PmgmApiClient } from './api/pmgmApi'
+import type { CandidateInterviewResult, CandidatePublicationWorkflowResponse, PmgmApiClient } from './api/pmgmApi'
 import type { DemoProfileKey } from './demoProfiles'
 import './initiationCircuit.css'
 import './initiationDeliberation.css'
@@ -8,7 +8,7 @@ const stages = [
   { title: 'Ingreso del insinuado', owner: 'Secretaría del Taller', profile: 'lodge', evidence: 'Ficha 2026, fotografía, fecha de ingreso y secretario responsable' },
   { title: 'Presentación y deliberación inicial', owner: 'Taller · 1.er grado', profile: 'lodge', evidence: 'Acta de presentación, espera mínima de 7 días y acuerdo unánime' },
   { title: 'Publicación institucional', owner: 'Gran Secretaría', profile: 'secretariat', evidence: 'Publicación en intranet por 20 días corridos' },
-  { title: 'Entrevistas y antecedentes', owner: 'Maestros entrevistadores', profile: 'lodge', evidence: 'Tres informes, cuestionario confidencial y autobiografía' },
+  { title: 'Entrevistas y antecedentes', owner: 'Maestros entrevistadores', profile: 'lodge', evidence: 'Mínimo tres entrevistas con resumen, resultado, Word/PDF privado, cuestionario confidencial y autobiografía' },
   { title: 'Revisión en 3.er grado', owner: 'Maestros del Taller', profile: 'lodge', evidence: 'Votación abierta y extracto de acta' },
   { title: 'Balotaje definitivo', owner: 'Taller · 1.er grado', profile: 'lodge', evidence: 'Balotaje anónimo, balotas blancas/negras y extracto de acta' },
   { title: 'Solicitud de Iniciación', owner: 'Venerable Maestro y Secretaría', profile: 'lodge', evidence: 'Solicitud vinculada al mismo expediente, sin redigitación' },
@@ -20,6 +20,9 @@ const stages = [
   { title: 'Plancha y programación', owner: 'Gran Secretaría', profile: 'secretariat', evidence: 'Plancha de autorización, fecha, Taller y reserva si corresponde' },
   { title: 'Ceremonia y activación', owner: 'Taller', profile: 'lodge', evidence: 'Acta de Iniciación; alta como miembro activo y Aprendiz' },
 ] as const
+
+interface InterviewDraft { id: string; interviewDate: string; interviewerDisplayName: string; summary: string; result: CandidateInterviewResult; documentVersionId: string | null; fileName: string | null; uploading: boolean }
+const demoRequestId = 'eeeeeeee-2222-2222-2222-222222222222'
 
 export default function InitiationCircuitPage({ api, demoProfileKey }: { api: PmgmApiClient; demoProfileKey?: DemoProfileKey }) {
   const initialCompleted = readDemoProgress(api.useMocks)
@@ -34,7 +37,12 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
   const [votesInFavor, setVotesInFavor] = useState(12)
   const [deliberationSource, setDeliberationSource] = useState('ACTA-1G-DEMO-2026-001')
   const [publication, setPublication] = useState<CandidatePublicationWorkflowResponse | null>(null)
-  const [publicationControlDate, setPublicationControlDate] = useState('2026-09-14')
+  const [publicationControlDate, setPublicationControlDate] = useState('2026-10-11')
+  const [interviews, setInterviews] = useState<InterviewDraft[]>(initialInterviews)
+  const [questionnaireAvailable, setQuestionnaireAvailable] = useState(true)
+  const [questionnaireReference, setQuestionnaireReference] = useState('CUEST-CONF-DEMO-2026-001')
+  const [autobiographyAvailable, setAutobiographyAvailable] = useState(true)
+  const [autobiographyReference, setAutobiographyReference] = useState('AUTOBIO-DEMO-2026-001')
   const current = stages[selected]
   const canDecideCurrent = !demoProfileKey || demoProfileKey === 'grandLodge' || demoProfileKey === current.profile
   const finished = completed === stages.length
@@ -47,7 +55,7 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
     try {
       if (!canDecideCurrent) throw new Error(`Esta etapa corresponde a ${current.owner}. Cambie al perfil aprobante indicado.`)
       if (completed === 1) {
-        const result = await api.recordInitialDeliberation('eeeeeeee-2222-2222-2222-222222222222', { deliberationDate, presentVoters, votesInFavor, minimumWaitingDays: 7, sourceReference: deliberationSource })
+        const result = await api.recordInitialDeliberation(demoRequestId, { deliberationDate, presentVoters, votesInFavor, minimumWaitingDays: 7, sourceReference: deliberationSource })
         if (result.validationStatus !== 'approved') {
           setDecision(result.validationStatus)
           setHistory(items => [`${stages[completed].title} — ${result.reason} · respaldo ${deliberationSource || 'sin referencia'}`, ...items])
@@ -55,7 +63,7 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
         }
       }
       if (completed === 2) {
-        const result = publication ?? await api.publishCeremonyCandidate('eeeeeeee-2222-2222-2222-222222222222')
+        const result = publication ?? await api.publishCeremonyCandidate(demoRequestId)
         setPublication(result)
         const controlDate = api.useMocks ? publicationControlDate : new Date().toISOString().slice(0, 10)
         const elapsedDays = Math.max(0, dateOnlyDayNumber(controlDate) - dateOnlyDayNumber(result.publishedFromUtc.slice(0, 10)))
@@ -65,7 +73,13 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
           return
         }
       }
-      if (completed === stages.length - 1) await api.registerInitiation('eeeeeeee-2222-2222-2222-222222222222', '2026-09-12', 'ACTA-INI-DEMO-2026-001')
+      if (completed === 3) {
+        const completedEvidence = interviews.filter(item => item.documentVersionId)
+        if (completedEvidence.length < 3) throw new Error('Debe cargar el archivo Word o PDF de al menos tres entrevistas.')
+        const result = await api.recordInterviewPackage(demoRequestId, { asOfDate: completedEvidence.map(item => item.interviewDate).sort().at(-1) ?? '2026-09-25', interviews: completedEvidence.map(item => ({ interviewDate: item.interviewDate, interviewerDisplayName: item.interviewerDisplayName, summary: item.summary, result: item.result, documentVersionId: item.documentVersionId! })), confidentialQuestionnaireAvailable: questionnaireAvailable, confidentialQuestionnaireReference: questionnaireReference || null, autobiographyAvailable, autobiographyReference: autobiographyReference || null })
+        if (result.validationStatus !== 'approved') { setDecision(result.validationStatus); setHistory(items => [`${stages[completed].title} — ${result.reason}`, ...items]); return }
+      }
+      if (completed === stages.length - 1) await api.registerInitiation(demoRequestId, '2026-09-12', 'ACTA-INI-DEMO-2026-001')
     const stage = stages[completed]
     setDecision('approved')
     setHistory(items => [`${stage.title} — evidencia registrada`, ...items])
@@ -76,6 +90,17 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
     setDecision(null)
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'No fue posible registrar la etapa.') } finally { setWorking(false) }
   }
+
+  const updateInterview = (id: string, patch: Partial<InterviewDraft>, preserveDocument = false) => setInterviews(items => items.map(item => item.id === id ? { ...item, ...patch, documentVersionId: preserveDocument ? (patch.documentVersionId ?? item.documentVersionId) : null, fileName: preserveDocument ? (patch.fileName ?? item.fileName) : null } : item))
+  const uploadInterview = async (interview: InterviewDraft, file?: File) => {
+    if (!file) return
+    setError(null); updateInterview(interview.id, { uploading: true }, true)
+    try {
+      const uploaded = await api.uploadInterviewDocument(demoRequestId, interview.id, file, { interviewDate: interview.interviewDate, interviewerDisplayName: interview.interviewerDisplayName, summary: interview.summary, result: interview.result })
+      updateInterview(interview.id, { uploading: false, documentVersionId: uploaded.documentVersionId, fileName: uploaded.fileName }, true)
+    } catch (reason) { updateInterview(interview.id, { uploading: false }, true); setError(reason instanceof Error ? reason.message : 'No fue posible cargar la entrevista.') }
+  }
+  const addInterview = () => setInterviews(items => [...items, { id: crypto.randomUUID(), interviewDate: '2026-09-26', interviewerDisplayName: `Entrevistador Demostrativo ${items.length + 1}`, summary: '', result: 'favorable', documentVersionId: null, fileName: null, uploading: false }])
 
   const reject = () => {
     if (selected !== completed || finished) return
@@ -115,9 +140,10 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
         {selected === 0 && <div className="initiation-fields"><label>Insinuado<input value="Persona Demostrativa Centenario" readOnly /></label><label>Taller<input value="Taller Demostrativo Nº 23" readOnly /></label><label>Fecha de ingreso<input value="12-09-2026" readOnly /></label><label>Secretario responsable<input value="Secretario Demostrativo" readOnly /></label></div>}
         {selected === 1 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Reglas automáticas</strong><span>Presentación: 12-09-2026 · espera mínima: 7 días · aprobación: unanimidad</span></div><div className="initiation-fields"><label>Fecha de deliberación<input type="date" value={deliberationDate} onChange={event => setDeliberationDate(event.target.value)} /></label><label>Asambleístas presentes<input type="number" min="1" value={presentVoters} onChange={event => setPresentVoters(Number(event.target.value))} /></label><label>Votos favorables<input type="number" min="0" max={presentVoters} value={votesInFavor} onChange={event => setVotesInFavor(Number(event.target.value))} /></label><label>Acta o extracto de respaldo<input value={deliberationSource} required maxLength={240} onChange={event => setDeliberationSource(event.target.value)} /></label></div><p className="initiation-vote-summary"><strong>{votesInFavor === presentVoters && presentVoters > 0 ? 'Unanimidad registrada' : 'La votación no es unánime'}</strong><span>{votesInFavor} de {presentVoters} votos favorables</span></p></div>}
         {selected === 2 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Publicación institucional protegida</strong><span>Gran Secretaría publica sólo con ficha completa y deliberación inicial aprobada.</span></div><div className="initiation-fields"><label>Período exigido<input value={`${publication?.requiredDays ?? 20} días corridos`} readOnly /></label>{api.useMocks && <label>Fecha de control QA<input type="date" value={publicationControlDate} onChange={event => setPublicationControlDate(event.target.value)} /></label>}<label>Inicio de publicación<input value={publication ? formatDateOnly(publication.publishedFromUtc.slice(0, 10)) : 'Se asigna al publicar'} readOnly /></label><label>Notificaciones internas<input value={publication ? `${publication.notificationsCreated} generadas` : 'Pendientes'} readOnly /></label></div>{publication && <p className="initiation-vote-summary"><strong>{publication.status === 'published' ? 'Visible en portal institucional' : publication.status}</strong><span>Regla: {publication.ruleCode}</span></p>}</div>}
+        {selected === 3 && <div className="interview-package"><div className="initiation-rule-check"><strong>Mínimo tres; adicionales por decisión del Venerable Maestro</strong><span>El sistema muestra sólo el resumen y el resultado. El Word o PDF completo queda como antecedente privado.</span></div><div className="interview-list">{interviews.map((interview, index) => <article className="interview-card" key={interview.id}><header><strong>Entrevista {index + 1}</strong><button type="button" disabled={interviews.length <= 3 || interview.uploading} onClick={() => setInterviews(items => items.filter(item => item.id !== interview.id))}>Quitar</button></header><div className="initiation-fields"><label>Fecha<input type="date" value={interview.interviewDate} onChange={event => updateInterview(interview.id, { interviewDate: event.target.value })} /></label><label>Responsable<input value={interview.interviewerDisplayName} onChange={event => updateInterview(interview.id, { interviewerDisplayName: event.target.value })} /></label></div><label className="interview-summary">Resumen<textarea maxLength={1000} value={interview.summary} onChange={event => updateInterview(interview.id, { summary: event.target.value })} /></label><div className="interview-result"><label>Resultado<select value={interview.result} onChange={event => updateInterview(interview.id, { result: event.target.value as CandidateInterviewResult })}><option value="favorable">Favorable</option><option value="desfavorable">Desfavorable</option></select></label><label className="interview-upload">Antecedente Word o PDF<input type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={interview.uploading} onChange={event => void uploadInterview(interview, event.target.files?.[0])} /><span>{interview.uploading ? 'Analizando archivo…' : interview.fileName ?? 'Sin archivo cargado'}</span></label></div></article>)}</div><button type="button" className="regularity-secondary" onClick={addInterview}>Agregar entrevista adicional</button><div className="interview-attachments"><label><input type="checkbox" checked={questionnaireAvailable} onChange={event => setQuestionnaireAvailable(event.target.checked)} /> Cuestionario confidencial disponible</label><input aria-label="Referencia cuestionario confidencial" value={questionnaireReference} onChange={event => setQuestionnaireReference(event.target.value)} /><label><input type="checkbox" checked={autobiographyAvailable} onChange={event => setAutobiographyAvailable(event.target.checked)} /> Autobiografía disponible</label><input aria-label="Referencia autobiografía" value={autobiographyReference} onChange={event => setAutobiographyReference(event.target.value)} /></div></div>}
         {selected === 12 && <div className="initiation-document"><span>PLANCHA</span><strong>{completed > 12 ? 'AUT-CER-DEMO-2026-001' : 'Se genera únicamente tras el visto bueno'}</strong><small>Permanece vinculada al expediente y a las validaciones congeladas.</small></div>}
         {selected === 13 && <div className="initiation-member"><strong>{finished ? 'Aprendiz activado' : 'Activación todavía bloqueada'}</strong><span>{finished ? 'Persona Demostrativa Centenario · Miembro activo · 1.er grado' : 'La autorización no convierte por sí sola al candidato en hermano.'}</span></div>}
-        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 1 ? 'Registrar deliberación inicial' : completed === 2 ? (publication ? 'Verificar plazo y continuar' : 'Aprobar y publicar insinuado') : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
+        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 1 ? 'Registrar deliberación inicial' : completed === 2 ? (publication ? 'Verificar plazo y continuar' : 'Aprobar y publicar insinuado') : completed === 3 ? 'Validar entrevistas y antecedentes' : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
       </section>
     </div>
 
@@ -131,6 +157,12 @@ function readDemoProgress(useMocks: boolean) {
   const stored = Number(window.localStorage.getItem('centenario.demo.initiation.completed') ?? '0')
   return Number.isInteger(stored) ? Math.max(0, Math.min(stored, stages.length)) : 0
 }
+
+function initialInterviews(): InterviewDraft[] { return [
+  { id: '10000000-0000-4000-8000-000000000001', interviewDate: '2026-09-23', interviewerDisplayName: 'Entrevistador Demostrativo Uno', summary: 'Conversa con claridad sobre sus motivaciones y disposición al trabajo personal.', result: 'favorable', documentVersionId: null, fileName: null, uploading: false },
+  { id: '10000000-0000-4000-8000-000000000002', interviewDate: '2026-09-24', interviewerDisplayName: 'Entrevistador Demostrativo Dos', summary: 'Se verifican antecedentes generales y compatibilidad con los principios institucionales.', result: 'favorable', documentVersionId: null, fileName: null, uploading: false },
+  { id: '10000000-0000-4000-8000-000000000003', interviewDate: '2026-09-25', interviewerDisplayName: 'Entrevistador Demostrativo Tres', summary: 'Manifiesta disponibilidad, comprensión del proceso y apoyo de su entorno inmediato.', result: 'favorable', documentVersionId: null, fileName: null, uploading: false },
+] }
 
 function dateOnlyDayNumber(value: string) { const [year, month, day] = value.split('-').map(Number); return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000) }
 function addDays(value: string, days: number) { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
