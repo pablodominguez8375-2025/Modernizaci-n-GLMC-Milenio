@@ -29,6 +29,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeMemberCharge> LodgeMemberCharges => Set<LodgeMemberCharge>();
     public DbSet<LodgeMemberPayment> LodgeMemberPayments => Set<LodgeMemberPayment>();
     public DbSet<LodgeHospitalariaMovement> LodgeHospitalariaMovements => Set<LodgeHospitalariaMovement>();
+    public DbSet<LodgeTreasuryExpense> LodgeTreasuryExpenses => Set<LodgeTreasuryExpense>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
@@ -131,6 +132,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Resolution).HasMaxLength(2000);
             entity.Property(x => x.RequestedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.DecidedBySubject).HasMaxLength(320);
+            entity.Property(x => x.OratorSignatureSubject).HasMaxLength(320);
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.OriginOrganization).WithMany().HasForeignKey(x => x.OriginOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MemberId, x.Status });
@@ -215,6 +217,8 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.AdjustmentType).HasMaxLength(80);
             entity.Property(x => x.AuthorizationReference).HasMaxLength(500);
             entity.Property(x => x.Observation).HasMaxLength(2000);
+            entity.Property(x => x.ApprovalStatus).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ApprovedBySubject).HasMaxLength(320);
             entity.Property(x => x.IdentityMatchStatus).HasMaxLength(40).IsRequired();
             entity.Ignore(x => x.PayableAmount);
             entity.HasOne(x => x.Statement).WithMany(x => x.Lines).HasForeignKey(x => x.StatementId).OnDelete(DeleteBehavior.Cascade);
@@ -299,6 +303,16 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.MovementDate });
+        });
+
+        modelBuilder.Entity<LodgeTreasuryExpense>(entity =>
+        {
+            entity.ToTable("lodge_treasury_expenses"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Category).HasMaxLength(80).IsRequired(); entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.ApprovalStatus).HasMaxLength(30).IsRequired(); entity.Property(x => x.Description).HasMaxLength(1000);
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500); entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired(); entity.Property(x => x.ApprovedBySubject).HasMaxLength(320);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.ExpenseDate });
         });
 
         modelBuilder.Entity<HospitalariaRegularitySnapshot>(entity =>

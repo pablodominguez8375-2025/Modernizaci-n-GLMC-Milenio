@@ -133,6 +133,26 @@ public sealed class LodgeHospitalariaMovement
     public string? Destination { get; set; }
     public string? EvidenceReference { get; set; }
     public string? Observation { get; set; }
+    public required string ApprovalStatus { get; set; }
+    public string? ApprovedBySubject { get; set; }
+    public DateTimeOffset? ApprovedAtUtc { get; set; }
     public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class LodgeTreasuryExpense
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public required string Category { get; set; }
+    public decimal Amount { get; set; }
+    public DateOnly ExpenseDate { get; set; }
+    public required string Description { get; set; }
+    public string? EvidenceReference { get; set; }
+    public required string ApprovalStatus { get; set; }
+    public required string RecordedBySubject { get; set; }
+    public string? ApprovedBySubject { get; set; }
+    public DateTimeOffset? ApprovedAtUtc { get; set; }
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }

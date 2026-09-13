@@ -112,4 +112,6 @@ public sealed class MemberWithdrawalRequest
     public string? DecidedBySubject { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? DecidedAtUtc { get; set; }
+    public string? OratorSignatureSubject { get; set; }
+    public DateTimeOffset? OratorSignedAtUtc { get; set; }
 }

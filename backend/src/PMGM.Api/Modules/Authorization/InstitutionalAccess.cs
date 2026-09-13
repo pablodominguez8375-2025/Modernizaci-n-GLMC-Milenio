@@ -24,6 +24,8 @@ public static class InstitutionalRoles
     public const string TallerAdmin = "lodge_admin";
     public const string TallerSecretaria = "lodge_secretariat";
     public const string TallerTesoreria = "lodge_treasury";
+    public const string TallerVenerable = "lodge_venerable";
+    public const string TallerOrador = "lodge_orator";
 }
 
 public interface IInstitutionalAccessService
@@ -36,6 +38,8 @@ public interface IInstitutionalAccessService
     bool CanManageLodgeOperations(ClaimsPrincipal user);
     bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId);
+    bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId);
+    bool CanSignLodgeDocuments(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
@@ -119,6 +123,12 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranHospitalaria)) ||
            (HasOrganizationClaim(user, organizationId) &&
             HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria, "lodge_hospitalaria"));
+
+    public bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId)
+        => HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerVenerable);
+
+    public bool CanSignLodgeDocuments(ClaimsPrincipal user, Guid organizationId)
+        => HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerOrador, InstitutionalRoles.TallerVenerable);
 
     public bool CanApproveTransfers(ClaimsPrincipal user)
         => HasOrderScope(user) &&
