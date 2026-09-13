@@ -514,6 +514,54 @@
       "retentionPolicyCode": "RET-INSTITUTIONAL-REGULARITY",
       "owner": "Régimen Interior / Gran Secretaría",
       "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-033",
+      "module": "Gran Tesorería",
+      "entity": "TreasuryMonthlyStatementLine",
+      "field": "MemberId/PayableAmount/AdjustmentType",
+      "classification": "sensitive",
+      "purpose": "Calcular y auditar la obligación mensual individual del Taller, incluidos ajustes formalmente autorizados.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "authorized_treasury_view_only",
+      "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
+      "owner": "Gran Tesorería",
+      "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-034",
+      "module": "Gran Tesorería",
+      "entity": "TreasuryPayment",
+      "field": "PayerRut/PayerDisplayName/Amount",
+      "classification": "sensitive",
+      "purpose": "Identificar y conciliar transferencias o depósitos asociados al cuadro mensual del Taller.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "omit_payer_identity_outside_treasury",
+      "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
+      "owner": "Gran Tesorería",
+      "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-035",
+      "module": "Gran Tesorería",
+      "entity": "TreasuryAdjustment",
+      "field": "AdjustmentType/Amount/AuthorizationReference",
+      "classification": "sensitive",
+      "purpose": "Respaldar rebajas o exenciones vigentes sin inferirlas desde observaciones de texto libre.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "authorized_treasury_view_only",
+      "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
+      "owner": "Gran Tesorería",
+      "status": "active"
     }
   ]
 }

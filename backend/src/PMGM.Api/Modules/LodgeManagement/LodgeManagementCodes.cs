@@ -60,8 +60,23 @@ public static class LodgeManagementCodes
         public const string Superseded = "superseded";
     }
 
+    public static class BallotType
+    {
+        public const string WhiteBlack = "white_black";
+        public const string PositiveNegative = "positive_negative";
+        public const string Candidate = "candidate";
+        public static bool IsValid(string value) => value is WhiteBlack or PositiveNegative or Candidate;
+    }
+
+    public static class BallotStatus
+    {
+        public const string Closed = "closed";
+        public const string Superseded = "superseded";
+    }
+
     public static class InstructionStatus
     {
+        public const string Scheduled = "scheduled";
         public const string Held = "held";
         public const string Cancelled = "cancelled";
     }

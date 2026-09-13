@@ -32,3 +32,17 @@ it('demo mode exposes a populated roster and transfer history without network ca
   expect(profile.memberships).toHaveLength(2)
   expect(fetch).not.toHaveBeenCalled()
 })
+
+it('demo mode models twenty workshops with the agreed operational composition', async () => {
+  const client = new MembershipApiClient({ useMocks: true })
+  const workshopIds = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23]
+  for (const number of workshopIds) {
+    const id = number === 1 ? '11111111-1111-1111-1111-111111111111' : number === 23 ? '23232323-2323-2323-2323-232323232323' : `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`
+    const roster = await client.getMembers(id, { limit: 100 })
+    expect(roster.total).toBe(24)
+    expect(roster.items.filter(item => item.currentDegree === 'master').length).toBe(12)
+    expect(roster.items.filter(item => item.currentDegree === 'fellowcraft').length).toBe(5)
+    expect(roster.items.filter(item => item.currentDegree === 'apprentice').length).toBe(5)
+    expect(roster.items.filter(item => item.membershipType === 'past_active').length).toBe(2)
+  }
+})

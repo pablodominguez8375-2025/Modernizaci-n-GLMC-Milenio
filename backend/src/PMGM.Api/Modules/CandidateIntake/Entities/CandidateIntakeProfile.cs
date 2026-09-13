@@ -17,10 +17,16 @@ public sealed class CandidateIntakeProfile
     public string? Nationality { get; set; }
     public string? CivilStatus { get; set; }
     public string? Occupation { get; set; }
+    public string? EmployerName { get; set; }
+    public string? WorkAddress { get; set; }
+    public string? WorkPosition { get; set; }
+    public string? WorkPhone { get; set; }
     public string? City { get; set; }
     public string? Orient { get; set; }
     public string PresentersJson { get; set; } = "[]";
     public DateOnly InsinuationDate { get; set; }
+    public DateOnly? FirstDegreePresentationDate { get; set; }
+    public string? ResponsibleSecretaryName { get; set; }
     public Guid? PhotoVersionId { get; set; }
     public string? InterviewSummary { get; set; }
     public string? InternalObservations { get; set; }

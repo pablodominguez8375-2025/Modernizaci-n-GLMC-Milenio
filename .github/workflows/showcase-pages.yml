@@ -2,7 +2,7 @@ name: PMGM Showcase Demo
 
 on:
   push:
-    branches: [dev]
+    branches: [dev, feature/treasury-payment-table-v1]
     paths:
       - 'frontend/**'
       - '.github/workflows/showcase-pages.yml'
@@ -22,8 +22,8 @@ permissions:
   pages: write
   id-token: write
 
-# PR validation must never cancel an in-flight deployment from dev.
-# Each PR gets its own concurrency group; dev keeps a stable deployment group.
+# PR validation must never cancel an in-flight deployment.
+# Each source keeps an independent deployment group.
 concurrency:
   group: pmgm-showcase-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -58,7 +58,7 @@ jobs:
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
           VITE_SHOWCASE_SHA: '${{ github.event.pull_request.head.sha || github.sha }}'
-          VITE_SHOWCASE_CHANNEL: 'dev-public-showcase'
+          VITE_SHOWCASE_CHANNEL: 'post-rc-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase
@@ -156,7 +156,7 @@ jobs:
     name: Deploy testing showcase
     needs: build
     environment:
-      name: github-pages
+      name: ${{ github.ref_name == 'dev' && 'github-pages' || 'github-pages-postrc' }}
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:

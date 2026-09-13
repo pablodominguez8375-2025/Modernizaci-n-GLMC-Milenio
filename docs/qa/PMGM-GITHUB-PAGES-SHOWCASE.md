@@ -1,4 +1,4 @@
-# Proyecto Milenio — demo pública y Showcase de testing en GitHub Pages
+# Proyecto Centenario — demo pública y Showcase de testing en GitHub Pages
 
 ## Objetivo
 
@@ -15,7 +15,7 @@ La URL de un Pull Request de GitHub no es una URL de demostración: sirve exclus
 ## Naturaleza del entorno
 
 - Entorno: demostración/testing público.
-- Fuente publicada: rama `dev` después de pasar el workflow de GitHub Pages.
+- Fuente estable: rama `dev`. Durante el incremento post-RC de Gestión Logial, la rama controlada `feature/treasury-payment-table-v1` puede publicar la demo sin modificar la RC1 congelada.
 - Frontend: React + TypeScript + Vite.
 - Datos: exclusivamente mocks/datos ficticios.
 - Autenticación real: deshabilitada.
@@ -67,6 +67,8 @@ La demo es adecuada para revisar:
 - Tesorería/Hospitalaria a nivel de experiencia de usuario;
 - Gran Secretaría;
 - Gestión Logial;
+- Secretaría, Tesorería y Hospitalaria propias de cada Taller;
+- Docencia/Instrucción del Taller bajo responsabilidad de los Vigilantes y el Ex Venerable Maestro;
 - Biblioteca Virtual y Gran Archivero;
 - insinuados publicados;
 - calendario y notificaciones;
@@ -103,7 +105,7 @@ Nombre en GitHub Actions:
 
 El workflow se ejecuta:
 - en pull requests hacia `dev` que afectan frontend/showcase, para validar build y evidencia visual sin publicar el PR;
-- en push a `dev`, para construir, validar y publicar la demo;
+- en push a `dev` o a la rama post-RC controlada, para construir, validar y publicar la demo;
 - manualmente mediante `workflow_dispatch`.
 
 ## Secuencia de publicación
@@ -168,17 +170,19 @@ El workflow busca patrones sensibles básicos dentro del `dist` antes de permiti
 
 ## Relación con el paquete instalable
 
-La demo y el paquete pre-UAT son dos productos distintos del mismo código:
+La demo y el paquete instalable son **la misma aplicación funcional construida desde el mismo código y SHA**. No constituyen productos funcionalmente separados. La demo reemplaza exclusivamente las integraciones de infraestructura por adaptadores de datos ficticios que respetan los mismos contratos de operación:
 
 ```text
 GitHub Pages
-= frontend estático + mocks + acceso público
+= misma interfaz y mismos flujos + adaptadores ficticios + acceso público
 
-Paquete pre-UAT
-= frontend + backend + PostgreSQL + Keycloak + MinIO + infraestructura + scripts + documentación
+Paquete instalable
+= misma interfaz y mismos flujos + API + PostgreSQL + Keycloak + MinIO + infraestructura
 ```
 
-La demo sirve para **mostrar**. El paquete sirve para **instalar y validar integralmente**.
+La demo sirve para revisar, probar y recepcionar funcionalidad y apariencia con datos ficticios. Una función sólo se presenta como operativa en la demo cuando existe en el instalable o utiliza un adaptador ficticio con el mismo contrato que el backend desarrollado. La conformidad de la demo no reemplaza las pruebas de infraestructura de la VM.
+
+Para Tenidas y Docencia, tanto demo como instalable deben respetar el mismo ciclo: **programar → proyectar al calendario → marcar realizada/cerrada → registrar o corregir asistencia**. La misma fuente alimenta el calendario personal, el calendario del Taller y la vista consolidada de la Orden, filtrada por permisos.
 
 ## Procedimiento para una demostración institucional
 

@@ -48,17 +48,49 @@ it('routes attendance and minute operations through dedicated lodge endpoints', 
   ])
 })
 
+it('uses the same instruction contract for list, creation and attendance', async () => {
+  const instruction = { id: 'i1', organizationId: 'o1', instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos', responsibleOffice: 'second_warden', instructorMemberId: null, status: 'held' }
+  const responses = [
+    new Response(JSON.stringify({ total: 0, items: [] })),
+    new Response(JSON.stringify(instruction), { status: 201 }),
+    new Response(JSON.stringify({ instructionId: 'i1', recorded: 1 })),
+  ]
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+  vi.stubGlobal('fetch', fetch)
+  const client = new LodgeApiClient({ getAccessToken: async () => 'token' })
+
+  await client.getInstructions('o1')
+  await client.createInstruction('o1', { instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos' })
+  await client.recordInstructionAttendance('i1', [{ memberId: 'm1', status: 'present' }])
+
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/gestion-logial/talleres/o1/instrucciones',
+    '/api/gestion-logial/talleres/o1/instrucciones',
+    '/api/gestion-logial/instrucciones/i1/asistencia',
+  ])
+})
+
 it('demo mode preserves corrections and minute versions without token or network', async () => {
   const fetch = vi.fn(), token = vi.fn()
   vi.stubGlobal('fetch', fetch)
   const client = new LodgeApiClient({ useMocks: true, getAccessToken: token })
   const meeting = await client.createMeeting('o1', { meetingDate: '2026-09-08', meetingType: 'regular', grade: 'all' })
   const members = await client.getMemberOptions('o1')
+  await client.closeMeeting(meeting.id)
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'present' })
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'excused', excuseReason: 'Rectificación' })
+  await client.recordAttendance(meeting.id, { memberId: members.items[1].id, status: 'present' })
   const attendance = await client.getAttendance(meeting.id)
-  expect(attendance.total).toBe(1)
-  expect(attendance.items[0].status).toBe('excused')
+  expect(attendance.total).toBe(2)
+  expect(attendance.items.find(item => item.memberId === members.items[0].id)?.status).toBe('excused')
+
+  const ballot = await client.recordAnonymousBallot(meeting.id, { ballotType: 'white_black', procedureNumber: 1, subject: 'Admisión QA', eligibleCount: 1, positiveCount: 1, negativeCount: 0 })
+  expect(ballot.attendeeCount).toBe(1)
+  expect(ballot.positiveCount).toBe(1)
+  expect(JSON.stringify(ballot)).not.toContain('memberId')
+  const extract = await client.generateMinuteExtract(meeting.id)
+  expect(extract.content).toContain('BALOTAJE Y VOTACIONES')
+  expect(extract.content).toContain('Primer trámite · Admisión QA: blancas 1; negras 0')
 
   const v1 = await client.createMinute(meeting.id, 'Versión uno')
   await client.approveMinute(meeting.id, v1.id)
@@ -68,6 +100,13 @@ it('demo mode preserves corrections and minute versions without token or network
   expect(minutes.total).toBe(2)
   expect(minutes.items.find(item => item.version === 1)?.status).toBe('superseded')
   expect(minutes.items.find(item => item.version === 2)?.status).toBe('approved')
+
+  const instruction = await client.createInstruction('23232323-2323-2323-2323-232323232323', { instructionDate: '2026-09-12', grade: 'master', topic: 'Docencia de Maestros' })
+  expect(instruction.status).toBe('scheduled')
+  await client.completeInstruction(instruction.id)
+  await client.recordInstructionAttendance(instruction.id, [{ memberId: members.items[0].id, status: 'present' }])
+  const instructions = await client.getInstructions('23232323-2323-2323-2323-232323232323')
+  expect(instructions.items.some(item => item.id === instruction.id)).toBe(true)
   expect(fetch).not.toHaveBeenCalled()
   expect(token).not.toHaveBeenCalled()
 })

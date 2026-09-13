@@ -18,6 +18,7 @@ public static class TreasuryEndpoints
         group.MapGet("/talleres/{organizationId:guid}/regularidad", GetWorkshopRegularityAsync);
         group.MapPost("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", SetMemberRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", GetMemberRegularityAsync);
+        group.MapTreasuryStatementEndpoints();
 
         return endpoints;
     }

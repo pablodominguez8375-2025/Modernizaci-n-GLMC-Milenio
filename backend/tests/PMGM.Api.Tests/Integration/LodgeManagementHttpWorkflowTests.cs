@@ -94,6 +94,15 @@ public sealed class LodgeManagementHttpWorkflowTests
         var meetingJson = await meetingResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var meetingId = meetingJson.GetProperty("id").GetGuid();
 
+        var prematureAttendance = await client.PostAsJsonAsync(
+            $"/api/gestion-logial/tenidas/{meetingId}/asistencia",
+            new { memberId, status = LodgeManagementCodes.AttendanceStatus.Present, excuseReason = (string?)null },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, prematureAttendance.StatusCode);
+
+        var closeResponse = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, closeResponse.StatusCode);
+
         var presentResponse = await client.PostAsJsonAsync(
             $"/api/gestion-logial/tenidas/{meetingId}/asistencia",
             new { memberId, status = LodgeManagementCodes.AttendanceStatus.Present, excuseReason = (string?)null },

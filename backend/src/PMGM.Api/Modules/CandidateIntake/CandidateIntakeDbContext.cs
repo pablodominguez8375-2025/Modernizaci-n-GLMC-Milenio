@@ -21,8 +21,13 @@ public sealed class CandidateIntakeDbContext(DbContextOptions<CandidateIntakeDbC
             entity.Property(x => x.Nationality).HasMaxLength(120);
             entity.Property(x => x.CivilStatus).HasMaxLength(120);
             entity.Property(x => x.Occupation).HasMaxLength(240);
+            entity.Property(x => x.EmployerName).HasMaxLength(240);
+            entity.Property(x => x.WorkAddress).HasMaxLength(500);
+            entity.Property(x => x.WorkPosition).HasMaxLength(240);
+            entity.Property(x => x.WorkPhone).HasMaxLength(80);
             entity.Property(x => x.City).HasMaxLength(160);
             entity.Property(x => x.Orient).HasMaxLength(160);
+            entity.Property(x => x.ResponsibleSecretaryName).HasMaxLength(240);
             entity.Property(x => x.PresentersJson).HasColumnType("jsonb").IsRequired();
             entity.Property(x => x.InterviewSummary).HasMaxLength(4000);
             entity.Property(x => x.InternalObservations).HasMaxLength(4000);

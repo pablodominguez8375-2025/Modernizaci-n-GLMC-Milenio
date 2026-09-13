@@ -29,7 +29,7 @@ La política actual de elegibilidad evalúa Régimen Interior, Gran Tesorería, 
 4. votación abierta y unanimidad;
 5. publicación en intranet;
 6. permanencia mínima de 20 días corridos;
-7. tres entrevistas;
+7. mínimo tres entrevistas, ampliables por decisión del Venerable Maestro, con resumen, resultado y archivo privado;
 8. Cuestionario Confidencial y autobiografía;
 9. conocimiento y votación abierta en 3.er grado;
 10. balotaje definitivo en 1.er grado;

@@ -18,6 +18,7 @@ public static class LodgeInstructionEndpoints
 
         group.MapPost("/talleres/{organizationId:guid}/instrucciones", CreateInstructionAsync);
         group.MapGet("/talleres/{organizationId:guid}/instrucciones", GetInstructionsAsync);
+        group.MapPost("/instrucciones/{instructionId:guid}/realizar", CompleteInstructionAsync);
         group.MapPost("/instrucciones/{instructionId:guid}/asistencia", RecordInstructionAttendanceAsync);
         group.MapGet("/miembros/{memberId:guid}/instrucciones", GetMemberInstructionHistoryAsync);
 
@@ -73,7 +74,7 @@ public static class LodgeInstructionEndpoints
             Topic = topic,
             ResponsibleOffice = responsibleOffice,
             InstructorMemberId = request.InstructorMemberId,
-            Status = LodgeManagementCodes.InstructionStatus.Held,
+            Status = LodgeManagementCodes.InstructionStatus.Scheduled,
             CreatedBySubject = GetSubject(httpContext.User)
         };
 
@@ -99,6 +100,30 @@ public static class LodgeInstructionEndpoints
         return Results.Created(
             $"/api/gestion-logial/instrucciones/{instruction.Id}",
             ToInstructionDto(instruction));
+    }
+
+    private static async Task<IResult> CompleteInstructionAsync(
+        Guid instructionId,
+        HttpContext httpContext,
+        LodgeManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        var instruction = await db.LodgeInstructionSessions.SingleOrDefaultAsync(x => x.Id == instructionId, cancellationToken);
+        if (instruction is null) return Results.NotFound();
+        if (!access.CanManageOrganization(httpContext.User, instruction.OrganizationId)) return Results.Forbid();
+        if (instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled)
+            return Results.Conflict(new { message = "Una instrucción cancelada no puede marcarse como realizada." });
+        if (instruction.Status == LodgeManagementCodes.InstructionStatus.Held)
+            return Results.Conflict(new { message = "La instrucción ya fue marcada como realizada." });
+
+        instruction.Status = LodgeManagementCodes.InstructionStatus.Held;
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext, "lodge.instruction.completed", nameof(LodgeInstructionSession), instruction.Id.ToString(),
+            instruction.OrganizationId, AuditResults.Success,
+            new { instruction.InstructionDate, instruction.Grade, instruction.ResponsibleOffice, instruction.Status }));
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(ToInstructionDto(instruction));
     }
 
     private static async Task<IResult> GetInstructionsAsync(
@@ -170,6 +195,8 @@ public static class LodgeInstructionEndpoints
         if (!access.CanManageOrganization(httpContext.User, instruction.OrganizationId)) return Results.Forbid();
         if (instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled)
             return Results.Conflict(new { message = "No se puede registrar asistencia en una instrucción cancelada." });
+        if (instruction.Status != LodgeManagementCodes.InstructionStatus.Held)
+            return Results.Conflict(new { message = "La asistencia sólo puede registrarse después de marcar la instrucción como realizada." });
 
         if (request.Items.Any(x => !LodgeManagementCodes.InstructionAttendanceStatus.IsValid(x.Status)))
             return Results.BadRequest(new { message = "Existe un estado de asistencia no válido." });

@@ -19,6 +19,7 @@ public static class CeremonyCodes
         public const string Observed = "observed";
         public const string Rejected = "rejected";
         public const string Authorized = "authorized";
+        public const string Completed = "completed";
     }
 
     public static class ValidationType
@@ -34,6 +35,7 @@ public static class CeremonyCodes
         public const string CandidateInterviewPackage = "candidate_interview_package";
         public const string CandidateThirdDegreeReview = "candidate_third_degree_review";
         public const string CandidateFinalBallot = "candidate_final_ballot";
+        public const string CandidateCeremonySubmission = "candidate_ceremony_submission";
         public const string CandidateRepresentationReview = "candidate_representation_review";
         public const string SpaceAvailability = "space_availability";
     }

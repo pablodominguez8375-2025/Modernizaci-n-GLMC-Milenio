@@ -125,7 +125,11 @@ public static class NotificationEndpoints
                 request.SourceEventId,
                 request.ActionUrl,
                 request.Mandatory,
-                request.ScheduledAtUtc), cancellationToken);
+                request.ScheduledAtUtc,
+                request.ActionRequired,
+                request.ActionStatus,
+                request.RelatedResourceType,
+                request.RelatedResourceId), cancellationToken);
 
             audit.Add(httpContext, result.Created ? "notification.queued" : "notification.duplicate_ignored",
                 nameof(NotificationMessage), result.MessageId.ToString(), null, AuditResults.Success,
@@ -174,7 +178,8 @@ public static class NotificationEndpoints
             .OrderByDescending(x => x.CreatedAtUtc)
             .Take(take)
             .Select(x => new NotificationInboxDto(x.Id, x.TypeCode, x.Subject, x.Body, x.ActionUrl,
-                x.Classification, x.Mandatory, x.CreatedAtUtc, x.ReadAtUtc))
+                x.Classification, x.Mandatory, x.ActionRequired, x.ActionStatus,
+                x.RelatedResourceType, x.RelatedResourceId, x.CreatedAtUtc, x.ReadAtUtc))
             .ToListAsync(cancellationToken);
 
         return Results.Ok(rows);
@@ -330,7 +335,11 @@ public sealed record QueueNotificationRequest(
     string? SourceEventId,
     string? ActionUrl,
     bool Mandatory,
-    DateTimeOffset? ScheduledAtUtc);
+    DateTimeOffset? ScheduledAtUtc,
+    bool ActionRequired = false,
+    string? ActionStatus = null,
+    string? RelatedResourceType = null,
+    string? RelatedResourceId = null);
 
 public sealed record RecordDeliveryResultRequest(string Status, string? Provider, string? ErrorCode);
 
@@ -342,5 +351,9 @@ public sealed record NotificationInboxDto(
     string? ActionUrl,
     string Classification,
     bool Mandatory,
+    bool ActionRequired,
+    string? ActionStatus,
+    string? RelatedResourceType,
+    string? RelatedResourceId,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset? ReadAtUtc);

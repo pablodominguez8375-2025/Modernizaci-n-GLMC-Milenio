@@ -31,7 +31,11 @@ export interface CandidateWorkshopQueueItem {
   photoAvailable: boolean
   reviewStatus: CandidateReviewStatus | string
   createdAtUtc: string
+  orderLevelAlert: CandidateOrderBlockAlert | null
 }
+export interface CandidateOrderBlockAlert { previousCeremonyRequestId: string; previousWorkshopName: string; rejectionDate: string; reason: string }
+export interface CandidateOrderRejectionAlert { personId: string; firstNames: string; lastNames: string; workshopName: string; workshopNumber: string | null; rejectionDate: string; sourceReference: string | null; notes: string | null }
+export interface CandidateOrderRejectionAlertResponse { total: number; items: CandidateOrderRejectionAlert[] }
 
 export interface CandidateWorkshopQueueResponse {
   total: number
@@ -48,6 +52,10 @@ export interface CandidateIntakeProfile {
   nationality: string | null
   civilStatus: string | null
   occupation: string | null
+  employerName: string | null
+  workAddress: string | null
+  workPosition: string | null
+  workPhone: string | null
   phone: string | null
   email: string | null
   address: string | null
@@ -57,8 +65,12 @@ export interface CandidateIntakeProfile {
   orient: string | null
   presenters: string[]
   insinuationDate: string
+  firstDegreePresentationDate: string | null
+  responsibleSecretaryName: string | null
   reviewStatus: CandidateReviewStatus | string
   photoAvailable: boolean
+  completenessPercent: number
+  missingRequirements: string[]
   interviewSummary: string | null
   internalObservations: string | null
   submittedAtUtc: string
@@ -74,6 +86,10 @@ export interface CandidateIntakeUpsertPayload {
   nationality?: string | null
   civilStatus?: string | null
   occupation?: string | null
+  employerName?: string | null
+  workAddress?: string | null
+  workPosition?: string | null
+  workPhone?: string | null
   phone?: string | null
   email?: string | null
   address?: string | null
@@ -81,6 +97,8 @@ export interface CandidateIntakeUpsertPayload {
   orient?: string | null
   presenters: string[]
   insinuationDate: string
+  firstDegreePresentationDate?: string | null
+  responsibleSecretaryName?: string | null
   interviewSummary?: string | null
   internalObservations?: string | null
 }
@@ -117,6 +135,10 @@ const demoProfile: CandidateIntakeProfile = {
   nationality: 'Chilena · demo',
   civilStatus: 'Soltero · demo',
   occupation: 'Profesional · dato ficticio',
+  employerName: 'Organización Demostrativa SpA',
+  workAddress: 'Avenida Ficticia 1000, Santiago',
+  workPosition: 'Coordinador de proyectos · demo',
+  workPhone: '+56 2 2000 0000',
   phone: '+56 9 0000 4321',
   email: 'insinuado.demo@ejemplo.cl',
   address: 'Dirección ficticia 2345, Depto. 702',
@@ -126,8 +148,12 @@ const demoProfile: CandidateIntakeProfile = {
   orient: 'Santiago',
   presenters: ['H∴ Presentante Uno · demo', 'H∴ Presentante Dos · demo'],
   insinuationDate: '2026-08-12',
+  firstDegreePresentationDate: '2026-08-28',
+  responsibleSecretaryName: 'H∴ Secretario Demostrativo',
   reviewStatus: 'pending_grand_secretariat',
   photoAvailable: true,
+  completenessPercent: 100,
+  missingRequirements: [],
   interviewSummary: 'Registro demostrativo: la entrevista evidencia interés por el conocimiento, el servicio y el perfeccionamiento personal.',
   internalObservations: 'Expediente ficticio utilizado exclusivamente para QA y demostración.',
   submittedAtUtc: '2026-09-10T14:30:00Z',
@@ -166,6 +192,7 @@ const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
     workshopName: 'Taller Demostrativo Nº 23',
     workshopNumber: '23',
     proposedDate: '2026-10-03',
+    orderLevelAlert: { previousCeremonyRequestId: 'eeeeeeee-4444-4444-4444-444444444444', previousWorkshopName: 'Taller Demostrativo Nº 7', rejectionDate: '2026-09-30', reason: 'Rechazo en Cámara del Medio / tercer grado' },
     requestStatus: 'under_review',
     profileAvailable: true,
     photoAvailable: true,
@@ -185,6 +212,7 @@ const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
     photoAvailable: false,
     reviewStatus: 'pending_grand_secretariat',
     createdAtUtc: '2026-09-10T12:00:00Z',
+    orderLevelAlert: null,
   },
 ]
 
@@ -230,6 +258,8 @@ export class CandidateIntakeApiClient {
   private readonly mockQueue = demoQueueSeed.map(item => ({ ...item }))
   private readonly mockWorkshopQueue = demoWorkshopQueueSeed.map(item => ({ ...item }))
   private readonly mockProfiles = new Map<string, CandidateIntakeProfile>([[demoRequestId, { ...demoProfile, presenters: [...demoProfile.presenters] }]])
+  // QA only: browser-memory storage. Nothing is sent to or retained by the public demo.
+  private readonly mockPhotos = new Map<string, Blob>()
 
   constructor(options: CandidateIntakeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -248,6 +278,11 @@ export class CandidateIntakeApiClient {
   async getWorkshopQueue(): Promise<CandidateWorkshopQueueResponse> {
     if (this.useMocks) return { total: this.mockWorkshopQueue.length, items: this.mockWorkshopQueue.map(item => ({ ...item })) }
     return this.request<CandidateWorkshopQueueResponse>('/api/insinuados/taller/solicitudes')
+  }
+
+  async getOrderRejectionAlerts(): Promise<CandidateOrderRejectionAlertResponse> {
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
+    return this.request<CandidateOrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
   }
 
   async getGrandSecretariatQueue(status?: CandidateReviewStatus | string): Promise<CandidateReviewQueueResponse> {
@@ -285,6 +320,10 @@ export class CandidateIntakeApiClient {
         nationality: payload.nationality?.trim() || null,
         civilStatus: payload.civilStatus?.trim() || null,
         occupation: payload.occupation?.trim() || null,
+        employerName: payload.employerName?.trim() || null,
+        workAddress: payload.workAddress?.trim() || null,
+        workPosition: payload.workPosition?.trim() || null,
+        workPhone: payload.workPhone?.trim() || null,
         phone: payload.phone?.trim() || null,
         email: payload.email?.trim() || null,
         address: payload.address?.trim() || null,
@@ -294,13 +333,19 @@ export class CandidateIntakeApiClient {
         orient: payload.orient?.trim() || null,
         presenters: payload.presenters.map(value => value.trim()).filter(Boolean),
         insinuationDate: payload.insinuationDate,
+        firstDegreePresentationDate: payload.firstDegreePresentationDate || null,
+        responsibleSecretaryName: payload.responsibleSecretaryName?.trim() || null,
         reviewStatus: 'pending_grand_secretariat',
         photoAvailable: existing?.photoAvailable ?? false,
+        completenessPercent: 0,
+        missingRequirements: [],
         interviewSummary: payload.interviewSummary?.trim() || null,
         internalObservations: payload.internalObservations?.trim() || null,
         submittedAtUtc: existing?.submittedAtUtc ?? now,
         updatedAtUtc: now,
       }
+      profile.missingRequirements = candidateMissingRequirements(profile)
+      profile.completenessPercent = Math.floor(((20 - profile.missingRequirements.length) * 100) / 20)
       this.mockProfiles.set(requestId, profile)
       queueItem.firstNames = profile.firstNames
       queueItem.lastNames = [profile.paternalSurname, profile.maternalSurname].filter(Boolean).join(' ')
@@ -321,6 +366,8 @@ export class CandidateIntakeApiClient {
       const profile = this.mockProfiles.get(requestId)
       if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero debe registrar la ficha del insinuado.')
       profile.photoAvailable = true
+      profile.missingRequirements = candidateMissingRequirements(profile)
+      profile.completenessPercent = Math.floor(((20 - profile.missingRequirements.length) * 100) / 20)
       profile.reviewStatus = 'pending_grand_secretariat'
       profile.updatedAtUtc = new Date().toISOString()
       const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
@@ -335,6 +382,30 @@ export class CandidateIntakeApiClient {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ photoVersionId }),
     })
+  }
+
+  async uploadPhoto(requestId: string, file: File): Promise<void> {
+    if (this.useMocks) {
+      if (!['image/jpeg', 'image/png'].includes(file.type)) throw new Error('La fotografía debe ser JPG o PNG.')
+      if (file.size <= 0 || file.size > 10_485_760) throw new Error('La fotografía debe contener información y pesar como máximo 10 MB.')
+      const profile = this.mockProfiles.get(requestId)
+      if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero debe registrar la ficha del insinuado.')
+      this.mockPhotos.set(requestId, file)
+      profile.photoAvailable = true
+      profile.reviewStatus = 'pending_grand_secretariat'
+      profile.updatedAtUtc = new Date().toISOString()
+      profile.missingRequirements = candidateMissingRequirements(profile)
+      profile.completenessPercent = Math.floor(((20 - profile.missingRequirements.length) * 100) / 20)
+      const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (queueItem) { queueItem.photoAvailable = true; queueItem.reviewStatus = 'pending_grand_secretariat' }
+      return
+    }
+    const response = await this.fetchAuthorized(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/foto/contenido`, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+      body: file,
+    })
+    if (!response.ok) throw await this.toError(response)
   }
 
   async review(requestId: string, decision: CandidateReviewDecision, notes?: string): Promise<void> {
@@ -360,9 +431,10 @@ export class CandidateIntakeApiClient {
 
   async approveAndPublish(requestId: string): Promise<void> {
     if (this.useMocks) {
+      const profile = this.mockProfiles.get(requestId)
+      if (profile?.missingRequirements.length) throw new CandidateIntakeApiHttpError(409, `La ficha no está completa: ${profile.missingRequirements.join(', ')}.`)
       const item = this.mockQueue.find(value => value.ceremonyRequestId === requestId)
       if (item) item.reviewStatus = 'approved'
-      const profile = this.mockProfiles.get(requestId)
       if (profile) {
         profile.reviewStatus = 'approved'
         profile.updatedAtUtc = new Date().toISOString()
@@ -375,7 +447,7 @@ export class CandidateIntakeApiClient {
   }
 
   async getPrivatePhoto(requestId: string): Promise<Blob | null> {
-    if (this.useMocks) return null
+    if (this.useMocks) return this.mockPhotos.get(requestId) ?? null
     const response = await this.fetchAuthorized(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/foto`, { headers: { Accept: 'image/jpeg,image/png' } })
     if (response.status === 404) return null
     if (!response.ok) throw await this.toError(response)
@@ -427,4 +499,16 @@ export function createDefaultCandidateIntakeApiClient(getAccessToken?: AccessTok
     throw new Error('La API debe usar el mismo origen mediante el proxy institucional.')
   }
   return new CandidateIntakeApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized })
+}
+
+function candidateMissingRequirements(profile: CandidateIntakeProfile): string[] {
+  return [
+    [profile.firstNames, 'Nombres'], [profile.paternalSurname, 'Apellido paterno'], [profile.rutOrInstitutionalId, 'RUT o identificación'],
+    [profile.birthDate, 'Fecha de nacimiento'], [profile.nationality, 'Nacionalidad'], [profile.civilStatus, 'Estado civil'],
+    [profile.phone, 'Teléfono personal'], [profile.email, 'Correo electrónico'], [profile.address, 'Dirección personal'], [profile.city, 'Ciudad'],
+    [profile.occupation, 'Actividad, profesión u oficio'], [profile.employerName, 'Empleador'], [profile.workAddress, 'Dirección laboral'],
+    [profile.workPosition, 'Cargo o función'], [profile.workPhone, 'Teléfono laboral'], [profile.orient, 'Oriente'],
+    [profile.presenters.length ? 'sí' : '', 'Presentantes'], [profile.firstDegreePresentationDate, 'Fecha de presentación en primer grado'],
+    [profile.responsibleSecretaryName, 'Secretario responsable'], [profile.photoAvailable ? 'sí' : '', 'Fotografía tipo pasaporte'],
+  ].filter(([value]) => !value).map(([, label]) => label as string)
 }

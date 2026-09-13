@@ -28,11 +28,11 @@
     {
       "code": "PMGM-DPA-003",
       "module": "Gran Tesorería",
-      "purpose": "Gestionar obligaciones financieras y exponer a otros módulos sólo estados mínimos de regularidad según finalidad.",
+      "purpose": "Gestionar cuadros mensuales, obligaciones, ajustes autorizados, pagos y conciliación, exponiendo a otros módulos sólo estados mínimos de regularidad según finalidad.",
       "lawfulBasisStatus": "pending_legal_review",
       "retentionPolicyStatus": "defined_in_system",
       "accessControlStatus": "order_scope_rbac",
-      "containsSensitiveData": false,
+      "containsSensitiveData": true,
       "owner": "Gran Tesorería",
       "legalReviewRequired": true
     },

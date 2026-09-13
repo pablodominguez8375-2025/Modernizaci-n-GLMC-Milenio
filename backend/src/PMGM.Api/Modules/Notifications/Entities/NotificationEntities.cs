@@ -30,6 +30,10 @@ public sealed class NotificationMessage
     public string? ActionUrl { get; set; }
     public required string Classification { get; set; }
     public bool Mandatory { get; set; }
+    public bool ActionRequired { get; set; }
+    public string? ActionStatus { get; set; }
+    public string? RelatedResourceType { get; set; }
+    public string? RelatedResourceId { get; set; }
     public required string IdempotencyKey { get; set; }
     public string? SourceEventId { get; set; }
     public required string CorrelationId { get; set; }

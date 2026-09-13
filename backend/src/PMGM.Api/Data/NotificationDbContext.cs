@@ -41,6 +41,9 @@ public sealed class NotificationDbContext(DbContextOptions<NotificationDbContext
             entity.Property(x => x.Body).HasColumnType("text").IsRequired();
             entity.Property(x => x.ActionUrl).HasMaxLength(1000);
             entity.Property(x => x.Classification).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ActionStatus).HasMaxLength(32);
+            entity.Property(x => x.RelatedResourceType).HasMaxLength(80);
+            entity.Property(x => x.RelatedResourceId).HasMaxLength(120);
             entity.Property(x => x.IdempotencyKey).HasMaxLength(500).IsRequired();
             entity.Property(x => x.SourceEventId).HasMaxLength(320);
             entity.Property(x => x.CorrelationId).HasMaxLength(160).IsRequired();

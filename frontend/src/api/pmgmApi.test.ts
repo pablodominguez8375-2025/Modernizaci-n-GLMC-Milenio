@@ -31,6 +31,18 @@ it('builds Regimen Interior aggregate query without personal identifiers', async
   expect(fetch.mock.calls[0][0]).toBe('/api/regimen-interior/summary?asOf=2026-09-08&from=2026-01-01')
 })
 
+it('keeps the Regimen Interior QA report aligned with twenty agreed workshops', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const order = await client.getRegimenInteriorSummary()
+  expect(order.members.currentlyAffiliated).toBe(480)
+  expect(order.members.active).toBe(480)
+  expect(order.degreeDistribution).toEqual({ master: 240, fellowcraft: 100, apprentice: 100, past_active: 40 })
+
+  const workshop = await client.getRegimenInteriorSummary({ organizationId: '11111111-1111-1111-1111-111111111111' })
+  expect(workshop.members.currentlyAffiliated).toBe(24)
+  expect(workshop.degreeDistribution).toEqual({ master: 12, fellowcraft: 5, apprentice: 5, past_active: 2 })
+})
+
 it('uses the minimized ceremony review queue and role-scoped workflow endpoints', async () => {
   const queue = { total: 1, items: [{ id: 'c1', organizationId: 'o1', organizationName: 'Taller 1', organizationNumber: '1', ceremonyType: 'wage_increase', subjectDisplayName: 'Hermano Ejemplo', proposedDate: '2026-10-01', status: 'under_review', eligibility: { status: 'complies', canAuthorize: true, publication: null, requirements: [{ code: 'regimen_interior', name: 'Régimen Interior', status: 'approved', reason: 'Aprobación vigente registrada.' }] }, actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true }, createdAtUtc: '2026-09-08T12:00:00Z' }] }
   const fetch = vi.fn()
@@ -116,4 +128,94 @@ it('demo does not request token or network', async () => {
   const fetch = vi.fn(), token = vi.fn(); vi.stubGlobal('fetch', fetch); const client = new PmgmApiClient({ useMocks: true, getAccessToken: token })
   await client.getSystemInfo(); await client.getRegimenInteriorSummary(); await client.getCeremonyReviewQueue(); await client.getTreasuryWorkshopRegularity('11111111-1111-1111-1111-111111111111'); await client.getHospitalariaWorkshopRegularity('11111111-1111-1111-1111-111111111111'); await client.getSecretariatAvailability('2026-09-08T18:00:00Z', '2026-09-08T20:00:00Z'); await client.getSecretariatCeremonyQueue()
   expect(fetch).not.toHaveBeenCalled(); expect(token).not.toHaveBeenCalled()
+})
+
+it('applies the seven-day and unanimity contract to demo initial deliberation', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const observed = await client.recordInitialDeliberation('c1', { deliberationDate: '2026-09-18', presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-1' })
+  const rejected = await client.recordInitialDeliberation('c1', { deliberationDate: '2026-09-19', presentVoters: 12, votesInFavor: 11, sourceReference: 'ACTA-2' })
+  const approved = await client.recordInitialDeliberation('c1', { deliberationDate: '2026-09-19', presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-3' })
+  expect(observed).toMatchObject({ validationStatus: 'observed', code: 'initial_deliberation.waiting_period' })
+  expect(rejected).toMatchObject({ validationStatus: 'rejected', code: 'initial_deliberation.unanimity' })
+  expect(approved).toMatchObject({ validationStatus: 'approved', code: 'initial_deliberation.approved' })
+})
+
+it('posts initial deliberation evidence to the protected workflow endpoint', async () => {
+  const response = { id: 'v1', validationStatus: 'approved', code: 'initial_deliberation.approved', reason: 'Aprobada', ceremonyStatus: 'under_review' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).recordInitialDeliberation('c1', { deliberationDate: '2026-09-19', presentVoters: 12, votesInFavor: 12, minimumWaitingDays: 7, sourceReference: 'ACTA-1' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/deliberacion-inicial'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-1' })
+})
+
+it('publishes the circuit demo candidate with the configured twenty-day rule', async () => {
+  const result = await new PmgmApiClient({ useMocks: true }).publishCeremonyCandidate('eeeeeeee-2222-2222-2222-222222222222')
+  expect(result).toMatchObject({ status: 'published', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', notificationsCreated: 34 })
+})
+
+it('accepts more than three interviews when every interview has private evidence', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const interviews = Array.from({ length: 4 }, (_, index) => ({ interviewDate: `2026-09-${23 + index}`, interviewerDisplayName: `Entrevistador ${index + 1}`, summary: `Resumen ${index + 1}`, result: 'favorable' as const, documentVersionId: `version-${index + 1}` }))
+  const result = await client.recordInterviewPackage('c1', { asOfDate: '2026-09-26', interviews, confidentialQuestionnaireAvailable: true, confidentialQuestionnaireReference: 'CUEST-1', autobiographyAvailable: true, autobiographyReference: 'AUTO-1' })
+  expect(result).toMatchObject({ validationStatus: 'approved', completedInterviews: 4 })
+})
+
+it('uploads interview Word or PDF with summary and favorable/desfavorable result metadata', async () => {
+  const response = { interviewId: 'i1', documentVersionId: 'v1', fileName: 'entrevista.pdf', result: 'desfavorable', summary: 'Resumen reservado', sizeBytes: 4 }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  const file = new File(['%PDF'], 'entrevista.pdf', { type: 'application/pdf' })
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).uploadInterviewDocument('c1', 'i1', file, { interviewDate: '2026-09-23', interviewerDisplayName: 'Entrevistador Uno', summary: 'Resumen reservado', result: 'desfavorable' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/entrevistas/i1/contenido'); expect(options.method).toBe('PUT'); expect(options.headers.get('X-Interview-Result')).toBe('desfavorable'); expect(decodeURIComponent(options.headers.get('X-Interview-Summary'))).toBe('Resumen reservado')
+})
+
+it('validates and records only aggregate third-degree open-vote results', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  await expect(client.recordThirdDegreeReview('c1', { reviewDate: '2026-10-12', presentVoters: 12, votesInFavor: 10, votesAgainst: 1, abstentions: 0, openVoteApproved: true, sourceReference: 'EXTRACTO-10' })).rejects.toThrow('coincidir')
+  const result = await client.recordThirdDegreeReview('c1', { reviewDate: '2026-10-12', presentVoters: 12, votesInFavor: 10, votesAgainst: 2, abstentions: 0, openVoteApproved: true, sourceReference: 'EXTRACTO-10' })
+  expect(result.thirdDegree).toMatchObject({ status: 'approved', code: 'third_degree_review.approved' })
+})
+
+it('exposes order-level third-degree rejection alerts only as protected antecedents', async () => {
+  const alerts = await new PmgmApiClient({ useMocks: true }).getOrderRejectionAlerts()
+  expect(alerts.total).toBe(1)
+  expect(alerts.items[0]).toMatchObject({ workshopName: 'Taller Demostrativo Nº 7', reason: 'Rechazo en Cámara del Medio / tercer grado' })
+})
+
+it('posts the third-degree extract reference and aggregate vote to the protected endpoint', async () => {
+  const response = { thirdDegree: { id: 'v3', status: 'approved', code: 'third_degree_review.approved', reason: 'Aprobada' }, status: 'under_review' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).recordThirdDegreeReview('c1', { reviewDate: '2026-10-12', presentVoters: 12, votesInFavor: 10, votesAgainst: 2, abstentions: 0, openVoteApproved: true, sourceReference: 'EXTRACTO-10' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/revision-tercer-grado'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 10, votesAgainst: 2, sourceReference: 'EXTRACTO-10' })
+})
+
+it('validates anonymous final-ballot rounds without recording individual choices', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  await expect(client.recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 10, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })).rejects.toThrow('habilitadas')
+  const result = await client.recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 11, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })
+  expect(result).toMatchObject({ validationStatus: 'approved', ceremonyStatus: 'under_review' })
+})
+
+it('posts final-ballot rounds and extract reference to the protected endpoint', async () => {
+  const response = { id: 'v5', validationStatus: 'approved', asOfDate: '2026-10-12', code: 'first_degree_ballot.approved', reason: 'Aprobado', ceremonyStatus: 'under_review' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 11, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/balotaje'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ ballots: [{ procedureNumber: 1, whiteBallots: 11, blackBallots: 1 }], sourceReference: 'EXTRACTO-10' })
+})
+
+it('submits the same initiation case with venerable and secretariat confirmation', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  await expect(client.submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-10-12', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })).rejects.toThrow('anterior')
+  const result = await client.submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-11-07', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })
+  expect(result).toMatchObject({ validationStatus: 'approved', proposedDate: '2026-11-07', alreadySubmitted: false })
+})
+
+it('posts formal initiation submission without re-entering candidate identity', async () => {
+  const response = { id: 'v6', validationStatus: 'approved', proposedDate: '2026-11-07', ceremonyStatus: 'under_review', alreadySubmitted: false }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-11-07', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/solicitud-iniciacion'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ proposedCeremonyDate: '2026-11-07', venerableApproval: true, sourceReference: 'SOL-1' })
 })

@@ -39,14 +39,14 @@ La insinuación debe permanecer publicada al menos 20 días corridos antes del b
 Una solicitud observada debe volver al Taller para corrección conservando el mismo expediente y su historial; no debe generarse una solicitud nueva para corregir el trámite existente.
 
 ## 4. Entrevistas, antecedentes y balotaje
-### PMGM-REQ-001.10 — Tres entrevistas
-Una vez aprobada la publicación deben poder programarse y registrarse tres entrevistas con la persona insinuada.
+### PMGM-REQ-001.10 — Mínimo tres entrevistas
+Una vez aprobada la publicación deben poder programarse y registrarse al menos tres entrevistas con la persona insinuada. El Venerable Maestro puede solicitar entrevistas adicionales. Cada registro muestra sólo un resumen y el resultado favorable o desfavorable; el Word o PDF completo queda como antecedente privado.
 
 ### PMGM-REQ-001.11 — Antecedentes confidenciales
 El expediente debe admitir el Cuestionario Confidencial y la Autobiografía, con permisos restringidos acordes a la sensibilidad del contenido.
 
 ### PMGM-REQ-001.12 — Evaluación en tercer grado
-Debe registrarse la presentación de los tres informes, cuestionario y autobiografía en tenida de tercer grado, junto con la votación abierta correspondiente.
+Debe registrarse la presentación de los informes disponibles —nunca menos de tres—, cuestionario y autobiografía en tenida de tercer grado, junto con la votación abierta correspondiente.
 
 ### PMGM-REQ-001.13 — Balotaje definitivo
 Cumplidos al menos 20 días corridos desde la publicación, debe habilitarse el balotaje de primer grado y registrarse su resultado.
@@ -132,6 +132,8 @@ El Extracto de Acta debe generarse desde la Tenida y sus registros: asistentes, 
 
 ### PMGM-REQ-001.38 — Evitar doble digitación
 Asistencia, cargos, miembros, resultados de balotaje y demás información ya registrada en el sistema deben incorporarse automáticamente al extracto.
+
+Los resultados de balotaje y votación deben incorporarse sólo como recuentos agregados. La nómina de asistentes y el padrón de habilitados se mantienen separados del escrutinio. El sistema no debe almacenar ni permitir reconstruir cómo votó una persona. En balotaje se registran balotas blancas y negras; en Asamblea, votos positivos y negativos o totales por candidatura, según corresponda.
 
 ## 12. Uso del Gran Templo
 ### PMGM-REQ-001.39 — Solicitud de espacio

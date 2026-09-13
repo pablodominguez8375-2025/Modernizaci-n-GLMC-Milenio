@@ -20,7 +20,7 @@ Registrar una votación abierta no unánime. No debe habilitarse la publicación
 Publicar una insinuación aprobada y luego intentar balotaje antes de 20 días corridos. Debe bloquearse indicando días cumplidos y mínimo requerido.
 
 ### UAT-005 — Antecedentes previos al 3.er grado
-Intentar avanzar sin las tres entrevistas o sin los antecedentes requeridos. Debe quedar bloqueado por expediente incompleto.
+Intentar avanzar con menos de tres entrevistas completas o sin los antecedentes requeridos. Debe quedar bloqueado por expediente incompleto; una cuarta entrevista debe admitirse si la solicita el Venerable Maestro.
 
 ### UAT-006 — Reingreso posterior a rechazo
 Intentar nueva presentación antes de un año: debe bloquearse. Después de un año, y registradas las causas como subsanadas, debe permitirse una nueva presentación vinculada al historial anterior.

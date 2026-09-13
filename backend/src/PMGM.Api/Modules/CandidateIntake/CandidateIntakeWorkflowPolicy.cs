@@ -50,11 +50,11 @@ public static class CandidateIntakeWorkflowPolicy
         if (completedInterviews < 0)
             throw new ArgumentOutOfRangeException(nameof(completedInterviews));
 
-        if (completedInterviews != 3)
+        if (completedInterviews < 3)
         {
             return CandidateWorkflowDecision.Blocked(
                 "third_degree_review.interviews",
-                $"El expediente requiere tres entrevistas completas; actualmente registra {completedInterviews}.");
+                $"El expediente requiere al menos tres entrevistas completas; actualmente registra {completedInterviews}.");
         }
 
         if (!confidentialQuestionnaireAvailable)
@@ -73,17 +73,29 @@ public static class CandidateIntakeWorkflowPolicy
 
         return CandidateWorkflowDecision.Allowed(
             "third_degree_review.package_complete",
-            "El expediente contiene las tres entrevistas, el Cuestionario Confidencial y la autobiografía.");
+            $"El expediente contiene {completedInterviews} entrevistas, el Cuestionario Confidencial y la autobiografía.");
     }
 
-    public static CandidateWorkflowDecision EvaluateThirdDegreeOpenVote(bool approved)
-        => approved
+    public static CandidateWorkflowDecision EvaluateThirdDegreeOpenVote(
+        int presentVoters,
+        int votesInFavor,
+        int votesAgainst,
+        int abstentions,
+        bool approved)
+    {
+        if (presentVoters <= 0)
+            return CandidateWorkflowDecision.Blocked("third_degree_review.quorum", "Debe registrarse al menos una persona presente en la votación abierta.");
+        if (votesInFavor < 0 || votesAgainst < 0 || abstentions < 0 || votesInFavor + votesAgainst + abstentions != presentVoters)
+            return CandidateWorkflowDecision.Blocked("third_degree_review.vote_totals", "La suma de votos favorables, desfavorables y abstenciones debe coincidir con la asistencia registrada.");
+
+        return approved
             ? CandidateWorkflowDecision.Allowed(
                 "third_degree_review.approved",
                 "La votación abierta de tercer grado fue favorable.")
             : CandidateWorkflowDecision.Rejected(
                 "third_degree_review.rejected",
                 "La votación abierta de tercer grado no fue favorable.");
+    }
 
     public static CandidateWorkflowDecision EvaluateFinalBallot(
         DateOnly publicationDate,
@@ -119,6 +131,37 @@ public static class CandidateIntakeWorkflowPolicy
             "El expediente cumple la revisión de tercer grado y el plazo mínimo de publicación para efectuar el balotaje.");
     }
 
+    public static CandidateWorkflowDecision EvaluateFinalBallotRounds(
+        IReadOnlyCollection<CandidateBallotRound> rounds,
+        bool approved)
+    {
+        if (rounds.Count == 0)
+            return CandidateWorkflowDecision.Blocked("first_degree_ballot.rounds", "Debe registrarse al menos un trámite de balotaje.");
+        if (rounds.Count > 3 || rounds.Any(x => x.ProcedureNumber is < 1 or > 3) || rounds.Select(x => x.ProcedureNumber).Distinct().Count() != rounds.Count)
+            return CandidateWorkflowDecision.Blocked("first_degree_ballot.procedures", "Cada trámite debe ser único y corresponder al primero, segundo o tercero.");
+        if (rounds.Any(x => x.EligibleVoters <= 0 || x.WhiteBallots < 0 || x.BlackBallots < 0 || x.WhiteBallots + x.BlackBallots != x.EligibleVoters))
+            return CandidateWorkflowDecision.Blocked("first_degree_ballot.counts", "En cada trámite, la suma de balotas blancas y negras debe coincidir con las personas habilitadas.");
+
+        return approved
+            ? CandidateWorkflowDecision.Allowed("first_degree_ballot.approved", "El balotaje definitivo fue favorable.")
+            : CandidateWorkflowDecision.Rejected("first_degree_ballot.rejected", "El balotaje definitivo fue desfavorable.");
+    }
+
+    public static CandidateWorkflowDecision EvaluateInitiationRequestSubmission(
+        DateOnly submissionDate,
+        DateOnly proposedCeremonyDate,
+        bool venerableApproval,
+        string? secretaryDisplayName)
+    {
+        if (proposedCeremonyDate < submissionDate)
+            return CandidateWorkflowDecision.Blocked("initiation_request.proposed_date", "La fecha propuesta de ceremonia no puede ser anterior a la solicitud.");
+        if (!venerableApproval)
+            return CandidateWorkflowDecision.Blocked("initiation_request.venerable_approval", "La solicitud formal requiere confirmación del Venerable Maestro.");
+        if (string.IsNullOrWhiteSpace(secretaryDisplayName) || secretaryDisplayName.Trim().Length > 240)
+            return CandidateWorkflowDecision.Blocked("initiation_request.secretary", "Debe indicar la Secretaría responsable.");
+        return CandidateWorkflowDecision.Allowed("initiation_request.submitted", "La solicitud formal de Iniciación está completa.");
+    }
+
     public static CandidateWorkflowDecision EvaluateRePresentation(
         DateOnly rejectionDate,
         DateOnly newPresentationDate,
@@ -151,6 +194,8 @@ public static class CandidateIntakeWorkflowPolicy
             "Ha transcurrido al menos un año y consta la subsanación de las causas del rechazo anterior.");
     }
 }
+
+public sealed record CandidateBallotRound(int ProcedureNumber, int EligibleVoters, int WhiteBallots, int BlackBallots);
 
 public sealed record CandidateWorkflowDecision(
     bool CanProceed,
