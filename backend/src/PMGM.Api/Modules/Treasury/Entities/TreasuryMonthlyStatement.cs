@@ -73,3 +73,49 @@ public sealed class TreasuryAdjustment
     public required string Status { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
+
+public sealed class LodgeFeePlan
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public required string FeeType { get; set; }
+    public decimal MemberAmount { get; set; }
+    public decimal GrandTreasuryAmount { get; set; }
+    public DateOnly EffectiveFrom { get; set; }
+    public DateOnly? EffectiveUntil { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class LodgeMemberCharge
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public Guid MemberId { get; set; }
+    public Member Member { get; set; } = null!;
+    public Guid FeePlanId { get; set; }
+    public LodgeFeePlan FeePlan { get; set; } = null!;
+    public int PeriodYear { get; set; }
+    public int PeriodMonth { get; set; }
+    public decimal MemberAmount { get; set; }
+    public decimal GrandTreasuryAmount { get; set; }
+    public required string Status { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public ICollection<LodgeMemberPayment> Payments { get; set; } = new List<LodgeMemberPayment>();
+}
+
+public sealed class LodgeMemberPayment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ChargeId { get; set; }
+    public LodgeMemberCharge Charge { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public required string PaymentMethod { get; set; }
+    public DateOnly PaymentDate { get; set; }
+    public required string ReceiptNumber { get; set; }
+    public string? Reference { get; set; }
+    public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}

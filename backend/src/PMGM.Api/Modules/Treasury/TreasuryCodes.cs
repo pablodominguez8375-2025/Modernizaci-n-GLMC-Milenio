@@ -2,6 +2,28 @@ namespace PMGM.Api.Modules.Treasury;
 
 public static class TreasuryCodes
 {
+    public static class LodgeFeeType
+    {
+        public const string Normal = "normal";
+        public const string Student = "student";
+        public const string Senior = "senior";
+        public static bool IsValid(string value) => value is Normal or Student or Senior;
+    }
+
+    public static class LodgeChargeStatus
+    {
+        public const string Pending = "pending";
+        public const string Partial = "partial";
+        public const string Paid = "paid";
+    }
+
+    public static class LodgePaymentMethod
+    {
+        public const string Cash = "cash";
+        public const string Transfer = "transfer";
+        public const string Deposit = "deposit";
+        public static bool IsValid(string value) => value is Cash or Transfer or Deposit;
+    }
     public static class StatementStatus
     {
         public const string Draft = "draft";

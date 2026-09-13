@@ -96,7 +96,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
-  const canLodge = capabilities?.canManageLodgeOperations ?? false
+  const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
   const canCandidateProfile = canSecretariat || canLodge
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
   const canDocuments = capabilities?.canManageDocuments ?? false
