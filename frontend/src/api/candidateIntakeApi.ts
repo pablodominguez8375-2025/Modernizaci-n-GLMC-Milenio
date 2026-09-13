@@ -248,6 +248,7 @@ export class CandidateIntakeApiClient {
   private readonly mockQueue = demoQueueSeed.map(item => ({ ...item }))
   private readonly mockWorkshopQueue = demoWorkshopQueueSeed.map(item => ({ ...item }))
   private readonly mockProfiles = new Map<string, CandidateIntakeProfile>([[demoRequestId, { ...demoProfile, presenters: [...demoProfile.presenters] }]])
+  private readonly mockPhotos = new Map<string, Blob>()
 
   constructor(options: CandidateIntakeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -361,6 +362,26 @@ export class CandidateIntakeApiClient {
     })
   }
 
+  async uploadPhoto(requestId: string, file: File): Promise<void> {
+    if (this.useMocks) {
+      const profile = this.mockProfiles.get(requestId)
+      if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero debe registrar la ficha del insinuado.')
+      this.mockPhotos.set(requestId, file)
+      profile.photoAvailable = true
+      profile.reviewStatus = 'pending_grand_secretariat'
+      profile.updatedAtUtc = new Date().toISOString()
+      const queueItem = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (queueItem) { queueItem.photoAvailable = true; queueItem.reviewStatus = 'pending_grand_secretariat' }
+      return
+    }
+    const response = await this.fetchAuthorized(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/foto/contenido`, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+      body: file,
+    })
+    if (!response.ok) throw await this.toError(response)
+  }
+
   async review(requestId: string, decision: CandidateReviewDecision, notes?: string): Promise<void> {
     if (this.useMocks) {
       const item = this.mockQueue.find(value => value.ceremonyRequestId === requestId)
@@ -399,7 +420,7 @@ export class CandidateIntakeApiClient {
   }
 
   async getPrivatePhoto(requestId: string): Promise<Blob | null> {
-    if (this.useMocks) return null
+    if (this.useMocks) return this.mockPhotos.get(requestId) ?? null
     const response = await this.fetchAuthorized(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/foto`, { headers: { Accept: 'image/jpeg,image/png' } })
     if (response.status === 404) return null
     if (!response.ok) throw await this.toError(response)

@@ -34,7 +34,7 @@ Validar que el flujo de iniciación mantenga un único expediente por solicitud 
 | Presentación en primer grado no futura ni anterior al ingreso | Implementada |
 | Fotografía sólo JPEG/PNG, procesada y del mismo Taller | Implementada |
 | Fotografía máximo 100 KB | Implementada |
-| Fotografía mínimo 500 × 500 píxeles | Requisito documentado; validación binaria pendiente para v1.0 |
+| Fotografía mínimo 500 × 500 píxeles | Implementada en QA v0.43 |
 | Corrección conserva la identidad del expediente | Implementada por restricción única y operación upsert |
 | Guardar/corregir no publica automáticamente | Implementada |
 
@@ -51,4 +51,4 @@ La demostración usa exclusivamente identidades, contactos, empleadores, Tallere
 
 ## Criterio de salida
 
-El incremento se considera apto para demostración cuando CI, despliegue de showcase y generación del instalable finalicen correctamente en `feature/treasury-payment-table-v1`. La validación de dimensiones de imagen queda registrada como brecha antes de declarar v1.0 real.
+El incremento se considera apto para demostración cuando CI, despliegue de showcase y generación del instalable finalicen correctamente en `feature/treasury-payment-table-v1`. La validación de dimensiones fue cerrada en QA v0.43.

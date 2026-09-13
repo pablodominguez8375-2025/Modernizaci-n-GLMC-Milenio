@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
@@ -7,6 +8,7 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.DocumentManagement.Entities;
 
 namespace PMGM.Api.Modules.CandidateIntake;
 
@@ -22,6 +24,7 @@ public static class CandidateIntakeEndpoints
         group.MapGet("/solicitudes/{requestId:guid}/ficha", GetProfileAsync);
         group.MapGet("/revision-gran-secretaria", GetGrandSecretariatQueueAsync);
         group.MapPost("/solicitudes/{requestId:guid}/foto", AttachPhotoAsync);
+        group.MapPut("/solicitudes/{requestId:guid}/foto/contenido", UploadPhotoAsync);
         group.MapGet("/solicitudes/{requestId:guid}/foto", GetPrivatePhotoAsync);
 
         endpoints.MapGet("/api/candidate-publications/{publicationId:guid}/photo", GetPublishedPhotoAsync)
@@ -296,6 +299,74 @@ public static class CandidateIntakeEndpoints
         await coreDb.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new { profile.CeremonyRequestId, photoAvailable = true });
+    }
+
+    private static async Task<IResult> UploadPhotoAsync(
+        Guid requestId,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        CandidateIntakeDbContext intakeDb,
+        DocumentManagementDbContext documentDb,
+        IInstitutionalAccessService access,
+        IDocumentObjectStore objectStore,
+        IDocumentMalwareScanner scanner,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var profile = await intakeDb.CandidateIntakeProfiles.SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
+        if (profile is null) return Results.NotFound(new { message = "Primero debe guardar la ficha del insinuado." });
+        if (!access.CanManageOrganization(httpContext.User, profile.OrganizationId)) return Results.Forbid();
+
+        var contentType = httpContext.Request.ContentType?.Split(';', 2)[0].Trim().ToLowerInvariant();
+        if (contentType is not ("image/jpeg" or "image/png")) return Results.BadRequest(new { message = "La fotografía debe ser JPG o PNG." });
+        var length = httpContext.Request.ContentLength;
+        if (length is null or <= 0 || length > CandidatePhotoPolicy.MaxBytes)
+            return Results.BadRequest(new { message = "La fotografía debe pesar como máximo 100 KB." });
+
+        await using var buffer = new MemoryStream((int)length.Value);
+        await httpContext.Request.Body.CopyToAsync(buffer, cancellationToken);
+        if (buffer.Length != length.Value || buffer.Length > CandidatePhotoPolicy.MaxBytes)
+            return Results.BadRequest(new { message = "El tamaño recibido de la fotografía no es válido." });
+        var bytes = buffer.ToArray();
+        if (!CandidatePhotoPolicy.MeetsMinimumDimensions(bytes, contentType, out var width, out var height))
+            return Results.BadRequest(new { message = "La fotografía debe ser válida y tener al menos 500 × 500 píxeles." });
+
+        DocumentMalwareScanResult scan;
+        try { scan = await scanner.ScanAsync(new MemoryStream(bytes, writable: false), cancellationToken); }
+        catch (Exception ex) when (ex is IOException or SocketException or InvalidDataException)
+        { return Results.Json(new { message = "El análisis antivirus no está disponible; intente nuevamente." }, statusCode: StatusCodes.Status503ServiceUnavailable); }
+        if (!scan.IsClean) return Results.UnprocessableEntity(new { message = "La fotografía fue rechazada por el análisis antivirus." });
+
+        var subject = GetSubject(httpContext.User);
+        var collectionCode = $"CANDIDATE-PHOTOS-{profile.OrganizationId:N}";
+        var collection = await documentDb.DocumentCollections.SingleOrDefaultAsync(x => x.Code == collectionCode, cancellationToken);
+        if (collection is null)
+        {
+            collection = new DocumentCollection { Code = collectionCode, Name = "Fotografías privadas de insinuados", Description = "Evidencia fotográfica privada del circuito de iniciación.", Scope = DocumentManagementCodes.Scope.Organization, OrganizationId = profile.OrganizationId, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = subject };
+            documentDb.DocumentCollections.Add(collection);
+        }
+        var document = new InstitutionalDocument { Collection = collection, OrganizationId = profile.OrganizationId, Title = $"Fotografía de insinuado {requestId:N}", DocumentType = "candidate_passport_photo", Classification = DocumentManagementCodes.Classification.Sensitive, AccessPolicy = DocumentManagementCodes.AccessPolicy.ManagementOnly, Status = DocumentManagementCodes.DocumentStatus.Active, CreatedBySubject = subject };
+        var encodedFileName = httpContext.Request.Headers["X-File-Name"].ToString();
+        string fileName;
+        try { fileName = Path.GetFileName(Uri.UnescapeDataString(encodedFileName)); }
+        catch (UriFormatException) { return Results.BadRequest(new { message = "El nombre codificado del archivo no es válido." }); }
+        if (string.IsNullOrWhiteSpace(fileName)) fileName = contentType == "image/png" ? "foto-insinuado.png" : "foto-insinuado.jpg";
+        if (fileName.Length > 500) return Results.BadRequest(new { message = "El nombre del archivo no puede superar 500 caracteres." });
+        var version = new DocumentVersion { Document = document, VersionNumber = 1, OriginalFileName = fileName, ContentType = contentType, SizeBytes = bytes.LongLength, Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), ProcessingStatus = DocumentManagementCodes.ProcessingStatus.Available, ScanReference = scan.EvidenceReference, CreatedBySubject = subject };
+        version.ObjectKey = DocumentObjectKeyFactory.Create(document.Id, version.Id);
+        await objectStore.StoreAsync(version.ObjectKey, new MemoryStream(bytes, writable: false), contentType, cancellationToken);
+        documentDb.InstitutionalDocuments.Add(document);
+        documentDb.DocumentVersions.Add(version);
+        await documentDb.SaveChangesAsync(cancellationToken);
+
+        profile.PhotoVersionId = version.Id;
+        profile.UpdatedBySubject = subject;
+        profile.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await intakeDb.SaveChangesAsync(cancellationToken);
+        coreDb.CeremonyValidations.Add(new PMGM.Api.Modules.Ceremonies.Entities.CeremonyValidation { CeremonyRequestId = requestId, ValidationType = CeremonyCodes.ValidationType.CandidatePublicationReview, Status = CeremonyCodes.ValidationStatus.Pending, AsOfDate = ChileToday(), SourceReference = profile.Id.ToString(), Notes = "Fotografía cargada, validada y ficha reenviada a revisión de Gran Secretaría." });
+        audit.Add(httpContext, "candidate.intake.photo_uploaded", nameof(CandidateIntakeProfile), profile.Id.ToString(), profile.OrganizationId, AuditResults.Success, new { profile.CeremonyRequestId, profile.PhotoVersionId, width, height, bytes = version.SizeBytes });
+        await coreDb.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { profile.CeremonyRequestId, photoAvailable = true, width, height, sizeBytes = version.SizeBytes });
     }
 
     private static async Task<IResult> GetPrivatePhotoAsync(

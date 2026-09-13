@@ -93,6 +93,18 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(row?.photoAvailable).toBe(true)
   })
 
+  it('uploads a selected photo directly in the demo contract', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const queue = await api.getWorkshopQueue()
+    const requestId = queue.items[0].ceremonyRequestId
+    const photo = new File([new Uint8Array([137, 80, 78, 71])], 'foto-demo.png', { type: 'image/png' })
+
+    await api.uploadPhoto(requestId, photo)
+
+    expect(await api.getPrivatePhoto(requestId)).toBe(photo)
+    expect((await api.getProfile(requestId)).photoAvailable).toBe(true)
+  })
+
   it('records an observation and refreshes its state without publishing', async () => {
     const api = new CandidateIntakeApiClient({ useMocks: true })
     const queue = await api.getGrandSecretariatQueue('pending_grand_secretariat')

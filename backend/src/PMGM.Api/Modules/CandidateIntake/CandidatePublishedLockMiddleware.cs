@@ -48,7 +48,7 @@ public sealed class CandidatePublishedLockMiddleware(RequestDelegate next)
         if (string.IsNullOrWhiteSpace(path)) return false;
 
         var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (segments.Length != 5) return false;
+        if (segments.Length is not (5 or 6)) return false;
         if (!string.Equals(segments[0], "api", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(segments[1], "insinuados", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(segments[2], "solicitudes", StringComparison.OrdinalIgnoreCase))
@@ -57,6 +57,10 @@ public sealed class CandidatePublishedLockMiddleware(RequestDelegate next)
         var mutation = segments[4];
         if (!string.Equals(mutation, "ficha", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(mutation, "foto", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        if (segments.Length == 6 && (!string.Equals(mutation, "foto", StringComparison.OrdinalIgnoreCase) ||
+                                     !string.Equals(segments[5], "contenido", StringComparison.OrdinalIgnoreCase)))
             return false;
 
         return Guid.TryParse(segments[3], out requestId);
