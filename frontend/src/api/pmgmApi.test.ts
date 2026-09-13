@@ -171,3 +171,18 @@ it('posts the third-degree extract reference and aggregate vote to the protected
   const [url, options] = fetch.mock.calls[0]
   expect(url).toBe('/api/insinuados/solicitudes/c1/revision-tercer-grado'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 10, votesAgainst: 2, sourceReference: 'EXTRACTO-10' })
 })
+
+it('validates anonymous final-ballot rounds without recording individual choices', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  await expect(client.recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 10, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })).rejects.toThrow('habilitadas')
+  const result = await client.recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 11, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })
+  expect(result).toMatchObject({ validationStatus: 'approved', ceremonyStatus: 'under_review' })
+})
+
+it('posts final-ballot rounds and extract reference to the protected endpoint', async () => {
+  const response = { id: 'v5', validationStatus: 'approved', asOfDate: '2026-10-12', code: 'first_degree_ballot.approved', reason: 'Aprobado', ceremonyStatus: 'under_review' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 11, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/balotaje'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ ballots: [{ procedureNumber: 1, whiteBallots: 11, blackBallots: 1 }], sourceReference: 'EXTRACTO-10' })
+})

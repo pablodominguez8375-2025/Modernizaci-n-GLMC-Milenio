@@ -131,6 +131,22 @@ public static class CandidateIntakeWorkflowPolicy
             "El expediente cumple la revisión de tercer grado y el plazo mínimo de publicación para efectuar el balotaje.");
     }
 
+    public static CandidateWorkflowDecision EvaluateFinalBallotRounds(
+        IReadOnlyCollection<CandidateBallotRound> rounds,
+        bool approved)
+    {
+        if (rounds.Count == 0)
+            return CandidateWorkflowDecision.Blocked("first_degree_ballot.rounds", "Debe registrarse al menos un trámite de balotaje.");
+        if (rounds.Count > 3 || rounds.Any(x => x.ProcedureNumber is < 1 or > 3) || rounds.Select(x => x.ProcedureNumber).Distinct().Count() != rounds.Count)
+            return CandidateWorkflowDecision.Blocked("first_degree_ballot.procedures", "Cada trámite debe ser único y corresponder al primero, segundo o tercero.");
+        if (rounds.Any(x => x.EligibleVoters <= 0 || x.WhiteBallots < 0 || x.BlackBallots < 0 || x.WhiteBallots + x.BlackBallots != x.EligibleVoters))
+            return CandidateWorkflowDecision.Blocked("first_degree_ballot.counts", "En cada trámite, la suma de balotas blancas y negras debe coincidir con las personas habilitadas.");
+
+        return approved
+            ? CandidateWorkflowDecision.Allowed("first_degree_ballot.approved", "El balotaje definitivo fue favorable.")
+            : CandidateWorkflowDecision.Rejected("first_degree_ballot.rejected", "El balotaje definitivo fue desfavorable.");
+    }
+
     public static CandidateWorkflowDecision EvaluateRePresentation(
         DateOnly rejectionDate,
         DateOnly newPresentationDate,
@@ -163,6 +179,8 @@ public static class CandidateIntakeWorkflowPolicy
             "Ha transcurrido al menos un año y consta la subsanación de las causas del rechazo anterior.");
     }
 }
+
+public sealed record CandidateBallotRound(int ProcedureNumber, int EligibleVoters, int WhiteBallots, int BlackBallots);
 
 public sealed record CandidateWorkflowDecision(
     bool CanProceed,

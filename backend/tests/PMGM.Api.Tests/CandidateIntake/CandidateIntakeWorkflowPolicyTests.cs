@@ -113,6 +113,21 @@ public sealed class CandidateIntakeWorkflowPolicyTests
     }
 
     [Fact]
+    public void FinalBallotRounds_RequireUniqueProcedures_AndConsistentCounts()
+    {
+        var invalidCount = CandidateIntakeWorkflowPolicy.EvaluateFinalBallotRounds(
+            [new CandidateBallotRound(1, 12, 10, 1)], approved: true);
+        var repeatedProcedure = CandidateIntakeWorkflowPolicy.EvaluateFinalBallotRounds(
+            [new CandidateBallotRound(1, 12, 11, 1), new CandidateBallotRound(1, 12, 12, 0)], approved: true);
+        var approved = CandidateIntakeWorkflowPolicy.EvaluateFinalBallotRounds(
+            [new CandidateBallotRound(1, 12, 11, 1), new CandidateBallotRound(2, 12, 12, 0)], approved: true);
+
+        Assert.Equal("first_degree_ballot.counts", invalidCount.Code);
+        Assert.Equal("first_degree_ballot.procedures", repeatedProcedure.Code);
+        Assert.True(approved.CanProceed);
+    }
+
+    [Fact]
     public void RePresentation_RequiresOneYear_AndRemediedCauses()
     {
         var rejectionDate = new DateOnly(2025, 9, 10);

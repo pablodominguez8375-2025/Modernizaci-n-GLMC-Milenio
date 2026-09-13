@@ -353,6 +353,10 @@ public static class CandidateWorkflowEndpoints
             return Results.Conflict(new { message = "La ceremonia ya está autorizada." });
         if (request.BallotDate > ChileToday())
             return Results.BadRequest(new { message = "El balotaje no puede registrarse con fecha futura." });
+        if (string.IsNullOrWhiteSpace(request.SourceReference))
+            return Results.BadRequest(new { message = "Debe indicar la referencia del extracto de acta." });
+        if (request.SourceReference.Trim().Length > 240)
+            return Results.BadRequest(new { message = "La referencia documental no puede superar 240 caracteres." });
 
         var thirdDegreeStatus = await GetLatestValidationStatusAsync(
             coreDb, requestId, CeremonyCodes.ValidationType.CandidateThirdDegreeReview, cancellationToken);
@@ -383,28 +387,26 @@ public static class CandidateWorkflowEndpoints
             return Results.Conflict(new { blockedValidation.Id, blockedValidation.Status, readiness.Code, readiness.Reason });
         }
 
-        var finalStatus = request.BallotApproved
-            ? CeremonyCodes.ValidationStatus.Approved
-            : CeremonyCodes.ValidationStatus.Rejected;
-        var finalReason = request.BallotApproved
-            ? "El balotaje fue registrado como aprobado por el Taller."
-            : "El balotaje fue registrado como rechazado por el Taller.";
+        var ballotDecision = CandidateIntakeWorkflowPolicy.EvaluateFinalBallotRounds(
+            request.Ballots?.Select(x => new CandidateBallotRound(x.ProcedureNumber, x.EligibleVoters, x.WhiteBallots, x.BlackBallots)).ToArray()
+                ?? Array.Empty<CandidateBallotRound>(),
+            request.BallotApproved);
+        var finalStatus = ToValidationStatus(ballotDecision);
 
         var validation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateFinalBallot,
-            finalStatus, request.BallotDate, request.SourceReference, finalReason);
+            finalStatus, request.BallotDate, request.SourceReference.Trim(), ballotDecision.Reason);
 
-        ceremony.Status = request.BallotApproved
-            ? CeremonyCodes.RequestStatus.UnderReview
-            : CeremonyCodes.RequestStatus.Rejected;
+        ceremony.Status = ballotDecision.IsRejected ? CeremonyCodes.RequestStatus.Rejected : CeremonyCodes.RequestStatus.UnderReview;
 
         audit.Add(httpContext, "candidate.workflow.final_ballot.recorded", nameof(CeremonyValidation),
             validation.Id.ToString(), ceremony.OrganizationId,
-            request.BallotApproved ? AuditResults.Success : AuditResults.Rejected,
+            ballotDecision.CanProceed ? AuditResults.Success : AuditResults.Rejected,
             new
             {
                 publicationDate,
                 request.BallotDate,
                 publication.RequiredDays,
+                ballots = (request.Ballots ?? Array.Empty<FinalBallotRoundRequest>()).Select(x => new { x.ProcedureNumber, x.EligibleVoters, x.WhiteBallots, x.BlackBallots }),
                 request.BallotApproved,
                 finalStatus
             });
@@ -415,6 +417,8 @@ public static class CandidateWorkflowEndpoints
             validation.Id,
             validationStatus = validation.Status,
             validation.AsOfDate,
+            ballotDecision.Code,
+            ballotDecision.Reason,
             ceremonyStatus = ceremony.Status
         });
     }
@@ -586,5 +590,12 @@ public sealed record ThirdDegreeReviewRequest(
 
 public sealed record FinalBallotRequest(
     DateOnly BallotDate,
+    IReadOnlyList<FinalBallotRoundRequest>? Ballots,
     bool BallotApproved,
     string? SourceReference);
+
+public sealed record FinalBallotRoundRequest(
+    int ProcedureNumber,
+    int EligibleVoters,
+    int WhiteBallots,
+    int BlackBallots);
