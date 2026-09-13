@@ -4,7 +4,7 @@ namespace PMGM.Api.Modules.CandidateIntake;
 
 public static class CandidatePhotoPolicy
 {
-    public const long MaxBytes = 100 * 1024;
+    public const long MaxBytes = 10 * 1024 * 1024;
     public const int MinimumWidth = 500;
     public const int MinimumHeight = 500;
 

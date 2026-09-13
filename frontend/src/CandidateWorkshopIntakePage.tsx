@@ -271,7 +271,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             <div className="workshop-photo-layout">
               <div className="candidate-passport-photo">{photoPreview || photoSrc ? <img src={photoPreview ?? photoSrc ?? ''} alt="Vista previa de fotografía tipo pasaporte" /> : <div className="workshop-photo-placeholder">Sin foto</div>}<small>{photoFile ? 'Vista previa · aún no guardada' : profile?.photoAvailable ? 'Fotografía vinculada' : 'Pendiente'}</small></div>
               <div>
-                <p>La foto se vincula desde una versión documental JPEG/PNG, mínimo 500 × 500 píxeles y máximo 100 KB, que ya haya completado el análisis antivirus. El objeto original permanece privado y nunca se publica con una URL permanente.</p>
+                <p>La foto se vincula desde una versión documental JPEG/PNG, mínimo 500 × 500 píxeles y máximo 10 MB. En la demo QA permanece sólo durante esta sesión del navegador; en la instalación real completa el análisis antivirus y queda privada.</p>
                 <label className="workshop-photo-version"><span>Seleccionar fotografía</span><input type="file" accept="image/jpeg,image/png" disabled={!profile || busy || locked} onChange={event => void selectPhoto(event.target.files?.[0] ?? null)} /></label>
                 {photoFile && <small className="workshop-photo-file">{photoFile.name} · {formatBytes(photoFile.size)}</small>}
                 <button className="candidate-secondary-button" type="button" disabled={!profile || !photoFile || busy || locked} onClick={() => void uploadPhoto()}>{busy ? 'Procesando…' : 'Subir y vincular fotografía'}</button>
@@ -295,7 +295,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     setPhotoFile(null); setPhotoPreview(null)
     if (!file) return
     if (!['image/jpeg', 'image/png'].includes(file.type)) { setError('La fotografía debe estar en formato JPG o PNG.'); return }
-    if (file.size > 100 * 1024) { setError('La fotografía no puede superar 100 KB.'); return }
+    if (file.size > 10 * 1024 * 1024) { setError('La fotografía no puede superar 10 MB.'); return }
     try {
       const dimensions = await readImageDimensions(file)
       if (dimensions.width < 500 || dimensions.height < 500) { setError('La fotografía debe tener al menos 500 × 500 píxeles.'); return }

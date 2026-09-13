@@ -6,6 +6,10 @@ namespace PMGM.Api.Tests.CandidateIntake;
 
 public sealed class CandidatePhotoPolicyTests
 {
+    [Fact]
+    public void UploadLimit_SupportsOperationalQaPhotos()
+        => Assert.Equal(10 * 1024 * 1024, CandidatePhotoPolicy.MaxBytes);
+
     [Theory]
     [InlineData(500, 500, true)]
     [InlineData(800, 600, true)]

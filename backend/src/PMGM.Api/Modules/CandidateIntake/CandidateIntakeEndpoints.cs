@@ -277,8 +277,8 @@ public static class CandidateIntakeEndpoints
             return Results.Conflict(new { message = "La fotografía debe completar carga y análisis antivirus antes de ser vinculada." });
         if (!CandidateIntakeCodes.PhotoContentType.IsAllowed(version.ContentType))
             return Results.BadRequest(new { message = "La foto tipo pasaporte debe ser JPEG o PNG." });
-        if (version.SizeBytes > 100 * 1024)
-            return Results.BadRequest(new { message = "La foto tipo pasaporte no puede superar 100 KB." });
+        if (version.SizeBytes > CandidatePhotoPolicy.MaxBytes)
+            return Results.BadRequest(new { message = "La foto tipo pasaporte no puede superar 10 MB." });
 
         profile.PhotoVersionId = version.Id;
         profile.UpdatedBySubject = GetSubject(httpContext.User);
@@ -321,7 +321,7 @@ public static class CandidateIntakeEndpoints
         if (contentType is not ("image/jpeg" or "image/png")) return Results.BadRequest(new { message = "La fotografía debe ser JPG o PNG." });
         var length = httpContext.Request.ContentLength;
         if (length is null or <= 0 || length > CandidatePhotoPolicy.MaxBytes)
-            return Results.BadRequest(new { message = "La fotografía debe pesar como máximo 100 KB." });
+            return Results.BadRequest(new { message = "La fotografía debe pesar como máximo 10 MB." });
 
         await using var buffer = new MemoryStream((int)length.Value);
         await httpContext.Request.Body.CopyToAsync(buffer, cancellationToken);

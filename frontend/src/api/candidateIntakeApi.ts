@@ -386,7 +386,7 @@ export class CandidateIntakeApiClient {
 
   async uploadPhoto(requestId: string, file: File): Promise<void> {
     if (this.useMocks) {
-      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) throw new Error('La fotografía debe ser JPG, PNG o WebP.')
+      if (!['image/jpeg', 'image/png'].includes(file.type)) throw new Error('La fotografía debe ser JPG o PNG.')
       if (file.size <= 0 || file.size > 10_485_760) throw new Error('La fotografía debe contener información y pesar como máximo 10 MB.')
       const profile = this.mockProfiles.get(requestId)
       if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero debe registrar la ficha del insinuado.')
