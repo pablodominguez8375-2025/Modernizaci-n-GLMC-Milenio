@@ -21,6 +21,8 @@ public static class LodgeTreasuryEndpoints
         group.MapPost("/talleres/{organizationId:guid}/cargos/generar", GenerateChargesAsync);
         group.MapGet("/talleres/{organizationId:guid}/resumen", GetSummaryAsync);
         group.MapPost("/cargos/{chargeId:guid}/pagos", AddPaymentAsync);
+        group.MapPost("/talleres/{organizationId:guid}/egresos", CreateExpenseAsync);
+        group.MapPost("/egresos/{expenseId:guid}/aprobar", ApproveExpenseAsync);
         group.MapGet("/hermanos/{memberId:guid}/cartola", GetMemberStatementAsync);
         return endpoints;
     }
@@ -171,6 +173,24 @@ public static class LodgeTreasuryEndpoints
     private static object ToFeePlan(LodgeFeePlan x) => new { x.Id, x.OrganizationId, x.FeeType, x.MemberAmount,
         x.GrandTreasuryAmount, workshopAmount = x.MemberAmount - x.GrandTreasuryAmount, x.EffectiveFrom, x.EffectiveUntil, x.IsActive };
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static async Task<IResult> CreateExpenseAsync(Guid organizationId, CreateLodgeTreasuryExpenseRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (request.Amount <= 0 || string.IsNullOrWhiteSpace(request.Category) || string.IsNullOrWhiteSpace(request.Description)) return Results.BadRequest(new { message = "Categoría, descripción y monto son obligatorios." });
+        var expense = new LodgeTreasuryExpense { OrganizationId = organizationId, Category = request.Category.Trim(), Amount = request.Amount, ExpenseDate = request.ExpenseDate, Description = request.Description.Trim(), EvidenceReference = Normalize(request.EvidenceReference), ApprovalStatus = "pending_approval", RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
+        db.LodgeTreasuryExpenses.Add(expense); audit.Add(context, "lodge.treasury.expense.recorded", nameof(LodgeTreasuryExpense), expense.Id.ToString(), organizationId, AuditResults.Success, new { expense.Category, expense.Amount }); await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/gestion-logial/tesoreria/egresos/{expense.Id}", expense);
+    }
+
+    private static async Task<IResult> ApproveExpenseAsync(Guid expenseId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var expense = await db.LodgeTreasuryExpenses.SingleOrDefaultAsync(x => x.Id == expenseId, ct); if (expense is null) return Results.NotFound();
+        if (!access.CanApproveLodgeExpenses(context.User, expense.OrganizationId)) return Results.Forbid();
+        if (expense.ApprovalStatus != "pending_approval") return Results.Conflict(new { message = "El egreso ya fue resuelto." });
+        expense.ApprovalStatus = "approved"; expense.ApprovedBySubject = context.User.FindFirstValue("sub") ?? "unknown"; expense.ApprovedAtUtc = DateTimeOffset.UtcNow;
+        audit.Add(context, "lodge.treasury.expense.approved", nameof(LodgeTreasuryExpense), expense.Id.ToString(), expense.OrganizationId, AuditResults.Success, new { expense.Category, expense.Amount }); await db.SaveChangesAsync(ct); return Results.Ok(expense);
+    }
 }
 
 public sealed record CreateLodgeFeePlanRequest(string FeeType, decimal MemberAmount, decimal GrandTreasuryAmount,
@@ -178,3 +198,4 @@ public sealed record CreateLodgeFeePlanRequest(string FeeType, decimal MemberAmo
 public sealed record LodgeFeeAssignmentRequest(Guid MemberId, string FeeType);
 public sealed record GenerateLodgeChargesRequest(int PeriodYear, int PeriodMonth, IReadOnlyList<LodgeFeeAssignmentRequest>? Assignments);
 public sealed record AddLodgeMemberPaymentRequest(decimal Amount, string PaymentMethod, DateOnly PaymentDate, string? Reference);
+public sealed record CreateLodgeTreasuryExpenseRequest(string Category, decimal Amount, DateOnly ExpenseDate, string Description, string? EvidenceReference);

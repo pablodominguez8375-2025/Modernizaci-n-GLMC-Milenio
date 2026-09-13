@@ -18,6 +18,7 @@ public static class WithdrawalEndpoints
         group.MapPost("/", CreateAsync);
         group.MapGet("/", ListAsync);
         group.MapPost("/{requestId:guid}/decision", DecideAsync);
+        group.MapPost("/{requestId:guid}/firmar-orador", SignByOratorAsync);
         return endpoints;
     }
 
@@ -155,8 +156,24 @@ public static class WithdrawalEndpoints
     private static object ToDto(MemberWithdrawalRequest value) => new
     {
         value.Id, value.MemberId, value.OriginOrganizationId, value.WithdrawalType,
-        value.RequestedEffectiveDate, value.Status, value.Resolution, value.CreatedAtUtc, value.DecidedAtUtc
+        value.RequestedEffectiveDate, value.Status, value.Resolution, value.CreatedAtUtc, value.DecidedAtUtc,
+        value.OratorSignatureSubject, value.OratorSignedAtUtc
     };
+
+    private static async Task<IResult> SignByOratorAsync(Guid requestId, HttpContext httpContext, PmgmDbContext db,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
+    {
+        var withdrawal = await db.MemberWithdrawalRequests.SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+        if (withdrawal is null) return Results.NotFound();
+        if (!access.CanSignLodgeDocuments(httpContext.User, withdrawal.OriginOrganizationId)) return Results.Forbid();
+        if (withdrawal.Status != MembershipCodes.WithdrawalRequestStatus.Approved) return Results.Conflict(new { message = "El retiro debe estar aprobado antes de firmarse." });
+        if (withdrawal.OratorSignatureSubject is not null) return Results.Conflict(new { message = "La carta ya cuenta con firma del Orador." });
+        withdrawal.OratorSignatureSubject = Subject(httpContext.User);
+        withdrawal.OratorSignedAtUtc = DateTimeOffset.UtcNow;
+        audit.Add(httpContext, "membership.withdrawal.orator_signed", nameof(MemberWithdrawalRequest), withdrawal.Id.ToString(), withdrawal.OriginOrganizationId, AuditResults.Success, new { withdrawal.WithdrawalType });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(ToDto(withdrawal));
+    }
 
     private static string Subject(ClaimsPrincipal user) => user.FindFirst("sub")?.Value ?? "unknown";
 }

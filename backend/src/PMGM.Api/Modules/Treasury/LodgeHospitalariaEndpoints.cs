@@ -14,6 +14,7 @@ public static class LodgeHospitalariaEndpoints
         var group = endpoints.MapGroup("/api/gestion-logial/hospitalaria")
             .WithTags("Hospitalaria del Taller").RequireAuthorization();
         group.MapPost("/talleres/{organizationId:guid}/movimientos", CreateMovementAsync);
+        group.MapPost("/movimientos/{movementId:guid}/aprobar", ApproveMovementAsync);
         group.MapGet("/talleres/{organizationId:guid}/resumen", GetSummaryAsync);
         return endpoints;
     }
@@ -28,12 +29,29 @@ public static class LodgeHospitalariaEndpoints
             Category = request.Category, Amount = request.Amount, MovementDate = request.MovementDate,
             MemberReference = Normalize(request.MemberReference), Destination = Normalize(request.Destination),
             EvidenceReference = Normalize(request.EvidenceReference), Observation = Normalize(request.Observation),
+            ApprovalStatus = request.MovementType == HospitalariaMovementCodes.Expense ? HospitalariaMovementCodes.PendingApproval : HospitalariaMovementCodes.NotRequired,
             RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
         db.LodgeHospitalariaMovements.Add(movement);
         audit.Add(context, "lodge.hospitalaria.movement.recorded", nameof(LodgeHospitalariaMovement), movement.Id.ToString(), organizationId,
             AuditResults.Success, new { movement.MovementType, movement.Category, movement.Amount, movement.MovementDate });
         await db.SaveChangesAsync(ct);
         return Results.Created($"/api/gestion-logial/hospitalaria/movimientos/{movement.Id}", movement);
+    }
+
+    private static async Task<IResult> ApproveMovementAsync(Guid movementId, HttpContext context, PmgmDbContext db,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var movement = await db.LodgeHospitalariaMovements.SingleOrDefaultAsync(x => x.Id == movementId, ct);
+        if (movement is null) return Results.NotFound();
+        if (movement.MovementType != HospitalariaMovementCodes.Expense) return Results.BadRequest(new { message = "Solo los egresos requieren aprobación." });
+        if (!access.CanApproveLodgeExpenses(context.User, movement.OrganizationId)) return Results.Forbid();
+        if (movement.ApprovalStatus != HospitalariaMovementCodes.PendingApproval) return Results.Conflict(new { message = "El egreso ya fue aprobado o no está pendiente." });
+        movement.ApprovalStatus = HospitalariaMovementCodes.Approved;
+        movement.ApprovedBySubject = context.User.FindFirstValue("sub") ?? "unknown";
+        movement.ApprovedAtUtc = DateTimeOffset.UtcNow;
+        audit.Add(context, "lodge.hospitalaria.expense.approved", nameof(LodgeHospitalariaMovement), movement.Id.ToString(), movement.OrganizationId, AuditResults.Success, new { movement.Amount, movement.Category });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(movement);
     }
 
     private static async Task<IResult> GetSummaryAsync(Guid organizationId, DateOnly? from, DateOnly? to, HttpContext context,
@@ -44,7 +62,7 @@ public static class LodgeHospitalariaEndpoints
         var end = to ?? start.AddMonths(1).AddDays(-1);
         var rows = await db.LodgeHospitalariaMovements.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.MovementDate >= start && x.MovementDate <= end).ToListAsync(ct);
         var income = rows.Where(x => x.MovementType == HospitalariaMovementCodes.Income).Sum(x => x.Amount);
-        var expenses = rows.Where(x => x.MovementType == HospitalariaMovementCodes.Expense).Sum(x => x.Amount);
+        var expenses = rows.Where(x => x.MovementType == HospitalariaMovementCodes.Expense && x.ApprovalStatus == HospitalariaMovementCodes.Approved).Sum(x => x.Amount);
         return Results.Ok(new { organizationId, from = start, to = end, income, expenses, balance = income - expenses,
             movements = rows.Count, categories = rows.GroupBy(x => x.Category).Select(g => new { category = g.Key, total = g.Sum(x => x.Amount), count = g.Count() }), items = rows.OrderByDescending(x => x.MovementDate) });
     }
@@ -63,6 +81,9 @@ public static class HospitalariaMovementCodes
     public const string CharityAid = "charity_aid";
     public const string Supplies = "supplies";
     public const string Ceremony = "ceremony";
+    public const string PendingApproval = "pending_approval";
+    public const string Approved = "approved";
+    public const string NotRequired = "not_required";
     public static bool IsValidType(string value) => value is Income or Expense;
     public static bool IsValidCategory(string value) => value is DeathReplenishment or AnnualFund or CharityBag or InitiationFee or CharityAid or Supplies or Ceremony;
 }
