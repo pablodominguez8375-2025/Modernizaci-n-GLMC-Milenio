@@ -69,13 +69,17 @@ interface MembershipApiClientOptions { baseUrl?: string; getAccessToken?: Member
 
 const org1 = '11111111-1111-1111-1111-111111111111'
 const org23 = '23232323-2323-2323-2323-232323232323'
-const demoMembers: MemberDirectoryItem[] = [
-  { memberId: 'aaaaaaaa-1111-1111-1111-111111111111', displayName: 'Ana María Rojas Salazar', institutionalNumber: 'GLMC-01842', membershipStatus: 'active', membershipType: 'regular', startDate: '2018-03-12', endDate: null, currentDegree: 'master', institutionalStatus: 'active' },
-  { memberId: 'aaaaaaaa-2222-2222-2222-222222222222', displayName: 'Carla Fernández Morales', institutionalNumber: 'GLMC-01977', membershipStatus: 'active', membershipType: 'regular', startDate: '2019-05-15', endDate: null, currentDegree: 'fellowcraft', institutionalStatus: 'active' },
-  { memberId: 'aaaaaaaa-3333-3333-3333-333333333333', displayName: 'Daniela Torres Alarcón', institutionalNumber: 'GLMC-02314', membershipStatus: 'active', membershipType: 'regular', startDate: '2023-08-10', endDate: null, currentDegree: 'apprentice', institutionalStatus: 'active' },
-  { memberId: 'aaaaaaaa-4444-4444-4444-444444444444', displayName: 'Marcelo Fuentes Araya', institutionalNumber: 'GLMC-01503', membershipStatus: 'active', membershipType: 'regular', startDate: '2016-09-03', endDate: null, currentDegree: 'master', institutionalStatus: 'active' },
-  { memberId: 'aaaaaaaa-6666-6666-6666-666666666666', displayName: 'Patricio Mendoza Silva', institutionalNumber: 'GLMC-01298', membershipStatus: 'transferred', membershipType: 'regular', startDate: '2014-04-18', endDate: '2026-06-30', currentDegree: 'master', institutionalStatus: 'workshop_transfer' },
-]
+const demoWorkshopNumbers = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23]
+const demoMembers: MemberDirectoryItem[] = demoWorkshopNumbers.flatMap(workshopNumber => {
+  const memberPrefix = workshopNumber === 1 ? '11111111' : workshopNumber === 23 ? '23232323' : String(workshopNumber).padStart(8, '0')
+  const roles = [...Array.from({ length: 12 }, () => 'master'), ...Array.from({ length: 5 }, () => 'fellowcraft'), ...Array.from({ length: 5 }, () => 'apprentice'), ...Array.from({ length: 2 }, () => 'past_active')]
+  return roles.map((role, index) => {
+    const transferred = workshopNumber === 23 && index === 0
+    const memberId = transferred ? 'aaaaaaaa-6666-6666-6666-666666666666' : `${memberPrefix}-${String(index + 1).padStart(4, '0')}-0000-0000-${String(workshopNumber).padStart(12, '0')}`
+    const roleLabel = role === 'master' ? 'Maestro operativo' : role === 'fellowcraft' ? 'Compañero' : role === 'apprentice' ? 'Aprendiz operativo' : 'PAS activo'
+    return { memberId, displayName: `${roleLabel} ${String(index + 1).padStart(2, '0')} · Taller ${workshopNumber}`, institutionalNumber: `DEMO-${String(workshopNumber).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`, membershipStatus: transferred ? 'transferred' : 'active', membershipType: role === 'past_active' ? 'past_active' : 'regular', startDate: `202${Math.min(6, 1 + (index % 5))}-03-12`, endDate: transferred ? '2026-06-30' : null, currentDegree: role === 'past_active' ? 'past_active' : role, institutionalStatus: transferred ? 'workshop_transfer' : 'active' }
+  })
+})
 
 const demoSelfProfile: MemberSelfProfile = {
   member: { id: 'demo-self-member', institutionalNumber: 'DEMO-0001', firstNames: 'Hermano', lastNames: 'Demostrativo' },
@@ -109,11 +113,13 @@ export class MembershipApiClient {
 
   async getMembers(organizationId: string, filters: { query?: string; status?: string; limit?: number } = {}): Promise<MemberDirectoryResponse> {
     if (this.useMocks) {
-      let items = organizationId === org23 ? demoMembers.filter(x => x.memberId.endsWith('666666666666')) : demoMembers.filter(x => !x.memberId.endsWith('666666666666'))
+      const workshopNumber = organizationId === org23 ? '23' : organizationId === org1 ? '1' : String(parseInt(organizationId.slice(-12), 10))
+      let items = demoMembers.filter(x => x.memberId.endsWith(String(workshopNumber).padStart(12, '0')))
+      if (organizationId === org23) items = demoMembers.filter(x => x.memberId.endsWith('000000000023') || x.memberId === 'aaaaaaaa-6666-6666-6666-666666666666')
       if (filters.status) items = items.filter(x => x.membershipStatus === filters.status)
       if (filters.query?.trim()) { const q = normalize(filters.query); items = items.filter(x => normalize(`${x.displayName} ${x.institutionalNumber ?? ''}`).includes(q)) }
       const max = Math.max(1, Math.min(filters.limit ?? 100, 250))
-      return { organization: { id: organizationId, name: organizationId === org23 ? 'Taller Demostrativo Nº 23' : 'Taller Demostrativo Nº 1', number: organizationId === org23 ? '23' : '1', type: 'workshop' }, total: items.length, returned: Math.min(items.length, max), items: items.slice(0, max).map(x => ({ ...x })) }
+      return { organization: { id: organizationId, name: `Taller Demostrativo Nº ${workshopNumber}`, number: workshopNumber, type: 'workshop' }, total: items.length, returned: Math.min(items.length, max), items: items.slice(0, max).map(x => ({ ...x })) }
     }
     const query = new URLSearchParams({ organizationId })
     if (filters.query?.trim()) query.set('query', filters.query.trim())

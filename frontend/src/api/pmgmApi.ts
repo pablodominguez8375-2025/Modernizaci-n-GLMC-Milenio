@@ -120,10 +120,12 @@ const mockSession: SessionProfile = {
     canManagePrivacy: true,
   },
 }
-const defaultMockOrganizations: OrganizationOption[] = [
-  { id: '11111111-1111-1111-1111-111111111111', name: 'Taller Demostrativo Nº 1', number: '1', type: 'workshop' },
-  { id: '23232323-2323-2323-2323-232323232323', name: 'Taller Demostrativo Nº 23', number: '23', type: 'workshop' },
-]
+const defaultMockOrganizations: OrganizationOption[] = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23].map(number => ({
+  id: number === 1 ? '11111111-1111-1111-1111-111111111111' : number === 23 ? '23232323-2323-2323-2323-232323232323' : `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`,
+  name: `Taller Demostrativo Nº ${number}`,
+  number: String(number),
+  type: 'workshop',
+}))
 const defaultMockSpaces: InstitutionalSpace[] = [
   { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', code: 'TEMP-01', name: 'Templo Principal', spaceType: 'temple', location: 'Sede institucional', capacity: 80, status: 'active' },
   { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', code: 'SEC-01', name: 'Sala de Secretaría', spaceType: 'secretariat_room', location: 'Sede institucional', capacity: 16, status: 'active' },
@@ -163,6 +165,8 @@ export class PmgmApiClient {
   private readonly mockSpaces = [...defaultMockSpaces]
   private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
   private readonly mockDocuments: SecretariatDocument[] = []
+  // QA only: uploaded interview files live in browser memory for this session.
+  private readonly mockInterviewDocuments = new Map<string, { file: Blob; fileName: string; metadata: CandidateInterviewEvidence }>()
   private readonly mockCeremonies = defaultMockCeremonies.map(item => ({ ...item }))
   private readonly mockReviewCeremonies = defaultMockReviewCeremonies.map(cloneCeremonyQueueItem)
   private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
@@ -243,7 +247,11 @@ export class PmgmApiClient {
     const contentType = file.type || (extension === 'pdf' ? 'application/pdf' : extension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : '')
     if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(contentType)) throw new Error('La entrevista debe adjuntarse en Word (.docx) o PDF.')
     if (file.size <= 0 || file.size > 52_428_800) throw new Error('El archivo debe contener información y pesar como máximo 50 MB.')
-    if (this.useMocks) return { interviewId, documentVersionId: crypto.randomUUID(), fileName: file.name, result: metadata.result, summary: metadata.summary, sizeBytes: file.size }
+    if (this.useMocks) {
+      const documentVersionId = crypto.randomUUID()
+      this.mockInterviewDocuments.set(documentVersionId, { file, fileName: file.name, metadata: { ...metadata, documentVersionId } })
+      return { interviewId, documentVersionId, fileName: file.name, result: metadata.result, summary: metadata.summary, sizeBytes: file.size }
+    }
     return this.request<InterviewDocumentResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/entrevistas/${encodeURIComponent(interviewId)}/contenido`, { method: 'PUT', headers: { 'Content-Type': contentType, 'X-File-Name': encodeURIComponent(file.name), 'X-Interviewer': encodeURIComponent(metadata.interviewerDisplayName), 'X-Interview-Summary': encodeURIComponent(metadata.summary), 'X-Interview-Result': metadata.result, 'X-Interview-Date': metadata.interviewDate }, body: file })
   }
   async recordInterviewPackage(ceremonyRequestId: string, payload: InterviewPackageRequest): Promise<InterviewPackageResponse> {
