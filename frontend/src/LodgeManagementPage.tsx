@@ -17,6 +17,7 @@ import './lodgeManagementAreas.css'
 import LodgeBallotPanel from './LodgeBallotPanel'
 import MinuteExtractEditor from './MinuteExtractEditor'
 import LodgeWithdrawalsPanel from './LodgeWithdrawalsPanel'
+import LodgeTreasuryPanel from './LodgeTreasuryPanel'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -346,6 +347,8 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
     </section>
 
     <LodgeWithdrawalsPanel lodgeApi={lodgeApi} organizationId={organizationId} members={members} />
+
+    <LodgeTreasuryPanel api={api} organizationId={organizationId} />
 
     <section className="lodge-insight-grid">
       <article className="lodge-product-card lodge-next-meeting-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Próxima tenida</p><h2>{nextMeeting ? nextMeeting.title || meetingTypeLabel(nextMeeting.meetingType) : api.useMocks ? 'Tenida Ordinaria · demo' : 'Sin tenida programada'}</h2></div></div><strong className="lodge-next-date">{nextMeeting ? formatDateOnly(nextMeeting.meetingDate) : api.useMocks ? '26 de septiembre de 2026' : '—'}</strong><p>{nextMeeting ? `${meetingTypeLabel(nextMeeting.meetingType)} · ${gradeLabel(nextMeeting.grade)}` : api.useMocks ? '19:00 hrs. · Todos los grados' : 'Registre una tenida para comenzar.'}</p><button type="button" className="lodge-blue-button" onClick={() => setShowOperations(true)}>Preparar tenida</button></article>
