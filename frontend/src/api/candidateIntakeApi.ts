@@ -31,7 +31,11 @@ export interface CandidateWorkshopQueueItem {
   photoAvailable: boolean
   reviewStatus: CandidateReviewStatus | string
   createdAtUtc: string
+  orderLevelAlert: CandidateOrderBlockAlert | null
 }
+export interface CandidateOrderBlockAlert { previousCeremonyRequestId: string; previousWorkshopName: string; rejectionDate: string; reason: string }
+export interface CandidateOrderRejectionAlert { personId: string; firstNames: string; lastNames: string; workshopName: string; workshopNumber: string | null; rejectionDate: string; sourceReference: string | null; notes: string | null }
+export interface CandidateOrderRejectionAlertResponse { total: number; items: CandidateOrderRejectionAlert[] }
 
 export interface CandidateWorkshopQueueResponse {
   total: number
@@ -188,6 +192,7 @@ const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
     workshopName: 'Taller Demostrativo Nº 23',
     workshopNumber: '23',
     proposedDate: '2026-10-03',
+    orderLevelAlert: { previousCeremonyRequestId: 'eeeeeeee-4444-4444-4444-444444444444', previousWorkshopName: 'Taller Demostrativo Nº 7', rejectionDate: '2026-09-30', reason: 'Rechazo en Cámara del Medio / tercer grado' },
     requestStatus: 'under_review',
     profileAvailable: true,
     photoAvailable: true,
@@ -207,6 +212,7 @@ const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
     photoAvailable: false,
     reviewStatus: 'pending_grand_secretariat',
     createdAtUtc: '2026-09-10T12:00:00Z',
+    orderLevelAlert: null,
   },
 ]
 
@@ -271,6 +277,11 @@ export class CandidateIntakeApiClient {
   async getWorkshopQueue(): Promise<CandidateWorkshopQueueResponse> {
     if (this.useMocks) return { total: this.mockWorkshopQueue.length, items: this.mockWorkshopQueue.map(item => ({ ...item })) }
     return this.request<CandidateWorkshopQueueResponse>('/api/insinuados/taller/solicitudes')
+  }
+
+  async getOrderRejectionAlerts(): Promise<CandidateOrderRejectionAlertResponse> {
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
+    return this.request<CandidateOrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
   }
 
   async getGrandSecretariatQueue(status?: CandidateReviewStatus | string): Promise<CandidateReviewQueueResponse> {

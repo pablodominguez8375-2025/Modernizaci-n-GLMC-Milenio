@@ -164,6 +164,12 @@ it('validates and records only aggregate third-degree open-vote results', async 
   expect(result.thirdDegree).toMatchObject({ status: 'approved', code: 'third_degree_review.approved' })
 })
 
+it('exposes order-level third-degree rejection alerts only as protected antecedents', async () => {
+  const alerts = await new PmgmApiClient({ useMocks: true }).getOrderRejectionAlerts()
+  expect(alerts.total).toBe(1)
+  expect(alerts.items[0]).toMatchObject({ workshopName: 'Taller Demostrativo Nº 7', reason: 'Rechazo en Cámara del Medio / tercer grado' })
+})
+
 it('posts the third-degree extract reference and aggregate vote to the protected endpoint', async () => {
   const response = { thirdDegree: { id: 'v3', status: 'approved', code: 'third_degree_review.approved', reason: 'Aprobada' }, status: 'under_review' }
   const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)

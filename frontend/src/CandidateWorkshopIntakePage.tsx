@@ -218,6 +218,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
 
           {locked && <div className="candidate-protected-notice">Esta ficha está {selected.reviewStatus === 'approved' ? 'aprobada/publicada' : 'rechazada'} y se muestra en modo de sólo lectura. Cualquier reapertura deberá quedar trazada mediante un flujo institucional específico.</div>}
 
+          {selected.orderLevelAlert && <div className="error-banner" role="alert"><strong>Alerta transversal de la Orden</strong><span>Este candidato registra un rechazo en {selected.orderLevelAlert.previousWorkshopName} el {formatDateOnly(selected.orderLevelAlert.rejectionDate)}: {selected.orderLevelAlert.reason}. Régimen Interior debe consultar el antecedente antes de permitir una nueva presentación.</span></div>}
+
           <section className="candidate-product-card">
             <div className="candidate-section-title"><span>▣</span><h2>Datos personales y de contacto</h2><em>Núcleo institucional protegido</em></div>
             <div className="workshop-form-grid">

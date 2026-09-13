@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient, type RegimenInteriorSummary } from './api/pmgmApi'
+import type { OrderRejectionAlert } from './api/pmgmApi'
 import './regimen.css'
 
 export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
@@ -11,6 +12,7 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
   const [summary, setSummary] = useState<RegimenInteriorSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [rejectionAlerts, setRejectionAlerts] = useState<OrderRejectionAlert[]>([])
 
   const load = async (filters = { organizationId, from, asOf }) => {
     setLoading(true); setError(null)
@@ -21,8 +23,8 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
 
   useEffect(() => {
     let active = true
-    Promise.all([api.getOrganizationOptions(), api.getRegimenInteriorSummary({ from: `${today.slice(0, 4)}-01-01`, asOf: today })])
-      .then(([orgs, report]) => { if (active) { setOrganizations(orgs.items); setSummary(report) } })
+    Promise.all([api.getOrganizationOptions(), api.getRegimenInteriorSummary({ from: `${today.slice(0, 4)}-01-01`, asOf: today }), api.getOrderRejectionAlerts()])
+      .then(([orgs, report, alerts]) => { if (active) { setOrganizations(orgs.items); setSummary(report); setRejectionAlerts(alerts.items) } })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible cargar Régimen Interior.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -40,6 +42,7 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
       <button className="primary-action" disabled={loading}>Actualizar reporte</button>
     </form></section>
     {loading && !summary ? <div className="panel"><p>Cargando reporte institucional…</p></div> : summary && <Report summary={summary} />}
+    <section className="panel report-wide"><div className="panel-heading"><div><p className="eyebrow">Antecedentes transversales · acceso restringido</p><h2>Alertas de candidatos rechazados en Cámara del Medio</h2><p>Consulta para detectar una ficha previa en otro Taller antes de autorizar una nueva presentación.</p></div><span className="count-badge">{rejectionAlerts.length} alertas</span></div>{rejectionAlerts.length === 0 ? <p className="muted">No hay rechazos registrados.</p> : <div className="table-wrap"><table><thead><tr><th>Candidato</th><th>Taller que rechazó</th><th>Fecha</th><th>Referencia</th></tr></thead><tbody>{rejectionAlerts.map((alert, index) => <tr key={`${alert.personId}-${alert.rejectionDate}-${index}`}><td><strong>{alert.firstNames} {alert.lastNames}</strong><small>ID transversal protegido</small></td><td>{alert.workshopName}{alert.workshopNumber ? ` · Nº ${alert.workshopNumber}` : ''}</td><td>{formatDateOnly(alert.rejectionDate)}</td><td>{alert.sourceReference ?? 'Sin referencia'}</td></tr>)}</tbody></table></div>}</section>
     {api.useMocks && <AssemblyRosterDemo />}
   </>
 }
