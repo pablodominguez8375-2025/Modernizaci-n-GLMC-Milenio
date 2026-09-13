@@ -31,6 +31,18 @@ it('builds Regimen Interior aggregate query without personal identifiers', async
   expect(fetch.mock.calls[0][0]).toBe('/api/regimen-interior/summary?asOf=2026-09-08&from=2026-01-01')
 })
 
+it('keeps the Regimen Interior QA report aligned with twenty agreed workshops', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const order = await client.getRegimenInteriorSummary()
+  expect(order.members.currentlyAffiliated).toBe(480)
+  expect(order.members.active).toBe(480)
+  expect(order.degreeDistribution).toEqual({ master: 240, fellowcraft: 100, apprentice: 100, past_active: 40 })
+
+  const workshop = await client.getRegimenInteriorSummary({ organizationId: '11111111-1111-1111-1111-111111111111' })
+  expect(workshop.members.currentlyAffiliated).toBe(24)
+  expect(workshop.degreeDistribution).toEqual({ master: 12, fellowcraft: 5, apprentice: 5, past_active: 2 })
+})
+
 it('uses the minimized ceremony review queue and role-scoped workflow endpoints', async () => {
   const queue = { total: 1, items: [{ id: 'c1', organizationId: 'o1', organizationName: 'Taller 1', organizationNumber: '1', ceremonyType: 'wage_increase', subjectDisplayName: 'Hermano Ejemplo', proposedDate: '2026-10-01', status: 'under_review', eligibility: { status: 'complies', canAuthorize: true, publication: null, requirements: [{ code: 'regimen_interior', name: 'Régimen Interior', status: 'approved', reason: 'Aprobación vigente registrada.' }] }, actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true }, createdAtUtc: '2026-09-08T12:00:00Z' }] }
   const fetch = vi.fn()
