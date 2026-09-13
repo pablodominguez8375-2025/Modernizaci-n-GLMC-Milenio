@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { PmgmApiClient } from './api/pmgmApi'
+import type { CandidatePublicationWorkflowResponse, PmgmApiClient } from './api/pmgmApi'
 import type { DemoProfileKey } from './demoProfiles'
 import './initiationCircuit.css'
 import './initiationDeliberation.css'
@@ -33,6 +33,8 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
   const [presentVoters, setPresentVoters] = useState(12)
   const [votesInFavor, setVotesInFavor] = useState(12)
   const [deliberationSource, setDeliberationSource] = useState('ACTA-1G-DEMO-2026-001')
+  const [publication, setPublication] = useState<CandidatePublicationWorkflowResponse | null>(null)
+  const [publicationControlDate, setPublicationControlDate] = useState('2026-09-14')
   const current = stages[selected]
   const canDecideCurrent = !demoProfileKey || demoProfileKey === 'grandLodge' || demoProfileKey === current.profile
   const finished = completed === stages.length
@@ -49,6 +51,17 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
         if (result.validationStatus !== 'approved') {
           setDecision(result.validationStatus)
           setHistory(items => [`${stages[completed].title} — ${result.reason} · respaldo ${deliberationSource || 'sin referencia'}`, ...items])
+          return
+        }
+      }
+      if (completed === 2) {
+        const result = publication ?? await api.publishCeremonyCandidate('eeeeeeee-2222-2222-2222-222222222222')
+        setPublication(result)
+        const controlDate = api.useMocks ? publicationControlDate : new Date().toISOString().slice(0, 10)
+        const elapsedDays = Math.max(0, dateOnlyDayNumber(controlDate) - dateOnlyDayNumber(result.publishedFromUtc.slice(0, 10)))
+        if (elapsedDays < result.requiredDays) {
+          setDecision('observed')
+          setHistory(items => [`${stages[completed].title} — ${elapsedDays}/${result.requiredDays} días cumplidos; disponible desde ${formatDateOnly(addDays(result.publishedFromUtc.slice(0, 10), result.requiredDays))}`, ...items])
           return
         }
       }
@@ -101,9 +114,10 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
         {selected === completed && !finished && !canDecideCurrent && <div className="error-banner" role="status"><strong>Cambio de perfil requerido.</strong><span>Seleccione “{current.owner}” en Perfil QA para resolver esta tarea.</span></div>}
         {selected === 0 && <div className="initiation-fields"><label>Insinuado<input value="Persona Demostrativa Centenario" readOnly /></label><label>Taller<input value="Taller Demostrativo Nº 23" readOnly /></label><label>Fecha de ingreso<input value="12-09-2026" readOnly /></label><label>Secretario responsable<input value="Secretario Demostrativo" readOnly /></label></div>}
         {selected === 1 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Reglas automáticas</strong><span>Presentación: 12-09-2026 · espera mínima: 7 días · aprobación: unanimidad</span></div><div className="initiation-fields"><label>Fecha de deliberación<input type="date" value={deliberationDate} onChange={event => setDeliberationDate(event.target.value)} /></label><label>Asambleístas presentes<input type="number" min="1" value={presentVoters} onChange={event => setPresentVoters(Number(event.target.value))} /></label><label>Votos favorables<input type="number" min="0" max={presentVoters} value={votesInFavor} onChange={event => setVotesInFavor(Number(event.target.value))} /></label><label>Acta o extracto de respaldo<input value={deliberationSource} required maxLength={240} onChange={event => setDeliberationSource(event.target.value)} /></label></div><p className="initiation-vote-summary"><strong>{votesInFavor === presentVoters && presentVoters > 0 ? 'Unanimidad registrada' : 'La votación no es unánime'}</strong><span>{votesInFavor} de {presentVoters} votos favorables</span></p></div>}
+        {selected === 2 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Publicación institucional protegida</strong><span>Gran Secretaría publica sólo con ficha completa y deliberación inicial aprobada.</span></div><div className="initiation-fields"><label>Período exigido<input value={`${publication?.requiredDays ?? 20} días corridos`} readOnly /></label>{api.useMocks && <label>Fecha de control QA<input type="date" value={publicationControlDate} onChange={event => setPublicationControlDate(event.target.value)} /></label>}<label>Inicio de publicación<input value={publication ? formatDateOnly(publication.publishedFromUtc.slice(0, 10)) : 'Se asigna al publicar'} readOnly /></label><label>Notificaciones internas<input value={publication ? `${publication.notificationsCreated} generadas` : 'Pendientes'} readOnly /></label></div>{publication && <p className="initiation-vote-summary"><strong>{publication.status === 'published' ? 'Visible en portal institucional' : publication.status}</strong><span>Regla: {publication.ruleCode}</span></p>}</div>}
         {selected === 12 && <div className="initiation-document"><span>PLANCHA</span><strong>{completed > 12 ? 'AUT-CER-DEMO-2026-001' : 'Se genera únicamente tras el visto bueno'}</strong><small>Permanece vinculada al expediente y a las validaciones congeladas.</small></div>}
         {selected === 13 && <div className="initiation-member"><strong>{finished ? 'Aprendiz activado' : 'Activación todavía bloqueada'}</strong><span>{finished ? 'Persona Demostrativa Centenario · Miembro activo · 1.er grado' : 'La autorización no convierte por sí sola al candidato en hermano.'}</span></div>}
-        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 1 ? 'Registrar deliberación inicial' : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
+        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 1 ? 'Registrar deliberación inicial' : completed === 2 ? (publication ? 'Verificar plazo y continuar' : 'Aprobar y publicar insinuado') : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
       </section>
     </div>
 
@@ -117,3 +131,7 @@ function readDemoProgress(useMocks: boolean) {
   const stored = Number(window.localStorage.getItem('centenario.demo.initiation.completed') ?? '0')
   return Number.isInteger(stored) ? Math.max(0, Math.min(stored, stages.length)) : 0
 }
+
+function dateOnlyDayNumber(value: string) { const [year, month, day] = value.split('-').map(Number); return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000) }
+function addDays(value: string, days: number) { const date = new Date(`${value}T12:00:00Z`); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10) }
+function formatDateOnly(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }

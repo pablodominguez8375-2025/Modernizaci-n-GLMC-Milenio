@@ -404,6 +404,17 @@ public static class CeremonyEndpoints
             });
         }
 
+        var initialDeliberationApproved = await db.CeremonyValidations.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId &&
+                        x.ValidationType == CeremonyCodes.ValidationType.CandidateInitialDeliberation)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(x => x.Status == CeremonyCodes.ValidationStatus.Approved)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!initialDeliberationApproved)
+        {
+            return Results.Conflict(new { message = "La deliberación inicial debe estar aprobada antes de publicar al insinuado." });
+        }
+
         var intakeProfile = await intakeDb.CandidateIntakeProfiles.AsNoTracking()
             .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
         if (intakeProfile is null) return Results.Conflict(new { message = "Debe completar la ficha privada del insinuado antes de aprobar su publicación." });

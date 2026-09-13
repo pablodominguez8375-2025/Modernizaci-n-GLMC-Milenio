@@ -135,3 +135,8 @@ it('posts initial deliberation evidence to the protected workflow endpoint', asy
   const [url, options] = fetch.mock.calls[0]
   expect(url).toBe('/api/insinuados/solicitudes/c1/deliberacion-inicial'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 12, sourceReference: 'ACTA-1' })
 })
+
+it('publishes the circuit demo candidate with the configured twenty-day rule', async () => {
+  const result = await new PmgmApiClient({ useMocks: true }).publishCeremonyCandidate('eeeeeeee-2222-2222-2222-222222222222')
+  expect(result).toMatchObject({ status: 'published', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', notificationsCreated: 34 })
+})
