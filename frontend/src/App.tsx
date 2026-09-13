@@ -14,6 +14,7 @@ import GrandSecretariatPage from './GrandSecretariatPage'
 import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 import InternalAffairsDataQualityPage from './InternalAffairsDataQualityPage'
 import InternalAffairsMemberControlPage from './InternalAffairsMemberControlPage'
+import InitiationCircuitPage from './InitiationCircuitPage'
 import LibraryPage from './LibraryPage'
 import LodgeManagementPage from './LodgeManagementPage'
 import LodgeProfilePage from './LodgeProfilePage'
@@ -23,6 +24,7 @@ import NotificationsPage from './NotificationsPage'
 import PublishedCandidatePhoto from './PublishedCandidatePhoto'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
+import TreasuryStatementPage from './TreasuryStatementPage'
 import { type BootstrapApiClient } from './api/bootstrapApi'
 import { type CalendarApiClient } from './api/calendarApi'
 import { type CandidateIntakeApiClient } from './api/candidateIntakeApi'
@@ -38,7 +40,7 @@ import { type CandidatePublication, type CandidatePortalResponse, type PmgmApiCl
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
-type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'candidates' | 'candidateProfile' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
+type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
 
 interface AppProps {
@@ -108,6 +110,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
 
   const openNotificationAction = (actionUrl: string) => {
     const path = actionUrl.split(/[?#]/, 1)[0]
+    if (path === '/initiation-circuit') return setView('initiationCircuit')
     if (path === '/candidates') return setView('candidates')
     if (path === '/calendar' && canCalendar) return setView('calendar')
     if (path === '/ceremonies' && canCeremonies) return setView('ceremonies')
@@ -119,7 +122,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Ir a Mi ficha"><span className="brand-mark" aria-hidden="true">C</span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
       <span className="product-motto">100 años de historia · Un legado hacia el futuro</span>
-      <div className="topbar-meta">{api.useMocks && <><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /></>}{effectiveProfile && <span className="environment-badge">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.39' : `API v${systemInfo?.version ?? '—'}`}</span></div>
+      <div className="topbar-meta">{api.useMocks && <><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /></>}{effectiveProfile && <span className="environment-badge">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.44' : `API v${systemInfo?.version ?? '—'}`}</span></div>
     </header>
     <div className="workspace">
       <nav className="sidebar" aria-label="Navegación principal">
@@ -132,6 +135,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         <div className="nav-section">Procesos</div>
         <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('candidates')}><NavIcon name="candidate" /> Insinuados publicados</button>
         <ModuleAccess icon="candidate" label={canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados'} allowed={canCandidateProfile} active={view === 'candidateProfile'} onOpen={canCandidateProfile ? () => setView('candidateProfile') : undefined} />
+        <ModuleAccess icon="ceremony" label="Circuito de Iniciación" allowed={canCandidateProfile || canCeremonies} active={view === 'initiationCircuit'} onOpen={canCandidateProfile || canCeremonies ? () => setView('initiationCircuit') : undefined} />
         {hasInstitutionalManagement && <>
           <div className="nav-section">Gestión institucional</div>
           <ModuleAccess icon="members" label="Fichas de miembros" allowed={canMembers} active={view === 'members'} onOpen={canMembers ? () => setView('members') : undefined} />
@@ -142,6 +146,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="ceremony" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />
           <ModuleAccess icon="shield" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
           <ModuleAccess icon="treasury" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
+          <ModuleAccess icon="treasury" label="Cuadro mensual" allowed={canTreasury} active={view === 'treasuryStatement'} onOpen={canTreasury ? () => setView('treasuryStatement') : undefined} />
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
           <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
           <ModuleAccess icon="archive" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
@@ -164,6 +169,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'bootstrap' && canBootstrap && <BootstrapPage bootstrapApi={bootstrapApi} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
+        {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
         {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
@@ -175,6 +181,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
         {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
+        {view === 'treasuryStatement' && canTreasury && <TreasuryStatementPage api={api} />}
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}

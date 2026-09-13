@@ -4,8 +4,12 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.CandidateIntake;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
+using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Notifications;
 using PMGM.Api.Modules.Treasury;
 using PMGM.Api.Modules.Treasury.Entities;
@@ -29,11 +33,65 @@ public static class CeremonyEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/publicacion-insinuado", PublishCandidateAsync);
         group.MapGet("/solicitudes/{requestId:guid}/elegibilidad", GetEligibilityAsync);
         group.MapPost("/solicitudes/{requestId:guid}/autorizar", AuthorizeAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/registrar-iniciacion", RegisterInitiationAsync);
         group.MapGet("/portal-insinuados", GetCandidatePortalAsync);
         group.MapPost("/reglas/publicacion-iniciacion", SetInitiationPublicationRuleAsync);
         group.MapGet("/reglas/publicacion-iniciacion", GetInitiationPublicationRuleAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> RegisterInitiationAsync(
+        Guid requestId,
+        RegisterInitiationRequest request,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        GrandSecretariatDbContext secretariatDb,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var ceremony = await db.CeremonyRequests.Include(x => x.CandidatePerson)
+            .SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+        if (ceremony is null) return Results.NotFound();
+        if (!access.CanManageOrganization(httpContext.User, ceremony.OrganizationId)) return Results.Forbid();
+        if (ceremony.CeremonyType != CeremonyCodes.Type.Initiation || ceremony.CandidatePersonId is null)
+            return Results.BadRequest(new { message = "La operación sólo corresponde a una ceremonia de Iniciación." });
+        if (ceremony.Status == CeremonyCodes.RequestStatus.Completed)
+            return Results.Conflict(new { message = "La Iniciación ya fue registrada y el Aprendiz ya está activado." });
+        if (ceremony.Status != CeremonyCodes.RequestStatus.Authorized)
+            return Results.Conflict(new { message = "La ceremonia debe estar autorizada antes de registrar su realización." });
+        if (request.CeremonyDate > ChileToday() || string.IsNullOrWhiteSpace(request.MinuteReference))
+            return Results.BadRequest(new { message = "La fecha no puede ser futura y la referencia del acta es obligatoria." });
+
+        var authorization = await secretariatDb.SecretariatDocuments.AsNoTracking()
+            .Where(x => x.RelatedCeremonyRequestId == requestId &&
+                        x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorization &&
+                        x.Status == GrandSecretariatCodes.DocumentStatus.Issued)
+            .OrderByDescending(x => x.IssuedAtUtc)
+            .Select(x => new { x.DocumentCode })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (authorization is null)
+            return Results.Conflict(new { message = "No puede registrarse la Iniciación sin una Plancha de autorización vigente emitida por Gran Secretaría." });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        if (await db.Members.AnyAsync(x => x.PersonId == ceremony.CandidatePersonId.Value, cancellationToken))
+            return Results.Conflict(new { message = "La persona ya se encuentra activada como miembro." });
+
+        var evidence = $"{authorization.DocumentCode}; {request.MinuteReference.Trim()}";
+        var member = new Member { PersonId = ceremony.CandidatePersonId.Value };
+        db.Members.Add(member);
+        db.Memberships.Add(new PMGM.Api.Modules.Membership.Entities.Membership { Member = member, OrganizationId = ceremony.OrganizationId, MembershipType = "regular", StartDate = request.CeremonyDate, Status = MembershipCodes.MembershipStatus.Active, EvidenceReference = evidence });
+        db.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent { Member = member, OrganizationId = ceremony.OrganizationId, EventType = MembershipCodes.InstitutionalStatus.Active, EffectiveDate = request.CeremonyDate, EvidenceReference = evidence, Reason = "Activación por ceremonia de Iniciación realizada." });
+        db.DegreeEvents.Add(new DegreeEvent { Member = member, OrganizationId = ceremony.OrganizationId, Degree = "apprentice", EventType = MembershipCodes.DegreeEvent.Initiation, EffectiveDate = request.CeremonyDate, EvidenceReference = evidence });
+        ceremony.Member = member;
+        ceremony.Status = CeremonyCodes.RequestStatus.Completed;
+
+        audit.Add(httpContext, "ceremony.initiation.completed", nameof(CeremonyRequest), ceremony.Id.ToString(), ceremony.OrganizationId, AuditResults.Success,
+            new { member.Id, ceremony.CandidatePersonId, request.CeremonyDate, request.MinuteReference, authorization.DocumentCode, degree = "apprentice", membershipStatus = "active" });
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return Results.Ok(new { ceremony.Id, ceremony.Status, memberId = member.Id, membershipStatus = "active", degree = "apprentice", effectiveDate = request.CeremonyDate, authorization.DocumentCode });
     }
 
     private static async Task<IResult> CreateRequestAsync(
@@ -283,6 +341,7 @@ public static class CeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        CandidateIntakeDbContext intakeDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         IInstitutionalNotificationService notifications,
@@ -344,6 +403,18 @@ public static class CeremonyEndpoints
                 notificationsCreated = reconciled.Created
             });
         }
+
+        var intakeProfile = await intakeDb.CandidateIntakeProfiles.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
+        if (intakeProfile is null) return Results.Conflict(new { message = "Debe completar la ficha privada del insinuado antes de aprobar su publicación." });
+        var completeness = CandidateIntakeCompletenessPolicy.Evaluate(
+            intakeProfile,
+            ceremony.CandidatePerson.FirstNames,
+            ceremony.CandidatePerson.Phone,
+            ceremony.CandidatePerson.Email,
+            ceremony.CandidatePerson.Address);
+        if (!completeness.IsComplete)
+            return Results.Conflict(new { message = "La ficha no está completa para publicación.", missingRequirements = completeness.MissingRequirements });
 
         var today = ChileToday();
         var requiredDays = await GetMinimumPublicationDaysAsync(db, today, cancellationToken);
@@ -1008,6 +1079,8 @@ public sealed record CandidatePublicationReviewRequest(
     string Decision,
     string? SourceReference,
     string? Notes);
+
+public sealed record RegisterInitiationRequest(DateOnly CeremonyDate, string MinuteReference);
 
 public sealed record InitiationPublicationRuleRequest(
     int MinimumDays,

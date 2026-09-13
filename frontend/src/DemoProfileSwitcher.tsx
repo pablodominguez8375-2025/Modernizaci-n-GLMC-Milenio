@@ -24,6 +24,11 @@ export default function DemoProfileSwitcher({ value, onChange }: DemoProfileSwit
     <select value={value} onChange={event => onChange(event.target.value as DemoProfileKey)} aria-label="Seleccionar perfil de demostración">
       <option value="brother">Hermano</option>
       <option value="lodge">Autoridad de Taller</option>
+      <option value="regimen">Régimen Interior</option>
+      <option value="treasury">Gran Tesorero</option>
+      <option value="hospitalaria">Gran Hospitalaria</option>
+      <option value="secretariat">Gran Secretaría</option>
+      <option value="grandMaster">Gran Maestra</option>
       <option value="grandLodge">Autoridad de Gran Logia</option>
     </select>
   </label>

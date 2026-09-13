@@ -107,6 +107,12 @@ Una plancha de autorización sólo puede emitirse después de cumplir la matriz 
 
 ### 4.4 Gestión Logial
 
+La Gestión Logial es el ámbito de administración propio de cada Taller. Incluye, como mínimo, **Secretaría del Taller, Tesorería del Taller, Hospitalaria del Taller y Docencia/Instrucción**. Estas funciones locales se integran con Gran Secretaría, Gran Tesorería y Gran Hospitalaria, pero no se confunden con ellas ni transfieren automáticamente sus atribuciones.
+
+- Secretaría del Taller: tenidas, asistencia, actas, correspondencia, comunicaciones y tramitación de solicitudes;
+- Tesorería del Taller: cuotas, aportes, pagos parciales, comprobantes, libro mayor, conciliación y rendición a Gran Tesorería;
+- Hospitalaria del Taller: bolso, ayudas, aportes, reposiciones, transferencias y rendición a Gran Hospitalaria;
+- Docencia/Instrucción: planificación por grado, sesiones, asistencia y seguimiento, bajo responsabilidad de los Vigilantes y del Ex Venerable Maestro conforme a sus cargos y a la normativa aplicable;
 - ficha del Taller;
 - cargos y períodos;
 - tenidas por grado/tipo;
@@ -117,7 +123,7 @@ Una plancha de autorización sólo puede emitirse después de cumplir la matriz 
 - dashboard operativo del Taller;
 - repositorio operativo del Taller dentro de los límites definidos.
 
-### 4.5 Tesorería
+### 4.5 Gran Tesorería
 
 - estado financiero por hermano y por Taller;
 - cuadro de pagos institucional;
@@ -153,6 +159,7 @@ Flujo institucional consolidado desde el Protocolo 2026:
 - Cuestionario Confidencial y autobiografía;
 - revisión/votación de 3.er grado;
 - balotaje en 1.er grado después de cumplir publicación y antecedentes;
+- balotaje, votación y sufragio siempre anónimos: se conserva por separado la asistencia o padrón de habilitados y únicamente el recuento agregado de balotas blancas/negras, votos positivos/negativos o totales por candidatura; nunca existe vínculo entre persona y voto, conforme a `PMGM-ARCH-006`;
 - rechazo con fecha, etapa y causas;
 - nueva presentación sólo cuando se cumpla el plazo reglamentario y conste subsanación.
 
@@ -251,14 +258,26 @@ No se implementa CENDOC como módulo, dependencia ni sustituto de Biblioteca Vir
 
 ### 4.12 Docencia
 
+- forma parte de la Gestión Logial de cada Taller;
+- es gestionada por los Vigilantes y el Ex Venerable Maestro, con asignaciones configurables conforme a la normativa institucional;
 - instrucciones por grado;
-- asistencia;
+- registro de cada instrucción con fecha, tema, grado, responsable y material asociado;
+- programación previa de instrucciones y Tenidas, proyectadas automáticamente al calendario;
+- estados diferenciados: programada, realizada/cerrada y cancelada;
+- Segundo Vigilante para Aprendices, Primer Vigilante para Compañeros y Ex Venerable Maestro para Maestros, salvo regla institucional posterior parametrizada;
+- asistencia individual específica a cada instrucción, con presente o ausente en el MVP, separada de la asistencia general a Tenida aunque pueda vincularse a ella;
+- registro y corrección de asistencia sólo después de la ejecución de la instrucción o Tenida;
+- historial formativo simple por hermano; evaluaciones y rúbricas quedan fuera del MVP;
 - planchas asociadas al historial del hermano cuando corresponda;
 - publicación en Biblioteca sólo cuando exista autorización y permisos compatibles;
 - filtros por grado y Taller/contexto según política.
 
 ### 4.13 Calendario y Notificaciones
 
+- una Tenida o instrucción programada se refleja automáticamente sin volver a digitarla;
+- calendario personal: reúne los eventos que el usuario puede ver según pertenencia, grado, cargo y permisos;
+- calendario del Taller: muestra las actividades programadas del Taller a sus integrantes autorizados;
+- calendario de la Orden: vista consolidada para perfiles institucionales habilitados, respetando visibilidad y minimización;
 - notificaciones con plantillas, bandeja, cola, idempotencia y auditoría;
 - calendario en vistas agenda/mes;
 - exportación/sincronización cuando corresponda;

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
@@ -7,6 +8,7 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.DocumentManagement.Entities;
 
 namespace PMGM.Api.Modules.CandidateIntake;
 
@@ -22,6 +24,7 @@ public static class CandidateIntakeEndpoints
         group.MapGet("/solicitudes/{requestId:guid}/ficha", GetProfileAsync);
         group.MapGet("/revision-gran-secretaria", GetGrandSecretariatQueueAsync);
         group.MapPost("/solicitudes/{requestId:guid}/foto", AttachPhotoAsync);
+        group.MapPut("/solicitudes/{requestId:guid}/foto/contenido", UploadPhotoAsync);
         group.MapGet("/solicitudes/{requestId:guid}/foto", GetPrivatePhotoAsync);
 
         endpoints.MapGet("/api/candidate-publications/{publicationId:guid}/photo", GetPublishedPhotoAsync)
@@ -91,10 +94,16 @@ public static class CandidateIntakeEndpoints
         profile.Nationality = Normalize(request.Nationality);
         profile.CivilStatus = Normalize(request.CivilStatus);
         profile.Occupation = Normalize(request.Occupation);
+        profile.EmployerName = Normalize(request.EmployerName);
+        profile.WorkAddress = Normalize(request.WorkAddress);
+        profile.WorkPosition = Normalize(request.WorkPosition);
+        profile.WorkPhone = Normalize(request.WorkPhone);
         profile.City = Normalize(request.City);
         profile.Orient = Normalize(request.Orient);
         profile.PresentersJson = JsonSerializer.Serialize(presenters);
         profile.InsinuationDate = request.InsinuationDate;
+        profile.FirstDegreePresentationDate = request.FirstDegreePresentationDate;
+        profile.ResponsibleSecretaryName = Normalize(request.ResponsibleSecretaryName);
         profile.InterviewSummary = Normalize(request.InterviewSummary);
         profile.InternalObservations = Normalize(request.InternalObservations);
         profile.UpdatedBySubject = subject;
@@ -268,6 +277,8 @@ public static class CandidateIntakeEndpoints
             return Results.Conflict(new { message = "La fotografía debe completar carga y análisis antivirus antes de ser vinculada." });
         if (!CandidateIntakeCodes.PhotoContentType.IsAllowed(version.ContentType))
             return Results.BadRequest(new { message = "La foto tipo pasaporte debe ser JPEG o PNG." });
+        if (version.SizeBytes > 100 * 1024)
+            return Results.BadRequest(new { message = "La foto tipo pasaporte no puede superar 100 KB." });
 
         profile.PhotoVersionId = version.Id;
         profile.UpdatedBySubject = GetSubject(httpContext.User);
@@ -288,6 +299,74 @@ public static class CandidateIntakeEndpoints
         await coreDb.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(new { profile.CeremonyRequestId, photoAvailable = true });
+    }
+
+    private static async Task<IResult> UploadPhotoAsync(
+        Guid requestId,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        CandidateIntakeDbContext intakeDb,
+        DocumentManagementDbContext documentDb,
+        IInstitutionalAccessService access,
+        IDocumentObjectStore objectStore,
+        IDocumentMalwareScanner scanner,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var profile = await intakeDb.CandidateIntakeProfiles.SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
+        if (profile is null) return Results.NotFound(new { message = "Primero debe guardar la ficha del insinuado." });
+        if (!access.CanManageOrganization(httpContext.User, profile.OrganizationId)) return Results.Forbid();
+
+        var contentType = httpContext.Request.ContentType?.Split(';', 2)[0].Trim().ToLowerInvariant();
+        if (contentType is not ("image/jpeg" or "image/png")) return Results.BadRequest(new { message = "La fotografía debe ser JPG o PNG." });
+        var length = httpContext.Request.ContentLength;
+        if (length is null or <= 0 || length > CandidatePhotoPolicy.MaxBytes)
+            return Results.BadRequest(new { message = "La fotografía debe pesar como máximo 100 KB." });
+
+        await using var buffer = new MemoryStream((int)length.Value);
+        await httpContext.Request.Body.CopyToAsync(buffer, cancellationToken);
+        if (buffer.Length != length.Value || buffer.Length > CandidatePhotoPolicy.MaxBytes)
+            return Results.BadRequest(new { message = "El tamaño recibido de la fotografía no es válido." });
+        var bytes = buffer.ToArray();
+        if (!CandidatePhotoPolicy.MeetsMinimumDimensions(bytes, contentType, out var width, out var height))
+            return Results.BadRequest(new { message = "La fotografía debe ser válida y tener al menos 500 × 500 píxeles." });
+
+        DocumentMalwareScanResult scan;
+        try { scan = await scanner.ScanAsync(new MemoryStream(bytes, writable: false), cancellationToken); }
+        catch (Exception ex) when (ex is IOException or SocketException or InvalidDataException)
+        { return Results.Json(new { message = "El análisis antivirus no está disponible; intente nuevamente." }, statusCode: StatusCodes.Status503ServiceUnavailable); }
+        if (!scan.IsClean) return Results.UnprocessableEntity(new { message = "La fotografía fue rechazada por el análisis antivirus." });
+
+        var subject = GetSubject(httpContext.User);
+        var collectionCode = $"CANDIDATE-PHOTOS-{profile.OrganizationId:N}";
+        var collection = await documentDb.DocumentCollections.SingleOrDefaultAsync(x => x.Code == collectionCode, cancellationToken);
+        if (collection is null)
+        {
+            collection = new DocumentCollection { Code = collectionCode, Name = "Fotografías privadas de insinuados", Description = "Evidencia fotográfica privada del circuito de iniciación.", Scope = DocumentManagementCodes.Scope.Organization, OrganizationId = profile.OrganizationId, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = subject };
+            documentDb.DocumentCollections.Add(collection);
+        }
+        var document = new InstitutionalDocument { Collection = collection, OrganizationId = profile.OrganizationId, Title = $"Fotografía de insinuado {requestId:N}", DocumentType = "candidate_passport_photo", Classification = DocumentManagementCodes.Classification.Sensitive, AccessPolicy = DocumentManagementCodes.AccessPolicy.ManagementOnly, Status = DocumentManagementCodes.DocumentStatus.Active, CreatedBySubject = subject };
+        var encodedFileName = httpContext.Request.Headers["X-File-Name"].ToString();
+        string fileName;
+        try { fileName = Path.GetFileName(Uri.UnescapeDataString(encodedFileName)); }
+        catch (UriFormatException) { return Results.BadRequest(new { message = "El nombre codificado del archivo no es válido." }); }
+        if (string.IsNullOrWhiteSpace(fileName)) fileName = contentType == "image/png" ? "foto-insinuado.png" : "foto-insinuado.jpg";
+        if (fileName.Length > 500) return Results.BadRequest(new { message = "El nombre del archivo no puede superar 500 caracteres." });
+        var version = new DocumentVersion { Document = document, VersionNumber = 1, OriginalFileName = fileName, ContentType = contentType, SizeBytes = bytes.LongLength, Sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant(), ProcessingStatus = DocumentManagementCodes.ProcessingStatus.Available, ScanReference = scan.EvidenceReference, CreatedBySubject = subject };
+        version.ObjectKey = DocumentObjectKeyFactory.Create(document.Id, version.Id);
+        await objectStore.StoreAsync(version.ObjectKey, new MemoryStream(bytes, writable: false), contentType, cancellationToken);
+        documentDb.InstitutionalDocuments.Add(document);
+        documentDb.DocumentVersions.Add(version);
+        await documentDb.SaveChangesAsync(cancellationToken);
+
+        profile.PhotoVersionId = version.Id;
+        profile.UpdatedBySubject = subject;
+        profile.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        await intakeDb.SaveChangesAsync(cancellationToken);
+        coreDb.CeremonyValidations.Add(new PMGM.Api.Modules.Ceremonies.Entities.CeremonyValidation { CeremonyRequestId = requestId, ValidationType = CeremonyCodes.ValidationType.CandidatePublicationReview, Status = CeremonyCodes.ValidationStatus.Pending, AsOfDate = ChileToday(), SourceReference = profile.Id.ToString(), Notes = "Fotografía cargada, validada y ficha reenviada a revisión de Gran Secretaría." });
+        audit.Add(httpContext, "candidate.intake.photo_uploaded", nameof(CandidateIntakeProfile), profile.Id.ToString(), profile.OrganizationId, AuditResults.Success, new { profile.CeremonyRequestId, profile.PhotoVersionId, width, height, bytes = version.SizeBytes });
+        await coreDb.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { profile.CeremonyRequestId, photoAvailable = true, width, height, sizeBytes = version.SizeBytes });
     }
 
     private static async Task<IResult> GetPrivatePhotoAsync(
@@ -366,6 +445,7 @@ public static class CandidateIntakeEndpoints
             .FirstOrDefaultAsync(cancellationToken);
         var published = await coreDb.CandidatePublications.AsNoTracking()
             .AnyAsync(x => x.CeremonyRequestId == profile.CeremonyRequestId && x.Status == CeremonyCodes.PublicationStatus.Published, cancellationToken);
+        var completeness = CandidateIntakeCompletenessPolicy.Evaluate(profile, person.FirstNames, person.Phone, person.Email, person.Address);
 
         return new CandidateIntakeProfileDto(
             profile.CeremonyRequestId,
@@ -377,6 +457,10 @@ public static class CandidateIntakeEndpoints
             profile.Nationality,
             profile.CivilStatus,
             profile.Occupation,
+            profile.EmployerName,
+            profile.WorkAddress,
+            profile.WorkPosition,
+            profile.WorkPhone,
             person.Phone,
             person.Email,
             person.Address,
@@ -386,8 +470,12 @@ public static class CandidateIntakeEndpoints
             profile.Orient,
             JsonSerializer.Deserialize<string[]>(profile.PresentersJson) ?? [],
             profile.InsinuationDate,
+            profile.FirstDegreePresentationDate,
+            profile.ResponsibleSecretaryName,
             published ? CandidateIntakeCodes.ReviewStatus.Approved : MapReviewStatus(latestReview),
             profile.PhotoVersionId is not null,
+            completeness.Percent,
+            completeness.MissingRequirements,
             profile.InterviewSummary,
             profile.InternalObservations,
             profile.SubmittedAtUtc,
@@ -410,8 +498,12 @@ public static class CandidateIntakeEndpoints
         if (request.MaternalSurname?.Length > 160) return "El apellido materno no puede exceder 160 caracteres.";
         if (request.RutOrInstitutionalId?.Length > 80) return "El RUT/ID no puede exceder 80 caracteres.";
         if (request.Email?.Length > 320 || request.Phone?.Length > 80 || request.Address?.Length > 500) return "Uno de los datos de contacto excede el máximo permitido.";
+        if (request.EmployerName?.Length > 240 || request.WorkAddress?.Length > 500 || request.WorkPosition?.Length > 240 || request.WorkPhone?.Length > 80) return "Uno de los antecedentes laborales excede el máximo permitido.";
         if (request.Presenters.Count is < 1 or > 8 || request.Presenters.Any(x => string.IsNullOrWhiteSpace(x) || x.Length > 200)) return "Debe registrar entre 1 y 8 presentantes válidos.";
         if (request.InsinuationDate > ChileToday()) return "La fecha de insinuación no puede estar en el futuro.";
+        if (request.FirstDegreePresentationDate is not null && request.FirstDegreePresentationDate > ChileToday()) return "La presentación en 1.er grado no puede estar en el futuro.";
+        if (request.FirstDegreePresentationDate is not null && request.FirstDegreePresentationDate < request.InsinuationDate) return "La presentación en 1.er grado no puede ser anterior al ingreso de la insinuación.";
+        if (request.ResponsibleSecretaryName?.Length > 240) return "El nombre del secretario responsable no puede exceder 240 caracteres.";
         if (request.BirthDate is not null && request.BirthDate > ChileToday()) return "La fecha de nacimiento no puede estar en el futuro.";
         if (request.InterviewSummary?.Length > 4000 || request.InternalObservations?.Length > 4000) return "Las observaciones no pueden exceder 4000 caracteres.";
         return null;
@@ -439,6 +531,10 @@ public sealed record CandidateIntakeUpsertRequest(
     string? Nationality,
     string? CivilStatus,
     string? Occupation,
+    string? EmployerName,
+    string? WorkAddress,
+    string? WorkPosition,
+    string? WorkPhone,
     string? Phone,
     string? Email,
     string? Address,
@@ -446,6 +542,8 @@ public sealed record CandidateIntakeUpsertRequest(
     string? Orient,
     IReadOnlyList<string> Presenters,
     DateOnly InsinuationDate,
+    DateOnly? FirstDegreePresentationDate,
+    string? ResponsibleSecretaryName,
     string? InterviewSummary,
     string? InternalObservations);
 
@@ -461,6 +559,10 @@ public sealed record CandidateIntakeProfileDto(
     string? Nationality,
     string? CivilStatus,
     string? Occupation,
+    string? EmployerName,
+    string? WorkAddress,
+    string? WorkPosition,
+    string? WorkPhone,
     string? Phone,
     string? Email,
     string? Address,
@@ -470,8 +572,12 @@ public sealed record CandidateIntakeProfileDto(
     string? Orient,
     IReadOnlyList<string> Presenters,
     DateOnly InsinuationDate,
+    DateOnly? FirstDegreePresentationDate,
+    string? ResponsibleSecretaryName,
     string ReviewStatus,
     bool PhotoAvailable,
+    int CompletenessPercent,
+    IReadOnlyList<string> MissingRequirements,
     string? InterviewSummary,
     string? InternalObservations,
     DateTimeOffset SubmittedAtUtc,

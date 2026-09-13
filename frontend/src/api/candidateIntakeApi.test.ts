@@ -12,7 +12,12 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     const profile = await api.getProfile(queue.items[0].ceremonyRequestId)
     expect(profile.rutOrInstitutionalId).toContain('DEMO')
     expect(profile.email).toContain('ejemplo.cl')
+    expect(profile.employerName).toContain('Demostrativa')
+    expect(profile.firstDegreePresentationDate).toBe('2026-08-28')
+    expect(profile.responsibleSecretaryName).toContain('Demostrativo')
     expect(profile.photoAvailable).toBe(true)
+    expect(profile.completenessPercent).toBe(100)
+    expect(profile.missingRequirements).toEqual([])
   })
 
   it('loads the transversal publication list with safe photo routes', async () => {
@@ -40,6 +45,10 @@ describe('CandidateIntakeApiClient demo workflow', () => {
       nationality: 'Chilena · demo',
       civilStatus: 'Demo',
       occupation: 'Profesión ficticia',
+      employerName: 'Empresa ficticia',
+      workAddress: 'Dirección laboral ficticia',
+      workPosition: 'Cargo ficticio',
+      workPhone: '+56 2 2000 0000',
       phone: '+56 9 0000 0000',
       email: 'taller.qa@ejemplo.cl',
       address: 'Dirección ficticia',
@@ -47,6 +56,8 @@ describe('CandidateIntakeApiClient demo workflow', () => {
       orient: 'Santiago',
       presenters: ['H∴ Presentante QA'],
       insinuationDate: '2026-09-01',
+      firstDegreePresentationDate: '2026-09-05',
+      responsibleSecretaryName: 'H∴ Secretario QA',
       interviewSummary: 'Entrevista ficticia.',
       internalObservations: 'Sólo QA.',
     })
@@ -56,6 +67,8 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(saved.reviewStatus).toBe('pending_grand_secretariat')
     expect(row?.profileAvailable).toBe(true)
     expect(row?.reviewStatus).toBe('pending_grand_secretariat')
+    expect(saved.workPosition).toBe('Cargo ficticio')
+    expect(saved.responsibleSecretaryName).toBe('H∴ Secretario QA')
 
     const published = await api.getPublishedCandidates()
     expect(published.items.some(item => item.displayName === saved.firstNames)).toBe(false)
@@ -80,6 +93,18 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(profile.photoAvailable).toBe(true)
     expect(profile.reviewStatus).toBe('pending_grand_secretariat')
     expect(row?.photoAvailable).toBe(true)
+  })
+
+  it('uploads a selected photo directly in the demo contract', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const queue = await api.getWorkshopQueue()
+    const requestId = queue.items[0].ceremonyRequestId
+    const photo = new File([new Uint8Array([137, 80, 78, 71])], 'foto-demo.png', { type: 'image/png' })
+
+    await api.uploadPhoto(requestId, photo)
+
+    expect(await api.getPrivatePhoto(requestId)).toBe(photo)
+    expect((await api.getProfile(requestId)).photoAvailable).toBe(true)
   })
 
   it('records an observation and refreshes its state without publishing', async () => {
@@ -107,5 +132,20 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     const profile = await api.getProfile(requestId)
     expect(approved.items.some(item => item.ceremonyRequestId === requestId)).toBe(true)
     expect(profile.reviewStatus).toBe('approved')
+  })
+
+  it('blocks publication when the official profile is incomplete', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const pending = (await api.getWorkshopQueue()).items.find(item => !item.profileAvailable)!
+    const profile = await api.saveProfile(pending.ceremonyRequestId, {
+      firstNames: 'Persona Incompleta',
+      paternalSurname: 'QA',
+      presenters: ['H∴ Presentante QA'],
+      insinuationDate: '2026-09-01',
+    })
+
+    expect(profile.completenessPercent).toBeLessThan(100)
+    expect(profile.missingRequirements).toContain('Fotografía tipo pasaporte')
+    await expect(api.approveAndPublish(pending.ceremonyRequestId)).rejects.toThrow('La ficha no está completa')
   })
 })

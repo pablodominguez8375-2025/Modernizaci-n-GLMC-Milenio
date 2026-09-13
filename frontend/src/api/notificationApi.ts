@@ -6,6 +6,10 @@ export interface NotificationInboxItem {
   actionUrl: string | null
   classification: string
   mandatory: boolean
+  actionRequired: boolean
+  actionStatus: 'pending' | 'approved' | 'rejected' | 'observed' | null
+  relatedResourceType: string | null
+  relatedResourceId: string | null
   createdAtUtc: string
   readAtUtc: string | null
 }
@@ -35,7 +39,26 @@ const demoInbox: NotificationInboxItem[] = [
     actionUrl: '/candidates',
     classification: 'internal',
     mandatory: false,
+    actionRequired: true,
+    actionStatus: 'pending',
+    relatedResourceType: 'ceremony_request',
+    relatedResourceId: 'eeeeeeee-2222-2222-2222-222222222222',
     createdAtUtc: '2026-09-10T15:05:00Z',
+    readAtUtc: null,
+  },
+  {
+    id: '9a000007-0000-0000-0000-000000000007',
+    typeCode: 'initiation.approval.required',
+    subject: 'Aprobación requerida: solicitud de Iniciación',
+    body: 'El expediente INI-DEMO-2026-001 espera su decisión. Revise insinuado, entrevistas, tenidas, balotaje y validaciones antes de aprobar, observar o rechazar.',
+    actionUrl: '/initiation-circuit?caseId=INI-DEMO-2026-001&stage=7',
+    classification: 'restricted',
+    mandatory: true,
+    actionRequired: true,
+    actionStatus: 'pending',
+    relatedResourceType: 'ceremony_request',
+    relatedResourceId: 'eeeeeeee-2222-2222-2222-222222222222',
+    createdAtUtc: '2026-09-12T14:05:00Z',
     readAtUtc: null,
   },
   {
@@ -46,6 +69,10 @@ const demoInbox: NotificationInboxItem[] = [
     actionUrl: '/ceremonies',
     classification: 'internal',
     mandatory: true,
+    actionRequired: false,
+    actionStatus: null,
+    relatedResourceType: null,
+    relatedResourceId: null,
     createdAtUtc: '2026-09-09T13:20:00Z',
     readAtUtc: null,
   },
@@ -57,6 +84,10 @@ const demoInbox: NotificationInboxItem[] = [
     actionUrl: '/candidates',
     classification: 'internal',
     mandatory: false,
+    actionRequired: false,
+    actionStatus: null,
+    relatedResourceType: null,
+    relatedResourceId: null,
     createdAtUtc: '2026-09-09T11:10:00Z',
     readAtUtc: null,
   },
@@ -68,6 +99,10 @@ const demoInbox: NotificationInboxItem[] = [
     actionUrl: '/calendar',
     classification: 'internal',
     mandatory: false,
+    actionRequired: false,
+    actionStatus: null,
+    relatedResourceType: null,
+    relatedResourceId: null,
     createdAtUtc: '2026-09-08T19:45:00Z',
     readAtUtc: null,
   },
@@ -79,6 +114,10 @@ const demoInbox: NotificationInboxItem[] = [
     actionUrl: '/documents',
     classification: 'confidential',
     mandatory: true,
+    actionRequired: true,
+    actionStatus: 'pending',
+    relatedResourceType: 'document_retention_review',
+    relatedResourceId: 'retention-demo-2026',
     createdAtUtc: '2026-09-08T15:30:00Z',
     readAtUtc: '2026-09-08T17:00:00Z',
   },
@@ -90,6 +129,10 @@ const demoInbox: NotificationInboxItem[] = [
     actionUrl: '/lodge',
     classification: 'internal',
     mandatory: false,
+    actionRequired: false,
+    actionStatus: null,
+    relatedResourceType: null,
+    relatedResourceId: null,
     createdAtUtc: '2026-09-07T22:10:00Z',
     readAtUtc: '2026-09-08T09:00:00Z',
   },

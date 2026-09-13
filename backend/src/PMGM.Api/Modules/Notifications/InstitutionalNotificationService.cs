@@ -92,6 +92,10 @@ public sealed class InstitutionalNotificationService(NotificationDbContext db) :
             ActionUrl = command.ActionUrl,
             Classification = template.Sensitivity,
             Mandatory = command.Mandatory,
+            ActionRequired = command.ActionRequired,
+            ActionStatus = command.ActionRequired ? command.ActionStatus ?? "pending" : null,
+            RelatedResourceType = command.RelatedResourceType,
+            RelatedResourceId = command.RelatedResourceId,
             IdempotencyKey = command.IdempotencyKey,
             SourceEventId = command.SourceEventId,
             CorrelationId = command.CorrelationId
@@ -180,6 +184,10 @@ public sealed record QueueNotificationCommand(
     string? SourceEventId,
     string? ActionUrl,
     bool Mandatory,
-    DateTimeOffset? ScheduledAtUtc);
+    DateTimeOffset? ScheduledAtUtc,
+    bool ActionRequired = false,
+    string? ActionStatus = null,
+    string? RelatedResourceType = null,
+    string? RelatedResourceId = null);
 
 public sealed record QueueNotificationResult(Guid MessageId, bool Created);

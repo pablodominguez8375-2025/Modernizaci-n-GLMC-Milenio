@@ -110,7 +110,18 @@ public sealed class LodgeInstructionHttpWorkflowTests
         var createJson = await createResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var instructionId = createJson.GetProperty("id").GetGuid();
         Assert.Equal(LodgeManagementCodes.InstructionOffice.SecondWarden, createJson.GetProperty("responsibleOffice").GetString());
+        Assert.Equal(LodgeManagementCodes.InstructionStatus.Scheduled, createJson.GetProperty("status").GetString());
         Assert.Equal(topic, createJson.GetProperty("topic").GetString());
+
+        var prematureAttendance = await client.PostAsJsonAsync(
+            $"/api/gestion-logial/instrucciones/{instructionId}/asistencia",
+            new { items = new[] { new { memberId, status = LodgeManagementCodes.InstructionAttendanceStatus.Present } } },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, prematureAttendance.StatusCode);
+
+        var completeResponse = await client.PostAsync(
+            $"/api/gestion-logial/instrucciones/{instructionId}/realizar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, completeResponse.StatusCode);
 
         var absentResponse = await client.PostAsJsonAsync(
             $"/api/gestion-logial/instrucciones/{instructionId}/asistencia",
@@ -180,6 +191,7 @@ public sealed class LodgeInstructionHttpWorkflowTests
             .Select(x => x.Action)
             .ToListAsync(cancellationToken);
         Assert.Contains("lodge.instruction.created", auditActions);
+        Assert.Contains("lodge.instruction.completed", auditActions);
         Assert.Equal(2, auditActions.Count(x => x == "lodge.instruction.attendance_recorded"));
     }
 }

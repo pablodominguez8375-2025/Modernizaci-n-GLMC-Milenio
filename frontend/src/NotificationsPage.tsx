@@ -93,6 +93,7 @@ function NotificationCard({ item, busy, onRead, onAction }: { item: Notification
           <div className="notification-badges">
             {unread && <span className="status-pill active">Pendiente</span>}
             {item.mandatory && <span className="status-pill attention">Obligatoria</span>}
+            {item.actionRequired && <span className="status-pill attention">Requiere decisión</span>}
             <span className="classification-badge">{classificationLabel(item.classification)}</span>
           </div>
           <h2>{item.subject}</h2>
@@ -103,7 +104,7 @@ function NotificationCard({ item, busy, onRead, onAction }: { item: Notification
       <div className="notification-footer">
         <span>{typeLabel(item.typeCode)}</span>
         <div className="notification-actions">
-          {onAction && <button className="secondary-button" type="button" onClick={onAction} disabled={busy}>{busy ? 'Abriendo…' : actionLabel(item.actionUrl)}</button>}
+          {onAction && <button className="secondary-button" type="button" onClick={onAction} disabled={busy}>{busy ? 'Abriendo…' : actionLabel(item.actionUrl, item.actionRequired)}</button>}
           {unread ? <button type="button" onClick={onRead} disabled={busy}>{busy ? 'Actualizando…' : 'Marcar como leído'}</button> : <span className="read-confirmation">✓ Leído</span>}
         </div>
       </div>
@@ -111,7 +112,8 @@ function NotificationCard({ item, busy, onRead, onAction }: { item: Notification
   </article>
 }
 
-function actionLabel(actionUrl: string | null) {
+function actionLabel(actionUrl: string | null, actionRequired = false) {
+  if (actionRequired) return 'Revisar y decidir'
   if (actionUrl === '/candidates') return 'Ver insinuados'
   if (actionUrl === '/calendar') return 'Ver calendario'
   if (actionUrl === '/ceremonies') return 'Ver ceremonias'

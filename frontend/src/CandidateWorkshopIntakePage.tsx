@@ -16,6 +16,10 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
   nationality: null,
   civilStatus: null,
   occupation: null,
+  employerName: null,
+  workAddress: null,
+  workPosition: null,
+  workPhone: null,
   phone: null,
   email: null,
   address: null,
@@ -23,6 +27,8 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
   orient: null,
   presenters: [],
   insinuationDate: chileToday(),
+  firstDegreePresentationDate: null,
+  responsibleSecretaryName: null,
   interviewSummary: null,
   internalObservations: null,
 })
@@ -33,7 +39,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
   const [presentersText, setPresentersText] = useState('')
-  const [photoVersionId, setPhotoVersionId] = useState('')
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [photoSrc, setPhotoSrc] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -61,7 +68,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     let active = true
     setMessage(null)
     setError(null)
-    setPhotoVersionId('')
+    setPhotoFile(null)
+    setPhotoPreview(null)
     if (!selected) {
       setProfile(null)
       setForm(emptyForm())
@@ -96,14 +104,11 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     setPhotoSrc(null)
     if (!profile?.photoAvailable) return () => { active = false }
 
-    if (api.useMocks) {
-      setPhotoSrc(`${import.meta.env.BASE_URL}demo-candidate-passport.svg`)
-      return () => { active = false }
-    }
-
     api.getPrivatePhoto(profile.ceremonyRequestId)
       .then(blob => {
-        if (!active || !blob) return
+        if (!active) return
+        if (!blob && api.useMocks) { setPhotoSrc(`${import.meta.env.BASE_URL}demo-candidate-passport.svg`); return }
+        if (!blob) return
         objectUrl = URL.createObjectURL(blob)
         setPhotoSrc(objectUrl)
       })
@@ -160,23 +165,20 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     }
   }
 
-  async function linkPhoto() {
+  async function uploadPhoto() {
     if (!selected || !profile || busy || locked) return
-    const value = photoVersionId.trim()
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
-      setError('Ingrese un ID válido de versión documental procesada para la fotografía.')
-      return
-    }
+    if (!photoFile) { setError('Seleccione una fotografía JPG o PNG.'); return }
     setBusy(true)
     setError(null)
     setMessage(null)
     try {
-      await api.attachPhotoVersion(selected.ceremonyRequestId, value)
+      await api.uploadPhoto(selected.ceremonyRequestId, photoFile)
       await refresh(selected.ceremonyRequestId)
-      setPhotoVersionId('')
-      setMessage('Fotografía tipo pasaporte vinculada. La ficha volvió a quedar pendiente de revisión de Gran Secretaría.')
+      setPhotoFile(null)
+      setPhotoPreview(null)
+      setMessage('Fotografía cargada y validada. La ficha volvió a quedar pendiente de revisión de Gran Secretaría.')
     } catch (reason) {
-      setError(errorMessage(reason, 'No fue posible vincular la fotografía.'))
+      setError(errorMessage(reason, 'No fue posible cargar la fotografía.'))
     } finally {
       setBusy(false)
     }
@@ -226,11 +228,21 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Fecha de nacimiento"><input type="date" value={form.birthDate ?? ''} disabled={locked} onChange={event => setForm({ ...form, birthDate: event.target.value || null })} /></Field>
               <Field label="Nacionalidad"><input value={form.nationality ?? ''} disabled={locked} onChange={event => setForm({ ...form, nationality: event.target.value || null })} /></Field>
               <Field label="Estado civil"><input value={form.civilStatus ?? ''} disabled={locked} onChange={event => setForm({ ...form, civilStatus: event.target.value || null })} /></Field>
-              <Field label="Profesión u oficio"><input value={form.occupation ?? ''} disabled={locked} onChange={event => setForm({ ...form, occupation: event.target.value || null })} /></Field>
               <Field label="Teléfono"><input type="tel" value={form.phone ?? ''} disabled={locked} onChange={event => setForm({ ...form, phone: event.target.value || null })} /></Field>
               <Field label="Correo"><input type="email" value={form.email ?? ''} disabled={locked} onChange={event => setForm({ ...form, email: event.target.value || null })} /></Field>
               <Field label="Dirección" wide><input value={form.address ?? ''} disabled={locked} onChange={event => setForm({ ...form, address: event.target.value || null })} /></Field>
               <Field label="Ciudad"><input value={form.city ?? ''} disabled={locked} onChange={event => setForm({ ...form, city: event.target.value || null })} /></Field>
+            </div>
+          </section>
+
+          <section className="candidate-product-card">
+            <div className="candidate-section-title"><span>▦</span><h2>Antecedentes laborales</h2><em>Formulario 2026</em></div>
+            <div className="workshop-form-grid">
+              <Field label="Actividad, profesión u oficio"><input value={form.occupation ?? ''} disabled={locked} onChange={event => setForm({ ...form, occupation: event.target.value || null })} /></Field>
+              <Field label="Empleador"><input value={form.employerName ?? ''} disabled={locked} onChange={event => setForm({ ...form, employerName: event.target.value || null })} /></Field>
+              <Field label="Cargo o función"><input value={form.workPosition ?? ''} disabled={locked} onChange={event => setForm({ ...form, workPosition: event.target.value || null })} /></Field>
+              <Field label="Teléfono laboral"><input type="tel" value={form.workPhone ?? ''} disabled={locked} onChange={event => setForm({ ...form, workPhone: event.target.value || null })} /></Field>
+              <Field label="Dirección laboral" wide><input value={form.workAddress ?? ''} disabled={locked} onChange={event => setForm({ ...form, workAddress: event.target.value || null })} /></Field>
             </div>
           </section>
 
@@ -240,6 +252,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Logia/Taller que presenta"><input value={`${selected.workshopName}${selected.workshopNumber ? ` · Nº ${selected.workshopNumber}` : ''}`} disabled /></Field>
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
+              <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
+              <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
               <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" /></Field>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
               <Field label="Observaciones internas" wide><textarea rows={4} value={form.internalObservations ?? ''} disabled={locked} onChange={event => setForm({ ...form, internalObservations: event.target.value || null })} /></Field>
@@ -253,11 +267,12 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
           <section className="candidate-product-card workshop-photo-section">
             <div className="candidate-section-title"><span>◫</span><h2>Fotografía tipo pasaporte</h2><em>Almacenamiento privado</em></div>
             <div className="workshop-photo-layout">
-              <div className="candidate-passport-photo">{photoSrc ? <img src={photoSrc} alt="Foto tipo pasaporte del expediente" /> : <div className="workshop-photo-placeholder">Sin foto</div>}<small>{profile?.photoAvailable ? 'Fotografía vinculada' : 'Pendiente'}</small></div>
+              <div className="candidate-passport-photo">{photoPreview || photoSrc ? <img src={photoPreview ?? photoSrc ?? ''} alt="Vista previa de fotografía tipo pasaporte" /> : <div className="workshop-photo-placeholder">Sin foto</div>}<small>{photoFile ? 'Vista previa · aún no guardada' : profile?.photoAvailable ? 'Fotografía vinculada' : 'Pendiente'}</small></div>
               <div>
-                <p>La foto se vincula desde una versión documental JPEG/PNG que ya haya completado el análisis antivirus. El objeto original permanece privado y nunca se publica con una URL permanente.</p>
-                <label className="workshop-photo-version"><span>ID de versión documental procesada</span><input value={photoVersionId} disabled={!profile || busy || locked} onChange={event => setPhotoVersionId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" /></label>
-                <button className="candidate-secondary-button" type="button" disabled={!profile || busy || locked} onClick={() => void linkPhoto()}>Vincular fotografía</button>
+                <p>La foto se vincula desde una versión documental JPEG/PNG, mínimo 500 × 500 píxeles y máximo 100 KB, que ya haya completado el análisis antivirus. El objeto original permanece privado y nunca se publica con una URL permanente.</p>
+                <label className="workshop-photo-version"><span>Seleccionar fotografía</span><input type="file" accept="image/jpeg,image/png" disabled={!profile || busy || locked} onChange={event => void selectPhoto(event.target.files?.[0] ?? null)} /></label>
+                {photoFile && <small className="workshop-photo-file">{photoFile.name} · {formatBytes(photoFile.size)}</small>}
+                <button className="candidate-secondary-button" type="button" disabled={!profile || !photoFile || busy || locked} onClick={() => void uploadPhoto()}>{busy ? 'Procesando…' : 'Subir y vincular fotografía'}</button>
                 {!profile && <small className="workshop-help">Primero guarde la ficha antes de vincular la fotografía.</small>}
               </div>
             </div>
@@ -271,6 +286,20 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
       </main>
     </section>
   </div>
+
+  async function selectPhoto(file: File | null) {
+    setError(null)
+    if (photoPreview) URL.revokeObjectURL(photoPreview)
+    setPhotoFile(null); setPhotoPreview(null)
+    if (!file) return
+    if (!['image/jpeg', 'image/png'].includes(file.type)) { setError('La fotografía debe estar en formato JPG o PNG.'); return }
+    if (file.size > 100 * 1024) { setError('La fotografía no puede superar 100 KB.'); return }
+    try {
+      const dimensions = await readImageDimensions(file)
+      if (dimensions.width < 500 || dimensions.height < 500) { setError('La fotografía debe tener al menos 500 × 500 píxeles.'); return }
+      setPhotoFile(file); setPhotoPreview(URL.createObjectURL(file))
+    } catch { setError('No fue posible leer la fotografía seleccionada.') }
+  }
 }
 
 function Field({ label, wide = false, children }: { label: string; wide?: boolean; children: React.ReactNode }) {
@@ -287,6 +316,10 @@ function profileToPayload(profile: CandidateIntakeProfile): CandidateIntakeUpser
     nationality: profile.nationality,
     civilStatus: profile.civilStatus,
     occupation: profile.occupation,
+    employerName: profile.employerName,
+    workAddress: profile.workAddress,
+    workPosition: profile.workPosition,
+    workPhone: profile.workPhone,
     phone: profile.phone,
     email: profile.email,
     address: profile.address,
@@ -294,6 +327,8 @@ function profileToPayload(profile: CandidateIntakeProfile): CandidateIntakeUpser
     orient: profile.orient,
     presenters: [...profile.presenters],
     insinuationDate: profile.insinuationDate,
+    firstDegreePresentationDate: profile.firstDegreePresentationDate,
+    responsibleSecretaryName: profile.responsibleSecretaryName,
     interviewSummary: profile.interviewSummary,
     internalObservations: profile.internalObservations,
   }
@@ -325,3 +360,15 @@ function formatDateOnly(value: string) {
   if (!year || !month || !day) return value
   return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(new Date(Date.UTC(year, month - 1, day, 12)))
 }
+
+function readImageDimensions(file: File): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onload = () => { const result = { width: image.naturalWidth, height: image.naturalHeight }; URL.revokeObjectURL(url); resolve(result) }
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('invalid image')) }
+    image.src = url
+  })
+}
+
+function formatBytes(value: number) { return `${Math.max(1, Math.round(value / 1024))} KB` }

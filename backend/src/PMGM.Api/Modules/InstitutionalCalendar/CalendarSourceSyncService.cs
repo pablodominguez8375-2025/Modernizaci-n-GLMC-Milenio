@@ -124,9 +124,13 @@ public sealed class InstitutionalCalendarSourceSyncService(
                 spaceId: null,
                 locationDisplay: null,
                 visibility: CalendarCodes.Visibility.Lodge,
-                status: instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled
-                    ? CalendarCodes.Status.Cancelled
-                    : CalendarCodes.Status.Completed,
+                status: instruction.Status switch
+                {
+                    LodgeManagementCodes.InstructionStatus.Scheduled => CalendarCodes.Status.Confirmed,
+                    LodgeManagementCodes.InstructionStatus.Held => CalendarCodes.Status.Completed,
+                    LodgeManagementCodes.InstructionStatus.Cancelled => CalendarCodes.Status.Cancelled,
+                    _ => CalendarCodes.Status.Tentative
+                },
                 occupancyOnlyWhenRestricted: false,
                 cancellationToken: cancellationToken);
             Count(result, ref created, ref updated);

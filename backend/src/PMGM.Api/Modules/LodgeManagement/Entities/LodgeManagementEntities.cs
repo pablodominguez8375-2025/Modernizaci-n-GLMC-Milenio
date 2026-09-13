@@ -38,6 +38,25 @@ public sealed class LodgeMinute
     public DateTimeOffset? ApprovedAtUtc { get; set; }
 }
 
+public sealed class LodgeAnonymousBallot
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid MeetingId { get; set; }
+    public LodgeMeeting Meeting { get; set; } = null!;
+    public int Version { get; set; }
+    public required string BallotType { get; set; }
+    public int? ProcedureNumber { get; set; }
+    public required string Subject { get; set; }
+    public int AttendeeCount { get; set; }
+    public int EligibleCount { get; set; }
+    public int PositiveCount { get; set; }
+    public int NegativeCount { get; set; }
+    public string? RecountObservation { get; set; }
+    public required string Status { get; set; }
+    public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class LodgeInstructionSession
 {
     public Guid Id { get; init; } = Guid.NewGuid();

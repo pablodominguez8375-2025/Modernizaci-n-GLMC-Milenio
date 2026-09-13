@@ -87,6 +87,17 @@ public sealed class CalendarSourceSyncPostgreSqlTests
             Status = LodgeManagementCodes.MeetingStatus.Scheduled
         };
         lodgeDb.LodgeMeetings.Add(meeting);
+        var instruction = new LodgeInstructionSession
+        {
+            OrganizationId = organizationId,
+            InstructionDate = new DateOnly(2026, 9, 23),
+            Grade = LodgeManagementCodes.Grade.Apprentice,
+            Topic = "Docencia programada QA",
+            ResponsibleOffice = LodgeManagementCodes.InstructionOffice.SecondWarden,
+            Status = LodgeManagementCodes.InstructionStatus.Scheduled,
+            CreatedBySubject = "qa.calendar"
+        };
+        lodgeDb.LodgeInstructionSessions.Add(instruction);
         await lodgeDb.SaveChangesAsync(cancellationToken);
 
         var service = new InstitutionalCalendarSourceSyncService(institutionalDb, secretariatDb, lodgeDb, calendarDb);
@@ -108,6 +119,17 @@ public sealed class CalendarSourceSyncPostgreSqlTests
             x => x.SourceModule == "lodge-management" &&
                  x.SourceEntityType == "lodge-meeting" &&
                  x.SourceEntityId == meeting.Id.ToString("N"), cancellationToken));
+        var instructionProjection = await calendarDb.CalendarEvents.SingleAsync(
+            x => x.SourceModule == "lodge-management" &&
+                 x.SourceEntityType == "lodge-instruction" &&
+                 x.SourceEntityId == instruction.Id.ToString("N"), cancellationToken);
+        Assert.Equal(CalendarCodes.Status.Confirmed, instructionProjection.Status);
+
+        instruction.Status = LodgeManagementCodes.InstructionStatus.Held;
+        await lodgeDb.SaveChangesAsync(cancellationToken);
+        await service.ReconcileAsync(cancellationToken);
+        await calendarDb.Entry(instructionProjection).ReloadAsync(cancellationToken);
+        Assert.Equal(CalendarCodes.Status.Completed, instructionProjection.Status);
 
         var ceremonyProjection = await calendarDb.CalendarEvents.AsNoTracking().SingleAsync(
             x => x.SourceModule == "ceremonies" && x.SourceEntityId == ceremony.Id.ToString("N"), cancellationToken);

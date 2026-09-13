@@ -50,6 +50,7 @@ export interface CeremonyReviewQueueItem {
 }
 export interface CeremonyReviewQueueResponse { total: number; items: CeremonyReviewQueueItem[] }
 export interface CeremonyInternalAffairsValidationRequest { status: Exclude<CeremonyValidationStatus, 'pending' | 'not_applicable'>; sourceReference?: string | null; notes?: string | null }
+export interface InitiationCompletionResponse { id: string; status: string; memberId: string; membershipStatus: string; degree: string; effectiveDate: string; documentCode: string }
 export interface RegimenInteriorSummary {
   scope: 'order' | 'organization'; organizationId: string | null; asOf: string; period: { from: string; to: string }
   members: { totalRelated: number; currentlyAffiliated: number; active: number; inactive: number; currentWithBlockingStatus: number }
@@ -63,6 +64,20 @@ export interface WorkshopRegularitySnapshot {
   id?: string; organizationId?: string; memberId?: string | null; scope?: string; status: string; asOfDate: string; sourceReference?: string | null; notes?: string | null; recordedAtUtc?: string
 }
 export interface WorkshopRegularityRequest { status: string; asOfDate: string; sourceReference?: string | null; notes?: string | null }
+export interface TreasuryStatementLine {
+  id: string; memberId: string | null; membershipId: string | null; degreeCodeAtCutoff: string; officeCodeAtCutoff: string | null
+  baseAmount: number; adjustmentAmount: number; payableAmount: number; adjustmentType: string | null; authorizationReference: string | null
+  observation: string | null; identityMatchStatus: string
+}
+export interface TreasuryStatementPayment { id: string; paymentMethod: string; paymentDate: string; amount: number; payerDisplayName: string | null; reference: string | null; recordedAtUtc?: string }
+export interface TreasuryStatement {
+  id: string; organizationId: string; periodYear: number; periodMonth: number; cutoffDate: string; status: string; sourceReference: string | null
+  expectedAmount: number; transferAmount: number; depositAmount: number; paidAmount: number; differenceAmount: number; unresolvedIdentities: number
+  lines: TreasuryStatementLine[]; payments: TreasuryStatementPayment[]; submittedAtUtc: string | null; reconciledAtUtc: string | null; closedAtUtc: string | null
+}
+export interface CreateTreasuryStatementRequest { periodYear: number; periodMonth: number; cutoffDate: string; sourceReference?: string | null }
+export interface GenerateTreasuryLinesRequest { apprenticeAmount: number; fellowcraftAmount: number; masterAmount: number }
+export interface AddTreasuryPaymentRequest { paymentMethod: 'transfer' | 'deposit'; paymentDate: string; amount: number; payerDisplayName?: string | null; payerRut?: string | null; reference?: string | null }
 export type AccessTokenProvider = () => Promise<string | null>
 export interface PmgmApiClientOptions { baseUrl?: string; getAccessToken?: AccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
@@ -134,6 +149,7 @@ export class PmgmApiClient {
   private readonly mockCeremonies = defaultMockCeremonies.map(item => ({ ...item }))
   private readonly mockReviewCeremonies = defaultMockReviewCeremonies.map(cloneCeremonyQueueItem)
   private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
+  private readonly mockTreasuryStatements = new Map<string, TreasuryStatement>()
   private readonly mockHospitalaria = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'hospitalaria-demo-1', organizationId: defaultMockOrganizations[0].id, status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:05:00Z' }]])
 
   constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized }
@@ -191,6 +207,10 @@ export class PmgmApiClient {
     }
     return this.request<{ id?: string; status: string }>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/autorizar`, { method: 'POST' })
   }
+  async registerInitiation(ceremonyRequestId: string, ceremonyDate: string, minuteReference: string): Promise<InitiationCompletionResponse> {
+    if (this.useMocks) return { id: ceremonyRequestId, status: 'completed', memberId: 'member-demo-2026-001', membershipStatus: 'active', degree: 'apprentice', effectiveDate: ceremonyDate, documentCode: 'AUT-CER-DEMO-2026-001' }
+    return this.postJson<InitiationCompletionResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/registrar-iniciacion`, { ceremonyDate, minuteReference })
+  }
 
   async getTreasuryWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
     if (this.useMocks) return mockSnapshotAsOf(this.mockTreasury.get(organizationId), asOf)
@@ -201,6 +221,43 @@ export class PmgmApiClient {
     if (this.useMocks) { const snapshot = mockRegularitySnapshot(organizationId, payload, 'treasury'); this.mockTreasury.set(organizationId, snapshot); return snapshot }
     return this.postJson<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad`, payload)
   }
+  async createTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = mockTreasuryStatement(organizationId, payload)
+      this.mockTreasuryStatements.set(statement.id, statement)
+      return cloneTreasuryStatement(statement)
+    }
+    return this.postJson<TreasuryStatement>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/cuadros`, payload)
+  }
+  async generateTreasuryStatementLines(statementId: string, payload: GenerateTreasuryLinesRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      const amounts = [payload.masterAmount, payload.masterAmount, payload.masterAmount, payload.fellowcraftAmount, payload.fellowcraftAmount, payload.apprenticeAmount, payload.apprenticeAmount]
+      const degrees = ['master', 'master', 'master', 'fellowcraft', 'fellowcraft', 'apprentice', 'apprentice']
+      const names = ['Venerable Maestra', 'Primer Vigilante', 'Segundo Vigilante', 'Compañero Uno', 'Compañera Dos', 'Aprendiz Uno', 'Aprendiza Dos']
+      statement.lines = amounts.map((amount, index) => ({ id: crypto.randomUUID(), memberId: `demo-member-${index + 1}`, membershipId: `demo-membership-${index + 1}`, degreeCodeAtCutoff: degrees[index], officeCodeAtCutoff: index < 3 ? ['VM', 'PV', 'SV'][index] : null, baseAmount: amount, adjustmentAmount: index === 2 ? -8000 : 0, payableAmount: index === 2 ? amount - 8000 : amount, adjustmentType: index === 2 ? 'senior_discount' : null, authorizationReference: index === 2 ? 'Plancha DEMO-023/2026' : null, observation: names[index], identityMatchStatus: 'matched' }))
+      recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
+    }
+    return this.postJson<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/generar-lineas`, payload)
+  }
+  async addTreasuryStatementPayment(statementId: string, payload: AddTreasuryPaymentRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName ?? null, reference: payload.reference ?? null, recordedAtUtc: new Date().toISOString() })
+      recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
+    }
+    await this.postJson<unknown>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/pagos`, payload)
+    return this.getTreasuryStatement(statementId)
+  }
+  async submitTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
+    if (this.useMocks) { const statement = this.requireMockTreasuryStatement(statementId); statement.status = 'submitted'; statement.submittedAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
+    return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/enviar`, { method: 'POST' })
+  }
+  async reconcileTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
+    if (this.useMocks) { const statement = this.requireMockTreasuryStatement(statementId); if (statement.differenceAmount !== 0) throw new Error('El cuadro mantiene una diferencia pendiente.'); statement.status = 'reconciled'; statement.reconciledAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
+    return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/conciliar`, { method: 'POST' })
+  }
+  async getTreasuryStatement(statementId: string): Promise<TreasuryStatement> { if (this.useMocks) return cloneTreasuryStatement(this.requireMockTreasuryStatement(statementId)); return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}`) }
   async getHospitalariaWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
     if (this.useMocks) return mockSnapshotAsOf(this.mockHospitalaria.get(organizationId), asOf)
     const query = new URLSearchParams(); if (asOf) query.set('asOf', asOf)
@@ -237,6 +294,7 @@ export class PmgmApiClient {
   }
 
   private requireMockReviewCeremony(id: string): CeremonyReviewQueueItem { const item = this.mockReviewCeremonies.find(value => value.id === id); if (!item) throw new Error('La ceremonia indicada no existe en la bandeja.'); return item }
+  private requireMockTreasuryStatement(id: string): TreasuryStatement { const item = this.mockTreasuryStatements.get(id); if (!item) throw new Error('El cuadro mensual indicado no existe.'); return item }
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -259,6 +317,9 @@ function sleep(milliseconds: number): Promise<void> { return new Promise(resolve
 function ceremonyTypeLabel(type: CeremonyType) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function mockSnapshotAsOf(snapshot: WorkshopRegularitySnapshot | undefined, asOf?: string): WorkshopRegularitySnapshot | null { if (!snapshot) return null; if (asOf && snapshot.asOfDate > asOf) return null; return { ...snapshot } }
 function mockRegularitySnapshot(organizationId: string, payload: WorkshopRegularityRequest, prefix: string): WorkshopRegularitySnapshot { return { id: `${prefix}-${crypto.randomUUID()}`, organizationId, scope: 'organization', status: payload.status, asOfDate: payload.asOfDate, sourceReference: payload.sourceReference ?? null, notes: payload.notes ?? null, recordedAtUtc: new Date().toISOString() } }
+function mockTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): TreasuryStatement { return { id: crypto.randomUUID(), organizationId, periodYear: payload.periodYear, periodMonth: payload.periodMonth, cutoffDate: payload.cutoffDate, status: 'draft', sourceReference: payload.sourceReference ?? null, expectedAmount: 0, transferAmount: 0, depositAmount: 0, paidAmount: 0, differenceAmount: 0, unresolvedIdentities: 0, lines: [], payments: [], submittedAtUtc: null, reconciledAtUtc: null, closedAtUtc: null } }
+function recalculateMockTreasury(statement: TreasuryStatement) { statement.expectedAmount = statement.lines.reduce((total, line) => total + line.payableAmount, 0); statement.transferAmount = statement.payments.filter(payment => payment.paymentMethod === 'transfer').reduce((total, payment) => total + payment.amount, 0); statement.depositAmount = statement.payments.filter(payment => payment.paymentMethod === 'deposit').reduce((total, payment) => total + payment.amount, 0); statement.paidAmount = statement.transferAmount + statement.depositAmount; statement.differenceAmount = statement.expectedAmount - statement.paidAmount }
+function cloneTreasuryStatement(statement: TreasuryStatement): TreasuryStatement { return { ...statement, lines: statement.lines.map(line => ({ ...line })), payments: statement.payments.map(payment => ({ ...payment })) } }
 function cloneCeremonyQueueItem(item: CeremonyReviewQueueItem): CeremonyReviewQueueItem { return { ...item, eligibility: { ...item.eligibility, publication: item.eligibility.publication ? { ...item.eligibility.publication } : null, requirements: item.eligibility.requirements.map(value => ({ ...value })) }, actions: { ...item.actions } } }
 function recomputeMockEligibility(item: CeremonyReviewQueueItem) { const blocked = item.eligibility.requirements.some(value => value.status === 'rejected'); const observed = item.eligibility.requirements.some(value => value.status === 'observed'); item.eligibility.canAuthorize = !blocked && !observed; item.eligibility.status = item.eligibility.canAuthorize ? 'complies' : observed ? 'observed' : 'does_not_comply' }
 function mockRegimenSummary(filters: { organizationId?: string; asOf?: string; from?: string }): RegimenInteriorSummary { const asOf = filters.asOf ?? '2026-09-08'; const from = filters.from ?? '2026-01-01'; const scoped = !!filters.organizationId; return { scope: scoped ? 'organization' : 'order', organizationId: filters.organizationId ?? null, asOf, period: { from, to: asOf }, members: { totalRelated: scoped ? 41 : 315, currentlyAffiliated: scoped ? 34 : 268, active: scoped ? 31 : 241, inactive: scoped ? 3 : 27, currentWithBlockingStatus: scoped ? 2 : 18 }, events: { voluntaryWithdrawals: scoped ? 1 : 9, forcedWithdrawals: scoped ? 0 : 3, reinstatements: scoped ? 1 : 7, deaths: scoped ? 0 : 4, transfers: scoped ? 2 : 13 }, financialRegularity: { source: 'Gran Tesorería', currentAffiliations: scoped ? 34 : 268, upToDate: scoped ? 28 : 221, delinquent: scoped ? 4 : 29, pending: scoped ? 1 : 10, exempt: scoped ? 1 : 5, withoutStatus: scoped ? 0 : 3, delinquentMembersDistinct: scoped ? 4 : 28 }, degreeDistribution: scoped ? { apprentice: 9, fellowcraft: 8, master: 17 } : { apprentice: 71, fellowcraft: 63, master: 134 }, pendingTransfers: scoped ? 1 : 6 } }

@@ -9,6 +9,7 @@ public sealed class CandidatePublishedLockMiddlewareTests
     [Theory]
     [InlineData("PUT", "/api/insinuados/solicitudes/11111111-2222-4333-8444-555555555555/ficha")]
     [InlineData("POST", "/api/insinuados/solicitudes/11111111-2222-4333-8444-555555555555/foto")]
+    [InlineData("PUT", "/api/insinuados/solicitudes/11111111-2222-4333-8444-555555555555/foto/contenido")]
     public void RecognizesCandidateMutationsThatMustBeLockedAfterPublication(string method, string path)
     {
         var context = new DefaultHttpContext();
