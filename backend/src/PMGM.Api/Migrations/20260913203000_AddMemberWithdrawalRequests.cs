@@ -45,8 +45,16 @@ public partial class AddMemberWithdrawalRequests : Migration
                     principalColumn: "Id",
                     onDelete: ReferentialAction.Restrict);
             });
-        migrationBuilder.CreateIndex("IX_member_withdrawal_requests_MemberId_Status", "core", "member_withdrawal_requests", new[] { "MemberId", "Status" });
-        migrationBuilder.CreateIndex("IX_member_withdrawal_requests_OriginOrganizationId_CreatedAtUtc", "core", "member_withdrawal_requests", new[] { "OriginOrganizationId", "CreatedAtUtc" });
+        migrationBuilder.CreateIndex(
+            name: "IX_member_withdrawal_requests_MemberId_Status",
+            schema: "core",
+            table: "member_withdrawal_requests",
+            columns: new[] { "MemberId", "Status" });
+        migrationBuilder.CreateIndex(
+            name: "IX_member_withdrawal_requests_OriginOrganizationId_CreatedAtUtc",
+            schema: "core",
+            table: "member_withdrawal_requests",
+            columns: new[] { "OriginOrganizationId", "CreatedAtUtc" });
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
