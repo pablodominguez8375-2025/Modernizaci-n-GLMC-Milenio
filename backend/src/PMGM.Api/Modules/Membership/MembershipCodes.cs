@@ -29,6 +29,21 @@ public static class MembershipCodes
         public const string WorkshopTransfer = "workshop_transfer";
     }
 
+    public static class WithdrawalType
+    {
+        public const string Voluntary = "voluntary";
+        public const string Forced = "forced";
+
+        public static bool IsValid(string value) => value is Voluntary or Forced;
+    }
+
+    public static class WithdrawalRequestStatus
+    {
+        public const string Pending = "pending";
+        public const string Approved = "approved";
+        public const string Rejected = "rejected";
+    }
+
     public static class DegreeEvent
     {
         public const string Initiation = "initiation";

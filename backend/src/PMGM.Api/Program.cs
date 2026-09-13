@@ -164,6 +164,7 @@ app.MapOrganizationEndpoints();
 app.MapMembershipEndpoints();
 app.MapMemberSelfEndpoints();
 app.MapTransferEndpoints();
+app.MapWithdrawalEndpoints();
 app.MapRegimenInteriorEndpoints();
 app.MapRegimenInteriorMemberControlEndpoints();
 app.MapRegimenInteriorDataQualityEndpoints();

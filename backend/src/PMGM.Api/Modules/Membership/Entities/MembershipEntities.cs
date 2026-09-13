@@ -94,3 +94,22 @@ public sealed class MemberTransfer
     public DateTimeOffset? ExecutedAtUtc { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
+
+public sealed class MemberWithdrawalRequest
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid MemberId { get; set; }
+    public Member Member { get; set; } = null!;
+    public Guid OriginOrganizationId { get; set; }
+    public Organization OriginOrganization { get; set; } = null!;
+    public required string WithdrawalType { get; set; }
+    public DateOnly RequestedEffectiveDate { get; set; }
+    public required string Reason { get; set; }
+    public required string EvidenceReference { get; set; }
+    public required string Status { get; set; }
+    public string? Resolution { get; set; }
+    public string RequestedBySubject { get; set; } = string.Empty;
+    public string? DecidedBySubject { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? DecidedAtUtc { get; set; }
+}
