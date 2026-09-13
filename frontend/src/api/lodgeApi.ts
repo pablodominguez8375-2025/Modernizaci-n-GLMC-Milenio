@@ -62,6 +62,10 @@ export interface LodgeAnonymousBallot { id: string; meetingId: string; version: 
 export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; procedureNumber?: 1 | 2 | 3 | null; subject: string; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation?: string | null }
 export interface LodgeAnonymousBallotsResponse { total: number; items: LodgeAnonymousBallot[] }
 export interface LodgeMinuteExtract { meetingId: string; attendeeCount: number; absentCount: number; excusedCount: number; ballotCount: number; content: string }
+export type LodgeWithdrawalType = 'voluntary' | 'forced'
+export interface LodgeWithdrawal { id: string; memberId: string; originOrganizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; status: 'pending' | 'approved' | 'rejected'; resolution: string | null; createdAtUtc: string; decidedAtUtc: string | null }
+export interface LodgeWithdrawalsResponse { total: number; items: LodgeWithdrawal[] }
+export interface CreateLodgeWithdrawalRequest { memberId: string; organizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; reason: string; evidenceReference: string }
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
 interface LodgeApiClientOptions {
@@ -134,6 +138,7 @@ export class LodgeApiClient {
   private readonly mockBallots = new Map<string, LodgeAnonymousBallot[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.ballots.map(item => ({ ...item }))]])
   private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
   private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
+  private readonly mockWithdrawals: LodgeWithdrawal[] = []
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -145,6 +150,25 @@ export class LodgeApiClient {
   async getMemberOptions(organizationId: string): Promise<LodgeMemberOptionsResponse> {
     if (this.useMocks) return { total: demoMembers.length, items: demoMembers.map(item => ({ ...item })) }
     return this.request<LodgeMemberOptionsResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/miembros/opciones`)
+  }
+
+  async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {
+    if (this.useMocks) {
+      const items = this.mockWithdrawals.filter(item => item.originOrganizationId === organizationId).map(item => ({ ...item }))
+      return { total: items.length, items }
+    }
+    return this.request<LodgeWithdrawalsResponse>(`/api/gestion-logial/retiros?organizationId=${encodeURIComponent(organizationId)}`)
+  }
+
+  async createWithdrawal(payload: CreateLodgeWithdrawalRequest): Promise<LodgeWithdrawal> {
+    if (this.useMocks) {
+      if (this.mockWithdrawals.some(item => item.memberId === payload.memberId && item.status === 'pending')) throw new Error('El hermano ya tiene un retiro pendiente de resolución.')
+      if (payload.reason.trim().length < 10) throw new Error('La causal o fundamento debe contener al menos 10 caracteres.')
+      const item: LodgeWithdrawal = { id: crypto.randomUUID(), memberId: payload.memberId, originOrganizationId: payload.organizationId, withdrawalType: payload.withdrawalType, requestedEffectiveDate: payload.requestedEffectiveDate, status: 'pending', resolution: null, createdAtUtc: new Date().toISOString(), decidedAtUtc: null }
+      this.mockWithdrawals.unshift(item)
+      return { ...item }
+    }
+    return this.postJson<LodgeWithdrawal>('/api/gestion-logial/retiros/', payload)
   }
 
   async getMeetings(organizationId: string, filters: { from?: string; to?: string } = {}): Promise<LodgeMeetingsResponse> {

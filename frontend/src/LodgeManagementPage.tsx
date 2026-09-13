@@ -16,6 +16,7 @@ import './lodgeManagement.css'
 import './lodgeManagementAreas.css'
 import LodgeBallotPanel from './LodgeBallotPanel'
 import MinuteExtractEditor from './MinuteExtractEditor'
+import LodgeWithdrawalsPanel from './LodgeWithdrawalsPanel'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -343,6 +344,8 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
       </div>
       {selectedInstructionId && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Después de la ejecución</p><h3>Registrar asistencia de la instrucción</h3></div>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || members.length === 0} onClick={completeInstructionAndRecordAttendance}>Marcar realizada y guardar asistencia</button></section>}
     </section>
+
+    <LodgeWithdrawalsPanel lodgeApi={lodgeApi} organizationId={organizationId} members={members} />
 
     <section className="lodge-insight-grid">
       <article className="lodge-product-card lodge-next-meeting-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Próxima tenida</p><h2>{nextMeeting ? nextMeeting.title || meetingTypeLabel(nextMeeting.meetingType) : api.useMocks ? 'Tenida Ordinaria · demo' : 'Sin tenida programada'}</h2></div></div><strong className="lodge-next-date">{nextMeeting ? formatDateOnly(nextMeeting.meetingDate) : api.useMocks ? '26 de septiembre de 2026' : '—'}</strong><p>{nextMeeting ? `${meetingTypeLabel(nextMeeting.meetingType)} · ${gradeLabel(nextMeeting.grade)}` : api.useMocks ? '19:00 hrs. · Todos los grados' : 'Registre una tenida para comenzar.'}</p><button type="button" className="lodge-blue-button" onClick={() => setShowOperations(true)}>Preparar tenida</button></article>

@@ -16,6 +16,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<Member> Members => Set<Member>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<MemberTransfer> MemberTransfers => Set<MemberTransfer>();
+    public DbSet<MemberWithdrawalRequest> MemberWithdrawalRequests => Set<MemberWithdrawalRequest>();
     public DbSet<InstitutionalStatusEvent> InstitutionalStatusEvents => Set<InstitutionalStatusEvent>();
     public DbSet<DegreeEvent> DegreeEvents => Set<DegreeEvent>();
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
@@ -113,6 +114,23 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.MemberId, x.RequestedDate });
             entity.HasIndex(x => x.SourceMembershipId);
             entity.HasIndex(x => x.TargetMembershipId);
+        });
+
+        modelBuilder.Entity<MemberWithdrawalRequest>(entity =>
+        {
+            entity.ToTable("member_withdrawal_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.WithdrawalType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Resolution).HasMaxLength(2000);
+            entity.Property(x => x.RequestedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.DecidedBySubject).HasMaxLength(320);
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.OriginOrganization).WithMany().HasForeignKey(x => x.OriginOrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.MemberId, x.Status });
+            entity.HasIndex(x => new { x.OriginOrganizationId, x.CreatedAtUtc });
         });
 
         modelBuilder.Entity<InstitutionalStatusEvent>(entity =>
