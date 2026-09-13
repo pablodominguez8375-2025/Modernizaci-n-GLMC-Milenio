@@ -32,6 +32,8 @@ public sealed class CandidateIntakeCompletenessPolicyTests
 
     private static CandidateIntakeProfile CompleteProfile() => new()
     {
+        SubmittedBySubject = "qa-user",
+        UpdatedBySubject = "qa-user",
         PaternalSurname = "QA",
         RutOrInstitutionalId = "DEMO-01",
         BirthDate = new DateOnly(1990, 1, 1),
