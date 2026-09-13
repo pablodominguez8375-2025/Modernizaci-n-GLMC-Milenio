@@ -321,7 +321,7 @@ La carpeta de Google Drive del proyecto contiene y se utiliza como fuente para m
 
 Regla: estos documentos no se copian ciegamente a pantallas; se convierten en datos estructurados, reglas, estados, evidencias y documentos generables, preservando la fuente institucional.
 
-## 7. Estado técnico consolidado al 11-09-2026
+## 7. Estado técnico consolidado al 13-09-2026
 
 ### Aprobaciones ya registradas
 
@@ -336,28 +336,21 @@ Regla: estos documentos no se copian ciegamente a pantallas; se convierten en da
 
 `dev` es la rama de integración vigente. `main` continúa reservada para la versión aprobada.
 
-En la consolidación más reciente se incorporó a `dev` el commit:
+En la consolidación más reciente se incorporó a `dev`, mediante el PR #70, el commit de integración:
 
-`a54b46dfd73ea51707dc710245bb0facf8cfaf5e`
+`d83d37a22998f2750dce434e10dd728794fdc6f2`
 
-que integra la corrección del cliente MinIO (`quay.io/minio/mc`) y el ajuste de migraciones para enlazar `AdmissionCase` con `CeremonyRequest` después de crear las tablas correspondientes.
+Este corte corresponde a `UI QA v0.56` e integra el circuito operacional de iniciación, aprobaciones institucionales, 20 Talleres ficticios con 480 registros, carga temporal QA de fotografías y antecedentes Word/PDF, reportería de Régimen Interior alineada, cuadros de Gran Tesorería, actas, votación, notificaciones y fichas/traspasos.
 
 ### CI / QA
 
-En la ejecución anterior:
+Sobre el mismo SHA de `dev` finalizaron correctamente:
 
-- infraestructura: verde;
-- frontend: verde;
-- privacy gate Ley 21.719: verde;
-- data classification gate: verde;
-- migration safety gate: verde;
-- bloqueo identificado antes del build backend por imagen `minio/mc:latest` inexistente/rechazada;
-- corrección integrada posteriormente en `dev`.
-
-Tras la integración se reactivaron:
-
-- `PMGM CI`;
-- `Proyecto Centenario Pre-UAT Installable`.
+- `PMGM CI` #1069 y #1070;
+- `PMGM Showcase Demo` #305;
+- `Proyecto Centenario Pre-UAT Installable` #265;
+- 119 pruebas frontend, lint y build;
+- backend, infraestructura, privacidad Ley 21.719, clasificación de datos, migraciones y release gates.
 
 La promoción a `main` permanece bloqueada hasta completar controles y UAT.
 
@@ -375,6 +368,8 @@ Pendiente obligatorio:
 - verificar experiencia móvil;
 - documentar incidencias y evidencia;
 - sólo después promover RC1 a `main`.
+
+El plan histórico `PMGM-UAT-EXECUTION-PLAN-V100-RC1.md` conserva la trazabilidad del candidato congelado anterior `739ba0b3`. No debe utilizarse para atribuir aceptación al nuevo código de `dev`. La preparación vigente del siguiente ciclo está en `docs/qa/PMGM-PREUAT-V056-EXECUTION.md`.
 
 ## 9. Instalación definitiva prevista
 
