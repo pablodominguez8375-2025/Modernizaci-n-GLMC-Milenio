@@ -219,6 +219,22 @@ public static class CeremonyEndpoints
             return Results.NotFound();
         }
 
+        if (ceremony.CeremonyType == CeremonyCodes.Type.Initiation)
+        {
+            var finalBallotApproved = await db.CeremonyValidations.AsNoTracking().AnyAsync(
+                x => x.CeremonyRequestId == requestId &&
+                     x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot &&
+                     x.Status == CeremonyCodes.ValidationStatus.Approved, cancellationToken);
+            var formalRequestSubmitted = await db.CeremonyValidations.AsNoTracking().AnyAsync(
+                x => x.CeremonyRequestId == requestId &&
+                     x.ValidationType == CeremonyCodes.ValidationType.CandidateCeremonySubmission &&
+                     x.Status == CeremonyCodes.ValidationStatus.Approved, cancellationToken);
+            if (!finalBallotApproved || !formalRequestSubmitted)
+                return Results.Conflict(new { message = "Régimen Interior sólo puede resolver después del balotaje aprobado y de la solicitud formal de Iniciación." });
+            if (string.IsNullOrWhiteSpace(request.SourceReference))
+                return Results.BadRequest(new { message = "La aprobación de Régimen Interior requiere referencia documental." });
+        }
+
         var validation = new CeremonyValidation
         {
             CeremonyRequestId = requestId,

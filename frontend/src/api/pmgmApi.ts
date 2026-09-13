@@ -186,6 +186,7 @@ export class PmgmApiClient {
   }
   async setCeremonyInternalAffairsValidation(ceremonyRequestId: string, payload: CeremonyInternalAffairsValidationRequest): Promise<unknown> {
     if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { status: payload.status }
       const item = this.requireMockReviewCeremony(ceremonyRequestId)
       if (!item.actions.canValidateInternalAffairs) throw new Error('La solicitud ya no admite validación de Régimen Interior.')
       const requirement = item.eligibility.requirements.find(value => value.code === 'regimen_interior')
