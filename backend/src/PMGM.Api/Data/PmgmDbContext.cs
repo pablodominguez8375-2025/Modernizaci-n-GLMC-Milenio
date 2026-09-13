@@ -28,6 +28,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeFeePlan> LodgeFeePlans => Set<LodgeFeePlan>();
     public DbSet<LodgeMemberCharge> LodgeMemberCharges => Set<LodgeMemberCharge>();
     public DbSet<LodgeMemberPayment> LodgeMemberPayments => Set<LodgeMemberPayment>();
+    public DbSet<LodgeHospitalariaMovement> LodgeHospitalariaMovements => Set<LodgeHospitalariaMovement>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
@@ -282,6 +283,22 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.HasOne(x => x.Charge).WithMany(x => x.Payments).HasForeignKey(x => x.ChargeId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => x.ReceiptNumber).IsUnique();
+        });
+
+        modelBuilder.Entity<LodgeHospitalariaMovement>(entity =>
+        {
+            entity.ToTable("lodge_hospitalaria_movements");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.MovementType).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.MemberReference).HasMaxLength(160);
+            entity.Property(x => x.Destination).HasMaxLength(240);
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500);
+            entity.Property(x => x.Observation).HasMaxLength(2000);
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.MovementDate });
         });
 
         modelBuilder.Entity<HospitalariaRegularitySnapshot>(entity =>
