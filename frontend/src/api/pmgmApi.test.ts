@@ -186,3 +186,18 @@ it('posts final-ballot rounds and extract reference to the protected endpoint', 
   const [url, options] = fetch.mock.calls[0]
   expect(url).toBe('/api/insinuados/solicitudes/c1/balotaje'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ ballots: [{ procedureNumber: 1, whiteBallots: 11, blackBallots: 1 }], sourceReference: 'EXTRACTO-10' })
 })
+
+it('submits the same initiation case with venerable and secretariat confirmation', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  await expect(client.submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-10-12', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })).rejects.toThrow('anterior')
+  const result = await client.submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-11-07', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })
+  expect(result).toMatchObject({ validationStatus: 'approved', proposedDate: '2026-11-07', alreadySubmitted: false })
+})
+
+it('posts formal initiation submission without re-entering candidate identity', async () => {
+  const response = { id: 'v6', validationStatus: 'approved', proposedDate: '2026-11-07', ceremonyStatus: 'under_review', alreadySubmitted: false }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response))); vi.stubGlobal('fetch', fetch)
+  await new PmgmApiClient({ getAccessToken: async () => 'token' }).submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-11-07', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/insinuados/solicitudes/c1/solicitud-iniciacion'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ proposedCeremonyDate: '2026-11-07', venerableApproval: true, sourceReference: 'SOL-1' })
+})

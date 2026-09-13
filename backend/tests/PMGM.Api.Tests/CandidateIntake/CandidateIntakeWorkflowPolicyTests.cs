@@ -128,6 +128,20 @@ public sealed class CandidateIntakeWorkflowPolicyTests
     }
 
     [Fact]
+    public void InitiationRequest_ReusesApprovedCase_AndRequiresBothWorkshopRoles()
+    {
+        var invalidDate = CandidateIntakeWorkflowPolicy.EvaluateInitiationRequestSubmission(new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 11), true, "Secretaría");
+        var missingVenerable = CandidateIntakeWorkflowPolicy.EvaluateInitiationRequestSubmission(new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 20), false, "Secretaría");
+        var missingSecretary = CandidateIntakeWorkflowPolicy.EvaluateInitiationRequestSubmission(new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 20), true, "");
+        var complete = CandidateIntakeWorkflowPolicy.EvaluateInitiationRequestSubmission(new DateOnly(2026, 10, 12), new DateOnly(2026, 10, 20), true, "Secretaria Demostrativa");
+
+        Assert.Equal("initiation_request.proposed_date", invalidDate.Code);
+        Assert.Equal("initiation_request.venerable_approval", missingVenerable.Code);
+        Assert.Equal("initiation_request.secretary", missingSecretary.Code);
+        Assert.True(complete.CanProceed);
+    }
+
+    [Fact]
     public void RePresentation_RequiresOneYear_AndRemediedCauses()
     {
         var rejectionDate = new DateOnly(2025, 9, 10);

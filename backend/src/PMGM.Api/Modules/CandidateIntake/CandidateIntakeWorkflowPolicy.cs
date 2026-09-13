@@ -147,6 +147,21 @@ public static class CandidateIntakeWorkflowPolicy
             : CandidateWorkflowDecision.Rejected("first_degree_ballot.rejected", "El balotaje definitivo fue desfavorable.");
     }
 
+    public static CandidateWorkflowDecision EvaluateInitiationRequestSubmission(
+        DateOnly submissionDate,
+        DateOnly proposedCeremonyDate,
+        bool venerableApproval,
+        string? secretaryDisplayName)
+    {
+        if (proposedCeremonyDate < submissionDate)
+            return CandidateWorkflowDecision.Blocked("initiation_request.proposed_date", "La fecha propuesta de ceremonia no puede ser anterior a la solicitud.");
+        if (!venerableApproval)
+            return CandidateWorkflowDecision.Blocked("initiation_request.venerable_approval", "La solicitud formal requiere confirmación del Venerable Maestro.");
+        if (string.IsNullOrWhiteSpace(secretaryDisplayName) || secretaryDisplayName.Trim().Length > 240)
+            return CandidateWorkflowDecision.Blocked("initiation_request.secretary", "Debe indicar la Secretaría responsable.");
+        return CandidateWorkflowDecision.Allowed("initiation_request.submitted", "La solicitud formal de Iniciación está completa.");
+    }
+
     public static CandidateWorkflowDecision EvaluateRePresentation(
         DateOnly rejectionDate,
         DateOnly newPresentationDate,

@@ -23,6 +23,7 @@ public static class CandidateWorkflowEndpoints
         group.MapPut("/solicitudes/{requestId:guid}/entrevistas/{interviewId:guid}/contenido", UploadInterviewDocumentAsync);
         group.MapPost("/solicitudes/{requestId:guid}/revision-tercer-grado", RecordThirdDegreeReviewAsync);
         group.MapPost("/solicitudes/{requestId:guid}/balotaje", RecordFinalBallotAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/solicitud-iniciacion", SubmitInitiationRequestAsync);
         group.MapGet("/solicitudes/{requestId:guid}/flujo", GetWorkflowAsync);
 
         return endpoints;
@@ -423,6 +424,64 @@ public static class CandidateWorkflowEndpoints
         });
     }
 
+    private static async Task<IResult> SubmitInitiationRequestAsync(
+        Guid requestId,
+        SubmitInitiationRequest request,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var ceremony = await GetInitiationAsync(requestId, coreDb, cancellationToken);
+        if (ceremony is null) return Results.NotFound(new { message = "La solicitud de iniciación no existe." });
+        if (!access.CanManageOrganization(httpContext.User, ceremony.OrganizationId)) return Results.Forbid();
+        if (ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Completed)
+            return Results.Conflict(new { message = "El expediente ya fue autorizado o completado." });
+        if (request.SubmissionDate > ChileToday())
+            return Results.BadRequest(new { message = "La solicitud formal no puede registrarse con fecha futura." });
+        var submissionDecision = CandidateIntakeWorkflowPolicy.EvaluateInitiationRequestSubmission(
+            request.SubmissionDate, request.ProposedCeremonyDate, request.VenerableApproval, request.SecretaryDisplayName);
+        if (!submissionDecision.CanProceed)
+            return Results.BadRequest(new { message = submissionDecision.Reason, submissionDecision.Code });
+        if (string.IsNullOrWhiteSpace(request.SourceReference) || request.SourceReference.Trim().Length > 240)
+            return Results.BadRequest(new { message = "Debe indicar una referencia documental de hasta 240 caracteres." });
+
+        var ballotStatus = await GetLatestValidationStatusAsync(
+            coreDb, requestId, CeremonyCodes.ValidationType.CandidateFinalBallot, cancellationToken);
+        if (ballotStatus != CeremonyCodes.ValidationStatus.Approved)
+            return Results.Conflict(new { message = "El balotaje definitivo debe estar aprobado antes de enviar la solicitud de Iniciación." });
+
+        var existing = await coreDb.CeremonyValidations.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId &&
+                        x.ValidationType == CeremonyCodes.ValidationType.CandidateCeremonySubmission &&
+                        x.Status == CeremonyCodes.ValidationStatus.Approved)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existing is not null)
+            return Results.Ok(new { existing.Id, validationStatus = existing.Status, ceremony.ProposedDate, ceremonyStatus = ceremony.Status, alreadySubmitted = true });
+
+        ceremony.ProposedDate = request.ProposedCeremonyDate;
+        ceremony.Status = CeremonyCodes.RequestStatus.UnderReview;
+        var validation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateCeremonySubmission,
+            CeremonyCodes.ValidationStatus.Approved, request.SubmissionDate, request.SourceReference.Trim(),
+            $"Solicitud confirmada por el Venerable Maestro y preparada por {request.SecretaryDisplayName.Trim()}.");
+
+        audit.Add(httpContext, "candidate.workflow.initiation_request.submitted", nameof(CeremonyRequest),
+            ceremony.Id.ToString(), ceremony.OrganizationId, AuditResults.Success,
+            new { request.SubmissionDate, request.ProposedCeremonyDate, request.VenerableApproval, validation.Id });
+        await coreDb.SaveChangesAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            validation.Id,
+            validationStatus = validation.Status,
+            ceremony.ProposedDate,
+            ceremonyStatus = ceremony.Status,
+            alreadySubmitted = false
+        });
+    }
+
     private static async Task<IResult> GetWorkflowAsync(
         Guid requestId,
         HttpContext httpContext,
@@ -441,7 +500,8 @@ public static class CandidateWorkflowEndpoints
             CeremonyCodes.ValidationType.CandidateInitialDeliberation,
             CeremonyCodes.ValidationType.CandidateInterviewPackage,
             CeremonyCodes.ValidationType.CandidateThirdDegreeReview,
-            CeremonyCodes.ValidationType.CandidateFinalBallot
+            CeremonyCodes.ValidationType.CandidateFinalBallot,
+            CeremonyCodes.ValidationType.CandidateCeremonySubmission
         };
 
         var validations = await coreDb.CeremonyValidations.AsNoTracking()
@@ -480,6 +540,7 @@ public static class CandidateWorkflowEndpoints
             interviewPackage = Stage(CeremonyCodes.ValidationType.CandidateInterviewPackage),
             thirdDegreeReview = Stage(CeremonyCodes.ValidationType.CandidateThirdDegreeReview),
             finalBallot = Stage(CeremonyCodes.ValidationType.CandidateFinalBallot),
+            initiationRequest = Stage(CeremonyCodes.ValidationType.CandidateCeremonySubmission),
             publication
         });
     }
@@ -599,3 +660,10 @@ public sealed record FinalBallotRoundRequest(
     int EligibleVoters,
     int WhiteBallots,
     int BlackBallots);
+
+public sealed record SubmitInitiationRequest(
+    DateOnly SubmissionDate,
+    DateOnly ProposedCeremonyDate,
+    bool VenerableApproval,
+    string SecretaryDisplayName,
+    string SourceReference);
