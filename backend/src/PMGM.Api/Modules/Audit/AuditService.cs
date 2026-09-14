@@ -104,11 +104,23 @@ public static class AuditEventFactory
             OrganizationId = organizationId,
             ActorSubject = subject,
             ActorDisplayName = displayName,
+            IpAddress = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            Menu = ResolveMenu(action),
+            Submenu = action.Split('.', StringSplitOptions.RemoveEmptyEntries).Skip(1).FirstOrDefault() ?? "General",
+            Summary = action.Replace('.', ' '),
             Result = result,
             CorrelationId = correlationId,
             MetadataJson = AuditMetadataSanitizer.Serialize(metadata)
         };
     }
+
+    private static string ResolveMenu(string action)
+        => action.Split('.', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() switch
+        {
+            "system" => "Sistema", "admission" => "Insinuados", "membership" => "Miembros",
+            "privacy" => "Privacidad", "calendar" => "Calendario", "lodge" => "Gestión Logial",
+            _ => "Institucional"
+        };
 }
 
 public interface IAuditService

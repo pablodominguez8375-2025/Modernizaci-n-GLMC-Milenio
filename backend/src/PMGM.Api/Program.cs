@@ -48,169 +48,471 @@ var mainConnectionString = builder.Configuration.GetConnectionString("MainDataba
     ?? "Host=localhost;Port=5432;Database=pmgm;Username=pmgm_app;Password=pmgm_dev_only";
 
 builder.Services.AddScoped<CalendarSourceProjectionInterceptor>();
-builder.Services.AddDbContext<PmgmDbContext>((services, options) =>
-    options.UseNpgsql(mainConnectionString)
-        .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
-builder.Services.AddDbContext<BootstrapDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<LodgeManagementDbContext>((services, options) =>
-    options.UseNpgsql(mainConnectionString)
-        .AddInterceptors(services.GetRequiredService<CalendarSourceProjectionInterceptor>()));
-builder.Services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<GrandArchiveDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<NotificationDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<CalendarDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<RegimenInteriorDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<CandidateIntakeDbContext>(options => options.UseNpgsql(mainConnectionString));
-builder.Services.AddDbContext<AdmissionsDbContext>(options => options.UseNpgsql(mainConnectionString));
+builder.Services.AddDbContext<PmgmDbContext>((servi×¾wîÚ$z{-®éÜj×[È8 %[Ù\›š^˜XÚpìÛˆÜ˜[ˆÙÚXHZ^HHÚ[IË\Nˆ	ÔQÓK\IË™\œÚ[Ûˆ	ÌŒL‹ŒIË[[YNˆ	Ë“‘UL	Ëİ[\™Nˆ	Ù\ËPÓ	Ë[œİ]][Û˜[[YV›Û™Nˆ	Ğ[Y\šXØKÔØ[XYÛÉËY˜][İ\œ™[˜ŞNˆ	ĞÓ	ÈNÈ™]\›ˆ\Ëœ™\]Y\İŞ\İ[R[™›ÏŠ	ËØ\KÜŞ\İ[KÚ[™›ÉÊHBˆ\Ş[˜ÈÙ]Ù\ÜÚ[Û”›Ùš[J
+Nˆ›ÛZ\ÙOÙ\ÜÚ[Û”›Ùš[OˆÈYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÔÙ\ÜÚ[ÛÈ™]\›ˆ\Ëœ™\]Y\İÙ\ÜÚ[Û”›Ùš[OŠ	ËØ\KÜÙ\ÜÚ[Û‹ÛYIÊHBˆ\Ş[˜ÈÙ]Ü™Ø[š^˜][Û“Ü[ÛœÊ
+Nˆ›ÛZ\ÙOÜ™Ø[š^˜][Û“Ü[ÛœÔ™\ÜÛœÙOˆÈYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚÓÜ™Ø[š^˜][ÛœË›[™İ][\ÎˆË‹‹\Ë›[ØÚÓÜ™Ø[š^˜][Ûœ×HNÈ™]\›ˆ\Ëœ™\]Y\İÜ™Ø[š^˜][Û“Ü[ÛœÔ™\ÜÛœÙOŠ	ËØ\KÚ[œİ]][Û˜[ÛÜ™Ø[š^˜][ÛœËÛÜ[ÛœÉÊHBˆ\Ş[˜ÈÙ]Ş\İ[TÙ][™ÜÊ
+Nˆ›ÛZ\ÙOŞ\İ[TÙ][™ÜÔ™\ÜÛœÙOˆÈYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚÔŞ\İ[TÙ][™ÜË›[™İ][\Îˆ\Ë›[ØÚÔŞ\İ[TÙ][™ÜË›X\
+][HOˆ
+È‹‹š][HJJHNÈ™]\›ˆ\Ëœ™\]Y\İŞ\İ[TÙ][™ÜÔ™\ÜÛœÙOŠ	ËØ\KÜŞ\İ[KÜÙ][™ÜËÉÊHBˆ\Ş[˜ÈÜ™X]TŞ\İ[TÙ][™Õ™\œÚ[ÛŠÛÙNˆİš[™Ë^[ØYˆÜ™X]TŞ\İ[TÙ][™Õ™\œÚ[Û”™\]Y\İ
+Nˆ›ÛZ\ÙOŞ\İ[TÙ][™ÏˆÈYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİ][O]\Ë›[ØÚÔŞ\İ[TÙ][™ÜË™š[™
+˜[YOO˜[YK˜ÛÙOOOXÛÙJNÈYŠZ][JH›İÈ™]È\œ›ÜŠ	Ñ[\°è[Y]›È›È\[™XÙH[Ø]0è[ÙÛÈYZ[š\İ˜X›K‰ÊNÈYŠ\^[ØY˜[YKš[J
+_\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
+JH›İÈ™]È\œ›ÜŠ	Õ˜[ÜˆH[™[Y[ÈÛÛˆØ›YØ]Üš[ÜË‰ÊNÈÛÛœİİ]\Ï\^[ØY™Y™™Xİ]™Qœ›ÛO›™]È]J
+KÒTÓÔİš[™Ê
+KœÛXÙJL
+OÉÜØÚY[Y	Î‰ØXİ]™IÎÈØš™Xİ˜\ÜÚYÛŠ][Kİ˜[YNœ^[ØY˜[YKš[J
+KY™™Xİ]™Qœ›ÛNœ^[ØY™Y™™Xİ]™Qœ›ÛKÛİ\˜ÙT™Y™\™[˜ÙNœ^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
+Kİ]\ßJNÈÛÛœİ™\œÚ[ÛœÏ]\Ë›[ØÚÔŞ\İ[TÙ][™Õ™\œÚ[ÛœË™Ù]
+ÛÙJOÏÖ×NÈ™\œÚ[ÛœË[œÚY
+ÚY˜Ü\Ëœ˜[™ÛUURQ
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.Authority = builder.Configuration["Authentication:Authority"];
-        options.Audience = builder.Configuration["Authentication:Audience"];
-        options.RequireHttpsMetadata = builder.Configuration.GetValue<bool?>("Authentication:RequireHttpsMetadata")
-            ?? !builder.Environment.IsDevelopment();
-    });
+K˜[YNš][K˜[YKY™™Xİ]™Qœ›ÛNš][K™Y™™Xİ]™Qœ›ÛKY™™Xİ]™UÎ›[Ûİ\˜ÙT™Y™\™[˜ÙNš][KœÛİ\˜ÙT™Y™\™[˜ÙKİ]\ËÜ™X]Y]]Î›™]È]J
+KÒTÓÔİš[™Ê
+_JNÈ\Ë›[ØÚÔŞ\İ[TÙ][™Õ™\œÚ[ÛœËœÙ]
+ÛÙK™\œÚ[ÛœÊNÈ™]\›ˆË‹‹š][_NÈH™]\›ˆ\ËœÜİœÛÛŞ\İ[TÙ][™ÏŠØ\KÜŞ\İ[KÜÙ][™ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+ÛÙJ_X^[ØY
+HBˆ\Ş[˜ÈÙ]Ş\İ[TÙ][™Õ™\œÚ[ÛœÊÛÙNˆİš[™ÊNˆ›ÛZ\ÙOŞ\İ[TÙ][™Õ™\œÚ[ÛœÔ™\ÜÛœÙOˆÈYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][\Ï]\Ë›[ØÚÔŞ\İ[TÙ][™Õ™\œÚ[ÛœË™Ù]
+ÛÙJOÏÖ×NÜ™]\›İİ[š][\Ë›[™İ][\Îš][\Ë›X\
+][OOŠË‹‹š][_JJ__H™]\›ˆ\Ëœ™\]Y\İŞ\İ[TÙ][™Õ™\œÚ[ÛœÔ™\ÜÛœÙOŠØ\KÜŞ\İ[KÜÙ][™ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+ÛÙJ_Kİ™\œÚ[ÛœØ
+HBˆ\Ş[˜ÈÙ]]Y]ÙÊ
+N”›ÛZ\ÙO]Y]ÙÔ™\ÜÛœÙOÚYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][\Î]Y]ÙÑ]™[×OVŞÚY‰Ø]Y]LIËØØİ\œ™Y]]Î‰ÌŒ‹LKLMLŒN‰Ë\Ù\‰ĞYZ[š\İ˜YÜˆPIË\Y™\ÜÎ‰ÌNL‹ŒŒ‹ŒM	ËY[N‰ÔÚ\İ[XIËİX›Y[N‰Õ\İX\š[ÜÉËİ[[X\N‰Ğ\ÚYÛ°ìÈ\™š[[\Ü˜[H\İX\š[È[[Üİ˜]]›ÉËXİ[Û‰ÜŞ\İ[K˜XØÙ\ÜË˜\ÜÚYÛ›Y[˜Ü™X]Y	Ë™\İ[‰ÜİXØÙ\ÜÉËÛÜœ™[][Û’Y‰ÜXKX]Y]LIßKÚY‰Ø]Y]L‰ËØØİ\œ™Y]]Î‰ÌŒ‹LKLMLŒÍNŒ‰Ë\Ù\‰ĞYZ[š\İ˜YÜˆPIË\Y™\ÜÎ‰ÌNL‹ŒŒ‹ŒM	ËY[N‰ÔÚ\İ[XIËİX›Y[N‰ĞÛÜœ™[ÉËİ[[X\N‰Ô›Ø°ìÈÛÛ™šYİ\˜XÚpìÛˆÓU	ËXİ[Û‰ÜŞ\İ[K›XZ[˜ÛÛ›™Xİ[Û‹\İY	Ë™\İ[‰ÜİXØÙ\ÜÉËÛÜœ™[][Û’Y‰ÜXKX]Y]L‰ßKÚY‰Ø]Y]LÉËØØİ\œ™Y]]Î‰ÌŒ‹LKLMLŒŒLV‰Ë\Ù\‰Õ\İX\š[ÈPIË\Y™\ÜÎ‰ÌNNLKŒLŒŒ‰ËY[N‰ĞXØÙ\ÛÉËİX›Y[N‰Ò[šXÚ[ÈHÙ\ÚpìÛ‰Ëİ[[X\N‰Ò[[ÈH]][XØXÚpìÛˆ™XÚ^˜YÉËXİ[Û‰ÚY[]K›ÙÚ[‹œ™Z™XİY	Ë™\İ[‰Ü™Z™XİY	ËÛÜœ™[][Û’Y‰ÜXKX]Y]LÉßWNÜ™]\›İİ[š][\Ë›[™İYÙNŒKYÙTÚ^™NL[[]]X›NYK][\ß_\™]\›ˆ\Ëœ™\]Y\İ]Y]ÙÔ™\ÜÛœÙOŠ	ËØ\KÜŞ\İ[KØ]Y]Y]™[ÉÊ_B‚ˆ\Ş[˜ÈÜ™X]SÙÙQ™YT[ŠÜ™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÈ™YU\NˆÙÙQ™YU\NÈY[X™\[[İ[ˆ[X™\ÈÜ˜[™™X\İ\P[[İ[ˆ[X™\ÈY™™Xİ]™Qœ›ÛNˆİš[™ÎÈY™™Xİ]™U[[Îˆİš[™È[JNˆ›ÛZ\ÙOÙÙQ™YT[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİ[œÈH\Ë›[ØÚÓÙÙQ™YT[œË™Ù]
+Ü™Ø[š^˜][Û’Y
+HÏÈ×BˆYˆ
+[œËœÛÛYJ][HOˆ][K™™YU\HOOH^[ØY™™YU\H	‰ˆ][Kš\ĞXİ]™JJH›İÈ™]È\œ›ÜŠ	ÖXH^\İH[˜Hİ[İHXİ]˜H[Z\Û[È\È\˜H\ØHšYÙ[˜ÚXK‰ÊBˆÛÛœİ[ˆHÈYˆÜ\Ëœ˜[™ÛUURQ
 
-builder.Services.AddAuthorization();
-builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
-builder.Services.AddScoped<IInstitutionalMemberContextResolver, InstitutionalMemberContextResolver>();
-builder.Services.AddScoped<IInstitutionalBootstrapService, InstitutionalBootstrapService>();
-builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilityService>();
-builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
-builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
-builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
-builder.Services.AddScoped<IInstitutionalCalendarProjectionService, InstitutionalCalendarProjectionService>();
-builder.Services.AddScoped<IInstitutionalCalendarSourceSyncService, InstitutionalCalendarSourceSyncService>();
-builder.Services.AddScoped<IExecutiveReportingService, ExecutiveReportingService>();
-builder.Services.AddScoped<IRegimenInteriorMemberControlService, RegimenInteriorMemberControlService>();
-builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
-builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
-builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
-builder.Services.AddScoped<FirstImplementationSeedService>();
+KÜ™Ø[š^˜][Û’Y‹‹œ^[ØYY™™Xİ]™U[[ˆ^[ØY™Y™™Xİ]™U[[ÏÈ[ÛÜšÜÚÜ[[İ[ˆ^[ØY›Y[X™\[[İ[H^[ØY™Ü˜[™™X\İ\P[[İ[\ĞXİ]™NˆYHBˆ[œËœ\Ú
+[ŠNÈ\Ë›[ØÚÓÙÙQ™YT[œËœÙ]
+Ü™Ø[š^˜][Û’Y[œÊNÈ™]\›ˆÈ‹‹œ[ˆBˆBˆ™]\›ˆ\ËœÜİœÛÛÙÙQ™YT[ŠØ\KÙÙ\İ[Û‹[ÙÚX[İ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ[™\ËXİ[İX^[ØY
+BˆBˆ\Ş[˜ÈÙ]ÙÙQ™YT[œÊÜ™Ø[š^˜][Û’Yˆİš[™ÊNˆ›ÛZ\ÙOÈİ[ˆ[X™\È][\ÎˆÙÙQ™YT[–×HOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆ][œÈH\Ë›[ØÚÓÙÙQ™YT[œË™Ù]
+Ü™Ø[š^˜][Û’Y
+BˆYˆ
+\[œÊHÈ[œÈHY˜][ÙÙQ™YT[œÊÜ™Ø[š^˜][Û’Y
+NÈ\Ë›[ØÚÓÙÙQ™YT[œËœÙ]
+Ü™Ø[š^˜][Û’Y[œÊHBˆ™]\›ˆÈİ[ˆ[œË›[™İ][\Îˆ[œË›X\
+][HOˆ
+È‹‹š][HJJHBˆBˆ™]\›ˆ\Ëœ™\]Y\İÈİ[ˆ[X™\È][\ÎˆÙÙQ™YT[–×HOŠØ\KÙÙ\İ[Û‹[ÙÚX[İ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ[™\ËXİ[İX
+BˆBˆ\Ş[˜ÈÙ[™\˜]SÙÙPÚ\™Ù\ÊÜ™Ø[š^˜][Û’Yˆİš[™Ë\š[ÙYX\ˆ[X™\‹\š[Ù[Ûˆ[X™\ŠNˆ›ÛZ\ÙOÙÙU™X\İ\Tİ[[X\OˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİ[œÈH
+]ØZ]\Ë™Ù]ÙÙQ™YT[œÊÜ™Ø[š^˜][Û’Y
+JKš][\ÂˆÛÛœİ›Ü›X[H[œË™š[™
+][HOˆ][K™™YU\HOOH	Û›Ü›X[	ÊHNÈÛÛœİİY[H[œË™š[™
+][HOˆ][K™™YU\HOOH	ÜİY[	ÊHNÈÛÛœİÙ[š[ÜˆH[œË™š[™
+][HOˆ][K™™YU\HOOH	ÜÙ[š[Ü‰ÊHBˆÛÛœİY[X™\‘^XİYH›Ü›X[›Y[X™\[[İ[
+ˆMÈ
+ÈİY[›Y[X™\[[İ[
+ˆÈ
+ÈÙ[š[Ü‹›Y[X™\[[İ[
+ˆ‚ˆÛÛœİÜ˜[™™X\İ\Q^XİYH›Ü›X[™Ü˜[™™X\İ\P[[İ[
+ˆMÈ
+ÈİY[™Ü˜[™™X\İ\P[[İ[
+ˆÈ
+ÈÙ[š[Ü‹™Ü˜[™™X\İ\P[[İ[
+ˆ‚ˆÛÛœİİ[[X\NˆÙÙU™X\İ\Tİ[[X\HHÈÜ™Ø[š^˜][Û’Y\š[ÙYX\‹\š[Ù[ÛY[X™\œÎˆŒ‹Y[X™\‘^XİYÛÛXİYˆÎ™XÙZ]˜X›NˆY[X™\‘^XİYHÎÜ˜[™™X\İ\Q^XİYÛÜšÜÚÜX\™Ú[”›Ú™XİYˆY[X™\‘^XİYHÜ˜[™™X\İ\Q^XİYZYˆMË\X[ˆ‹İ™\™YNˆË˜Y™šXÓYÚˆ	Ø[X™\‰ÈBˆ\Ë›[ØÚÓÙÙU™X\İ\Tİ[[X\šY\ËœÙ]
+	ÛÜ™Ø[š^˜][Û’YN‰Ü\š[ÙYX\ŸKIÜ\š[Ù[ÛXİ[[X\JNÈ™]\›ˆÈ‹‹œİ[[X\HBˆBˆ™]\›ˆ\ËœÜİœÛÛÙÙU™X\İ\Tİ[[X\OŠØ\KÙÙ\İ[Û‹[ÙÚX[İ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KØØ\™ÛÜËÙÙ[™\˜\˜È\š[ÙYX\‹\š[Ù[Û\ÜÚYÛ›Y[Îˆ×HJBˆBˆ\Ş[˜ÈÙ]ÙÙU™X\İ\Tİ[[X\JÜ™Ø[š^˜][Û’Yˆİš[™Ë\š[ÙYX\ˆ[X™\‹\š[Ù[Ûˆ[X™\ŠNˆ›ÛZ\ÙOÙÙU™X\İ\Tİ[[X\OˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆ\Ë›[ØÚÓÙÙU™X\İ\Tİ[[X\šY\Ë™Ù]
+	ÛÜ™Ø[š^˜][Û’YN‰Ü\š[ÙYX\ŸKIÜ\š[Ù[ÛX
+HÏÈÈÜ™Ø[š^˜][Û’Y\š[ÙYX\‹\š[Ù[ÛY[X™\œÎˆY[X™\‘^XİYˆÛÛXİYˆ™XÙZ]˜X›NˆÜ˜[™™X\İ\Q^XİYˆÛÜšÜÚÜX\™Ú[”›Ú™XİYˆZYˆ\X[ˆİ™\™YNˆ˜Y™šXÓYÚˆ	Û›×Ù]IÈBˆ™]\›ˆ\Ëœ™\]Y\İÙÙU™X\İ\Tİ[[X\OŠØ\KÙÙ\İ[Û‹[ÙÚX[İ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ™\İ[Y[ŞYX\IÜ\š[ÙYX\ŸI›[ÛIÜ\š[Ù[ÛX
+BˆB‚ˆ\Ş[˜ÈÙ]™YÚ[Y[’[\š[Ü”İ[[X\Jš[\œÎˆÈÜ™Ø[š^˜][Û’YÎˆİš[™ÎÈ\ÓÙÎˆİš[™ÎÈœ›ÛOÎˆİš[™ÈHHßJNˆ›ÛZ\ÙO™YÚ[Y[’[\š[Ü”İ[[X\OˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÔ™YÚ[Y[”İ[[X\Jš[\œÊBˆÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\Ê
+NÈYˆ
+š[\œË›Ü™Ø[š^˜][Û’Y
+H]Y\KœÙ]
+	ÛÜ™Ø[š^˜][Û’Y	Ëš[\œË›Ü™Ø[š^˜][Û’Y
+NÈYˆ
+š[\œË˜\ÓÙŠH]Y\KœÙ]
+	Ø\ÓÙ‰Ëš[\œË˜\ÓÙŠNÈYˆ
+š[\œË™œ›ÛJH]Y\KœÙ]
+	Ùœ›ÛIËš[\œË™œ›ÛJBˆ™]\›ˆ\Ëœ™\]Y\İ™YÚ[Y[’[\š[Ü”İ[[X\OŠØ\KÜ™YÚ[Y[‹Z[\š[Ü‹Üİ[[X\IÜ]Y\KœÚ^™HÈÉÜ]Y\_Xˆ	ÉßX
+BˆBˆ\Ş[˜ÈÙ]Ü™\”™Z™Xİ[Û[\Ê
+Nˆ›ÛZ\ÙOÜ™\”™Z™Xİ[Û[\™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆK][\ÎˆŞÈ\œÛÛ’Yˆ	Ü\œÛÛ‹Y[[ËX›ØÚÙY	Ëš\œİ˜[Y\Îˆ	Ô\œÛÛ˜H™XÚ^˜YIË\İ˜[Y\Îˆ	Ñ[[Üİ˜]]˜IËÛÜšÜÚÜ˜[YNˆ	Õ[\ˆ[[Üİ˜]]›È°®ˆÉËÛÜšÜÚÜ[X™\ˆ	ÍÉË™Z™Xİ[Û‘]Nˆ	ÌŒ‹LKLÌ	Ë™X\ÛÛˆ	Ô™XÚ^›È[ˆğè[X\˜H[YY[ÈÈ\˜Ù\ˆÜ˜YÉËÛİ\˜ÙT™Y™\™[˜ÙNˆ	ĞPÕKT‘PÒV“ËQSSËLŒ‹LÉË›İ\Îˆ	Ğ[XÙY[H™\Ù\˜YÈ\˜HÛÛœİ[HH°êYÚ[Y[ˆ[\š[Ü‹‰ÈWHBˆ™]\›ˆ\Ëœ™\]Y\İÜ™\”™Z™Xİ[Û[\™\ÜÛœÙOŠ	ËØ\KÚ[œÚ[XYÜËÜ™YÚ[Y[‹Z[\š[Ü‹Ø[\\Ë\™XÚ^›ÉÊBˆB‚ˆ\Ş[˜ÈÙ]Ù\™[[ÛT™]šY]Ô]Y]YJ
+Nˆ›ÛZ\ÙOÙ\™[[ÛT™]šY]Ô]Y]YT™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚÔ™]šY]ĞÙ\™[[ÛšY\Ë›[™İ][\Îˆ\Ë›[ØÚÔ™]šY]ĞÙ\™[[ÛšY\Ë›X\
+ÛÛ™PÙ\™[[ÛT]Y]YR][JHBˆ™]\›ˆ\Ëœ™\]Y\İÙ\™[[ÛT™]šY]Ô]Y]YT™\ÜÛœÙOŠ	ËØ\KÚ[œİ]][Û˜[ØÙ\™[[ÛšX\ËØ˜[™Z˜IÊBˆBˆ\Ş[˜ÈÙ]Ù\™[[ÛR[\›˜[Y™˜Z\œÕ˜[Y][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆÙ\™[[ÛR[\›˜[Y™˜Z\œÕ˜[Y][Û”™\]Y\İ
+Nˆ›ÛZ\ÙO[šÛ›İÛˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+Ù\™[[ÛT™\]Y\İYOOH	ÙYYYYYYYKLŒŒŒ‹LŒŒŒ‹LŒŒŒ‹LŒŒŒŒŒŒŒŒŒŒŒ‰ÊH™]\›ˆÈİ]\Îˆ^[ØYœİ]\ÈBˆÛÛœİ][HH\Ëœ™\]Z\™S[ØÚÔ™]šY]ĞÙ\™[[ÛJÙ\™[[ÛT™\]Y\İY
+BˆYˆ
+Z][K˜Xİ[ÛœË˜Ø[•˜[Y]R[\›˜[Y™˜Z\œÊH›İÈ™]È\œ›ÜŠ	ÓHÛÛXÚ]YXH›ÈYZ]H˜[YXÚpìÛˆH°êYÚ[Y[ˆ[\š[Ü‹‰ÊBˆÛÛœİ™\]Z\™[Y[H][K™[YÚXš[]Kœ™\]Z\™[Y[Ë™š[™
+˜[YHOˆ˜[YK˜ÛÙHOOH	Ü™YÚ[Y[—Ú[\š[Ü‰ÊBˆYˆ
+™\]Z\™[Y[
+HÂˆÛÛœİ\›İ™YH^[ØYœİ]\ÈOOH	Ø\›İ™Y	È^[ØYœİ]\ÈOOH	Ù^Ù\[Û—Ø\›İ™Y	Âˆ™\]Z\™[Y[œİ]\ÈH\›İ™YÈ	Ø\›İ™Y	Èˆ^[ØYœİ]\Âˆ™\]Z\™[Y[œ™X\ÛÛˆH\›İ™YÈ	Ğ\›Ø˜XÚpìÛˆšYÙ[H™YÚ\İ˜YK‰Èˆ^[ØYœİ]\ÈOOH	ÛØœÙ\™Y	ÈÈ	ÓHÛÛXÚ]YY[™HØœÙ\˜XÚ[Û™\È[™Y[\ÈH°êYÚ[Y[ˆ[\š[Ü‹‰Èˆ	Ó›È^\İH[˜H\›Ø˜XÚpìÛˆXš[][HH°êYÚ[Y[ˆ[\š[Ü‹‰ÂˆBˆ™XÛÛ\]S[ØÚÑ[YÚXš[]J][JBˆ™]\›ˆÈİ]\Îˆ^[ØYœİ]\ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛ[šÛ›İÛŠØ\KØÙ\™[[ÛšX\ËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_Kİ˜[YXÚ[Û™\ËÜ™YÚ[Y[‹Z[\š[Ü˜^[ØY
+BˆBˆ\Ş[˜ÈX›\ÚÙ\™[[ÛPØ[™Y]JÙ\™[[ÛT™\]Y\İYˆİš[™ÊNˆ›ÛZ\ÙOØ[™Y]TX›XØ][Û•ÛÜšÙ›İÔ™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+Ù\™[[ÛT™\]Y\İYOOH	ÙYYYYYYYKLŒŒŒ‹LŒŒŒ‹LŒŒŒ‹LŒŒŒŒŒŒŒŒŒŒŒ‰ÊH™]\›ˆÈYˆ	ÜX›XØ][Û‹Y[[ËLŒ‹LIËÙ\™[[ÛT™\]Y\İYX›\ÚYœ›ÛU]Îˆ	ÌŒ‹LKLŒUMNŒŒ‰Ë™\]Z\™Y^\ÎˆŒ[PÛÙNˆ	Ú[š]X][Û‹œX›XØ][Û‹›Z[š[][WÙ^\ÉËİ]\Îˆ	ÜX›\ÚY	Ë[™XYTX›\ÚYˆ˜[ÙK›İYšXØ][Û”™XÚ\Y[ÎˆÍ›İYšXØ][ÛœĞÜ™X]YˆÍBˆÛÛœİ][HH\Ëœ™\]Z\™S[ØÚÔ™]šY]ĞÙ\™[[ÛJÙ\™[[ÛT™\]Y\İY
+BˆYˆ
+Z][K˜Xİ[ÛœË˜Ø[”X›\ÚØ[™Y]H][K˜Ù\™[[ÛU\HOOH	Ú[š]X][Û‰ÊH›İÈ™]È\œ›ÜŠ	ÓHÛÛXÚ]Y›ÈYZ]H[šXÚX\ˆ[˜HY]˜HX›XØXÚpìÛˆ[[œÚ[XYË‰ÊBˆ][K™[YÚXš[]KœX›XØ][ÛˆHÈİ]\Îˆ	ÜX›\ÚY	Ë™\]Z\™Y^\ÎˆŒÛÛ\]Y^\ÎˆX›\ÚYœ›ÛU]Îˆ™]È]J
+KÒTÓÔİš[™Ê
+KX›\ÚY[[]Îˆ[BˆÛÛœİ^\İ[™ÈH][K™[YÚXš[]Kœ™\]Z\™[Y[Ë™š[™
+˜[YHOˆ˜[YK˜ÛÙHOOH	ÜX›XØXÚ[Û—Ú[œÚ[XYÉÊBˆÛÛœİ™\]Z\™[Y[HÈÛÙNˆ	ÜX›XØXÚ[Û—Ú[œÚ[XYÉË˜[YNˆ	ÔX›XØXÚpìÛˆ[[œÚ[XYÉËİ]\Îˆ	Ü™Z™XİY	Ë™X\ÛÛˆ	ÔÙH™\]ZY\™[ˆŒ0ëX\ÈHX›XØXÚpìÛˆHÙH[ˆİ[\YÈ0ëX\È°è[YÜË‰ÈBˆYˆ
+^\İ[™ÊHØš™Xİ˜\ÜÚYÛŠ^\İ[™Ë™\]Z\™[Y[
+NÈ[ÙH][K™[YÚXš[]Kœ™\]Z\™[Y[Ëœ\Ú
+™\]Z\™[Y[
+Bˆ][K˜Xİ[ÛœË˜Ø[”X›\ÚØ[™Y]HH˜[ÙNÈ™XÛÛ\]S[ØÚÑ[YÚXš[]J][JBˆ™]\›ˆÈYˆX›XØ][Û‹IÚ][KšYXÙ\™[[ÛT™\]Y\İYX›\ÚYœ›ÛU]Îˆ][K™[YÚXš[]KœX›XØ][Û‹œX›\ÚYœ›ÛU]Ë™\]Z\™Y^\ÎˆŒ[PÛÙNˆ	Ú[š]X][Û‹œX›XØ][Û‹›Z[š[][WÙ^\ÉËİ]\Îˆ	ÜX›\ÚY	Ë[™XYTX›\ÚYˆ˜[ÙK›İYšXØ][Û”™XÚ\Y[ÎˆÍ›İYšXØ][ÛœĞÜ™X]YˆÍBˆBˆ™]\›ˆ\Ëœ™\]Y\İØ[™Y]TX›XØ][Û•ÛÜšÙ›İÔ™\ÜÛœÙOŠØ\KØÙ\™[[ÛšX\ËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KÜX›XØXÚ[Û‹Z[œÚ[XYØÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜È]]Üš^™PÙ\™[[ÛJÙ\™[[ÛT™\]Y\İYˆİš[™ÊNˆ›ÛZ\ÙOÈYÎˆİš[™ÎÈİ]\Îˆİš[™ÈOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİ][HH\Ëœ™\]Z\™S[ØÚÔ™]šY]ĞÙ\™[[ÛJÙ\™[[ÛT™\]Y\İY
+BˆYˆ
+Z][K˜Xİ[ÛœË˜Ø[]]Üš^™JH›İÈ™]È\œ›ÜŠ	ÔİHİY[H›ÈYYH]]Üš^˜\ˆ\İHÙ\™[[ÛšXK‰ÊBˆYˆ
+Z][K™[YÚXš[]K˜Ø[]]Üš^™JH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXHpî›ˆY[™H™\]Z\Ú]ÜÈØ›YØ]Üš[ÜÈ[™Y[\Ë‰ÊBˆ][Kœİ]\ÈH	Ø]]Üš^™Y	ÎÈ][K˜Xİ[ÛœÈHÈØ[•˜[Y]R[\›˜[Y™˜Z\œÎˆ˜[ÙKØ[”X›\ÚØ[™Y]Nˆ˜[ÙKØ[]]Üš^™Nˆ˜[ÙHBˆ™]\›ˆÈYˆ][KšYİ]\Îˆ][Kœİ]\ÈBˆBˆ™]\›ˆ\Ëœ™\]Y\İÈYÎˆİš[™ÎÈİ]\Îˆİš[™ÈOŠØ\KØÙ\™[[ÛšX\ËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KØ]]Üš^˜\˜ÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜È™YÚ\İ\’[š]X][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™ËÙ\™[[ÛQ]Nˆİš[™ËZ[]T™Y™\™[˜ÙNˆİš[™ÊNˆ›ÛZ\ÙO[š]X][ÛÛÛ\][Û”™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İYİ]\Îˆ	ØÛÛ\]Y	ËY[X™\’Yˆ	ÛY[X™\‹Y[[ËLŒ‹LIËY[X™\œÚ\İ]\Îˆ	ØXİ]™IËYÜ™YNˆ	Ø\™[XÙIËY™™Xİ]™Q]NˆÙ\™[[ÛQ]KØİ[Y[ÛÙNˆ	ĞUUPÑT‹QSSËLŒ‹LIÈBˆ™]\›ˆ\ËœÜİœÛÛ[š]X][ÛÛÛ\][Û”™\ÜÛœÙOŠØ\KØÙ\™[[ÛšX\ËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KÜ™YÚ\İ˜\‹Z[šXÚXXÚ[Û˜ÈÙ\™[[ÛQ]KZ[]T™Y™\™[˜ÙHJBˆBˆ\Ş[˜È™XÛÜ™[š]X[[X™\˜][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[š]X[[X™\˜][Û”™\]Y\İ
+Nˆ›ÛZ\ÙO[š]X[[X™\˜][Û”™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÒ[š]X[[X™\˜][ÛŠÙ\™[[ÛT™\]Y\İY^[ØY
+Bˆ™]\›ˆ\ËœÜİœÛÛ[š]X[[X™\˜][Û”™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KÙ[X™\˜XÚ[Û‹Z[šXÚX[^[ØY
+BˆBˆ\Ş[˜È\ØY[\šY]ÑØİ[Y[
+Ù\™[[ÛT™\]Y\İYˆİš[™Ë[\šY]ÒYˆİš[™Ëš[Nˆš[KY]Y]NˆÛZ]Ø[™Y]R[\šY]Ñ]šY[˜ÙK	ÙØİ[Y[™\œÚ[Û’Y	ÏŠNˆ›ÛZ\ÙO[\šY]ÑØİ[Y[™\ÜÛœÙOˆÂˆÛÛœİ^[œÚ[ÛˆHš[K›˜[YKÓİÙ\Ø\ÙJ
+KœÜ]
+	Ë‰ÊKœÜ
 
-var app = builder.Build();
+BˆÛÛœİÛÛ[\HHš[K\H
+^[œÚ[ÛˆOOH	Ü‰ÈÈ	Ø\XØ][Û‹Ü‰Èˆ^[œÚ[ÛˆOOH	ÙØŞ	ÈÈ	Ø\XØ][Û‹İ›™›Ü[[›Ü›X]Ë[Ù™šXÙYØİ[Y[ÛÜ™›ØÙ\ÜÚ[™Û[™Øİ[Y[	Èˆ	ÉÊBˆYˆ
+VÉØ\XØ][Û‹Ü‰Ë	Ø\XØ][Û‹İ›™›Ü[[›Ü›X]Ë[Ù™šXÙYØİ[Y[ÛÜ™›ØÙ\ÜÚ[™Û[™Øİ[Y[	×Kš[˜ÛY\ÊÛÛ[\JJH›İÈ™]È\œ›ÜŠ	ÓH[™]š\İHX™HY[\œÙH[ˆÛÜ™
+™ØŞ
+HÈ‹‰ÊBˆYˆ
+š[KœÚ^™HHš[KœÚ^™HˆL—ÍÎ
+H›İÈ™]È\œ›ÜŠ	Ñ[\˜Ú]›ÈX™HÛÛ[™\ˆ[™›Ü›XXÚpìÛˆH\Ø\ˆÛÛ[Èpè^[[ÈLP‹‰ÊBˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİØİ[Y[™\œÚ[Û’YHÜ\Ëœ˜[™ÛUURQ
 
-if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
-{
-    await using var scope = app.Services.CreateAsyncScope();
-    var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
-    await db.Database.MigrateAsync();
-    var bootstrapDb = scope.ServiceProvider.GetRequiredService<BootstrapDbContext>();
-    await bootstrapDb.Database.MigrateAsync();
-    var documentDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
-    await documentDb.Database.MigrateAsync();
-    var grandArchiveDb = scope.ServiceProvider.GetRequiredService<GrandArchiveDbContext>();
-    await grandArchiveDb.Database.MigrateAsync();
-    var notificationDb = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
-    await notificationDb.Database.MigrateAsync();
-    var calendarDb = scope.ServiceProvider.GetRequiredService<CalendarDbContext>();
-    await calendarDb.Database.MigrateAsync();
-    var regimenInteriorDb = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
-    await regimenInteriorDb.Database.MigrateAsync();
-    var candidateIntakeDb = scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>();
-    await candidateIntakeDb.Database.MigrateAsync();
-    var admissionsDb = scope.ServiceProvider.GetRequiredService<AdmissionsDbContext>();
-    await admissionsDb.Database.MigrateAsync();
-}
+Bˆ\Ë›[ØÚÒ[\šY]ÑØİ[Y[ËœÙ]
+Øİ[Y[™\œÚ[Û’YÈš[Kš[S˜[YNˆš[K›˜[YKY]Y]NˆÈ‹‹›Y]Y]KØİ[Y[™\œÚ[Û’YHJBˆ™]\›ˆÈ[\šY]ÒYØİ[Y[™\œÚ[Û’Yš[S˜[YNˆš[K›˜[YK™\İ[ˆY]Y]Kœ™\İ[İ[[X\NˆY]Y]Kœİ[[X\KÚ^™P]\Îˆš[KœÚ^™HBˆBˆ™]\›ˆ\Ëœ™\]Y\İ[\šY]ÑØİ[Y[™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KÙ[™]š\İ\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+[\šY]ÒY
+_KØÛÛ[šYØÈY]Ùˆ	ÔU	ËXY\œÎˆÈ	ĞÛÛ[U\IÎˆÛÛ[\K	ÖQš[KS˜[YIÎˆ[˜ÛÙUT’PÛÛ\Û™[
+š[K›˜[YJK	ÖR[\šY]Ù\‰Îˆ[˜ÛÙUT’PÛÛ\Û™[
+Y]Y]Kš[\šY]Ù\‘\Ü^S˜[YJK	ÖR[\šY]ËTİ[[X\IÎˆ[˜ÛÙUT’PÛÛ\Û™[
+Y]Y]Kœİ[[X\JK	ÖR[\šY]ËT™\İ[	ÎˆY]Y]Kœ™\İ[	ÖR[\šY]ËQ]IÎˆY]Y]Kš[\šY]Ñ]HK›ÙNˆš[HJBˆBˆ\Ş[˜È™XÛÜ™[\šY]ÔXÚØYÙJÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[\šY]ÔXÚØYÙT™\]Y\İ
+Nˆ›ÛZ\ÙO[\šY]ÔXÚØYÙT™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+^[ØYš[\šY]ÜË›[™İÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]Ëš[\šY]ÜÉË™X\ÛÛˆ[^YY[H™\]ZY\™H[Y[›ÜÈ™\È[™]š\İ\ÈÛÛ\]\ÎÈXİX[Y[H™YÚ\İ˜H	Ü^[ØYš[\šY]ÜË›[™İK˜ÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
+^[ØYš[\šY]ÜËœÛÛYJ][HOˆZ][Kœİ[[X\Kš[J
+HZ][K™Øİ[Y[™\œÚ[Û’YVÉÙ˜]›Ü˜X›IË	Ù\Ù˜]›Ü˜X›I×Kš[˜ÛY\Ê][Kœ™\İ[
+JJH›İÈ™]È\œ›ÜŠ	ĞØYH[™]š\İH™\]ZY\™H™\İ[Y[‹™\İ[YÈH\˜Ú]›ÈÛÜ™È‹‰ÊBˆYˆ
+\^[ØY˜ÛÛ™šY[X[]Y\İ[Û›˜Z\™P]˜Z[X›JH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]Ë˜ÛÛ™šY[X[Ü]Y\İ[Û›˜Z\™IË™X\ÛÛˆ	Ñ˜[H[İY\İ[Û˜\š[ÈÛÛ™šY[˜ÚX[™\]Y\šYÈ\˜HH™]š\ÚpìÛˆH\˜Ù\ˆÜ˜YË‰ËÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
+\^[ØY˜]]Øš[ÙÜ˜\P]˜Z[X›JH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]Ë˜]]Øš[ÙÜ˜\IË™X\ÛÛˆ	Ñ˜[HH]]Øš[ÙÜ˜Y°ëXH™\]Y\šYH\˜HH™]š\ÚpìÛˆH\˜Ù\ˆÜ˜YË‰ËÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ø\›İ™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]ËœXÚØYÙWØÛÛ\]IË™X\ÛÛˆ[^YY[HÛÛY[™H	Ü^[ØYš[\šY]ÜË›[™İH[™]š\İ\ÈHÜÈ[XÙY[\È™\]Y\šYÜË˜ÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆBˆ™]\›ˆ\ËœÜİœÛÛ[\šY]ÔXÚØYÙT™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KØ[XÙY[\Ø^[ØY
+BˆBˆ\Ş[˜È™XÛÜ™\™YÜ™YT™]šY]ÊÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ\™YÜ™YT™]šY]Ô™\]Y\İ
+Nˆ›ÛZ\ÙO\™YÜ™YT™]šY]Ô™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
+JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆH™Y™\™[˜ÚXH[^˜XİÈHXİK‰ÊBˆYˆ
+^[ØYœ™\Ù[›İ\œÈH^[ØY›İ\Ò[‘˜]›Üˆ^[ØY›İ\ĞYØZ[œİ^[ØY˜Xœİ[[ÛœÈ^[ØY›İ\Ò[‘˜]›Üˆ
+È^[ØY›İ\ĞYØZ[œİ
+È^[ØY˜Xœİ[[ÛœÈOOH^[ØYœ™\Ù[›İ\œÊH›İÈ™]È\œ›ÜŠ	ÓHİ[XHH›İÜÈX™HÛÚ[˜ÚY\ˆÛÛˆH\Ú\İ[˜ÚXH™YÚ\İ˜YK‰ÊBˆÛÛœİİ]\ÈH^[ØY›Ü[•›İP\›İ™YÈ	Ø\›İ™Y	Èˆ	Ü™Z™XİY	Âˆ™]\›ˆÈ\™YÜ™YNˆÈYˆÙ\™[[ÛT™\]Y\İYİ]\ËÛÙNˆ\™ÙYÜ™YWÜ™]šY]Ë‰Üİ]\ßX™X\ÛÛˆ^[ØY›Ü[•›İP\›İ™YÈ	ÓH›İXÚpìÛˆXšY\HH\˜Ù\ˆÜ˜YÈYH˜]›Ü˜X›K‰Èˆ	ÓH›İXÚpìÛˆXšY\HH\˜Ù\ˆÜ˜YÈ›ÈYH˜]›Ü˜X›K‰ÈKİ]\Îˆ^[ØY›Ü[•›İP\›İ™YÈ	İ[™\—Ü™]šY]ÉÈˆ	Ü™Z™XİY	ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛ\™YÜ™YT™]šY]Ô™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KÜ™]š\Ú[Û‹]\˜Ù\‹YÜ˜YØ^[ØY
+BˆBˆ\Ş[˜È™XÛÜ™š[˜[˜[İ
+Ù\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆš[˜[˜[İ™\]Y\İ
+Nˆ›ÛZ\ÙOš[˜[˜[İ™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
+JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆH™Y™\™[˜ÚXH[^˜XİÈHXİK‰ÊBˆYˆ
+^[ØY˜˜[İË›[™İH^[ØY˜˜[İË›[™İˆÈ™]ÈÙ]
+^[ØY˜˜[İË›X\
+][HOˆ][Kœ›ØÙY\™S[X™\ŠJKœÚ^™HOOH^[ØY˜˜[İË›[™İ
+H›İÈ™]È\œ›ÜŠ	ÑX™H™YÚ\İ˜\ˆ[™H[›ÈH™\È°è[Z]\È\İ[ÜË‰ÊBˆYˆ
+^[ØY˜˜[İËœÛÛYJ][HOˆ][K™[YÚX›U›İ\œÈH][KÚ]P˜[İÈ][K˜›XÚĞ˜[İÈ][KÚ]P˜[İÈ
+È][K˜›XÚĞ˜[İÈOOH][K™[YÚX›U›İ\œÊJH›İÈ™]È\œ›ÜŠ	Ó\È˜[İ\È›[˜Ø\ÈH™YÜ˜\ÈX™[ˆÛÚ[˜ÚY\ˆÛÛˆ\È\œÛÛ˜\ÈXš[]Y\Ë‰ÊBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ^[ØY˜˜[İ\›İ™YÈ	Ø\›İ™Y	Èˆ	Ü™Z™XİY	Ë\ÓÙ‘]Nˆ^[ØY˜˜[İ]KÛÙNˆ^[ØY˜˜[İ\›İ™YÈ	Ùš\œİÙYÜ™YWØ˜[İ˜\›İ™Y	Èˆ	Ùš\œİÙYÜ™YWØ˜[İœ™Z™XİY	Ë™X\ÛÛˆ^[ØY˜˜[İ\›İ™YÈ	Ñ[˜[İZ™HYš[š]]›ÈYH˜]›Ü˜X›K‰Èˆ	Ñ[˜[İZ™HYš[š]]›ÈYH\Ù˜]›Ü˜X›K‰ËÙ\™[[ÛTİ]\Îˆ^[ØY˜˜[İ\›İ™YÈ	İ[™\—Ü™]šY]ÉÈˆ	Ü™Z™XİY	ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛš[˜[˜[İ™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KØ˜[İZ™X^[ØY
+BˆBˆ\Ş[˜ÈİX›Z][š]X][Û”™\]Y\İ
+Ù\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[š]X][Û”™\]Y\İİX›Z\ÜÚ[ÛŠNˆ›ÛZ\ÙO[š]X][Û”™\]Y\İİX›Z\ÜÚ[Û”™\ÜÛœÙOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+^[ØYœ›ÜÜÙYÙ\™[[ÛQ]H^[ØYœİX›Z\ÜÚ[Û‘]JH›İÈ™]È\œ›ÜŠ	ÓH™XÚH›ÜY\İH›ÈYYHÙ\ˆ[\š[ÜˆHHÛÛXÚ]Y‰ÊBˆYˆ
+\^[ØY™[™\˜X›P\›İ˜[
+H›İÈ™]È\œ›ÜŠ	ÓHÛÛXÚ]Y™\]ZY\™HÛÛ™š\›XXÚpìÛˆ[™[™\˜X›HXY\İ›Ë‰ÊBˆYˆ
+\^[ØYœÙXÜ™]\Q\Ü^S˜[YKš[J
+H\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
+JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆÙXÜ™]\°ëXH™\ÜÛœØX›HH™Y™\™[˜ÚXHØİ[Y[[‰ÊBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ø\›İ™Y	Ë›ÜÜÙY]Nˆ^[ØYœ›ÜÜÙYÙ\™[[ÛQ]KÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉË[™XYTİX›Z]Yˆ˜[ÙHBˆBˆ™]\›ˆ\ËœÜİœÛÛ[š]X][Û”™\]Y\İİX›Z\ÜÚ[Û”™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KÜÛÛXÚ]YZ[šXÚXXÚ[Û˜^[ØY
+BˆB‚ˆ\Ş[˜ÈÙ]™X\İ\UÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë\ÓÙÎˆİš[™ÊNˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÔÛ˜\Úİ\ÓÙŠ\Ë›[ØÚÕ™X\İ\K™Ù]
+Ü™Ø[š^˜][Û’Y
+K\ÓÙŠBˆÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\Ê
+NÈYˆ
+\ÓÙŠH]Y\KœÙ]
+	Ø\ÓÙ‰Ë\ÓÙŠBˆ™]\›ˆ\Ë›Ü[Û˜[Ù]ÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ™Yİ[\šYY	Ü]Y\KœÚ^™HÈÉÜ]Y\_Xˆ	ÉßX
+BˆBˆ\Ş[˜ÈÙ]™X\İ\UÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÛÜšÜÚÜ™Yİ[\š]T™\]Y\İ
+Nˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİÛ˜\ÚİH[ØÚÔ™Yİ[\š]TÛ˜\Úİ
+Ü™Ø[š^˜][Û’Y^[ØY	İ™X\İ\IÊNÈ\Ë›[ØÚÕ™X\İ\KœÙ]
+Ü™Ø[š^˜][Û’YÛ˜\Úİ
+NÈ™]\›ˆÛ˜\ÚİBˆ™]\›ˆ\ËœÜİœÛÛÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ™Yİ[\šYY^[ØY
+BˆBˆ\Ş[˜ÈÜ™X]U™X\İ\Tİ][Y[
+Ü™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÜ™X]U™X\İ\Tİ][Y[™\]Y\İ
+Nˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H[ØÚÕ™X\İ\Tİ][Y[
+Ü™Ø[š^˜][Û’Y^[ØY
+Bˆ\Ë›[ØÚÕ™X\İ\Tİ][Y[ËœÙ]
+İ][Y[šYİ][Y[
+Bˆ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
+İ][Y[
+BˆBˆ™]\›ˆ\ËœÜİœÛÛ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KØİXY›ÜØ^[ØY
+BˆBˆ\Ş[˜ÈÙ[™\˜]U™X\İ\Tİ][Y[[™\Êİ][Y[Yˆİš[™Ë^[ØYˆÙ[™\˜]U™X\İ\S[™\Ô™\]Y\İ
+Nˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
+İ][Y[Y
+BˆÛÛœİ[[İ[ÈHÜ^[ØY›X\İ\[[İ[^[ØY›X\İ\[[İ[^[ØY›X\İ\[[İ[^[ØY™™[İØÜ˜Y[[İ[^[ØY™™[İØÜ˜Y[[İ[^[ØY˜\™[XÙP[[İ[^[ØY˜\™[XÙP[[İ[BˆÛÛœİYÜ™Y\ÈHÉÛX\İ\‰Ë	ÛX\İ\‰Ë	ÛX\İ\‰Ë	Ù™[İØÜ˜Y	Ë	Ù™[İØÜ˜Y	Ë	Ø\™[XÙIË	Ø\™[XÙI×BˆÛÛœİ˜[Y\ÈHÉÕ™[™\˜X›HXY\İ˜IË	Ôš[Y\ˆšYÚ[[IË	ÔÙYİ[™ÈšYÚ[[IË	ĞÛÛ\pìY\›È[›ÉË	ĞÛÛ\pìY\˜HÜÉË	Ğ\™[™^ˆ[›ÉË	Ğ\™[™^˜HÜÉ×Bˆİ][Y[›[™\ÈH[[İ[Ë›X\
 
-if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
-{
-    if (app.Environment.IsProduction())
-        throw new InvalidOperationException("DemoData:Enabled nunca puede utilizarse en Production.");
+[[İ[[™^
+HOˆ
+ÈYˆÜ\Ëœ˜[™ÛUURQ
 
-    await using var scope = app.Services.CreateAsyncScope();
-    await scope.ServiceProvider.GetRequiredService<FirstImplementationSeedService>().SeedAsync();
-}
+KY[X™\’Yˆ[[Ë[Y[X™\‹IÚ[™^
+È_XY[X™\œÚ\Yˆ[[Ë[Y[X™\œÚ\IÚ[™^
+È_XYÜ™YPÛÙP]İ]Ù™ˆYÜ™Y\ÖÚ[™^KÙ™šXÙPÛÙP]İ]Ù™ˆ[™^ÈÈÉÕ“IË	Ô‰Ë	ÔÕ‰×VÚ[™^Hˆ[˜\ÙP[[İ[ˆ[[İ[Y\İY[[[İ[ˆ[™^OOHˆÈNˆ^XX›P[[İ[ˆ[™^OOHˆÈ[[İ[Hˆ[[İ[Y\İY[\Nˆ[™^OOHˆÈ	ÜÙ[š[Ü—Ù\ØÛİ[	Èˆ[]]Üš^˜][Û”™Y™\™[˜ÙNˆ[™^OOHˆÈ	Ô[˜ÚHSSËLŒËÌŒ‰Èˆ[ØœÙ\˜][Ûˆ˜[Y\ÖÚ[™^KY[]SX]Úİ]\Îˆ	ÛX]ÚY	ÈJJBˆ™XØ[İ[]S[ØÚÕ™X\İ\Jİ][Y[
+NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
+İ][Y[
+BˆBˆ™]\›ˆ\ËœÜİœÛÛ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+İ][Y[Y
+_KÙÙ[™\˜\‹[[™X\Ø^[ØY
+BˆBˆ\Ş[˜ÈY™X\İ\Tİ][Y[^[Y[
+İ][Y[Yˆİš[™Ë^[ØYˆY™X\İ\T^[Y[™\]Y\İ
+Nˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
+İ][Y[Y
+Bˆİ][Y[œ^[Y[Ëœ\Ú
+ÈYˆÜ\Ëœ˜[™ÛUURQ
 
-app.UseExceptionHandler();
-app.UseRequestLocalization();
-app.UseAuthentication();
-app.UseMiddleware<LibraryDegreeAccessMiddleware>();
-app.UseAuthorization();
-app.UseMiddleware<CandidatePublishedLockMiddleware>();
-app.UseMiddleware<CandidateInitiationAuthorizationGuardMiddleware>();
-app.UseMiddleware<AdmissionCeremonyAuthorizationGuardMiddleware>();
-app.UseMiddleware<GrandMasterCeremonyAuthorizationGuardMiddleware>();
+K^[Y[Y]Ùˆ^[ØYœ^[Y[Y]Ù^[Y[]Nˆ^[ØYœ^[Y[]K[[İ[ˆ^[ØY˜[[İ[^Y\‘\Ü^S˜[YNˆ^[ØYœ^Y\‘\Ü^S˜[YHÏÈ[™Y™\™[˜ÙNˆ^[ØYœ™Y™\™[˜ÙHÏÈ[™XÛÜ™Y]]Îˆ™]È]J
+KÒTÓÔİš[™Ê
+HJBˆ™XØ[İ[]S[ØÚÕ™X\İ\Jİ][Y[
+NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
+İ][Y[
+BˆBˆ]ØZ]\ËœÜİœÛÛ[šÛ›İÛŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+İ][Y[Y
+_KÜYÛÜØ^[ØY
+Bˆ™]\›ˆ\Ë™Ù]™X\İ\Tİ][Y[
+İ][Y[Y
+BˆBˆ\Ş[˜ÈİX›Z]™X\İ\Tİ][Y[
+İ][Y[Yˆİš[™ÊNˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
+İ][Y[Y
+NÈİ][Y[œİ]\ÈH	ÜİX›Z]Y	ÎÈİ][Y[œİX›Z]Y]]ÈH™]È]J
+KÒTÓÔİš[™Ê
+NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
+İ][Y[
+HBˆ™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+İ][Y[Y
+_KÙ[šX\˜ÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜È™XÛÛ˜Ú[U™X\İ\Tİ][Y[
+İ][Y[Yˆİš[™ÊNˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
+İ][Y[Y
+NÈYˆ
+İ][Y[™Y™™\™[˜ÙP[[İ[OOH
+H›İÈ™]È\œ›ÜŠ	Ñ[İXY›ÈX[Y[™H[˜HY™\™[˜ÚXH[™Y[K‰ÊNÈİ][Y[œİ]\ÈH	Ü™XÛÛ˜Ú[Y	ÎÈİ][Y[œ™XÛÛ˜Ú[Y]]ÈH™]È]J
+KÒTÓÔİš[™Ê
+NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
+İ][Y[
+HBˆ™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+İ][Y[Y
+_KØÛÛ˜Ú[X\˜ÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜ÈÙ]™X\İ\Tİ][Y[
+İ][Y[Yˆİš[™ÊNˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÈYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÛÛ™U™X\İ\Tİ][Y[
+\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
+İ][Y[Y
+JNÈ™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+İ][Y[Y
+_X
+HBˆ\Ş[˜ÈÙ]ÜÜ][\šXUÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë\ÓÙÎˆİš[™ÊNˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÔÛ˜\Úİ\ÓÙŠ\Ë›[ØÚÒÜÜ][\šXK™Ù]
+Ü™Ø[š^˜][Û’Y
+K\ÓÙŠBˆÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\Ê
+NÈYˆ
+\ÓÙŠH]Y\KœÙ]
+	Ø\ÓÙ‰Ë\ÓÙŠBˆ™]\›ˆ\Ë›Ü[Û˜[Ù]ÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\KÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ™Yİ[\šYY	Ü]Y\KœÚ^™HÈÉÜ]Y\_Xˆ	ÉßX
+BˆBˆ\Ş[˜ÈÙ]ÜÜ][\šXUÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÛÜšÜÚÜ™Yİ[\š]T™\]Y\İ
+Nˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİÛ˜\ÚİH[ØÚÔ™Yİ[\š]TÛ˜\Úİ
+Ü™Ø[š^˜][Û’Y^[ØY	ÚÜÜ][\šXIÊNÈ\Ë›[ØÚÒÜÜ][\šXKœÙ]
+Ü™Ø[š^˜][Û’YÛ˜\Úİ
+NÈ™]\›ˆÛ˜\ÚİBˆ™]\›ˆ\ËœÜİœÛÛÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\KÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ü™Ø[š^˜][Û’Y
+_KÜ™Yİ[\šYY^[ØY
+BˆB‚ˆ\Ş[˜ÈÙ]ÙXÜ™]\šX]]˜Z[Xš[]Jœ›ÛU]Îˆİš[™ËÕ]Îˆİš[™ÊNˆ›ÛZ\ÙOÜXÙP]˜Z[Xš[]T™\ÜÛœÙOˆÈYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİ][\ÈH\Ë›[ØÚÔÜXÙ\Ë›X\
+ÜXÙHOˆ
+È‹‹œÜXÙK\Ğ]˜Z[X›Nˆ]\Ë›[ØÚĞ\ŞTÜXÙ\Ëš\ÊÜXÙKšY
+HJJNÈ™]\›ˆÈœ›ÛU]ËÕ]Ëİ[ˆ][\Ë›[™İ]˜Z[X›Nˆ][\Ë™š[\ŠOˆš\Ğ]˜Z[X›JK›[™İ][\ÈHHÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\ÊÈœ›ÛU]ËÕ]ÈJNÈ™]\›ˆ\Ëœ™\]Y\İÜXÙP]˜Z[Xš[]T™\ÜÛœÙOŠØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙ\ÜXÚ[ÜËÙ\ÜÛšXš[YYÉÜ]Y\_X
+HBˆ\Ş[˜ÈÙ]ÙXÜ™]\šX]Øİ[Y[Ê
+Nˆ›ÛZ\ÙOÙXÜ™]\šX]Øİ[Y[Ô™\ÜÛœÙOˆÈYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚÑØİ[Y[Ë›[™İ][\ÎˆË‹‹\Ë›[ØÚÑØİ[Y[×HNÈ™]\›ˆ\Ëœ™\]Y\İÙXÜ™]\šX]Øİ[Y[Ô™\ÜÛœÙOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙØİ[Y[ÜÉÊHBˆ\Ş[˜ÈÙ]ÙXÜ™]\šX]Ù\™[[ÛT]Y]YJ
+Nˆ›ÛZ\ÙOÜ˜[™ÙXÜ™]\šX]Ù\™[[ÛT]Y]YT™\ÜÛœÙOˆÈYˆ
+\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚĞÙ\™[[ÛšY\Ë›[™İ][\Îˆ\Ë›[ØÚĞÙ\™[[ÛšY\Ë›X\
+][HOˆ
+È‹‹š][HJJHNÈ™]\›ˆ\Ëœ™\]Y\İÜ˜[™ÙXÜ™]\šX]Ù\™[[ÛT]Y]YT™\ÜÛœÙOŠ	ËØ\KÚ[œİ]][Û˜[ÙÜ˜[‹\ÙXÜ™]\šXKØÙ\™[[ÛšX\ËX]]Üš^˜Y\ÉÊHBˆ\Ş[˜ÈÜ™X]TÙXÜ™]\šX]ÜXÙJ^[ØYˆÜ™X]TÜXÙT™\]Y\İ
+Nˆ›ÛZ\ÙO[œİ]][Û˜[ÜXÙOˆÈYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİÜXÙNˆ[œİ]][Û˜[ÜXÙHHÈYˆÜ\Ëœ˜[™ÛUURQ
 
-var apiVersion = typeof(Program).Assembly
-    .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-    .InformationalVersion
-    .Split('+', 2)[0]
-    ?? "0.0.0-unknown";
+K‹‹œ^[ØYØØ][Ûˆ^[ØY›ØØ][ÛˆÏÈ[Ø\XÚ]Nˆ^[ØY˜Ø\XÚ]HÏÈ[İ]\Îˆ	ØXİ]™IÈNÈ\Ë›[ØÚÔÜXÙ\Ëœ\Ú
+ÜXÙJNÈ™]\›ˆÜXÙHH™]\›ˆ\ËœÜİœÛÛ[œİ]][Û˜[ÜXÙOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙ\ÜXÚ[ÜÉË^[ØY
+HBˆ\Ş[˜ÈÜ™X]TÙXÜ™]\šX]™\Ù\˜][ÛŠ^[ØYˆÜ™X]T™\Ù\˜][Û”™\]Y\İ
+Nˆ›ÛZ\ÙOÈYˆİš[™ÎÈİ]\Îˆİš[™ÈOˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆYˆ
+\Ë›[ØÚĞ\ŞTÜXÙ\Ëš\Ê^[ØYœÜXÙRY
+JH›İÈ™]È\œ›ÜŠ	Ñ[[\ÈÈØ[HXH\İ0èH™\Ù\˜YÈ[ˆ\ÙHÜ˜\š[Ë‰ÊBˆÛÛœİÙ\™[[ÛHH^[ØY˜Ù\™[[ÛT™\]Y\İYÈ\Ë›[ØÚĞÙ\™[[ÛšY\Ë™š[™
+][HOˆ][KšYOOH^[ØY˜Ù\™[[ÛT™\]Y\İY
+Hˆ[™Yš[™YˆYˆ
+^[ØY˜Ù\™[[ÛT™\]Y\İY	‰ˆXÙ\™[[ÛJH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH[™XØYH›È^\İH[ˆH˜[™Z˜H]]Üš^˜YK‰ÊBˆYˆ
+Ù\™[[ÛH	‰ˆÙ\™[[ÛK›Ü™Ø[š^˜][Û’YOOH^[ØY›Ü™Ø[š^˜][Û’Y
+H›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH›ÈÛÜœ™\ÜÛ™H[[\ˆ[™XØYË‰ÊBˆÛÛœİYHÜ\Ëœ˜[™ÛUURQ
 
-app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "PMGM.Api" }));
-app.MapGet("/health/ready", async (PmgmDbContext db, CancellationToken cancellationToken) =>
-    await db.Database.CanConnectAsync(cancellationToken)
-        ? Results.Ok(new { status = "ready", database = "postgresql" })
-        : Results.StatusCode(StatusCodes.Status503ServiceUnavailable));
+NÈ\Ë›[ØÚĞ\ŞTÜXÙ\Ë˜Y
+^[ØYœÜXÙRY
+BˆYˆ
+Ù\™[[ÛJHÈÛÛœİÜXÙHH\Ë›[ØÚÔÜXÙ\Ë™š[™
+][HOˆ][KšYOOH^[ØYœÜXÙRY
+NÈÙ\™[[ÛKœÜXÙT™\Ù\˜][Û’YHYÈÙ\™[[ÛKœÜXÙS˜[YHHÜXÙOË›˜[YHÏÈ	Ñ\ÜXÚ[È[œİ]XÚ[Û˜[	ÎÈÙ\™[[ÛKœ™\Ù\˜][Û”İ\Ğ]]ÈH^[ØYœİ\Ğ]]ÎÈÙ\™[[ÛKœ™\Ù\˜][Û‘[™Ğ]]ÈH^[ØY™[™Ğ]]ÈBˆ™]\›ˆÈYİ]\Îˆ	Ü™\Ù\™Y	ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛÈYˆİš[™ÎÈİ]\Îˆİš[™ÈOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÜ™\Ù\˜\ÉË^[ØY
+BˆBˆ\Ş[˜È\ÜİYTÙXÜ™]\šX]Øİ[Y[
+^[ØYˆ\ÜİYQØİ[Y[™\]Y\İ
+Nˆ›ÛZ\ÙOÙXÜ™]\šX]Øİ[Y[ˆÈYˆ
+\Ë\ÙS[ØÚÜÊHÈÛÛœİØİ[Y[ˆÙXÜ™]\šX]Øİ[Y[HÈYˆÜ\Ëœ˜[™ÛUURQ
 
-app.MapGet("/api/system/info", () => Results.Ok(new
-{
-    project = "Proyecto Centenario â€” ModernizaciÃ³n Gran Logia Mixta de Chile",
-    api = "PMGM.Api",
-    version = apiVersion,
-    runtime = ".NET 10",
-    culture = "es-CL",
-    institutionalTimeZone = "America/Santiago",
-    defaultCurrency = "CLP"
-}));
+KØİ[Y[\Nˆ^[ØY™Øİ[Y[\KØİ[Y[ÛÙNˆ	Ü^[ØY™Øİ[Y[\HOOH	ÙXÜ™YIÈÈ	ÑPÉÈˆ	ĞÓÓIßKQSSËIÔİš[™Ê\Ë›[ØÚÑØİ[Y[Ë›[™İ
+ÈJKœYİ\
+Ë	Ì	Ê_X]Nˆ^[ØY]KÛÛ[ˆ^[ØY˜ÛÛ[Ü™Ø[š^˜][Û’Yˆ^[ØY›Ü™Ø[š^˜][Û’YÏÈ[™[]YÙ\™[[ÛT™\]Y\İYˆ[ÜXÙT™\Ù\˜][Û’Yˆ[İ]\Îˆ	Ú\ÜİYY	Ë\ÜİYY]]Îˆ™]È]J
+KÒTÓÔİš[™Ê
+K\ÜİYYTİXš™Xİˆ	Ù[[ÉÈNÈ\Ë›[ØÚÑØİ[Y[Ë[œÚY
+Øİ[Y[
+NÈ™]\›ˆØİ[Y[H™]\›ˆ\ËœÜİœÛÛÙXÜ™]\šX]Øİ[Y[Š	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙØİ[Y[ÜÉË^[ØY
+HBˆ\Ş[˜È\ÜİYTÙXÜ™]\šX]Ù\™[[ÛP]]Üš^˜][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™ËÜXÙT™\Ù\˜][Û’Yˆİš[™È[H[
+Nˆ›ÛZ\ÙOÙXÜ™]\šX]Øİ[Y[ˆÂˆYˆ
+\Ë\ÙS[ØÚÜÊHÂˆÛÛœİÙ\™[[ÛHH\Ë›[ØÚĞÙ\™[[ÛšY\Ë™š[™
+][HOˆ][KšYOOHÙ\™[[ÛT™\]Y\İY
+NÈYˆ
+XÙ\™[[ÛJH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH[™XØYH›È^\İK‰ÊNÈYˆ
+Ù\™[[ÛK™›Ü›X[]]Üš^˜][Û’\ÜİYY
+H›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXHXHİY[HÛÛˆ]]Üš^˜XÚpìÛˆ›Ü›X[šYÙ[K‰ÊNÈYˆ
+ÜXÙT™\Ù\˜][Û’Y	‰ˆÙ\™[[ÛKœÜXÙT™\Ù\˜][Û’YOOHÜXÙT™\Ù\˜][Û’Y
+H›İÈ™]È\œ›ÜŠ	ÓH™\Ù\˜H[™XØYH›ÈÛÜœ™\ÜÛ™HH\İHÙ\™[[ÛšXK‰ÊNÈÙ\™[[ÛK™›Ü›X[]]Üš^˜][Û’\ÜİYYHYBˆÛÛœİØİ[Y[ˆÙXÜ™]\šX]Øİ[Y[HÈYˆÜ\Ëœ˜[™ÛUURQ
 
-app.MapSessionEndpoints();
-app.MapBootstrapEndpoints();
-app.MapOrganizationEndpoints();
-app.MapMembershipEndpoints();
-app.MapMemberSelfEndpoints();
-app.MapTransferEndpoints();
-app.MapWithdrawalEndpoints();
-app.MapRegimenInteriorEndpoints();
-app.MapRegimenInteriorMemberControlEndpoints();
-app.MapRegimenInteriorDataQualityEndpoints();
-app.MapDataQualityCaseEndpoints();
-app.MapExecutiveReportingEndpoints();
-app.MapTreasuryEndpoints();
-app.MapLodgeTreasuryEndpoints();
-app.MapLodgeHospitalariaEndpoints();
-app.MapHospitalariaEndpoints();
-app.MapInstitutionalRegularityProjectionEndpoints();
-app.MapCandidateIntakeEndpoints();
-app.MapCandidateWorkshopIntakeEndpoints();
-app.MapCandidateWorkflowEndpoints();
-app.MapAdmissionEndpoints();
-app.MapAdmissionLodgeDecisionEndpoints();
-app.MapAdmissionCeremonyEndpoints();
-app.MapCeremonyEndpoints();
-app.MapGrandMasterCeremonyEndpoints();
-app.MapCandidatePublicationEndpoints();
-app.MapCeremonyReviewQueueEndpoints();
-app.MapGrandSecretariatEndpoints();
-app.MapGrandSecretariatQueryEndpoints();
-app.MapGrandSecretariatCeremonyQueueEndpoints();
-app.MapLodgeManagementEndpoints();
-app.MapLodgeInstructionEndpoints();
-app.MapDocumentManagementEndpoints();
-app.MapDocumentManagementQueryEndpoints();
-app.MapDocumentContentEndpoints();
-app.MapDocumentContentRecoveryEndpoints();
-app.MapLibraryCatalogEndpoints();
-app.MapLibraryAccessPolicyEndpoints();
-app.MapLibraryCatalogMetadataEndpoints();
-app.MapGrandArchiveEndpoints();
-app.MapNotificationEndpoints();
-app.MapInstitutionalCalendarEndpoints();
-app.MapInstitutionalCalendarSourceEndpoints();
-app.MapPrivacyEndpoints();
-app.MapPrivacyRetentionEndpoints();
-app.MapPrivacyRiskEndpoints();
-app.MapPrivacyProcessorEndpoints();
-app.MapPrivacyProcessorLifecycleEndpoints();
-app.MapPrivacyLegalRuleEndpoints();
-app.MapPrivacyWorkflowEndpoints();
-app.MapSystemConfigurationEndpoints();
+KØİ[Y[\Nˆ	ØÙ\™[[ÛWØ]]Üš^˜][Û‰ËØİ[Y[ÛÙNˆUUPÑT‹QSSËIÔİš[™Ê\Ë›[ØÚÑØİ[Y[Ë›[™İ
+ÈJKœYİ\
+Ë	Ì	Ê_X]Nˆ]]Üš^˜XÚpìÛˆHÙ\™[[ÛšXH8 %	ØÙ\™[[ÛU\SX™[
+Ù\™[[ÛK˜Ù\™[[ÛU\J_XÛÛ[ˆ]]Üš^˜XÚpìÛˆ[œİ]XÚ[Û˜[[[Üİ˜]]˜H\˜H	ØÙ\™[[ÛK›Ü™Ø[š^˜][Û“˜[Y_K˜Ü™Ø[š^˜][Û’YˆÙ\™[[ÛK›Ü™Ø[š^˜][Û’Y™[]YÙ\™[[ÛT™\]Y\İYˆÙ\™[[ÛKšYÜXÙT™\Ù\˜][Û’Yİ]\Îˆ	Ú\ÜİYY	Ë\ÜİYY]]Îˆ™]È]J
+KÒTÓÔİš[™Ê
+K\ÜİYYTİXš™Xİˆ	Ù[[ÉÈNÈ\Ë›[ØÚÑØİ[Y[Ë[œÚY
+Øİ[Y[
+NÈ™]\›ˆØİ[Y[ˆBˆ™]\›ˆ\ËœÜİœÛÛÙXÜ™]\šX]Øİ[Y[ŠØ\KÙÜ˜[‹\ÙXÜ™]\šXKØÙ\™[[ÛšX\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
+Ù\™[[ÛT™\]Y\İY
+_KØ]]Üš^˜XÚ[Û˜ÈÜXÙT™\Ù\˜][Û’YJBˆB‚ˆš]˜]H™\]Z\™S[ØÚÔ™]šY]ĞÙ\™[[ÛJYˆİš[™ÊNˆÙ\™[[ÛT™]šY]Ô]Y]YR][HÈÛÛœİ][HH\Ë›[ØÚÔ™]šY]ĞÙ\™[[ÛšY\Ë™š[™
+˜[YHOˆ˜[YKšYOOHY
+NÈYˆ
+Z][JH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH[™XØYH›È^\İH[ˆH˜[™Z˜K‰ÊNÈ™]\›ˆ][HBˆš]˜]H™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
+Yˆİš[™ÊNˆ™X\İ\Tİ][Y[ÈÛÛœİ][HH\Ë›[ØÚÕ™X\İ\Tİ][Y[Ë™Ù]
+Y
+NÈYˆ
+Z][JH›İÈ™]È\œ›ÜŠ	Ñ[İXY›ÈY[œİX[[™XØYÈ›È^\İK‰ÊNÈ™]\›ˆ][HBˆš]˜]HÜİœÛÛŠ]ˆİš[™Ë^[ØYˆ[šÛ›İÛŠNˆ›ÛZ\ÙOˆÈ™]\›ˆ\Ëœ™\]Y\İŠ]ÈY]Ùˆ	ÔÔÕ	ËXY\œÎˆÈ	ĞÛÛ[U\IÎˆ	Ø\XØ][Û‹ÚœÛÛ‰ÈK›ÙNˆ”ÓÓ‹œİš[™ÚYJ^[ØY
+HJHBˆš]˜]H\Ş[˜ÈÜ[Û˜[Ù]Š]ˆİš[™ÊNˆ›ÛZ\ÙO[ˆÈHÈ™]\›ˆ]ØZ]\Ëœ™\]Y\İŠ]
+HHØ]Ú
+\œ›ÜŠHÈYˆ
+\œ›Üˆ[œİ[˜Ù[ÙˆYÛP\R\œ›Üˆ	‰ˆ\œ›Ü‹œİ]\ÈOOH
+H™]\›ˆ[È›İÈ\œ›ÜˆHBˆš]˜]H\Ş[˜È™\]Y\İŠ]ˆİš[™Ë[š]ˆ™\]Y\İ[š]HßJNˆ›ÛZ\ÙOˆÂˆÛÛœİXY\œÈH™]ÈXY\œÊ[š]šXY\œÊNÈXY\œËœÙ]
+	ĞXØÙ\	Ë	Ø\XØ][Û‹ÚœÛÛ‰ÊBˆÛÛœİÚÙ[ˆH]ØZ]\Ë™Ù]XØÙ\ÜÕÚÙ[ËŠ
+NÈYˆ
+]ÚÙ[ŠH›İÈ™]È\œ›ÜŠ	ÑX™H[™Ü™\Ø\ˆ\˜HÛÛœİ[\ˆH[™›Ü›XXÚpìÛˆ[œİ]XÚ[Û˜[‰ÊNÈXY\œËœÙ]
+	Ğ]]Üš^˜][Û‰Ë™X\™\ˆ	İÚÙ[ŸX
+BˆÛÛœİ™\ÜÛœÙHH]ØZ]™]Ú
+	İ\Ë˜˜\ÙU\›IÜ]XÈ‹‹š[š]Ü™Y[X[Îˆ	ÛÛZ]	Ë™Y\™Xİˆ	Ù\œ›Ü‰ËØXÚNˆ	Û›Ë\İÜ™IËXY\œÈJBˆYˆ
+\™\ÜÛœÙK›ÚÊHÂˆYˆ
+™\ÜÛœÙKœİ]\ÈOOHJH]ØZ]\Ë›Û•[˜]]Üš^™YËŠ
+Bˆ]Y\ÜØYÙHH	ÉÂˆHÈÛÛœİ›ÙHH]ØZ]™\ÜÛœÙK˜ÛÛ™J
+KšœÛÛŠ
+H\ÈÈY\ÜØYÙOÎˆİš[™ÈNÈY\ÜØYÙHH\[Ùˆ›ÙK›Y\ÜØYÙHOOH	Üİš[™ÉÈÈ›ÙK›Y\ÜØYÙHˆ	ÉÈHØ]ÚÈÊˆ™\ÜY\İHÚ[ˆ”ÓÓˆ
+‹ÈBˆYˆ
+™\ÜÛœÙKœİ]\ÈOOHÊHY\ÜØYÙHH	ÔİHİY[H›ÈY[™H\›Z\ÛÈ\˜H™X[^˜\ˆ\İHÜ\˜XÚpìÛ‹‰Âˆ›İÈ™]ÈYÛP\R\œ›ÜŠ™\ÜÛœÙKœİ]\ËY\ÜØYÙHHTH™\ÜÛ™pìÈ	Ü™\ÜÛœÙKœİ]\ßH	Ü™\ÜÛœÙKœİ]\Õ^K˜
+BˆBˆ™]\›ˆ™\ÜÛœÙKšœÛÛŠ
+H\È›ÛZ\ÙO‚ˆBŸB‚™^Ü[˜İ[ÛˆÜ™X]QY˜][YÛP\PÛY[
+Ù]XØÙ\ÜÕÚÙ[ÎˆXØÙ\ÜÕÚÙ[”›İšY\‹Û•[˜]]Üš^™YÎˆ
 
-app.Run();
+HOˆ›ÛZ\ÙO›ÚYŠNˆYÛP\PÛY[ÈÛÛœİ˜\ÙU\›H[\Ü›Y]K™[‹•’UWĞTWĞTÑWÕT“ÏÈ	ÉÎÈÛÛœİ\ÙS[ØÚÜÈH[\Ü›Y]K™[‹•’UWÕTÑWÓSĞÒÔÈOOH	İYIÎÈÛÛœİ\›H™]ÈT“
+˜\ÙU\›	ËÉËÚ[™İË›ØØ][Û‹›ÜšYÚ[ŠNÈYˆ
+\››ÜšYÚ[ˆOOHÚ[™İË›ØØ][Û‹›ÜšYÚ[ˆ\›\Ù\›˜[YH\›œ\ÜİÛÜ™\›œÙX\˜Ú\›š\Ú
+H›İÈ™]È\œ›ÜŠ	ÓHTHX™H\Ø\ˆ[Z\Û[ÈÜšYÙ[ˆYYX[H[›ŞH[œİ]XÚ[Û˜[‰ÊNÈ™]\›ˆ™]ÈYÛP\PÛY[
+È˜\ÙU\›\ÙS[ØÚÜËÙ]XØÙ\ÜÕÚÙ[‹Û•[˜]]Üš^™YJHB™[˜İ[ÛˆÛY\
+Z[\ÙXÛÛ™Îˆ[X™\ŠNˆ›ÛZ\ÙO›ÚYˆÈ™]\›ˆ™]È›ÛZ\ÙJ™\ÛÛ™HOˆÚ[™İËœÙ][Y[İ]
+™\ÛÛ™KZ[\ÙXÛÛ™ÊJHB™[˜İ[Ûˆ[ØÚÒ[š]X[[X™\˜][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[š]X[[X™\˜][Û”™\]Y\İ
+Nˆ[š]X[[X™\˜][Û”™\ÜÛœÙHÂˆYˆ
+\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
+JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆH™Y™\™[˜ÚXH[XİHÈ^˜XİÈ]YH™\Ü[HH[X™\˜XÚpìÛ‹‰ÊBˆYˆ
+^[ØYœ™\Ù[›İ\œÈH
+H™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹œ][Ü[IË™X\ÛÛˆ	ÑX™H^\İ\ˆ[Y[›ÜÈ[˜H\œÛÛ˜HXš[]YH™\Ù[H\˜H™YÚ\İ˜\ˆH›İXÚpìÛ‹‰ËÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
+^[ØY›İ\Ò[‘˜]›Üˆ^[ØY›İ\Ò[‘˜]›Üˆˆ^[ØYœ™\Ù[›İ\œÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹›İ\ÉË™X\ÛÛˆ	ÓHØ[YYH›İÜÈ˜]›Ü˜X›\È›È\È°è[YK‰ËÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆÛÛœİ[\ÙY^\ÈH]SÛ›Q^S[X™\Š^[ØY™[X™\˜][Û‘]JHH]SÛ›Q^S[X™\Š	ÌŒ‹LKLL‰ÊBˆÛÛœİZ[š[][UØZ][™Ñ^\ÈH^[ØY›Z[š[][UØZ][™Ñ^\ÈÏÈÂˆYˆ
+[\ÙY^\ÈZ[š[][UØZ][™Ñ^\ÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹ØZ][™×Ü\š[Ù	Ë™X\ÛÛˆX™[ˆ˜[œØİ\œš\ˆ[Y[›ÜÈ	ÛZ[š[][UØZ][™Ñ^\ßH0ëX\È\ÙHH™\Ù[XÚpìÛÈ[ˆ˜[œØİ\œšYÈ	Ù[\ÙY^\ßK˜Ù\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
+^[ØY›İ\Ò[‘˜]›ÜˆOOH^[ØYœ™\Ù[›İ\œÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ü™Z™XİY	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹[˜[š[Z]IË™X\ÛÛˆ	ÓH\›Ø˜XÚpìÛˆ[šXÚX[™\]ZY\™H[˜[š[ZYYH\È\œÛÛ˜\È™\Ù[\Ë‰ËÙ\™[[ÛTİ]\Îˆ	Ü™Z™XİY	ÈBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ø\›İ™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹˜\›İ™Y	Ë™X\ÛÛˆ	ÔÙHİ[\H[^›Èpë[š[[ÈHH›İXÚpìÛˆ[šXÚX[YH[°è[š[YK‰ËÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBŸB™[˜İ[Ûˆ]SÛ›Q^S[X™\Š˜[YNˆİš[™ÊHÈÛÛœİŞYX\‹[Û^WHH˜[YKœÜ]
+	ËIÊK›X\
+[X™\ŠNÈYˆ
+^YX\ˆ[[ÛY^JH›İÈ™]È\œ›ÜŠ	ÓH™XÚHH[X™\˜XÚpìÛˆ›È\È°è[YK‰ÊNÈ™]\›ˆX]™›ÛÜŠ]K•UÊYX\‹[ÛHK^JHÈ—ÍÌ
+HB™[˜İ[ÛˆÙ\™[[ÛU\SX™[
+\NˆÙ\™[[ÛU\JHÈ™]\›ˆ\HOOH	Ú[š]X][Û‰ÈÈ	Ò[šXÚXXÚpìÛ‰Èˆ\HOOH	İØYÙWÚ[˜Ü™X\ÙIÈÈ	Ğ][Y[ÈHØ[\š[ÉÈˆ	Ñ^[XÚpìÛ‰ÈB™[˜İ[Ûˆ[ØÚÔÛ˜\Úİ\ÓÙŠÛ˜\ÚİˆÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[™Yš[™Y\ÓÙÎˆİš[™ÊNˆÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[ÈYˆ
+\Û˜\Úİ
+H™]\›ˆ[ÈYˆ
+\ÓÙˆ	‰ˆÛ˜\Úİ˜\ÓÙ‘]Hˆ\ÓÙŠH™]\›ˆ[È™]\›ˆÈ‹‹œÛ˜\ÚİHB™[˜İ[ÛˆY˜][ÙÙQ™YT[œÊÜ™Ø[š^˜][Û’Yˆİš[™ÊNˆÙÙQ™YT[–×HÈ™]\›ˆÂˆÈYˆ™YK[›Ü›X[IÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y™YU\Nˆ	Û›Ü›X[	ËY[X™\[[İ[ˆŒÜ˜[™™X\İ\P[[İ[ˆŒLÛÜšÜÚÜ[[İ[ˆLY™™Xİ]™Qœ›ÛNˆ	ÌŒ‹LKLIËY™™Xİ]™U[[ˆ[\ĞXİ]™NˆYHKˆÈYˆ™YK\İY[IÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y™YU\Nˆ	ÜİY[	ËY[X™\[[İ[ˆLÌÜ˜[™™X\İ\P[[İ[ˆLLÛÜšÜÚÜ[[İ[ˆŒY™™Xİ]™Qœ›ÛNˆ	ÌŒ‹LKLIËY™™Xİ]™U[[ˆ[\ĞXİ]™NˆYHKˆÈYˆ™YK\Ù[š[Ü‹IÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y™YU\Nˆ	ÜÙ[š[Ü‰ËY[X™\[[İ[ˆMŒÜ˜[™™X\İ\P[[İ[ˆLÌÛÜšÜÚÜ[[İ[ˆÌY™™Xİ]™Qœ›ÛNˆ	ÌŒ‹LKLIËY™™Xİ]™U[[ˆ[\ĞXİ]™NˆYHK—HB™[˜İ[Ûˆ[ØÚÔ™Yİ[\š]TÛ˜\Úİ
+Ü™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÛÜšÜÚÜ™Yİ[\š]T™\]Y\İ™Yš^ˆİš[™ÊNˆÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİÈ™]\›ˆÈYˆ	Ü™Yš^KIØÜ\Ëœ˜[™ÛUURQ
 
-public partial class Program;
+_XÜ™Ø[š^˜][Û’YØÛÜNˆ	ÛÜ™Ø[š^˜][Û‰Ëİ]\Îˆ^[ØYœİ]\Ë\ÓÙ‘]Nˆ^[ØY˜\ÓÙ‘]KÛİ\˜ÙT™Y™\™[˜ÙNˆ^[ØYœÛİ\˜ÙT™Y™\™[˜ÙHÏÈ[›İ\Îˆ^[ØY››İ\ÈÏÈ[™XÛÜ™Y]]Îˆ™]È]J
+KÒTÓÔİš[™Ê
+HHB™[˜İ[Ûˆ[ØÚÕ™X\İ\Tİ][Y[
+Ü™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÜ™X]U™X\İ\Tİ][Y[™\]Y\İ
+Nˆ™X\İ\Tİ][Y[È™]\›ˆÈYˆÜ\Ëœ˜[™ÛUURQ
+
+KÜ™Ø[š^˜][Û’Y\š[ÙYX\ˆ^[ØYœ\š[ÙYX\‹\š[Ù[Ûˆ^[ØYœ\š[Ù[Ûİ]Ù™‘]Nˆ^[ØY˜İ]Ù™‘]Kİ]\Îˆ	Ù˜Y	ËÛİ\˜ÙT™Y™\™[˜ÙNˆ^[ØYœÛİ\˜ÙT™Y™\™[˜ÙHÏÈ[^XİY[[İ[ˆ˜[œÙ™\[[İ[ˆ\ÜÚ][[İ[ˆZY[[İ[ˆY™™\™[˜ÙP[[İ[ˆ[œ™\ÛÛ™YY[]Y\Îˆ[™\Îˆ×K^[Y[Îˆ×KİX›Z]Y]]Îˆ[™XÛÛ˜Ú[Y]]Îˆ[ÛÜÙY]]Îˆ[HB™[˜İ[Ûˆ™XØ[İ[]S[ØÚÕ™X\İ\Jİ][Y[ˆ™X\İ\Tİ][Y[
+HÈİ][Y[™^XİY[[İ[Hİ][Y[›[™\Ëœ™YXÙJ
+İ[[™JHOˆİ[
+È[™Kœ^XX›P[[İ[
+NÈİ][Y[˜[œÙ™\[[İ[Hİ][Y[œ^[Y[Ë™š[\Š^[Y[Oˆ^[Y[œ^[Y[Y]ÙOOH	İ˜[œÙ™\‰ÊKœ™YXÙJ
+İ[^[Y[
+HOˆİ[
+È^[Y[˜[[İ[
+NÈİ][Y[™\ÜÚ][[İ[Hİ][Y[œ^[Y[Ë™š[\Š^[Y[Oˆ^[Y[œ^[Y[Y]ÙOOH	Ù\ÜÚ]	ÊKœ™YXÙJ
+İ[^[Y[
+HOˆİ[
+È^[Y[˜[[İ[
+NÈİ][Y[œZY[[İ[Hİ][Y[˜[œÙ™\[[İ[
+Èİ][Y[™\ÜÚ][[İ[Èİ][Y[™Y™™\™[˜ÙP[[İ[Hİ][Y[™^XİY[[İ[Hİ][Y[œZY[[İ[B™[˜İ[ÛˆÛÛ™U™X\İ\Tİ][Y[
+İ][Y[ˆ™X\İ\Tİ][Y[
+Nˆ™X\İ\Tİ][Y[È™]\›ˆÈ‹‹œİ][Y[[™\Îˆİ][Y[›[™\Ë›X\
+[™HOˆ
+È‹‹›[™HJJK^[Y[Îˆİ][Y[œ^[Y[Ë›X\
+^[Y[Oˆ
+È‹‹œ^[Y[JJHHB™[˜İ[ÛˆÛÛ™PÙ\™[[ÛT]Y]YR][J][NˆÙ\™[[ÛT™]šY]Ô]Y]YR][JNˆÙ\™[[ÛT™]šY]Ô]Y]YR][HÈ™]\›ˆÈ‹‹š][K[YÚXš[]NˆÈ‹‹š][K™[YÚXš[]KX›XØ][Ûˆ][K™[YÚXš[]KœX›XØ][ÛˆÈÈ‹‹š][K™[YÚXš[]KœX›XØ][ÛˆHˆ[™\]Z\™[Y[Îˆ][K™[YÚXš[]Kœ™\]Z\™[Y[Ë›X\
+˜[YHOˆ
+È‹‹˜[YHJJHKXİ[ÛœÎˆÈ‹‹š][K˜Xİ[ÛœÈHHB™[˜İ[Ûˆ™XÛÛ\]S[ØÚÑ[YÚXš[]J][NˆÙ\™[[ÛT™]šY]Ô]Y]YR][JHÈÛÛœİ›ØÚÙYH][K™[YÚXš[]Kœ™\]Z\™[Y[ËœÛÛYJ˜[YHOˆ˜[YKœİ]\ÈOOH	Ü™Z™XİY	ÊNÈÛÛœİØœÙ\™YH][K™[YÚXš[]Kœ™\]Z\™[Y[ËœÛÛYJ˜[YHOˆ˜[YKœİ]\ÈOOH	ÛØœÙ\™Y	ÊNÈ][K™[YÚXš[]K˜Ø[]]Üš^™HHX›ØÚÙY	‰ˆ[ØœÙ\™YÈ][K™[YÚXš[]Kœİ]\ÈH][K™[YÚXš[]K˜Ø[]]Üš^™HÈ	ØÛÛ\Y\ÉÈˆØœÙ\™YÈ	ÛØœÙ\™Y	Èˆ	ÙÙ\×Û›İØÛÛ\IÈB™[˜İ[Ûˆ[ØÚÔ™YÚ[Y[”İ[[X\Jš[\œÎˆÈÜ™Ø[š^˜][Û’YÎˆİš[™ÎÈ\ÓÙÎˆİš[™ÎÈœ›ÛOÎˆİš[™ÈJNˆ™YÚ[Y[’[\š[Ü”İ[[X\HÂˆÛÛœİ\ÓÙˆHš[\œË˜\ÓÙˆÏÈ	ÌŒ‹LKL	ÂˆÛÛœİœ›ÛHHš[\œË™œ›ÛHÏÈ	ÌŒ‹LKLIÂˆÛÛœİØÛÜYHHYš[\œË›Ü™Ø[š^˜][Û’YˆÛÛœİ][\Y\ˆHØÛÜYÈHˆŒˆÛÛœİY™š[X]YH
+ˆ][\Y\‚ˆ™]\›ˆÂˆØÛÜNˆØÛÜYÈ	ÛÜ™Ø[š^˜][Û‰Èˆ	ÛÜ™\‰ËˆÜ™Ø[š^˜][Û’Yˆš[\œË›Ü™Ø[š^˜][Û’YÏÈ[ˆ\ÓÙ‹ˆ\š[ÙˆÈœ›ÛKÎˆ\ÓÙˆKˆY[X™\œÎˆÈİ[™[]YˆY™š[X]Yİ\œ™[PY™š[X]YˆY™š[X]YXİ]™NˆY™š[X]Y[˜Xİ]™Nˆİ\œ™[Ú]›ØÚÚ[™Ôİ]\ÎˆKˆ]™[ÎˆÈ›Û[\UÚ]˜]Ø[Îˆ›Ü˜ÙYÚ]˜]Ø[Îˆ™Z[œİ][Y[ÎˆX]Îˆ˜[œÙ™\œÎˆKˆš[˜[˜ÚX[™Yİ[\š]NˆÈÛİ\˜ÙNˆ	ÑÜ˜[ˆ\ÛÜ™\°ëXH0­È\ØÙ[˜\š[ÈPIËİ\œ™[Y™š[X][ÛœÎˆY™š[X]Y\Ñ]NˆY™š[X]Y[[œ]Y[ˆ[™[™Îˆ^[\ˆÚ]İ]İ]\Îˆ[[œ]Y[Y[X™\œÑ\İ[˜İˆKˆYÜ™YQ\İšX][ÛˆÈX\İ\ˆLˆ
+ˆ][\Y\‹™[İØÜ˜YˆH
+ˆ][\Y\‹\™[XÙNˆH
+ˆ][\Y\‹\İØXİ]™Nˆˆ
+ˆ][\Y\ˆKˆ[™[™Õ˜[œÙ™\œÎˆˆBŸB
