@@ -25,6 +25,7 @@ using PMGM.Api.Modules.Notifications;
 using PMGM.Api.Modules.Privacy;
 using PMGM.Api.Modules.RegimenInterior;
 using PMGM.Api.Modules.Treasury;
+using PMGM.Api.Modules.SystemConfiguration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -164,15 +165,12 @@ app.MapOrganizationEndpoints();
 app.MapMembershipEndpoints();
 app.MapMemberSelfEndpoints();
 app.MapTransferEndpoints();
-app.MapWithdrawalEndpoints();
 app.MapRegimenInteriorEndpoints();
 app.MapRegimenInteriorMemberControlEndpoints();
 app.MapRegimenInteriorDataQualityEndpoints();
 app.MapDataQualityCaseEndpoints();
 app.MapExecutiveReportingEndpoints();
 app.MapTreasuryEndpoints();
-app.MapLodgeTreasuryEndpoints();
-app.MapLodgeHospitalariaEndpoints();
 app.MapHospitalariaEndpoints();
 app.MapInstitutionalRegularityProjectionEndpoints();
 app.MapCandidateIntakeEndpoints();
@@ -208,6 +206,7 @@ app.MapPrivacyProcessorEndpoints();
 app.MapPrivacyProcessorLifecycleEndpoints();
 app.MapPrivacyLegalRuleEndpoints();
 app.MapPrivacyWorkflowEndpoints();
+app.MapSystemConfigurationEndpoints();
 
 app.Run();
 
