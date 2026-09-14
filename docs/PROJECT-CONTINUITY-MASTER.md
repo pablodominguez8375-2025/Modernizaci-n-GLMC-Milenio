@@ -38,7 +38,14 @@ La matriz de firmantes a validar es:
 - Taller: Venerable Maestro, Secretario, Orador y Tesorero.
 - Orden: Régimen Interior, Gran Tesorero, Gran Hospitalaria, Gran Secretaría y Gran Maestra.
 
-La verificación pendiente consiste en contrastar esta matriz con cada formulario, decreto, carta, autorización de ceremonia, autorización de espacios y documento de retiro/reintegro, respetando el orden de aprobación y la firma que corresponde a cada acto.
+La verificación inicial en Google Drive confirma la separación de cargos y añade evidencia documental:
+
+- **EXTRACTO-DE-ACTA-2026.docx:** campos de firma para Venerable Maestro, Secretario/a y Orador/a; además enumera en el cuadro del Taller a I∴ ex V∴M∴, Primer Vigilante, Segundo Vigilante, Orador, Secretario y Tesorero.
+- **JURAMENTO-DE-OFICIALES-2026.docx:** exige firma individual de Orador/a, Tesorero/a y Secretario/a; el apartado de vigilantes exige Primer/a y Segundo/a Vigilante.
+- **FORMULARIO-SOLICITUD-DE-CEREMONIAS-2026.docx:** establece como firmantes representantes del Taller al Secretario/a y V∴M∴; el protocolo exige copias a Régimen Interior, Gran Tesorería, Gran Hospitalidad y Gran Secretaría, con aprobación final de Gran Maestría.
+- **PROTOCOLO-PARA-LA-TRAMITACIÓN-DE-INSINUACIONES-AFILIACIONES-Y-SOLICITUDES-DE-CEREMONIAS-2026.docx:** confirma el orden de insinuación, entrevistas, Cámara del Medio, balotaje y revisión de Régimen Interior/Tesorería/Hospitalidad/Secretaría/Maestría; también exige registrar fecha de rechazo y subsanación en una nueva presentación.
+
+La auditoría completa de todos los modelos y cartas sigue siendo una tarea de cierre; las pantallas y permisos ya deben usar esta matriz como contrato mínimo.
 
 ## Acuerdos funcionales consolidados
 
@@ -73,7 +80,7 @@ La docencia y el seguimiento formativo se asignan separadamente a:
 - **Segundo Vigilante:** responsabilidad docente y seguimiento de Aprendices.
 - **Ex Venerable Maestro:** apoyo docente, experiencia institucional y acompañamiento formativo.
 
-Estos cargos no deben reemplazarse entre sí en los permisos, formularios, firmas, circuitos de aprobación ni reportes. La matriz definitiva debe contrastarse con cada documento oficial de la carpeta Google Drive **Proyecto Centenario** antes del cierre de v1.0.
+Estos cargos no deben reemplazarse entre sí en los permisos, formularios, firmas, circuitos de aprobación ni reportes. La matriz queda respaldada preliminarmente por los documentos consultados de Google Drive **Proyecto Centenario**; cualquier excepción por acto debe documentarse antes del cierre de v1.0.
 
 ## Estado de la demo QA
 
