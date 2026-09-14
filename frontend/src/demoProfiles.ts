@@ -1,6 +1,6 @@
 import type { SessionProfile } from './api/pmgmApi'
 
-export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandLodge'
+export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'systemAdmin' | 'grandLodge'
 
 type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canBootstrapInstitutional?: boolean
@@ -8,6 +8,7 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canManageDocuments?: boolean
   canReadLibrary?: boolean
   canManageGrandArchive?: boolean
+  canConfigureSystem?: boolean
 }
 
 export type DemoSessionProfile = Omit<SessionProfile, 'capabilities'> & {
@@ -100,6 +101,10 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
     displayName: 'Gran Maestra · Demostración', accessScope: 'order',
     capabilities: { ...deniedCoreCapabilities, canAuthorizeCeremonies: true, canReviewCeremonies: true, canReadLibrary: true },
   },
+  systemAdmin: {
+    displayName: 'Administrador del Sistema · Demostración', accessScope: 'order',
+    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canBootstrapInstitutional: true, canManageDocuments: true, canReadLibrary: true },
+  },
   grandLodge: {
     displayName: 'Autoridad de Gran Logia · Demostración',
     accessScope: 'order',
@@ -119,6 +124,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManageDocuments: true,
       canManageGrandArchive: true,
       canBootstrapInstitutional: true,
+      canConfigureSystem: true,
     },
   },
 }
