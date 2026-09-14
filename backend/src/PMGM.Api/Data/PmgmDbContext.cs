@@ -390,6 +390,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.EntityId).HasMaxLength(160).IsRequired();
             entity.Property(x => x.ActorSubject).HasMaxLength(320);
             entity.Property(x => x.ActorDisplayName).HasMaxLength(320);
+            entity.Property(x => x.IpAddress).HasMaxLength(64);
+            entity.Property(x => x.Menu).HasMaxLength(100);
+            entity.Property(x => x.Submenu).HasMaxLength(100);
+            entity.Property(x => x.Summary).HasMaxLength(300);
             entity.Property(x => x.Result).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CorrelationId).HasMaxLength(160).IsRequired();
             entity.Property(x => x.MetadataJson).HasColumnType("jsonb");
