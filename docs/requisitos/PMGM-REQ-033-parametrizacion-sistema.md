@@ -51,6 +51,9 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 24. Cada asignación define alcance, fecha de inicio y término opcional.
 25. Las asignaciones futuras quedan programadas; las revocadas permanecen en el historial.
 26. La pantalla muestra el acceso acumulado antes de confirmar nuevas asignaciones.
+27. Sistema incluye una auditoría periódica de accesos con clasificación de riesgo.
+28. Los administradores pueden certificar o revocar cada asignación y exportar la revisión en CSV.
+29. Los perfiles privilegiados se recertifican según una frecuencia parametrizable; no tienen aprobación permanente.
 
 ## Experiencia QA
 
