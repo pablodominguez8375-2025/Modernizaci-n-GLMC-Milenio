@@ -43,6 +43,10 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 16. Cada perfil define por separado vistas visibles, acciones permitidas y alcance Orden/Taller.
 17. Las definiciones se guardan como configuración versionada y auditable antes de asignarlas a usuarios.
 18. Los perfiles base pueden modificarse, pero no eliminarse accidentalmente.
+19. Antes de guardar, el administrador puede simular las vistas permitidas, bloqueadas y acciones efectivas.
+20. Un perfil con alcance Taller no puede escalar a administración global de usuarios o del Sistema.
+21. El perfil Administrador del Sistema no puede perder simultáneamente la vista Sistema y sus acciones críticas.
+22. Las combinaciones dudosas generan advertencias antes de la aplicación.
 
 ## Experiencia QA
 
