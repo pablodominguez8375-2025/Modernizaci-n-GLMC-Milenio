@@ -48,7 +48,8 @@ public static class SystemConfigurationEndpoints
         ["system.brand.logo_reference"] = new("Identidad visual", "Referencia del logotipo", "text", "logo-institucional.svg"),
         ["system.identity.provider"] = new("Usuarios", "Proveedor de identidad", "text", "Keycloak"),
         ["system.identity.require_mfa_admins"] = new("Usuarios", "MFA obligatorio para administradores", "text", "Sí"),
-        ["system.access.profile_definitions"] = new("Usuarios", "Definiciones independientes de perfiles", "text", "[]")
+        ["system.access.profile_definitions"] = new("Usuarios", "Definiciones independientes de perfiles", "text", "[]"),
+        ["system.access.user_assignments"] = new("Usuarios", "Asignaciones de perfiles a usuarios", "text", "[]")
     };
 
     public static IEndpointRouteBuilder MapSystemConfigurationEndpoints(this IEndpointRouteBuilder endpoints)

@@ -47,6 +47,10 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 20. Un perfil con alcance Taller no puede escalar a administración global de usuarios o del Sistema.
 21. El perfil Administrador del Sistema no puede perder simultáneamente la vista Sistema y sus acciones críticas.
 22. Las combinaciones dudosas generan advertencias antes de la aplicación.
+23. Un usuario puede recibir múltiples perfiles y su acceso efectivo es la suma controlada de ellos.
+24. Cada asignación define alcance, fecha de inicio y término opcional.
+25. Las asignaciones futuras quedan programadas; las revocadas permanecen en el historial.
+26. La pantalla muestra el acceso acumulado antes de confirmar nuevas asignaciones.
 
 ## Experiencia QA
 
