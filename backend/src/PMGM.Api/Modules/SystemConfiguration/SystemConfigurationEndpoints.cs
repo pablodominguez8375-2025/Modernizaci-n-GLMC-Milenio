@@ -40,6 +40,7 @@ public static class SystemConfigurationEndpoints
     {
         var group = endpoints.MapGroup("/api/system/settings").WithTags("Sistema — Parametrización").RequireAuthorization();
         group.MapGet("/", GetAsync);
+        group.MapGet("/{code}/versions", GetVersionsAsync);
         group.MapPost("/{code}", CreateVersionAsync);
         return endpoints;
     }
@@ -48,7 +49,7 @@ public static class SystemConfigurationEndpoints
     {
         if (!access.CanConfigureSystem(context.User)) return Results.Forbid();
         var stored = await db.InstitutionalRuleSettings.AsNoTracking()
-            .Where(x => x.Code.StartsWith("system.") && x.Status == "active")
+            .Where(x => x.Code.StartsWith("system.") && x.Status == "active" && x.EffectiveFrom <= DateOnly.FromDateTime(DateTime.UtcNow))
             .OrderByDescending(x => x.EffectiveFrom).ToListAsync(cancellationToken);
         var items = Definitions.Select(pair =>
         {
@@ -58,6 +59,17 @@ public static class SystemConfigurationEndpoints
                 active?.SourceReference ?? "Configuración base Proyecto Centenario", active is null ? "default" : "active");
         });
         return Results.Ok(new { total = Definitions.Count, items });
+    }
+
+    private static async Task<IResult> GetVersionsAsync(string code, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanConfigureSystem(context.User)) return Results.Forbid();
+        if (!Definitions.ContainsKey(code)) return Results.BadRequest(new { message = "El parámetro no pertenece al catálogo administrable." });
+        var versions = await db.InstitutionalRuleSettings.AsNoTracking().Where(x => x.Code == code)
+            .OrderByDescending(x => x.EffectiveFrom).ThenByDescending(x => x.CreatedAtUtc)
+            .Select(x => new SystemSettingVersionResponse(x.Id, x.Value, x.EffectiveFrom, x.EffectiveTo, x.SourceReference ?? "Sin referencia", x.Status, x.CreatedAtUtc))
+            .ToListAsync(cancellationToken);
+        return Results.Ok(new { total = versions.Count, items = versions });
     }
 
     private static async Task<IResult> CreateVersionAsync(string code, CreateSystemSettingVersionRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
@@ -71,7 +83,8 @@ public static class SystemConfigurationEndpoints
         if (duplicate) return Results.Conflict(new { message = "Ya existe una versión del parámetro con esa fecha de vigencia." });
         var previous = await db.InstitutionalRuleSettings.Where(x => x.Code == code && x.Status == "active" && (x.EffectiveTo == null || x.EffectiveTo >= request.EffectiveFrom)).OrderByDescending(x => x.EffectiveFrom).FirstOrDefaultAsync(cancellationToken);
         if (previous is not null) { previous.EffectiveTo = request.EffectiveFrom.AddDays(-1); previous.Status = "retired"; }
-        var entity = new InstitutionalRuleSetting { Code = code, Value = value, EffectiveFrom = request.EffectiveFrom, Status = "active", SourceReference = request.SourceReference.Trim() };
+        var status = request.EffectiveFrom > DateOnly.FromDateTime(DateTime.UtcNow) ? "scheduled" : "active";
+        var entity = new InstitutionalRuleSetting { Code = code, Value = value, EffectiveFrom = request.EffectiveFrom, Status = status, SourceReference = request.SourceReference.Trim() };
         db.InstitutionalRuleSettings.Add(entity);
         audit.Add(context, "system.setting.version_created", nameof(InstitutionalRuleSetting), entity.Id.ToString(), null, AuditResults.Success, new { entity.Code, entity.Value, entity.EffectiveFrom, entity.SourceReference, previousId = previous?.Id });
         await db.SaveChangesAsync(cancellationToken);
@@ -83,3 +96,4 @@ public static class SystemConfigurationEndpoints
 
 public sealed record CreateSystemSettingVersionRequest(string Value, DateOnly EffectiveFrom, string SourceReference);
 public sealed record SystemSettingResponse(string Code, string Category, string Label, string ValueType, string Value, DateOnly EffectiveFrom, string SourceReference, string Status);
+public sealed record SystemSettingVersionResponse(Guid Id, string Value, DateOnly EffectiveFrom, DateOnly? EffectiveTo, string SourceReference, string Status, DateTimeOffset CreatedAtUtc);

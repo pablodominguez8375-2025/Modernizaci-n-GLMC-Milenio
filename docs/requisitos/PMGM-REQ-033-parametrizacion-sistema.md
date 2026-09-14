@@ -32,6 +32,8 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 5. Toda creación de versión genera auditoría.
 6. Los códigos administrables pertenecen a una lista blanca; no se admiten parámetros arbitrarios.
 7. La configuración base conserva valores derivados de los documentos 2026 y de los acuerdos del proyecto.
+8. El administrador puede consultar todas las versiones y los cambios futuros programados.
+9. Restaurar no sobrescribe antecedentes: carga el valor histórico como borrador y crea una nueva versión auditada.
 
 ## Experiencia QA
 
