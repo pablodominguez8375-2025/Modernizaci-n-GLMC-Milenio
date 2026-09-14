@@ -32,6 +32,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 14-09-2026 | Se continúa la parametrización de perfiles y permisos. | Sistema incorpora matriz administrable de vistas y acciones para cargos de Taller, docencia, grandes dignatarios y administradores. |
 | 14-09-2026 | Se continúa el control administrativo de parámetros. | Se agrega historial, cambios futuros programados y restauración no destructiva como nueva versión auditada. |
 | 14-09-2026 | Se amplía el menú Sistema. | Se incorporan consolas QA para backup/restauración, usuarios con perfiles, correo SMTP e identidad visual; el instalable reutiliza scripts protegidos y Keycloak. |
+| 14-09-2026 | Se solicita independencia para configurar vistas y perfiles. | Se incorpora diseñador de perfiles con alcance, vistas y acciones editables, duplicación y persistencia versionada separada del cargo institucional. |
 
 ## Última conversación recuperada
 
