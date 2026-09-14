@@ -44,7 +44,8 @@ public sealed record SessionCapabilitiesDto(
     bool CanManageLodgeTreasury,
     bool CanManageDocuments,
     bool CanReadLibrary,
-    bool CanManagePrivacy);
+    bool CanManagePrivacy,
+    bool CanConfigureSystem);
 
 public static class SessionProfileBuilder
 {
@@ -93,6 +94,7 @@ public static class SessionProfileBuilder
                 CanManageLodgeTreasury: organizationId is not null && access.CanManageLodgeTreasury(user, organizationId.Value),
                 CanManageDocuments: canManageDocuments,
                 CanReadLibrary: user.Identity?.IsAuthenticated == true,
-                CanManagePrivacy: access.CanManagePrivacy(user)));
+                CanManagePrivacy: access.CanManagePrivacy(user),
+                CanConfigureSystem: access.CanConfigureSystem(user)));
     }
 }

@@ -56,6 +56,7 @@ public interface IInstitutionalAccessService
     bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId);
     bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId);
     bool CanManagePrivacy(ClaimsPrincipal user);
+    bool CanConfigureSystem(ClaimsPrincipal user);
 }
 
 public sealed class InstitutionalAccessService : IInstitutionalAccessService
@@ -116,13 +117,11 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
     public bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId)
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranTesoreria)) ||
-           (HasOrganizationClaim(user, organizationId) &&
-            HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerTesoreria));
+           (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerTesoreria));
 
     public bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId)
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranHospitalaria)) ||
-           (HasOrganizationClaim(user, organizationId) &&
-            HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria, "lodge_hospitalaria"));
+           (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria, "lodge_hospitalaria"));
 
     public bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId)
         => HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerVenerable);
@@ -228,6 +227,10 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     public bool CanManagePrivacy(ClaimsPrincipal user)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.PrivacyOfficer);
+
+    public bool CanConfigureSystem(ClaimsPrincipal user)
+        => IsPlatformSuperAdmin(user) ||
+           (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin));
 
     private static bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
         => user.Claims.Any(x =>

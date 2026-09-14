@@ -39,5 +39,12 @@ describe('showcase role profiles', () => {
     expect(profile.capabilities.canManageHospitalariaRegularity).toBe(true)
     expect(profile.capabilities.canManageGrandArchive).toBe(true)
     expect(profile.capabilities.canBootstrapInstitutional).toBe(true)
+    expect(profile.capabilities.canConfigureSystem).toBe(true)
+  })
+
+  it('provides a dedicated system administrator profile', () => {
+    const profile = getDemoProfile('systemAdmin')
+    expect(profile.displayName).toBe('Administrador del Sistema · Demostración')
+    expect(profile.capabilities.canConfigureSystem).toBe(true)
   })
 })

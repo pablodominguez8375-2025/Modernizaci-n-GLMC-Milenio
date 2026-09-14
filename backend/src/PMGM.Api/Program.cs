@@ -25,6 +25,7 @@ using PMGM.Api.Modules.Notifications;
 using PMGM.Api.Modules.Privacy;
 using PMGM.Api.Modules.RegimenInterior;
 using PMGM.Api.Modules.Treasury;
+using PMGM.Api.Modules.SystemConfiguration;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -208,6 +209,7 @@ app.MapPrivacyProcessorEndpoints();
 app.MapPrivacyProcessorLifecycleEndpoints();
 app.MapPrivacyLegalRuleEndpoints();
 app.MapPrivacyWorkflowEndpoints();
+app.MapSystemConfigurationEndpoints();
 
 app.Run();
 

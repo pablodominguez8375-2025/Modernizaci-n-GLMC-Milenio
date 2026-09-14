@@ -28,6 +28,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 13-09-2026 | Se detecta diferencia entre el reporte de Régimen Interior y el padrón QA. | Reporte alineado a 20 Talleres, 480 integrantes y distribución 12/5/5/2 por Taller. |
 | 13-09-2026 | Se solicita demo operacional con cargas temporales. | Demo QA habilitada para fotografías JPG/PNG y antecedentes Word/PDF durante la sesión. |
 | 13-09-2026 | Se solicita alerta transversal por rechazo en Cámara del Medio. | Antecedente protegido consultable por Régimen Interior y visible como alerta al Taller. |
+| 14-09-2026 | Se solicita un menú Sistema ampliamente parametrizable por administradores. | Se implementa catálogo versionado y auditable para flujos, plazos, Biblioteca, Gestor Documental, Gran Archivo, Tesorería, Hospitalaria, notificaciones y seguridad. |
 
 ## Última conversación recuperada
 
