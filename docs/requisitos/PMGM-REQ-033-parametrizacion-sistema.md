@@ -39,6 +39,10 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 12. Las cuentas se administran mediante Keycloak; las contraseñas no se almacenan en la base funcional.
 13. Las credenciales SMTP se almacenan como secretos del servidor y nunca se devuelven completas a la interfaz.
 14. Logos y colores aceptan vista previa antes de crear una versión institucional.
+15. Los administradores pueden crear, editar y duplicar perfiles técnicos independientes de los cargos institucionales.
+16. Cada perfil define por separado vistas visibles, acciones permitidas y alcance Orden/Taller.
+17. Las definiciones se guardan como configuración versionada y auditable antes de asignarlas a usuarios.
+18. Los perfiles base pueden modificarse, pero no eliminarse accidentalmente.
 
 ## Experiencia QA
 
