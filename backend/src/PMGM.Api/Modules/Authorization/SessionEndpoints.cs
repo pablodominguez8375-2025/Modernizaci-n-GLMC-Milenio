@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -13,13 +15,20 @@ public static class SessionEndpoints
         return endpoints;
     }
 
-    private static IResult GetCurrentSession(
+    private static async Task<IResult> GetCurrentSession(
         HttpContext httpContext,
-        IInstitutionalAccessService access)
+        IInstitutionalAccessService access,
+        PmgmDbContext db,
+        IAuditService audit,
+        CancellationToken cancellationToken)
     {
         httpContext.Response.Headers.CacheControl = "no-store";
         httpContext.Response.Headers.Pragma = "no-cache";
-        return Results.Ok(SessionProfileBuilder.Build(httpContext.User, access));
+        var profile = SessionProfileBuilder.Build(httpContext.User, access);
+        audit.Add(httpContext, "identity.session.started", "Session", httpContext.TraceIdentifier, null, AuditResults.Success,
+            new { profile.AccessScope });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(profile);
     }
 }
 
