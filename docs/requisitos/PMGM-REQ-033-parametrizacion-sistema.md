@@ -20,6 +20,8 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 - plazo de reposición de Hospitalaria;
 - anticipación de notificaciones;
 - duración de sesión.
+- perfiles administrativos, cargos firmantes y cargos docentes del Taller;
+- vistas y acciones habilitadas para cada perfil.
 
 ## Reglas obligatorias
 
@@ -34,3 +36,5 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 ## Experiencia QA
 
 La demo presenta un perfil `Administrador del Sistema`, un menú `Sistema` y formularios funcionales en memoria. El instalable utiliza PostgreSQL mediante `InstitutionalRuleSetting` y endpoints autenticados.
+
+La pantalla incluye una matriz consolidada para revisar los permisos vigentes de Venerable Maestro, Secretaría, Tesorería, Hospitalaria, Orador, Primer Vigilante, Segundo Vigilante, Ex Venerable Maestro, grandes dignatarios y administradores del sistema.
