@@ -49,7 +49,8 @@ public static class SystemConfigurationEndpoints
         ["system.identity.provider"] = new("Usuarios", "Proveedor de identidad", "text", "Keycloak"),
         ["system.identity.require_mfa_admins"] = new("Usuarios", "MFA obligatorio para administradores", "text", "Sí"),
         ["system.access.profile_definitions"] = new("Usuarios", "Definiciones independientes de perfiles", "text", "[]"),
-        ["system.access.user_assignments"] = new("Usuarios", "Asignaciones de perfiles a usuarios", "text", "[]")
+        ["system.access.user_assignments"] = new("Usuarios", "Asignaciones de perfiles a usuarios", "text", "[]"),
+        ["system.access.review_frequency_days"] = new("Auditoría de accesos", "Frecuencia de certificación (días)", "integer", "90")
     };
 
     public static IEndpointRouteBuilder MapSystemConfigurationEndpoints(this IEndpointRouteBuilder endpoints)
