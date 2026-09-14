@@ -41,7 +41,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
     },
   },
   lodge: {
-    displayName: 'Autoridad de Taller · Demostración',
+    displayName: 'Venerable Maestro · Demostración',
     accessScope: 'organization',
     capabilities: {
       ...deniedCoreCapabilities,
