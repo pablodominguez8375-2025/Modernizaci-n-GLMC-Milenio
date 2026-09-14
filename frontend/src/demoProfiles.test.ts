@@ -21,6 +21,14 @@ describe('showcase role profiles', () => {
     expect(profile.capabilities.canManageTreasuryRegularity).toBe(false)
   })
 
+  it('exposes each administrative and teaching Taller role in the QA switcher model', () => {
+    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeHospitalaria', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
+      const profile = getDemoProfile(key)
+      expect(profile.accessScope).toBe('organization')
+      expect(profile.capabilities.canManageLodgeOperations).toBe(true)
+    }
+  })
+
   it('gives a Gran Logia authority order-level institutional capabilities', () => {
     const profile = getDemoProfile('grandLodge')
     expect(profile.accessScope).toBe('order')
