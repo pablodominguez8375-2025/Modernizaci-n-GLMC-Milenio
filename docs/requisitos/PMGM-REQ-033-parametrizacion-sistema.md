@@ -34,6 +34,11 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 7. La configuración base conserva valores derivados de los documentos 2026 y de los acuerdos del proyecto.
 8. El administrador puede consultar todas las versiones y los cambios futuros programados.
 9. Restaurar no sobrescribe antecedentes: carga el valor histórico como borrador y crea una nueva versión auditada.
+10. El menú incorpora consola de backup/restauración, usuarios y perfiles, correo SMTP e identidad visual.
+11. La restauración exige respaldo verificado, confirmación reforzada, ventana de mantenimiento, auditoría y smoke posterior.
+12. Las cuentas se administran mediante Keycloak; las contraseñas no se almacenan en la base funcional.
+13. Las credenciales SMTP se almacenan como secretos del servidor y nunca se devuelven completas a la interfaz.
+14. Logos y colores aceptan vista previa antes de crear una versión institucional.
 
 ## Experiencia QA
 
