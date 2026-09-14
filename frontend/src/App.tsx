@@ -25,6 +25,7 @@ import PublishedCandidatePhoto from './PublishedCandidatePhoto'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
 import TreasuryStatementPage from './TreasuryStatementPage'
+import SystemConfigurationPage from './SystemConfigurationPage'
 import { type BootstrapApiClient } from './api/bootstrapApi'
 import { type CalendarApiClient } from './api/calendarApi'
 import { type CandidateIntakeApiClient } from './api/candidateIntakeApi'
@@ -40,8 +41,8 @@ import { type CandidatePublication, type CandidatePortalResponse, type PmgmApiCl
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
-type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
+type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -83,6 +84,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const hasInstitutionalScope = effectiveProfile?.accessScope === 'organization' || effectiveProfile?.accessScope === 'order'
   const canMemberPortal = effectiveProfile !== null
   const canBootstrap = capabilities?.canBootstrapInstitutional ?? false
+  const canConfigureSystem = capabilities?.canConfigureSystem ?? canBootstrap
   const canCalendar = effectiveProfile !== null
   const canNotifications = effectiveProfile !== null
   const canMembers = hasInstitutionalScope
@@ -96,7 +98,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
-  const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
+  const canLodge = capabilities?.canManageLodgeOperations ?? false
   const canCandidateProfile = canSecretariat || canLodge
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
   const canDocuments = capabilities?.canManageDocuments ?? false
@@ -131,7 +133,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         <ModuleAccess icon="member" label="Mi ficha" allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
         <ModuleAccess icon="calendar" label="Mi calendario" allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="bell" label="Notificaciones" allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
-        {canBootstrap && <><div className="nav-section">Plataforma</div><ModuleAccess icon="settings" label="Configuración inicial" allowed={canBootstrap} active={view === 'bootstrap'} onOpen={() => setView('bootstrap')} /></>}
+        {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label="Parámetros del sistema" allowed={canConfigureSystem} active={view === 'system'} onOpen={() => setView('system')} /><ModuleAccess icon="settings" label="Configuración inicial" allowed={canBootstrap} active={view === 'bootstrap'} onOpen={() => setView('bootstrap')} /></>}
         <div className="nav-section">Procesos</div>
         <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('candidates')}><NavIcon name="candidate" /> Insinuados publicados</button>
         <ModuleAccess icon="candidate" label={canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados'} allowed={canCandidateProfile} active={view === 'candidateProfile'} onOpen={canCandidateProfile ? () => setView('candidateProfile') : undefined} />
@@ -167,6 +169,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'bootstrap' && canBootstrap && <BootstrapPage bootstrapApi={bootstrapApi} />}
+        {view === 'system' && canConfigureSystem && <SystemConfigurationPage api={api} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
