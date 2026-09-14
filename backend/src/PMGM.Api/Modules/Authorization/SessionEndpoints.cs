@@ -41,10 +41,10 @@ public sealed record SessionCapabilitiesDto(
     bool CanValidateCeremonyInternalAffairs,
     bool CanAuthorizeCeremonies,
     bool CanManageLodgeOperations,
-    bool CanManageLodgeTreasury,
     bool CanManageDocuments,
     bool CanReadLibrary,
-    bool CanManagePrivacy);
+    bool CanManagePrivacy,
+    bool CanConfigureSystem);
 
 public static class SessionProfileBuilder
 {
@@ -90,9 +90,9 @@ public static class SessionProfileBuilder
                 CanValidateCeremonyInternalAffairs: access.CanValidateCeremonyInternalAffairs(user),
                 CanAuthorizeCeremonies: access.CanAuthorizeCeremonies(user),
                 CanManageLodgeOperations: access.CanManageLodgeOperations(user),
-                CanManageLodgeTreasury: organizationId is not null && access.CanManageLodgeTreasury(user, organizationId.Value),
                 CanManageDocuments: canManageDocuments,
                 CanReadLibrary: user.Identity?.IsAuthenticated == true,
-                CanManagePrivacy: access.CanManagePrivacy(user)));
+                CanManagePrivacy: access.CanManagePrivacy(user),
+                CanConfigureSystem: access.CanConfigureSystem(user)));
     }
 }
