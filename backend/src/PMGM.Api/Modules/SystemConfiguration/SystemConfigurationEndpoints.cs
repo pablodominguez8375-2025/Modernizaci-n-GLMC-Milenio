@@ -23,7 +23,17 @@ public static class SystemConfigurationEndpoints
         ["system.treasury.cutoff_day"] = new("Tesorería", "Día de corte mensual", "integer", "5"),
         ["system.hospitalaria.replacement_days"] = new("Hospitalaria", "Plazo de reposición (días)", "integer", "30"),
         ["system.notifications.reminder_days"] = new("Notificaciones", "Anticipación de recordatorios (días)", "integer", "3"),
-        ["system.security.session_minutes"] = new("Seguridad", "Duración de sesión (minutos)", "integer", "30")
+        ["system.security.session_minutes"] = new("Seguridad", "Duración de sesión (minutos)", "integer", "30"),
+        ["system.permissions.system_administrators"] = new("Perfiles y permisos", "Administradores habilitados", "list", "Superadministrador|Administrador Gran Logia"),
+        ["system.permissions.lodge_venerable"] = new("Perfiles y permisos", "Venerable Maestro", "list", "Gestión del Taller|Insinuados|Circuito de iniciación|Aprobar egresos|Firmar documentos|Ceremonias"),
+        ["system.permissions.lodge_secretariat"] = new("Perfiles y permisos", "Secretaría del Taller", "list", "Datos administrativos|Tenidas y asistencia|Actas|Insinuados|Documentos"),
+        ["system.permissions.lodge_treasury"] = new("Perfiles y permisos", "Tesorería del Taller", "list", "Planes de cuota|Ingresos|Egresos|Estado de pagos|Reportes de Tesorería"),
+        ["system.permissions.lodge_hospitalaria"] = new("Perfiles y permisos", "Hospitalaria del Taller", "list", "Aportes|Egresos|Reposiciones|Estado de obligaciones|Reportes de Hospitalaria"),
+        ["system.permissions.lodge_orator"] = new("Perfiles y permisos", "Orador del Taller", "list", "Revisión normativa|Firmar retiros|Firmar documentos definidos|Consulta de actas"),
+        ["system.permissions.lodge_first_warden"] = new("Perfiles y permisos", "Primer Vigilante", "list", "Docencia de Compañeros|Seguimiento formativo|Evaluaciones docentes"),
+        ["system.permissions.lodge_second_warden"] = new("Perfiles y permisos", "Segundo Vigilante", "list", "Docencia de Aprendices|Seguimiento formativo|Evaluaciones docentes"),
+        ["system.permissions.lodge_past_master"] = new("Perfiles y permisos", "Ex Venerable Maestro", "list", "Apoyo docente|Consulta histórica|Acompañamiento al Taller"),
+        ["system.permissions.grand_dignitaries"] = new("Perfiles y permisos", "Grandes dignatarios", "list", "Régimen Interior|Gran Tesorería|Gran Hospitalaria|Gran Secretaría|Gran Archivo|Gran Maestría")
     };
 
     public static IEndpointRouteBuilder MapSystemConfigurationEndpoints(this IEndpointRouteBuilder endpoints)
