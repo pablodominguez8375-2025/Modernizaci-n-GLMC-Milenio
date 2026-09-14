@@ -1,6 +1,6 @@
 import type { SessionProfile } from './api/pmgmApi'
 
-export type DemoProfileKey = 'brother' | 'lodge' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandLodge'
+export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandLodge'
 
 type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canBootstrapInstitutional?: boolean
@@ -51,6 +51,34 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManageGrandArchive: false,
       canBootstrapInstitutional: false,
     },
+  },
+  lodgeTreasurer: {
+    displayName: 'Tesorero del Taller · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+  },
+  lodgeSecretary: {
+    displayName: 'Secretaría del Taller · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+  },
+  lodgeHospitalaria: {
+    displayName: 'Hospitalaria del Taller · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+  },
+  lodgeOrator: {
+    displayName: 'Orador del Taller · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+  },
+  lodgeFirstWarden: {
+    displayName: 'Primer Vigilante · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+  },
+  lodgeSecondWarden: {
+    displayName: 'Segundo Vigilante · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+  },
+  lodgePastMaster: {
+    displayName: 'Ex Venerable Maestro · Demostración', accessScope: 'organization',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
   },
   regimen: {
     displayName: 'Régimen Interior · Demostración', accessScope: 'order',
