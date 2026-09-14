@@ -12,6 +12,7 @@ export interface SessionCapabilities {
   canValidateCeremonyInternalAffairs: boolean
   canAuthorizeCeremonies: boolean
   canManagePrivacy: boolean
+  canManageLodgeTreasury?: boolean
   canConfigureSystem?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
@@ -20,6 +21,9 @@ export interface OrganizationOptionsResponse { total: number; items: Organizatio
 export interface SystemSetting { code: string; category: string; label: string; valueType: 'integer' | 'text' | 'list'; value: string; effectiveFrom: string; sourceReference: string; status: string }
 export interface SystemSettingsResponse { total: number; items: SystemSetting[] }
 export interface CreateSystemSettingVersionRequest { value: string; effectiveFrom: string; sourceReference: string }
+export type LodgeFeeType = 'normal' | 'student' | 'senior'
+export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; workshopAmount: number; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
+export interface LodgeTreasurySummary { organizationId: string; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
 export interface InstitutionalSpace { id: string; code: string; name: string; spaceType: 'temple' | 'secretariat_room'; location: string | null; capacity: number | null; status?: string; isAvailable?: boolean }
 export interface SpaceAvailabilityResponse { fromUtc: string; toUtc: string; total: number; available: number; items: InstitutionalSpace[] }
 export interface SecretariatDocument { id: string; documentType: 'decree' | 'communication' | 'ceremony_authorization'; documentCode: string; title: string; content: string; organizationId: string | null; relatedCeremonyRequestId: string | null; spaceReservationId: string | null; status: string; issuedAtUtc: string; issuedBySubject: string }
@@ -122,6 +126,7 @@ const mockSession: SessionProfile = {
     canValidateCeremonyInternalAffairs: true,
     canAuthorizeCeremonies: true,
     canManagePrivacy: true,
+    canManageLodgeTreasury: true,
     canConfigureSystem: true,
   },
 }
@@ -193,6 +198,8 @@ export class PmgmApiClient {
   private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
   private readonly mockTreasuryStatements = new Map<string, TreasuryStatement>()
   private readonly mockHospitalaria = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'hospitalaria-demo-1', organizationId: defaultMockOrganizations[0].id, status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:05:00Z' }]])
+  private readonly mockLodgeFeePlans = new Map<string, LodgeFeePlan[]>()
+  private readonly mockLodgeTreasurySummaries = new Map<string, LodgeTreasurySummary>()
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
 
   constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized }
@@ -203,6 +210,39 @@ export class PmgmApiClient {
   async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: [...this.mockOrganizations] }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
   async getSystemSettings(): Promise<SystemSettingsResponse> { if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => ({ ...item })) }; return this.request<SystemSettingsResponse>('/api/system/settings/') }
   async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> { if (this.useMocks) { const item=this.mockSystemSettings.find(value=>value.code===code); if(!item) throw new Error('El parámetro no pertenece al catálogo administrable.'); if(!payload.value.trim()||!payload.sourceReference.trim()) throw new Error('Valor y fundamento son obligatorios.'); Object.assign(item,{value:payload.value.trim(),effectiveFrom:payload.effectiveFrom,sourceReference:payload.sourceReference.trim(),status:'active'}); return {...item}; } return this.postJson<SystemSetting>(`/api/system/settings/${encodeURIComponent(code)}`,payload) }
+
+  async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
+    if (this.useMocks) {
+      const plans = this.mockLodgeFeePlans.get(organizationId) ?? []
+      if (plans.some(item => item.feeType === payload.feeType && item.isActive)) throw new Error('Ya existe una cuota activa del mismo tipo para esa vigencia.')
+      const plan = { id: crypto.randomUUID(), organizationId, ...payload, effectiveUntil: payload.effectiveUntil ?? null, workshopAmount: payload.memberAmount - payload.grandTreasuryAmount, isActive: true }
+      plans.push(plan); this.mockLodgeFeePlans.set(organizationId, plans); return { ...plan }
+    }
+    return this.postJson<LodgeFeePlan>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`, payload)
+  }
+  async getLodgeFeePlans(organizationId: string): Promise<{ total: number; items: LodgeFeePlan[] }> {
+    if (this.useMocks) {
+      let plans = this.mockLodgeFeePlans.get(organizationId)
+      if (!plans) { plans = defaultLodgeFeePlans(organizationId); this.mockLodgeFeePlans.set(organizationId, plans) }
+      return { total: plans.length, items: plans.map(item => ({ ...item })) }
+    }
+    return this.request<{ total: number; items: LodgeFeePlan[] }>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`)
+  }
+  async generateLodgeCharges(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
+    if (this.useMocks) {
+      const plans = (await this.getLodgeFeePlans(organizationId)).items
+      const normal = plans.find(item => item.feeType === 'normal')!; const student = plans.find(item => item.feeType === 'student')!; const senior = plans.find(item => item.feeType === 'senior')!
+      const memberExpected = normal.memberAmount * 17 + student.memberAmount * 3 + senior.memberAmount * 2
+      const grandTreasuryExpected = normal.grandTreasuryAmount * 17 + student.grandTreasuryAmount * 3 + senior.grandTreasuryAmount * 2
+      const summary: LodgeTreasurySummary = { organizationId, periodYear, periodMonth, members: 22, memberExpected, collected: 438000, receivable: memberExpected - 438000, grandTreasuryExpected, workshopMarginProjected: memberExpected - grandTreasuryExpected, paid: 17, partial: 2, overdue: 3, trafficLight: 'amber' }
+      this.mockLodgeTreasurySummaries.set(`${organizationId}:${periodYear}-${periodMonth}`, summary); return { ...summary }
+    }
+    return this.postJson<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos/generar`, { periodYear, periodMonth, assignments: [] })
+  }
+  async getLodgeTreasurySummary(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
+    if (this.useMocks) return this.mockLodgeTreasurySummaries.get(`${organizationId}:${periodYear}-${periodMonth}`) ?? { organizationId, periodYear, periodMonth, members: 0, memberExpected: 0, collected: 0, receivable: 0, grandTreasuryExpected: 0, workshopMarginProjected: 0, paid: 0, partial: 0, overdue: 0, trafficLight: 'no_data' }
+    return this.request<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/resumen?year=${periodYear}&month=${periodMonth}`)
+  }
 
   async getRegimenInteriorSummary(filters: { organizationId?: string; asOf?: string; from?: string } = {}): Promise<RegimenInteriorSummary> {
     if (this.useMocks) return mockRegimenSummary(filters)
@@ -431,6 +471,11 @@ function mockInitialDeliberation(ceremonyRequestId: string, payload: InitialDeli
 function dateOnlyDayNumber(value: string) { const [year, month, day] = value.split('-').map(Number); if (!year || !month || !day) throw new Error('La fecha de deliberación no es válida.'); return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000) }
 function ceremonyTypeLabel(type: CeremonyType) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function mockSnapshotAsOf(snapshot: WorkshopRegularitySnapshot | undefined, asOf?: string): WorkshopRegularitySnapshot | null { if (!snapshot) return null; if (asOf && snapshot.asOfDate > asOf) return null; return { ...snapshot } }
+function defaultLodgeFeePlans(organizationId: string): LodgeFeePlan[] { return [
+  { id: `fee-normal-${organizationId}`, organizationId, feeType: 'normal', memberAmount: 26000, grandTreasuryAmount: 21000, workshopAmount: 5000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-student-${organizationId}`, organizationId, feeType: 'student', memberAmount: 13000, grandTreasuryAmount: 11000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-senior-${organizationId}`, organizationId, feeType: 'senior', memberAmount: 16000, grandTreasuryAmount: 13000, workshopAmount: 3000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+] }
 function mockRegularitySnapshot(organizationId: string, payload: WorkshopRegularityRequest, prefix: string): WorkshopRegularitySnapshot { return { id: `${prefix}-${crypto.randomUUID()}`, organizationId, scope: 'organization', status: payload.status, asOfDate: payload.asOfDate, sourceReference: payload.sourceReference ?? null, notes: payload.notes ?? null, recordedAtUtc: new Date().toISOString() } }
 function mockTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): TreasuryStatement { return { id: crypto.randomUUID(), organizationId, periodYear: payload.periodYear, periodMonth: payload.periodMonth, cutoffDate: payload.cutoffDate, status: 'draft', sourceReference: payload.sourceReference ?? null, expectedAmount: 0, transferAmount: 0, depositAmount: 0, paidAmount: 0, differenceAmount: 0, unresolvedIdentities: 0, lines: [], payments: [], submittedAtUtc: null, reconciledAtUtc: null, closedAtUtc: null } }
 function recalculateMockTreasury(statement: TreasuryStatement) { statement.expectedAmount = statement.lines.reduce((total, line) => total + line.payableAmount, 0); statement.transferAmount = statement.payments.filter(payment => payment.paymentMethod === 'transfer').reduce((total, payment) => total + payment.amount, 0); statement.depositAmount = statement.payments.filter(payment => payment.paymentMethod === 'deposit').reduce((total, payment) => total + payment.amount, 0); statement.paidAmount = statement.transferAmount + statement.depositAmount; statement.differenceAmount = statement.expectedAmount - statement.paidAmount }
