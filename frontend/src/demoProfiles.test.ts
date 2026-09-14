@@ -14,6 +14,7 @@ describe('showcase role profiles', () => {
 
   it('gives a lodge authority operational Taller access without Gran Logia authority', () => {
     const profile = getDemoProfile('lodge')
+    expect(profile.displayName).toBe('Venerable Maestro · Demostración')
     expect(profile.accessScope).toBe('organization')
     expect(profile.capabilities.canManageLodgeOperations).toBe(true)
     expect(profile.capabilities.canManageDocuments).toBe(true)
