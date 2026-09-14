@@ -1,0 +1,194 @@
+/* PMGM-UI-001 · Dashboard / home fidelity layer from approved Proyecto Milenio mockup. */
+
+.dashboard-page {
+  --dashboard-navy: #102c54;
+  --dashboard-blue: #173b6e;
+  --dashboard-gold: #b48a37;
+  --dashboard-gold-soft: #f7f0df;
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-page .executive-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 245px;
+  border: 1px solid rgba(180, 138, 55, .42);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 78% 35%, rgba(213, 172, 87, .18), transparent 24%),
+    linear-gradient(120deg, #0b203b 0%, #102c54 50%, #173b6e 100%);
+  box-shadow: 0 7px 24px rgba(12, 36, 67, .14);
+}
+
+.dashboard-page .executive-hero::after {
+  content: '';
+  position: absolute;
+  right: -10%;
+  bottom: -58%;
+  width: 58%;
+  aspect-ratio: 1.5;
+  border-radius: 50% 50% 0 0;
+  border-top: 1px solid rgba(229, 200, 120, .14);
+  box-shadow: 0 -24px 0 rgba(255, 255, 255, .018), 0 -50px 0 rgba(180, 138, 55, .018);
+  transform: rotate(-5deg);
+  pointer-events: none;
+}
+
+.dashboard-page .executive-hero h1 {
+  max-width: 720px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(30px, 4vw, 48px);
+  line-height: 1.08;
+}
+
+.dashboard-page .executive-hero .eyebrow {
+  color: #e2c578;
+}
+
+.dashboard-page .executive-hero .lead {
+  max-width: 760px;
+  color: #d2dce9;
+}
+
+.dashboard-page .hero-assurance span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 5px;
+  border-color: rgba(229, 200, 120, .18);
+  background: rgba(255, 255, 255, .055);
+}
+
+.dashboard-page .hero-assurance svg {
+  color: #e2c578;
+  flex: 0 0 auto;
+}
+
+.dashboard-page .executive-status-card {
+  position: relative;
+  z-index: 1;
+  border-radius: 7px;
+  border-color: rgba(229, 200, 120, .18);
+  background: rgba(8, 26, 49, .36);
+}
+
+.dashboard-page .executive-metrics {
+  gap: 10px;
+}
+
+.dashboard-page .executive-metrics .metric-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 7px;
+  border-color: #dce3ec;
+  box-shadow: 0 4px 14px rgba(16, 44, 84, .04);
+}
+
+.dashboard-page .executive-metrics .metric-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--dashboard-navy);
+}
+
+.dashboard-page .executive-metrics .metric-card.metric-attention::before {
+  background: var(--dashboard-gold);
+}
+
+.dashboard-page .quick-actions {
+  margin: 0;
+  border-radius: 8px;
+  border-top: 3px solid var(--dashboard-gold);
+  box-shadow: none;
+}
+
+.dashboard-page .quick-action-grid {
+  gap: 8px;
+}
+
+.dashboard-page .quick-action {
+  min-height: 82px;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 3px 10px rgba(16, 44, 84, .035);
+}
+
+.dashboard-page .quick-action:hover {
+  border-color: #cfb16b;
+  background: #fffdf8;
+}
+
+.dashboard-page .quick-action-icon {
+  border-radius: 6px;
+  background: var(--dashboard-navy);
+  color: #e5c878;
+}
+
+.dashboard-page .command-panel,
+.dashboard-page .platform-health,
+.dashboard-page .maturity-panel {
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(16, 44, 84, .04);
+}
+
+.dashboard-page .command-panel {
+  border-top: 3px solid var(--dashboard-navy);
+}
+
+.dashboard-page .date-block {
+  border-radius: 5px;
+  background: var(--dashboard-gold-soft);
+}
+
+.dashboard-page .dashboard-alert {
+  border-radius: 6px;
+}
+
+.dashboard-page .dashboard-alert > span:first-child {
+  border-radius: 6px;
+  background: var(--dashboard-gold-soft);
+  color: #806121;
+}
+
+.dashboard-page .control-state {
+  border-radius: 7px;
+}
+
+.dashboard-page .control-state > span {
+  border-radius: 6px;
+}
+
+.dashboard-page .maturity-panel {
+  border-top: 3px solid var(--dashboard-gold);
+}
+
+.dashboard-page .maturity-meter,
+.dashboard-page .maturity-meter span {
+  border-radius: 4px;
+}
+
+.dashboard-page .maturity-tags span {
+  border-radius: 4px;
+}
+
+@media (max-width: 980px) {
+  .dashboard-page .executive-hero {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashboard-page .executive-hero {
+    padding: 22px 18px;
+  }
+
+  .dashboard-page .executive-hero h1 {
+    font-size: clamp(29px, 9vw, 38px);
+  }
+
+  .dashboard-page .quick-action {
+    min-height: 68px;
+  }
+}

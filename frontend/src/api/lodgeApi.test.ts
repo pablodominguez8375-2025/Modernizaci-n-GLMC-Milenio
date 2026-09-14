@@ -1,0 +1,121 @@
+import { afterEach, expect, it, vi } from 'vitest'
+import { LodgeApiClient } from './lodgeApi'
+
+afterEach(() => vi.unstubAllGlobals())
+
+it('uses the same bearer-only boundary for Lodge Management', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ total: 0, items: [] })))
+  vi.stubGlobal('fetch', fetch)
+  await new LodgeApiClient({ getAccessToken: async () => 'lodge-token' }).getMeetings('o1')
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/gestion-logial/talleres/o1/tenidas')
+  expect(options.headers.get('Authorization')).toBe('Bearer lodge-token')
+  expect(options).toMatchObject({ credentials: 'omit', cache: 'no-store', redirect: 'error' })
+})
+
+it('uses only the minimized lodge member selector', async () => {
+  const response = { total: 1, items: [{ id: 'm1', displayName: 'Hermana Uno' }] }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response)))
+  vi.stubGlobal('fetch', fetch)
+  const result = await new LodgeApiClient({ getAccessToken: async () => 'token' }).getMemberOptions('o1')
+  expect(result.items[0]).toEqual({ id: 'm1', displayName: 'Hermana Uno' })
+  expect(fetch.mock.calls[0][0]).toBe('/api/gestion-logial/talleres/o1/miembros/opciones')
+  expect(JSON.stringify(result)).not.toContain('institutionalNumber')
+  expect(JSON.stringify(result)).not.toContain('email')
+})
+
+it('routes attendance and minute operations through dedicated lodge endpoints', async () => {
+  const responses = [
+    new Response(JSON.stringify({ id: 'a1' }), { status: 201 }),
+    new Response(JSON.stringify({ total: 0, items: [] })),
+    new Response(JSON.stringify({ id: 'min1', meetingId: 't1', version: 1, content: 'Acta', status: 'draft', createdAtUtc: '2026-09-08T13:00:00Z', approvedAtUtc: null }), { status: 201 }),
+    new Response(JSON.stringify({ id: 'min1', meetingId: 't1', version: 1, content: 'Acta', status: 'approved', createdAtUtc: '2026-09-08T13:00:00Z', approvedAtUtc: '2026-09-08T14:00:00Z' })),
+  ]
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+  vi.stubGlobal('fetch', fetch)
+  const client = new LodgeApiClient({ getAccessToken: async () => 'token' })
+
+  await client.recordAttendance('t1', { memberId: 'm1', status: 'present' })
+  await client.getAttendance('t1')
+  await client.createMinute('t1', 'Acta')
+  await client.approveMinute('t1', 'min1')
+
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/gestion-logial/tenidas/t1/asistencia',
+    '/api/gestion-logial/tenidas/t1/asistencia',
+    '/api/gestion-logial/tenidas/t1/actas',
+    '/api/gestion-logial/tenidas/t1/actas/min1/aprobar',
+  ])
+})
+
+it('uses the same instruction contract for list, creation and attendance', async () => {
+  const instruction = { id: 'i1', organizationId: 'o1', instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos', responsibleOffice: 'second_warden', instructorMemberId: null, status: 'held' }
+  const responses = [
+    new Response(JSON.stringify({ total: 0, items: [] })),
+    new Response(JSON.stringify(instruction), { status: 201 }),
+    new Response(JSON.stringify({ instructionId: 'i1', recorded: 1 })),
+  ]
+  const fetch = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+  vi.stubGlobal('fetch', fetch)
+  const client = new LodgeApiClient({ getAccessToken: async () => 'token' })
+
+  await client.getInstructions('o1')
+  await client.createInstruction('o1', { instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos' })
+  await client.recordInstructionAttendance('i1', [{ memberId: 'm1', status: 'present' }])
+
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/gestion-logial/talleres/o1/instrucciones',
+    '/api/gestion-logial/talleres/o1/instrucciones',
+    '/api/gestion-logial/instrucciones/i1/asistencia',
+  ])
+})
+
+it('demo mode preserves corrections and minute versions without token or network', async () => {
+  const fetch = vi.fn(), token = vi.fn()
+  vi.stubGlobal('fetch', fetch)
+  const client = new LodgeApiClient({ useMocks: true, getAccessToken: token })
+  const meeting = await client.createMeeting('o1', { meetingDate: '2026-09-08', meetingType: 'regular', grade: 'all' })
+  const members = await client.getMemberOptions('o1')
+  await client.closeMeeting(meeting.id)
+  await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'present' })
+  await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'excused', excuseReason: 'Rectificación' })
+  await client.recordAttendance(meeting.id, { memberId: members.items[1].id, status: 'present' })
+  const attendance = await client.getAttendance(meeting.id)
+  expect(attendance.total).toBe(2)
+  expect(attendance.items.find(item => item.memberId === members.items[0].id)?.status).toBe('excused')
+
+  const ballot = await client.recordAnonymousBallot(meeting.id, { ballotType: 'white_black', procedureNumber: 1, subject: 'Admisión QA', eligibleCount: 1, positiveCount: 1, negativeCount: 0 })
+  expect(ballot.attendeeCount).toBe(1)
+  expect(ballot.positiveCount).toBe(1)
+  expect(JSON.stringify(ballot)).not.toContain('memberId')
+  const extract = await client.generateMinuteExtract(meeting.id)
+  expect(extract.content).toContain('BALOTAJE Y VOTACIONES')
+  expect(extract.content).toContain('Primer trámite · Admisión QA: blancas 1; negras 0')
+
+  const v1 = await client.createMinute(meeting.id, 'Versión uno')
+  await client.approveMinute(meeting.id, v1.id)
+  const v2 = await client.createMinute(meeting.id, 'Versión dos')
+  await client.approveMinute(meeting.id, v2.id)
+  const minutes = await client.getMinutes(meeting.id)
+  expect(minutes.total).toBe(2)
+  expect(minutes.items.find(item => item.version === 1)?.status).toBe('superseded')
+  expect(minutes.items.find(item => item.version === 2)?.status).toBe('approved')
+
+  const instruction = await client.createInstruction('23232323-2323-2323-2323-232323232323', { instructionDate: '2026-09-12', grade: 'master', topic: 'Docencia de Maestros' })
+  expect(instruction.status).toBe('scheduled')
+  await client.completeInstruction(instruction.id)
+  await client.recordInstructionAttendance(instruction.id, [{ memberId: members.items[0].id, status: 'present' }])
+  const instructions = await client.getInstructions('23232323-2323-2323-2323-232323232323')
+  expect(instructions.items.some(item => item.id === instruction.id)).toBe(true)
+  expect(fetch).not.toHaveBeenCalled()
+  expect(token).not.toHaveBeenCalled()
+})
+
+it('registers a single pending lodge withdrawal and preserves the institutional review boundary', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const member = (await client.getMemberOptions('23232323-2323-2323-2323-232323232323')).items[0]
+  const created = await client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'voluntary', requestedEffectiveDate: '2026-09-30', reason: 'Solicitud voluntaria demostrativa.', evidenceReference: 'CARTA-QA-001' })
+  expect(created.status).toBe('pending')
+  expect((await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total).toBe(1)
+  await expect(client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'forced', requestedEffectiveDate: '2026-10-01', reason: 'Segunda solicitud demostrativa.', evidenceReference: 'CARTA-QA-002' })).rejects.toThrow('pendiente')
+})

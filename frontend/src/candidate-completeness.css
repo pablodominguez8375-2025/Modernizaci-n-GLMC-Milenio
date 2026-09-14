@@ -1,0 +1,12 @@
+.candidate-completeness-card { display: grid; gap: 12px; }
+.candidate-completeness-card .candidate-section-title { margin-bottom: 0; }
+.candidate-completeness-card p { margin: 0; color: #65748b; font-size: 12px; }
+.candidate-completeness-progress { height: 8px; border-radius: 99px; background: #e8edf4; overflow: hidden; }
+.candidate-completeness-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #b48a37, #2b9b67); }
+.candidate-missing-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px 18px; margin: 0; padding: 0; list-style: none; }
+.candidate-missing-list li { padding: 8px 10px; border-radius: 8px; background: #fff4df; color: #8a631d; font-size: 11px; font-weight: 700; }
+.candidate-missing-list li::before { content: '!'; display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 7px; border-radius: 50%; background: #d99b2b; color: #fff; font-size: 10px; }
+
+@media (max-width: 640px) {
+  .candidate-missing-list { grid-template-columns: 1fr; }
+}

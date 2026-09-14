@@ -1,0 +1,105 @@
+name: Proyecto Centenario Post-RC Installable
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feature/treasury-payment-table-v1]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build post-RC installable package
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify source and deployment definitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          docker compose --env-file infrastructure/first.env.example -f infrastructure/docker-compose.first.yml config --quiet
+          docker compose --env-file infrastructure/pilot.env.example -f infrastructure/docker-compose.pilot.yml config --quiet
+          bash -n scripts/install-pilot.sh
+          bash scripts/install-pilot.sh --help >/dev/null
+          for script in preflight-definitive-host.sh preflight-pilot.sh start-pilot.sh smoke-pilot.sh backup-pilot.sh verify-pilot-backup.sh; do
+            bash -n "scripts/$script"
+          done
+
+      - name: Build package from exact SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="Proyecto-Centenario-postRC-installable"
+          package_root="artifacts/$package_name"
+          mkdir -p "$package_root"
+          git archive --format=tar "$GITHUB_SHA" | tar -xf - -C "$package_root"
+          git bundle create "$package_root/pmgm-repository.bundle" --all
+
+          cat > "$package_root/BUILD-INFO.txt" <<EOF
+          PRODUCT=Proyecto Centenario - Gran Logia Mixta de Chile
+          CHANNEL=post-RC-development
+          SOURCE_SHA=$GITHUB_SHA
+          SOURCE_REF=$GITHUB_REF
+          BUILD_RUN_ID=$GITHUB_RUN_ID
+          BUILD_RUN_NUMBER=$GITHUB_RUN_NUMBER
+          BUILD_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          FROZEN_RC1_SHA=3ffb64c7a188c2bd4130f616928b2a657844a8aa
+          PUBLIC_DEMO=https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
+          NOTE=Incremento posterior a RC1. No es produccion ni reemplaza el candidato UAT congelado.
+          EOF
+
+          cp "$package_root/docs/installation/PREUAT-INSTALL.md" "$package_root/LEAME-INSTALACION.md"
+          cp "$package_root/docs/installation/VM-IMPLEMENTATION-CHECKLIST.md" "$package_root/CHECKLIST-IMPLEMENTACION.md"
+          cat > "$package_root/INSTALAR.sh" <<'EOF'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          PACKAGE_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+          exec bash "$PACKAGE_DIR/scripts/install-pilot.sh" "$@"
+          EOF
+          chmod +x "$package_root/INSTALAR.sh" "$package_root/scripts/install-pilot.sh"
+
+          cat > "$package_root/ESTADO-PAQUETE.txt" <<EOF
+          PROYECTO CENTENARIO — PAQUETE INSTALABLE POST-RC
+
+          Este paquete contiene el incremento posterior a la RC1 congelada.
+          Incluye la Gestión Logial propia de cada Taller: Secretaría, Tesorería,
+          Hospitalaria y Docencia/Instrucción de Vigilantes y Ex Venerable Maestro.
+
+          SOURCE_SHA=$GITHUB_SHA
+          FROZEN_RC1_SHA=3ffb64c7a188c2bd4130f616928b2a657844a8aa
+
+          No reemplaza la RC1 ni constituye aprobación de producción. Use datos
+          ficticios hasta completar las pruebas funcionales e institucionales.
+
+          Inicio: ./INSTALAR.sh --help
+          EOF
+
+          (cd "$package_root" && find . -type f ! -name MANIFEST.sha256 -print0 | sort -z | xargs -0 sha256sum > MANIFEST.sha256)
+          (cd artifacts && zip -qr "$package_name.zip" "$package_name" && sha256sum "$package_name.zip" > "$package_name.zip.sha256")
+
+      - name: Verify generated package
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_name="Proyecto-Centenario-postRC-installable"
+          (cd artifacts && sha256sum -c "$package_name.zip.sha256")
+          verify_dir="$(mktemp -d)"
+          unzip -q "artifacts/$package_name.zip" -d "$verify_dir"
+          (cd "$verify_dir/$package_name" && sha256sum -c MANIFEST.sha256 >/dev/null && bash ./INSTALAR.sh --help >/dev/null)
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Proyecto-Centenario-postRC-installable-${{ github.sha }}
+          path: |
+            artifacts/Proyecto-Centenario-postRC-installable.zip
+            artifacts/Proyecto-Centenario-postRC-installable.zip.sha256
+          if-no-files-found: error
+          retention-days: 30

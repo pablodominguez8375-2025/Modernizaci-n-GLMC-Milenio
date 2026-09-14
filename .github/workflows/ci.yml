@@ -1,0 +1,469 @@
+name: PMGM CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  backend-build:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: pmgm_ci
+          POSTGRES_USER: pmgm
+          POSTGRES_PASSWORD: pmgm_ci_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pmgm -d pmgm_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      PMGM_TEST_POSTGRES: Host=localhost;Port=5432;Database=pmgm_ci;Username=pmgm;Password=pmgm_ci_only
+      PMGM_TEST_S3_URL: http://127.0.0.1:9000
+      PMGM_TEST_S3_ACCESS_KEY: pmgm_minio_ci
+      PMGM_TEST_S3_SECRET_KEY: pmgm_minio_ci_secret_change_me
+      PMGM_TEST_S3_BUCKET: pmgm-documents
+      PMGM_TEST_CLAMAV_HOST: 127.0.0.1
+      PMGM_TEST_CLAMAV_PORT: 3310
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Privacy gate — Ley 21.719
+        run: python3 tests/privacy_gate.py
+
+      - name: Data classification gate
+        run: python3 tests/data_classification_gate.py
+
+      - name: Migration safety gate
+        run: python3 tests/migration_gate.py
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Start private MinIO for S3 integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name pmgm-minio-ci \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER="$PMGM_TEST_S3_ACCESS_KEY" \
+            -e MINIO_ROOT_PASSWORD="$PMGM_TEST_S3_SECRET_KEY" \
+            quay.io/minio/minio:latest server /data
+
+          ready=false
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ready" != "true" ]; then
+            docker logs pmgm-minio-ci
+            exit 1
+          fi
+
+          docker run --rm \
+            --network host \
+            --entrypoint /bin/sh \
+            quay.io/minio/mc:latest \
+            -c "mc alias set pmgm '$PMGM_TEST_S3_URL' '$PMGM_TEST_S3_ACCESS_KEY' '$PMGM_TEST_S3_SECRET_KEY' && mc mb --ignore-existing pmgm/$PMGM_TEST_S3_BUCKET && mc anonymous set none pmgm/$PMGM_TEST_S3_BUCKET"
+
+      - name: Start ClamAV for malware integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d \
+            --name pmgm-clamav-ci \
+            -p 3310:3310 \
+            clamav/clamav:1.4
+
+          ready=false
+          for attempt in $(seq 1 60); do
+            if python3 - <<'PY'
+          import socket
+          try:
+              with socket.create_connection(("127.0.0.1", 3310), timeout=1) as connection:
+                  connection.sendall(b"zPING\0")
+                  response = connection.recv(64)
+              raise SystemExit(0 if b"PONG" in response else 1)
+          except OSError:
+              raise SystemExit(1)
+          PY
+            then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$ready" != "true" ]; then
+            docker logs pmgm-clamav-ci
+            exit 1
+          fi
+
+      - name: Restore API
+        run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
+
+      - name: Build API
+        run: dotnet build backend/src/PMGM.Api/PMGM.Api.csproj --configuration Release --no-restore
+
+      - name: Restore tests
+        run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
+
+      - name: Test unit, PostgreSQL, S3 and ClamAV integration
+        run: >-
+          dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
+          --configuration Release
+          --no-restore
+          --results-directory artifacts/test-results
+          --report-xunit-trx
+          --report-xunit-trx-filename pmgm-tests.trx
+          --xunit-info
+
+      - name: Publish backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-backend-test-results
+          path: artifacts/test-results
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Stop ClamAV
+        if: always()
+        run: docker rm -f pmgm-clamav-ci >/dev/null 2>&1 || true
+
+      - name: Stop MinIO
+        if: always()
+        run: docker rm -f pmgm-minio-ci >/dev/null 2>&1 || true
+
+  frontend-build:
+    name: Frontend lint and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend --no-audit --no-fund
+
+      - name: Lint frontend
+        run: npm run lint --prefix frontend
+
+      - name: Build frontend
+        run: npm run build --prefix frontend
+
+      - name: Test OIDC session and API boundary
+        run: npm test --prefix frontend
+
+      - name: Build frontend container
+        run: docker build --build-arg VITE_USE_MOCKS=true -t pmgm-web-ci frontend
+
+      - name: Validate Nginx configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create pmgm-nginx-ci
+          trap 'docker rm -f pmgm-api-placeholder >/dev/null 2>&1 || true; docker network rm pmgm-nginx-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --name pmgm-api-placeholder --network pmgm-nginx-ci --network-alias api nginx:stable-alpine
+          docker run --rm --network pmgm-nginx-ci pmgm-web-ci nginx -t
+
+      - name: Build standalone showcase container
+        run: docker build -f frontend/Dockerfile.showcase -t pmgm-showcase-ci frontend
+
+      - name: Validate showcase Nginx configuration
+        run: docker run --rm pmgm-showcase-ci nginx -t
+
+      - name: Build first-implementation frontend configuration
+        run: >-
+          docker build
+          --build-arg VITE_USE_MOCKS=false
+          --build-arg VITE_OIDC_AUTHORITY=http://127.0.0.1:8180/realms/pmgm
+          --build-arg VITE_OIDC_CLIENT_ID=pmgm-web
+          --build-arg VITE_OIDC_ALLOW_HTTP_LOCAL=true
+          -t pmgm-first-web-ci frontend
+
+      - name: Build pilot frontend configuration
+        run: >-
+          docker build
+          --build-arg VITE_USE_MOCKS=false
+          --build-arg VITE_OIDC_AUTHORITY=https://localhost:8443/identity/realms/pmgm
+          --build-arg VITE_OIDC_CLIENT_ID=pmgm-web
+          --build-arg VITE_OIDC_ALLOW_HTTP_LOCAL=false
+          -t pmgm-pilot-web-ci frontend
+
+  infrastructure-validate:
+    name: Infrastructure configuration
+    runs-on: ubuntu-latest
+    env:
+      PMGM_FIRST_DB_PASSWORD: ci_first_db_only
+      PMGM_FIRST_MINIO_USER: ci_first_storage
+      PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
+      PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
+      PMGM_QA_USER_PASSWORD: ci_first_user_only
+      PMGM_PILOT_HOSTNAME: localhost
+      PMGM_PILOT_PUBLIC_URL: https://localhost:8443
+      PMGM_PILOT_BIND_ADDRESS: 127.0.0.1
+      PMGM_PILOT_HTTP_PORT: 8088
+      PMGM_PILOT_HTTPS_PORT: 8443
+      PMGM_PILOT_CADDYFILE: ./caddy/Caddyfile.pilot-ci
+      PMGM_PILOT_ALLOW_LOCALHOST: "true"
+      PMGM_PILOT_INSECURE_TLS: "true"
+      PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
+      PMGM_PILOT_MINIO_USER: ci-pilot-storage
+      PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
+      PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
+      PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD: ci-pilot-keycloak-secret-2026-003
+      PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
+      PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
+      PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate development Docker Compose
+        run: docker compose -f infrastructure/docker-compose.dev.yml config
+
+      - name: Validate QA Docker Compose
+        env:
+          POSTGRES_PASSWORD: ci_qa_postgres_only
+          MINIO_ACCESS_KEY: ci_qa_storage
+          MINIO_SECRET_KEY: ci_qa_storage_secret_only
+        run: docker compose -f infrastructure/docker-compose.qa.yml config
+
+      - name: Validate standalone showcase Docker Compose
+        run: docker compose -f infrastructure/docker-compose.showcase.yml config
+
+      - name: Validate first-implementation Docker Compose
+        run: docker compose -f infrastructure/docker-compose.first.yml config
+
+      - name: Validate pilot Docker Compose
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -f infrastructure/docker-compose.pilot.yml config
+          docker compose -f infrastructure/docker-compose.pilot.yml config --format json > "$RUNNER_TEMP/pilot-compose.json"
+          PILOT_COMPOSE="$RUNNER_TEMP/pilot-compose.json" python3 - <<'PY'
+          import json, os
+          payload=json.load(open(os.environ['PILOT_COMPOSE']))
+          services=payload['services']
+          for name, service in services.items():
+              if name != 'gateway' and service.get('ports'):
+                  raise SystemExit(f'{name} expone puertos públicos en el piloto')
+          api_env=services['api']['environment']
+          if str(api_env.get('DemoData__Enabled','')).lower() != 'false':
+              raise SystemExit('DemoData debe estar desactivado en piloto')
+          command=services['keycloak'].get('command', [])
+          if not command or command[0] != 'start' or 'start-dev' in command:
+              raise SystemExit(f'Keycloak piloto no está en server mode: {command}')
+          if '/identity' not in services['keycloak']['environment'].get('KC_HTTP_RELATIVE_PATH',''):
+              raise SystemExit('Keycloak piloto debe vivir bajo /identity')
+          PY
+
+      - name: Validate Keycloak QA realm JSON
+        run: python3 -m json.tool infrastructure/keycloak/pmgm-realm.json >/dev/null
+
+      - name: Validate Keycloak realm filename convention
+        run: >-
+          python3 -c "import json, pathlib; path=pathlib.Path('infrastructure/keycloak/pmgm-realm.json');
+          realm=json.load(path.open())['realm']; assert path.name == f'{realm}-realm.json', (path.name, realm)"
+
+      - name: Reject fixed QA passwords in realm
+        run: >-
+          python3 -c "import json; p=json.load(open('infrastructure/keycloak/pmgm-realm.json'));
+          values=[c.get('value','') for u in p.get('users',[]) for c in u.get('credentials',[])];
+          assert values and all(v == '\${PMGM_QA_USER_PASSWORD}' for v in values), values"
+
+      - name: Validate Keycloak pilot realm
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m json.tool infrastructure/keycloak/pmgm-pilot-realm.json >/dev/null
+          python3 - <<'PY'
+          import json
+          p=json.load(open('infrastructure/keycloak/pmgm-pilot-realm.json'))
+          assert p['realm']=='pmgm'
+          assert p['sslRequired']=='external'
+          users=p.get('users',[])
+          assert len(users)==1
+          assert users[0]['username']=='${PMGM_PILOT_ADMIN_USERNAME}'
+          assert not any(str(u.get('username','')).lower().startswith('qa') for u in users)
+          assert users[0]['credentials'][0]['value']=='${PMGM_PILOT_ADMIN_PASSWORD}'
+          client=next(c for c in p['clients'] if c['clientId']=='pmgm-web')
+          assert client['standardFlowEnabled'] is True
+          assert client['directAccessGrantsEnabled'] is False
+          assert client['attributes']['pkce.code.challenge.method']=='S256'
+          assert all('localhost' not in x for x in client['redirectUris'])
+          PY
+
+      - name: Validate backup, pilot and recovery Bash scripts
+        shell: bash
+        run: >-
+          bash -n
+          scripts/backup-first-implementation.sh
+          scripts/verify-first-backup.sh
+          scripts/restore-first-implementation.sh
+          scripts/recovery-drill-first-implementation.sh
+          scripts/preflight-pilot.sh
+          scripts/start-pilot.sh
+          scripts/smoke-pilot.sh
+          scripts/backup-pilot.sh
+          scripts/verify-pilot-backup.sh
+          scripts/restore-pilot.sh
+          scripts/recovery-drill-pilot.sh
+
+      - name: Validate backup, pilot and recovery PowerShell scripts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = @(
+            'scripts/backup-first-implementation.ps1',
+            'scripts/verify-first-backup.ps1',
+            'scripts/restore-first-implementation.ps1',
+            'scripts/preflight-pilot.ps1',
+            'scripts/start-pilot.ps1',
+            'scripts/smoke-pilot.ps1',
+            'scripts/backup-pilot.ps1',
+            'scripts/verify-pilot-backup.ps1',
+            'scripts/restore-pilot.ps1'
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              foreach ($parseError in $errors) { Write-Error "${file}: $($parseError.Message)" }
+              throw "PowerShell syntax inválida en $file"
+            }
+          }
+
+  first-implementation-smoke:
+    name: First implementation authenticated smoke
+    runs-on: ubuntu-latest
+    env:
+      PMGM_FIRST_DB_PASSWORD: ci_first_db_only
+      PMGM_FIRST_MINIO_USER: ci_first_storage
+      PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
+      PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
+      PMGM_QA_USER_PASSWORD: ci_first_user_only
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start first implementation
+        run: docker compose -f infrastructure/docker-compose.first.yml up -d --build
+
+      - name: Run authenticated stack smoke
+        run: bash scripts/smoke-first-implementation.sh
+
+      - name: Run backup and recovery drill
+        run: bash scripts/recovery-drill-first-implementation.sh "$RUNNER_TEMP/pmgm-recovery-drill"
+
+      - name: Show first-implementation logs on failure
+        if: failure()
+        run: docker compose -f infrastructure/docker-compose.first.yml logs --no-color --tail=300
+
+      - name: Stop first implementation
+        if: always()
+        run: docker compose -f infrastructure/docker-compose.first.yml down -v --remove-orphans
+
+  pilot-operational-smoke:
+    name: Pilot operational HTTPS and recovery
+    runs-on: ubuntu-latest
+    env:
+      PMGM_PILOT_HOSTNAME: localhost
+      PMGM_PILOT_PUBLIC_URL: https://localhost:8443
+      PMGM_PILOT_BIND_ADDRESS: 127.0.0.1
+      PMGM_PILOT_HTTP_PORT: 8088
+      PMGM_PILOT_HTTPS_PORT: 8443
+      PMGM_PILOT_CADDYFILE: ./caddy/Caddyfile.pilot-ci
+      PMGM_PILOT_ALLOW_LOCALHOST: "true"
+      PMGM_PILOT_INSECURE_TLS: "true"
+      PMGM_PILOT_RECOVERY_DRILL_ALLOWED: "true"
+      PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
+      PMGM_PILOT_MINIO_USER: ci-pilot-storage
+      PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
+      PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
+      PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD: ci-pilot-keycloak-secret-2026-003
+      PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
+      PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
+      PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create CI pilot environment file
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/pmgm-pilot.env" <<EOF
+          PMGM_PILOT_HOSTNAME=$PMGM_PILOT_HOSTNAME
+          PMGM_PILOT_PUBLIC_URL=$PMGM_PILOT_PUBLIC_URL
+          PMGM_PILOT_BIND_ADDRESS=$PMGM_PILOT_BIND_ADDRESS
+          PMGM_PILOT_HTTP_PORT=$PMGM_PILOT_HTTP_PORT
+          PMGM_PILOT_HTTPS_PORT=$PMGM_PILOT_HTTPS_PORT
+          PMGM_PILOT_CADDYFILE=$PMGM_PILOT_CADDYFILE
+          PMGM_PILOT_ALLOW_LOCALHOST=$PMGM_PILOT_ALLOW_LOCALHOST
+          PMGM_PILOT_INSECURE_TLS=$PMGM_PILOT_INSECURE_TLS
+          PMGM_PILOT_RECOVERY_DRILL_ALLOWED=$PMGM_PILOT_RECOVERY_DRILL_ALLOWED
+          PMGM_PILOT_DB_PASSWORD=$PMGM_PILOT_DB_PASSWORD
+          PMGM_PILOT_MINIO_USER=$PMGM_PILOT_MINIO_USER
+          PMGM_PILOT_MINIO_PASSWORD=$PMGM_PILOT_MINIO_PASSWORD
+          PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME=$PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME
+          PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD=$PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD
+          PMGM_PILOT_ADMIN_USERNAME=$PMGM_PILOT_ADMIN_USERNAME
+          PMGM_PILOT_ADMIN_EMAIL=$PMGM_PILOT_ADMIN_EMAIL
+          PMGM_PILOT_ADMIN_PASSWORD=$PMGM_PILOT_ADMIN_PASSWORD
+          EOF
+          echo "PMGM_PILOT_ENV_FILE=$RUNNER_TEMP/pmgm-pilot.env" >> "$GITHUB_ENV"
+
+      - name: Run pilot preflight
+        run: bash scripts/preflight-pilot.sh
+
+      - name: Build and start operational pilot
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml up -d --build
+
+      - name: Run pilot HTTPS/OIDC smoke
+        run: bash scripts/smoke-pilot.sh
+
+      - name: Run pilot backup and recovery drill
+        run: bash scripts/recovery-drill-pilot.sh "$RUNNER_TEMP/pmgm-pilot-recovery-drill"
+
+      - name: Show pilot logs on failure
+        if: failure()
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml logs --no-color --tail=400
+
+      - name: Stop operational pilot
+        if: always()
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml down -v --remove-orphans
