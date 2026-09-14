@@ -33,7 +33,21 @@ public static class SystemConfigurationEndpoints
         ["system.permissions.lodge_first_warden"] = new("Perfiles y permisos", "Primer Vigilante", "list", "Docencia de Compañeros|Seguimiento formativo|Evaluaciones docentes"),
         ["system.permissions.lodge_second_warden"] = new("Perfiles y permisos", "Segundo Vigilante", "list", "Docencia de Aprendices|Seguimiento formativo|Evaluaciones docentes"),
         ["system.permissions.lodge_past_master"] = new("Perfiles y permisos", "Ex Venerable Maestro", "list", "Apoyo docente|Consulta histórica|Acompañamiento al Taller"),
-        ["system.permissions.grand_dignitaries"] = new("Perfiles y permisos", "Grandes dignatarios", "list", "Régimen Interior|Gran Tesorería|Gran Hospitalaria|Gran Secretaría|Gran Archivo|Gran Maestría")
+        ["system.permissions.grand_dignitaries"] = new("Perfiles y permisos", "Grandes dignatarios", "list", "Régimen Interior|Gran Tesorería|Gran Hospitalaria|Gran Secretaría|Gran Archivo|Gran Maestría"),
+        ["system.backup.schedule"] = new("Respaldo y restauración", "Programación de respaldo", "text", "Diario 02:00 America/Santiago"),
+        ["system.backup.retention_days"] = new("Respaldo y restauración", "Retención de respaldos (días)", "integer", "30"),
+        ["system.backup.offsite_required"] = new("Respaldo y restauración", "Copia externa obligatoria", "text", "Sí"),
+        ["system.mail.smtp_host"] = new("Correo electrónico", "Servidor SMTP", "text", "smtp.ejemplo.cl"),
+        ["system.mail.smtp_port"] = new("Correo electrónico", "Puerto SMTP", "integer", "587"),
+        ["system.mail.sender_address"] = new("Correo electrónico", "Cuenta remitente", "text", "notificaciones@ejemplo.cl"),
+        ["system.mail.sender_name"] = new("Correo electrónico", "Nombre del remitente", "text", "Gran Logia Mixta de Chile"),
+        ["system.mail.security"] = new("Correo electrónico", "Seguridad de transporte", "list", "STARTTLS"),
+        ["system.brand.organization_name"] = new("Identidad visual", "Nombre institucional", "text", "Gran Logia Mixta de Chile"),
+        ["system.brand.primary_color"] = new("Identidad visual", "Color institucional principal", "text", "#243b67"),
+        ["system.brand.secondary_color"] = new("Identidad visual", "Color institucional secundario", "text", "#d8bd73"),
+        ["system.brand.logo_reference"] = new("Identidad visual", "Referencia del logotipo", "text", "logo-institucional.svg"),
+        ["system.identity.provider"] = new("Usuarios", "Proveedor de identidad", "text", "Keycloak"),
+        ["system.identity.require_mfa_admins"] = new("Usuarios", "MFA obligatorio para administradores", "text", "Sí")
     };
 
     public static IEndpointRouteBuilder MapSystemConfigurationEndpoints(this IEndpointRouteBuilder endpoints)

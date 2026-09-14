@@ -31,6 +31,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 14-09-2026 | Se solicita un menú Sistema ampliamente parametrizable por administradores. | Se implementa catálogo versionado y auditable para flujos, plazos, Biblioteca, Gestor Documental, Gran Archivo, Tesorería, Hospitalaria, notificaciones y seguridad. |
 | 14-09-2026 | Se continúa la parametrización de perfiles y permisos. | Sistema incorpora matriz administrable de vistas y acciones para cargos de Taller, docencia, grandes dignatarios y administradores. |
 | 14-09-2026 | Se continúa el control administrativo de parámetros. | Se agrega historial, cambios futuros programados y restauración no destructiva como nueva versión auditada. |
+| 14-09-2026 | Se amplía el menú Sistema. | Se incorporan consolas QA para backup/restauración, usuarios con perfiles, correo SMTP e identidad visual; el instalable reutiliza scripts protegidos y Keycloak. |
 
 ## Última conversación recuperada
 
