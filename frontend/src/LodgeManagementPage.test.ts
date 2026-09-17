@@ -8,15 +8,16 @@ describe('Gestión Logial product cockpit', () => {
   it('keeps the agreed product cockpit areas in fictitious showcase data', () => {
     expect(lodgeCockpitDemoData.lodge.name).toContain('Demostrativo')
     expect(lodgeCockpitDemoData.members.active).toBeGreaterThan(0)
-    expect(lodgeCockpitDemoData.officers.length).toBeGreaterThanOrEqual(6)
-    expect(lodgeCockpitDemoData.officers.some(([role]) => role === 'Ex Venerable Maestro')).toBe(true)
+    expect(lodgeCockpitDemoData.officers.length).toBeGreaterThanOrEqual(8)
+    expect(lodgeCockpitDemoData.officers.some(([role]) => role === 'Inmediato Ex-Venerable Maestro')).toBe(true)
     expect(lodgeCockpitDemoData.managementAreas.map(([area]) => area)).toEqual([
+      'Consejo de Administración',
       'Secretaría del Taller',
       'Tesorería del Taller',
       'Hospitalaria del Taller',
       'Docencia e instrucción',
     ])
-    expect(lodgeCockpitDemoData.managementAreas.find(([area]) => area === 'Docencia e instrucción')?.[1]).toBe('Vigilantes y Ex Venerable Maestro')
+    expect(lodgeCockpitDemoData.managementAreas.find(([area]) => area === 'Docencia e instrucción')?.[1]).toBe('Vigilantes e Inmediato Ex-Venerable Maestro')
     expect(lodgeCockpitDemoData.instruction.length).toBeGreaterThanOrEqual(4)
     expect(lodgeCockpitDemoData.notifications.length).toBeGreaterThanOrEqual(3)
   })
@@ -25,7 +26,7 @@ describe('Gestión Logial product cockpit', () => {
     expect(instructionResponsibilityByGrade).toEqual({
       apprentice: 'Segundo Vigilante',
       fellowcraft: 'Primer Vigilante',
-      master: 'Ex Venerable Maestro',
+      master: 'Inmediato Ex-Venerable Maestro',
     })
   })
 

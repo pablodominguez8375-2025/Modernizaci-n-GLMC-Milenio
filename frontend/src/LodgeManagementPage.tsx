@@ -18,6 +18,7 @@ import LodgeBallotPanel from './LodgeBallotPanel'
 import MinuteExtractEditor from './MinuteExtractEditor'
 import LodgeWithdrawalsPanel from './LodgeWithdrawalsPanel'
 import LodgeTreasuryPanel from './LodgeTreasuryPanel'
+import LodgeCouncilPanel from './LodgeCouncilPanel'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -32,18 +33,20 @@ export const lodgeCockpitDemoData = {
   members: { active: 37, masters: 16, fellowcraft: 12, apprentices: 7, honorary: 2 },
   officers: [
     ['Venerable Maestro', 'H∴ Autoridad Demo'],
-    ['Ex Venerable Maestro', 'H∴ Consejero Demo'],
+    ['Inmediato Ex-Venerable Maestro', 'H∴ Consejero Demo'],
     ['Primer Vigilante', 'H∴ Primer Vigilante Demo'],
     ['Segundo Vigilante', 'H∴ Segundo Vigilante Demo'],
+    ['Orador/a', 'H∴ Orador Demo'],
     ['Secretaría', 'H∴ Secretaría Demo'],
     ['Tesorería', 'H∴ Tesorería Demo'],
     ['Hospitalaria', 'H∴ Hospitalaria Demo'],
   ],
   managementAreas: [
+    ['Consejo de Administración', '8 cargos reglamentarios', 'Sesiones mensuales, quórum, acuerdos, controles y propuestas a Cámara del Medio.'],
     ['Secretaría del Taller', 'Secretario/a', 'Tenidas, asistencia, actas, correspondencia y solicitudes.'],
     ['Tesorería del Taller', 'Tesorero/a', 'Cuotas, abonos, comprobantes, libro mayor y rendición a Gran Tesorería.'],
     ['Hospitalaria del Taller', 'Hospitalario/a', 'Bolso, ayudas, aportes, reposiciones y rendición a Gran Hospitalaria.'],
-    ['Docencia e instrucción', 'Vigilantes y Ex Venerable Maestro', 'Plan por grado, sesiones, asistencia y seguimiento formativo.'],
+    ['Docencia e instrucción', 'Vigilantes e Inmediato Ex-Venerable Maestro', 'Plan por grado, sesiones, asistencia y seguimiento formativo.'],
   ],
   instruction: [
     ['Simbología y rito', 80],
@@ -62,7 +65,7 @@ export const lodgeCockpitDemoData = {
 export const instructionResponsibilityByGrade = {
   apprentice: 'Segundo Vigilante',
   fellowcraft: 'Primer Vigilante',
-  master: 'Ex Venerable Maestro',
+  master: 'Inmediato Ex-Venerable Maestro',
 } as const
 
 export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiClient; lodgeApi: LodgeApiClient }) {
@@ -330,8 +333,10 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
       <div className="lodge-management-grid">{lodgeCockpitDemoData.managementAreas.map(([area, responsible, summary]) => <article className="lodge-management-area" key={area}><span>{area[0]}</span><div><h3>{area}</h3><strong>{responsible}</strong><p>{summary}</p></div></article>)}</div>
     </section>
 
+    <LodgeCouncilPanel organizationId={organizationId} members={members} />
+
     <section className="lodge-instruction-workspace">
-      <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">Demostración con datos ficticios</span></div>
+      <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">{api.useMocks ? 'Demostración con datos ficticios' : 'Operativo'}</span></div>
       {instructionConfirmation && <div className="regularity-success" role="status">{instructionConfirmation}</div>}
       <div className="lodge-instruction-workspace-grid">
         <form className="lodge-instruction-form" onSubmit={saveInstruction}>
@@ -408,7 +413,7 @@ const attendanceOptions = [['present', 'Presente'], ['excused', 'Justificado'], 
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function meetingTypeLabel(value: LodgeMeetingType) { return meetingTypeOptions.find(([key]) => key === value)?.[1] ?? value }
 function gradeLabel(value: LodgeGrade) { return gradeOptions.find(([key]) => key === value)?.[1] ?? value }
-function instructionOfficeLabel(value: LodgeInstruction['responsibleOffice']) { return value === 'second_warden' ? 'Segundo Vigilante' : value === 'first_warden' ? 'Primer Vigilante' : 'Ex Venerable Maestro' }
+function instructionOfficeLabel(value: LodgeInstruction['responsibleOffice']) { return value === 'second_warden' ? 'Segundo Vigilante' : value === 'first_warden' ? 'Primer Vigilante' : 'Inmediato Ex-Venerable Maestro' }
 function attendanceLabel(value: LodgeAttendanceStatus) { return attendanceOptions.find(([key]) => key === value)?.[1] ?? value }
 function meetingStatusLabel(value: string) { return value === 'closed' ? 'Cerrada' : value === 'open' ? 'Abierta' : value === 'cancelled' ? 'Cancelada' : 'Programada' }
 function minuteStatusLabel(value: string) { return value === 'approved' ? 'Aprobada' : value === 'superseded' ? 'Reemplazada' : 'Borrador' }
