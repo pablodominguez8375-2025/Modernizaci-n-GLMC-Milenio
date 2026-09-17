@@ -1,93 +1,124 @@
-# Proyecto Milenio — Modernización Gran Logia Mixta de Chile
+# Proyecto Centenario — Modernización Gran Logia Mixta Milenio
 
-Repositorio oficial del proyecto **Modernización Gran Logia Mixta Milenio (PMGM)**.
+Repositorio oficial del **Proyecto Centenario / Modernización Gran Logia Mixta Milenio**.
+
+## Línea base vigente
+
+La referencia funcional, técnica y documental vigente es **LB-PC-2026-09-17**.
+
+Documentos maestros:
+- `docs/LINEA-BASE-PROYECTO-CENTENARIO-2026-09-17.md`
+- `docs/PERFILES-TALLER-Y-FIRMAS.md`
+- `docs/CONTROL-DE-CAMBIOS.md`
+- `docs/README-INDEX.md`
+
+Regla de trabajo: los cambios aprobados deben quedar consolidados tanto en GitHub como en la documentación maestra de Google Drive. Una conversación por sí sola no constituye una modificación vigente del proyecto.
 
 ## Propósito
-Construir un ecosistema digital institucional único, seguro, trazable e integrado para la Gran Logia Mixta de Chile, reemplazando progresivamente sistemas aislados, procesos manuales y planillas duplicadas por una plataforma modular con identidad única, base de datos institucional única y servicios centralizados.
+
+Construir una plataforma institucional única, segura, trazable, modular y multi-Taller para la Gran Logia Mixta de Chile, reemplazando progresivamente procesos manuales, sistemas aislados y planillas duplicadas.
 
 ## Principios rectores
-- Un solo acceso institucional (SSO) para cada usuario.
-- Una base de datos maestra institucional.
+
+- Base de datos institucional única.
 - Seguridad y privacidad desde el diseño.
-- Auditoría transversal y trazabilidad de cambios.
+- Auditoría transversal y trazabilidad.
+- Segregación de información por Taller y acceso transversal controlado.
 - Arquitectura modular e integrable.
-- Evolución incremental mediante MVPs.
+- Parametrización de perfiles, vistas, flujos y reglas cuando sea técnicamente razonable.
+- Evolución incremental mediante versiones demostrables e instalables.
 - GitHub como fuente única de verdad técnica.
-- Separación entre continuidad de sistemas actuales y desarrollo del nuevo ecosistema.
+- Google Drive como repositorio de documentos oficiales y línea base funcional/documental.
 
 ## Gobierno
+
 - **Sponsor / Product Owner:** Pablo Domínguez.
 - **Arquitectura funcional y técnica:** ChatGPT / Chatito.
 - **Desarrollo y automatización:** Codex.
-- **Repositorio:** fuente única de verdad para código, documentación, backlog y decisiones.
 
-## Flujo de trabajo
-Requisito → Diseño → Aprobación de arquitectura → Desarrollo → Pruebas → Documentación → Publicación.
+Flujo: Requisito → Diseño → Aprobación → Desarrollo → QA → Documentación → Despliegue.
 
-## Alcance funcional inicial
-- Identidad, usuarios, roles y permisos.
+## Alcance funcional vigente
+
+- Identidad, usuarios, perfiles, vistas y permisos.
 - Dashboard.
-- Gestión de miembros.
-- Gestión de Talleres / Logias.
-- Secretaría.
-- Régimen Interior.
-- Gestión Logial.
+- Miembros y estados históricos.
+- Talleres / Logias.
+- Secretaría y Gestión Logial.
+- Tenidas y actas.
+- Insinuaciones, entrevistas y candidatos.
+- Ceremonias y aprobaciones.
 - Tesorería.
 - Hospitalaria.
 - Docencia.
+- Régimen Interior.
+- Gran Secretaría.
+- Gran Tesorería.
+- Gran Hospitalaria.
 - Biblioteca Virtual.
-- CENDOC / gestor documental.
-- Museo / archivo histórico digital.
-- Calendario institucional.
-- Gestión de Tenidas.
-- Ceremonias y solicitudes.
-- Comunicaciones internas y externas.
+- Gran Archivero.
+- Gestión Documental.
+- Agenda de templos y salas.
 - Notificaciones.
-- Auditoría y reportes.
-- Administración general.
-- Integraciones y experiencia móvil futura.
+- Reportes.
+- Auditoría.
+- Administración del Sistema.
 
-## Arquitectura base v0.1
+**CENDOC como módulo único no forma parte del alcance vigente.** Biblioteca Virtual y Gran Archivero se gestionan como componentes separados.
+
+## Perfiles de Taller base
+
+- Venerable Maestro.
+- Inmediato Ex-Venerable Maestro.
+- Primer Vigilante.
+- Segundo Vigilante.
+- Orador/a.
+- Secretario/a.
+- Tesorero/a.
+- Hospitalario/a.
+
+Orden de subrogación: **Venerable Maestro → Inmediato Ex-Venerable Maestro → Primer Vigilante → Segundo Vigilante**.
+
+Docencia: **Segundo Vigilante → Aprendices; Primer Vigilante → Compañeros; Inmediato Ex-Venerable Maestro → Maestros**.
+
+Las CRV y CRF contemplan como firmantes funcionales a **Venerable Maestro, Tesorero/a, Orador/a y Secretario/a**.
+
+## Arquitectura base
+
 - Backend: ASP.NET Core.
-- Frontend: React o Blazor (decisión pendiente vía ADR).
+- Frontend: React o Blazor, sujeto a ADR definitivo.
 - Base de datos: PostgreSQL.
 - Identidad: OpenID Connect / SSO.
 - Contenedores: Docker.
-- Proxy / publicación: Nginx o equivalente.
+- Proxy/publicación: Nginx o equivalente.
 - TLS obligatorio.
-- Servidor de referencia: Ubuntu Server 24.04 LTS.
 - CI/CD: GitHub Actions.
 
-## MVP inicial
-Login/SSO → Dashboard → Miembros → Talleres → Secretaría → Régimen Interior → Documentos/Biblioteca → Auditoría básica.
+## Infraestructura QA confirmada
 
-## Estructura del repositorio
+Servidor `srv01`:
+- Ubuntu 26.04.1 LTS.
+- 8 vCPU.
+- Aproximadamente 8 GB RAM.
+- Docker 29.1.3.
+- Docker Compose 2.40.3.
+- Repositorio clonado en `/opt/centenario/app`.
+- Deploy Key GitHub operativa.
+
+## Estructura objetivo
+
 - `docs/` documentación funcional y técnica.
 - `backend/` servicios y API.
 - `frontend/` interfaz de usuario.
 - `database/` modelo, migraciones y scripts.
-- `infrastructure/` despliegue, Docker, CI/CD e IaC.
+- `infrastructure/` Docker, despliegue, CI/CD e IaC.
 - `tests/` pruebas automatizadas y de aceptación.
 - `adrs/` Architecture Decision Records.
 - `backlog/` backlog y planificación.
 - `changelog/` historial de versiones y cambios.
 
-## Repositorio relacionado
-La migración de la plataforma Joomla actual se gestiona separadamente en `ehshackleton/glm-platform-migration`. Ese repositorio cubre continuidad operacional y migración de los sitios existentes; este repositorio contiene el nuevo ecosistema Milenio.
-
-## Nomenclatura documental
-- `PMGM-REQ-###` — requisitos.
-- `PMGM-UC-###` — casos de uso.
-- `PMGM-ARCH-###` — arquitectura.
-- `PMGM-DB-###` — modelo de datos.
-- `PMGM-SEC-###` — seguridad.
-- `PMGM-ADR-###` — decisiones de arquitectura.
-- `PMGM-BLG-###` — backlog.
-- `PMGM-TEST-###` — pruebas.
-
-## Ramas
-- `main`: versión estable y aprobada.
-- `dev`: integración de desarrollo.
-
 ## Estado
-Versión base del proyecto: **v0.1**.
+
+La documentación de línea base ya está versionada en `main`.
+
+**Siguiente hito técnico:** consolidar y subir el código funcional de backend, frontend, base de datos, infraestructura y pruebas, y desplegarlo de forma reproducible en `srv01`.
