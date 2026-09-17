@@ -1,5 +1,6 @@
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.LodgeManagement;
+using Xunit;
 
 namespace PMGM.Api.Tests.LodgeManagement;
 
