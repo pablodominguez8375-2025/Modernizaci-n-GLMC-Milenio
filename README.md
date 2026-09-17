@@ -6,6 +6,23 @@ Repositorio oficial del **Proyecto Centenario / Modernización Gran Logia Mixta 
 
 La referencia funcional, técnica y documental vigente es **LB-PC-2026-09-17**.
 
+## Regla de continuidad única
+
+**Existe un solo Proyecto Centenario y un solo desarrollo continuo.**
+
+Todo documento, componente, carpeta, servicio, matriz, prueba, migración, módulo o código que se incorpore a este repositorio forma parte de la misma aplicación del Proyecto Centenario, salvo decisión expresa del Sponsor/Product Owner registrada en el Control de Cambios.
+
+Nombres técnicos como `Centenario.Authorization`, `RBAC Taller`, `Matriz Funcional Normativa` o futuros componentes describen partes internas de la solución; **no constituyen proyectos, productos ni desarrollos paralelos**.
+
+Cada nueva implementación debe:
+
+1. continuar desde el último código vigente de `main`;
+2. reutilizar y extender la arquitectura y modelos ya definidos;
+3. preservar funcionalidades ya implementadas que no hayan sido expresamente sustituidas;
+4. integrarse con los módulos existentes del Proyecto Centenario;
+5. evitar crear soluciones paralelas, repositorios alternativos o estructuras incompatibles;
+6. registrar cualquier cambio de arquitectura que realmente sea necesario mediante ADR y Control de Cambios.
+
 Documentos maestros:
 - `docs/LINEA-BASE-PROYECTO-CENTENARIO-2026-09-17.md`
 - `docs/PERFILES-TALLER-Y-FIRMAS.md`
@@ -125,7 +142,7 @@ Servidor `srv01`:
 
 ### Autorización de cargos de Taller
 
-Se incorpora la primera pieza de código funcional versionado:
+Como parte del **mismo desarrollo del Proyecto Centenario**, se incorpora el componente interno de autorización:
 
 - `backend/Centenario.Authorization/`
 - `backend/Centenario.Authorization.SmokeTests/`
@@ -143,7 +160,7 @@ Incluye:
 - validación de autorización de ayudas hospitalarias;
 - validación de firmantes CRV/CRF.
 
-La autorización está desacoplada del frontend para no forzar aún la decisión React vs. Blazor.
+`Centenario.Authorization` es una biblioteca/componente interno de la solución; no constituye una aplicación independiente. La autorización está desacoplada del frontend para no forzar aún la decisión React vs. Blazor y deberá integrarse con la API, identidad, base de datos y vistas de la misma aplicación Centenario.
 
 ## Estructura objetivo
 
@@ -159,6 +176,6 @@ La autorización está desacoplada del frontend para no forzar aún la decisión
 
 ## Estado
 
-La línea base, reglas permanentes y el primer componente funcional de autorización están versionados en `main`.
+La línea base, reglas permanentes y el primer componente funcional de autorización están versionados en `main` como partes del único desarrollo del Proyecto Centenario.
 
-**Siguiente hito técnico:** integrar el catálogo RBAC con PostgreSQL, autenticación OIDC/SSO y API autorizada; después conectar las vistas del frontend.
+**Siguiente hito técnico:** integrar el catálogo RBAC con PostgreSQL, autenticación OIDC/SSO y API autorizada dentro de la aplicación Centenario; después conectar las vistas del frontend de la misma solución.
