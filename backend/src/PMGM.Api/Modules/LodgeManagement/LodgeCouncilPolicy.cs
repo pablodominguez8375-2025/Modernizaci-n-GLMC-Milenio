@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using PMGM.Api.Modules.Authorization;
 
 namespace PMGM.Api.Modules.LodgeManagement;
@@ -16,11 +18,33 @@ public static class LodgeCouncilPolicy
         InstitutionalRoles.TallerHospitalaria
     };
 
+    private static readonly IReadOnlyDictionary<string, HashSet<string>> OfficeAliases =
+        new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            [InstitutionalRoles.TallerVenerable] = AliasSet(InstitutionalRoles.TallerVenerable, "venerable", "venerable maestro"),
+            [InstitutionalRoles.TallerInmediatoExVenerable] = AliasSet(InstitutionalRoles.TallerInmediatoExVenerable, "inmediato ex venerable", "inmediato ex venerable maestro", "ex venerable", "ex venerable maestro"),
+            [InstitutionalRoles.TallerPrimerVigilante] = AliasSet(InstitutionalRoles.TallerPrimerVigilante, "primer vigilante", "primero vigilante"),
+            [InstitutionalRoles.TallerSegundoVigilante] = AliasSet(InstitutionalRoles.TallerSegundoVigilante, "segundo vigilante"),
+            [InstitutionalRoles.TallerOrador] = AliasSet(InstitutionalRoles.TallerOrador, "orador", "oradora"),
+            [InstitutionalRoles.TallerSecretaria] = AliasSet(InstitutionalRoles.TallerSecretaria, "secretario", "secretaria"),
+            [InstitutionalRoles.TallerTesoreria] = AliasSet(InstitutionalRoles.TallerTesoreria, "tesorero", "tesorera"),
+            [InstitutionalRoles.TallerHospitalaria] = AliasSet(InstitutionalRoles.TallerHospitalaria, "hospitalario", "hospitalaria")
+        };
+
     public static bool IsCouncilRole(string? role)
         => !string.IsNullOrWhiteSpace(role) && CouncilRoles.Contains(role);
 
     public static bool CanVote(string participationType, string? role)
         => participationType == LodgeCouncilCodes.ParticipationType.Member && IsCouncilRole(role);
+
+    public static bool OfficeTypeMatchesRole(string? officeType, string? role)
+    {
+        if (string.IsNullOrWhiteSpace(officeType) || string.IsNullOrWhiteSpace(role) ||
+            !OfficeAliases.TryGetValue(role, out var aliases))
+            return false;
+
+        return aliases.Contains(NormalizeOfficeValue(officeType));
+    }
 
     public static bool RequiresChamberReview(string category)
         => category is LodgeCouncilCodes.DecisionCategory.BudgetProposal or
@@ -45,4 +69,33 @@ public static class LodgeCouncilPolicy
     // institucional auditable y no inventa un umbral numérico.
     public static bool CanConfirmQualifiedQuorum(bool explicitlyConfirmed, int presentVotingMembers)
         => explicitlyConfirmed && presentVotingMembers > 0;
+
+    private static HashSet<string> AliasSet(params string[] values)
+        => values.Select(NormalizeOfficeValue).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static string NormalizeOfficeValue(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(normalized.Length);
+        var separatorPending = false;
+
+        foreach (var character in normalized)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+                continue;
+
+            if (char.IsLetterOrDigit(character))
+            {
+                if (separatorPending && builder.Length > 0) builder.Append('_');
+                builder.Append(character);
+                separatorPending = false;
+            }
+            else
+            {
+                separatorPending = builder.Length > 0;
+            }
+        }
+
+        return builder.ToString();
+    }
 }
