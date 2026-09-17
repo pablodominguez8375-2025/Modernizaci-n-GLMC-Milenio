@@ -6,6 +6,20 @@ Repositorio oficial del **Proyecto Centenario / Modernización Gran Logia Mixta 
 
 La referencia funcional, técnica y documental vigente es **LB-PC-2026-09-17**.
 
+## Inicio obligatorio para cualquier IA o desarrollador
+
+Antes de continuar desde un chat nuevo, otra sesión o una IA distinta, leer primero:
+
+1. `AGENTS.md`
+2. `docs/INSTRUCCIONES-CONTINUIDAD-IA.md`
+3. `docs/REGLAS-CONTINUIDAD-Y-NO-REGRESION.md`
+4. `docs/CONTROL-DE-CAMBIOS.md`
+5. `docs/LINEA-BASE-PROYECTO-CENTENARIO-2026-09-17.md`
+6. los ADR, migraciones, pruebas y configuraciones relacionados con la tarea;
+7. la Línea Base Maestra y documentación oficial vigente en Google Drive.
+
+**Nunca reconstruir el proyecto desde chats antiguos, resúmenes o memoria de una IA si existe una versión posterior en GitHub o Drive.**
+
 ## Regla de continuidad única
 
 **Existe un solo Proyecto Centenario y un solo desarrollo continuo.**
@@ -43,6 +57,7 @@ Documentos maestros:
 - `docs/PERFILES-TALLER-Y-FIRMAS.md`
 - `docs/MATRIZ-FUNCIONAL-NORMATIVA-TALLER-v1.0.md`
 - `docs/ESTRATEGIA-ENTREGAS-DEMO-Y-QA.md`
+- `docs/INSTRUCCIONES-CONTINUIDAD-IA.md`
 - `docs/CONTROL-DE-CAMBIOS.md`
 - `docs/REGLAS-CONTINUIDAD-Y-NO-REGRESION.md`
 - `docs/README-INDEX.md`
@@ -192,6 +207,6 @@ Incluye:
 
 ## Estado
 
-La línea base, reglas permanentes y el primer componente funcional de autorización están versionados en `main` como partes del único desarrollo del Proyecto Centenario.
+La línea base, reglas permanentes, protocolo de continuidad para IA y el primer componente funcional de autorización están versionados en `main` como partes del único desarrollo del Proyecto Centenario.
 
 **Siguiente hito técnico:** integrar el catálogo RBAC con PostgreSQL, autenticación OIDC/SSO y API autorizada dentro de la aplicación Centenario; actualizar en paralelo la demo GitHub Pages y preparar la versión instalable/operacional para QA en `srv01`.
