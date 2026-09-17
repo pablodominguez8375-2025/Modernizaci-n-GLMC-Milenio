@@ -27,7 +27,7 @@ public static class LodgeCouncilPolicy
             [InstitutionalRoles.TallerSegundoVigilante] = AliasSet(InstitutionalRoles.TallerSegundoVigilante, "segundo vigilante"),
             [InstitutionalRoles.TallerOrador] = AliasSet(InstitutionalRoles.TallerOrador, "orador", "oradora", "orador/a"),
             [InstitutionalRoles.TallerSecretaria] = AliasSet(InstitutionalRoles.TallerSecretaria, "secretario", "secretaria", "secretario/a"),
-            [InstitutionalRoles.TallerTesoreria] = AliasSet(InstitutionalRoles.TallerTesoreria, "tesorero", "tesorera", "tesorero/a"),
+            [InstitutionalRoles.TallerTesoreria] = AliasSet(InstitutionalRoles.TallerTesoreria, "tesoreria", "tesorero", "tesorera", "tesorero/a"),
             [InstitutionalRoles.TallerHospitalaria] = AliasSet(InstitutionalRoles.TallerHospitalaria, "hospitalario", "hospitalaria", "hospitalario/a")
         };
 
