@@ -68,6 +68,78 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
+    public void LodgeHospitalaria_CanManageOwnHospitalariaOnly()
+    {
+        var ownOrganization = Guid.NewGuid();
+        var otherOrganization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerHospitalaria),
+            new Claim(InstitutionalClaims.Organization, ownOrganization.ToString()));
+
+        Assert.True(_service.CanManageLodgeHospitalaria(user, ownOrganization));
+        Assert.False(_service.CanManageLodgeHospitalaria(user, otherOrganization));
+    }
+
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerSegundoVigilante, 1, true)]
+    [InlineData(InstitutionalRoles.TallerPrimerVigilante, 2, true)]
+    [InlineData(InstitutionalRoles.TallerInmediatoExVenerable, 3, true)]
+    [InlineData(InstitutionalRoles.TallerPrimerVigilante, 1, false)]
+    [InlineData(InstitutionalRoles.TallerSegundoVigilante, 2, false)]
+    [InlineData(InstitutionalRoles.TallerSecretaria, 3, false)]
+    public void LodgeInstruction_UsesNormativeOfficerByDegree(string role, int degree, bool expected)
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, role),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.Equal(expected, _service.CanManageLodgeInstruction(user, organization, degree));
+    }
+
+    [Fact]
+    public void LodgeInstruction_CannotCrossOrganizationBoundary()
+    {
+        var ownOrganization = Guid.NewGuid();
+        var otherOrganization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerSegundoVigilante),
+            new Claim(InstitutionalClaims.Organization, ownOrganization.ToString()));
+
+        Assert.False(_service.CanManageLodgeInstruction(user, otherOrganization, 1));
+    }
+
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerVenerable)]
+    [InlineData(InstitutionalRoles.TallerInmediatoExVenerable)]
+    [InlineData(InstitutionalRoles.TallerPrimerVigilante)]
+    [InlineData(InstitutionalRoles.TallerSegundoVigilante)]
+    [InlineData(InstitutionalRoles.TallerOrador)]
+    [InlineData(InstitutionalRoles.TallerSecretaria)]
+    [InlineData(InstitutionalRoles.TallerTesoreria)]
+    [InlineData(InstitutionalRoles.TallerHospitalaria)]
+    public void LodgeCouncil_RecognizesEightInstitutionalOffices(string role)
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, role),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.True(_service.CanParticipateInLodgeCouncil(user, organization));
+    }
+
+    [Fact]
+    public void LodgeAdministratorSecurityProfile_IsNotAnInstitutionalCouncilOffice()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.False(_service.CanParticipateInLodgeCouncil(user, organization));
+    }
+
+    [Fact]
     public void LodgeSecretariat_CannotApproveCandidatePublication()
     {
         var organization = Guid.NewGuid();
