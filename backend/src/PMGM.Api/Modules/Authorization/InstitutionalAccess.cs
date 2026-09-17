@@ -24,8 +24,15 @@ public static class InstitutionalRoles
     public const string TallerAdmin = "lodge_admin";
     public const string TallerSecretaria = "lodge_secretariat";
     public const string TallerTesoreria = "lodge_treasury";
+    public const string TallerHospitalaria = "lodge_hospitalaria";
     public const string TallerVenerable = "lodge_venerable";
     public const string TallerOrador = "lodge_orator";
+    public const string TallerPrimerVigilante = "lodge_first_warden";
+    public const string TallerSegundoVigilante = "lodge_second_warden";
+
+    // Se conserva el claim histórico lodge_past_master para compatibilidad con configuraciones existentes,
+    // pero funcionalmente corresponde al cargo reglamentario Inmediato Ex-Venerable Maestro.
+    public const string TallerInmediatoExVenerable = "lodge_past_master";
 }
 
 public interface IInstitutionalAccessService
@@ -40,6 +47,8 @@ public interface IInstitutionalAccessService
     bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId);
     bool CanSignLodgeDocuments(ClaimsPrincipal user, Guid organizationId);
+    bool CanManageLodgeInstruction(ClaimsPrincipal user, Guid organizationId, int degree);
+    bool CanParticipateInLodgeCouncil(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
@@ -121,13 +130,38 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
     public bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId)
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranHospitalaria)) ||
-           (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria, "lodge_hospitalaria"));
+           (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerHospitalaria));
 
     public bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId)
         => HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerVenerable);
 
     public bool CanSignLodgeDocuments(ClaimsPrincipal user, Guid organizationId)
         => HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerOrador, InstitutionalRoles.TallerVenerable);
+
+    public bool CanManageLodgeInstruction(ClaimsPrincipal user, Guid organizationId, int degree)
+    {
+        if (!HasOrganizationClaim(user, organizationId)) return false;
+
+        return degree switch
+        {
+            1 => HasRole(user, InstitutionalRoles.TallerSegundoVigilante),
+            2 => HasRole(user, InstitutionalRoles.TallerPrimerVigilante),
+            3 => HasRole(user, InstitutionalRoles.TallerInmediatoExVenerable),
+            _ => false
+        };
+    }
+
+    public bool CanParticipateInLodgeCouncil(ClaimsPrincipal user, Guid organizationId)
+        => HasOrganizationClaim(user, organizationId) && HasRole(
+            user,
+            InstitutionalRoles.TallerVenerable,
+            InstitutionalRoles.TallerInmediatoExVenerable,
+            InstitutionalRoles.TallerPrimerVigilante,
+            InstitutionalRoles.TallerSegundoVigilante,
+            InstitutionalRoles.TallerOrador,
+            InstitutionalRoles.TallerSecretaria,
+            InstitutionalRoles.TallerTesoreria,
+            InstitutionalRoles.TallerHospitalaria);
 
     public bool CanApproveTransfers(ClaimsPrincipal user)
         => HasOrderScope(user) &&
