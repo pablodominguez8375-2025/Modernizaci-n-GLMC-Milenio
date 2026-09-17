@@ -155,6 +155,20 @@ public static class LodgeCouncilEndpoints
             if (member is null)
                 return Results.BadRequest(new { message = "El integrante no registra pertenencia activa al Taller." });
 
+            var effectiveOfficeTypes = await institutionalDb.OfficeAssignments.AsNoTracking()
+                .Where(x => x.MemberId == member.MemberId &&
+                            x.OrganizationId == session.OrganizationId &&
+                            x.StartDate <= session.SessionDate &&
+                            (x.EndDate == null || x.EndDate >= session.SessionDate))
+                .Select(x => x.OfficeType)
+                .ToListAsync(cancellationToken);
+
+            if (!effectiveOfficeTypes.Any(x => LodgeCouncilPolicy.OfficeTypeMatchesRole(x, request.InstitutionalRole)))
+                return Results.BadRequest(new
+                {
+                    message = "El integrante no registra una asignación vigente para el cargo del Consejo indicado en la fecha de la sesión."
+                });
+
             memberId = member.MemberId;
             displayName = member.DisplayName;
             institutionalRole = request.InstitutionalRole;
