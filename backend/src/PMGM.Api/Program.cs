@@ -190,6 +190,7 @@ app.MapGrandSecretariatEndpoints();
 app.MapGrandSecretariatQueryEndpoints();
 app.MapGrandSecretariatCeremonyQueueEndpoints();
 app.MapLodgeManagementEndpoints();
+app.MapLodgeCouncilEndpoints();
 app.MapLodgeInstructionEndpoints();
 app.MapDocumentManagementEndpoints();
 app.MapDocumentManagementQueryEndpoints();
