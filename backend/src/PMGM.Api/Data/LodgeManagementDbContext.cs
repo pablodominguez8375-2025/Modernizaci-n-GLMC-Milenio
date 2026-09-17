@@ -12,6 +12,10 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
     public DbSet<LodgeAnonymousBallot> LodgeAnonymousBallots => Set<LodgeAnonymousBallot>();
     public DbSet<LodgeInstructionSession> LodgeInstructionSessions => Set<LodgeInstructionSession>();
     public DbSet<LodgeInstructionAttendanceRecord> LodgeInstructionAttendanceRecords => Set<LodgeInstructionAttendanceRecord>();
+    public DbSet<LodgeCouncilSession> LodgeCouncilSessions => Set<LodgeCouncilSession>();
+    public DbSet<LodgeCouncilAttendanceRecord> LodgeCouncilAttendanceRecords => Set<LodgeCouncilAttendanceRecord>();
+    public DbSet<LodgeCouncilDecision> LodgeCouncilDecisions => Set<LodgeCouncilDecision>();
+    public DbSet<LodgeCouncilFinancialReview> LodgeCouncilFinancialReviews => Set<LodgeCouncilFinancialReview>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -95,6 +99,64 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
             entity.HasOne(x => x.InstructionSession).WithMany().HasForeignKey(x => x.InstructionSessionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.InstructionSessionId, x.MemberId, x.RecordedAtUtc });
             entity.HasIndex(x => new { x.MemberId, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<LodgeCouncilSession>(entity =>
+        {
+            entity.ToTable("lodge_council_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.QuorumConfirmedBySubject).HasMaxLength(320);
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.SessionDate });
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+
+        modelBuilder.Entity<LodgeCouncilAttendanceRecord>(entity =>
+        {
+            entity.ToTable("lodge_council_attendance_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.DisplayName).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.InstitutionalRole).HasMaxLength(80);
+            entity.Property(x => x.ParticipationType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.SessionId, x.MemberId, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<LodgeCouncilDecision>(entity =>
+        {
+            entity.ToTable("lodge_council_decisions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Category).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Resolution).HasMaxLength(5000).IsRequired();
+            entity.Property(x => x.Outcome).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ChamberReference).HasMaxLength(500);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.SessionId, x.RecordedAtUtc });
+            entity.HasIndex(x => new { x.SessionId, x.Category });
+        });
+
+        modelBuilder.Entity<LodgeCouncilFinancialReview>(entity =>
+        {
+            entity.ToTable("lodge_council_financial_reviews");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ControlArea).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.PeriodLabel).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Conclusion).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.Observations).HasMaxLength(5000);
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.Session).WithMany().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.SessionId, x.ControlArea });
         });
 
         modelBuilder.Entity<AuditEvent>(entity =>
