@@ -13,6 +13,7 @@ La implementación reutiliza:
 - `LodgeManagementDbContext`;
 - el control de acceso institucional por Taller;
 - `CanParticipateInLodgeCouncil(...)`;
+- la ficha histórica y `OfficeAssignment` de la base maestra;
 - la bitácora auditable transversal;
 - PostgreSQL/EF Core;
 - el frontend React y su demo con datos ficticios.
@@ -46,6 +47,8 @@ Representa una sesión del Consejo por Taller y fecha. Registra estado, confirma
 
 Registra asistencia histórica de integrantes o invitados. Los ocho cargos reglamentarios pueden tener voto; un invitado puede tener voz, pero no voto.
 
+Para impedir que un miembro activo cualquiera sea registrado como integrante con voto, el backend contrasta el cargo solicitado contra `OfficeAssignment` de la base maestra. La asignación debe pertenecer al mismo Taller y estar vigente en la **fecha de la sesión** (`StartDate <= SessionDate` y `EndDate` nula o posterior). Se aceptan códigos institucionales y variantes históricas normalizadas de los nombres de cargo para preservar compatibilidad de datos, sin ampliar el conjunto de los ocho cargos reglamentarios.
+
 ### `LodgeCouncilDecision`
 
 Registra asunto, resolución, resultado, categoría normativa, eventual monto/documento y si la materia requiere revisión posterior de Cámara del Medio.
@@ -77,6 +80,7 @@ Para estas categorías el sistema acepta `approved_for_referral` o rechazo; no p
 
 - Lectura/participación: los ocho cargos reglamentarios del Consejo, dentro del Taller de su `pmgm_org`.
 - Registro administrativo de sesión, asistencia, quórum, acuerdos y revisiones: Venerable Maestro o Secretaría del Taller.
+- La pertenencia activa al Taller no basta para obtener voto: el integrante registrado debe tener el cargo del Consejo vigente en la fecha de la sesión según `OfficeAssignment`.
 - `lodge_admin` es un perfil técnico y no se considera por sí solo integrante masónico del Consejo.
 
 ## 7. Auditoría
