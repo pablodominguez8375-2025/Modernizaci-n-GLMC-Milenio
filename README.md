@@ -9,6 +9,7 @@ La referencia funcional, técnica y documental vigente es **LB-PC-2026-09-17**.
 Documentos maestros:
 - `docs/LINEA-BASE-PROYECTO-CENTENARIO-2026-09-17.md`
 - `docs/PERFILES-TALLER-Y-FIRMAS.md`
+- `docs/MATRIZ-FUNCIONAL-NORMATIVA-TALLER-v1.0.md`
 - `docs/CONTROL-DE-CAMBIOS.md`
 - `docs/REGLAS-CONTINUIDAD-Y-NO-REGRESION.md`
 - `docs/README-INDEX.md`
@@ -120,6 +121,30 @@ Servidor `srv01`:
 - Repositorio clonado en `/opt/centenario/app`.
 - Deploy Key GitHub operativa.
 
+## Código desarrollado
+
+### Autorización de cargos de Taller
+
+Se incorpora la primera pieza de código funcional versionado:
+
+- `backend/Centenario.Authorization/`
+- `backend/Centenario.Authorization.SmokeTests/`
+- `adrs/ADR-001-RBAC-NORMATIVO-TALLER.md`
+- `database/001_rbac_taller.sql`
+
+Incluye:
+
+- perfiles de Taller;
+- vistas;
+- acciones;
+- fundamento de cada permiso;
+- separación normativa/protocolo/control operativo;
+- subrogaciones mediante permisos temporales;
+- validación de autorización de ayudas hospitalarias;
+- validación de firmantes CRV/CRF.
+
+La autorización está desacoplada del frontend para no forzar aún la decisión React vs. Blazor.
+
 ## Estructura objetivo
 
 - `docs/` documentación funcional y técnica.
@@ -134,6 +159,6 @@ Servidor `srv01`:
 
 ## Estado
 
-La documentación de línea base y las reglas permanentes de continuidad ya están versionadas en `main`.
+La línea base, reglas permanentes y el primer componente funcional de autorización están versionados en `main`.
 
-**Siguiente hito técnico:** consolidar y subir el código funcional de backend, frontend, base de datos, infraestructura y pruebas, y desplegarlo de forma reproducible en `srv01`.
+**Siguiente hito técnico:** integrar el catálogo RBAC con PostgreSQL, autenticación OIDC/SSO y API autorizada; después conectar las vistas del frontend.
