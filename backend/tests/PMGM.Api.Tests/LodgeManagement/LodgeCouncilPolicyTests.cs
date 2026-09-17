@@ -27,6 +27,24 @@ public sealed class LodgeCouncilPolicyTests
     public void IsCouncilRole_RejectsTechnicalLodgeAdminProfile()
         => Assert.False(LodgeCouncilPolicy.IsCouncilRole(InstitutionalRoles.TallerAdmin));
 
+    [Theory]
+    [InlineData("Venerable Maestro", InstitutionalRoles.TallerVenerable)]
+    [InlineData("venerable_maestro", InstitutionalRoles.TallerVenerable)]
+    [InlineData("Inmediato Ex-Venerable Maestro", InstitutionalRoles.TallerInmediatoExVenerable)]
+    [InlineData("Ex Venerable Maestro", InstitutionalRoles.TallerInmediatoExVenerable)]
+    [InlineData("Primer Vigilante", InstitutionalRoles.TallerPrimerVigilante)]
+    [InlineData("Segundo Vigilante", InstitutionalRoles.TallerSegundoVigilante)]
+    [InlineData("Orador/a", InstitutionalRoles.TallerOrador)]
+    [InlineData("Secretaría", InstitutionalRoles.TallerSecretaria)]
+    [InlineData("Tesorería", InstitutionalRoles.TallerTesoreria)]
+    [InlineData("Hospitalaria", InstitutionalRoles.TallerHospitalaria)]
+    public void OfficeTypeMatchesRole_AcceptsCanonicalAndHistoricalLabels(string officeType, string role)
+        => Assert.True(LodgeCouncilPolicy.OfficeTypeMatchesRole(officeType, role));
+
+    [Fact]
+    public void OfficeTypeMatchesRole_RejectsDifferentCouncilOffice()
+        => Assert.False(LodgeCouncilPolicy.OfficeTypeMatchesRole("Tesorero", InstitutionalRoles.TallerOrador));
+
     [Fact]
     public void CanVote_GuestNeverVotes()
         => Assert.False(LodgeCouncilPolicy.CanVote(
