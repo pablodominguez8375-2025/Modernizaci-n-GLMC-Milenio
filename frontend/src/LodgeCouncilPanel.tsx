@@ -44,7 +44,7 @@ export default function LodgeCouncilPanel({ organizationId, members }: { organiz
   const [sessionDate, setSessionDate] = useState(todayInChile())
   const [sessionTitle, setSessionTitle] = useState('Consejo de Administración')
   const [memberId, setMemberId] = useState('')
-  const [institutionalRole, setInstitutionalRole] = useState(roleOptions[0][0])
+  const [institutionalRole, setInstitutionalRole] = useState<string>(roleOptions[0][0])
   const [decisionCategory, setDecisionCategory] = useState<CouncilDecisionCategory>('financial_control')
   const [decisionSubject, setDecisionSubject] = useState('')
   const [decisionResolution, setDecisionResolution] = useState('')
