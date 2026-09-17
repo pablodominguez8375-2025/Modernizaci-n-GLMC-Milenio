@@ -25,10 +25,10 @@ public static class LodgeCouncilPolicy
             [InstitutionalRoles.TallerInmediatoExVenerable] = AliasSet(InstitutionalRoles.TallerInmediatoExVenerable, "inmediato ex venerable", "inmediato ex venerable maestro", "ex venerable", "ex venerable maestro"),
             [InstitutionalRoles.TallerPrimerVigilante] = AliasSet(InstitutionalRoles.TallerPrimerVigilante, "primer vigilante", "primero vigilante"),
             [InstitutionalRoles.TallerSegundoVigilante] = AliasSet(InstitutionalRoles.TallerSegundoVigilante, "segundo vigilante"),
-            [InstitutionalRoles.TallerOrador] = AliasSet(InstitutionalRoles.TallerOrador, "orador", "oradora"),
-            [InstitutionalRoles.TallerSecretaria] = AliasSet(InstitutionalRoles.TallerSecretaria, "secretario", "secretaria"),
-            [InstitutionalRoles.TallerTesoreria] = AliasSet(InstitutionalRoles.TallerTesoreria, "tesorero", "tesorera"),
-            [InstitutionalRoles.TallerHospitalaria] = AliasSet(InstitutionalRoles.TallerHospitalaria, "hospitalario", "hospitalaria")
+            [InstitutionalRoles.TallerOrador] = AliasSet(InstitutionalRoles.TallerOrador, "orador", "oradora", "orador/a"),
+            [InstitutionalRoles.TallerSecretaria] = AliasSet(InstitutionalRoles.TallerSecretaria, "secretario", "secretaria", "secretario/a"),
+            [InstitutionalRoles.TallerTesoreria] = AliasSet(InstitutionalRoles.TallerTesoreria, "tesorero", "tesorera", "tesorero/a"),
+            [InstitutionalRoles.TallerHospitalaria] = AliasSet(InstitutionalRoles.TallerHospitalaria, "hospitalario", "hospitalaria", "hospitalario/a")
         };
 
     public static bool IsCouncilRole(string? role)
