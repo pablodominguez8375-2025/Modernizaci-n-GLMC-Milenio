@@ -10,7 +10,22 @@ Documentos maestros:
 - `docs/LINEA-BASE-PROYECTO-CENTENARIO-2026-09-17.md`
 - `docs/PERFILES-TALLER-Y-FIRMAS.md`
 - `docs/CONTROL-DE-CAMBIOS.md`
+- `docs/REGLAS-CONTINUIDAD-Y-NO-REGRESION.md`
 - `docs/README-INDEX.md`
+
+## Protocolo permanente para retomar el proyecto
+
+Antes de continuar desarrollo, análisis, correcciones o despliegues, incluso desde un chat nuevo:
+
+1. revisar el último estado de GitHub `main`;
+2. revisar la Línea Base Maestra vigente y Control de Cambios;
+3. revisar los documentos oficiales de Drive que afecten la tarea;
+4. comprobar el código, ADR, migraciones, pruebas y configuraciones ya desarrollados;
+5. usar chats o hilos anteriores solamente como contexto histórico.
+
+**Nunca se debe reconstruir el proyecto desde una conversación antigua si existe una versión posterior consolidada.**
+
+**Regla de no regresión:** no eliminar, degradar ni reemplazar código, funcionalidades o acuerdos aprobados/versionados sin una decisión explícita registrada, con motivo, impacto y versión de reemplazo.
 
 Regla de trabajo: los cambios aprobados deben quedar consolidados tanto en GitHub como en la documentación maestra de Google Drive. Una conversación por sí sola no constituye una modificación vigente del proyecto.
 
@@ -119,6 +134,6 @@ Servidor `srv01`:
 
 ## Estado
 
-La documentación de línea base ya está versionada en `main`.
+La documentación de línea base y las reglas permanentes de continuidad ya están versionadas en `main`.
 
 **Siguiente hito técnico:** consolidar y subir el código funcional de backend, frontend, base de datos, infraestructura y pruebas, y desplegarlo de forma reproducible en `srv01`.
