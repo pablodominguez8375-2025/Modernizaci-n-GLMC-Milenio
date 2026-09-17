@@ -23,10 +23,26 @@ Cada nueva implementación debe:
 5. evitar crear soluciones paralelas, repositorios alternativos o estructuras incompatibles;
 6. registrar cualquier cambio de arquitectura que realmente sea necesario mediante ADR y Control de Cambios.
 
+## Regla permanente de entrega: Demo + QA
+
+**Todo incremento funcional relevante del Proyecto Centenario debe mantener dos salidas coordinadas del mismo desarrollo:**
+
+1. **Demo navegable en GitHub Pages**, para revisión visual, funcional y de flujos con datos ficticios/controlados.
+2. **Versión instalable y operacional para QA en `srv01`**, para validar API, PostgreSQL, autenticación, permisos, persistencia, auditoría, archivos, integraciones y comportamiento real.
+
+La demo GitHub Pages y la versión QA **no son desarrollos separados**. Deben evolucionar desde la misma línea base, el mismo código y los mismos requisitos. Una función puede aparecer primero simulada visualmente en GitHub Pages, pero no se considera operacional hasta estar integrada y probada en QA.
+
+Regla de paridad incremental:
+
+`Requisito aprobado → Código en main → Demo GitHub Pages → QA instalable → Prueba QA/UAT`
+
+Documento rector: `docs/ESTRATEGIA-ENTREGAS-DEMO-Y-QA.md`.
+
 Documentos maestros:
 - `docs/LINEA-BASE-PROYECTO-CENTENARIO-2026-09-17.md`
 - `docs/PERFILES-TALLER-Y-FIRMAS.md`
 - `docs/MATRIZ-FUNCIONAL-NORMATIVA-TALLER-v1.0.md`
+- `docs/ESTRATEGIA-ENTREGAS-DEMO-Y-QA.md`
 - `docs/CONTROL-DE-CAMBIOS.md`
 - `docs/REGLAS-CONTINUIDAD-Y-NO-REGRESION.md`
 - `docs/README-INDEX.md`
@@ -178,4 +194,4 @@ Incluye:
 
 La línea base, reglas permanentes y el primer componente funcional de autorización están versionados en `main` como partes del único desarrollo del Proyecto Centenario.
 
-**Siguiente hito técnico:** integrar el catálogo RBAC con PostgreSQL, autenticación OIDC/SSO y API autorizada dentro de la aplicación Centenario; después conectar las vistas del frontend de la misma solución.
+**Siguiente hito técnico:** integrar el catálogo RBAC con PostgreSQL, autenticación OIDC/SSO y API autorizada dentro de la aplicación Centenario; actualizar en paralelo la demo GitHub Pages y preparar la versión instalable/operacional para QA en `srv01`.
