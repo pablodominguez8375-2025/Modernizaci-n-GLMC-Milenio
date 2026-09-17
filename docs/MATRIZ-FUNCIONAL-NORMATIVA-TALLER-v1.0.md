@@ -1,8 +1,16 @@
-# Matriz funcional-normativa de cargos de Taller v1.0
+# Proyecto Centenario — Matriz funcional-normativa de cargos de Taller v1.0
 
 Estado: **vigente para desarrollo**  
 Fecha: 2026-09-17  
 Base: Constitución y Reglamento General GLMCh + formularios/protocolos 2026 + Línea Base LB-PC-2026-09-17.
+
+## Continuidad del desarrollo
+
+Este documento **no define un proyecto nuevo, una aplicación separada ni un desarrollo paralelo**. Es una especificación funcional y normativa interna del **mismo Proyecto Centenario** y debe implementarse sobre el código, arquitectura, modelos, repositorio, base de datos y flujos ya vigentes.
+
+El componente técnico `Centenario.Authorization` es solo una pieza interna reutilizable del backend del Proyecto Centenario. Debe integrarse con la API, autenticación, PostgreSQL, auditoría, frontend y demás módulos de la misma solución. No debe evolucionar como producto independiente.
+
+Toda implementación derivada de esta matriz debe respetar la regla de no regresión, continuar desde `main` y reutilizar lo ya desarrollado.
 
 ## Regla de diseño
 
@@ -280,9 +288,11 @@ El frontend deberá ocultar por defecto las vistas sin permiso y el backend debe
 
 ## Estado de implementación
 
-Esta matriz se materializa inicialmente en:
+Esta matriz se materializa inicialmente, dentro del mismo Proyecto Centenario, en:
 
 - `backend/Centenario.Authorization/`
 - `backend/Centenario.Authorization.SmokeTests/`
+- `database/001_rbac_taller.sql`
+- `adrs/ADR-001-RBAC-NORMATIVO-TALLER.md`
 
-El catálogo de permisos está desacoplado del frontend para poder integrarse posteriormente con React o Blazor sin cambiar las reglas normativas.
+El catálogo de permisos está desacoplado del frontend únicamente como decisión de arquitectura interna para permitir su integración posterior con React o Blazor. **No es una aplicación separada** y debe continuar integrándose con el resto del Proyecto Centenario.
