@@ -2,12 +2,7 @@ name: PMGM Showcase Demo
 
 on:
   push:
-    branches: [dev, feature/treasury-payment-table-v1]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/showcase-pages.yml'
-      - '.github/scripts/capture-showcase-views.mjs'
-      - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
+    branches: [dev]
   pull_request:
     branches: [dev]
     paths:
@@ -156,7 +151,7 @@ jobs:
     name: Deploy testing showcase
     needs: build
     environment:
-      name: ${{ github.ref_name == 'dev' && 'github-pages' || 'github-pages-postrc' }}
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
