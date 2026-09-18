@@ -87,6 +87,10 @@ public sealed class LodgeManagementHttpWorkflowTests
                 meetingDate = new DateOnly(2026, 9, 8),
                 meetingType = LodgeManagementCodes.MeetingType.Regular,
                 grade = LodgeManagementCodes.Grade.Master,
+                ceremonyType = (string?)null,
+                modality = LodgeManagementCodes.MeetingModality.InPerson,
+                locationReference = "Templo CI",
+                virtualAccessReference = (string?)null,
                 title = "Tenida ordinaria de integración"
             },
             cancellationToken);
