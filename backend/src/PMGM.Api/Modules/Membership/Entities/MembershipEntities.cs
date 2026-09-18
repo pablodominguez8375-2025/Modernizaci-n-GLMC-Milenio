@@ -20,7 +20,7 @@ public sealed class Membership
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
     public required string MembershipType { get; set; }
-    public DateOnly StartDate { get; set; }
+    public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public required string Status { get; set; }
     public string? EndReason { get; set; }
