@@ -136,7 +136,6 @@ export interface InitialDeliberationPayload {
   deliberationDate: string
   presentVoters: number
   votesInFavor: number
-  minimumWaitingDays?: number | null
   sourceReference: string
 }
 
@@ -564,7 +563,7 @@ export class CandidateIntakeApiClient {
     if (this.useMocks) {
       const profile = this.mockProfiles.get(requestId)
       if (!profile?.firstDegreePresentationDate) throw new CandidateIntakeApiHttpError(409, 'Debe registrar la presentación en 1.er grado antes de la deliberación.')
-      const minimumDays = payload.minimumWaitingDays ?? 7
+      const minimumDays = 7
       const elapsed = daysBetween(profile.firstDegreePresentationDate, payload.deliberationDate)
       if (elapsed < minimumDays) throw new CandidateIntakeApiHttpError(409, `Deben transcurrir al menos ${minimumDays} días desde la presentación en 1.er grado.`)
       const unanimous = payload.presentVoters > 0 && payload.votesInFavor === payload.presentVoters
