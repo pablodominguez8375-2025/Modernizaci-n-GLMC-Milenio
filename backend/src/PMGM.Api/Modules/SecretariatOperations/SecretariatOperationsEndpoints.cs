@@ -410,15 +410,13 @@ public static class SecretariatOperationsEndpoints
                 LastNames = intake.LastNames,
                 Rut = intake.Rut,
                 Email = intake.Email,
-                Phone = intake.Phone,
-                Status = "active"
+                Phone = intake.Phone
             };
             member = new Member
             {
                 Person = person,
                 InstitutionalNumber = intake.InstitutionalNumber,
                 CurrentDegree = intake.CurrentDegree,
-                Status = MembershipCodes.MemberStatus.Active
             };
             db.Members.Add(member);
         }
@@ -447,11 +445,11 @@ public static class SecretariatOperationsEndpoints
         }
 
         if (intake.InitiationDate is not null)
-            await AddDegreeEventIfMissingAsync(db, member.Id, intake.OrganizationId, "initiation", intake.InitiationDate.Value, 1, intake.EvidenceReference, cancellationToken);
+            await AddDegreeEventIfMissingAsync(db, member.Id, intake.OrganizationId, MembershipCodes.DegreeEvent.Initiation, intake.InitiationDate.Value, SecretariatOperationsCodes.CurrentDegree.Apprentice, intake.EvidenceReference, cancellationToken);
         if (intake.WageIncreaseDate is not null)
-            await AddDegreeEventIfMissingAsync(db, member.Id, intake.OrganizationId, "wage_increase", intake.WageIncreaseDate.Value, 2, intake.EvidenceReference, cancellationToken);
+            await AddDegreeEventIfMissingAsync(db, member.Id, intake.OrganizationId, MembershipCodes.DegreeEvent.WageIncrease, intake.WageIncreaseDate.Value, SecretariatOperationsCodes.CurrentDegree.Fellowcraft, intake.EvidenceReference, cancellationToken);
         if (intake.ExaltationDate is not null)
-            await AddDegreeEventIfMissingAsync(db, member.Id, intake.OrganizationId, "exaltation", intake.ExaltationDate.Value, 3, intake.EvidenceReference, cancellationToken);
+            await AddDegreeEventIfMissingAsync(db, member.Id, intake.OrganizationId, MembershipCodes.DegreeEvent.Exaltation, intake.ExaltationDate.Value, SecretariatOperationsCodes.CurrentDegree.Master, intake.EvidenceReference, cancellationToken);
 
         foreach (var office in intake.Offices)
         {
@@ -484,22 +482,22 @@ public static class SecretariatOperationsEndpoints
         Guid organizationId,
         string eventType,
         DateOnly eventDate,
-        int resultingDegree,
+        string resultingDegree,
         string evidence,
         CancellationToken cancellationToken)
     {
-        var exists = await db.DegreeHistory.AnyAsync(
-            x => x.MemberId == memberId && x.EventType == eventType && x.EventDate == eventDate,
+        var exists = await db.DegreeEvents.AnyAsync(
+            x => x.MemberId == memberId && x.EventType == eventType && x.EffectiveDate == eventDate,
             cancellationToken);
         if (exists) return;
 
-        db.DegreeHistory.Add(new DegreeHistory
+        db.DegreeEvents.Add(new DegreeEvent
         {
             MemberId = memberId,
             OrganizationId = organizationId,
+            Degree = resultingDegree,
             EventType = eventType,
-            EventDate = eventDate,
-            ResultingDegree = resultingDegree,
+            EffectiveDate = eventDate,
             EvidenceReference = evidence
         });
     }
