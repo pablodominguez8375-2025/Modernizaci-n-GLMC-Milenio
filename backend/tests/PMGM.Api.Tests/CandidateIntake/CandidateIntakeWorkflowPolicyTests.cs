@@ -6,6 +6,12 @@ namespace PMGM.Api.Tests.CandidateIntake;
 public sealed class CandidateIntakeWorkflowPolicyTests
 {
     [Fact]
+    public void InitialDeliberation_ProtocolMinimum_RemainsSevenDays()
+    {
+        Assert.Equal(7, CandidateIntakeWorkflowPolicy.InitialDeliberationMinimumWaitingDays);
+    }
+
+    [Fact]
     public void InitialDeliberation_IsBlocked_BeforeSevenDays()
     {
         var decision = CandidateIntakeWorkflowPolicy.EvaluateInitialDeliberation(
