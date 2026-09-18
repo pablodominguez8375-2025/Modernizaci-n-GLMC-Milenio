@@ -81,3 +81,4 @@ echo
 echo "QA SRV01 INSTALADO"
 echo "Web: consulte PMGM_QA_WEB_PUBLIC_URL en $ENV_FILE"
 echo "OIDC: consulte PMGM_QA_OIDC_PUBLIC_URL en $ENV_FILE"
+echo "Siguiente paso: bash scripts/prepare-srv01-regression.sh"

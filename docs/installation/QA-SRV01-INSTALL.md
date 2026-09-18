@@ -76,3 +76,20 @@ Registrar en cada instalación:
 - incidencias QA/UAT.
 
 Una demo de GitHub Pages y un instalable QA deben corresponder al mismo SHA del corte cuando se declare completa la triple salida.
+
+
+## Regresión QA posterior a la instalación
+
+Una instalación técnicamente correcta debe continuar con el kit de regresión ligado al SHA del paquete:
+
+```bash
+bash scripts/prepare-srv01-regression.sh
+```
+
+Luego registrar cada control con `scripts/record-srv01-regression-result.py` y validar la ejecución con:
+
+```bash
+python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json --allow-pending
+```
+
+El cierre interno QA exige 21/21 controles `pass`, incluyendo `QA-021` para Consejo de Administración. Este cierre de regresión no sustituye la UAT institucional formal ni la aprobación del Sponsor/Product Owner. Consulte `docs/qa/PMGM-SRV01-REGRESSION-KIT.md`.

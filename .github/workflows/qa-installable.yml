@@ -29,6 +29,9 @@ jobs:
           bash -n scripts/install-srv01-qa.sh
           bash -n scripts/smoke-srv01-qa.sh
           bash -n scripts/build-qa-installable.sh
+          bash -n scripts/prepare-srv01-regression.sh
+          python3 -m py_compile scripts/record-srv01-regression-result.py tests/qa_srv01_regression_gate.py
+          python3 tests/qa_srv01_regression_gate.py release/PMGM-QA-SRV01-REGRESSION.template.json --allow-pending
 
       - name: Create non-secret CI environment
         shell: bash
@@ -102,6 +105,11 @@ jobs:
           test -x "$root/INSTALAR.sh"
           test -f "$root/infrastructure/docker-compose.srv01.yml"
           test -f "$root/scripts/smoke-srv01-qa.sh"
+          test -f "$root/scripts/prepare-srv01-regression.sh"
+          test -f "$root/scripts/record-srv01-regression-result.py"
+          test -f "$root/tests/qa_srv01_regression_gate.py"
+          test -f "$root/release/PMGM-QA-SRV01-REGRESSION.template.json"
+          test -f "$root/docs/qa/PMGM-SRV01-REGRESSION-KIT.md"
 
       - name: Upload QA installable
         uses: actions/upload-artifact@v4
