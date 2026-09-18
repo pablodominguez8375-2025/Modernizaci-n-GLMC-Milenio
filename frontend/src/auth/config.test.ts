@@ -28,3 +28,22 @@ it('keeps offline_access forbidden', () => {
     VITE_OIDC_SCOPE: 'openid profile offline_access',
   }, 'https://pmgm.example.test')).toThrow(/offline_access/)
 })
+
+it('allows explicit HTTP OIDC on the same host only for internal srv01 QA', () => {
+  const config = readAuthConfig({
+    VITE_OIDC_AUTHORITY: 'http://10.20.30.40:8180/realms/pmgm',
+    VITE_OIDC_CLIENT_ID: 'pmgm-web',
+    VITE_OIDC_SCOPE: 'openid profile',
+    VITE_OIDC_ALLOW_HTTP_QA: 'true',
+  }, 'http://10.20.30.40:8081')
+  expect(config?.authority).toBe('http://10.20.30.40:8180/realms/pmgm')
+})
+
+it('rejects internal QA HTTP when application and OIDC hosts differ', () => {
+  expect(() => readAuthConfig({
+    VITE_OIDC_AUTHORITY: 'http://10.20.30.41:8180/realms/pmgm',
+    VITE_OIDC_CLIENT_ID: 'pmgm-web',
+    VITE_OIDC_SCOPE: 'openid profile',
+    VITE_OIDC_ALLOW_HTTP_QA: 'true',
+  }, 'http://10.20.30.40:8081')).toThrow(/HTTPS/)
+})

@@ -11,17 +11,63 @@
   "verifyEmail": false,
   "roles": {
     "realm": [
-      { "name": "platform_superadmin" },
-      { "name": "grand_lodge_admin" },
-      { "name": "internal_affairs" },
-      { "name": "grand_secretariat" },
-      { "name": "grand_treasury" },
-      { "name": "grand_hospitalaria" },
-      { "name": "privacy_officer" },
-      { "name": "document_manager" },
-      { "name": "grand_archivist" },
-      { "name": "lodge_admin" },
-      { "name": "lodge_secretariat" }
+      {
+        "name": "platform_superadmin"
+      },
+      {
+        "name": "grand_lodge_admin"
+      },
+      {
+        "name": "internal_affairs"
+      },
+      {
+        "name": "grand_secretariat"
+      },
+      {
+        "name": "grand_treasury"
+      },
+      {
+        "name": "grand_hospitalaria"
+      },
+      {
+        "name": "privacy_officer"
+      },
+      {
+        "name": "document_manager"
+      },
+      {
+        "name": "grand_archivist"
+      },
+      {
+        "name": "lodge_admin"
+      },
+      {
+        "name": "lodge_secretariat"
+      },
+      {
+        "name": "grand_master"
+      },
+      {
+        "name": "lodge_treasury"
+      },
+      {
+        "name": "lodge_hospitalaria"
+      },
+      {
+        "name": "lodge_venerable"
+      },
+      {
+        "name": "lodge_orator"
+      },
+      {
+        "name": "lodge_first_warden"
+      },
+      {
+        "name": "lodge_second_warden"
+      },
+      {
+        "name": "lodge_past_master"
+      }
     ]
   },
   "clients": [
@@ -36,16 +82,18 @@
       "serviceAccountsEnabled": false,
       "frontchannelLogout": true,
       "redirectUris": [
+        "${PMGM_QA_WEB_PUBLIC_URL}/auth/callback",
         "http://127.0.0.1:8081/auth/callback",
         "http://localhost:8081/auth/callback"
       ],
       "webOrigins": [
+        "${PMGM_QA_WEB_PUBLIC_URL}",
         "http://127.0.0.1:8081",
         "http://localhost:8081"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://127.0.0.1:8081/auth/logout##http://localhost:8081/auth/logout"
+        "post.logout.redirect.uris": "${PMGM_QA_WEB_PUBLIC_URL}/auth/logout##http://127.0.0.1:8081/auth/logout##http://localhost:8081/auth/logout"
       },
       "protocolMappers": [
         {
@@ -116,7 +164,9 @@
       "email": "qa.admin@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
-        "pmgm_scope": ["order"]
+        "pmgm_scope": [
+          "order"
+        ]
       },
       "realmRoles": [
         "platform_superadmin",
@@ -130,7 +180,11 @@
         "grand_archivist"
       ],
       "credentials": [
-        { "type": "password", "value": "${PMGM_QA_USER_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
       ]
     },
     {
@@ -141,12 +195,231 @@
       "email": "qa.taller23@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
-        "pmgm_scope": ["organization"],
-        "pmgm_org": ["23232323-2323-2323-2323-232323232323"]
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
       },
-      "realmRoles": ["lodge_admin", "lodge_secretariat"],
+      "realmRoles": [
+        "lodge_admin",
+        "lodge_secretariat"
+      ],
       "credentials": [
-        { "type": "password", "value": "${PMGM_QA_USER_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.venerable23",
+      "enabled": true,
+      "firstName": "Venerable",
+      "lastName": "Taller QA 23",
+      "email": "qa.venerable23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_venerable"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.exvenerable23",
+      "enabled": true,
+      "firstName": "Inmediato Ex-Venerable",
+      "lastName": "Taller QA 23",
+      "email": "qa.exvenerable23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_past_master"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.primer23",
+      "enabled": true,
+      "firstName": "Primer Vigilante",
+      "lastName": "Taller QA 23",
+      "email": "qa.primer23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_first_warden"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.segundo23",
+      "enabled": true,
+      "firstName": "Segundo Vigilante",
+      "lastName": "Taller QA 23",
+      "email": "qa.segundo23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_second_warden"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.orador23",
+      "enabled": true,
+      "firstName": "Orador",
+      "lastName": "Taller QA 23",
+      "email": "qa.orador23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_orator"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.secretaria23",
+      "enabled": true,
+      "firstName": "Secretaría",
+      "lastName": "Taller QA 23",
+      "email": "qa.secretaria23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_secretariat"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.tesoreria23",
+      "enabled": true,
+      "firstName": "Tesorería",
+      "lastName": "Taller QA 23",
+      "email": "qa.tesoreria23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_treasury"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "qa.hospitalaria23",
+      "enabled": true,
+      "firstName": "Hospitalaria",
+      "lastName": "Taller QA 23",
+      "email": "qa.hospitalaria23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [
+        "lodge_hospitalaria"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
       ]
     }
   ]

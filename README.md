@@ -14,16 +14,19 @@ Construir una plataforma institucional unificada con acceso único, base maestra
 
 La demo de GitHub Pages utiliza exclusivamente datos ficticios y frontend estático. No está conectada a la futura VM, PostgreSQL, Keycloak, MinIO ni datos institucionales reales. La cabecera de la demo identifica el entorno y el SHA corto del build publicado para facilitar soporte y trazabilidad.
 
-**Paquete instalable pre-UAT:**
+**Instalable QA srv01 (vigente):**
 
-GitHub Actions genera `Proyecto-Centenario-preUAT-installable.zip` desde un SHA exacto. El ZIP incorpora código, infraestructura, documentación, manifest SHA-256, Git bundle y una entrada de instalación guiada `INSTALAR.sh` para preflight, arranque, smoke y respaldo inicial.
+GitHub Actions genera `Proyecto-Centenario-QA-srv01-<SHA>.zip` desde el mismo SHA integrado en `dev` que identifica el corte de demo. El ZIP incorpora código, infraestructura, migraciones, documentación, `BUILD-INFO.txt`, `MANIFEST.sha256`, Git bundle y `INSTALAR.sh`, que ejecuta preflight, construcción del stack, arranque y smoke autenticado sobre el perfil QA de `srv01`.
 
-La demo sirve para **mostrar y revisar la experiencia**; el paquete pre-UAT sirve para **instalar y validar el sistema completo en una VM**. Ninguno de los dos autoriza por sí solo la carga de datos personales reales ni una promoción a producción estable.
+El perfil QA usa API real, PostgreSQL, Keycloak, MinIO y ClamAV con datos/identidades ficticias. No es producción y permite HTTP en red QA controlada. El paquete pre-UAT histórico se conserva como antecedente de release, pero el artefacto operativo vigente para `srv01` es el nuevo paquete QA por SHA.
+
+La demo sirve para **mostrar y revisar la experiencia funcional con datos ficticios**; el paquete QA sirve para **instalar y validar el sistema completo en `srv01`**. Ninguno autoriza por sí solo la carga de datos personales reales ni una promoción a producción estable.
 
 Documentos principales:
 
 - `docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md` — funcionamiento, versionado visible, evidencia responsive y límites de la demo pública.
-- `docs/installation/PREUAT-INSTALL.md` — guía del paquete instalable actual.
+- `docs/installation/QA-SRV01-INSTALL.md` — guía vigente del instalable QA para `srv01`.
+- `docs/installation/PREUAT-INSTALL.md` — guía histórica del paquete pre-UAT.
 - `docs/installation/VM-IMPLEMENTATION-CHECKLIST.md` — checklist de implementación y evidencia de la VM.
 - `docs/ui/PMGM-UI-001-identidad-visual-responsive.md` — contrato visual y responsive basado en las PPT aprobadas.
 - `docs/ui/PMGM-UAT-VISUAL-001.md` — acta/checklist de aceptación visual institucional.
@@ -149,7 +152,7 @@ PMGM CI mantiene cinco jobs críticos: backend, frontend, infraestructura, first
 
 La RC agrega `tests/release_gate.py`, que comprueba coherencia entre el manifest, la versión del assembly, la infraestructura piloto, OIDC, bootstrap y los jobs requeridos. `/api/system/info` obtiene su versión desde el assembly para evitar discrepancias entre binario y release validada.
 
-El workflow `Proyecto Centenario Pre-UAT Installable` construye además un ZIP reproducible del SHA actual y verifica que `INSTALAR.sh`, `LEAME-INSTALACION.md`, `CHECKLIST-IMPLEMENTACION.md`, `BUILD-INFO.txt`, `ESTADO-PAQUETE.txt` y `MANIFEST.sha256` estén presentes y sean íntegros antes de publicar el artifact.
+El workflow `Proyecto Centenario QA srv01 Installable` construye un ZIP reproducible en cada push a `dev` y verifica que `INSTALAR.sh`, `LEAME-INSTALACION.md`, `CHECKLIST-IMPLEMENTACION.md`, `BUILD-INFO.txt`, `ESTADO-PAQUETE.txt`, `MANIFEST.sha256`, la infraestructura `srv01` y el smoke autenticado estén presentes e íntegros antes de publicar el artifact.
 
 El workflow `PMGM Showcase Demo` valida también la identidad del SHA visible y genera una matriz automática de evidencia responsive antes de considerar aprobable el frontend de demostración.
 

@@ -1,0 +1,109 @@
+name: Proyecto Centenario QA srv01 Installable
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Build QA srv01 installable
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact SHA
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate QA scripts
+        run: |
+          bash -n scripts/preflight-srv01-qa.sh
+          bash -n scripts/install-srv01-qa.sh
+          bash -n scripts/smoke-srv01-qa.sh
+          bash -n scripts/build-qa-installable.sh
+
+      - name: Create non-secret CI environment
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/srv01.env" <<'EOF'
+          PMGM_QA_BIND_ADDRESS=127.0.0.1
+          PMGM_QA_WEB_PORT=18081
+          PMGM_QA_OIDC_PORT=18180
+          PMGM_QA_WEB_PUBLIC_URL=http://127.0.0.1:18081
+          PMGM_QA_OIDC_PUBLIC_URL=http://127.0.0.1:18180
+          PMGM_QA_DB_PASSWORD=ci-only-db-password-001
+          PMGM_QA_MINIO_USER=ciqa
+          PMGM_QA_MINIO_PASSWORD=ci-only-minio-password-002
+          PMGM_QA_KEYCLOAK_ADMIN_PASSWORD=ci-only-keycloak-password-003
+          PMGM_QA_USER_PASSWORD=ci-only-users-password-004
+          EOF
+          chmod 600 "$RUNNER_TEMP/srv01.env"
+
+      - name: Validate srv01 Docker Compose
+        run: docker compose --env-file "$RUNNER_TEMP/srv01.env" -f infrastructure/docker-compose.srv01.yml config >/dev/null
+
+      - name: Validate QA realm roles and users
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          realm=json.loads(Path("infrastructure/keycloak/pmgm-realm.json").read_text(encoding="utf-8"))
+          roles={item["name"] for item in realm["roles"]["realm"]}
+          expected={
+              "lodge_venerable","lodge_past_master","lodge_first_warden","lodge_second_warden",
+              "lodge_orator","lodge_secretariat","lodge_treasury","lodge_hospitalaria"
+          }
+          missing=expected-roles
+          if missing:
+              raise SystemExit(f"Faltan cargos QA en realm: {sorted(missing)}")
+          users={item["username"]: item for item in realm.get("users", [])}
+          for username in (
+              "qa.venerable23","qa.exvenerable23","qa.primer23","qa.segundo23",
+              "qa.orador23","qa.secretaria23","qa.tesoreria23","qa.hospitalaria23"
+          ):
+              if username not in users:
+                  raise SystemExit(f"Falta usuario QA: {username}")
+          client=next(item for item in realm["clients"] if item["clientId"]=="pmgm-web")
+          if "${PMGM_QA_WEB_PUBLIC_URL}/auth/callback" not in client["redirectUris"]:
+              raise SystemExit("El realm QA no parametriza el callback remoto de srv01")
+          PY
+
+      - name: Build reproducible QA package
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        run: bash scripts/build-qa-installable.sh
+
+      - name: Verify package identifies exact SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          zipfile="$(find artifacts/qa-installable -maxdepth 1 -name '*.zip' -print -quit)"
+          test -n "$zipfile"
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          unzip -q "$zipfile" -d "$tmp"
+          root="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          grep -qx "SOURCE_SHA=$EXPECTED_SHA" "$root/BUILD-INFO.txt"
+          (cd "$root" && sha256sum -c MANIFEST.sha256 >/dev/null)
+          test -x "$root/INSTALAR.sh"
+          test -f "$root/infrastructure/docker-compose.srv01.yml"
+          test -f "$root/scripts/smoke-srv01-qa.sh"
+
+      - name: Upload QA installable
+        uses: actions/upload-artifact@v4
+        with:
+          name: proyecto-centenario-qa-srv01-${{ github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/qa-installable/*.zip
+          if-no-files-found: error
+          retention-days: 30

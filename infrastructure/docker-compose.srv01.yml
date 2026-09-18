@@ -5,34 +5,34 @@ services:
     environment:
       POSTGRES_DB: pmgm
       POSTGRES_USER: pmgm_app
-      POSTGRES_PASSWORD: ${PMGM_FIRST_DB_PASSWORD:?PMGM_FIRST_DB_PASSWORD es obligatorio}
+      POSTGRES_PASSWORD: ${PMGM_QA_DB_PASSWORD:?PMGM_QA_DB_PASSWORD es obligatorio}
     volumes:
-      - pmgm_first_postgres_data:/var/lib/postgresql/data
+      - pmgm_srv01_postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pmgm_app -d pmgm"]
       interval: 5s
       timeout: 5s
       retries: 20
-    networks: [pmgm_first_internal]
+    networks: [pmgm_srv01_internal]
 
   minio:
     image: quay.io/minio/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}
-      MINIO_ROOT_PASSWORD: ${PMGM_FIRST_MINIO_PASSWORD:?PMGM_FIRST_MINIO_PASSWORD es obligatorio}
+      MINIO_ROOT_USER: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
     volumes:
-      - pmgm_first_minio_data:/data
-    networks: [pmgm_first_internal]
+      - pmgm_srv01_minio_data:/data
+    networks: [pmgm_srv01_internal]
 
   minio-init:
     image: quay.io/minio/mc:latest
     depends_on: [minio]
     restart: "no"
     environment:
-      MINIO_ACCESS_KEY: ${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}
-      MINIO_SECRET_KEY: ${PMGM_FIRST_MINIO_PASSWORD:?PMGM_FIRST_MINIO_PASSWORD es obligatorio}
+      MINIO_ACCESS_KEY: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
+      MINIO_SECRET_KEY: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
     entrypoint: >
       /bin/sh -c "
       until mc alias set pmgm http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done;
@@ -40,14 +40,14 @@ services:
       mc anonymous set none pmgm/pmgm-documents;
       exit 0;
       "
-    networks: [pmgm_first_internal]
+    networks: [pmgm_srv01_internal]
 
   clamav:
     image: clamav/clamav:1.4
     restart: unless-stopped
     volumes:
-      - pmgm_first_clamav_db:/var/lib/clamav
-    networks: [pmgm_first_internal]
+      - pmgm_srv01_clamav_db:/var/lib/clamav
+    networks: [pmgm_srv01_internal]
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.7.3
@@ -55,20 +55,20 @@ services:
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: qa-keycloak-admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD:?PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD es obligatorio}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_QA_KEYCLOAK_ADMIN_PASSWORD:?PMGM_QA_KEYCLOAK_ADMIN_PASSWORD es obligatorio}
       PMGM_QA_USER_PASSWORD: ${PMGM_QA_USER_PASSWORD:?PMGM_QA_USER_PASSWORD es obligatorio}
-      PMGM_QA_WEB_PUBLIC_URL: http://127.0.0.1:8081
+      PMGM_QA_WEB_PUBLIC_URL: ${PMGM_QA_WEB_PUBLIC_URL:?PMGM_QA_WEB_PUBLIC_URL es obligatorio}
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
-      KC_HOSTNAME: http://127.0.0.1:8180
+      KC_HOSTNAME: ${PMGM_QA_OIDC_PUBLIC_URL:?PMGM_QA_OIDC_PUBLIC_URL es obligatorio}
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HOSTNAME_STRICT: "true"
     volumes:
       - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
-      - pmgm_first_keycloak_data:/opt/keycloak/data
+      - pmgm_srv01_keycloak_data:/opt/keycloak/data
     ports:
-      - "127.0.0.1:8180:8080"
-    networks: [pmgm_first_internal]
+      - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_OIDC_PORT:-8180}:8080"
+    networks: [pmgm_srv01_internal]
 
   api:
     build:
@@ -91,18 +91,18 @@ services:
       Authentication__Authority: http://keycloak:8080/realms/pmgm
       Authentication__Audience: pmgm-api
       Authentication__RequireHttpsMetadata: "false"
-      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${PMGM_FIRST_DB_PASSWORD:?PMGM_FIRST_DB_PASSWORD es obligatorio}
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${PMGM_QA_DB_PASSWORD:?PMGM_QA_DB_PASSWORD es obligatorio}
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
       DocumentStorage__Bucket: pmgm-documents
-      DocumentStorage__AccessKey: ${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}
-      DocumentStorage__SecretKey: ${PMGM_FIRST_MINIO_PASSWORD:?PMGM_FIRST_MINIO_PASSWORD es obligatorio}
+      DocumentStorage__AccessKey: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
+      DocumentStorage__SecretKey: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
       DocumentStorage__ForcePathStyle: "true"
       DocumentStorage__MaxUploadBytes: "52428800"
       DocumentMalware__Host: clamav
       DocumentMalware__Port: "3310"
       DocumentMalware__MaxStreamBytes: "52428800"
-    networks: [pmgm_first_internal]
+    networks: [pmgm_srv01_internal]
 
   web:
     build:
@@ -111,22 +111,23 @@ services:
       args:
         VITE_API_BASE_URL: ""
         VITE_USE_MOCKS: "false"
-        VITE_OIDC_AUTHORITY: http://127.0.0.1:8180/realms/pmgm
+        VITE_OIDC_AUTHORITY: ${PMGM_QA_OIDC_PUBLIC_URL:?PMGM_QA_OIDC_PUBLIC_URL es obligatorio}/realms/pmgm
         VITE_OIDC_CLIENT_ID: pmgm-web
         VITE_OIDC_SCOPE: openid profile
-        VITE_OIDC_ALLOW_HTTP_LOCAL: "true"
+        VITE_OIDC_ALLOW_HTTP_LOCAL: "false"
+        VITE_OIDC_ALLOW_HTTP_QA: "true"
     restart: unless-stopped
     depends_on: [api, keycloak]
     ports:
-      - "127.0.0.1:8081:80"
-    networks: [pmgm_first_internal]
+      - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_WEB_PORT:-8081}:80"
+    networks: [pmgm_srv01_internal]
 
 networks:
-  pmgm_first_internal:
+  pmgm_srv01_internal:
     driver: bridge
 
 volumes:
-  pmgm_first_postgres_data:
-  pmgm_first_minio_data:
-  pmgm_first_clamav_db:
-  pmgm_first_keycloak_data:
+  pmgm_srv01_postgres_data:
+  pmgm_srv01_minio_data:
+  pmgm_srv01_clamav_db:
+  pmgm_srv01_keycloak_data:
