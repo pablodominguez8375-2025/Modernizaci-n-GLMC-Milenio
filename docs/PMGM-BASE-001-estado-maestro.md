@@ -527,6 +527,37 @@ Después de cerrar QA, continuar con el expediente de insinuación definido en `
 
 No reutilizar la RC1 histórica o evidencia de un SHA anterior para atribuir aceptación al código vivo.
 
+
+## 15. Secretaría integral — estado integrado y reglas de continuidad
+
+El flujo integral de **Secretaría del Taller + Régimen Interior + Gran Secretaría** quedó integrado mediante PR #105. Merge SHA: `88e6fd70493b972467759fddc1d6180eb07927d1`.
+
+Reglas funcionales vigentes:
+
+- **Cuadro del Taller:** Secretaría puede cargar hermanos activos individualmente o por XLSX; la carga histórica admite fechas desconocidas sin inventarlas; RI aprueba, observa o rechaza y sólo la aprobación modifica el Cuadro oficial.
+- **Identidad histórica:** RUT y número institucional identifican transversalmente al hermano; el grado actual puede quedar validado aunque falten fechas exactas de hitos.
+- **Tenidas:** estados Programada, Realizada y Cancelada; modalidad Presencial o Virtual.
+- **Plancha de trabajo del hermano:** opcional, PDF/DOCX, asociada al hermano autor; puede cargarse antes o después de la Tenida; no existe para iniciación, aumento de salario ni exaltación.
+- **Extracto de Acta:** PDF remitible a Gran Secretaría únicamente después de que la Tenida esté Realizada.
+- **Acta completa:** PDF/DOCX opcional y privada del Taller.
+- **Reuniones y Consejos:** privados del Taller; no se remiten a Gran Secretaría.
+- **Gran Secretaría:** accede sólo a datos básicos de Tenidas remitidas y al Extracto PDF; no accede a plancha del hermano, acta completa, asistencia, votaciones, enlace virtual, Reuniones ni Consejos.
+- **Plancha de Gran Secretaría:** documento formal separado de Decreto. Puede ser comunicado formal (`formal_communication`) o autorización formal de ceremonia (`ceremony_authorization`). La Plancha de Autorización de Ceremonia no constituye Decreto.
+- **Gestión documental:** reutiliza MinIO/S3, versionado, integridad/hash, ClamAV y permisos del Taller.
+- **No regresión:** Tenidas, Consejo y Gestión Documental existentes se reutilizan; no se duplican entidades ni repositorios.
+
+Fuentes técnicas canónicas del incremento:
+
+- `docs/PMGM-ARCH-009-secretaria-flujo-integral.md`
+- `changelog/2026-09-18-secretaria-flujo-integral-v1.md`
+- `changelog/2026-09-18-secretaria-flujo-integral.md`
+- PR #105.
+
+La Línea Base Maestra de Google Drive contiene el mismo acuerdo en su sección **32. Secretaría integral — Cuadro del Taller, Tenidas y Gran Secretaría**.
+
+> Nota de frescura: este apartado describe reglas integradas. El SHA operativo vigente debe obtenerse siempre del HEAD vivo de `dev`; actualmente, al sincronizar esta documentación, `dev` está en `125635e5cbf23919d135965311f7c24bb086cea1` por integración posterior del PR #106.
+
+
 ---
 
 **Este documento es la referencia canónica de continuidad funcional/técnica del Proyecto Centenario.**
