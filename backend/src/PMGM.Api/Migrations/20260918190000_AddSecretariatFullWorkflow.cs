@@ -1,9 +1,13 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using PMGM.Api.Data;
 
 #nullable disable
 
 namespace PMGM.Api.Migrations;
 
+[DbContext(typeof(PmgmDbContext))]
+[Migration("20260918190000_AddSecretariatFullWorkflow")]
 public partial class AddSecretariatFullWorkflow : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
