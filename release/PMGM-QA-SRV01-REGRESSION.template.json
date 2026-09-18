@@ -203,6 +203,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-022",
+      "category": "candidates",
+      "title": "Insinuación: 7 días, entrevistas, 3.er grado, balotaje e Iniciación",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
