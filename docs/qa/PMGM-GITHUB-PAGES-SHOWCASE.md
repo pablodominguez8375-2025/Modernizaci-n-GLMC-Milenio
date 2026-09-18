@@ -104,9 +104,12 @@ Nombre en GitHub Actions:
 `PMGM Showcase Demo`
 
 El workflow se ejecuta:
-- en pull requests hacia `dev` que afectan frontend/showcase, para validar build y evidencia visual sin publicar el PR;
-- en cada push a `dev`, para construir, validar y publicar la demo, incluso cuando el incremento combine cambios frontend/backend/documentales;
+- en pull requests hacia `dev`, para validar build y evidencia visual sin publicar mientras el PR siga abierto;
+- al cerrarse un PR fusionado hacia `dev`, usando explícitamente `merge_commit_sha` para construir y desplegar el SHA que quedó integrado;
+- en cada push a `dev`, cuando GitHub entregue ese evento;
 - manualmente mediante `workflow_dispatch`.
+
+La ejecución post-merge por `pull_request.closed` es el mecanismo de respaldo obligatorio cuando el método de integración no genera un workflow de `push`; evita que la publicación dependa de cómo se realizó el merge.
 
 ## Secuencia de publicación
 
