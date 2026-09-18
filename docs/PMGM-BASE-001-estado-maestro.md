@@ -449,6 +449,71 @@ Flujo permanente:
 
 `Requisito aprobado → feature/* desde dev → programación y pruebas → PR/CI exact-head → merge a dev → publicación Demo GitHub Pages → generación instalable del mismo SHA → despliegue/smoke srv01 → QA/UAT → promoción controlada a main`
 
+
+## 14. Corte operativo vigente — triple salida y siguiente hito
+
+> Esta sección prevalece sobre checkpoints históricos de las secciones 7, 8 y 10 cuando exista discrepancia de estado.
+
+### Desarrollo integrado
+
+- rama activa: `dev`;
+- HEAD verificado previo a este cierre documental: `ba1f4475223b66736280a7d99d05eaee23bb0cd5`;
+- PR #91 integró Consejo de Administración auditable;
+- PR #93 fijó la Definition of Done de triple salida;
+- PR #94 automatizó demo + instalable QA `srv01`;
+- PR #98 incorporó kit de regresión QA de 21 controles;
+- PR #100 resolvió el bloqueo real del deploy post-merge de GitHub Pages.
+
+### Demo GitHub Pages
+
+La demo pública está operacional y fue desplegada correctamente desde el mismo merge SHA:
+
+`https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/`
+
+Verificación del workflow:
+
+- Build Showcase: `success`;
+- Deploy testing showcase: `success`;
+- Pages deployment version: `ba1f4475223b66736280a7d99d05eaee23bb0cd5`.
+
+Causa raíz del bloqueo anterior: el environment `github-pages` permitía sólo `dev`/ `main`, mientras el fallback post-merge quedaba registrado con ref de la rama feature. La solución mantiene `github-pages` protegido para deploys normales y usa un environment dedicado únicamente para el post-merge de PR ya fusionado. Issue #96 quedó cerrado.
+
+### Instalable QA srv01
+
+El artifact reproducible correspondiente al mismo SHA quedó generado y validado:
+
+- artifact: `proyecto-centenario-qa-srv01-ba1f4475223b66736280a7d99d05eaee23bb0cd5`;
+- artifact ID: `10527367573`;
+- digest: `sha256:36337f374e41d0e8b45539a5dd0063579a115d1a68fb6063b0e2cf828dcc905b`.
+
+El paquete contiene API, frontend, PostgreSQL, Keycloak, MinIO, ClamAV, migraciones, preflight, instalador, smoke autenticado, `BUILD-INFO.txt`, manifiesto/checksums y kit de regresión QA.
+
+### Regresión QA
+
+El paquete incluye 21 controles:
+
+- QA-001..QA-020: cobertura funcional heredada del plan histórico;
+- QA-021: Consejo de Administración.
+
+La regresión QA no sustituye la UAT institucional formal ni la aprobación del Sponsor / Product Owner.
+
+### Siguiente hito obligatorio
+
+El bloqueo técnico de Pages está cerrado. El cuello de botella vigente pasa a ser Issue #97:
+
+1. desplegar el artifact exacto en `srv01`;
+2. validar `MANIFEST.sha256`;
+3. completar `/etc/pmgm/srv01.env` fuera de Git;
+4. ejecutar `INSTALAR.sh`;
+5. ejecutar smoke autenticado;
+6. comprobar Consejo de Administración con perfil autorizado;
+7. ejecutar regresión QA 21/21;
+8. corregir defectos P0/P1 si aparecen;
+9. congelar un nuevo candidato UAT desde el código vigente;
+10. ejecutar UAT institucional y promover a `main` sólo con aprobación expresa.
+
+No reutilizar la antigua RC1 o su evidencia para atribuir aceptación al corte actual.
+
 ---
 
 **Este documento es la referencia canónica de continuidad funcional/técnica del Proyecto Centenario.**
