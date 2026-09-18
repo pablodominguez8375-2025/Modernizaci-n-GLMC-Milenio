@@ -122,7 +122,7 @@ if [ -L "$DEPLOY_ROOT/current" ]; then
 fi
 
 backup_dir=""
-if [ "$NO_BACKUP" = false ] && [ -n "$previous_release" ] && [ -x "$previous_release/scripts/backup-srv01-qa.sh" ]; then
+if [ "$NO_BACKUP" = false ] && [ -n "$previous_release" ] && [ -f "$previous_release/scripts/backup-srv01-qa.sh" ]; then
   if docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$previous_release/infrastructure/docker-compose.srv01.yml" ps --status running --services 2>/dev/null | grep -qx postgres; then
     backup_dir="$DEPLOY_ROOT/backups/predeploy-$(date -u +%Y%m%dT%H%M%SZ)-$(basename "$previous_release")"
     PMGM_QA_ENV_FILE="$ENV_FILE" bash "$previous_release/scripts/backup-srv01-qa.sh" --env "$ENV_FILE" --output "$backup_dir"
@@ -139,7 +139,11 @@ fi
 
 ln -sfn "$release_dir" "$DEPLOY_ROOT/current"
 
-evidence_file="$(PMGM_QA_ENV_FILE="$ENV_FILE" PMGM_BUILD_INFO="$release_dir/BUILD-INFO.txt" bash "$release_dir/scripts/prepare-srv01-regression.sh" --env "$ENV_FILE" --build-info "$release_dir/BUILD-INFO.txt" --output "$DEPLOY_ROOT/evidence/PMGM-QA-srv01-${SOURCE_SHA:0:12}.json" | tail -n1 || true)"
+PMGM_QA_ENV_FILE="$ENV_FILE" PMGM_BUILD_INFO="$release_dir/BUILD-INFO.txt" \
+  bash "$release_dir/scripts/prepare-srv01-regression.sh" \
+  --env "$ENV_FILE" \
+  --build-info "$release_dir/BUILD-INFO.txt" \
+  --output "$DEPLOY_ROOT/evidence/PMGM-QA-srv01-${SOURCE_SHA:0:12}.json"
 
 DEPLOY_ROOT="$DEPLOY_ROOT" SOURCE_SHA="$SOURCE_SHA" ZIP_SHA256="$EXPECTED_DIGEST" BACKUP_DIR="$backup_dir" PREVIOUS_RELEASE="$previous_release" python3 - <<'PY'
 import datetime as dt, json, os
