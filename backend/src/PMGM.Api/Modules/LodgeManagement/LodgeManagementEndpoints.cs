@@ -3,8 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.SecretariatOperations;
 
 namespace PMGM.Api.Modules.LodgeManagement;
 
@@ -19,7 +21,8 @@ public static class LodgeManagementEndpoints
         group.MapGet("/talleres/{organizationId:guid}/miembros/opciones", GetMemberOptionsAsync);
         group.MapPost("/talleres/{organizationId:guid}/tenidas", CreateMeetingAsync);
         group.MapGet("/talleres/{organizationId:guid}/tenidas", GetMeetingsAsync);
-        group.MapPost("/tenidas/{meetingId:guid}/cerrar", CloseMeetingAsync);
+        group.MapPost("/tenidas/{meetingId:guid}/realizar", CloseMeetingAsync);
+        group.MapPost("/tenidas/{meetingId:guid}/cerrar", CloseMeetingAsync); // compatibilidad
         group.MapPost("/tenidas/{meetingId:guid}/asistencia", RecordAttendanceAsync);
         group.MapGet("/tenidas/{meetingId:guid}/asistencia", GetCurrentAttendanceAsync);
         group.MapPost("/tenidas/{meetingId:guid}/votaciones", RecordAnonymousBallotAsync);
@@ -67,12 +70,22 @@ public static class LodgeManagementEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageOrganization(httpContext.User, organizationId)) return Results.Forbid();
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId)) return Results.Forbid();
         if (!LodgeManagementCodes.MeetingType.IsValid(request.MeetingType) ||
-            !LodgeManagementCodes.Grade.IsValid(request.Grade))
+            !LodgeManagementCodes.Grade.IsValid(request.Grade) ||
+            !LodgeManagementCodes.MeetingModality.IsValid(request.Modality) ||
+            !SecretariatOperationsCodes.CeremonyType.IsValid(request.CeremonyType))
         {
-            return Results.BadRequest(new { message = "El tipo de tenida o grado indicado no es válido." });
+            return Results.BadRequest(new { message = "El tipo, grado, modalidad o ceremonia de la Tenida no es válido." });
         }
+
+        if (request.Modality == LodgeManagementCodes.MeetingModality.InPerson &&
+            string.IsNullOrWhiteSpace(request.LocationReference))
+            return Results.BadRequest(new { message = "Una Tenida presencial debe indicar templo, sala o lugar." });
+
+        if (request.Modality == LodgeManagementCodes.MeetingModality.Virtual &&
+            string.IsNullOrWhiteSpace(request.VirtualAccessReference))
+            return Results.BadRequest(new { message = "Una Tenida virtual debe indicar la referencia de acceso." });
 
         var organizationExists = await institutionalDb.Organizations
             .AsNoTracking()
@@ -85,6 +98,14 @@ public static class LodgeManagementEndpoints
             MeetingDate = request.MeetingDate,
             MeetingType = request.MeetingType,
             Grade = request.Grade,
+            CeremonyType = NormalizeOptional(request.CeremonyType),
+            Modality = request.Modality,
+            LocationReference = request.Modality == LodgeManagementCodes.MeetingModality.InPerson
+                ? NormalizeOptional(request.LocationReference)
+                : null,
+            VirtualAccessReference = request.Modality == LodgeManagementCodes.MeetingModality.Virtual
+                ? NormalizeOptional(request.VirtualAccessReference)
+                : null,
             Title = NormalizeOptional(request.Title),
             Status = LodgeManagementCodes.MeetingStatus.Scheduled
         };
@@ -97,7 +118,7 @@ public static class LodgeManagementEndpoints
             meeting.Id.ToString(),
             organizationId,
             AuditResults.Success,
-            new { meeting.MeetingDate, meeting.MeetingType, meeting.Grade, meeting.Status }));
+            new { meeting.MeetingDate, meeting.MeetingType, meeting.Grade, meeting.CeremonyType, meeting.Modality, meeting.Status }));
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/gestion-logial/tenidas/{meeting.Id}", ToMeetingDto(meeting));
@@ -133,23 +154,49 @@ public static class LodgeManagementEndpoints
     private static async Task<IResult> CloseMeetingAsync(
         Guid meetingId,
         HttpContext httpContext,
+        PmgmDbContext institutionalDb,
         LodgeManagementDbContext db,
+        DocumentManagementDbContext documentDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
         var meeting = await db.LodgeMeetings.SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null) return Results.NotFound();
-        if (!access.CanManageOrganization(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
-        if (meeting.Status == LodgeManagementCodes.MeetingStatus.Closed)
-            return Results.Conflict(new { message = "La tenida ya se encuentra cerrada." });
+        if (!access.CanManageLodgeSecretariat(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
+        if (LodgeManagementCodes.MeetingStatus.IsHeld(meeting.Status))
+            return Results.Conflict(new { message = "La Tenida ya se encuentra realizada." });
         if (meeting.Status == LodgeManagementCodes.MeetingStatus.Cancelled)
-            return Results.Conflict(new { message = "Una tenida cancelada no puede cerrarse." });
+            return Results.Conflict(new { message = "Una Tenida cancelada no puede marcarse como realizada." });
 
-        meeting.Status = LodgeManagementCodes.MeetingStatus.Closed;
+        if (SecretariatOperationsPolicy.WorkPaperRequiredToMarkHeld(meeting.CeremonyType))
+        {
+            var submission = await institutionalDb.LodgeSecretariatSubmissions
+                .AsNoTracking()
+                .SingleOrDefaultAsync(
+                    x => x.RecordType == SecretariatOperationsCodes.RecordType.LodgeMeeting &&
+                         x.SourceRecordId == meeting.Id,
+                    cancellationToken);
+
+            if (submission?.WorkPaperDocumentVersionId is null)
+                return Results.Conflict(new { message = "Una Tenida no ceremonial requiere la plancha de trabajo antes de marcarse como realizada." });
+
+            var workPaperReady = await documentDb.DocumentVersions
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.Id == submission.WorkPaperDocumentVersionId.Value &&
+                         x.ContentType == "application/pdf" &&
+                         x.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Available,
+                    cancellationToken);
+
+            if (!workPaperReady)
+                return Results.Conflict(new { message = "La plancha debe ser un PDF cargado, íntegro y analizado antes de marcar la Tenida como realizada." });
+        }
+
+        meeting.Status = LodgeManagementCodes.MeetingStatus.Held;
         meeting.ClosedAtUtc = DateTimeOffset.UtcNow;
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
-            "lodge.meeting.closed",
+            "lodge.meeting.held",
             nameof(LodgeMeeting),
             meeting.Id.ToString(),
             meeting.OrganizationId,
@@ -174,8 +221,8 @@ public static class LodgeManagementEndpoints
         var meeting = await db.LodgeMeetings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null) return Results.NotFound();
         if (!access.CanManageOrganization(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
-        if (meeting.Status != LodgeManagementCodes.MeetingStatus.Closed)
-            return Results.Conflict(new { message = "La asistencia sólo puede registrarse después de cerrar la tenida realizada." });
+        if (!LodgeManagementCodes.MeetingStatus.IsHeld(meeting.Status))
+            return Results.Conflict(new { message = "La asistencia sólo puede registrarse después de marcar la Tenida como realizada." });
 
         var memberBelongs = await institutionalDb.Memberships
             .AsNoTracking()
@@ -278,8 +325,8 @@ public static class LodgeManagementEndpoints
         var meeting = await db.LodgeMeetings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
         if (meeting is null) return Results.NotFound();
         if (!access.CanManageOrganization(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
-        if (meeting.Status != LodgeManagementCodes.MeetingStatus.Closed)
-            return Results.Conflict(new { message = "El escrutinio sólo puede registrarse después de cerrar la Tenida realizada." });
+        if (!LodgeManagementCodes.MeetingStatus.IsHeld(meeting.Status))
+            return Results.Conflict(new { message = "El escrutinio sólo puede registrarse después de marcar la Tenida como realizada." });
         if (!LodgeManagementCodes.BallotType.IsValid(request.BallotType) || string.IsNullOrWhiteSpace(request.Subject))
             return Results.BadRequest(new { message = "La modalidad y el asunto de la votación son obligatorios." });
         if (request.BallotType == LodgeManagementCodes.BallotType.WhiteBlack && request.ProcedureNumber is not (1 or 2 or 3))
@@ -364,7 +411,7 @@ public static class LodgeManagementEndpoints
                 (string.IsNullOrWhiteSpace(x.RecountObservation) ? "" : $" Observación: {x.RecountObservation}")));
         var content = $"EXTRACTO DE ACTA{Environment.NewLine}" +
             $"Taller: {organization.Name}{(organization.Number is null ? "" : $" N.º {organization.Number}")}{Environment.NewLine}" +
-            $"Fecha: {meeting.MeetingDate:dd-MM-yyyy} · Tipo: {meeting.MeetingType} · Grado: {meeting.Grade}{Environment.NewLine}{Environment.NewLine}" +
+            $"Fecha: {meeting.MeetingDate:dd-MM-yyyy} · Tipo: {meeting.MeetingType} · Grado: {meeting.Grade} · Modalidad: {(meeting.Modality == LodgeManagementCodes.MeetingModality.Virtual ? "Virtual" : "Presencial")}{Environment.NewLine}{Environment.NewLine}" +
             $"ASISTENCIA{Environment.NewLine}Presentes: {present.Count} · Inasistentes: {absent.Count} · Excusados: {excused.Count} · Total registrado: {attendance.Count}{Environment.NewLine}" +
             $"Presentes: {JoinNames(present, names)}{Environment.NewLine}Excusas: {JoinNames(excused, names)}{Environment.NewLine}{Environment.NewLine}" +
             $"BALOTAJE Y VOTACIONES{Environment.NewLine}{ballotLines}{Environment.NewLine}{Environment.NewLine}" +
@@ -496,7 +543,20 @@ public static class LodgeManagementEndpoints
     }
 
     private static LodgeMeetingDto ToMeetingDto(LodgeMeeting meeting)
-        => new(meeting.Id, meeting.OrganizationId, meeting.MeetingDate, meeting.MeetingType, meeting.Grade, meeting.Title, meeting.Status, meeting.CreatedAtUtc, meeting.ClosedAtUtc);
+        => new(
+            meeting.Id,
+            meeting.OrganizationId,
+            meeting.MeetingDate,
+            meeting.MeetingType,
+            meeting.Grade,
+            meeting.CeremonyType,
+            meeting.Modality,
+            meeting.LocationReference,
+            meeting.VirtualAccessReference,
+            meeting.Title,
+            meeting.Status,
+            meeting.CreatedAtUtc,
+            meeting.ClosedAtUtc);
 
     private static LodgeMinuteDto ToMinuteDto(LodgeMinute minute)
         => new(minute.Id, minute.MeetingId, minute.Version, minute.Content, minute.Status, minute.CreatedAtUtc, minute.ApprovedAtUtc);
@@ -518,6 +578,10 @@ public sealed record CreateLodgeMeetingRequest(
     DateOnly MeetingDate,
     string MeetingType,
     string Grade,
+    string? CeremonyType,
+    string Modality,
+    string? LocationReference,
+    string? VirtualAccessReference,
     string? Title);
 
 public sealed record LodgeAttendanceRequest(
@@ -537,6 +601,10 @@ public sealed record LodgeMeetingDto(
     DateOnly MeetingDate,
     string MeetingType,
     string Grade,
+    string? CeremonyType,
+    string Modality,
+    string? LocationReference,
+    string? VirtualAccessReference,
     string? Title,
     string Status,
     DateTimeOffset CreatedAtUtc,
