@@ -31,6 +31,7 @@ public sealed class SecretariatDocument
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public required string DocumentType { get; set; }
+    public string? PlanchaKind { get; set; }
     public required string DocumentCode { get; set; }
     public required string Title { get; set; }
     public required string Content { get; set; }
