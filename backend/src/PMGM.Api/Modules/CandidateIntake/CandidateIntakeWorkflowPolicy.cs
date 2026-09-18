@@ -6,12 +6,14 @@ namespace PMGM.Api.Modules.CandidateIntake;
 /// </summary>
 public static class CandidateIntakeWorkflowPolicy
 {
+    public const int InitialDeliberationMinimumWaitingDays = 7;
+
     public static CandidateWorkflowDecision EvaluateInitialDeliberation(
         DateOnly presentationDate,
         DateOnly deliberationDate,
         int presentVoters,
         int votesInFavor,
-        int minimumWaitingDays = 7)
+        int minimumWaitingDays = InitialDeliberationMinimumWaitingDays)
     {
         if (minimumWaitingDays < 0)
             throw new ArgumentOutOfRangeException(nameof(minimumWaitingDays));

@@ -1,0 +1,40 @@
+.candidate-workflow-panel { display: grid; gap: 18px; }
+.candidate-workflow-intro { margin: 0; color: var(--muted); line-height: 1.6; }
+.candidate-workflow-timeline { display: grid; gap: 10px; }
+.candidate-workflow-stage { display: grid; grid-template-columns: 18px 1fr; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+.candidate-workflow-stage strong, .candidate-workflow-stage small { display: block; }
+.candidate-workflow-stage small { margin-top: 4px; color: var(--muted); line-height: 1.4; }
+.candidate-workflow-stage p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.candidate-workflow-dot { width: 10px; height: 10px; margin-top: 4px; border-radius: 50%; background: #9aa4b5; }
+.candidate-workflow-stage.approved .candidate-workflow-dot { background: var(--success); }
+.candidate-workflow-stage.rejected .candidate-workflow-dot { background: var(--danger); }
+.candidate-workflow-stage.observed .candidate-workflow-dot { background: #b97825; }
+.candidate-workflow-action { display: grid; gap: 14px; padding: 16px; border: 1px solid #e1e5ed; border-radius: 14px; background: #fbfcfe; }
+.candidate-workflow-action h3 { margin: 0; font-size: 14px; }
+.candidate-workflow-action p { margin: 0; color: var(--muted); line-height: 1.55; }
+.candidate-workflow-action > button { justify-self: start; }
+.candidate-workflow-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.candidate-workflow-grid label { display: grid; gap: 6px; min-width: 0; }
+.candidate-workflow-grid label.wide { grid-column: 1 / -1; }
+.candidate-workflow-grid label > span { font-size: 11px; color: #526078; font-weight: 800; }
+.candidate-workflow-grid input, .candidate-workflow-grid select, .candidate-workflow-grid textarea { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; background: #fff; color: var(--ink); }
+.candidate-workflow-grid input:focus, .candidate-workflow-grid select:focus, .candidate-workflow-grid textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.candidate-workflow-grid .candidate-check { grid-template-columns: auto 1fr; align-items: center; align-content: center; }
+.candidate-workflow-grid .candidate-check input { width: auto; }
+.candidate-workflow-private-refs { margin-top: 4px; }
+.candidate-interview-list { display: grid; gap: 12px; }
+.candidate-interview-card { padding: 13px; border-radius: 12px; border: 1px solid #e4e8ef; background: #fff; }
+.candidate-interview-heading { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.candidate-link-button { border: 0; background: transparent; color: var(--danger); font-weight: 700; cursor: pointer; }
+.candidate-ballot-rounds { display: grid; gap: 10px; }
+.candidate-ballot-round { display: grid; grid-template-columns: minmax(90px, .7fr) repeat(3, minmax(0, 1fr)); gap: 10px; align-items: end; padding: 12px; border: 1px solid #e4e8ef; border-radius: 12px; background: #fff; }
+.candidate-ballot-round label { display: grid; gap: 5px; }
+.candidate-ballot-round label span { font-size: 10px; color: var(--muted); font-weight: 800; }
+.candidate-ballot-round input { width: 100%; border: 1px solid #d9dee8; border-radius: 9px; padding: 9px; }
+
+@media (max-width: 760px) {
+  .candidate-workflow-grid { grid-template-columns: 1fr; }
+  .candidate-workflow-grid label.wide { grid-column: auto; }
+  .candidate-ballot-round { grid-template-columns: 1fr 1fr; }
+  .candidate-ballot-round > strong { grid-column: 1 / -1; }
+}

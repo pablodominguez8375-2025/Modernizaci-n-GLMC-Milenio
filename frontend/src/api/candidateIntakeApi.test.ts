@@ -148,4 +148,66 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(profile.missingRequirements).toContain('Fotografía tipo pasaporte')
     await expect(api.approveAndPublish(pending.ceremonyRequestId)).rejects.toThrow('La ficha no está completa')
   })
+  it('reproduces the complete regulatory insinuation flow with the same API contract in demo mode', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const requestId = (await api.getWorkshopQueue()).items[0].ceremonyRequestId
+
+    const initial = await api.getWorkflow(requestId)
+    expect(initial.initialDeliberation?.status).toBe('approved')
+
+    await api.approveAndPublish(requestId)
+    expect((await api.getWorkflow(requestId)).publication?.requiredDays).toBe(20)
+
+    const interviews = []
+    for (let index = 0; index < 3; index += 1) {
+      const file = new File([new Uint8Array([37, 80, 68, 70])], `entrevista-${index + 1}.pdf`, { type: 'application/pdf' })
+      const metadata = {
+        interviewDate: `2026-08-${String(22 + index).padStart(2, '0')}`,
+        interviewerDisplayName: `Maestro Entrevistador ${index + 1}`,
+        summary: `Resumen ficticio de entrevista ${index + 1}`,
+        result: 'favorable' as const,
+      }
+      const uploaded = await api.uploadInterviewDocument(requestId, crypto.randomUUID(), file, metadata)
+      interviews.push({ ...metadata, documentVersionId: uploaded.documentVersionId })
+    }
+
+    await api.recordInterviewPackage(requestId, {
+      asOfDate: '2026-08-24',
+      interviews,
+      confidentialQuestionnaireAvailable: true,
+      confidentialQuestionnaireReference: 'DOC-DEMO-CUESTIONARIO',
+      autobiographyAvailable: true,
+      autobiographyReference: 'DOC-DEMO-AUTOBIOGRAFIA',
+    })
+    expect((await api.getWorkflow(requestId)).interviewPackage?.status).toBe('approved')
+
+    await api.recordThirdDegreeReview(requestId, {
+      reviewDate: '2026-09-05',
+      presentVoters: 12,
+      votesInFavor: 12,
+      votesAgainst: 0,
+      abstentions: 0,
+      openVoteApproved: true,
+      sourceReference: 'ACTA-DEMO-3G',
+    })
+    expect((await api.getWorkflow(requestId)).thirdDegreeReview?.status).toBe('approved')
+
+    await api.recordFinalBallot(requestId, {
+      ballotDate: '2026-09-15',
+      ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 12, blackBallots: 0 }],
+      ballotApproved: true,
+      sourceReference: 'ACTA-DEMO-BALOTAJE',
+    })
+    expect((await api.getWorkflow(requestId)).finalBallot?.status).toBe('approved')
+
+    await api.submitInitiationRequest(requestId, {
+      submissionDate: '2026-09-16',
+      proposedCeremonyDate: '2026-10-10',
+      venerableApproval: true,
+      secretaryDisplayName: 'H∴ Secretario Demostrativo',
+      sourceReference: 'SOL-INIT-DEMO-001',
+    })
+    expect((await api.getWorkflow(requestId)).initiationRequest?.status).toBe('approved')
+  })
+
 })

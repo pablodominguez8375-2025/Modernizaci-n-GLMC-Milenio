@@ -34,7 +34,7 @@ export interface CandidateWorkshopQueueItem {
   orderLevelAlert: CandidateOrderBlockAlert | null
 }
 export interface CandidateOrderBlockAlert { previousCeremonyRequestId: string; previousWorkshopName: string; rejectionDate: string; reason: string }
-export interface CandidateOrderRejectionAlert { personId: string; firstNames: string; lastNames: string; workshopName: string; workshopNumber: string | null; rejectionDate: string; sourceReference: string | null; notes: string | null }
+export interface CandidateOrderRejectionAlert { personId: string; firstNames: string; lastNames: string; workshopName: string; workshopNumber: string | null; rejectionDate: string; sourceReference: string | null; notes: string | null; reason: string }
 export interface CandidateOrderRejectionAlertResponse { total: number; items: CandidateOrderRejectionAlert[] }
 
 export interface CandidateWorkshopQueueResponse {
@@ -101,6 +101,103 @@ export interface CandidateIntakeUpsertPayload {
   responsibleSecretaryName?: string | null
   interviewSummary?: string | null
   internalObservations?: string | null
+}
+
+export interface CandidateWorkflowStage {
+  id: string
+  status: string
+  asOfDate: string
+  sourceReference: string | null
+  notes: string | null
+  recordedAtUtc: string
+}
+
+export interface CandidateWorkflowPublication {
+  id: string
+  status: string
+  publishedFromUtc: string
+  publishedUntilUtc: string | null
+  requiredDays: number
+  ruleCode: string
+}
+
+export interface CandidateWorkflowResponse {
+  requestId: string
+  status: string
+  initialDeliberation: CandidateWorkflowStage | null
+  interviewPackage: CandidateWorkflowStage | null
+  thirdDegreeReview: CandidateWorkflowStage | null
+  finalBallot: CandidateWorkflowStage | null
+  initiationRequest: CandidateWorkflowStage | null
+  publication: CandidateWorkflowPublication | null
+}
+
+export interface InitialDeliberationPayload {
+  deliberationDate: string
+  presentVoters: number
+  votesInFavor: number
+  sourceReference: string
+}
+
+export interface CandidateInterviewUploadMetadata {
+  interviewDate: string
+  interviewerDisplayName: string
+  summary: string
+  result: 'favorable' | 'desfavorable'
+}
+
+export interface CandidateInterviewEvidencePayload extends CandidateInterviewUploadMetadata {
+  documentVersionId: string
+}
+
+export interface InterviewPackagePayload {
+  asOfDate: string
+  interviews: CandidateInterviewEvidencePayload[]
+  confidentialQuestionnaireAvailable: boolean
+  confidentialQuestionnaireReference: string | null
+  autobiographyAvailable: boolean
+  autobiographyReference: string | null
+}
+
+export interface ThirdDegreeReviewPayload {
+  reviewDate: string
+  presentVoters: number
+  votesInFavor: number
+  votesAgainst: number
+  abstentions: number
+  openVoteApproved: boolean
+  sourceReference: string
+}
+
+export interface FinalBallotRoundPayload {
+  procedureNumber: number
+  eligibleVoters: number
+  whiteBallots: number
+  blackBallots: number
+}
+
+export interface FinalBallotPayload {
+  ballotDate: string
+  ballots: FinalBallotRoundPayload[]
+  ballotApproved: boolean
+  sourceReference: string
+}
+
+export interface SubmitInitiationPayload {
+  submissionDate: string
+  proposedCeremonyDate: string
+  venerableApproval: boolean
+  secretaryDisplayName: string
+  sourceReference: string
+}
+
+export interface CandidateInterviewUploadResult {
+  interviewId: string
+  documentVersionId: string
+  fileName: string
+  result: string
+  summary: string
+  sizeBytes: number
 }
 
 export type PublishedCandidate = CandidatePortalResponse['items'][number] & { photoUrl: string | null }
@@ -250,6 +347,51 @@ const demoPublishedCandidates: PublishedCandidatePortalResponse = {
   ],
 }
 
+const demoWorkflowSeed: CandidateWorkflowResponse = {
+  requestId: demoRequestId,
+  status: 'under_review',
+  initialDeliberation: {
+    id: 'demo-stage-initial',
+    status: 'approved',
+    asOfDate: '2026-09-04',
+    sourceReference: 'ACTA-DEMO-1G-2026-09-04',
+    notes: 'Se cumple el plazo mínimo desde la presentación en 1.er grado y la votación inicial fue unánime.',
+    recordedAtUtc: '2026-09-04T22:00:00Z',
+  },
+  interviewPackage: null,
+  thirdDegreeReview: null,
+  finalBallot: null,
+  initiationRequest: null,
+  publication: null,
+}
+
+function cloneWorkflow(value: CandidateWorkflowResponse): CandidateWorkflowResponse {
+  return {
+    ...value,
+    initialDeliberation: value.initialDeliberation ? { ...value.initialDeliberation } : null,
+    interviewPackage: value.interviewPackage ? { ...value.interviewPackage } : null,
+    thirdDegreeReview: value.thirdDegreeReview ? { ...value.thirdDegreeReview } : null,
+    finalBallot: value.finalBallot ? { ...value.finalBallot } : null,
+    initiationRequest: value.initiationRequest ? { ...value.initiationRequest } : null,
+    publication: value.publication ? { ...value.publication } : null,
+  }
+}
+
+function demoStage(status: string, asOfDate: string, sourceReference: string, notes: string): CandidateWorkflowStage {
+  return {
+    id: crypto.randomUUID(),
+    status,
+    asOfDate,
+    sourceReference,
+    notes,
+    recordedAtUtc: new Date().toISOString(),
+  }
+}
+
+function daysBetween(fromDate: string, toDate: string): number {
+  return Math.floor((Date.parse(`${toDate}T12:00:00Z`) - Date.parse(`${fromDate}T12:00:00Z`)) / 86_400_000)
+}
+
 export class CandidateIntakeApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
@@ -258,6 +400,7 @@ export class CandidateIntakeApiClient {
   private readonly mockQueue = demoQueueSeed.map(item => ({ ...item }))
   private readonly mockWorkshopQueue = demoWorkshopQueueSeed.map(item => ({ ...item }))
   private readonly mockProfiles = new Map<string, CandidateIntakeProfile>([[demoRequestId, { ...demoProfile, presenters: [...demoProfile.presenters] }]])
+  private readonly mockWorkflows = new Map<string, CandidateWorkflowResponse>([[demoRequestId, cloneWorkflow(demoWorkflowSeed)]])
   // QA only: browser-memory storage. Nothing is sent to or retained by the public demo.
   private readonly mockPhotos = new Map<string, Blob>()
 
@@ -281,7 +424,7 @@ export class CandidateIntakeApiClient {
   }
 
   async getOrderRejectionAlerts(): Promise<CandidateOrderRejectionAlertResponse> {
-    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.', reason: 'Rechazo en balotaje de 1.er grado' }] }
     return this.request<CandidateOrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
   }
 
@@ -408,6 +551,166 @@ export class CandidateIntakeApiClient {
     if (!response.ok) throw await this.toError(response)
   }
 
+  async getWorkflow(requestId: string): Promise<CandidateWorkflowResponse> {
+    if (this.useMocks) {
+      const workflow = this.mockWorkflow(requestId)
+      return cloneWorkflow(workflow)
+    }
+    return this.request<CandidateWorkflowResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/flujo`)
+  }
+
+  async recordInitialDeliberation(requestId: string, payload: InitialDeliberationPayload): Promise<void> {
+    if (this.useMocks) {
+      const profile = this.mockProfiles.get(requestId)
+      if (!profile?.firstDegreePresentationDate) throw new CandidateIntakeApiHttpError(409, 'Debe registrar la presentación en 1.er grado antes de la deliberación.')
+      const minimumDays = 7
+      const elapsed = daysBetween(profile.firstDegreePresentationDate, payload.deliberationDate)
+      if (elapsed < minimumDays) throw new CandidateIntakeApiHttpError(409, `Deben transcurrir al menos ${minimumDays} días desde la presentación en 1.er grado.`)
+      const unanimous = payload.presentVoters > 0 && payload.votesInFavor === payload.presentVoters
+      const workflow = this.mockWorkflow(requestId)
+      workflow.initialDeliberation = demoStage(
+        unanimous ? 'approved' : 'rejected',
+        payload.deliberationDate,
+        payload.sourceReference,
+        unanimous ? 'Deliberación inicial unánime.' : 'La aprobación inicial no obtuvo unanimidad.')
+      workflow.status = unanimous ? 'under_review' : 'rejected'
+      const row = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (row) row.requestStatus = workflow.status
+      return
+    }
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/deliberacion-inicial`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async uploadInterviewDocument(
+    requestId: string,
+    interviewId: string,
+    file: File,
+    metadata: CandidateInterviewUploadMetadata,
+  ): Promise<CandidateInterviewUploadResult> {
+    if (this.useMocks) {
+      if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type))
+        throw new Error('El antecedente de entrevista debe ser PDF o DOCX.')
+      return {
+        interviewId,
+        documentVersionId: crypto.randomUUID(),
+        fileName: file.name,
+        result: metadata.result,
+        summary: metadata.summary,
+        sizeBytes: file.size,
+      }
+    }
+    const response = await this.fetchAuthorized(
+      `/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/entrevistas/${encodeURIComponent(interviewId)}/contenido`,
+      {
+        method: 'PUT',
+        headers: {
+          'Content-Type': file.type,
+          'X-File-Name': encodeURIComponent(file.name),
+          'X-Interviewer': encodeURIComponent(metadata.interviewerDisplayName),
+          'X-Interview-Summary': encodeURIComponent(metadata.summary),
+          'X-Interview-Result': metadata.result,
+          'X-Interview-Date': metadata.interviewDate,
+        },
+        body: file,
+      },
+    )
+    if (!response.ok) throw await this.toError(response)
+    return response.json() as Promise<CandidateInterviewUploadResult>
+  }
+
+  async recordInterviewPackage(requestId: string, payload: InterviewPackagePayload): Promise<void> {
+    if (this.useMocks) {
+      const workflow = this.mockWorkflow(requestId)
+      if (workflow.initialDeliberation?.status !== 'approved' || !workflow.publication)
+        throw new CandidateIntakeApiHttpError(409, 'La deliberación y publicación deben estar aprobadas antes de registrar entrevistas.')
+      const complete = payload.interviews.length >= 3 &&
+        payload.confidentialQuestionnaireAvailable && Boolean(payload.confidentialQuestionnaireReference?.trim()) &&
+        payload.autobiographyAvailable && Boolean(payload.autobiographyReference?.trim())
+      if (!complete) throw new CandidateIntakeApiHttpError(400, 'El expediente requiere tres entrevistas, cuestionario confidencial y autobiografía.')
+      workflow.interviewPackage = demoStage('approved', payload.asOfDate, payload.interviews.map(item => item.documentVersionId).join(' | '), 'Paquete de entrevistas y antecedentes completo.')
+      return
+    }
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/antecedentes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async recordThirdDegreeReview(requestId: string, payload: ThirdDegreeReviewPayload): Promise<void> {
+    if (this.useMocks) {
+      const workflow = this.mockWorkflow(requestId)
+      if (workflow.interviewPackage?.status !== 'approved') throw new CandidateIntakeApiHttpError(409, 'Las entrevistas deben estar validadas antes de la revisión de 3.er grado.')
+      const totalsOk = payload.presentVoters > 0 &&
+        payload.votesInFavor + payload.votesAgainst + payload.abstentions === payload.presentVoters
+      if (!totalsOk) throw new CandidateIntakeApiHttpError(400, 'La suma de votos debe coincidir con las personas presentes.')
+      workflow.thirdDegreeReview = demoStage(payload.openVoteApproved ? 'approved' : 'rejected', payload.reviewDate, payload.sourceReference, payload.openVoteApproved ? 'Votación abierta favorable.' : 'Votación abierta desfavorable.')
+      workflow.status = payload.openVoteApproved ? 'under_review' : 'rejected'
+      return
+    }
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/revision-tercer-grado`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async recordFinalBallot(requestId: string, payload: FinalBallotPayload): Promise<void> {
+    if (this.useMocks) {
+      const workflow = this.mockWorkflow(requestId)
+      if (workflow.thirdDegreeReview?.status !== 'approved' || !workflow.publication)
+        throw new CandidateIntakeApiHttpError(409, 'La revisión de 3.er grado y la publicación deben estar aprobadas antes del balotaje.')
+      if (daysBetween(workflow.publication.publishedFromUtc.slice(0, 10), payload.ballotDate) < workflow.publication.requiredDays)
+        throw new CandidateIntakeApiHttpError(409, `Deben transcurrir al menos ${workflow.publication.requiredDays} días corridos desde la publicación.`)
+      workflow.finalBallot = demoStage(payload.ballotApproved ? 'approved' : 'rejected', payload.ballotDate, payload.sourceReference, payload.ballotApproved ? 'Balotaje definitivo favorable.' : 'Balotaje definitivo desfavorable.')
+      workflow.status = payload.ballotApproved ? 'under_review' : 'rejected'
+      return
+    }
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/balotaje`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async submitInitiationRequest(requestId: string, payload: SubmitInitiationPayload): Promise<void> {
+    if (this.useMocks) {
+      const workflow = this.mockWorkflow(requestId)
+      if (workflow.finalBallot?.status !== 'approved') throw new CandidateIntakeApiHttpError(409, 'El balotaje definitivo debe estar aprobado.')
+      workflow.initiationRequest = demoStage('approved', payload.submissionDate, payload.sourceReference, `Solicitud preparada por ${payload.secretaryDisplayName}.`)
+      workflow.status = 'under_review'
+      const row = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (row) { row.proposedDate = payload.proposedCeremonyDate; row.requestStatus = 'under_review' }
+      return
+    }
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/solicitud-iniciacion`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+  }
+
+  private mockWorkflow(requestId: string): CandidateWorkflowResponse {
+    const existing = this.mockWorkflows.get(requestId)
+    if (existing) return existing
+    const created: CandidateWorkflowResponse = {
+      requestId,
+      status: 'under_review',
+      initialDeliberation: null,
+      interviewPackage: null,
+      thirdDegreeReview: null,
+      finalBallot: null,
+      initiationRequest: null,
+      publication: null,
+    }
+    this.mockWorkflows.set(requestId, created)
+    return created
+  }
+
   async review(requestId: string, decision: CandidateReviewDecision, notes?: string): Promise<void> {
     if (this.useMocks) {
       const item = this.mockQueue.find(value => value.ceremonyRequestId === requestId)
@@ -433,6 +736,9 @@ export class CandidateIntakeApiClient {
     if (this.useMocks) {
       const profile = this.mockProfiles.get(requestId)
       if (profile?.missingRequirements.length) throw new CandidateIntakeApiHttpError(409, `La ficha no está completa: ${profile.missingRequirements.join(', ')}.`)
+      const workflow = this.mockWorkflow(requestId)
+      if (workflow.initialDeliberation?.status !== 'approved')
+        throw new CandidateIntakeApiHttpError(409, 'La deliberación inicial debe estar aprobada antes de publicar al insinuado.')
       const item = this.mockQueue.find(value => value.ceremonyRequestId === requestId)
       if (item) item.reviewStatus = 'approved'
       if (profile) {
@@ -441,6 +747,14 @@ export class CandidateIntakeApiClient {
       }
       const workshopItem = this.mockWorkshopQueue.find(value => value.ceremonyRequestId === requestId)
       if (workshopItem) workshopItem.reviewStatus = 'approved'
+      workflow.publication = {
+        id: crypto.randomUUID(),
+        status: 'published',
+        publishedFromUtc: '2026-08-20T15:00:00Z',
+        publishedUntilUtc: null,
+        requiredDays: 20,
+        ruleCode: 'initiation.publication.minimum_days',
+      }
       return
     }
     await this.request(`/api/ceremonias/solicitudes/${encodeURIComponent(requestId)}/aprobar-publicacion-insinuado`, { method: 'POST' })

@@ -222,6 +222,8 @@ public static class CandidateWorkflowEndpoints
         var profile = await intakeDb.CandidateIntakeProfiles.AsNoTracking()
             .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
         if (profile is null) return Results.Conflict(new { message = "Debe existir una ficha privada de insinuación antes de registrar la deliberación." });
+        if (profile.FirstDegreePresentationDate is null)
+            return Results.Conflict(new { message = "Debe registrar la presentación de la insinuación en 1.er grado antes de iniciar el cómputo reglamentario de 7 días." });
         if (request.DeliberationDate > ChileToday())
             return Results.BadRequest(new { message = "La deliberación no puede registrarse con fecha futura." });
         if (string.IsNullOrWhiteSpace(request.SourceReference))
@@ -230,11 +232,11 @@ public static class CandidateWorkflowEndpoints
             return Results.BadRequest(new { message = "La referencia documental no puede superar 240 caracteres." });
 
         var decision = CandidateIntakeWorkflowPolicy.EvaluateInitialDeliberation(
-            profile.InsinuationDate,
+            profile.FirstDegreePresentationDate.Value,
             request.DeliberationDate,
             request.PresentVoters,
             request.VotesInFavor,
-            request.MinimumWaitingDays ?? 7);
+            CandidateIntakeWorkflowPolicy.InitialDeliberationMinimumWaitingDays);
 
         var status = ToValidationStatus(decision);
         var validation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateInitialDeliberation,
@@ -249,7 +251,7 @@ public static class CandidateWorkflowEndpoints
             decision.IsRejected ? AuditResults.Rejected : AuditResults.Success,
             new
             {
-                profile.InsinuationDate,
+                profile.FirstDegreePresentationDate,
                 request.DeliberationDate,
                 request.PresentVoters,
                 request.VotesInFavor,
@@ -622,7 +624,6 @@ public sealed record InitialDeliberationRequest(
     DateOnly DeliberationDate,
     int PresentVoters,
     int VotesInFavor,
-    int? MinimumWaitingDays,
     string? SourceReference);
 
 public sealed record InterviewPackageRequest(
