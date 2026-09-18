@@ -133,7 +133,7 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerSecretaria));
 
     public bool CanReadLodgeSecretariat(ClaimsPrincipal user, Guid organizationId)
-        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria)) ||
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior)) ||
            (HasOrganizationClaim(user, organizationId) &&
             HasRole(user, InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerVenerable, InstitutionalRoles.TallerOrador));
 
