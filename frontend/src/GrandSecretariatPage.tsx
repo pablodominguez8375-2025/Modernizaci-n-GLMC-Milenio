@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   type GrandSecretariatCeremonyQueueItem,
+  type GrandSecretariatTenidaItem,
   type InstitutionalSpace,
   type OrganizationOption,
   type PmgmApiClient,
@@ -19,6 +20,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   const [availability, setAvailability] = useState<SpaceAvailabilityResponse | null>(null)
   const [documents, setDocuments] = useState<SecretariatDocument[]>([])
   const [ceremonies, setCeremonies] = useState<GrandSecretariatCeremonyQueueItem[]>([])
+  const [submittedTenidas, setSubmittedTenidas] = useState<GrandSecretariatTenidaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -32,6 +34,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   }
   const refreshDocuments = async () => { const response = await api.getSecretariatDocuments(); setDocuments(response.items) }
   const refreshCeremonies = async () => { const response = await api.getSecretariatCeremonyQueue(); setCeremonies(response.items) }
+  const refreshSubmittedTenidas = async () => { const response = await api.getSubmittedTenidas(); setSubmittedTenidas(response.items) }
 
   useEffect(() => {
     let active = true
@@ -39,10 +42,11 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
       api.getOrganizationOptions(),
       api.getSecretariatDocuments(),
       api.getSecretariatCeremonyQueue(),
+      api.getSubmittedTenidas(),
       api.getSecretariatAvailability(santiagoLocalToIso(initial.from), santiagoLocalToIso(initial.to)),
-    ]).then(([orgs, docs, queue, spaces]) => {
+    ]).then(([orgs, docs, queue, tenidas, spaces]) => {
       if (!active) return
-      setOrganizations(orgs.items); setDocuments(docs.items); setCeremonies(queue.items); setAvailability(spaces)
+      setOrganizations(orgs.items); setDocuments(docs.items); setCeremonies(queue.items); setSubmittedTenidas(tenidas.items); setAvailability(spaces)
     }).catch(reason => { if (active) setError(toMessage(reason)) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [api, initial])
@@ -62,7 +66,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
         <div>
           <p className="eyebrow">Operación institucional</p>
           <h1>Gran Secretaría</h1>
-          <p>Espacios, reservas, autorizaciones de ceremonia y documentos oficiales, con trazabilidad y horario institucional de Chile.</p>
+          <p>Planchas formales, Decretos, espacios institucionales y recepción de extractos de Tenidas, con acceso mínimo y trazable.</p>
         </div>
         <span className="count-badge">{loading ? 'cargando…' : `${pendingAuthorizations} autorizaciones pendientes`}</span>
       </section>
@@ -72,6 +76,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
 
       <section className="secretariat-grid">
         <CeremonyAuthorizationPanel api={api} items={ceremonies} working={working} execute={execute} refreshDocuments={refreshDocuments} refreshCeremonies={refreshCeremonies} />
+        <SubmittedTenidasPanel api={api} items={submittedTenidas} working={working} execute={execute} refresh={refreshSubmittedTenidas} />
 
         <article className="panel secretariat-wide">
           <div className="panel-heading">
@@ -95,7 +100,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
         <article className="panel secretariat-wide">
           <div className="panel-heading"><div><p className="eyebrow">Registro oficial</p><h2>Documentos recientes</h2></div><span className="count-badge">{documents.length} registros</span></div>
           {documents.length === 0 ? <p className="muted">Aún no hay documentos emitidos.</p> : (
-            <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document.documentType)} · {formatChile(document.issuedAtUtc)}</small></div>)}</div>
+            <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document)} · {formatChile(document.issuedAtUtc)}</small></div>)}</div>
           )}
         </article>
       </section>
@@ -108,19 +113,67 @@ function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocum
   execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshDocuments: () => Promise<void>; refreshCeremonies: () => Promise<void>
 }) {
   const issue = (item: GrandSecretariatCeremonyQueueItem) => {
-    const success = item.spaceReservationId ? 'Autorización formal emitida con la reserva institucional asociada.' : 'Autorización formal emitida dejando constancia de que no existe sala asignada.'
+    const success = item.spaceReservationId ? 'Plancha de Autorización emitida con la reserva institucional asociada.' : 'Plancha de Autorización emitida dejando constancia de que no existe sala asignada.'
     void execute(async () => {
       await api.issueSecretariatCeremonyAuthorization(item.id, item.spaceReservationId)
       await Promise.all([refreshDocuments(), refreshCeremonies()])
     }, success)
   }
 
-  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Autorización formal de Gran Secretaría</h2></div><span className="count-badge">{items.filter(item => !item.formalAuthorizationIssued).length} pendientes</span></div>
+  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Plancha de Autorización de Ceremonia</h2></div><span className="count-badge">{items.filter(item => !item.formalAuthorizationIssued).length} pendientes</span></div>
     <p className="form-note">Esta bandeja no expone nombres de hermanos o insinuados. La autorización formal sólo utiliza el Taller, tipo de ceremonia, fecha y reserva institucional cuando existe.</p>
     {items.length === 0 ? <p className="muted">No hay ceremonias autorizadas pendientes de gestión documental.</p> : <div className="ceremony-queue">{items.map(item => <div className="ceremony-row" key={item.id}>
-      <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Autorización emitida' : 'Pendiente de documento'}</span></div><span>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
-      {!item.formalAuthorizationIssued && <button className={item.spaceReservationId ? 'primary-action' : 'secondary-action'} type="button" disabled={working} onClick={() => issue(item)}>{item.spaceReservationId ? 'Emitir autorización' : 'Emitir sin sala asignada'}</button>}
+      <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Plancha emitida' : 'Pendiente de Plancha'}</span></div><span>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
+      {!item.formalAuthorizationIssued && <button className={item.spaceReservationId ? 'primary-action' : 'secondary-action'} type="button" disabled={working} onClick={() => issue(item)}>{item.spaceReservationId ? 'Emitir Plancha' : 'Emitir Plancha sin sala asignada'}</button>}
     </div>)}</div>}
+  </article>
+}
+
+function SubmittedTenidasPanel({ api, items, working, execute, refresh }: {
+  api: PmgmApiClient
+  items: GrandSecretariatTenidaItem[]
+  working: boolean
+  execute: (action: () => Promise<void>, success: string) => Promise<void>
+  refresh: () => Promise<void>
+}) {
+  const download = async (item: GrandSecretariatTenidaItem) => {
+    const blob = await api.downloadSubmittedTenidaExtract(item.recordId)
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `Extracto-Tenida-${item.lodge.number ?? item.lodge.name}-${item.meetingDate}.pdf`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const observe = (item: GrandSecretariatTenidaItem) => {
+    const notes = window.prompt('Indique la observación institucional sobre el extracto:')
+    if (!notes?.trim()) return
+    void execute(async () => {
+      await api.reviewSubmittedTenida(item.recordId, 'observed', notes.trim())
+      await refresh()
+    }, 'Extracto observado y devuelto a Secretaría del Taller.')
+  }
+
+  return <article className="panel secretariat-wide">
+    <div className="panel-heading"><div><p className="eyebrow">Tenidas remitidas</p><h2>Extractos recibidos de los Talleres</h2></div><span className="count-badge">{items.length} registros</span></div>
+    <p className="form-note">Gran Secretaría ve únicamente datos básicos de la Tenida y su Extracto PDF. Plancha de trabajo, acta completa, asistencia, votaciones, Reuniones y Consejos permanecen privados del Taller.</p>
+    {items.length === 0 ? <p className="muted">No hay extractos de Tenidas remitidos.</p> : <div className="ceremony-queue">
+      {items.map(item => <div className="ceremony-row" key={item.recordId}>
+        <div className="ceremony-main">
+          <div className="ceremony-title"><strong>{item.title || 'Tenida'}</strong><span className={item.submissionStatus === 'received' ? 'status-pill complete' : 'status-pill active'}>{submissionLabel(item.submissionStatus)}</span></div>
+          <span>{item.lodge.name}{item.lodge.number ? ` · Nº ${item.lodge.number}` : ''}</span>
+          <small>{formatDateOnly(item.meetingDate)} · {meetingTypeLabel(item.meetingType)} · {degreeLabel(item.grade)} · {item.modality === 'virtual' ? 'Virtual' : 'Presencial'}</small>
+          {item.ceremonyType && <small>Ceremonia: {ceremonyTypeLabel(item.ceremonyType)}</small>}
+          {item.reviewNotes && <small className="reservation-warning">Observación: {item.reviewNotes}</small>}
+        </div>
+        <div className="secretariat-actions">
+          <button className="secondary-action" type="button" disabled={working} onClick={() => void execute(() => download(item), 'Extracto PDF descargado.')}>Descargar extracto</button>
+          {item.submissionStatus !== 'received' && <button className="primary-action" type="button" disabled={working} onClick={() => void execute(async () => { await api.reviewSubmittedTenida(item.recordId, 'received'); await refresh() }, 'Extracto recibido por Gran Secretaría.')}>Marcar recibido</button>}
+          <button className="secondary-action" type="button" disabled={working} onClick={() => observe(item)}>Observar</button>
+        </div>
+      </div>)}
+    </div>}
   </article>
 }
 
@@ -177,13 +230,13 @@ function SpacePanel({ api, working, execute, refreshAvailability }: { api: PmgmA
 }
 
 function DocumentPanel({ api, organizations, working, execute, refreshDocuments }: { api: PmgmApiClient; organizations: OrganizationOption[]; working: boolean; execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshDocuments: () => Promise<void> }) {
-  const [type, setType] = useState<'decree' | 'communication'>('communication'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState('')
+  const [type, setType] = useState<'decree' | 'plancha'>('plancha'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState('')
   const submit = (event: FormEvent) => { event.preventDefault(); void execute(async () => {
-    await api.issueSecretariatDocument({ documentType: type, title, content, organizationId: organizationId || null })
+    await api.issueSecretariatDocument({ documentType: type, planchaKind: type === 'plancha' ? 'formal_communication' : null, title, content, organizationId: organizationId || null })
     setTitle(''); setContent(''); await refreshDocuments()
-  }, type === 'decree' ? 'Decreto emitido y auditado.' : 'Comunicado emitido y auditado.') }
+  }, type === 'decree' ? 'Decreto emitido y auditado.' : 'Plancha de comunicado formal emitida y auditada.') }
   return <article className="panel"><p className="eyebrow">Documentos</p><h2>Emitir documento oficial</h2><form className="stack-form" onSubmit={submit}>
-    <div className="form-grid"><Field label="Tipo"><select value={type} onChange={e => setType(e.target.value as typeof type)}><option value="communication">Comunicado</option><option value="decree">Decreto</option></select></Field><Field label="Destinatario institucional"><select value={organizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Toda la Orden / general</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field></div>
+    <div className="form-grid"><Field label="Tipo"><select value={type} onChange={e => setType(e.target.value as typeof type)}><option value="plancha">Plancha · comunicado formal</option><option value="decree">Decreto</option></select></Field><Field label="Destinatario institucional"><select value={organizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Toda la Orden / general</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field></div>
     <Field label="Título"><input required maxLength={240} value={title} onChange={e => setTitle(e.target.value)} /></Field>
     <Field label="Contenido"><textarea required rows={5} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} /></Field>
     <button className="primary-action" disabled={working}>Emitir</button>
@@ -195,7 +248,10 @@ function SpaceRow({ space }: { space: InstitutionalSpace }) { return <div classN
 function organizationLabel(o: OrganizationOption) { return `${o.name}${o.number ? ` · Nº ${o.number}` : ''}` }
 function spaceTypeLabel(type: InstitutionalSpace['spaceType']) { return type === 'temple' ? 'Templo' : 'Sala de Secretaría' }
 function ceremonyTypeLabel(type: GrandSecretariatCeremonyQueueItem['ceremonyType']) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
-function documentTypeLabel(type: SecretariatDocument['documentType']) { return type === 'decree' ? 'Decreto' : type === 'communication' ? 'Comunicado' : 'Autorización de ceremonia' }
+function documentTypeLabel(document: SecretariatDocument) { if (document.documentType === 'decree') return 'Decreto'; if (document.planchaKind === 'ceremony_authorization' || document.documentType === 'ceremony_authorization' || document.documentType === 'ceremony_authorization_plancha') return 'Plancha · autorización formal'; return 'Plancha · comunicado formal' }
+function submissionLabel(value: GrandSecretariatTenidaItem['submissionStatus']) { return value === 'received' ? 'Recibido' : value === 'observed' ? 'Observado' : 'Pendiente de recepción' }
+function meetingTypeLabel(value: string) { return value === 'regular' ? 'Regular' : value === 'solemn' ? 'Solemne' : value === 'instruction' ? 'Instrucción' : value === 'anniversary' ? 'Aniversario' : value === 'funeral' ? 'Fúnebre' : value }
+function degreeLabel(value: string) { return value === 'apprentice' ? 'Aprendiz' : value === 'fellowcraft' ? 'Compañero' : value === 'master' ? 'Maestro' : value === 'all' ? 'Todos los grados' : value }
 function formatChile(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short', timeZone: SANTIAGO }).format(new Date(value)) }
 function formatChileRange(from: string | null, to: string | null) { if (!from || !to) return 'horario no disponible'; const date = new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: SANTIAGO }).format(new Date(from)); const time = new Intl.DateTimeFormat('es-CL', { hour: '2-digit', minute: '2-digit', timeZone: SANTIAGO }); return `${date} · ${time.format(new Date(from))}–${time.format(new Date(to))}` }
 function formatDateOnly(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`)) }
