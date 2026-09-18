@@ -43,7 +43,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
 
         var memberships = await db.Memberships
             .AsNoTracking()
-            .Where(x => memberIds.Contains(x.MemberId) && x.StartDate <= query.AsOf)
+            .Where(x => memberIds.Contains(x.MemberId) && (x.StartDate == null || x.StartDate <= query.AsOf))
             .Select(x => new MembershipRow(
                 x.Id,
                 x.MemberId,
@@ -192,7 +192,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
         IReadOnlyList<MembershipRow> rows,
         ICollection<DataQualityIssue> issues)
     {
-        foreach (var row in rows.Where(x => x.EndDate is not null && x.EndDate < x.StartDate))
+        foreach (var row in rows.Where(x => x.StartDate is not null && x.EndDate is not null && x.EndDate < x.StartDate))
         {
             Add(issues, member, row.OrganizationId, row.OrganizationName,
                 "invalid_membership_range", DataQualitySeverity.Error,
@@ -204,7 +204,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
 
         var current = rows.Where(x =>
                 x.Status == MembershipCodes.MembershipStatus.Active &&
-                x.StartDate <= asOf &&
+                (x.StartDate == null || x.StartDate <= asOf) &&
                 (x.EndDate == null || x.EndDate >= asOf))
             .ToList();
         if (current.Count > 1)
@@ -225,6 +225,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
                 var left = rows[i];
                 var right = rows[j];
                 if (left.OrganizationId == right.OrganizationId) continue;
+                if (left.StartDate is null || right.StartDate is null) continue;
                 var leftEnd = Min(left.EndDate ?? asOf, asOf);
                 var rightEnd = Min(right.EndDate ?? asOf, asOf);
                 if (left.StartDate <= rightEnd && right.StartDate <= leftEnd)
@@ -375,7 +376,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
                 "Corroborar las fechas con los documentos institucionales correspondientes.");
         }
 
-        foreach (var office in offices.Where(x => x.StartDate > deathDate))
+        foreach (var office in offices.Where(x => x.StartDate is not null && x.StartDate > deathDate))
         {
             Add(issues, member, office.OrganizationId, office.OrganizationName,
                 "office_after_death", DataQualitySeverity.Error,
@@ -387,7 +388,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
 
         var activeAfterDeath = memberships.FirstOrDefault(x =>
             x.Status == MembershipCodes.MembershipStatus.Active &&
-            x.StartDate <= asOf &&
+            (x.StartDate == null || x.StartDate <= asOf) &&
             (x.EndDate == null || x.EndDate >= asOf));
         if (activeAfterDeath is not null && deathDate <= asOf)
         {
@@ -405,7 +406,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
         IReadOnlyList<OfficeRow> rows,
         ICollection<DataQualityIssue> issues)
     {
-        foreach (var row in rows.Where(x => x.EndDate is not null && x.EndDate < x.StartDate))
+        foreach (var row in rows.Where(x => x.StartDate is not null && x.EndDate is not null && x.EndDate < x.StartDate))
         {
             Add(issues, member, row.OrganizationId, row.OrganizationName,
                 "invalid_office_range", DataQualitySeverity.Error,
@@ -475,7 +476,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
                         "Corroborar resolución y fecha de ingreso al Taller destino.");
                 }
 
-                if (effective < row.SourceMembershipStartDate ||
+                if ((row.SourceMembershipStartDate is not null && effective < row.SourceMembershipStartDate.Value) ||
                     (row.SourceMembershipEndDate is not null && effective > row.SourceMembershipEndDate.Value))
                 {
                     Add(issues, member, row.SourceOrganizationId, row.SourceOrganizationName,
@@ -506,7 +507,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
 
         var hasCurrentMembership = memberships.Any(x =>
             x.Status == MembershipCodes.MembershipStatus.Active &&
-            x.StartDate <= asOf &&
+            (x.StartDate == null || x.StartDate <= asOf) &&
             (x.EndDate == null || x.EndDate >= asOf));
         if (!hasCurrentMembership)
         {
@@ -563,11 +564,11 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
         => new(asOf, 0, 0, new DataQualitySummary(0, 0, 0, new Dictionary<string, int>()), []);
 
     private sealed record MemberIdentity(Guid Id, string? InstitutionalNumber, string DisplayName);
-    private sealed record MembershipRow(Guid Id, Guid MemberId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber, DateOnly StartDate, DateOnly? EndDate, string Status);
+    private sealed record MembershipRow(Guid Id, Guid MemberId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber, DateOnly? StartDate, DateOnly? EndDate, string Status);
     private sealed record DegreeRow(Guid Id, Guid MemberId, Guid OrganizationId, string OrganizationName, string EventType, string Degree, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record StatusRow(Guid Id, Guid MemberId, Guid? OrganizationId, string? OrganizationName, string Status, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
-    private sealed record OfficeRow(Guid Id, Guid MemberId, Guid OrganizationId, string OrganizationName, string OfficeType, DateOnly StartDate, DateOnly? EndDate);
-    private sealed record TransferRow(Guid Id, Guid MemberId, Guid SourceOrganizationId, string SourceOrganizationName, Guid TargetOrganizationId, string TargetOrganizationName, DateOnly SourceMembershipStartDate, DateOnly? SourceMembershipEndDate, Guid? TargetMembershipId, DateOnly? TargetMembershipStartDate, DateOnly RequestedDate, DateOnly ProposedEffectiveDate, DateOnly? ApprovedEffectiveDate, string Status);
+    private sealed record OfficeRow(Guid Id, Guid MemberId, Guid OrganizationId, string OrganizationName, string OfficeType, DateOnly? StartDate, DateOnly? EndDate);
+    private sealed record TransferRow(Guid Id, Guid MemberId, Guid SourceOrganizationId, string SourceOrganizationName, Guid TargetOrganizationId, string TargetOrganizationName, DateOnly? SourceMembershipStartDate, DateOnly? SourceMembershipEndDate, Guid? TargetMembershipId, DateOnly? TargetMembershipStartDate, DateOnly RequestedDate, DateOnly ProposedEffectiveDate, DateOnly? ApprovedEffectiveDate, string Status);
 }
 
 public static class DataQualitySeverity
