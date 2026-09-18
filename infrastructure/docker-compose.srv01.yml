@@ -114,7 +114,7 @@ services:
         VITE_OIDC_AUTHORITY: ${PMGM_QA_OIDC_PUBLIC_URL:?PMGM_QA_OIDC_PUBLIC_URL es obligatorio}/realms/pmgm
         VITE_OIDC_CLIENT_ID: pmgm-web
         VITE_OIDC_SCOPE: openid profile
-        VITE_OIDC_ALLOW_HTTP_LOCAL: "true"
+        VITE_OIDC_ALLOW_HTTP_LOCAL: "false"\n        VITE_OIDC_ALLOW_HTTP_QA: "true"
     restart: unless-stopped
     depends_on: [api, keycloak]
     ports:
