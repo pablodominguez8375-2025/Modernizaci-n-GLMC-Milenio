@@ -321,6 +321,53 @@ export class DocumentApiClient {
     return this.postJson<DocumentVersion>(`/api/documentos/${encodeURIComponent(documentId)}/versiones`, payload)
   }
 
+  async uploadVersionContent(versionId: string, file: File): Promise<DocumentVersion> {
+    if (this.useMocks) {
+      const document = [...this.mockDocuments.values()].find(item => item.versions.some(version => version.id === versionId))
+      const version = document?.versions.find(item => item.id === versionId)
+      if (!version) throw new Error('La versión indicada no existe.')
+      if (version.sizeBytes !== file.size) throw new Error('El tamaño del archivo no coincide con la versión registrada.')
+      version.processingStatus = 'uploaded'; version.hasIntegrityHash = true
+      return { ...version }
+    }
+    const response = await this.authorizedFetch(
+      `/api/documentos/versiones/${encodeURIComponent(versionId)}/contenido`,
+      { method: 'PUT', headers: { 'Content-Type': file.type }, body: file },
+    )
+    const state = await response.json() as { processingStatus: DocumentProcessingStatus; sizeBytes: number; hasIntegrityHash: boolean }
+    return { id: versionId, documentId: '', versionNumber: 0, originalFileName: file.name, contentType: file.type, sizeBytes: state.sizeBytes, processingStatus: state.processingStatus, hasIntegrityHash: state.hasIntegrityHash, scanEvidenceRecorded: false, createdAtUtc: new Date().toISOString() }
+  }
+
+  async scanVersionContent(versionId: string): Promise<DocumentVersion> {
+    if (this.useMocks) {
+      const document = [...this.mockDocuments.values()].find(item => item.versions.some(version => version.id === versionId))
+      const version = document?.versions.find(item => item.id === versionId)
+      if (!version) throw new Error('La versión indicada no existe.')
+      if (version.processingStatus !== 'uploaded' && version.processingStatus !== 'scanning') throw new Error('La versión no está lista para análisis.')
+      version.processingStatus = 'available'; version.scanEvidenceRecorded = true
+      return { ...version }
+    }
+    const state = await this.request<{ processingStatus: DocumentProcessingStatus; clean: boolean }>(`/api/documentos/versiones/${encodeURIComponent(versionId)}/analizar`, { method: 'POST' })
+    return { id: versionId, documentId: '', versionNumber: 0, originalFileName: '', contentType: '', sizeBytes: 0, processingStatus: state.processingStatus, hasIntegrityHash: true, scanEvidenceRecorded: true, createdAtUtc: new Date().toISOString() }
+  }
+
+  async uploadManagedFile(
+    collectionId: string,
+    payload: CreateInstitutionalDocumentRequest,
+    file: File,
+  ): Promise<{ document: InstitutionalDocument; version: DocumentVersion }> {
+    const document = await this.createDocument(collectionId, payload)
+    const version = await this.createVersion(document.id, {
+      originalFileName: file.name,
+      contentType: file.type,
+      sizeBytes: file.size,
+    })
+    await this.uploadVersionContent(version.id, file)
+    const scanned = await this.scanVersionContent(version.id)
+    if (scanned.processingStatus !== 'available') throw new Error('El archivo no quedó disponible después del análisis.')
+    return { document: await this.getDocument(document.id), version: scanned }
+  }
+
   async publishDocument(documentId: string, versionId: string): Promise<LibraryDocument> {
     if (this.useMocks) {
       const document = this.mockDocuments.get(documentId); if (!document) throw new Error('El documento indicado no existe.')
