@@ -31,6 +31,16 @@ Documentos principales:
 - `docs/instalacion/PMGM-VM-DEFINITIVA-V100.md` — diseño y requisitos de la VM definitiva.
 - `docs/instalacion/PMGM-PAQUETE-IMPLEMENTACION-V100.md` — paquete RC1 congelado y procedimiento de implementación.
 
+## Regla permanente de entrega
+
+Para cada incremento funcional, Proyecto Centenario exige tres salidas del **mismo desarrollo y del mismo SHA**:
+
+1. **Código real integrado en `dev`**, con pruebas, migraciones, permisos, auditoría y documentación aplicable.
+2. **Demo funcional en GitHub Pages**, con datos exclusivamente ficticios/sintéticos y adaptadores mock que reproduzcan los mismos flujos, formularios, estados y validaciones del producto. La demo no es una maqueta paralela.
+3. **Paquete instalable para QA en `srv01`**, reproducible y trazable, con aplicación, infraestructura, scripts/runbook, migraciones, manifiesto/checksums y configuración segura necesaria para levantar el stack operacional.
+
+Un incremento no se considera cerrado únicamente por tener PR fusionado o CI verde. Debe quedar actualizada la demo y generado/actualizado el instalable. El despliegue real en `srv01` y QA/UAT se registran como una etapa posterior verificable; si no se ejecutaron, deben quedar expresamente pendientes.
+
 ## Estado actual
 
 Proyecto Milenio se encuentra en preparación de **v1.0.0-rc1 — Piloto Operacional**. La rama `dev` concentra la integración estable y `release/v1.0-rc1` congela la Release Candidate para validar versión, seguridad, infraestructura, backup/restauración y UAT institucional.
