@@ -28,6 +28,10 @@ public sealed class LodgeManagementDbContext(DbContextOptions<LodgeManagementDbC
             entity.HasKey(x => x.Id);
             entity.Property(x => x.MeetingType).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Grade).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.CeremonyType).HasMaxLength(40);
+            entity.Property(x => x.Modality).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.LocationReference).HasMaxLength(500);
+            entity.Property(x => x.VirtualAccessReference).HasMaxLength(1000);
             entity.Property(x => x.Title).HasMaxLength(300);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();
