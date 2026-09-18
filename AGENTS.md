@@ -83,25 +83,35 @@ Antes de cambiar tecnología, buscar un ADR posterior. La base actual es:
 
 No crear una segunda API, un frontend alternativo o un servicio paralelo si el requisito puede extender los módulos existentes.
 
-## 7. Una sola línea con Demo + QA
+## 7. Una sola línea con triple salida obligatoria
 
-Cada incremento relevante debe mantener el flujo:
+Cada incremento funcional relevante debe mantener el flujo:
 
-`Requisito aprobado → feature/* desde dev → PR/CI → dev → Demo GitHub Pages → QA instalable → QA/UAT → promoción controlada a main cuando corresponda`
+`Requisito aprobado → feature/* desde dev → implementación + pruebas → PR/CI exact-head → dev → Demo funcional GitHub Pages → instalable QA del mismo SHA → despliegue/smoke QA en srv01 → QA/UAT → promoción controlada a main cuando corresponda`
+
+### Definition of Done permanente
+
+Un incremento funcional no se considera terminado por estar fusionado a `dev` ni por tener CI verde. Debe dejar **tres salidas sincronizadas del mismo desarrollo**:
+
+1. **Código real:** implementación, migraciones, permisos, auditoría, pruebas y documentación que correspondan.
+2. **Demo GitHub Pages funcional:** datos exclusivamente ficticios/sintéticos, mismos formularios, validaciones, recorridos, estados y permisos visuales que el producto, mediante adaptadores mock compatibles con los contratos reales. No se acepta una maqueta estática sustitutiva.
+3. **Instalable QA para `srv01`:** artefacto reproducible desde el mismo SHA, con aplicación e infraestructura necesarias para levantar el stack operacional de QA, incluyendo scripts/runbook, migraciones, manifiesto/checksums y configuración segura de ejemplo.
+
+Si por falta de acceso no se puede desplegar en `srv01`, el artefacto instalable debe quedar igualmente generado/actualizado y el handoff debe decir explícitamente **“despliegue QA pendiente”**. Nunca declarar operacional algo que solo está integrado, empaquetado o visible en Pages.
 
 ### Demo GitHub Pages
 
 - Es la superficie demostrativa del mismo producto.
 - Usa datos ficticios/sintéticos.
 - Debe reflejar las mismas reglas, perfiles, vistas y flujos.
-- Toda función simulada debe identificarse como simulada.
+- Toda función demostrada debe conservar el comportamiento funcional mediante datos ficticios/adaptadores mock; si existe una simulación parcial, debe identificarse claramente.
 - Visible en Pages **no significa operacional**.
 
 ### QA
 
 - La versión operacional se valida en el ambiente QA acordado (`srv01` cuando corresponda al corte vigente).
 - Debe ser reproducible desde los artefactos/configuración versionados.
-- QA valida backend, PostgreSQL, OIDC, permisos reales, persistencia, auditoría, archivos, correo e integraciones según el avance.
+- El instalable QA debe salir del mismo SHA que la demo/código del corte. QA valida backend, PostgreSQL, OIDC, permisos reales, persistencia, auditoría, archivos, correo e integraciones según el avance.
 
 ## 8. Perfiles y normativa de Taller
 
