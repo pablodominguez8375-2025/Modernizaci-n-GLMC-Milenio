@@ -72,7 +72,7 @@ export const instructionResponsibilityByGrade = {
   master: 'Inmediato Ex-Venerable Maestro',
 } as const
 
-export default function LodgeManagementPage({ api, lodgeApi, documentApi }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient }) {
+export default function LodgeManagementPage({ api, lodgeApi, documentApi, canReadSecretariat = false, canManageSecretariat = false }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; canReadSecretariat?: boolean; canManageSecretariat?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [meetings, setMeetings] = useState<LodgeMeeting[]>([])
@@ -344,7 +344,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi }: { ap
 
     <LodgeCouncilPanel organizationId={organizationId} members={members} />
 
-    <LodgeSecretariatPanel organizationId={organizationId} lodgeApi={lodgeApi} documentApi={documentApi} meetings={meetings} members={members} />
+    {canReadSecretariat && <LodgeSecretariatPanel organizationId={organizationId} lodgeApi={lodgeApi} documentApi={documentApi} meetings={meetings} members={members} canManage={canManageSecretariat} />}
 
     <section className="lodge-instruction-workspace">
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">{api.useMocks ? 'Demostración con datos ficticios' : 'Operativo'}</span></div>
