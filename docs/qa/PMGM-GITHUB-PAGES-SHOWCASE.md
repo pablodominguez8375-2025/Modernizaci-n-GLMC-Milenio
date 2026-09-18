@@ -15,7 +15,7 @@ La URL de un Pull Request de GitHub no es una URL de demostración: sirve exclus
 ## Naturaleza del entorno
 
 - Entorno: demostración/testing público.
-- Fuente estable: rama `dev`. Durante el incremento post-RC de Gestión Logial, la rama controlada `feature/treasury-payment-table-v1` puede publicar la demo sin modificar la RC1 congelada.
+- Fuente única de publicación: rama `dev`. Cada push a `dev` reconstruye y publica la demo para que el SHA visible corresponda al corte integrado.
 - Frontend: React + TypeScript + Vite.
 - Datos: exclusivamente mocks/datos ficticios.
 - Autenticación real: deshabilitada.
@@ -105,7 +105,7 @@ Nombre en GitHub Actions:
 
 El workflow se ejecuta:
 - en pull requests hacia `dev` que afectan frontend/showcase, para validar build y evidencia visual sin publicar el PR;
-- en push a `dev` o a la rama post-RC controlada, para construir, validar y publicar la demo;
+- en cada push a `dev`, para construir, validar y publicar la demo, incluso cuando el incremento combine cambios frontend/backend/documentales;
 - manualmente mediante `workflow_dispatch`.
 
 ## Secuencia de publicación
@@ -212,7 +212,7 @@ Así una observación visual puede asociarse con precisión al commit correspond
 
 ## Actualización y alcance
 
-Cada cambio de frontend integrado a `dev` vuelve a ejecutar el workflow. Si todos los gates pasan, GitHub Pages reemplaza la publicación anterior por el nuevo build.
+Cada push a `dev` vuelve a ejecutar el workflow. Si todos los gates pasan, GitHub Pages reemplaza la publicación anterior por el nuevo build y muestra el SHA de ese corte. Esta regla mantiene la demo sincronizada con la misma referencia utilizada para generar el instalable QA.
 
 Un PR puede tener todos sus controles verdes y, aun así, no modificar la URL pública hasta que el cambio se integre a `dev`. Esta separación evita que una rama de trabajo reemplace accidentalmente la demostración institucional estable.
 
