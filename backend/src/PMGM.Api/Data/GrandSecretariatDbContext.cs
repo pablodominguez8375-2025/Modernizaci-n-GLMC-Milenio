@@ -53,6 +53,7 @@ public sealed class GrandSecretariatDbContext(DbContextOptions<GrandSecretariatD
             entity.ToTable("secretariat_documents");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.DocumentType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.PlanchaKind).HasMaxLength(80);
             entity.Property(x => x.DocumentCode).HasMaxLength(120).IsRequired();
             entity.Property(x => x.Title).HasMaxLength(500).IsRequired();
             entity.Property(x => x.Content).HasMaxLength(8000).IsRequired();
@@ -65,7 +66,7 @@ public sealed class GrandSecretariatDbContext(DbContextOptions<GrandSecretariatD
                 .HasForeignKey(x => x.SpaceReservationId)
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.DocumentCode).IsUnique();
-            entity.HasIndex(x => new { x.DocumentType, x.Status, x.IssuedAtUtc });
+            entity.HasIndex(x => new { x.DocumentType, x.PlanchaKind, x.Status, x.IssuedAtUtc });
             entity.HasIndex(x => new { x.RelatedCeremonyRequestId, x.DocumentType, x.Status });
         });
 
