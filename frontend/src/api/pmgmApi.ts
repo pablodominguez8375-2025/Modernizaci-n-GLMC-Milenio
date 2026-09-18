@@ -12,6 +12,8 @@ export interface SessionCapabilities {
   canValidateCeremonyInternalAffairs: boolean
   canAuthorizeCeremonies: boolean
   canManagePrivacy: boolean
+  canReadLodgeSecretariat?: boolean
+  canManageLodgeSecretariat?: boolean
   canManageLodgeTreasury?: boolean
   canConfigureSystem?: boolean
 }
