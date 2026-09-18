@@ -1,12 +1,15 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
+import { type DocumentApiClient } from './api/documentApi'
 import {
   type LodgeApiClient,
   type LodgeAttendanceCurrent,
   type LodgeAttendanceStatus,
+  type LodgeCeremonyType,
   type LodgeGrade,
   type LodgeInstruction,
   type LodgeMeeting,
+  type LodgeMeetingModality,
   type LodgeMeetingType,
   type LodgeMemberOption,
   type LodgeMinute,
@@ -19,6 +22,7 @@ import MinuteExtractEditor from './MinuteExtractEditor'
 import LodgeWithdrawalsPanel from './LodgeWithdrawalsPanel'
 import LodgeTreasuryPanel from './LodgeTreasuryPanel'
 import LodgeCouncilPanel from './LodgeCouncilPanel'
+import LodgeSecretariatPanel from './LodgeSecretariatPanel'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -68,7 +72,7 @@ export const instructionResponsibilityByGrade = {
   master: 'Inmediato Ex-Venerable Maestro',
 } as const
 
-export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiClient; lodgeApi: LodgeApiClient }) {
+export default function LodgeManagementPage({ api, lodgeApi, documentApi }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [meetings, setMeetings] = useState<LodgeMeeting[]>([])
@@ -92,6 +96,10 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
   const [meetingDate, setMeetingDate] = useState(todayInChile())
   const [meetingType, setMeetingType] = useState<LodgeMeetingType>('regular')
   const [grade, setGrade] = useState<LodgeGrade>('all')
+  const [ceremonyType, setCeremonyType] = useState<LodgeCeremonyType | ''>('')
+  const [modality, setModality] = useState<LodgeMeetingModality>('in_person')
+  const [locationReference, setLocationReference] = useState('Templo o sala del Taller')
+  const [virtualAccessReference, setVirtualAccessReference] = useState('')
   const [title, setTitle] = useState('')
   const [memberId, setMemberId] = useState('')
   const [attendanceStatus, setAttendanceStatus] = useState<LodgeAttendanceStatus>('present')
@@ -179,11 +187,12 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
     event.preventDefault()
     if (!organizationId) return
     setWorking(true); setError(null); setMessage(null)
-    void lodgeApi.createMeeting(organizationId, { meetingDate, meetingType, grade, title: title.trim() || null })
+    void lodgeApi.createMeeting(organizationId, { meetingDate, meetingType, grade, ceremonyType: ceremonyType || null, modality, locationReference: modality === 'in_person' ? locationReference.trim() || null : null, virtualAccessReference: modality === 'virtual' ? virtualAccessReference.trim() || null : null, title: title.trim() || null })
       .then(async meeting => {
         await refreshMeetings(meeting.id)
         setTitle('')
-        setMessage('Tenida creada y registrada en auditoría institucional.')
+        setVirtualAccessReference('')
+        setMessage('Tenida creada como Programada y registrada en auditoría institucional.')
       })
       .catch(reason => setError(toMessage(reason)))
       .finally(() => setWorking(false))
@@ -252,14 +261,14 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
       .then(async () => {
         await refreshMeetings(selectedMeetingId)
         await refreshSelected()
-        setMessage('Tenida realizada y cerrada. Ya puede registrar asistencia, escrutinios y acta.')
+        setMessage('Tenida marcada como Realizada. Ya puede registrar asistencia, escrutinios y documentación; la plancha sigue siendo opcional y puede cargarse posteriormente.')
       })
       .catch(reason => setError(toMessage(reason)))
       .finally(() => setWorking(false))
   }
 
-  const meetingFinalized = selectedMeeting?.status === 'closed' || selectedMeeting?.status === 'cancelled'
-  const canRecordMeetingAttendance = selectedMeeting?.status === 'closed'
+  const meetingFinalized = selectedMeeting?.status === 'held' || selectedMeeting?.status === 'closed' || selectedMeeting?.status === 'cancelled'
+  const canRecordMeetingAttendance = selectedMeeting?.status === 'held' || selectedMeeting?.status === 'closed'
   const lodgeName = api.useMocks ? lodgeCockpitDemoData.lodge.name : selectedOrganization ? organizationLabel(selectedOrganization) : 'Taller autorizado'
   const memberCount = api.useMocks ? lodgeCockpitDemoData.members.active : members.length
   const instructionResponsible = instructionResponsibilityByGrade[instructionGrade]
@@ -335,6 +344,8 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
 
     <LodgeCouncilPanel organizationId={organizationId} members={members} />
 
+    <LodgeSecretariatPanel organizationId={organizationId} lodgeApi={lodgeApi} documentApi={documentApi} meetings={meetings} members={members} />
+
     <section className="lodge-instruction-workspace">
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">{api.useMocks ? 'Demostración con datos ficticios' : 'Operativo'}</span></div>
       {instructionConfirmation && <div className="regularity-success" role="status">{instructionConfirmation}</div>}
@@ -366,7 +377,7 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
     </section>
 
     <section className="lodge-activity-grid">
-      <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Agenda del Taller</p><h2>Próximas tenidas y actividades</h2></div><span>{loading ? 'Cargando…' : `${meetings.length} registradas`}</span></div><div className="lodge-activity-table"><div className="lodge-activity-header"><span>Fecha</span><span>Tipo / actividad</span><span>Grado</span><span>Estado</span></div>{meetings.length ? meetings.slice(0, 5).map(meeting => <button type="button" key={meeting.id} onClick={() => { setSelectedMeetingId(meeting.id); setShowOperations(true) }}><span>{formatDateOnly(meeting.meetingDate)}</span><strong>{meeting.title || meetingTypeLabel(meeting.meetingType)}</strong><span>{gradeLabel(meeting.grade)}</span><em className={meeting.status === 'closed' ? 'closed' : 'active'}>{meetingStatusLabel(meeting.status)}</em></button>) : api.useMocks ? demoMeetingRows.map(row => <div key={row[0]}><span>{row[0]}</span><strong>{row[1]}</strong><span>{row[2]}</span><em className="active">{row[3]}</em></div>) : <p className="lodge-empty-copy">No hay tenidas registradas para este Taller.</p>}</div></article>
+      <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Agenda del Taller</p><h2>Próximas tenidas y actividades</h2></div><span>{loading ? 'Cargando…' : `${meetings.length} registradas`}</span></div><div className="lodge-activity-table"><div className="lodge-activity-header"><span>Fecha</span><span>Tipo / actividad</span><span>Grado</span><span>Estado</span></div>{meetings.length ? meetings.slice(0, 5).map(meeting => <button type="button" key={meeting.id} onClick={() => { setSelectedMeetingId(meeting.id); setShowOperations(true) }}><span>{formatDateOnly(meeting.meetingDate)}</span><strong>{meeting.title || meetingTypeLabel(meeting.meetingType)}</strong><span>{gradeLabel(meeting.grade)}</span><em className={meeting.status === 'held' || meeting.status === 'closed' ? 'closed' : 'active'}>{meetingStatusLabel(meeting.status)}</em></button>) : api.useMocks ? demoMeetingRows.map(row => <div key={row[0]}><span>{row[0]}</span><strong>{row[1]}</strong><span>{row[2]}</span><em className="active">{row[3]}</em></div>) : <p className="lodge-empty-copy">No hay tenidas registradas para este Taller.</p>}</div></article>
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Centro de avisos</p><h2>Últimas notificaciones</h2></div></div><div className="lodge-notification-list">{lodgeCockpitDemoData.notifications.map((notification, index) => <div key={notification}><span className={`lodge-notification-dot tone-${index}`} /><div><strong>{notification}</strong><small>{api.useMocks ? ['hace 2 días', 'hace 4 días', 'hace 6 días'][index] : 'Vista previa del panel transversal'}</small></div></div>)}</div></article>
     </section>
 
@@ -379,15 +390,17 @@ export default function LodgeManagementPage({ api, lodgeApi }: { api: PmgmApiCli
           <form className="regularity-form" onSubmit={createMeeting}>
             <label className="regularity-field"><span>Fecha · Chile</span><input type="date" required value={meetingDate} onChange={event => setMeetingDate(event.target.value)} /></label>
             <div className="lodge-form-row"><label className="regularity-field"><span>Tipo</span><select value={meetingType} onChange={event => setMeetingType(event.target.value as LodgeMeetingType)}>{meetingTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="regularity-field"><span>Grado</span><select value={grade} onChange={event => setGrade(event.target.value as LodgeGrade)}>{gradeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
+            <div className="lodge-form-row"><label className="regularity-field"><span>Ceremonia</span><select value={ceremonyType} onChange={event => setCeremonyType(event.target.value as LodgeCeremonyType | '')}><option value="">No ceremonial</option><option value="initiation">Iniciación</option><option value="wage_increase">Aumento de salario</option><option value="exaltation">Exaltación</option></select></label><label className="regularity-field"><span>Modalidad</span><select value={modality} onChange={event => setModality(event.target.value as LodgeMeetingModality)}><option value="in_person">Presencial</option><option value="virtual">Virtual</option></select></label></div>
+            {modality === 'in_person' ? <label className="regularity-field"><span>Templo, sala o lugar</span><input required value={locationReference} onChange={event => setLocationReference(event.target.value)} /></label> : <label className="regularity-field"><span>Referencia de acceso virtual</span><input required value={virtualAccessReference} onChange={event => setVirtualAccessReference(event.target.value)} placeholder="Enlace o referencia de conexión restringida" /></label>}
             <label className="regularity-field"><span>Título opcional</span><input maxLength={500} value={title} onChange={event => setTitle(event.target.value)} /></label>
             <button className="regularity-primary" type="submit" disabled={working || !organizationId}>Crear Tenida</button>
           </form>
-          <div className="lodge-meeting-list">{meetings.length === 0 ? <div className="empty-state"><strong>No hay Tenidas registradas.</strong></div> : meetings.map(meeting => <button key={meeting.id} className={meeting.id === selectedMeetingId ? 'lodge-meeting selected' : 'lodge-meeting'} type="button" onClick={() => setSelectedMeetingId(meeting.id)}><div><strong>{meeting.title || meetingTypeLabel(meeting.meetingType)}</strong><small>{formatDateOnly(meeting.meetingDate)} · {gradeLabel(meeting.grade)}</small></div><span className={meeting.status === 'closed' ? 'regularity-status blocked' : 'regularity-status good'}>{meetingStatusLabel(meeting.status)}</span></button>)}</div>
+          <div className="lodge-meeting-list">{meetings.length === 0 ? <div className="empty-state"><strong>No hay Tenidas registradas.</strong></div> : meetings.map(meeting => <button key={meeting.id} className={meeting.id === selectedMeetingId ? 'lodge-meeting selected' : 'lodge-meeting'} type="button" onClick={() => setSelectedMeetingId(meeting.id)}><div><strong>{meeting.title || meetingTypeLabel(meeting.meetingType)}</strong><small>{formatDateOnly(meeting.meetingDate)} · {gradeLabel(meeting.grade)}</small></div><span className={meeting.status === 'held' || meeting.status === 'closed' ? 'regularity-status blocked' : 'regularity-status good'}>{meetingStatusLabel(meeting.status)}</span></button>)}</div>
         </article>
 
         <article className="panel lodge-detail lodge-operation-panel">
-          {!selectedMeeting ? <div className="empty-state"><strong>Seleccione o cree una Tenida para operar asistencia y actas.</strong></div> : <><div className="panel-heading"><div><p className="eyebrow">Tenida seleccionada</p><h2>{selectedMeeting.title || meetingTypeLabel(selectedMeeting.meetingType)}</h2><p>{formatDateOnly(selectedMeeting.meetingDate)} · {meetingTypeLabel(selectedMeeting.meetingType)} · {gradeLabel(selectedMeeting.grade)}</p></div><button className="regularity-secondary" type="button" disabled={working || meetingFinalized} onClick={closeMeeting}>Marcar realizada y cerrar</button></div>
-            <section className="lodge-section"><div><p className="eyebrow">Después de la ejecución</p><h3>Asistencia</h3><small>{canRecordMeetingAttendance ? 'La Tenida está realizada: puede registrar o corregir su asistencia.' : 'Primero marque la Tenida como realizada y cerrada.'}</small></div><form className="regularity-form" onSubmit={recordAttendance}><label className="regularity-field"><span>Hermano/a</span><select required value={memberId} disabled={!canRecordMeetingAttendance} onChange={event => setMemberId(event.target.value)}><option value="">Seleccione…</option>{members.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label><div className="lodge-form-row"><label className="regularity-field"><span>Estado</span><select value={attendanceStatus} disabled={!canRecordMeetingAttendance} onChange={event => setAttendanceStatus(event.target.value as LodgeAttendanceStatus)}>{attendanceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{attendanceStatus === 'excused' && <label className="regularity-field"><span>Justificación</span><input maxLength={1000} value={excuseReason} disabled={!canRecordMeetingAttendance} onChange={event => setExcuseReason(event.target.value)} /></label>}</div><button className="regularity-primary" type="submit" disabled={working || !canRecordMeetingAttendance || !memberId}>Registrar asistencia</button></form><div className="lodge-attendance-list">{attendance.length === 0 ? <small>Sin asistencia registrada.</small> : attendance.map(item => <div key={item.memberId}><div><strong>{item.displayName}</strong>{item.excuseReason && <small>{item.excuseReason}</small>}</div><span className={attendanceClass(item.status)}>{attendanceLabel(item.status)}</span></div>)}</div></section>
+          {!selectedMeeting ? <div className="empty-state"><strong>Seleccione o cree una Tenida para operar asistencia y actas.</strong></div> : <><div className="panel-heading"><div><p className="eyebrow">Tenida seleccionada</p><h2>{selectedMeeting.title || meetingTypeLabel(selectedMeeting.meetingType)}</h2><p>{formatDateOnly(selectedMeeting.meetingDate)} · {meetingTypeLabel(selectedMeeting.meetingType)} · {gradeLabel(selectedMeeting.grade)} · {selectedMeeting.modality === 'virtual' ? 'Virtual' : 'Presencial'}{selectedMeeting.ceremonyType ? ` · ${ceremonyTypeLabel(selectedMeeting.ceremonyType)}` : ''}</p></div><button className="regularity-secondary" type="button" disabled={working || meetingFinalized} onClick={closeMeeting}>Marcar realizada</button></div>
+            <section className="lodge-section"><div><p className="eyebrow">Después de la ejecución</p><h3>Asistencia</h3><small>{canRecordMeetingAttendance ? 'La Tenida está realizada: puede registrar o corregir su asistencia.' : 'Primero marque la Tenida como Realizada.'}</small></div><form className="regularity-form" onSubmit={recordAttendance}><label className="regularity-field"><span>Hermano/a</span><select required value={memberId} disabled={!canRecordMeetingAttendance} onChange={event => setMemberId(event.target.value)}><option value="">Seleccione…</option>{members.map(item => <option key={item.id} value={item.id}>{item.displayName}</option>)}</select></label><div className="lodge-form-row"><label className="regularity-field"><span>Estado</span><select value={attendanceStatus} disabled={!canRecordMeetingAttendance} onChange={event => setAttendanceStatus(event.target.value as LodgeAttendanceStatus)}>{attendanceOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>{attendanceStatus === 'excused' && <label className="regularity-field"><span>Justificación</span><input maxLength={1000} value={excuseReason} disabled={!canRecordMeetingAttendance} onChange={event => setExcuseReason(event.target.value)} /></label>}</div><button className="regularity-primary" type="submit" disabled={working || !canRecordMeetingAttendance || !memberId}>Registrar asistencia</button></form><div className="lodge-attendance-list">{attendance.length === 0 ? <small>Sin asistencia registrada.</small> : attendance.map(item => <div key={item.memberId}><div><strong>{item.displayName}</strong>{item.excuseReason && <small>{item.excuseReason}</small>}</div><span className={attendanceClass(item.status)}>{attendanceLabel(item.status)}</span></div>)}</div></section>
             <LodgeBallotPanel meetingId={selectedMeeting.id} attendeeCount={attendance.filter(item => item.status === 'present').length} enabled={canRecordMeetingAttendance} api={lodgeApi} onError={setError} />
             <section className="lodge-section"><div><p className="eyebrow">Documento histórico</p><h3>Actas versionadas</h3><small>Genere el borrador desde la Tenida, asistencia y escrutinios; complete únicamente los antecedentes narrativos pendientes.</small></div><button className="regularity-secondary" type="button" disabled={working || !canRecordMeetingAttendance} onClick={generateMinuteExtract}>Generar Extracto de Acta</button>{minuteContent && <MinuteExtractEditor baseContent={minuteContent} onApply={setMinuteContent} />}<form className="regularity-form" onSubmit={createMinute}><label className="regularity-field"><span>Nueva versión del acta</span><textarea rows={18} maxLength={20000} value={minuteContent} onChange={event => setMinuteContent(event.target.value)} placeholder="Genere el extracto automático o redacte una nueva versión…" /></label><button className="regularity-primary" type="submit" disabled={working || !minuteContent.trim()}>Crear nueva versión</button></form><div className="lodge-minute-list">{minutes.length === 0 ? <small>Sin versiones de acta.</small> : minutes.map(minute => <article key={minute.id}><div className="lodge-minute-heading"><strong>Versión {minute.version}</strong><span className={minute.status === 'approved' ? 'regularity-status good' : minute.status === 'superseded' ? 'regularity-status blocked' : 'regularity-status pending'}>{minuteStatusLabel(minute.status)}</span></div><p>{minute.content}</p><small>Creada {formatChile(minute.createdAtUtc)}{minute.approvedAtUtc ? ` · aprobada ${formatChile(minute.approvedAtUtc)}` : ''}</small>{minute.status === 'draft' && <button className="regularity-secondary" type="button" disabled={working} onClick={() => approveMinute(minute.id)}>Aprobar esta versión</button>}</article>)}</div></section>
           </>}
@@ -413,6 +426,7 @@ const attendanceOptions = [['present', 'Presente'], ['excused', 'Justificado'], 
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function meetingTypeLabel(value: LodgeMeetingType) { return meetingTypeOptions.find(([key]) => key === value)?.[1] ?? value }
 function gradeLabel(value: LodgeGrade) { return gradeOptions.find(([key]) => key === value)?.[1] ?? value }
+function ceremonyTypeLabel(value: LodgeCeremonyType) { return value === 'initiation' ? 'Iniciación' : value === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function instructionOfficeLabel(value: LodgeInstruction['responsibleOffice']) { return value === 'second_warden' ? 'Segundo Vigilante' : value === 'first_warden' ? 'Primer Vigilante' : 'Inmediato Ex-Venerable Maestro' }
 function attendanceLabel(value: LodgeAttendanceStatus) { return attendanceOptions.find(([key]) => key === value)?.[1] ?? value }
 function meetingStatusLabel(value: string) { return value === 'closed' ? 'Cerrada' : value === 'open' ? 'Abierta' : value === 'cancelled' ? 'Cancelada' : 'Programada' }
