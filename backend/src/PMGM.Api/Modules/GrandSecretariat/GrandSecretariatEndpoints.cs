@@ -332,11 +332,28 @@ public static class GrandSecretariatEndpoints
             return Results.Forbid();
         }
 
-        if (request.DocumentType is not GrandSecretariatCodes.DocumentType.Decree and not GrandSecretariatCodes.DocumentType.Communication ||
+        var normalizedDocumentType = request.DocumentType == GrandSecretariatCodes.DocumentType.CommunicationLegacy
+            ? GrandSecretariatCodes.DocumentType.Plancha
+            : request.DocumentType;
+        var normalizedPlanchaKind = normalizedDocumentType == GrandSecretariatCodes.DocumentType.Plancha
+            ? (string.IsNullOrWhiteSpace(request.PlanchaKind)
+                ? GrandSecretariatCodes.PlanchaKind.FormalCommunication
+                : request.PlanchaKind)
+            : null;
+
+        if (normalizedDocumentType is not GrandSecretariatCodes.DocumentType.Decree and not GrandSecretariatCodes.DocumentType.Plancha ||
             string.IsNullOrWhiteSpace(request.Title) ||
-            string.IsNullOrWhiteSpace(request.Content))
+            string.IsNullOrWhiteSpace(request.Content) ||
+            (normalizedDocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+             !GrandSecretariatCodes.PlanchaKind.IsValid(normalizedPlanchaKind!)))
         {
-            return Results.BadRequest(new { message = "El tipo, título y contenido del documento son obligatorios." });
+            return Results.BadRequest(new { message = "Debe indicar un Decreto o una Plancha formal válida, con título y contenido." });
+        }
+
+        if (normalizedDocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+            normalizedPlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization)
+        {
+            return Results.BadRequest(new { message = "Las Planchas de Autorización de Ceremonia se emiten exclusivamente desde el flujo de ceremonia autorizada." });
         }
 
         if (request.OrganizationId is not null)
@@ -352,8 +369,9 @@ public static class GrandSecretariatEndpoints
 
         var document = new SecretariatDocument
         {
-            DocumentType = request.DocumentType,
-            DocumentCode = NewDocumentCode(request.DocumentType),
+            DocumentType = normalizedDocumentType,
+            PlanchaKind = normalizedPlanchaKind,
+            DocumentCode = NewDocumentCode(normalizedDocumentType, normalizedPlanchaKind),
             Title = request.Title.Trim(),
             Content = request.Content.Trim(),
             OrganizationId = request.OrganizationId,
@@ -370,7 +388,7 @@ public static class GrandSecretariatEndpoints
             document.Id.ToString(),
             document.OrganizationId,
             AuditResults.Success,
-            new { document.DocumentType, document.DocumentCode, document.Status }));
+            new { document.DocumentType, document.PlanchaKind, document.DocumentCode, document.Status }));
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/gran-secretaria/documentos/{document.Id}", ToDocumentDto(document));
@@ -432,8 +450,10 @@ public static class GrandSecretariatEndpoints
 
         var alreadyIssued = await db.SecretariatDocuments.AnyAsync(
             x => x.RelatedCeremonyRequestId == requestId &&
-                 (x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha ||
-                  x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy) &&
+                 ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                   x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                  x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                  x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy) &&
                  x.Status == GrandSecretariatCodes.DocumentStatus.Issued,
             cancellationToken);
         if (alreadyIssued)
@@ -469,8 +489,11 @@ public static class GrandSecretariatEndpoints
 
         var document = new SecretariatDocument
         {
-            DocumentType = GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha,
-            DocumentCode = NewDocumentCode(GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha),
+            DocumentType = GrandSecretariatCodes.DocumentType.Plancha,
+            PlanchaKind = GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization,
+            DocumentCode = NewDocumentCode(
+                GrandSecretariatCodes.DocumentType.Plancha,
+                GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization),
             Title = $"Plancha de Autorización de Ceremonia — {ceremony.CeremonyType}",
             Content = $"Gran Secretaría autoriza oficialmente la realización de la ceremonia '{ceremony.CeremonyType}' solicitada por {ceremony.Organization.Name}, para {dateText}, {spaceText}. Esta Plancha de Autorización se emite una vez cumplidas las validaciones institucionales exigibles y no constituye Decreto.",
             OrganizationId = ceremony.OrganizationId,
@@ -514,14 +537,17 @@ public static class GrandSecretariatEndpoints
            ?? user.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? "unknown";
 
-    private static string NewDocumentCode(string type)
+    private static string NewDocumentCode(string type, string? planchaKind = null)
     {
         var prefix = type switch
         {
             GrandSecretariatCodes.DocumentType.Decree => "DEC",
-            GrandSecretariatCodes.DocumentType.Communication => "COM",
-            GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha => "PLA-AUT-CER",
+            GrandSecretariatCodes.DocumentType.Plancha
+                when planchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization => "PLA-AUT-CER",
+            GrandSecretariatCodes.DocumentType.Plancha => "PLA-COM",
+            GrandSecretariatCodes.DocumentType.CommunicationLegacy => "COM",
             GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy => "AUT-CER",
+            GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy => "PLA-AUT-CER",
             _ => "DOC"
         };
 
@@ -533,6 +559,7 @@ public static class GrandSecretariatEndpoints
         {
             document.Id,
             document.DocumentType,
+            document.PlanchaKind,
             document.DocumentCode,
             document.Title,
             document.Content,
@@ -563,6 +590,7 @@ public sealed record CreateSpaceReservationRequest(
 
 public sealed record IssueSecretariatDocumentRequest(
     string DocumentType,
+    string? PlanchaKind,
     string Title,
     string Content,
     Guid? OrganizationId);
