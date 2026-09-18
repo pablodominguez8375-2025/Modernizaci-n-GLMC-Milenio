@@ -4,6 +4,7 @@ public sealed class HistoricalMemberIntake
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid OrganizationId { get; set; }
+    public Guid? TargetMemberId { get; set; }
     public DateOnly CutoffDate { get; set; }
     public required string FirstNames { get; set; }
     public required string LastNames { get; set; }
