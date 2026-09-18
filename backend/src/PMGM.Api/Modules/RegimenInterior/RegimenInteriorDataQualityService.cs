@@ -15,7 +15,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
     {
         var relatedMemberships = db.Memberships
             .AsNoTracking()
-            .Where(x => x.StartDate <= query.AsOf);
+            .Where(x => x.StartDate == null || x.StartDate <= query.AsOf);
 
         if (query.OrganizationId is not null)
         {
@@ -84,7 +84,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
 
         var offices = await db.OfficeAssignments
             .AsNoTracking()
-            .Where(x => memberIds.Contains(x.MemberId) && x.StartDate <= query.AsOf)
+            .Where(x => memberIds.Contains(x.MemberId) && (x.StartDate == null || x.StartDate <= query.AsOf))
             .Select(x => new OfficeRow(
                 x.Id,
                 x.MemberId,
@@ -192,7 +192,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
         IReadOnlyList<MembershipRow> rows,
         ICollection<DataQualityIssue> issues)
     {
-        foreach (var row in rows.Where(x => x.StartDate is not null && x.EndDate is not null && x.EndDate < x.StartDate))
+        foreach (var row in rows.Where(x => x.StartDate is not null && x.EndDate is not null && x.EndDate.Value < x.StartDate.Value))
         {
             Add(issues, member, row.OrganizationId, row.OrganizationName,
                 "invalid_membership_range", DataQualitySeverity.Error,
@@ -228,7 +228,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
                 if (left.StartDate is null || right.StartDate is null) continue;
                 var leftEnd = Min(left.EndDate ?? asOf, asOf);
                 var rightEnd = Min(right.EndDate ?? asOf, asOf);
-                if (left.StartDate <= rightEnd && right.StartDate <= leftEnd)
+                if (left.StartDate.Value <= rightEnd && right.StartDate.Value <= leftEnd)
                 {
                     Add(issues, member, right.OrganizationId, right.OrganizationName,
                         "overlapping_workshop_memberships", DataQualitySeverity.Warning,
@@ -376,7 +376,7 @@ public sealed class RegimenInteriorDataQualityService(PmgmDbContext db) : IRegim
                 "Corroborar las fechas con los documentos institucionales correspondientes.");
         }
 
-        foreach (var office in offices.Where(x => x.StartDate is not null && x.StartDate > deathDate))
+        foreach (var office in offices.Where(x => x.StartDate is not null && x.StartDate.Value > deathDate.Value))
         {
             Add(issues, member, office.OrganizationId, office.OrganizationName,
                 "office_after_death", DataQualitySeverity.Error,
