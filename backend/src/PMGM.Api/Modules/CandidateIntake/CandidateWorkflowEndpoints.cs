@@ -236,7 +236,7 @@ public static class CandidateWorkflowEndpoints
             request.DeliberationDate,
             request.PresentVoters,
             request.VotesInFavor,
-            request.MinimumWaitingDays ?? 7);
+            CandidateIntakeWorkflowPolicy.InitialDeliberationMinimumWaitingDays);
 
         var status = ToValidationStatus(decision);
         var validation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateInitialDeliberation,
@@ -624,7 +624,6 @@ public sealed record InitialDeliberationRequest(
     DateOnly DeliberationDate,
     int PresentVoters,
     int VotesInFavor,
-    int? MinimumWaitingDays,
     string? SourceReference);
 
 public sealed record InterviewPackageRequest(
