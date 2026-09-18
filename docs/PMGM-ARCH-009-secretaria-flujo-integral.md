@@ -2,7 +2,7 @@
 
 ## Estado
 
-Implementado en PR #105 sobre `dev`, pendiente de gates e integración al momento de redactar esta decisión.
+Integrado en `dev` mediante PR #105. Merge SHA: `88e6fd70493b972467759fddc1d6180eb07927d1`. PMGM CI, Showcase y QA srv01 Installable quedaron verdes antes del merge. El despliegue físico en `srv01` continúa pendiente y se traza en Issue #97.
 
 ## 1. Propósito
 
