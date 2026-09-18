@@ -24,7 +24,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<HistoricalMemberIntake> HistoricalMemberIntakes => Set<HistoricalMemberIntake>();
     public DbSet<HistoricalMemberIntakeOffice> HistoricalMemberIntakeOffices => Set<HistoricalMemberIntakeOffice>();
     public DbSet<LodgeAdministrativeMeeting> LodgeAdministrativeMeetings => Set<LodgeAdministrativeMeeting>();
-    public DbSet<LodgeSecretariatSubmission> LodgeSecretariatSubmissions => Set<LodgeSecretariatSubmission>();
+    public DbSet<LodgeSecretariatRecord> LodgeSecretariatRecords => Set<LodgeSecretariatRecord>();
     public DbSet<FinancialRegularitySnapshot> FinancialRegularitySnapshots => Set<FinancialRegularitySnapshot>();
     public DbSet<TreasuryMonthlyStatement> TreasuryMonthlyStatements => Set<TreasuryMonthlyStatement>();
     public DbSet<TreasuryMonthlyStatementLine> TreasuryMonthlyStatementLines => Set<TreasuryMonthlyStatementLine>();
@@ -230,9 +230,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.OrganizationId, x.MeetingDate });
         });
 
-        modelBuilder.Entity<LodgeSecretariatSubmission>(entity =>
+        modelBuilder.Entity<LodgeSecretariatRecord>(entity =>
         {
-            entity.ToTable("lodge_secretariat_submissions");
+            entity.ToTable("lodge_secretariat_records");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.RecordType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Title).HasMaxLength(500).IsRequired();
