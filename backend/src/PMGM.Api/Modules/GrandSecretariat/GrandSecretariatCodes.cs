@@ -23,8 +23,22 @@ public static class GrandSecretariatCodes
     public static class DocumentType
     {
         public const string Decree = "decree";
-        public const string Communication = "communication";
+        public const string Plancha = "plancha";
+        public const string CommunicationLegacy = "communication";
+        public const string CeremonyAuthorizationLegacy = "ceremony_authorization";
+        public const string CeremonyAuthorizationPlanchaLegacy = "ceremony_authorization_plancha";
+
+        public static bool IsPlancha(string value)
+            => value is Plancha or CommunicationLegacy or CeremonyAuthorizationLegacy or CeremonyAuthorizationPlanchaLegacy;
+    }
+
+    public static class PlanchaKind
+    {
+        public const string FormalCommunication = "formal_communication";
         public const string CeremonyAuthorization = "ceremony_authorization";
+
+        public static bool IsValid(string value)
+            => value is FormalCommunication or CeremonyAuthorization;
     }
 
     public static class DocumentStatus

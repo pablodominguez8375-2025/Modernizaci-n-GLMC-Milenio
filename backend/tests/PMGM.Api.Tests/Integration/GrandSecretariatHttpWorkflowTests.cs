@@ -157,7 +157,9 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(HttpStatusCode.Created, authorizationResponse.StatusCode);
 
         var authorizationJson = await authorizationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.Equal(GrandSecretariatCodes.DocumentType.CeremonyAuthorization, authorizationJson.GetProperty("documentType").GetString());
+        Assert.Equal(GrandSecretariatCodes.DocumentType.Plancha, authorizationJson.GetProperty("documentType").GetString());
+        Assert.Equal(GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization, authorizationJson.GetProperty("planchaKind").GetString());
+        Assert.StartsWith("PLA-AUT-CER-", authorizationJson.GetProperty("documentCode").GetString());
         Assert.Equal(ceremonyId, authorizationJson.GetProperty("relatedCeremonyRequestId").GetGuid());
         Assert.Equal(reservationId, authorizationJson.GetProperty("spaceReservationId").GetGuid());
 
@@ -181,6 +183,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
             new
             {
                 documentType = GrandSecretariatCodes.DocumentType.Decree,
+                planchaKind = (string?)null,
                 title = "Decreto CI",
                 content = "Contenido institucional de prueba para validar el circuito documental de Gran Secretaría.",
                 organizationId = (Guid?)null
@@ -195,7 +198,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 .AsNoTracking()
                 .SingleAsync(
                     x => x.RelatedCeremonyRequestId == ceremonyId &&
-                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorization,
+                         x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                         x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization,
                     cancellationToken);
 
             Assert.Equal(GrandSecretariatCodes.DocumentStatus.Issued, authorization.Status);

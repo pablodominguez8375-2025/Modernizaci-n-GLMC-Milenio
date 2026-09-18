@@ -5,6 +5,7 @@ using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Privacy.Entities;
+using PMGM.Api.Modules.SecretariatOperations.Entities;
 using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Data;
@@ -20,6 +21,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<InstitutionalStatusEvent> InstitutionalStatusEvents => Set<InstitutionalStatusEvent>();
     public DbSet<DegreeEvent> DegreeEvents => Set<DegreeEvent>();
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
+    public DbSet<HistoricalMemberIntake> HistoricalMemberIntakes => Set<HistoricalMemberIntake>();
+    public DbSet<HistoricalMemberIntakeOffice> HistoricalMemberIntakeOffices => Set<HistoricalMemberIntakeOffice>();
+    public DbSet<LodgeAdministrativeMeeting> LodgeAdministrativeMeetings => Set<LodgeAdministrativeMeeting>();
+    public DbSet<LodgeSecretariatRecord> LodgeSecretariatRecords => Set<LodgeSecretariatRecord>();
     public DbSet<FinancialRegularitySnapshot> FinancialRegularitySnapshots => Set<FinancialRegularitySnapshot>();
     public DbSet<TreasuryMonthlyStatement> TreasuryMonthlyStatements => Set<TreasuryMonthlyStatement>();
     public DbSet<TreasuryMonthlyStatementLine> TreasuryMonthlyStatementLines => Set<TreasuryMonthlyStatementLine>();
@@ -53,11 +58,13 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.ToTable("people");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.FirstNames).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Rut).HasMaxLength(16);
             entity.Property(x => x.LastNames).HasMaxLength(160).IsRequired();
             entity.Property(x => x.Email).HasMaxLength(320);
             entity.Property(x => x.Phone).HasMaxLength(80);
             entity.Property(x => x.Address).HasMaxLength(500);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.HasIndex(x => x.Rut).IsUnique();
         });
 
         modelBuilder.Entity<Organization>(entity =>
@@ -79,6 +86,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.ToTable("members");
             entity.HasKey(x => x.Id);
             entity.Property(x => x.InstitutionalNumber).HasMaxLength(80);
+            entity.Property(x => x.CurrentDegree).HasMaxLength(40);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasOne(x => x.Person)
                 .WithOne()
@@ -177,6 +185,65 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MemberId, x.OrganizationId, x.StartDate });
+        });
+
+        modelBuilder.Entity<HistoricalMemberIntake>(entity =>
+        {
+            entity.ToTable("historical_member_intakes");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.FirstNames).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.LastNames).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.Rut).HasMaxLength(16);
+            entity.Property(x => x.InstitutionalNumber).HasMaxLength(80);
+            entity.Property(x => x.Email).HasMaxLength(320);
+            entity.Property(x => x.Phone).HasMaxLength(80);
+            entity.Property(x => x.CurrentDegree).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.CreatedAtUtc });
+            entity.HasIndex(x => x.TargetMemberId);
+            entity.HasIndex(x => x.Rut);
+            entity.HasIndex(x => x.InstitutionalNumber);
+        });
+
+        modelBuilder.Entity<HistoricalMemberIntakeOffice>(entity =>
+        {
+            entity.ToTable("historical_member_intake_offices");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OfficeType).HasMaxLength(120).IsRequired();
+            entity.Property(x => x.Period).HasMaxLength(80).IsRequired();
+            entity.HasOne(x => x.Intake).WithMany(x => x.Offices).HasForeignKey(x => x.IntakeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.IntakeId, x.OfficeType, x.Period });
+        });
+
+        modelBuilder.Entity<LodgeAdministrativeMeeting>(entity =>
+        {
+            entity.ToTable("lodge_administrative_meetings");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Purpose).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasIndex(x => new { x.OrganizationId, x.MeetingDate });
+        });
+
+        modelBuilder.Entity<LodgeSecretariatRecord>(entity =>
+        {
+            entity.ToTable("lodge_secretariat_records");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.RecordType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Title).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.SubmittedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.OrganizationId, x.RecordType, x.EventDate });
+            entity.HasIndex(x => new { x.RecordType, x.SourceRecordId }).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
         });
 
         modelBuilder.Entity<FinancialRegularitySnapshot>(entity =>

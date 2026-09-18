@@ -230,7 +230,7 @@ public sealed record MemberMembershipHistoryDto(
     Guid OrganizationId,
     string OrganizationName,
     string? OrganizationNumber,
-    DateOnly StartDate,
+    DateOnly? StartDate,
     DateOnly? EndDate,
     string Status);
 
@@ -248,7 +248,7 @@ public sealed record MemberOfficeHistoryDto(
     string OrganizationName,
     string OfficeType,
     string Period,
-    DateOnly StartDate,
+    DateOnly? StartDate,
     DateOnly? EndDate);
 
 public sealed record MemberStatusHistoryDto(

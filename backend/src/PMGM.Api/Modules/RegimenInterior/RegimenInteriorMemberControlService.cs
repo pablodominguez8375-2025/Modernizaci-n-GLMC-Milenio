@@ -16,7 +16,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
     {
         var relatedMemberships = db.Memberships
             .AsNoTracking()
-            .Where(x => x.StartDate <= query.AsOf);
+            .Where(x => x.StartDate == null || x.StartDate <= query.AsOf);
 
         if (query.OrganizationId is not null)
         {
@@ -39,12 +39,13 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
             .Select(x => new PersonRow(
                 x.Id,
                 x.InstitutionalNumber,
+                x.CurrentDegree,
                 x.Person.FirstNames + " " + x.Person.LastNames))
             .ToListAsync(cancellationToken);
 
         var memberships = await db.Memberships
             .AsNoTracking()
-            .Where(x => relatedMemberIds.Contains(x.MemberId) && x.StartDate <= query.AsOf)
+            .Where(x => relatedMemberIds.Contains(x.MemberId) && (x.StartDate == null || x.StartDate <= query.AsOf))
             .Select(x => new MembershipRow(
                 x.MemberId,
                 x.OrganizationId,
@@ -186,7 +187,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 Workshop(lastMembership),
                 currentStatus,
                 latestStatus?.EffectiveDate,
-                latestDegree?.Degree,
+                latestDegree?.Degree ?? person.CurrentDegree,
                 new MemberMilestones(
                     FirstDegreeDate(memberDegrees, MembershipCodes.DegreeEvent.Initiation),
                     FirstDegreeDate(memberDegrees, MembershipCodes.DegreeEvent.WageIncrease),
@@ -242,7 +243,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
 
     private static bool IsCurrentMembership(MembershipRow row, DateOnly asOf)
         => row.Status == MembershipCodes.MembershipStatus.Active &&
-           row.StartDate <= asOf &&
+           (row.StartDate == null || row.StartDate <= asOf) &&
            (row.EndDate == null || row.EndDate >= asOf);
 
     private static WorkshopRef Workshop(MembershipRow row)
@@ -261,8 +262,8 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
             .ToLowerInvariant()
             .Trim();
 
-    private sealed record PersonRow(Guid MemberId, string? InstitutionalNumber, string DisplayName);
-    private sealed record MembershipRow(Guid MemberId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber, DateOnly StartDate, DateOnly? EndDate, string Status);
+    private sealed record PersonRow(Guid MemberId, string? InstitutionalNumber, string? CurrentDegree, string DisplayName);
+    private sealed record MembershipRow(Guid MemberId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber, DateOnly? StartDate, DateOnly? EndDate, string Status);
     private sealed record StatusRow(Guid MemberId, string Status, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record DegreeRow(Guid MemberId, string Degree, string EventType, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record TransferRow(Guid MemberId, Guid SourceOrganizationId, string SourceOrganizationName, Guid TargetOrganizationId, string TargetOrganizationName, DateOnly RequestedDate, DateOnly ProposedEffectiveDate, DateOnly? ApprovedEffectiveDate, string Status, DateTimeOffset CreatedAtUtc);
@@ -306,7 +307,7 @@ public sealed record WorkshopRef(
     Guid Id,
     string Name,
     string? Number,
-    DateOnly StartDate,
+    DateOnly? StartDate,
     DateOnly? EndDate);
 
 public sealed record MemberMilestones(

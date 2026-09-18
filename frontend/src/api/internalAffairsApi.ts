@@ -2,7 +2,7 @@ export interface MemberControlWorkshopRef {
   id: string
   name: string
   number: string | null
-  startDate: string
+  startDate: string | null
   endDate: string | null
 }
 
@@ -92,6 +92,30 @@ export interface DataQualityFilters {
   limit?: number
 }
 
+
+export interface HistoricalIntakeReviewItem {
+  id: string
+  organizationId: string
+  targetMemberId: string | null
+  cutoffDate: string
+  firstNames: string
+  lastNames: string
+  rut: string | null
+  institutionalNumber: string | null
+  currentDegree: string
+  membershipStartDate: string | null
+  initiationDate: string | null
+  wageIncreaseDate: string | null
+  exaltationDate: string | null
+  evidenceReference: string
+  status: string
+  revision: number
+  submittedAtUtc: string | null
+  reviewNotes: string | null
+  offices: Array<{ id:string; officeType:string; period:string; startDate:string|null; endDate:string|null; isCurrent:boolean }>
+}
+export interface HistoricalIntakeReviewResponse { total:number; items:HistoricalIntakeReviewItem[] }
+
 export type InternalAffairsTokenProvider = () => Promise<string | null>
 
 interface InternalAffairsApiClientOptions {
@@ -106,6 +130,9 @@ export class InternalAffairsApiClient {
   private readonly getAccessToken?: InternalAffairsTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
+  private readonly mockHistoricalIntakes: HistoricalIntakeReviewItem[] = [
+    { id:'ri-hist-demo-1', organizationId:ORG_23, targetMemberId:null, cutoffDate:'2026-09-18', firstNames:'Hermana', lastNames:'Histórica Demo', rut:'12345678-5', institutionalNumber:'GLM-DEMO-096', currentDegree:'master', membershipStartDate:null, initiationDate:'1998-05-12', wageIncreaseDate:null, exaltationDate:'2002-08-24', evidenceReference:'Cuadro del Taller histórico · demo', status:'submitted', revision:2, submittedAtUtc:'2026-09-18T15:00:00Z', reviewNotes:null, offices:[{id:'office-demo-1',officeType:'lodge_secretariat',period:'2026',startDate:null,endDate:null,isCurrent:true}] }
+  ]
 
   constructor(options: InternalAffairsApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -129,6 +156,27 @@ export class InternalAffairsApiClient {
     return this.request<MemberControlResponse>(`/api/regimen-interior/members${query.size ? `?${query}` : ''}`)
   }
 
+
+  async getPendingHistoricalIntakes(organizationId?: string): Promise<HistoricalIntakeReviewResponse> {
+    if(this.useMocks){
+      const items=this.mockHistoricalIntakes.filter(x=>x.status==='submitted'&&(!organizationId||x.organizationId===organizationId)).map(x=>({...x,offices:x.offices.map(o=>({...o}))}))
+      return {total:items.length,items}
+    }
+    const query=new URLSearchParams(); if(organizationId) query.set('organizationId',organizationId)
+    return this.request<HistoricalIntakeReviewResponse>(`/api/regimen-interior/carga-historica/${query.size?`?${query}`:''}`)
+  }
+
+  async reviewHistoricalIntake(id:string,decision:'approve'|'observe'|'reject',notes?:string|null):Promise<HistoricalIntakeReviewItem>{
+    if(this.useMocks){
+      const item=this.mockHistoricalIntakes.find(x=>x.id===id); if(!item) throw new Error('La carga histórica indicada no existe.')
+      item.status=decision==='approve'?'approved':decision==='observe'?'observed':'rejected'; item.reviewNotes=notes?.trim()||null
+      return {...item,offices:item.offices.map(o=>({...o}))}
+    }
+    return this.request<HistoricalIntakeReviewItem>(`/api/regimen-interior/carga-historica/${encodeURIComponent(id)}/resolver`,{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,notes:notes??null})
+    })
+  }
+
   async getDataQuality(filters: DataQualityFilters = {}): Promise<DataQualityResponse> {
     if (this.useMocks) return mockDataQualityResponse(filters)
     const query = new URLSearchParams()
@@ -141,14 +189,12 @@ export class InternalAffairsApiClient {
     return this.request<DataQualityResponse>(`/api/regimen-interior/data-quality${query.size ? `?${query}` : ''}`)
   }
 
-  private async request<T>(path: string): Promise<T> {
-    const headers = new Headers({ Accept: 'application/json' })
+  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const headers = new Headers(init.headers); headers.set('Accept', 'application/json')
     const token = await this.getAccessToken?.()
     if (!token) throw new Error('Debe ingresar para operar Régimen Interior.')
     headers.set('Authorization', `Bearer ${token}`)
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error', headers,
-    })
+    const response = await fetch(`${this.baseUrl}${path}`, { ...init, method: init.method ?? 'GET', credentials: 'omit', cache: 'no-store', redirect: 'error', headers })
     if (!response.ok) {
       if (response.status === 401) await this.onUnauthorized?.()
       if (response.status === 403) throw new Error('Su cuenta no tiene permiso para consultar Régimen Interior.')
@@ -256,6 +302,6 @@ function mockDataQualityResponse(filters: DataQualityFilters): DataQualityRespon
 function qualityIssue(code: string, severity: 'error' | 'warning', member: MemberControlRow, organizationId: string, organizationName: string, title: string, description: string, primaryDate: string | null, relatedDate: string | null, suggestedAction: string): DataQualityIssue {
   return { code, severity, memberId: member.memberId, institutionalNumber: member.institutionalNumber, displayName: member.displayName, organizationId, organizationName, title, description, primaryDate, relatedDate, suggestedAction }
 }
-function workshop(id: string, name: string, number: string, startDate: string): MemberControlWorkshopRef { return { id, name, number, startDate, endDate: null } }
+function workshop(id: string, name: string, number: string, startDate: string | null): MemberControlWorkshopRef { return { id, name, number, startDate, endDate: null } }
 function milestones(initiation: string | null, wageIncrease: string | null, exaltation: string | null): MemberControlMilestones { return { initiation, wageIncrease, exaltation, withdrawalType: null, withdrawal: null, reinstatement: null, death: null, transfer: null } }
 function normalize(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }

@@ -51,7 +51,10 @@ public static class GrandSecretariatCeremonyQueueEndpoints
                 .AsNoTracking()
                 .Where(x => x.RelatedCeremonyRequestId != null &&
                             requestIds.Contains(x.RelatedCeremonyRequestId.Value) &&
-                            x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorization &&
+                            ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                              x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                             x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                             x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy) &&
                             x.Status == GrandSecretariatCodes.DocumentStatus.Issued)
                 .Select(x => x.RelatedCeremonyRequestId!.Value)
                 .Distinct()

@@ -5,11 +5,14 @@ public static class LodgeCouncilCodes
     public static class SessionStatus
     {
         public const string Scheduled = "scheduled";
-        public const string Closed = "closed";
+        public const string Held = "held";
+        public const string Closed = "closed"; // legado: se lee como realizada
         public const string Cancelled = "cancelled";
 
         public static bool IsValid(string value)
-            => value is Scheduled or Closed or Cancelled;
+            => value is Scheduled or Held or Closed or Cancelled;
+
+        public static bool IsHeld(string value) => value is Held or Closed;
     }
 
     public static class ParticipationType

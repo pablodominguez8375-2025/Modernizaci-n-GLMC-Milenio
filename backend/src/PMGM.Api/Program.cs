@@ -24,6 +24,7 @@ using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Notifications;
 using PMGM.Api.Modules.Privacy;
 using PMGM.Api.Modules.RegimenInterior;
+using PMGM.Api.Modules.SecretariatOperations;
 using PMGM.Api.Modules.Treasury;
 using PMGM.Api.Modules.SystemConfiguration;
 
@@ -190,6 +191,7 @@ app.MapGrandSecretariatEndpoints();
 app.MapGrandSecretariatQueryEndpoints();
 app.MapGrandSecretariatCeremonyQueueEndpoints();
 app.MapLodgeManagementEndpoints();
+app.MapSecretariatOperationsEndpoints();
 app.MapLodgeCouncilEndpoints();
 app.MapLodgeInstructionEndpoints();
 app.MapDocumentManagementEndpoints();

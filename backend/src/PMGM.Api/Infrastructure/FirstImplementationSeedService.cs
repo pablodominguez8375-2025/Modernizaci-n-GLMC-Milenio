@@ -61,9 +61,9 @@ public sealed class FirstImplementationSeedService(
         var p3 = new Person { Id = Guid.Parse("50505050-5050-5050-5050-505050505050"), FirstNames = "Hermana", LastNames = "Histórica QA", Email = "persona3@pmgm.invalid" };
         var candidate = new Person { Id = Guid.Parse("70707070-7070-7070-7070-707070707070"), FirstNames = "Persona", LastNames = "Insinuada Demostrativa", Email = "insinuada@pmgm.invalid" };
 
-        var m1 = new Member { Id = Guid.Parse("20202020-2020-2020-2020-202020202020"), Person = p1, InstitutionalNumber = "GLM-QA-0230" };
-        var m2 = new Member { Id = Guid.Parse("40404040-4040-4040-4040-404040404040"), Person = p2, InstitutionalNumber = "GLM-QA-0404" };
-        var m3 = new Member { Id = Guid.Parse("60606060-6060-6060-6060-606060606060"), Person = p3, InstitutionalNumber = "GLM-QA-0606" };
+        var m1 = new Member { Id = Guid.Parse("20202020-2020-2020-2020-202020202020"), Person = p1, InstitutionalNumber = "GLM-QA-0230", CurrentDegree = "master" };
+        var m2 = new Member { Id = Guid.Parse("40404040-4040-4040-4040-404040404040"), Person = p2, InstitutionalNumber = "GLM-QA-0404", CurrentDegree = "fellowcraft" };
+        var m3 = new Member { Id = Guid.Parse("60606060-6060-6060-6060-606060606060"), Person = p3, InstitutionalNumber = "GLM-QA-0606", CurrentDegree = "master" };
 
         var oldMembership = new Membership
         {
@@ -199,6 +199,7 @@ public sealed class FirstImplementationSeedService(
         {
             Id = meetingId, OrganizationId = Lodge23Id, MeetingDate = new DateOnly(2026, 9, 12),
             MeetingType = LodgeManagementCodes.MeetingType.Regular, Grade = LodgeManagementCodes.Grade.All,
+            Modality = LodgeManagementCodes.MeetingModality.InPerson, LocationReference = "Templo QA ficticio",
             Title = "Tenida Regular — Primera implementación", Status = LodgeManagementCodes.MeetingStatus.Scheduled
         };
         var minute = new LodgeMinute

@@ -8,6 +8,7 @@ public sealed class Member
     public Guid PersonId { get; set; }
     public Person Person { get; set; } = null!;
     public string? InstitutionalNumber { get; set; }
+    public string? CurrentDegree { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
@@ -19,7 +20,7 @@ public sealed class Membership
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
     public required string MembershipType { get; set; }
-    public DateOnly StartDate { get; set; }
+    public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public required string Status { get; set; }
     public string? EndReason { get; set; }
@@ -65,7 +66,7 @@ public sealed class OfficeAssignment
     public Organization Organization { get; set; } = null!;
     public required string OfficeType { get; set; }
     public required string Period { get; set; }
-    public DateOnly StartDate { get; set; }
+    public DateOnly? StartDate { get; set; }
     public DateOnly? EndDate { get; set; }
     public string? EvidenceReference { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;

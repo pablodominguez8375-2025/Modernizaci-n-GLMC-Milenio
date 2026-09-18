@@ -12,6 +12,8 @@ export interface SessionCapabilities {
   canValidateCeremonyInternalAffairs: boolean
   canAuthorizeCeremonies: boolean
   canManagePrivacy: boolean
+  canReadLodgeSecretariat?: boolean
+  canManageLodgeSecretariat?: boolean
   canManageLodgeTreasury?: boolean
   canConfigureSystem?: boolean
 }
@@ -30,11 +32,31 @@ export interface LodgeFeePlan { id: string; organizationId: string; feeType: Lod
 export interface LodgeTreasurySummary { organizationId: string; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
 export interface InstitutionalSpace { id: string; code: string; name: string; spaceType: 'temple' | 'secretariat_room'; location: string | null; capacity: number | null; status?: string; isAvailable?: boolean }
 export interface SpaceAvailabilityResponse { fromUtc: string; toUtc: string; total: number; available: number; items: InstitutionalSpace[] }
-export interface SecretariatDocument { id: string; documentType: 'decree' | 'communication' | 'ceremony_authorization'; documentCode: string; title: string; content: string; organizationId: string | null; relatedCeremonyRequestId: string | null; spaceReservationId: string | null; status: string; issuedAtUtc: string; issuedBySubject: string }
+export type SecretariatDocumentType = 'decree' | 'plancha' | 'communication' | 'ceremony_authorization' | 'ceremony_authorization_plancha'
+export type SecretariatPlanchaKind = 'formal_communication' | 'ceremony_authorization'
+export interface SecretariatDocument { id: string; documentType: SecretariatDocumentType; planchaKind: SecretariatPlanchaKind | null; documentCode: string; title: string; content: string; organizationId: string | null; relatedCeremonyRequestId: string | null; spaceReservationId: string | null; status: string; issuedAtUtc: string; issuedBySubject: string }
 export interface SecretariatDocumentsResponse { total: number; items: SecretariatDocument[] }
+export interface GrandSecretariatTenidaItem {
+  recordId: string
+  lodge: { id: string; name: string; number: string | null }
+  meetingId: string
+  meetingDate: string
+  meetingType: string
+  grade: string
+  ceremonyType: CeremonyType | null
+  modality: 'in_person' | 'virtual'
+  title: string | null
+  meetingStatus: string
+  extractDocumentVersionId: string
+  submissionStatus: 'submitted' | 'received' | 'observed'
+  submittedAtUtc: string
+  reviewedAtUtc: string | null
+  reviewNotes: string | null
+}
+export interface GrandSecretariatTenidasResponse { total: number; items: GrandSecretariatTenidaItem[] }
 export interface CreateSpaceRequest { code: string; name: string; spaceType: 'temple' | 'secretariat_room'; location?: string | null; capacity?: number | null }
 export interface CreateReservationRequest { spaceId: string; organizationId: string; ceremonyRequestId?: string | null; purpose: string; startsAtUtc: string; endsAtUtc: string; notes?: string | null }
-export interface IssueDocumentRequest { documentType: 'decree' | 'communication'; title: string; content: string; organizationId?: string | null }
+export interface IssueDocumentRequest { documentType: 'decree' | 'plancha'; planchaKind?: 'formal_communication' | null; title: string; content: string; organizationId?: string | null }
 export type CeremonyType = 'initiation' | 'wage_increase' | 'exaltation'
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
@@ -222,6 +244,14 @@ export class PmgmApiClient {
   private readonly mockSpaces = [...defaultMockSpaces]
   private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
   private readonly mockDocuments: SecretariatDocument[] = []
+  private readonly mockSubmittedTenidas: GrandSecretariatTenidaItem[] = [
+    {
+      recordId: 'gs-tenida-demo-001', lodge: { id: defaultMockOrganizations[1].id, name: defaultMockOrganizations[1].name, number: '23' },
+      meetingId: 'dddddddd-dddd-dddd-dddd-dddddddddddd', meetingDate: '2026-09-12', meetingType: 'regular', grade: 'all', ceremonyType: null,
+      modality: 'in_person', title: 'Tenida Regular — Primera implementación', meetingStatus: 'held',
+      extractDocumentVersionId: 'extract-demo-001', submissionStatus: 'submitted', submittedAtUtc: '2026-09-13T13:00:00Z', reviewedAtUtc: null, reviewNotes: null,
+    },
+  ]
   // QA only: uploaded interview files live in browser memory for this session.
   private readonly mockInterviewDocuments = new Map<string, { file: Blob; fileName: string; metadata: CandidateInterviewEvidence }>()
   private readonly mockCeremonies = defaultMockCeremonies.map(item => ({ ...item }))
@@ -448,6 +478,25 @@ export class PmgmApiClient {
 
   async getSecretariatAvailability(fromUtc: string, toUtc: string): Promise<SpaceAvailabilityResponse> { if (this.useMocks) { const items = this.mockSpaces.map(space => ({ ...space, isAvailable: !this.mockBusySpaces.has(space.id) })); return { fromUtc, toUtc, total: items.length, available: items.filter(x => x.isAvailable).length, items } } const query = new URLSearchParams({ fromUtc, toUtc }); return this.request<SpaceAvailabilityResponse>(`/api/gran-secretaria/espacios/disponibilidad?${query}`) }
   async getSecretariatDocuments(): Promise<SecretariatDocumentsResponse> { if (this.useMocks) return { total: this.mockDocuments.length, items: [...this.mockDocuments] }; return this.request<SecretariatDocumentsResponse>('/api/gran-secretaria/documentos') }
+  async getSubmittedTenidas(): Promise<GrandSecretariatTenidasResponse> {
+    if (this.useMocks) return { total: this.mockSubmittedTenidas.length, items: this.mockSubmittedTenidas.map(item => ({ ...item, lodge: { ...item.lodge } })) }
+    return this.request<GrandSecretariatTenidasResponse>('/api/gran-secretaria/tenidas')
+  }
+  async reviewSubmittedTenida(recordId: string, decision: 'received' | 'observed', notes?: string | null): Promise<{ id:string; status:string }> {
+    if (this.useMocks) {
+      const item=this.mockSubmittedTenidas.find(value=>value.recordId===recordId); if(!item) throw new Error('La Tenida remitida no existe.')
+      item.submissionStatus=decision; item.reviewedAtUtc=new Date().toISOString(); item.reviewNotes=notes?.trim()||null
+      return { id: recordId, status: item.submissionStatus }
+    }
+    return this.postJson<{ id:string; status:string }>(`/api/gran-secretaria/tenidas/${encodeURIComponent(recordId)}/revision`, { decision, notes: notes ?? null })
+  }
+  async downloadSubmittedTenidaExtract(recordId: string): Promise<Blob> {
+    if (this.useMocks) return new Blob(['Extracto PDF demostrativo'], { type: 'application/pdf' })
+    const headers=new Headers({ Accept:'application/pdf' }); const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para descargar el extracto.'); headers.set('Authorization', `Bearer ${token}`)
+    const response=await fetch(`${this.baseUrl}/api/gran-secretaria/tenidas/${encodeURIComponent(recordId)}/extracto`, { credentials:'omit', redirect:'error', cache:'no-store', headers })
+    if(!response.ok){ if(response.status===401) await this.onUnauthorized?.(); throw new PmgmApiHttpError(response.status, response.status===403?'Su cuenta no tiene permiso para descargar este extracto.':`La API respondió ${response.status} ${response.statusText}.`) }
+    return response.blob()
+  }
   async getSecretariatCeremonyQueue(): Promise<GrandSecretariatCeremonyQueueResponse> { if (this.useMocks) return { total: this.mockCeremonies.length, items: this.mockCeremonies.map(item => ({ ...item })) }; return this.request<GrandSecretariatCeremonyQueueResponse>('/api/institutional/gran-secretaria/ceremonias-autorizadas') }
   async createSecretariatSpace(payload: CreateSpaceRequest): Promise<InstitutionalSpace> { if (this.useMocks) { const space: InstitutionalSpace = { id: crypto.randomUUID(), ...payload, location: payload.location ?? null, capacity: payload.capacity ?? null, status: 'active' }; this.mockSpaces.push(space); return space } return this.postJson<InstitutionalSpace>('/api/gran-secretaria/espacios', payload) }
   async createSecretariatReservation(payload: CreateReservationRequest): Promise<{ id: string; status: string }> {
@@ -462,11 +511,11 @@ export class PmgmApiClient {
     }
     return this.postJson<{ id: string; status: string }>('/api/gran-secretaria/reservas', payload)
   }
-  async issueSecretariatDocument(payload: IssueDocumentRequest): Promise<SecretariatDocument> { if (this.useMocks) { const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document } return this.postJson<SecretariatDocument>('/api/gran-secretaria/documentos', payload) }
+  async issueSecretariatDocument(payload: IssueDocumentRequest): Promise<SecretariatDocument> { if (this.useMocks) { const kind=payload.documentType==='plancha'?(payload.planchaKind??'formal_communication'):null; const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, planchaKind: kind, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'PLA-COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document } return this.postJson<SecretariatDocument>('/api/gran-secretaria/documentos', payload) }
   async issueSecretariatCeremonyAuthorization(ceremonyRequestId: string, spaceReservationId: string | null = null): Promise<SecretariatDocument> {
     if (this.useMocks) {
       const ceremony = this.mockCeremonies.find(item => item.id === ceremonyRequestId); if (!ceremony) throw new Error('La ceremonia indicada no existe.'); if (ceremony.formalAuthorizationIssued) throw new Error('La ceremonia ya cuenta con autorización formal vigente.'); if (spaceReservationId && ceremony.spaceReservationId !== spaceReservationId) throw new Error('La reserva indicada no corresponde a esta ceremonia.'); ceremony.formalAuthorizationIssued = true
-      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'ceremony_authorization', documentCode: `AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Autorización de ceremonia — ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: `Autorización institucional demostrativa para ${ceremony.organizationName}.`, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document
+      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'plancha', planchaKind: 'ceremony_authorization', documentCode: `PLA-AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Plancha de Autorización de Ceremonia — ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: `Plancha formal de autorización demostrativa para ${ceremony.organizationName}. No constituye Decreto.`, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document
     }
     return this.postJson<SecretariatDocument>(`/api/gran-secretaria/ceremonias/${encodeURIComponent(ceremonyRequestId)}/autorizacion`, { spaceReservationId })
   }

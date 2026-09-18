@@ -5,6 +5,7 @@ public sealed class Person
     public Guid Id { get; init; } = Guid.NewGuid();
     public required string FirstNames { get; set; }
     public required string LastNames { get; set; }
+    public string? Rut { get; set; }
     public string? Email { get; set; }
     public string? Phone { get; set; }
     public string? Address { get; set; }
