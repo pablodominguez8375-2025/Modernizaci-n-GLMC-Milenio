@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "purpose": "qa-regression-srv01",
+  "formalUatReplacement": false,
+  "sourceSha": null,
+  "executionId": "qa-srv01-pending",
+  "environment": {
+    "name": "qa-srv01",
+    "baseUrl": null,
+    "executedAtUtc": null
+  },
+  "dataPolicy": {
+    "fictionalDataOnly": true,
+    "noSecretsInEvidence": true,
+    "noPersonalDataCommittedToGit": true
+  },
+  "checks": [
+    {
+      "id": "QA-001",
+      "category": "identity",
+      "title": "Ingreso OIDC y sesión institucional",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-002",
+      "category": "authorization",
+      "title": "Segregación Gran Logia / Taller",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-003",
+      "category": "bootstrap",
+      "title": "Bootstrap controlado e idempotente",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-004",
+      "category": "membership",
+      "title": "Ficha de miembro y grado vigente",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-005",
+      "category": "membership",
+      "title": "Traslado preserva historial y grado",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-006",
+      "category": "regimen_interior",
+      "title": "Reportería ejecutiva Orden/Taller",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-007",
+      "category": "data_quality",
+      "title": "Caso de calidad de datos trazable",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-008",
+      "category": "regularity",
+      "title": "Regularidad Tesorería/Hospitalaria",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-009",
+      "category": "ceremonies",
+      "title": "Ceremonia bloqueada por requisito pendiente",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-010",
+      "category": "ceremonies",
+      "title": "Ceremonia autorizada con requisitos completos",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-011",
+      "category": "candidates",
+      "title": "Publicación de insinuado y plazo mínimo",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-012",
+      "category": "grand_secretariat",
+      "title": "Reserva de templo/sala sin conflicto",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-013",
+      "category": "calendar",
+      "title": "Calendario con masking protegido",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-014",
+      "category": "lodge_management",
+      "title": "Tenida, acta y docencia por Taller",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-015",
+      "category": "documents",
+      "title": "Carga y versionado documental seguro",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-016",
+      "category": "documents",
+      "title": "Archivo riesgoso o inválido rechazado",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-017",
+      "category": "library",
+      "title": "Biblioteca por grado y permisos",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-018",
+      "category": "grand_archive",
+      "title": "Gran Archivero restringido y separado de planchas",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-019",
+      "category": "notifications",
+      "title": "Notificaciones, lectura y obligatoriedad",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-020",
+      "category": "recovery",
+      "title": "Backup, restore y smoke post-recuperación",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-021",
+      "category": "lodge_council",
+      "title": "Consejo de Administración por cargo, Taller y fecha",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    }
+  ],
+  "result": {
+    "decision": "pending",
+    "completedAtUtc": null,
+    "comments": null
+  }
+}
