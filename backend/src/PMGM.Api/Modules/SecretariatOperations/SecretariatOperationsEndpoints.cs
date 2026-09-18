@@ -399,6 +399,8 @@ public static class SecretariatOperationsEndpoints
             member.Person.Rut = intake.Rut;
             member.Person.Email = intake.Email;
             member.Person.Phone = intake.Phone;
+            member.InstitutionalNumber = intake.InstitutionalNumber ?? member.InstitutionalNumber;
+            member.CurrentDegree = intake.CurrentDegree;
         }
         else
         {
@@ -411,7 +413,13 @@ public static class SecretariatOperationsEndpoints
                 Phone = intake.Phone,
                 Status = "active"
             };
-            member = new Member { Person = person, Status = MembershipCodes.MemberStatus.Active };
+            member = new Member
+            {
+                Person = person,
+                InstitutionalNumber = intake.InstitutionalNumber,
+                CurrentDegree = intake.CurrentDegree,
+                Status = MembershipCodes.MemberStatus.Active
+            };
             db.Members.Add(member);
         }
 
@@ -429,16 +437,12 @@ public static class SecretariatOperationsEndpoints
                 MembershipType = "member",
                 StartDate = intake.MembershipStartDate,
                 Status = MembershipCodes.MembershipStatus.Active,
-                InstitutionalNumber = intake.InstitutionalNumber,
-                CurrentDegree = intake.CurrentDegree
             };
             db.Memberships.Add(membership);
         }
         else
         {
             membership.StartDate = intake.MembershipStartDate ?? membership.StartDate;
-            membership.InstitutionalNumber = intake.InstitutionalNumber ?? membership.InstitutionalNumber;
-            membership.CurrentDegree = intake.CurrentDegree;
             membership.Status = MembershipCodes.MembershipStatus.Active;
         }
 
@@ -759,7 +763,7 @@ public static class SecretariatOperationsEndpoints
         if (!string.IsNullOrWhiteSpace(institutionalNumber))
         {
             return await db.Memberships.AsNoTracking()
-                .Where(x => x.OrganizationId == organizationId && x.InstitutionalNumber == institutionalNumber)
+                .Where(x => x.OrganizationId == organizationId && x.Member.InstitutionalNumber == institutionalNumber)
                 .Select(x => (Guid?)x.MemberId)
                 .FirstOrDefaultAsync(cancellationToken);
         }
