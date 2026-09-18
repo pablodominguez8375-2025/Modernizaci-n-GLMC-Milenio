@@ -130,6 +130,7 @@ public sealed class GrandSecretariatTenidaPrivacyTests
         Assert.False(item.TryGetProperty("attendance", out _));
         Assert.False(item.TryGetProperty("ballots", out _));
 
-        Assert.DoesNotContain("Reunión privada CI", response.Content.ReadAsStringAsync(cancellationToken).Result);
+        var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        Assert.DoesNotContain("Reunión privada CI", responseBody);
     }
 }
