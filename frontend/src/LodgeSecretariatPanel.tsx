@@ -1,5 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
-import { type DocumentApiClient, type DocumentVersion } from './api/documentApi'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type DocumentApiClient } from './api/documentApi'
 import {
   type CreateHistoricalMemberIntakeRequest,
   type HistoricalMemberIntake,
@@ -305,7 +305,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   </section>
 }
 
-function Field({label,children}:{label:string;children:React.ReactNode}){return <label className="regularity-field"><span>{label}</span>{children}</label>}
+function Field({label,children}:{label:string;children:ReactNode}){return <label className="regularity-field"><span>{label}</span>{children}</label>}
 function FileButton({label,accept,disabled,onFile}:{label:string;accept:string;disabled:boolean;onFile:(file:File)=>void}){return <label className={disabled?'regularity-secondary disabled':'regularity-secondary'}>{label}<input hidden type="file" accept={accept} disabled={disabled} onChange={e=>{const file=e.target.files?.[0];if(file)onFile(file);e.currentTarget.value=''}} /></label>}
 function today(){return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())}
 function formatDate(value:string){const [y,m,d]=value.split('-');return y&&m&&d?`${d}-${m}-${y}`:value}
