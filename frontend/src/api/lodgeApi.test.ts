@@ -74,7 +74,7 @@ it('demo mode preserves corrections and minute versions without token or network
   const fetch = vi.fn(), token = vi.fn()
   vi.stubGlobal('fetch', fetch)
   const client = new LodgeApiClient({ useMocks: true, getAccessToken: token })
-  const meeting = await client.createMeeting('o1', { meetingDate: '2026-09-08', meetingType: 'regular', grade: 'all' })
+  const meeting = await client.createMeeting('o1', { meetingDate: '2026-09-08', meetingType: 'regular', grade: 'all', modality: 'in_person', locationReference: 'Templo de prueba' })
   const members = await client.getMemberOptions('o1')
   await client.closeMeeting(meeting.id)
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'present' })
