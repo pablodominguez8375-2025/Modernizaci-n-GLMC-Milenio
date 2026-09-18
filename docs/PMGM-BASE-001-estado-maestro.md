@@ -433,6 +433,22 @@ Desde este punto, toda conversación futura que diga “continúa”, “sigue c
 5. evitar crear líneas paralelas, nombres nuevos o arquitecturas alternativas sin una ADR formal;
 6. distinguir siempre entre **diseñado**, **implementado**, **probado**, **aprobado en UAT** y **promovido a producción**.
 
+## 13. Regla permanente de triple salida y Definition of Done
+
+Por decisión del Sponsor / Product Owner, desde este punto todo incremento funcional del Proyecto Centenario debe mantener tres salidas sincronizadas del mismo desarrollo y del mismo SHA:
+
+1. **Programación real en la aplicación vigente:** el cambio debe implementarse sobre la arquitectura y módulos existentes de `dev`, con backend/frontend/datos/permisos/auditoría/migraciones/pruebas/documentación según corresponda.
+2. **Demo funcional GitHub Pages con datos ficticios:** la demo debe permitir navegar y ejecutar los mismos flujos funcionales, formularios, estados, validaciones y permisos visuales utilizando exclusivamente datos ficticios/sintéticos y adaptadores mock compatibles con los contratos del sistema real. No se acepta una maqueta estática o un frontend paralelo como sustituto de la funcionalidad desarrollada.
+3. **Instalable reproducible para QA en `srv01`:** cada corte funcional debe dejar generado o actualizado un paquete instalable trazable desde el mismo SHA, con aplicación, infraestructura, migraciones, scripts/runbook, manifiesto/checksums y configuración segura de ejemplo suficiente para montar el stack operacional de QA.
+
+Un incremento no se considera terminado por el solo hecho de estar fusionado a `dev`, compilar o tener CI verde. La Definition of Done exige código integrado, demo actualizada/publicable y artefacto instalable actualizado. El despliegue en `srv01`, smoke y QA/UAT constituyen la validación operacional posterior. Si no existe acceso al servidor, debe registrarse explícitamente “despliegue QA pendiente” y nunca declararse operacional.
+
+GitHub Pages y el instalable QA son dos salidas del mismo producto, no desarrollos separados. La demo no usa datos personales reales, secretos ni servicios institucionales reales. El instalable QA valida la arquitectura operacional vigente: API, PostgreSQL, OIDC/Keycloak, MinIO/S3, ClamAV, proxy/TLS y demás componentes definidos en el corte.
+
+Flujo permanente:
+
+`Requisito aprobado → feature/* desde dev → programación y pruebas → PR/CI exact-head → merge a dev → publicación Demo GitHub Pages → generación instalable del mismo SHA → despliegue/smoke srv01 → QA/UAT → promoción controlada a main`
+
 ---
 
 **Este documento es la referencia canónica de continuidad funcional/técnica del Proyecto Centenario.**
