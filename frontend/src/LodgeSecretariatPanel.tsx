@@ -19,11 +19,12 @@ type Props = {
   documentApi: DocumentApiClient
   meetings: LodgeMeeting[]
   members: LodgeMemberOption[]
+  canManage: boolean
 }
 
 type DocumentKind = 'work_paper' | 'extract' | 'full_minute'
 
-export default function LodgeSecretariatPanel({ organizationId, lodgeApi, documentApi, meetings, members }: Props) {
+export default function LodgeSecretariatPanel({ organizationId, lodgeApi, documentApi, meetings, members, canManage }: Props) {
   const councilApi = useLodgeCouncilApi()
   const [intakes, setIntakes] = useState<HistoricalMemberIntake[]>([])
   const [adminMeetings, setAdminMeetings] = useState<LodgeAdministrativeMeeting[]>([])
@@ -227,7 +228,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   return <section className="lodge-secretariat-workspace">
     <div className="lodge-secretariat-heading">
       <div><p className="lodge-kicker">Gestión Logial › Secretaría del Taller</p><h2>Cuadro, reuniones y archivo de Secretaría</h2><p>La Secretaría opera la información del Taller. Régimen Interior valida la carga histórica y Gran Secretaría sólo recibe datos básicos de Tenidas con su extracto PDF.</p></div>
-      <span className="lodge-live-chip">Ámbito privado del Taller</span>
+      <span className="lodge-live-chip">{canManage ? 'Operación de Secretaría' : 'Supervisión · solo lectura'}</span>
     </div>
 
     {error && <div className="error-banner" role="alert">{error}</div>}
@@ -237,7 +238,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       <article className="panel">
         <div className="panel-heading"><div><p className="eyebrow">Puesta en marcha</p><h3>Carga inicial del Cuadro del Taller</h3></div><span className="count-badge">{intakes.length} cargas</span></div>
         <p className="form-note">Para hermanos que ya pertenecen a la Orden. No obliga a inventar fechas desconocidas y no usa el flujo de nuevos iniciados.</p>
-        <form className="regularity-form" onSubmit={createHistorical}>
+        {canManage && <form className="regularity-form" onSubmit={createHistorical}>
           <div className="lodge-form-row"><Field label="Nombres"><input required value={firstNames} onChange={e=>setFirstNames(e.target.value)} /></Field><Field label="Apellidos"><input required value={lastNames} onChange={e=>setLastNames(e.target.value)} /></Field></div>
           <div className="lodge-form-row"><Field label="RUT"><input value={rut} onChange={e=>setRut(e.target.value)} placeholder="Opcional" /></Field><Field label="Nº institucional"><input value={institutionalNumber} onChange={e=>setInstitutionalNumber(e.target.value)} /></Field></div>
           <div className="lodge-form-row"><Field label="Grado actual"><select value={currentDegree} onChange={e=>setCurrentDegree(e.target.value as typeof currentDegree)}><option value="apprentice">Aprendiz</option><option value="fellowcraft">Compañero</option><option value="master">Maestro</option></select></Field><Field label="Ingreso al Taller"><input type="date" value={membershipStartDate} onChange={e=>setMembershipStartDate(e.target.value)} /></Field></div>
@@ -245,30 +246,30 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
           <div className="lodge-form-row"><Field label="Cargo vigente opcional"><input value={officeType} onChange={e=>setOfficeType(e.target.value)} placeholder="Ej.: lodge_secretariat" /></Field><Field label="Período"><input value={officePeriod} onChange={e=>setOfficePeriod(e.target.value)} /></Field></div>
           <Field label="Fuente / evidencia"><input required value={evidenceReference} onChange={e=>setEvidenceReference(e.target.value)} /></Field>
           <button className="regularity-primary" type="submit" disabled={working}>Guardar borrador</button>
-        </form>
+        </form>}
 
-        <div className="lodge-secretariat-import">
+        {canManage && <div className="lodge-secretariat-import">
           <button type="button" className="regularity-secondary" disabled={working} onClick={()=>void downloadTemplate()}>Descargar plantilla Excel</button>
           <input aria-label="Plantilla Excel del Cuadro" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={e=>setBulkFile(e.target.files?.[0]??null)} />
           <button type="button" className="regularity-secondary" disabled={working||!bulkFile} onClick={()=>void importTemplate()}>Importar Excel</button>
-        </div>
+        </div>}
 
         <div className="lodge-secretariat-list">
-          {intakes.slice(0,12).map(item=><div key={item.id}><div><strong>{item.firstNames} {item.lastNames}</strong><span>{degreeLabel(item.currentDegree)} · {intakeStatusLabel(item.status)}</span><small>{item.evidenceReference}</small></div>{(item.status==='draft'||item.status==='observed')&&<button type="button" className="regularity-secondary" disabled={working} onClick={()=>void submitHistorical(item.id)}>Enviar a RI</button>}</div>)}
+          {intakes.slice(0,12).map(item=><div key={item.id}><div><strong>{item.firstNames} {item.lastNames}</strong><span>{degreeLabel(item.currentDegree)} · {intakeStatusLabel(item.status)}</span><small>{item.evidenceReference}</small></div>{canManage&&(item.status==='draft'||item.status==='observed')&&<button type="button" className="regularity-secondary" disabled={working} onClick={()=>void submitHistorical(item.id)}>Enviar a RI</button>}</div>)}
           {!intakes.length && <p className="muted">No hay cargas históricas ingresadas todavía.</p>}
         </div>
       </article>
 
       <article className="panel">
         <div className="panel-heading"><div><p className="eyebrow">Privado del Taller</p><h3>Reuniones</h3></div><span className="count-badge">{adminMeetings.length}</span></div>
-        <form className="regularity-form" onSubmit={createAdministrativeMeeting}>
+        {canManage && <form className="regularity-form" onSubmit={createAdministrativeMeeting}>
           <Field label="Fecha"><input type="date" required value={meetingDate} onChange={e=>setMeetingDate(e.target.value)} /></Field>
           <Field label="Título"><input required value={meetingTitle} onChange={e=>setMeetingTitle(e.target.value)} /></Field>
           <Field label="Propósito"><input value={meetingPurpose} onChange={e=>setMeetingPurpose(e.target.value)} /></Field>
           <button className="regularity-primary" type="submit" disabled={working}>Programar reunión</button>
-        </form>
+        </form>}
         <div className="lodge-secretariat-list">
-          {adminMeetings.map(item=><div key={item.id}><div><strong>{item.title}</strong><span>{formatDate(item.meetingDate)} · {item.status==='held'?'Realizada':'Programada'}</span><small>{item.purpose||'Sin descripción adicional'}</small></div>{item.status==='scheduled'&&<button type="button" className="regularity-secondary" onClick={()=>void markMeetingHeld(item.id)}>Marcar realizada</button>}</div>)}
+          {adminMeetings.map(item=><div key={item.id}><div><strong>{item.title}</strong><span>{formatDate(item.meetingDate)} · {item.status==='held'?'Realizada':'Programada'}</span><small>{item.purpose||'Sin descripción adicional'}</small></div>{canManage&&item.status==='scheduled'&&<button type="button" className="regularity-secondary" onClick={()=>void markMeetingHeld(item.id)}>Marcar realizada</button>}</div>)}
           {!adminMeetings.length && <p className="muted">No hay reuniones registradas.</p>}
         </div>
       </article>
@@ -282,7 +283,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         <Field label="Registro"><select value={sourceRecordId} onChange={e=>setSourceRecordId(e.target.value)}><option value="">Seleccione…</option>{sources.map(x=><option key={x.id} value={x.id}>{x.label}</option>)}</select></Field>
       </div>
 
-      {currentSource && <div className="lodge-secretariat-document-actions">
+      {currentSource && canManage && <div className="lodge-secretariat-document-actions">
         <div className="secretariat-document-card">
           <strong>Plancha de trabajo</strong><span>{planchaAllowed?'Opcional · PDF o Word · puede cargarse posteriormente':'No corresponde a este registro'}</span>
           {planchaAllowed && <><select aria-label="Hermano autor de la plancha" value={workPaperAuthorMemberId} onChange={e=>setWorkPaperAuthorMemberId(e.target.value)}><option value="">Hermano autor…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select><FileButton disabled={!!uploadingKind} accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" label={currentRecord?.workPaperDocumentVersionId?'Reemplazar plancha':'Cargar plancha'} onFile={file=>void uploadDocument('work_paper',file)} /></>}
@@ -300,7 +301,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         </div>
       </div>}
 
-      {recordType==='tenida' && currentSource && <div className="lodge-secretariat-submit"><button type="button" className="regularity-primary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button><small>Solo se remiten datos básicos de la Tenida y el extracto PDF.</small></div>}
+      {canManage && recordType==='tenida' && currentSource && <div className="lodge-secretariat-submit"><button type="button" className="regularity-primary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button><small>Solo se remiten datos básicos de la Tenida y el extracto PDF.</small></div>}
     </article>
   </section>
 }
