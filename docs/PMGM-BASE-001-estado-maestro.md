@@ -450,69 +450,74 @@ Flujo permanente:
 `Requisito aprobado → feature/* desde dev → programación y pruebas → PR/CI exact-head → merge a dev → publicación Demo GitHub Pages → generación instalable del mismo SHA → despliegue/smoke srv01 → QA/UAT → promoción controlada a main`
 
 
-## 14. Corte operativo vigente — triple salida y siguiente hito
+## 14. Corte operativo vigente — regla de frescura y siguiente hito
 
 > Esta sección prevalece sobre checkpoints históricos de las secciones 7, 8 y 10 cuando exista discrepancia de estado.
 
+### Regla de frescura obligatoria
+
+El SHA exacto de trabajo **no se toma de un valor fijado en este documento**. Toda sesión, chat, Work, Codex u otra IA debe consultar al inicio:
+
+1. HEAD vivo de `dev`;
+2. PRs/CI asociados al corte;
+3. Issue #97 para el artifact QA y estado operacional vigente;
+4. Línea Base Maestra de Google Drive.
+
+Los SHA y artifact IDs citados en changelogs o secciones históricas son evidencia de un corte anterior, no punteros permanentes.
+
 ### Desarrollo integrado
 
-- rama activa: `dev`;
-- HEAD verificado previo a este cierre documental: `ba1f4475223b66736280a7d99d05eaee23bb0cd5`;
-- PR #91 integró Consejo de Administración auditable;
-- PR #93 fijó la Definition of Done de triple salida;
-- PR #94 automatizó demo + instalable QA `srv01`;
-- PR #98 incorporó kit de regresión QA de 21 controles;
-- PR #100 resolvió el bloqueo real del deploy post-merge de GitHub Pages.
+La línea vigente incluye, como mínimo:
+
+- Consejo de Administración auditable;
+- Definition of Done de triple salida;
+- demo GitHub Pages funcional con datos ficticios;
+- instalable QA reproducible para `srv01`;
+- kit de regresión QA de 21 controles;
+- deploy post-merge de Pages resuelto;
+- Keycloak QA persistido en PostgreSQL;
+- backup/restore de PostgreSQL + MinIO;
+- deploy/rollback de `srv01` por release;
+- publicación en Pages de `downloads/qa-current.json` y del ZIP QA del mismo SHA.
 
 ### Demo GitHub Pages
 
-La demo pública está operacional y fue desplegada correctamente desde el mismo merge SHA:
+URL oficial:
 
 `https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/`
 
-Verificación del workflow:
+Cada publicación desplegable debe mantener la paridad:
 
-- Build Showcase: `success`;
-- Deploy testing showcase: `success`;
-- Pages deployment version: `ba1f4475223b66736280a7d99d05eaee23bb0cd5`.
+`HEAD dev = SHA visible demo = sourceSha de qa-current.json = BUILD-INFO del ZIP QA`.
 
-Causa raíz del bloqueo anterior: el environment `github-pages` permitía sólo `dev`/ `main`, mientras el fallback post-merge quedaba registrado con ref de la rama feature. La solución mantiene `github-pages` protegido para deploys normales y usa un environment dedicado únicamente para el post-merge de PR ya fusionado. Issue #96 quedó cerrado.
+### Instalable y despliegue QA
 
-### Instalable QA srv01
+La referencia operacional dinámica es **Issue #97**.
 
-El artifact reproducible correspondiente al mismo SHA quedó generado y validado:
+El método preferido está documentado en:
 
-- artifact: `proyecto-centenario-qa-srv01-ba1f4475223b66736280a7d99d05eaee23bb0cd5`;
-- artifact ID: `10527367573`;
-- digest: `sha256:36337f374e41d0e8b45539a5dd0063579a115d1a68fb6063b0e2cf828dcc905b`.
+`docs/installation/QA-SRV01-AUTODEPLOY.md`
 
-El paquete contiene API, frontend, PostgreSQL, Keycloak, MinIO, ClamAV, migraciones, preflight, instalador, smoke autenticado, `BUILD-INFO.txt`, manifiesto/checksums y kit de regresión QA.
+Flujo:
 
-### Regresión QA
+1. actualizar el clon `/opt/centenario/app` a `origin/dev`;
+2. ejecutar `deploy-srv01-from-pages.sh` con el SHA vivo;
+3. verificar SHA-256 externo e interno;
+4. generar backup previo si existe versión instalada;
+5. instalar;
+6. ejecutar smoke autenticado;
+7. preparar regresión QA;
+8. cerrar QA-001..QA-021;
+9. corregir P0/P1;
+10. recién entonces congelar UAT.
 
-El paquete incluye 21 controles:
+### Siguiente incremento funcional
 
-- QA-001..QA-020: cobertura funcional heredada del plan histórico;
-- QA-021: Consejo de Administración.
+No abrir un nuevo incremento funcional mientras Issue #97 continúe bloqueando el corte QA, salvo decisión expresa del Sponsor / Product Owner.
 
-La regresión QA no sustituye la UAT institucional formal ni la aprobación del Sponsor / Product Owner.
+Después de cerrar QA, continuar con el expediente de insinuación definido en `PMGM-NEXT-001`.
 
-### Siguiente hito obligatorio
-
-El bloqueo técnico de Pages está cerrado. El cuello de botella vigente pasa a ser Issue #97:
-
-1. desplegar el artifact exacto en `srv01`;
-2. validar `MANIFEST.sha256`;
-3. completar `/etc/pmgm/srv01.env` fuera de Git;
-4. ejecutar `INSTALAR.sh`;
-5. ejecutar smoke autenticado;
-6. comprobar Consejo de Administración con perfil autorizado;
-7. ejecutar regresión QA 21/21;
-8. corregir defectos P0/P1 si aparecen;
-9. congelar un nuevo candidato UAT desde el código vigente;
-10. ejecutar UAT institucional y promover a `main` sólo con aprobación expresa.
-
-No reutilizar la antigua RC1 o su evidencia para atribuir aceptación al corte actual.
+No reutilizar la RC1 histórica o evidencia de un SHA anterior para atribuir aceptación al código vivo.
 
 ---
 
