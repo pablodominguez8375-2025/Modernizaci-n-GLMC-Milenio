@@ -60,7 +60,7 @@ fi
 
 PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/preflight-srv01-qa.sh"
 
-compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 echo "Descargando imágenes base..."
 "${compose[@]}" pull postgres minio minio-init clamav keycloak
