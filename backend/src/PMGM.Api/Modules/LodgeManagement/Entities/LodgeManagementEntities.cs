@@ -8,7 +8,7 @@ public sealed class LodgeMeeting
     public required string MeetingType { get; set; }
     public required string Grade { get; set; }
     public string? CeremonyType { get; set; }
-    public required string Modality { get; set; }
+    public string Modality { get; set; } = "in_person";
     public string? LocationReference { get; set; }
     public string? VirtualAccessReference { get; set; }
     public string? Title { get; set; }
