@@ -42,7 +42,7 @@ import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
 type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -99,6 +99,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
   const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
+  const canReadLodgeSecretariat = capabilities?.canReadLodgeSecretariat ?? false
+  const canManageLodgeSecretariat = capabilities?.canManageLodgeSecretariat ?? false
   const canCandidateProfile = canSecretariat || canLodge
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
   const canDocuments = capabilities?.canManageDocuments ?? false
@@ -188,7 +190,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
-        {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} />}
+        {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat} />}
         {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
       </main>
