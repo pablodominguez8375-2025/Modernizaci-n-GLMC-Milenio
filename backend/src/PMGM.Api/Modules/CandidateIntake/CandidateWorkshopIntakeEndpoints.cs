@@ -28,21 +28,45 @@ public static class CandidateWorkshopIntakeEndpoints
         if (!access.HasOrderScope(httpContext.User) ||
             !access.HasRole(httpContext.User, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranLogiaAdmin))
             return Results.Forbid();
-        var alerts = await coreDb.CeremonyValidations.AsNoTracking()
-            .Where(x => x.ValidationType == CeremonyCodes.ValidationType.CandidateThirdDegreeReview && x.Status == CeremonyCodes.ValidationStatus.Rejected)
+        var alertRows = await coreDb.CeremonyValidations.AsNoTracking()
+            .Where(x => (x.ValidationType == CeremonyCodes.ValidationType.CandidateThirdDegreeReview ||
+                         x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot) &&
+                        x.Status == CeremonyCodes.ValidationStatus.Rejected)
             .OrderByDescending(x => x.RecordedAtUtc)
-            .Select(x => new CandidateOrderRejectionAlertDto(
-                x.CeremonyRequest.CandidatePersonId!.Value,
-                x.CeremonyRequest.CandidatePerson!.FirstNames,
-                x.CeremonyRequest.CandidatePerson!.LastNames,
-                x.CeremonyRequest.Organization.Name,
-                x.CeremonyRequest.Organization.Number,
+            .Select(x => new
+            {
+                PersonId = x.CeremonyRequest.CandidatePersonId!.Value,
+                FirstNames = x.CeremonyRequest.CandidatePerson!.FirstNames,
+                LastNames = x.CeremonyRequest.CandidatePerson!.LastNames,
+                WorkshopName = x.CeremonyRequest.Organization.Name,
+                WorkshopNumber = x.CeremonyRequest.Organization.Number,
                 x.AsOfDate,
                 x.SourceReference,
                 x.Notes,
-                x.Notes ?? "Rechazo en Cámara del Medio / tercer grado"))
+                x.ValidationType,
+                x.RecordedAtUtc
+            })
             .Take(500)
             .ToListAsync(cancellationToken);
+        var alerts = alertRows.Select(x => new CandidateOrderRejectionAlertDto(
+                x.PersonId,
+                x.FirstNames,
+                x.LastNames,
+                x.WorkshopName,
+                x.WorkshopNumber,
+                x.AsOfDate,
+                x.SourceReference,
+                x.Notes,
+                CandidateRejectionPolicy.GetReason(x.ValidationType)))
+            .ToList();
+        /*
+            The query above intentionally retrieves both blocking rejection sources.
+            Reason text is assigned after materialization to keep the EF query simple
+            and the normative mapping covered by unit tests.
+        */
+        /* legacy projection removed:
+            .Select(x => new CandidateOrderRejectionAlertDto(
+        */
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { total = alerts.Count, items = alerts });
     }
@@ -114,11 +138,19 @@ public static class CandidateWorkshopIntakeEndpoints
 
         var personIds = allowed.Select(x => x.CandidatePersonId!.Value).Distinct().ToArray();
         var blockedRows = await coreDb.CeremonyValidations.AsNoTracking()
-            .Where(x => x.ValidationType == CeremonyCodes.ValidationType.CandidateThirdDegreeReview &&
+            .Where(x => (x.ValidationType == CeremonyCodes.ValidationType.CandidateThirdDegreeReview ||
+                         x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot) &&
                         x.Status == CeremonyCodes.ValidationStatus.Rejected &&
                         personIds.Contains(x.CeremonyRequest.CandidatePersonId!.Value))
             .OrderByDescending(x => x.RecordedAtUtc)
-            .Select(x => new { PersonId = x.CeremonyRequest.CandidatePersonId!.Value, x.CeremonyRequestId, WorkshopName = x.CeremonyRequest.Organization.Name, x.AsOfDate })
+            .Select(x => new
+            {
+                PersonId = x.CeremonyRequest.CandidatePersonId!.Value,
+                x.CeremonyRequestId,
+                WorkshopName = x.CeremonyRequest.Organization.Name,
+                x.AsOfDate,
+                x.ValidationType
+            })
             .ToListAsync(cancellationToken);
         var blockedByPerson = blockedRows.GroupBy(x => x.PersonId).ToDictionary(x => x.Key, x => x.First());
 
@@ -145,7 +177,7 @@ public static class CandidateWorkshopIntakeEndpoints
                 profile?.PhotoVersionId is not null,
                 reviewStatus,
                 candidate.CreatedAtUtc,
-                blocked is null ? null : new CandidateOrderBlockAlertDto(blocked.CeremonyRequestId, blocked.WorkshopName, blocked.AsOfDate, "Rechazo en Cámara del Medio / tercer grado"));
+                blocked is null ? null : new CandidateOrderBlockAlertDto(blocked.CeremonyRequestId, blocked.WorkshopName, blocked.AsOfDate, CandidateRejectionPolicy.GetReason(blocked.ValidationType)));
         }).ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
