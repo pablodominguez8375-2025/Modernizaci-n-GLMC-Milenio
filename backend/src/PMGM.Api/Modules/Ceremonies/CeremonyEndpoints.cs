@@ -66,7 +66,10 @@ public static class CeremonyEndpoints
 
         var authorization = await secretariatDb.SecretariatDocuments.AsNoTracking()
             .Where(x => x.RelatedCeremonyRequestId == requestId &&
-                        x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorization &&
+                        ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                          x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy) &&
                         x.Status == GrandSecretariatCodes.DocumentStatus.Issued)
             .OrderByDescending(x => x.IssuedAtUtc)
             .Select(x => new { x.DocumentCode })
