@@ -36,12 +36,12 @@ describe('Gestión Logial product cockpit', () => {
 
     expect(meetings.total).toBeGreaterThanOrEqual(3)
     expect(meetings.items.some(item => item.status === 'scheduled')).toBe(true)
-    expect(meetings.items.some(item => item.status === 'closed')).toBe(true)
+    expect(meetings.items.some(item => item.status === 'held')).toBe(true)
   })
 
   it('keeps attendance and an approved minute for the historical demo meeting', async () => {
     const api = new LodgeApiClient({ useMocks: true })
-    const historicalMeeting = demoLodgeSeed.meetings.find(item => item.status === 'closed')
+    const historicalMeeting = demoLodgeSeed.meetings.find(item => item.status === 'held')
     expect(historicalMeeting).toBeDefined()
 
     const attendance = await api.getAttendance(historicalMeeting!.id)
