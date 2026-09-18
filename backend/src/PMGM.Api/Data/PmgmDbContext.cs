@@ -204,6 +204,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
             entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
             entity.HasIndex(x => new { x.OrganizationId, x.Status, x.CreatedAtUtc });
+            entity.HasIndex(x => x.TargetMemberId);
             entity.HasIndex(x => x.Rut);
             entity.HasIndex(x => x.InstitutionalNumber);
         });
