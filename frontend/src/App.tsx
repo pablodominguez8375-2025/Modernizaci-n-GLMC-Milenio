@@ -188,7 +188,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
-        {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} />}
+        {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} />}
         {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
       </main>
