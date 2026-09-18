@@ -51,7 +51,4 @@ public static class SecretariatOperationsPolicy
     public static bool WorkPaperAllowed(string recordType, string? ceremonyType)
         => recordType == SecretariatOperationsCodes.RecordType.LodgeMeeting &&
            !SecretariatOperationsCodes.CeremonyType.IsCeremonial(ceremonyType);
-
-    public static bool WorkPaperRequiredToMarkHeld(string? ceremonyType)
-        => !SecretariatOperationsCodes.CeremonyType.IsCeremonial(ceremonyType);
 }
