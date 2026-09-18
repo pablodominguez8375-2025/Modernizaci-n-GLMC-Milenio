@@ -199,6 +199,7 @@ public sealed class FirstImplementationSeedService(
         {
             Id = meetingId, OrganizationId = Lodge23Id, MeetingDate = new DateOnly(2026, 9, 12),
             MeetingType = LodgeManagementCodes.MeetingType.Regular, Grade = LodgeManagementCodes.Grade.All,
+            Modality = LodgeManagementCodes.MeetingModality.InPerson, LocationReference = "Templo QA ficticio",
             Title = "Tenida Regular — Primera implementación", Status = LodgeManagementCodes.MeetingStatus.Scheduled
         };
         var minute = new LodgeMinute
