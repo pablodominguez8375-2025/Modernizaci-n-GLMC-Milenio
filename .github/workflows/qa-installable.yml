@@ -30,6 +30,11 @@ jobs:
           bash -n scripts/smoke-srv01-qa.sh
           bash -n scripts/build-qa-installable.sh
           bash -n scripts/prepare-srv01-regression.sh
+          bash -n scripts/backup-srv01-qa.sh
+          bash -n scripts/verify-srv01-backup.sh
+          bash -n scripts/restore-srv01-qa.sh
+          bash -n scripts/deploy-srv01-from-pages.sh
+          bash -n scripts/rollback-srv01-qa.sh
           python3 -m py_compile scripts/record-srv01-regression-result.py tests/qa_srv01_regression_gate.py
           python3 tests/qa_srv01_regression_gate.py release/PMGM-QA-SRV01-REGRESSION.template.json --allow-pending
 
@@ -51,7 +56,13 @@ jobs:
           chmod 600 "$RUNNER_TEMP/srv01.env"
 
       - name: Validate srv01 Docker Compose
-        run: docker compose --env-file "$RUNNER_TEMP/srv01.env" -f infrastructure/docker-compose.srv01.yml config >/dev/null
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose -p pmgm-srv01 --env-file "$RUNNER_TEMP/srv01.env" -f infrastructure/docker-compose.srv01.yml config > "$RUNNER_TEMP/srv01-compose.rendered.yml"
+          grep -q 'jdbc:postgresql://postgres:5432/pmgm_keycloak' "$RUNNER_TEMP/srv01-compose.rendered.yml"
+          grep -q '10-init-srv01.sql' "$RUNNER_TEMP/srv01-compose.rendered.yml"
+          test -s infrastructure/postgres/init-srv01.sql
 
       - name: Validate QA realm roles and users
         shell: bash
@@ -110,6 +121,12 @@ jobs:
           test -f "$root/tests/qa_srv01_regression_gate.py"
           test -f "$root/release/PMGM-QA-SRV01-REGRESSION.template.json"
           test -f "$root/docs/qa/PMGM-SRV01-REGRESSION-KIT.md"
+          test -f "$root/infrastructure/postgres/init-srv01.sql"
+          test -f "$root/scripts/backup-srv01-qa.sh"
+          test -f "$root/scripts/verify-srv01-backup.sh"
+          test -f "$root/scripts/restore-srv01-qa.sh"
+          test -f "$root/scripts/deploy-srv01-from-pages.sh"
+          test -f "$root/scripts/rollback-srv01-qa.sh"
 
       - name: Upload QA installable
         uses: actions/upload-artifact@v4
