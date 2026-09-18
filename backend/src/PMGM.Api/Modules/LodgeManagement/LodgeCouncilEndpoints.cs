@@ -158,7 +158,7 @@ public static class LodgeCouncilEndpoints
             var effectiveOfficeTypes = await institutionalDb.OfficeAssignments.AsNoTracking()
                 .Where(x => x.MemberId == member.MemberId &&
                             x.OrganizationId == session.OrganizationId &&
-                            x.StartDate <= session.SessionDate &&
+                            (x.StartDate == null || x.StartDate <= session.SessionDate) &&
                             (x.EndDate == null || x.EndDate >= session.SessionDate))
                 .Select(x => x.OfficeType)
                 .ToListAsync(cancellationToken);
