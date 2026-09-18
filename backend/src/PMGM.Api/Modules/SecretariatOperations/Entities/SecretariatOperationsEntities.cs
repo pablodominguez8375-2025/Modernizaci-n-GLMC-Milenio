@@ -55,7 +55,7 @@ public sealed class LodgeAdministrativeMeeting
     public DateTimeOffset? HeldAtUtc { get; set; }
 }
 
-public sealed class LodgeSecretariatSubmission
+public sealed class LodgeSecretariatRecord
 {
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid OrganizationId { get; set; }
