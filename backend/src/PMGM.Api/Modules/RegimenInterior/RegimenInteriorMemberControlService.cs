@@ -39,6 +39,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
             .Select(x => new PersonRow(
                 x.Id,
                 x.InstitutionalNumber,
+                x.CurrentDegree,
                 x.Person.FirstNames + " " + x.Person.LastNames))
             .ToListAsync(cancellationToken);
 
@@ -52,8 +53,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 x.Organization.Number,
                 x.StartDate,
                 x.EndDate,
-                x.Status,
-                x.CurrentDegree))
+                x.Status))
             .ToListAsync(cancellationToken);
 
         var statusEvents = await db.InstitutionalStatusEvents
@@ -187,7 +187,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 Workshop(lastMembership),
                 currentStatus,
                 latestStatus?.EffectiveDate,
-                latestDegree?.Degree ?? currentMembership?.CurrentDegree ?? lastMembership.CurrentDegree,
+                latestDegree?.Degree ?? person.CurrentDegree,
                 new MemberMilestones(
                     FirstDegreeDate(memberDegrees, MembershipCodes.DegreeEvent.Initiation),
                     FirstDegreeDate(memberDegrees, MembershipCodes.DegreeEvent.WageIncrease),
@@ -262,8 +262,8 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
             .ToLowerInvariant()
             .Trim();
 
-    private sealed record PersonRow(Guid MemberId, string? InstitutionalNumber, string DisplayName);
-    private sealed record MembershipRow(Guid MemberId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber, DateOnly? StartDate, DateOnly? EndDate, string Status, string? CurrentDegree);
+    private sealed record PersonRow(Guid MemberId, string? InstitutionalNumber, string? CurrentDegree, string DisplayName);
+    private sealed record MembershipRow(Guid MemberId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber, DateOnly? StartDate, DateOnly? EndDate, string Status);
     private sealed record StatusRow(Guid MemberId, string Status, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record DegreeRow(Guid MemberId, string Degree, string EventType, DateOnly EffectiveDate, DateTimeOffset RecordedAtUtc);
     private sealed record TransferRow(Guid MemberId, Guid SourceOrganizationId, string SourceOrganizationName, Guid TargetOrganizationId, string TargetOrganizationName, DateOnly RequestedDate, DateOnly ProposedEffectiveDate, DateOnly? ApprovedEffectiveDate, string Status, DateTimeOffset CreatedAtUtc);
