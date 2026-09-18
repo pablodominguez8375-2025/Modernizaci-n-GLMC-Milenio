@@ -626,6 +626,18 @@ public static class SecretariatOperationsEndpoints
         {
             if (!SecretariatOperationsPolicy.WorkPaperAllowed(recordType, ceremonyType))
                 return Results.BadRequest(new { message = "La plancha sólo puede asociarse a una Tenida no ceremonial." });
+            if (request.WorkPaperAuthorMemberId is null)
+                return Results.BadRequest(new { message = "Debe identificar al hermano autor de la plancha." });
+
+            var authorBelongsToLodge = await db.Memberships.AsNoTracking()
+                .AnyAsync(
+                    x => x.MemberId == request.WorkPaperAuthorMemberId.Value &&
+                         x.OrganizationId == organizationId &&
+                         x.Status == MembershipCodes.MembershipStatus.Active &&
+                         x.EndDate == null,
+                    cancellationToken);
+            if (!authorBelongsToLodge)
+                return Results.BadRequest(new { message = "El autor de la plancha debe pertenecer activamente al Cuadro del Taller." });
 
             var valid = await ValidateDocumentVersionAsync(
                 documentDb, request.WorkPaperDocumentVersionId.Value, organizationId, requirePdf: false, cancellationToken);
@@ -751,18 +763,18 @@ public static class SecretariatOperationsEndpoints
     {
         if (!string.IsNullOrWhiteSpace(rut))
         {
-            var byRut = await db.Memberships.AsNoTracking()
-                .Where(x => x.OrganizationId == organizationId && x.Member.Person.Rut == rut)
-                .Select(x => (Guid?)x.MemberId)
+            var byRut = await db.Members.AsNoTracking()
+                .Where(x => x.Person.Rut == rut)
+                .Select(x => (Guid?)x.Id)
                 .FirstOrDefaultAsync(cancellationToken);
             if (byRut is not null) return byRut;
         }
 
         if (!string.IsNullOrWhiteSpace(institutionalNumber))
         {
-            return await db.Memberships.AsNoTracking()
-                .Where(x => x.OrganizationId == organizationId && x.Member.InstitutionalNumber == institutionalNumber)
-                .Select(x => (Guid?)x.MemberId)
+            return await db.Members.AsNoTracking()
+                .Where(x => x.InstitutionalNumber == institutionalNumber)
+                .Select(x => (Guid?)x.Id)
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
@@ -784,8 +796,6 @@ public static class SecretariatOperationsEndpoints
             return "Debe indicar la fuente o evidencia de la carga histórica.";
         if (request.Offices.Any(x => string.IsNullOrWhiteSpace(x.OfficeType) || string.IsNullOrWhiteSpace(x.Period)))
             return "Todo cargo debe indicar código institucional y período.";
-        if (request.Offices.Any(x => x.IsCurrent && !CouncilOfficeCodes.Contains(x.OfficeType)))
-            return "Los cargos vigentes de Taller deben usar códigos institucionales reconocidos.";
         return null;
     }
 
