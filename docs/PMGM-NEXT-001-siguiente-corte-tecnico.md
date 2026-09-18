@@ -24,6 +24,14 @@ La automatización vigente está documentada en:
 
 y se traza en Issue #97.
 
+## Autorización de avance funcional en paralelo — 18-09-2026
+
+El Sponsor / Product Owner instruyó expresamente continuar desarrollo, pruebas, documentación y siguientes funciones desde el estado vivo de `dev`.
+
+Esta autorización permite trabajar el siguiente incremento funcional en una rama `feature/*` mientras Issue #97 permanece abierto. **No elimina el gate operacional de QA**: no se puede declarar el corte operacional, ejecutar UAT como evidencia del código nuevo ni promover a `main` hasta desplegar en `srv01` el SHA correspondiente y completar smoke/regresión.
+
+El incremento activo es `feature/insinuaciones-flujo-reglamentario-v2`, que extiende el flujo real de insinuaciones ya existente y corrige brechas de alineamiento con el protocolo 2026.
+
 ## Siguiente incremento funcional después de QA
 
 Una vez cerrado el hito anterior, continuar con el expediente de insinuación y sus transiciones reglamentarias. La fuente de verdad será dominio/backend antes que interfaz.
