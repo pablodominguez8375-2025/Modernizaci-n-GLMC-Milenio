@@ -35,6 +35,14 @@ public static class LodgeManagementCodes
             };
     }
 
+    public static class MeetingModality
+    {
+        public const string InPerson = "in_person";
+        public const string Virtual = "virtual";
+
+        public static bool IsValid(string value) => value is InPerson or Virtual;
+    }
+
     public static class MeetingStatus
     {
         public const string Scheduled = "scheduled";
