@@ -43,6 +43,10 @@ public interface IInstitutionalAccessService
     bool CanReadOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeOperations(ClaimsPrincipal user);
+    bool CanManageLodgeSecretariat(ClaimsPrincipal user, Guid organizationId);
+    bool CanReadLodgeSecretariat(ClaimsPrincipal user, Guid organizationId);
+    bool CanReviewHistoricalMemberIntake(ClaimsPrincipal user);
+    bool CanReviewSecretariatSubmissions(ClaimsPrincipal user);
     bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeHospitalaria(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId);
@@ -123,6 +127,23 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin)) ||
            (HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria) &&
             user.Claims.Any(x => x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
+
+    public bool CanManageLodgeSecretariat(ClaimsPrincipal user, Guid organizationId)
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin)) ||
+           (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerSecretaria));
+
+    public bool CanReadLodgeSecretariat(ClaimsPrincipal user, Guid organizationId)
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior, InstitutionalRoles.GranSecretaria)) ||
+           (HasOrganizationClaim(user, organizationId) &&
+            HasRole(user, InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerVenerable, InstitutionalRoles.TallerOrador));
+
+    public bool CanReviewHistoricalMemberIntake(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior);
+
+    public bool CanReviewSecretariatSubmissions(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranSecretaria);
 
     public bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId)
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranTesoreria)) ||
