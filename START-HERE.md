@@ -48,7 +48,19 @@ No crees una segunda API, un frontend paralelo, un nuevo esquema de autorizació
 
 No mezcles una corrección documental/gobierno con cambios funcionales si pueden revisarse por separado.
 
-## 6. Handoff obligatorio
+## 6. Definición permanente de terminado: triple salida
+
+Todo incremento funcional del Proyecto Centenario debe producir y mantener **tres salidas sincronizadas del mismo desarrollo y del mismo SHA**:
+
+1. **Programación real:** funcionalidad implementada sobre el código vigente de `dev`, con backend/frontend/datos/permisos/auditoría/migraciones/pruebas/documentación según corresponda.
+2. **Demo funcional GitHub Pages:** misma experiencia y mismos flujos funcionales, usando exclusivamente datos ficticios/sintéticos y adaptadores mock equivalentes a los contratos reales. No puede ser una maqueta estática que omita el comportamiento implementado. Debe publicarse desde `dev` y permitir verificar el SHA visible.
+3. **Instalable QA para `srv01`:** paquete reproducible generado desde el mismo SHA, con aplicación, infraestructura, configuración de ejemplo segura, migraciones, scripts/runbook, manifiesto/checksums y controles necesarios para montar el stack operacional de QA.
+
+Un incremento **no se considera terminado** solo porque el PR esté fusionado o el CI compile. Debe quedar, como mínimo, código integrado, demo actualizada/publicable y artefacto instalable generado/actualizado. Cuando exista acceso operativo a `srv01`, el ciclo continúa con despliegue, smoke y QA/UAT. Si el despliegue no pudo realizarse, debe declararse expresamente como pendiente y nunca confundirse con un estado operacional.
+
+La demo pública nunca usa datos personales reales, secretos ni servicios institucionales reales. El instalable QA sí valida la arquitectura operacional con API, PostgreSQL, OIDC/Keycloak, almacenamiento S3/MinIO, ClamAV y demás componentes vigentes.
+
+## 7. Handoff obligatorio
 
 Toda intervención debe terminar dejando, como mínimo:
 
@@ -62,13 +74,13 @@ Toda intervención debe terminar dejando, como mínimo:
 - documentación GitHub y Drive actualizada;
 - pendientes y riesgos abiertos.
 
-## 7. Prompt universal de arranque
+## 8. Prompt universal de arranque
 
 Copia este texto al iniciar un chat, Work o IA que no tenga aún el contexto del proyecto:
 
 > **Continuar Proyecto Centenario. No uses memoria de chats como fuente de verdad. Primero consulta el HEAD vivo de `dev` del repositorio `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`, verifica `main` como rama estable, lee `START-HERE.md`, `AGENTS.md`, Estado Maestro, documentos PMGM-GOV/ADR/pruebas/workflows relacionados y consulta la Línea Base Maestra y documentos oficiales vigentes de Google Drive. Preserva todo lo ya programado y aprobado, resuelve discrepancias GitHub/Drive antes de modificar código, trabaja mediante `feature/* → PR/CI exact-head → dev`, mantén paridad Demo GitHub Pages + QA instalable y no promociones a `main` sin el flujo aprobado. Al terminar deja un handoff verificable.**
 
-## 8. Regla final
+## 9. Regla final
 
 **Si no puedes consultar `dev` y las fuentes oficiales necesarias, no reconstruyas ni continúes a ciegas: declara qué fuente no pudiste verificar.**
 
