@@ -3,7 +3,6 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
-using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.SecretariatOperations;
@@ -156,7 +155,6 @@ public static class LodgeManagementEndpoints
         HttpContext httpContext,
         PmgmDbContext institutionalDb,
         LodgeManagementDbContext db,
-        DocumentManagementDbContext documentDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -167,30 +165,6 @@ public static class LodgeManagementEndpoints
             return Results.Conflict(new { message = "La Tenida ya se encuentra realizada." });
         if (meeting.Status == LodgeManagementCodes.MeetingStatus.Cancelled)
             return Results.Conflict(new { message = "Una Tenida cancelada no puede marcarse como realizada." });
-
-        if (SecretariatOperationsPolicy.WorkPaperRequiredToMarkHeld(meeting.CeremonyType))
-        {
-            var submission = await institutionalDb.LodgeSecretariatSubmissions
-                .AsNoTracking()
-                .SingleOrDefaultAsync(
-                    x => x.RecordType == SecretariatOperationsCodes.RecordType.LodgeMeeting &&
-                         x.SourceRecordId == meeting.Id,
-                    cancellationToken);
-
-            if (submission?.WorkPaperDocumentVersionId is null)
-                return Results.Conflict(new { message = "Una Tenida no ceremonial requiere la plancha de trabajo antes de marcarse como realizada." });
-
-            var workPaperReady = await documentDb.DocumentVersions
-                .AsNoTracking()
-                .AnyAsync(
-                    x => x.Id == submission.WorkPaperDocumentVersionId.Value &&
-                         x.ContentType == "application/pdf" &&
-                         x.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Available,
-                    cancellationToken);
-
-            if (!workPaperReady)
-                return Results.Conflict(new { message = "La plancha debe ser un PDF cargado, íntegro y analizado antes de marcar la Tenida como realizada." });
-        }
 
         meeting.Status = LodgeManagementCodes.MeetingStatus.Held;
         meeting.ClosedAtUtc = DateTimeOffset.UtcNow;
