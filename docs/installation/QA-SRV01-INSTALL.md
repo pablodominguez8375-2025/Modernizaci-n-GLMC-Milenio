@@ -93,3 +93,20 @@ python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json --al
 ```
 
 El cierre interno QA exige 21/21 controles `pass`, incluyendo `QA-021` para Consejo de Administración. Este cierre de regresión no sustituye la UAT institucional formal ni la aprobación del Sponsor/Product Owner. Consulte `docs/qa/PMGM-SRV01-REGRESSION-KIT.md`.
+
+
+## Despliegue recomendado desde Pages
+
+Para `srv01`, el método preferido deja de ser la copia manual del artifact. Usar:
+
+```bash
+cd /opt/centenario/app
+git fetch origin dev
+git checkout dev
+git reset --hard origin/dev
+bash scripts/deploy-srv01-from-pages.sh --sha "$(git rev-parse HEAD)"
+```
+
+El script descarga el instalable publicado en GitHub Pages, valida el SHA externo e interno, genera respaldo previo si corresponde, instala, ejecuta smoke y prepara la regresión QA.
+
+Guía completa: `docs/installation/QA-SRV01-AUTODEPLOY.md`.

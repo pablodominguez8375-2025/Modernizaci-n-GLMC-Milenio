@@ -30,6 +30,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Setup Node 24
         uses: actions/setup-node@v4
@@ -139,6 +140,46 @@ jobs:
           path: frontend/visual-evidence/*.png
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish QA installable beside the demo
+        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
+        shell: bash
+        env:
+          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+          BUILD_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/qa-pages"
+          QA_PACKAGE_OUT_DIR="$OUT" bash scripts/build-qa-installable.sh
+          mkdir -p frontend/dist/downloads
+          zipfile="$(find "$OUT" -maxdepth 1 -name 'Proyecto-Centenario-QA-srv01-*.zip' -print -quit)"
+          test -n "$zipfile"
+          filename="$(basename "$zipfile")"
+          cp "$zipfile" "frontend/dist/downloads/$filename"
+          digest="$(sha256sum "$zipfile" | awk '{print $1}')"
+          SOURCE_SHA="$SOURCE_SHA" FILENAME="$filename" DIGEST="$digest" python3 - <<'PY'
+          import datetime as dt, json, os
+          from pathlib import Path
+          payload={
+              "schemaVersion":1,
+              "project":"Proyecto Centenario",
+              "channel":"qa-srv01",
+              "sourceSha":os.environ["SOURCE_SHA"],
+              "shortSha":os.environ["SOURCE_SHA"][:12],
+              "filename":os.environ["FILENAME"],
+              "sha256":os.environ["DIGEST"],
+              "generatedAtUtc":dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00","Z"),
+              "pagesBase":"https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio"
+          }
+          Path("frontend/dist/downloads/qa-current.json").write_text(
+              json.dumps(payload,indent=2,ensure_ascii=False)+"\n",
+              encoding="utf-8"
+          )
+          PY
+          test -s frontend/dist/downloads/qa-current.json
+          test -s "frontend/dist/downloads/$filename"
+          printf 'QA PUBLIC DOWNLOAD OK — %s — %s\n' "$filename" "$digest"
 
       - name: Inspect Pages and deployment environment
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true

@@ -26,6 +26,7 @@ Documentos principales:
 
 - `docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md` — funcionamiento, versionado visible, evidencia responsive y límites de la demo pública.
 - `docs/installation/QA-SRV01-INSTALL.md` — guía vigente del instalable QA para `srv01`.
+- `docs/installation/QA-SRV01-AUTODEPLOY.md` — despliegue automatizado desde Pages con backup/rollback.
 - `docs/qa/PMGM-SRV01-REGRESSION-KIT.md` — matriz/evidencia de regresión QA ligada al SHA instalado.
 - `docs/installation/PREUAT-INSTALL.md` — guía histórica del paquete pre-UAT.
 - `docs/installation/VM-IMPLEMENTATION-CHECKLIST.md` — checklist de implementación y evidencia de la VM.

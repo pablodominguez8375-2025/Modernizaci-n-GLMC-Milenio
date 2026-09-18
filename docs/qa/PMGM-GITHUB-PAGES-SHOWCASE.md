@@ -222,3 +222,19 @@ Un PR puede tener todos sus controles verdes y, aun así, no modificar la URL p�
 El Showcase sirve para validar experiencia, diseño, navegación y flujos demostrativos. La evidencia PNG permite revisar además composición y responsividad de forma repetible.
 
 No reemplaza UAT del backend ni los casos institucionales funcionales, porque esas pruebas requieren el entorno operacional HTTPS con backend, identidad, persistencia, permisos, backup y recuperación reales.
+
+
+## Distribución del instalable QA
+
+Cada publicación desplegable de Pages incluye además:
+
+- `downloads/qa-current.json`;
+- el ZIP QA correspondiente al mismo SHA.
+
+El manifiesto público expone únicamente metadatos técnicos no sensibles: SHA, nombre de archivo, hash SHA-256, timestamp y URL base.
+
+Esto permite que `srv01` descargue y verifique el instalable desde la misma publicación que muestra la demo, garantizando paridad entre:
+
+`dev → Pages → instalable QA → srv01`.
+
+La descarga pública no contiene secretos ni datos personales reales; el repositorio ya es público y el paquete se genera desde el mismo código versionado.

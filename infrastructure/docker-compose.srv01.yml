@@ -8,6 +8,7 @@ services:
       POSTGRES_PASSWORD: ${PMGM_QA_DB_PASSWORD:?PMGM_QA_DB_PASSWORD es obligatorio}
     volumes:
       - pmgm_srv01_postgres_data:/var/lib/postgresql/data
+      - ./postgres/init-srv01.sql:/docker-entrypoint-initdb.d/10-init-srv01.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pmgm_app -d pmgm"]
       interval: 5s
@@ -53,7 +54,14 @@ services:
     image: quay.io/keycloak/keycloak:26.7.3
     restart: unless-stopped
     command: ["start-dev", "--import-realm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/pmgm_keycloak
+      KC_DB_USERNAME: pmgm_app
+      KC_DB_PASSWORD: ${PMGM_QA_DB_PASSWORD:?PMGM_QA_DB_PASSWORD es obligatorio}
       KC_BOOTSTRAP_ADMIN_USERNAME: qa-keycloak-admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_QA_KEYCLOAK_ADMIN_PASSWORD:?PMGM_QA_KEYCLOAK_ADMIN_PASSWORD es obligatorio}
       PMGM_QA_USER_PASSWORD: ${PMGM_QA_USER_PASSWORD:?PMGM_QA_USER_PASSWORD es obligatorio}
@@ -65,7 +73,6 @@ services:
       KC_HOSTNAME_STRICT: "true"
     volumes:
       - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
-      - pmgm_srv01_keycloak_data:/opt/keycloak/data
     ports:
       - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_OIDC_PORT:-8180}:8080"
     networks: [pmgm_srv01_internal]
@@ -130,4 +137,3 @@ volumes:
   pmgm_srv01_postgres_data:
   pmgm_srv01_minio_data:
   pmgm_srv01_clamav_db:
-  pmgm_srv01_keycloak_data:

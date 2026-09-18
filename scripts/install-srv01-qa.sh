@@ -60,13 +60,30 @@ fi
 
 PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/preflight-srv01-qa.sh"
 
-compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 echo "Descargando imágenes base..."
 "${compose[@]}" pull postgres minio minio-init clamav keycloak
 
 echo "Construyendo API y frontend..."
 "${compose[@]}" build api web
+
+echo "Preparando PostgreSQL..."
+"${compose[@]}" up -d postgres
+db_ready=false
+for _ in $(seq 1 40); do
+  if "${compose[@]}" exec -T postgres pg_isready -U pmgm_app -d pmgm >/dev/null 2>&1; then
+    db_ready=true
+    break
+  fi
+  sleep 2
+done
+[ "$db_ready" = true ] || { echo "PostgreSQL no quedó disponible." >&2; exit 1; }
+
+if ! "${compose[@]}" exec -T postgres psql -U pmgm_app -d pmgm -Atqc "select 1 from pg_database where datname='pmgm_keycloak'" | grep -qx 1; then
+  echo "Creando base pmgm_keycloak..."
+  "${compose[@]}" exec -T postgres createdb -U pmgm_app -O pmgm_app pmgm_keycloak
+fi
 
 echo "Levantando QA srv01..."
 "${compose[@]}" up -d
