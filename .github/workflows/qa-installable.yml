@@ -5,6 +5,7 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
@@ -12,12 +13,14 @@ permissions:
 
 jobs:
   package:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: Build QA srv01 installable
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact SHA
+      - name: Checkout exact delivery SHA
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Validate QA scripts
@@ -77,7 +80,7 @@ jobs:
 
       - name: Build reproducible QA package
         env:
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
           SOURCE_REF: ${{ github.head_ref || github.ref_name }}
           BUILD_RUN_ID: ${{ github.run_id }}
         run: bash scripts/build-qa-installable.sh
@@ -85,7 +88,7 @@ jobs:
       - name: Verify package identifies exact SHA
         shell: bash
         env:
-          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           zipfile="$(find artifacts/qa-installable -maxdepth 1 -name '*.zip' -print -quit)"
@@ -103,7 +106,7 @@ jobs:
       - name: Upload QA installable
         uses: actions/upload-artifact@v4
         with:
-          name: proyecto-centenario-qa-srv01-${{ github.event.pull_request.head.sha || github.sha }}
+          name: proyecto-centenario-qa-srv01-${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
           path: artifacts/qa-installable/*.zip
           if-no-files-found: error
           retention-days: 30

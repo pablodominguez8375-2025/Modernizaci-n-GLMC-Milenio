@@ -5,11 +5,7 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/showcase-pages.yml'
-      - '.github/scripts/capture-showcase-views.mjs'
-      - 'docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md'
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
@@ -25,11 +21,14 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: Build showcase for GitHub Pages
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout exact delivery SHA
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node 24
         uses: actions/setup-node@v4
@@ -52,14 +51,14 @@ jobs:
           VITE_API_BASE_URL: ''
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
-          VITE_SHOWCASE_SHA: '${{ github.event.pull_request.head.sha || github.sha }}'
+          VITE_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
           VITE_SHOWCASE_CHANNEL: 'post-rc-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase
         shell: bash
         env:
-          EXPECTED_SHOWCASE_SHA: '${{ github.event.pull_request.head.sha || github.sha }}'
+          EXPECTED_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test -s frontend/dist/index.html
@@ -141,13 +140,13 @@ jobs:
           retention-days: 14
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
         uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
     name: Deploy testing showcase
     needs: build
     environment:
