@@ -6,8 +6,10 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
+using MembershipEntity = PMGM.Api.Modules.Membership.Entities.Membership;
 using PMGM.Api.Modules.SecretariatOperations.Entities;
 
 namespace PMGM.Api.Modules.SecretariatOperations;
@@ -428,7 +430,7 @@ public static class SecretariatOperationsEndpoints
 
         if (membership is null)
         {
-            membership = new Membership
+            membership = new MembershipEntity
             {
                 Member = member,
                 OrganizationId = intake.OrganizationId,
