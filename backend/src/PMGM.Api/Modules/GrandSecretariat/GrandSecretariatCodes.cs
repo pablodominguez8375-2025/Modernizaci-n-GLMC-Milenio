@@ -24,7 +24,11 @@ public static class GrandSecretariatCodes
     {
         public const string Decree = "decree";
         public const string Communication = "communication";
-        public const string CeremonyAuthorization = "ceremony_authorization";
+        public const string CeremonyAuthorizationPlancha = "ceremony_authorization_plancha";
+        public const string CeremonyAuthorizationLegacy = "ceremony_authorization";
+
+        public static bool IsCeremonyAuthorization(string value)
+            => value is CeremonyAuthorizationPlancha or CeremonyAuthorizationLegacy;
     }
 
     public static class DocumentStatus
