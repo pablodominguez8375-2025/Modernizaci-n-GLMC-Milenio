@@ -77,7 +77,7 @@ if len(set(values)) != len(values):
     raise SystemExit("Las contraseñas QA deben ser distintas entre sí")
 PY
 
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null && ok "Docker Compose srv01 válido" || fail "Docker Compose srv01 inválido"
+  docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null && ok "Docker Compose srv01 válido" || fail "Docker Compose srv01 inválido"
 fi
 
 printf '\nResumen: %d fallo(s), %d advertencia(s).\n' "$failures" "$warnings"
