@@ -432,7 +432,8 @@ public static class GrandSecretariatEndpoints
 
         var alreadyIssued = await db.SecretariatDocuments.AnyAsync(
             x => x.RelatedCeremonyRequestId == requestId &&
-                 x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorization &&
+                 (x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha ||
+                  x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy) &&
                  x.Status == GrandSecretariatCodes.DocumentStatus.Issued,
             cancellationToken);
         if (alreadyIssued)
@@ -468,10 +469,10 @@ public static class GrandSecretariatEndpoints
 
         var document = new SecretariatDocument
         {
-            DocumentType = GrandSecretariatCodes.DocumentType.CeremonyAuthorization,
-            DocumentCode = NewDocumentCode(GrandSecretariatCodes.DocumentType.CeremonyAuthorization),
-            Title = $"Autorización de ceremonia — {ceremony.CeremonyType}",
-            Content = $"Gran Secretaría deja constancia de la autorización institucional de la ceremonia '{ceremony.CeremonyType}' solicitada por {ceremony.Organization.Name}, para {dateText}, {spaceText}. La presente autorización se emite una vez cumplidas las validaciones institucionales exigibles.",
+            DocumentType = GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha,
+            DocumentCode = NewDocumentCode(GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha),
+            Title = $"Plancha de Autorización de Ceremonia — {ceremony.CeremonyType}",
+            Content = $"Gran Secretaría autoriza oficialmente la realización de la ceremonia '{ceremony.CeremonyType}' solicitada por {ceremony.Organization.Name}, para {dateText}, {spaceText}. Esta Plancha de Autorización se emite una vez cumplidas las validaciones institucionales exigibles y no constituye Decreto.",
             OrganizationId = ceremony.OrganizationId,
             RelatedCeremonyRequestId = ceremony.Id,
             SpaceReservationId = reservation?.Id,
@@ -519,7 +520,8 @@ public static class GrandSecretariatEndpoints
         {
             GrandSecretariatCodes.DocumentType.Decree => "DEC",
             GrandSecretariatCodes.DocumentType.Communication => "COM",
-            GrandSecretariatCodes.DocumentType.CeremonyAuthorization => "AUT-CER",
+            GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlancha => "PLA-AUT-CER",
+            GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy => "AUT-CER",
             _ => "DOC"
         };
 
