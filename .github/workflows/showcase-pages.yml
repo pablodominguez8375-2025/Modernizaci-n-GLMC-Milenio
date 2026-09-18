@@ -11,6 +11,7 @@ on:
 permissions:
   contents: read
   pages: write
+  deployments: read
   id-token: write
 
 # PR validation must never cancel an in-flight deployment.
@@ -138,6 +139,94 @@ jobs:
           path: frontend/visual-evidence/*.png
           if-no-files-found: error
           retention-days: 14
+
+      - name: Inspect Pages and deployment environment
+        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          api_get() {
+            local path="$1"
+            local output="$2"
+            local code
+            code="$(curl -sS -L               -H "Accept: application/vnd.github+json"               -H "Authorization: Bearer $GH_TOKEN"               -H "X-GitHub-Api-Version: 2022-11-28"               -o "$output"               -w '%{http_code}'               "https://api.github.com/repos/$GITHUB_REPOSITORY/$path")"
+            printf '%s\n' "$code"
+          }
+
+          pages_code="$(api_get pages /tmp/pages.json)"
+          env_code="$(api_get environments/github-pages /tmp/pages-environment.json)"
+          policies_code="$(api_get environments/github-pages/deployment-branch-policies?per_page=100 /tmp/pages-policies.json)"
+          deployments_code="$(api_get 'deployments?environment=github-pages&per_page=5' /tmp/pages-deployments.json)"
+
+          PAGES_CODE="$pages_code"           ENV_CODE="$env_code"           POLICIES_CODE="$policies_code"           DEPLOYMENTS_CODE="$deployments_code"           python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          def load(path):
+              try:
+                  return json.loads(Path(path).read_text(encoding="utf-8"))
+              except Exception:
+                  return None
+
+          pages = load("/tmp/pages.json")
+          environment = load("/tmp/pages-environment.json")
+          policies = load("/tmp/pages-policies.json")
+          deployments = load("/tmp/pages-deployments.json")
+
+          print("PAGES_DIAGNOSTIC")
+          print("pages_http=", os.environ["PAGES_CODE"])
+          if isinstance(pages, dict):
+              source = pages.get("source") or {}
+              print("pages_status=", pages.get("status"))
+              print("pages_build_type=", pages.get("build_type"))
+              print("pages_html_url=", pages.get("html_url"))
+              print("pages_source_branch=", source.get("branch"))
+              print("pages_source_path=", source.get("path"))
+          else:
+              print("pages_response=", pages)
+
+          print("environment_http=", os.environ["ENV_CODE"])
+          if isinstance(environment, dict):
+              print("environment_name=", environment.get("name"))
+              print("environment_branch_policy=", environment.get("deployment_branch_policy"))
+              rules = environment.get("protection_rules") or []
+              print("environment_protection_rules=", [rule.get("type") for rule in rules if isinstance(rule, dict)])
+          else:
+              print("environment_response=", environment)
+
+          print("branch_policies_http=", os.environ["POLICIES_CODE"])
+          if isinstance(policies, dict):
+              branches = [
+                  item.get("name")
+                  for item in policies.get("branch_policies", [])
+                  if isinstance(item, dict)
+              ]
+              print("allowed_deployment_branches=", branches)
+          else:
+              print("branch_policies_response=", policies)
+
+          print("deployments_http=", os.environ["DEPLOYMENTS_CODE"])
+          if isinstance(deployments, list):
+              for item in deployments[:5]:
+                  if not isinstance(item, dict):
+                      continue
+                  print(
+                      "deployment=",
+                      {
+                          "id": item.get("id"),
+                          "ref": item.get("ref"),
+                          "sha": item.get("sha"),
+                          "environment": item.get("environment"),
+                          "created_at": item.get("created_at"),
+                      },
+                  )
+          else:
+              print("deployments_response=", deployments)
+          PY
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
