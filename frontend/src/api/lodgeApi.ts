@@ -1,6 +1,8 @@
 export type LodgeMeetingType = 'regular' | 'solemn' | 'instruction' | 'anniversary' | 'funeral' | 'special'
 export type LodgeGrade = 'apprentice' | 'fellowcraft' | 'master' | 'all'
-export type LodgeMeetingStatus = 'scheduled' | 'open' | 'closed' | 'cancelled'
+export type LodgeMeetingStatus = 'scheduled' | 'open' | 'held' | 'closed' | 'cancelled'
+export type LodgeMeetingModality = 'in_person' | 'virtual'
+export type LodgeCeremonyType = 'initiation' | 'wage_increase' | 'exaltation'
 export type LodgeAttendanceStatus = 'present' | 'excused' | 'absent'
 export type LodgeMinuteStatus = 'draft' | 'approved' | 'superseded'
 
@@ -12,13 +14,26 @@ export interface LodgeMeeting {
   meetingDate: string
   meetingType: LodgeMeetingType
   grade: LodgeGrade
+  ceremonyType: LodgeCeremonyType | null
+  modality: LodgeMeetingModality
+  locationReference: string | null
+  virtualAccessReference: string | null
   title: string | null
   status: LodgeMeetingStatus
   createdAtUtc: string
   closedAtUtc: string | null
 }
 export interface LodgeMeetingsResponse { total: number; items: LodgeMeeting[] }
-export interface CreateLodgeMeetingRequest { meetingDate: string; meetingType: LodgeMeetingType; grade: LodgeGrade; title?: string | null }
+export interface CreateLodgeMeetingRequest {
+  meetingDate: string
+  meetingType: LodgeMeetingType
+  grade: LodgeGrade
+  ceremonyType?: LodgeCeremonyType | null
+  modality: LodgeMeetingModality
+  locationReference?: string | null
+  virtualAccessReference?: string | null
+  title?: string | null
+}
 export interface LodgeAttendanceCurrent {
   recordId: string
   memberId: string
@@ -66,6 +81,41 @@ export type LodgeWithdrawalType = 'voluntary' | 'forced'
 export interface LodgeWithdrawal { id: string; memberId: string; originOrganizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; status: 'pending' | 'approved' | 'rejected'; resolution: string | null; createdAtUtc: string; decidedAtUtc: string | null }
 export interface LodgeWithdrawalsResponse { total: number; items: LodgeWithdrawal[] }
 export interface CreateLodgeWithdrawalRequest { memberId: string; organizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; reason: string; evidenceReference: string }
+
+export type HistoricalIntakeStatus = 'draft' | 'submitted' | 'observed' | 'approved' | 'rejected'
+export interface HistoricalOfficeInput { officeType: string; period: string; startDate?: string | null; endDate?: string | null; isCurrent: boolean }
+export interface HistoricalMemberIntake {
+  id: string; organizationId: string; targetMemberId: string | null; cutoffDate: string; firstNames: string; lastNames: string
+  rut: string | null; institutionalNumber: string | null; email: string | null; phone: string | null; currentDegree: 'apprentice' | 'fellowcraft' | 'master'
+  membershipStartDate: string | null; initiationDate: string | null; wageIncreaseDate: string | null; exaltationDate: string | null
+  evidenceReference: string; status: HistoricalIntakeStatus; revision: number; createdAtUtc: string; submittedAtUtc: string | null
+  reviewedAtUtc: string | null; reviewNotes: string | null; approvedMemberId: string | null
+  offices: Array<{ id: string; officeType: string; period: string; startDate: string | null; endDate: string | null; isCurrent: boolean }>
+}
+export interface HistoricalMemberIntakesResponse { total: number; items: HistoricalMemberIntake[] }
+export interface CreateHistoricalMemberIntakeRequest {
+  firstNames: string; lastNames: string; rut?: string | null; institutionalNumber?: string | null; email?: string | null; phone?: string | null
+  currentDegree: 'apprentice' | 'fellowcraft' | 'master'; membershipStartDate?: string | null; initiationDate?: string | null
+  wageIncreaseDate?: string | null; exaltationDate?: string | null; cutoffDate: string; evidenceReference: string; offices: HistoricalOfficeInput[]
+}
+export interface LodgeAdministrativeMeeting {
+  id: string; organizationId: string; meetingDate: string; title: string; purpose: string | null
+  status: 'scheduled' | 'held' | 'cancelled'; createdAtUtc: string; heldAtUtc: string | null
+}
+export interface LodgeAdministrativeMeetingsResponse { total: number; items: LodgeAdministrativeMeeting[] }
+export type LodgeSecretariatRecordType = 'tenida' | 'reunion' | 'consejo'
+export interface LodgeSecretariatRecord {
+  id: string; organizationId: string; recordType: LodgeSecretariatRecordType; sourceRecordId: string; eventDate: string; title: string
+  workPaperDocumentVersionId: string | null; workPaperAuthorMemberId: string | null; extractDocumentVersionId: string | null
+  fullMinuteDocumentVersionId: string | null; status: 'draft' | 'submitted' | 'received' | 'observed'
+  createdAtUtc: string; submittedAtUtc: string | null; reviewedAtUtc: string | null; reviewNotes: string | null
+}
+export interface LodgeSecretariatRecordsResponse { total: number; items: LodgeSecretariatRecord[] }
+export interface UpsertLodgeSecretariatRecordRequest {
+  workPaperDocumentVersionId?: string | null; workPaperAuthorMemberId?: string | null
+  extractDocumentVersionId?: string | null; fullMinuteDocumentVersionId?: string | null
+}
+
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
 interface LodgeApiClientOptions {
@@ -95,19 +145,19 @@ export const demoLodgeSeed = {
   meetings: [
     {
       id: 'bbbbbbbb-2309-0012-0000-000000000001', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-12', meetingType: 'regular' as const,
-      grade: 'all' as const, title: 'Tenida Ordinaria · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-01T15:00:00Z', closedAtUtc: null,
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Ordinaria · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-01T15:00:00Z', closedAtUtc: null,
     },
     {
       id: 'bbbbbbbb-2309-0026-0000-000000000002', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-26', meetingType: 'instruction' as const,
-      grade: 'all' as const, title: 'Tenida de Instrucción · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-02T15:00:00Z', closedAtUtc: null,
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida de Instrucción · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-02T15:00:00Z', closedAtUtc: null,
     },
     {
       id: 'bbbbbbbb-2309-0005-0000-000000000003', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-05', meetingType: 'regular' as const,
-      grade: 'all' as const, title: 'Tenida Ordinaria anterior · demo', status: 'closed' as const, createdAtUtc: '2026-08-25T15:00:00Z', closedAtUtc: '2026-09-06T01:20:00Z',
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Ordinaria anterior · demo', status: 'held' as const, createdAtUtc: '2026-08-25T15:00:00Z', closedAtUtc: '2026-09-06T01:20:00Z',
     },
     {
       id: 'bbbbbbbb-0109-0019-0000-000000000004', organizationId: DEMO_LODGE_1_ID, meetingDate: '2026-09-19', meetingType: 'solemn' as const,
-      grade: 'all' as const, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', closedAtUtc: null,
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', closedAtUtc: null,
     },
   ] satisfies LodgeMeeting[],
   attendance: [
@@ -139,6 +189,9 @@ export class LodgeApiClient {
   private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
   private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
   private readonly mockWithdrawals: LodgeWithdrawal[] = []
+  private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
+  private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
+  private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = []
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -150,6 +203,76 @@ export class LodgeApiClient {
   async getMemberOptions(organizationId: string): Promise<LodgeMemberOptionsResponse> {
     if (this.useMocks) return { total: demoMembers.length, items: demoMembers.map(item => ({ ...item })) }
     return this.request<LodgeMemberOptionsResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/miembros/opciones`)
+  }
+
+
+  async getHistoricalMemberIntakes(organizationId: string): Promise<HistoricalMemberIntakesResponse> {
+    if (this.useMocks) {
+      const items=this.mockHistoricalIntakes.filter(x=>x.organizationId===organizationId).map(x=>({...x,offices:x.offices.map(o=>({...o}))}))
+      return { total:items.length, items }
+    }
+    return this.request<HistoricalMemberIntakesResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/cuadro/carga-historica`)
+  }
+
+  async createHistoricalMemberIntake(organizationId: string, payload: CreateHistoricalMemberIntakeRequest): Promise<HistoricalMemberIntake> {
+    if (this.useMocks) {
+      const item:HistoricalMemberIntake={ id:crypto.randomUUID(), organizationId, targetMemberId:null, ...payload,
+        rut:payload.rut??null, institutionalNumber:payload.institutionalNumber??null, email:payload.email??null, phone:payload.phone??null,
+        membershipStartDate:payload.membershipStartDate??null, initiationDate:payload.initiationDate??null, wageIncreaseDate:payload.wageIncreaseDate??null,
+        exaltationDate:payload.exaltationDate??null, status:'draft', revision:1, createdAtUtc:new Date().toISOString(), submittedAtUtc:null,
+        reviewedAtUtc:null, reviewNotes:null, approvedMemberId:null,
+        offices:payload.offices.map(o=>({id:crypto.randomUUID(),officeType:o.officeType,period:o.period,startDate:o.startDate??null,endDate:o.endDate??null,isCurrent:o.isCurrent})) }
+      this.mockHistoricalIntakes.unshift(item); return {...item,offices:item.offices.map(o=>({...o}))}
+    }
+    return this.postJson<HistoricalMemberIntake>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/cuadro/carga-historica`, payload)
+  }
+
+  async submitHistoricalMemberIntake(intakeId: string): Promise<HistoricalMemberIntake> {
+    if(this.useMocks){ const item=this.mockHistoricalIntakes.find(x=>x.id===intakeId); if(!item) throw new Error('La carga histórica no existe.'); item.status='submitted'; item.submittedAtUtc=new Date().toISOString(); item.revision+=1; return {...item,offices:item.offices.map(o=>({...o}))} }
+    return this.request<HistoricalMemberIntake>(`/api/secretaria/carga-historica/${encodeURIComponent(intakeId)}/enviar-ri`,{method:'POST'})
+  }
+
+  async downloadHistoricalTemplate(organizationId: string): Promise<Blob> {
+    if(this.useMocks) return new Blob(['Plantilla XLSX demostrativa'],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+    const response=await this.authorizedFetch(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/cuadro/plantilla.xlsx`,{},'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    return response.blob()
+  }
+
+  async importHistoricalMemberIntakes(organizationId: string,file: File): Promise<{imported:number;status:string}> {
+    if(this.useMocks) return { imported:1,status:'draft' }
+    const body=new FormData(); body.append('file',file)
+    const response=await this.authorizedFetch(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/cuadro/importar.xlsx`,{method:'POST',body},'application/json')
+    return response.json() as Promise<{imported:number;status:string}>
+  }
+
+  async getAdministrativeMeetings(organizationId: string): Promise<LodgeAdministrativeMeetingsResponse> {
+    if(this.useMocks){ const items=this.mockAdministrativeMeetings.filter(x=>x.organizationId===organizationId).map(x=>({...x})); return {total:items.length,items} }
+    return this.request<LodgeAdministrativeMeetingsResponse>(`/api/secretaria/reuniones/talleres/${encodeURIComponent(organizationId)}`)
+  }
+
+  async createAdministrativeMeeting(organizationId:string,payload:{meetingDate:string;title:string;purpose?:string|null}):Promise<LodgeAdministrativeMeeting>{
+    if(this.useMocks){ const item:LodgeAdministrativeMeeting={id:crypto.randomUUID(),organizationId,meetingDate:payload.meetingDate,title:payload.title.trim(),purpose:payload.purpose?.trim()||null,status:'scheduled',createdAtUtc:new Date().toISOString(),heldAtUtc:null}; this.mockAdministrativeMeetings.unshift(item); return {...item} }
+    return this.postJson<LodgeAdministrativeMeeting>(`/api/secretaria/reuniones/talleres/${encodeURIComponent(organizationId)}`,payload)
+  }
+
+  async markAdministrativeMeetingHeld(meetingId:string):Promise<LodgeAdministrativeMeeting>{
+    if(this.useMocks){ const item=this.mockAdministrativeMeetings.find(x=>x.id===meetingId); if(!item) throw new Error('La reunión no existe.'); item.status='held'; item.heldAtUtc=new Date().toISOString(); return {...item} }
+    return this.request<LodgeAdministrativeMeeting>(`/api/secretaria/reuniones/${encodeURIComponent(meetingId)}/realizar`,{method:'POST'})
+  }
+
+  async getSecretariatRecords(organizationId:string):Promise<LodgeSecretariatRecordsResponse>{
+    if(this.useMocks){ const items=this.mockSecretariatRecords.filter(x=>x.organizationId===organizationId).map(x=>({...x})); return {total:items.length,items} }
+    return this.request<LodgeSecretariatRecordsResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/registros`)
+  }
+
+  async upsertSecretariatRecord(organizationId:string,recordType:LodgeSecretariatRecordType,sourceRecordId:string,payload:UpsertLodgeSecretariatRecordRequest):Promise<LodgeSecretariatRecord>{
+    if(this.useMocks){ let item=this.mockSecretariatRecords.find(x=>x.recordType===recordType&&x.sourceRecordId===sourceRecordId); if(!item){ item={id:crypto.randomUUID(),organizationId,recordType,sourceRecordId,eventDate:new Date().toISOString().slice(0,10),title:`${recordType} demostrativo`,workPaperDocumentVersionId:null,workPaperAuthorMemberId:null,extractDocumentVersionId:null,fullMinuteDocumentVersionId:null,status:'draft',createdAtUtc:new Date().toISOString(),submittedAtUtc:null,reviewedAtUtc:null,reviewNotes:null}; this.mockSecretariatRecords.unshift(item) } Object.assign(item,payload); return {...item} }
+    return this.putJson<LodgeSecretariatRecord>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/registros/${encodeURIComponent(recordType)}/${encodeURIComponent(sourceRecordId)}`,payload)
+  }
+
+  async submitTenidaExtract(organizationId:string,meetingId:string):Promise<LodgeSecretariatRecord>{
+    if(this.useMocks){ const item=this.mockSecretariatRecords.find(x=>x.recordType==='tenida'&&x.sourceRecordId===meetingId); if(!item?.extractDocumentVersionId) throw new Error('Debe cargar el extracto PDF antes de remitir la Tenida.'); item.status='submitted'; item.submittedAtUtc=new Date().toISOString(); return {...item} }
+    return this.request<LodgeSecretariatRecord>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/tenidas/${encodeURIComponent(meetingId)}/remitir-extracto`,{method:'POST'})
   }
 
   async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {
@@ -195,6 +318,10 @@ export class LodgeApiClient {
         meetingDate: payload.meetingDate,
         meetingType: payload.meetingType,
         grade: payload.grade,
+        ceremonyType: payload.ceremonyType ?? null,
+        modality: payload.modality,
+        locationReference: payload.modality === 'in_person' ? payload.locationReference?.trim() || null : null,
+        virtualAccessReference: payload.modality === 'virtual' ? payload.virtualAccessReference?.trim() || null : null,
         title: payload.title?.trim() || null,
         status: 'scheduled',
         createdAtUtc: new Date().toISOString(),
@@ -209,11 +336,11 @@ export class LodgeApiClient {
   async closeMeeting(meetingId: string): Promise<LodgeMeeting> {
     if (this.useMocks) {
       const meeting = this.requireMeeting(meetingId)
-      if (meeting.status === 'closed') throw new Error('La tenida ya se encuentra cerrada.')
-      meeting.status = 'closed'; meeting.closedAtUtc = new Date().toISOString()
+      if (meeting.status === 'held' || meeting.status === 'closed') throw new Error('La Tenida ya se encuentra realizada.')
+      meeting.status = 'held'; meeting.closedAtUtc = new Date().toISOString()
       return { ...meeting }
     }
-    return this.request<LodgeMeeting>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/cerrar`, { method: 'POST' })
+    return this.request<LodgeMeeting>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/realizar`, { method: 'POST' })
   }
 
   async getAttendance(meetingId: string): Promise<LodgeAttendanceResponse> {
@@ -230,7 +357,7 @@ export class LodgeApiClient {
   async recordAttendance(meetingId: string, payload: LodgeAttendanceRequest): Promise<unknown> {
     if (this.useMocks) {
       const meeting = this.requireMeeting(meetingId)
-      if (meeting.status !== 'closed') throw new Error('La asistencia sólo puede registrarse después de cerrar la tenida realizada.')
+      if (meeting.status !== 'held' && meeting.status !== 'closed') throw new Error('La asistencia sólo puede registrarse después de cerrar la tenida realizada.')
       const member = demoMembers.find(item => item.id === payload.memberId)
       if (!member) throw new Error('El hermano indicado no pertenece al Taller.')
       const row: LodgeAttendanceCurrent = {
@@ -284,7 +411,7 @@ export class LodgeApiClient {
 
   async recordAnonymousBallot(meetingId: string, payload: LodgeAnonymousBallotRequest): Promise<LodgeAnonymousBallot> {
     if (this.useMocks) {
-      const meeting = this.requireMeeting(meetingId); if (meeting.status !== 'closed') throw new Error('El escrutinio sólo puede registrarse después de cerrar la Tenida realizada.')
+      const meeting = this.requireMeeting(meetingId); if (meeting.status !== 'held' && meeting.status !== 'closed') throw new Error('El escrutinio sólo puede registrarse después de cerrar la Tenida realizada.')
       const attendeeCount = (await this.getAttendance(meetingId)).items.filter(item => item.status === 'present').length
       if (payload.eligibleCount > attendeeCount) throw new Error('Las personas habilitadas no pueden superar a las asistentes presentes.')
       if (payload.positiveCount + payload.negativeCount !== payload.eligibleCount && !payload.recountObservation?.trim()) throw new Error('La diferencia del recuento debe explicarse en el acta.')
@@ -356,6 +483,17 @@ export class LodgeApiClient {
 
   private postJson<T>(path: string, payload: unknown): Promise<T> {
     return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  }
+
+  private putJson<T>(path:string,payload:unknown):Promise<T>{ return this.request<T>(path,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}) }
+
+  private async authorizedFetch(path:string,init:RequestInit={},accept='application/json'):Promise<Response>{
+    const headers=new Headers(init.headers); headers.set('Accept',accept)
+    const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para operar Gestión Logial.')
+    headers.set('Authorization',`Bearer ${token}`)
+    const response=await fetch(`${this.baseUrl}${path}`,{...init,credentials:'omit',redirect:'error',cache:'no-store',headers})
+    if(!response.ok){ if(response.status===401) await this.onUnauthorized?.(); let message=''; try{ const body=await response.clone().json() as {message?:string}; message=body.message??'' }catch{/* sin JSON */} if(response.status===403) message='Su cuenta no tiene permiso para esta operación de Secretaría.'; throw new LodgeApiHttpError(response.status,message||`La API respondió ${response.status} ${response.statusText}.`) }
+    return response
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
