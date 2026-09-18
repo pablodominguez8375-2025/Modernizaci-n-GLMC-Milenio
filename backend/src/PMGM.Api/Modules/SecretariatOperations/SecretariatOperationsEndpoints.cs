@@ -434,7 +434,7 @@ public static class SecretariatOperationsEndpoints
             {
                 Member = member,
                 OrganizationId = intake.OrganizationId,
-                MembershipType = "member",
+                MembershipType = "regular",
                 StartDate = intake.MembershipStartDate,
                 Status = MembershipCodes.MembershipStatus.Active,
             };
