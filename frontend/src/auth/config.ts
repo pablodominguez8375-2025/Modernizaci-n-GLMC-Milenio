@@ -15,8 +15,14 @@ export function readAuthConfig(env: Record<string, unknown>, origin: string): Au
   const hostname = url.hostname.toLowerCase()
   const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(hostname) || hostname.endsWith('.localhost')
   const allowLocalHttp = env.DEV === true || env.VITE_OIDC_ALLOW_HTTP_LOCAL === 'true'
-  if ((url.protocol !== 'https:' && !(allowLocalHttp && loopback && url.protocol === 'http:')) || url.username || url.password || url.search || url.hash) {
-    throw new Error('La autoridad OIDC debe usar HTTPS, salvo QA local explícitamente habilitado.')
+  const appUrl = new URL(origin)
+  const allowQaInternalHttp =
+    env.VITE_OIDC_ALLOW_HTTP_QA === 'true' &&
+    url.protocol === 'http:' &&
+    appUrl.protocol === 'http:' &&
+    url.hostname.toLowerCase() === appUrl.hostname.toLowerCase()
+  if ((url.protocol !== 'https:' && !(allowLocalHttp && loopback && url.protocol === 'http:') && !allowQaInternalHttp) || url.username || url.password || url.search || url.hash) {
+    throw new Error('La autoridad OIDC debe usar HTTPS, salvo QA local/interno explícitamente habilitado.')
   }
   if (!clientId || !scope.split(/\s+/).includes('openid') || scope.split(/\s+/).includes('offline_access')) {
     throw new Error('Configure el cliente público y scopes OIDC sin offline_access.')
