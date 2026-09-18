@@ -8,6 +8,8 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canManageDocuments?: boolean
   canReadLibrary?: boolean
   canManageGrandArchive?: boolean
+  canReadLodgeSecretariat?: boolean
+  canManageLodgeSecretariat?: boolean
   canConfigureSystem?: boolean
 }
 
@@ -26,6 +28,8 @@ const deniedCoreCapabilities: SessionProfile['capabilities'] = {
   canValidateCeremonyInternalAffairs: false,
   canAuthorizeCeremonies: false,
   canManagePrivacy: false,
+  canReadLodgeSecretariat: false,
+  canManageLodgeSecretariat: false,
 }
 
 export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
@@ -48,6 +52,8 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       ...deniedCoreCapabilities,
       canReadLibrary: true,
       canManageLodgeOperations: true,
+      canReadLodgeSecretariat: true,
+      canManageLodgeSecretariat: false,
       canManageDocuments: true,
       canManageGrandArchive: false,
       canBootstrapInstitutional: false,
@@ -59,7 +65,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeSecretary: {
     displayName: 'Secretaría del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canManageDocuments: true },
   },
   lodgeHospitalaria: {
     displayName: 'Hospitalaria del Taller · Demostración', accessScope: 'organization',
@@ -67,7 +73,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeOrator: {
     displayName: 'Orador del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: false, canManageDocuments: true },
   },
   lodgeFirstWarden: {
     displayName: 'Primer Vigilante · Demostración', accessScope: 'organization',
@@ -121,6 +127,8 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManagePrivacy: true,
       canReadLibrary: true,
       canManageLodgeOperations: true,
+      canReadLodgeSecretariat: true,
+      canManageLodgeSecretariat: true,
       canManageDocuments: true,
       canManageGrandArchive: true,
       canBootstrapInstitutional: true,
