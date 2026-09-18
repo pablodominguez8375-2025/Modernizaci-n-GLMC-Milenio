@@ -4,14 +4,15 @@
 
 Este kit acompaña el instalable QA actual y permite ejecutar una regresión trazable sobre el **SHA exacto instalado en srv01**.
 
-No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product Owner. El plan histórico de 20 casos de `v1.0.0-rc1` se conserva intacto. Este kit agrega un control adicional para **Consejo de Administración**, porque esa funcionalidad fue integrada después del plan RC1.
+No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product Owner. El plan histórico de 20 casos de `v1.0.0-rc1` se conserva intacto. El kit suma controles posteriores para **Consejo de Administración** y para el **flujo reglamentario integral de insinuaciones**.
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 21 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 22 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
+- QA-022: flujo reglamentario de insinuaciones desde presentación en 1.er grado hasta solicitud de Iniciación.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -44,6 +45,19 @@ python3 scripts/record-srv01-regression-result.py \
   --evidence "captura-controlada:qa-consejo-venerable"
 ```
 
+Ejemplo de flujo de insinuaciones aprobado:
+
+```bash
+python3 scripts/record-srv01-regression-result.py \
+  evidence/PMGM-QA-srv01-<sha>.json \
+  QA-022 pass \
+  --evidence "audit-event:insinuacion-deliberacion-demo" \
+  --evidence "audit-event:insinuacion-balotaje-demo" \
+  --evidence "captura-controlada:qa-insinuacion-flujo-completo"
+```
+
+El control QA-022 debe comprobar, con datos ficticios: fecha de presentación en 1.er grado; bloqueo antes de 7 días; deliberación unánime; publicación; al menos tres entrevistas privadas; revisión de 3.er grado; cumplimiento del plazo de publicación; balotaje; y solicitud formal de Iniciación.
+
 Ejemplo de fallo:
 
 ```bash
@@ -68,7 +82,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 21/21 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 22/22 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 
@@ -93,7 +107,7 @@ No se guardan en Git:
 
 ## Relación con UAT formal
 
-La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 21/21 pass:
+La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 22/22 pass:
 
 - no promueve automáticamente a `main`;
 - no convierte QA en producción;
