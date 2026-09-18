@@ -68,7 +68,7 @@ public static class MembershipEndpoints
                         !db.Memberships.Any(other =>
                             other.OrganizationId == organizationId &&
                             other.MemberId == x.MemberId &&
-                            (other.StartDate > x.StartDate ||
+                            ((other.StartDate ?? DateOnly.MinValue) > (x.StartDate ?? DateOnly.MinValue) ||
                              (other.StartDate == x.StartDate && other.CreatedAtUtc > x.CreatedAtUtc))));
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -294,7 +294,7 @@ public static class MembershipEndpoints
         var currentStatus = statusEvents.FirstOrDefault();
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var currentOffices = offices
-            .Where(x => x.StartDate <= today && (x.EndDate == null || x.EndDate >= today))
+            .Where(x => (x.StartDate == null || x.StartDate <= today) && (x.EndDate == null || x.EndDate >= today))
             .ToList();
 
         object? regularity = null;
