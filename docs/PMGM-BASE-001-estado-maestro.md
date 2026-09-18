@@ -70,6 +70,14 @@ Ambientes consolidados:
 
 ### 4.1 Core / Membresía
 
+**Terminología institucional obligatoria:**
+
+- el conjunto oficial de hermanos pertenecientes a un Taller se denomina **Cuadro del Taller**;
+- la vista consolidada institucional se denomina **Cuadro General de la Orden**;
+- cuando corresponda, puede hablarse de **hermanos del Cuadro**;
+- **Padrón** se reserva para el **Padrón de la Gran Asamblea**, es decir, el conjunto de **electores vigentes habilitados para participar en la Gran Asamblea**;
+- no usar **padrón** como sinónimo de listado general de hermanos, membresía o Cuadro del Taller.
+
 - Persona maestra única.
 - Ficha del hermano con historial de grados, estados, cargos, pertenencias, movimientos y antecedentes autorizados.
 - Traslado entre Talleres preservando historial del origen y creando nueva pertenencia en destino.
