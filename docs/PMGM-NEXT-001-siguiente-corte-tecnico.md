@@ -12,7 +12,7 @@ Orden obligatorio:
 4. validar SHA-256 y `MANIFEST.sha256`;
 5. ejecutar smoke autenticado;
 6. probar Consejo de Administración con perfil autorizado;
-7. ejecutar regresión QA-001..QA-021;
+7. ejecutar regresión QA-001..QA-022;
 8. corregir defectos P0/P1 detectados;
 9. congelar un nuevo candidato UAT desde el código realmente probado;
 10. ejecutar UAT institucional;
