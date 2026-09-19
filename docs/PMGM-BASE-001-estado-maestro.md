@@ -515,7 +515,7 @@ Flujo:
 5. instalar;
 6. ejecutar smoke autenticado;
 7. preparar regresión QA;
-8. cerrar QA-001..QA-024;
+8. cerrar QA-001..QA-025;
 9. corregir P0/P1;
 10. recién entonces congelar UAT.
 
@@ -523,7 +523,7 @@ Flujo:
 
 Issue #97 continúa siendo el gate operacional de despliegue físico/QA. El Sponsor / Product Owner mantiene autorización expresa para continuar desarrollo funcional en paralelo sin atribuir aceptación operacional al código no desplegado.
 
-El flujo reglamentario de insinuaciones ya está integrado por PR #106 y el Cuadro Mensual de Tesorería por PR #112. El siguiente bloque funcional es **Hospitalaria del Taller + Gran Hospitalaria**, reutilizando el módulo existente y contrastando Art. 12.13, formularios/planillas vigentes de Drive y reglas de reposición antes de programar.
+El flujo reglamentario de insinuaciones ya está integrado por PR #106 y el Cuadro Mensual de Tesorería por PR #112. El incremento funcional activo es **Hospitalaria del Taller + Gran Hospitalaria**, PR #114, reutilizando el módulo existente y el Consejo auditable conforme al Art. 12.13 y matrices vigentes de Drive.
 
 No reutilizar la RC1 histórica ni evidencia de un SHA anterior para atribuir aceptación al código vivo.
 
@@ -631,6 +631,42 @@ Estado integrado:
 El despliegue físico en `srv01`, smoke real, regresión 24/24 y UAT continúan pendientes y no se declaran ejecutados desde este chat.
 
 Siguiente bloque funcional: **Hospitalaria del Taller + Gran Hospitalaria**, respetando independencia del Tronco de Beneficencia respecto de Tesorería, Art. 12.13 y fuentes documentales vigentes de Drive.
+
+
+## 18. Incremento activo — Hospitalaria integral Taller + Gran Hospitalaria
+
+PR #114 `feat(hospitalaria): flujo integral Taller y Gran Hospitalaria`.
+
+Fuentes verificadas:
+
+- Constitución y Reglamento General, art. 12.13;
+- Matriz Funcional Normativa de Cargos de Taller;
+- Matriz Perfiles/Vistas/Firmas Proyecto Centenario;
+- Línea Base Maestra vigente.
+
+Reglas implementadas en la rama:
+
+- el Tronco de Beneficencia permanece independiente de Tesorería;
+- Hospitalario registra aportes, movimientos y socorros de su Taller;
+- todo egreso requiere respaldo y nace pendiente de autorización;
+- Venerable Maestro puede inspeccionar y aprobar sin editar el libro del Hospitalario;
+- el Consejo puede autorizar socorros sólo mediante acuerdo real `benevolence_aid_proposal` aprobado y por monto coincidente;
+- Secretaría del Taller no administra Hospitalaria;
+- Gran Hospitalaria no tiene acceso al detalle local de beneficiarios/ayudas;
+- la rendición mensual exige revisión Hospitalaria del Consejo;
+- la proyección superior contiene sólo agregados, reposiciones, comprobante y referencias institucionales;
+- Gran Hospitalaria observa o concilia;
+- la conciliación genera `HospitalariaRegularitySnapshot`, reutilizado por Ceremonias;
+- el endpoint manual histórico de regularidad se conserva para compatibilidad/excepción;
+- QA-025 eleva la regresión a 25 controles.
+
+Frontera de privacidad:
+
+- local reservado: referencia interna, destino resumido, respaldo y observación minimizada;
+- Gran Hospitalaria: no recibe `memberReference`, destino, observación ni detalle de beneficiario;
+- no se registran diagnósticos médicos detallados como parte de este incremento.
+
+Estado al registrar: desarrollado en rama `feature/hospitalaria-flujo-integral`, PR #114 abierto; pendiente gates exact-head, merge a `dev`, Pages/instalable del merge SHA y sincronización de Issue #97/Línea Base Maestra.
 
 ---
 
