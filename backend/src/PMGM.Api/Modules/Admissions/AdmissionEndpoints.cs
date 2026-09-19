@@ -18,6 +18,7 @@ public static class AdmissionEndpoints
             .RequireAuthorization();
 
         group.MapPost("/expedientes", CreateCaseAsync);
+        group.MapGet("/expedientes", ListCasesAsync);
         group.MapGet("/expedientes/{caseId:guid}", GetCaseAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias", AddEvidenceAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias/{evidenceId:guid}/revision", ReviewEvidenceAsync);
@@ -126,6 +127,58 @@ public static class AdmissionEndpoints
         await coreDb.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/admisiones/expedientes/{entity.Id}", ToCaseDto(entity));
+    }
+
+    private static async Task<IResult> ListCasesAsync(
+        Guid? organizationId,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        AdmissionsDbContext admissionsDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (organizationId is null)
+        {
+            if (!access.CanEvaluateCeremonies(httpContext.User))
+                return Results.Forbid();
+        }
+        else if (!access.CanReadOrganization(httpContext.User, organizationId.Value) &&
+                 !access.CanEvaluateCeremonies(httpContext.User))
+        {
+            return Results.Forbid();
+        }
+
+        var query = admissionsDb.AdmissionCases.AsNoTracking();
+        if (organizationId is not null)
+            query = query.Where(x => x.OrganizationId == organizationId.Value);
+
+        var cases = await query
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(250)
+            .ToListAsync(cancellationToken);
+
+        var organizationIds = cases.Select(x => x.OrganizationId).Distinct().ToArray();
+        var personIds = cases.Select(x => x.PersonId).Distinct().ToArray();
+
+        var organizationNames = await coreDb.Organizations.AsNoTracking()
+            .Where(x => organizationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var people = await coreDb.People.AsNoTracking()
+            .Where(x => personIds.Contains(x.Id))
+            .ToDictionaryAsync(
+                x => x.Id,
+                x => (x.FirstNames + " " + x.LastNames).Trim(),
+                cancellationToken);
+
+        var items = cases.Select(x => new
+        {
+            admissionCase = ToCaseDto(x),
+            organizationName = organizationNames.GetValueOrDefault(x.OrganizationId, "Taller"),
+            personDisplayName = people.GetValueOrDefault(x.PersonId, "Persona")
+        }).ToList();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> GetCaseAsync(
