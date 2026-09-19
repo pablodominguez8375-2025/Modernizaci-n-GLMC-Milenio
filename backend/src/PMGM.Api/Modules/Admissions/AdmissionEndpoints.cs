@@ -18,6 +18,7 @@ public static class AdmissionEndpoints
             .RequireAuthorization();
 
         group.MapPost("/expedientes", CreateCaseAsync);
+        group.MapGet("/personas/opciones", SearchPersonOptionsAsync);
         group.MapGet("/expedientes", ListCasesAsync);
         group.MapGet("/expedientes/{caseId:guid}", GetCaseAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias", AddEvidenceAsync);
@@ -127,6 +128,52 @@ public static class AdmissionEndpoints
         await coreDb.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/admisiones/expedientes/{entity.Id}", ToCaseDto(entity));
+    }
+
+    private static async Task<IResult> SearchPersonOptionsAsync(
+        Guid organizationId,
+        string? query,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId) &&
+            !access.CanEvaluateCeremonies(httpContext.User))
+            return Results.Forbid();
+
+        var normalized = query?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length < 2)
+            return Results.BadRequest(new { message = "Ingrese al menos dos caracteres para buscar una persona." });
+
+        var peopleQuery = coreDb.People.AsNoTracking()
+            .Where(x => (x.FirstNames + " " + x.LastNames).Contains(normalized));
+
+        var people = await peopleQuery
+            .OrderBy(x => x.LastNames)
+            .ThenBy(x => x.FirstNames)
+            .Take(50)
+            .Select(x => new
+            {
+                x.Id,
+                displayName = (x.FirstNames + " " + x.LastNames).Trim()
+            })
+            .ToListAsync(cancellationToken);
+
+        var personIds = people.Select(x => x.Id).ToArray();
+        var memberByPerson = await coreDb.Members.AsNoTracking()
+            .Where(x => personIds.Contains(x.PersonId))
+            .ToDictionaryAsync(x => x.PersonId, x => x.Id, cancellationToken);
+
+        var items = people.Select(x => new
+        {
+            personId = x.Id,
+            x.displayName,
+            memberId = memberByPerson.TryGetValue(x.Id, out var memberId) ? memberId : (Guid?)null
+        }).ToList();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> ListCasesAsync(
