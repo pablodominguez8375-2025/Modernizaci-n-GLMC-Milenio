@@ -96,6 +96,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canDataQuality = canRegimen
   const canCaseQueue = canRegimen
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
+  const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
+  const canTreasuryStatement = canTreasury || canLodgeTreasury
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
   const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
@@ -150,7 +152,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="ceremony" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />
           <ModuleAccess icon="shield" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
           <ModuleAccess icon="treasury" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
-          <ModuleAccess icon="treasury" label="Cuadro mensual" allowed={canTreasury} active={view === 'treasuryStatement'} onOpen={canTreasury ? () => setView('treasuryStatement') : undefined} />
+          {canTreasury && <ModuleAccess icon="treasury" label="Cuadros mensuales" allowed active={view === 'treasuryStatement'} onOpen={() => setView('treasuryStatement')} />}
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
           <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
           <ModuleAccess icon="archive" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
@@ -159,6 +161,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <div className="nav-section">Taller</div>
           <ModuleAccess icon="lodge" label="Ficha de Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
           <ModuleAccess icon="lodge" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />
+          {canLodgeTreasury && !canTreasury && <ModuleAccess icon="treasury" label="Cuadro mensual Tesorería" allowed active={view === 'treasuryStatement'} onOpen={() => setView('treasuryStatement')} />}
         </>}
         {(canLibrary || canDocuments) && <>
           <div className="nav-section">Conocimiento</div>
@@ -186,7 +189,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
         {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
-        {view === 'treasuryStatement' && canTreasury && <TreasuryStatementPage api={api} />}
+        {view === 'treasuryStatement' && canTreasuryStatement && <TreasuryStatementPage api={api} canPrepare={canLodgeTreasury || canTreasury} canReview={canTreasury} />}
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
