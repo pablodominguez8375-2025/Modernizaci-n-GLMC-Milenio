@@ -5,6 +5,7 @@ import {
   type HistoricalMemberIntake,
   type LodgeAdministrativeMeeting,
   type LodgeApiClient,
+  type LodgeCeremonyAuthorizationOption,
   type LodgeMeeting,
   type LodgeMemberOption,
   type LodgeSecretariatRecord,
@@ -20,15 +21,17 @@ type Props = {
   meetings: LodgeMeeting[]
   members: LodgeMemberOption[]
   canManage: boolean
+  onMeetingChanged?: (meetingId: string) => Promise<void> | void
 }
 
 type DocumentKind = 'work_paper' | 'extract' | 'full_minute'
 
-export default function LodgeSecretariatPanel({ organizationId, lodgeApi, documentApi, meetings, members, canManage }: Props) {
+export default function LodgeSecretariatPanel({ organizationId, lodgeApi, documentApi, meetings, members, canManage, onMeetingChanged }: Props) {
   const councilApi = useLodgeCouncilApi()
   const [intakes, setIntakes] = useState<HistoricalMemberIntake[]>([])
   const [adminMeetings, setAdminMeetings] = useState<LodgeAdministrativeMeeting[]>([])
   const [records, setRecords] = useState<LodgeSecretariatRecord[]>([])
+  const [ceremonyAuthorizations, setCeremonyAuthorizations] = useState<LodgeCeremonyAuthorizationOption[]>([])
   const [councilSessions, setCouncilSessions] = useState<Array<{ id: string; sessionDate: string; title: string | null; status: string }>>([])
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -65,21 +68,23 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       lodgeApi.getHistoricalMemberIntakes(organizationId),
       lodgeApi.getAdministrativeMeetings(organizationId),
       lodgeApi.getSecretariatRecords(organizationId),
+      lodgeApi.getCeremonyAuthorizationOptions(organizationId),
       councilApi.getSessions(organizationId),
-    ]).then(([historical, reunions, secretariatRecords, councils]) => {
+    ]).then(([historical, reunions, secretariatRecords, authorizations, councils]) => {
       if (!active) return
       setIntakes(historical.items)
       setAdminMeetings(reunions.items)
       setRecords(secretariatRecords.items)
+      setCeremonyAuthorizations(authorizations.items)
       setCouncilSessions(councils.items)
     }).catch(reason => { if (active) setError(toMessage(reason)) })
     return () => { active = false }
   }, [organizationId, lodgeApi, councilApi])
 
   const sources = useMemo(() => {
-    if (recordType === 'tenida') return meetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title || meetingTypeLabel(x.meetingType)}`, date: x.meetingDate, status: x.status, ceremonial: !!x.ceremonyType }))
-    if (recordType === 'reunion') return adminMeetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title}`, date: x.meetingDate, status: x.status, ceremonial: false }))
-    return councilSessions.map(x => ({ id: x.id, label: `${formatDate(x.sessionDate)} · ${x.title || 'Consejo de Administración'}`, date: x.sessionDate, status: x.status, ceremonial: false }))
+    if (recordType === 'tenida') return meetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title || meetingTypeLabel(x.meetingType)}`, date: x.meetingDate, status: x.status, ceremonial: !!x.ceremonyType, ceremonyType: x.ceremonyType }))
+    if (recordType === 'reunion') return adminMeetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title}`, date: x.meetingDate, status: x.status, ceremonial: false, ceremonyType: null }))
+    return councilSessions.map(x => ({ id: x.id, label: `${formatDate(x.sessionDate)} · ${x.title || 'Consejo de Administración'}`, date: x.sessionDate, status: x.status, ceremonial: false, ceremonyType: null }))
   }, [recordType, meetings, adminMeetings, councilSessions])
 
   useEffect(() => {
@@ -89,6 +94,11 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const currentRecord = records.find(x => x.recordType === recordType && x.sourceRecordId === sourceRecordId) ?? null
   const currentSource = sources.find(x => x.id === sourceRecordId) ?? null
   const planchaAllowed = recordType === 'tenida' && currentSource && !currentSource.ceremonial
+  const matchingAuthorizations = currentSource?.ceremonyType ? ceremonyAuthorizations.filter(x => x.ceremonyType === currentSource.ceremonyType) : []
+  const extractReady = !!currentRecord?.extractDocumentVersionId
+  const authorizationRequired = recordType === 'tenida' && !!currentSource?.ceremonial
+  const authorizationReady = !authorizationRequired || !!currentRecord?.ceremonyAuthorizationDocumentId
+  const canCloseTenida = recordType === 'tenida' && currentSource?.status === 'held' && extractReady && authorizationReady
   const canSubmitToGrandSecretariat =
     recordType === 'tenida' &&
     currentSource &&
