@@ -123,6 +123,9 @@ export interface LodgeCeremonyAuthorizationOption {
   proposedDate: string | null; issuedAtUtc: string
 }
 export interface LodgeCeremonyAuthorizationOptionsResponse { total: number; items: LodgeCeremonyAuthorizationOption[] }
+export interface LodgeCorrespondence { id:string; organizationId:string; direction:'received'|'sent'; folio:string; correspondenceDate:string; subject:string; counterparty:string; channel:'email'|'letter'|'hand_delivery'|'other'; reference:string|null; status:'registered'|'closed'; createdAtUtc:string; closedAtUtc:string|null }
+export interface LodgeSecretariatTask { id:string; organizationId:string; title:string; detail:string|null; dueDate:string|null; priority:'low'|'normal'|'high'|'urgent'; responsible:string|null; status:'pending'|'in_progress'|'completed'|'cancelled'; createdAtUtc:string; completedAtUtc:string|null }
+export interface LodgeAgendaItem { id:string; organizationId:string; meetingId:string|null; order:number; title:string; detail:string|null; status:'pending'|'covered'|'deferred'; createdAtUtc:string; updatedAtUtc:string|null }
 
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
@@ -239,6 +242,9 @@ export class LodgeApiClient {
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
   private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = demoLodgeSeed.secretariatRecords.map(item => ({ ...item }))
   private readonly mockCeremonyAuthorizations: LodgeCeremonyAuthorizationOption[] = demoLodgeSeed.ceremonyAuthorizations.map(item => ({ ...item }))
+  private readonly mockCorrespondence: LodgeCorrespondence[] = [{id:'corr-demo-001',organizationId:DEMO_LODGE_23_ID,direction:'received',folio:'REC-2026-001',correspondenceDate:'2026-09-17',subject:'Circular institucional demostrativa',counterparty:'Gran Secretaría',channel:'email',reference:'Correo institucional ficticio',status:'registered',createdAtUtc:'2026-09-17T15:00:00Z',closedAtUtc:null}]
+  private readonly mockSecretariatTasks: LodgeSecretariatTask[] = [{id:'task-demo-001',organizationId:DEMO_LODGE_23_ID,title:'Preparar extracto de próxima Tenida',detail:'Pendiente demostrativo sin datos reales.',dueDate:'2026-09-25',priority:'high',responsible:'Secretaría del Taller',status:'pending',createdAtUtc:'2026-09-18T15:00:00Z',completedAtUtc:null}]
+  private readonly mockAgenda: LodgeAgendaItem[] = [{id:'agenda-demo-001',organizationId:DEMO_LODGE_23_ID,meetingId:'bbbbbbbb-2309-0026-0000-000000000002',order:1,title:'Apertura y lectura del acta anterior',detail:null,status:'pending',createdAtUtc:'2026-09-18T16:00:00Z',updatedAtUtc:null}]
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -260,6 +266,16 @@ export class LodgeApiClient {
     }
     return this.request<HistoricalMemberIntakesResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/cuadro/carga-historica`)
   }
+
+  async getCorrespondence(organizationId:string):Promise<{total:number;items:LodgeCorrespondence[]}>{ if(this.useMocks){const items=this.mockCorrespondence.filter(x=>x.organizationId===organizationId);return{total:items.length,items:items.map(x=>({...x}))}} return this.request(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/correspondencia`) }
+  async createCorrespondence(organizationId:string,payload:Omit<LodgeCorrespondence,'id'|'organizationId'|'status'|'createdAtUtc'|'closedAtUtc'>):Promise<LodgeCorrespondence>{ if(this.useMocks){const item:LodgeCorrespondence={id:crypto.randomUUID(),organizationId,...payload,status:'registered',createdAtUtc:new Date().toISOString(),closedAtUtc:null};this.mockCorrespondence.unshift(item);return{...item}} return this.postJson(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/correspondencia`,payload) }
+  async updateCorrespondenceStatus(id:string,status:'registered'|'closed'):Promise<LodgeCorrespondence>{ if(this.useMocks){const x=this.mockCorrespondence.find(i=>i.id===id);if(!x)throw new Error('Correspondencia no encontrada.');x.status=status;x.closedAtUtc=status==='closed'?new Date().toISOString():null;return{...x}} return this.postJson(`/api/secretaria/correspondencia/${encodeURIComponent(id)}/estado`,{status}) }
+  async getSecretariatTasks(organizationId:string):Promise<{total:number;items:LodgeSecretariatTask[]}>{if(this.useMocks){const items=this.mockSecretariatTasks.filter(x=>x.organizationId===organizationId);return{total:items.length,items:items.map(x=>({...x}))}}return this.request(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/pendientes`)}
+  async createSecretariatTask(organizationId:string,payload:{title:string;detail?:string|null;dueDate?:string|null;priority:LodgeSecretariatTask['priority'];responsible?:string|null}):Promise<LodgeSecretariatTask>{if(this.useMocks){const item:LodgeSecretariatTask={id:crypto.randomUUID(),organizationId,title:payload.title,detail:payload.detail??null,dueDate:payload.dueDate??null,priority:payload.priority,responsible:payload.responsible??null,status:'pending',createdAtUtc:new Date().toISOString(),completedAtUtc:null};this.mockSecretariatTasks.unshift(item);return{...item}}return this.postJson(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/pendientes`,payload)}
+  async updateSecretariatTaskStatus(id:string,status:LodgeSecretariatTask['status']):Promise<LodgeSecretariatTask>{if(this.useMocks){const x=this.mockSecretariatTasks.find(i=>i.id===id);if(!x)throw new Error('Pendiente no encontrado.');x.status=status;x.completedAtUtc=status==='completed'?new Date().toISOString():null;return{...x}}return this.postJson(`/api/secretaria/pendientes/${encodeURIComponent(id)}/estado`,{status})}
+  async getAgendaItems(organizationId:string):Promise<{total:number;items:LodgeAgendaItem[]}>{if(this.useMocks){const items=this.mockAgenda.filter(x=>x.organizationId===organizationId);return{total:items.length,items:items.map(x=>({...x}))}}return this.request(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/agenda`)}
+  async createAgendaItem(organizationId:string,payload:{meetingId?:string|null;order:number;title:string;detail?:string|null}):Promise<LodgeAgendaItem>{if(this.useMocks){const item:LodgeAgendaItem={id:crypto.randomUUID(),organizationId,meetingId:payload.meetingId??null,order:payload.order,title:payload.title,detail:payload.detail??null,status:'pending',createdAtUtc:new Date().toISOString(),updatedAtUtc:null};this.mockAgenda.push(item);return{...item}}return this.postJson(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/agenda`,payload)}
+  async updateAgendaStatus(id:string,status:LodgeAgendaItem['status']):Promise<LodgeAgendaItem>{if(this.useMocks){const x=this.mockAgenda.find(i=>i.id===id);if(!x)throw new Error('Punto de agenda no encontrado.');x.status=status;x.updatedAtUtc=new Date().toISOString();return{...x}}return this.postJson(`/api/secretaria/agenda/${encodeURIComponent(id)}/estado`,{status})}
 
   async createHistoricalMemberIntake(organizationId: string, payload: CreateHistoricalMemberIntakeRequest): Promise<HistoricalMemberIntake> {
     if (this.useMocks) {

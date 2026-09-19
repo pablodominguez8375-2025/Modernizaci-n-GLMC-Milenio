@@ -56,4 +56,22 @@ public static class SecretariatOperationsCodes
         public static bool IsCeremonial(string? value)
             => value is Initiation or Affiliation or WageIncrease or Exaltation or Incorporation;
     }
+
+    public static class Correspondence
+    {
+        public static bool IsDirection(string value) => value is "received" or "sent";
+        public static bool IsChannel(string value) => value is "email" or "letter" or "hand_delivery" or "other";
+        public static bool IsStatus(string value) => value is "registered" or "closed";
+    }
+
+    public static class Task
+    {
+        public static bool IsPriority(string value) => value is "low" or "normal" or "high" or "urgent";
+        public static bool IsStatus(string value) => value is "pending" or "in_progress" or "completed" or "cancelled";
+    }
+
+    public static class Agenda
+    {
+        public static bool IsStatus(string value) => value is "pending" or "covered" or "deferred";
+    }
 }

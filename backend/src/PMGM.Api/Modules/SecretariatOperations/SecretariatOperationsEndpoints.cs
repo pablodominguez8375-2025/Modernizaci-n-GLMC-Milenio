@@ -50,6 +50,16 @@ public static class SecretariatOperationsEndpoints
         group.MapPut("/talleres/{organizationId:guid}/registros/{recordType}/{sourceRecordId:guid}", UpsertLodgeRecordAsync);
         group.MapPost("/talleres/{organizationId:guid}/tenidas/{meetingId:guid}/remitir-extracto", SubmitTenidaExtractAsync);
 
+        group.MapGet("/talleres/{organizationId:guid}/correspondencia", ListCorrespondenceAsync);
+        group.MapPost("/talleres/{organizationId:guid}/correspondencia", CreateCorrespondenceAsync);
+        group.MapPost("/correspondencia/{id:guid}/estado", UpdateCorrespondenceStatusAsync);
+        group.MapGet("/talleres/{organizationId:guid}/pendientes", ListTasksAsync);
+        group.MapPost("/talleres/{organizationId:guid}/pendientes", CreateTaskAsync);
+        group.MapPost("/pendientes/{id:guid}/estado", UpdateTaskStatusAsync);
+        group.MapGet("/talleres/{organizationId:guid}/agenda", ListAgendaAsync);
+        group.MapPost("/talleres/{organizationId:guid}/agenda", CreateAgendaItemAsync);
+        group.MapPost("/agenda/{id:guid}/estado", UpdateAgendaStatusAsync);
+
         var ri = endpoints.MapGroup("/api/regimen-interior/carga-historica")
             .WithTags("Régimen Interior")
             .RequireAuthorization();
@@ -845,6 +855,102 @@ public static class SecretariatOperationsEndpoints
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     }
 
+    private static async Task<IResult> ListCorrespondenceAsync(Guid organizationId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanReadLodgeSecretariatOperations(context.User, organizationId)) return Results.Forbid();
+        var items = await db.LodgeCorrespondence.AsNoTracking().Where(x => x.OrganizationId == organizationId)
+            .OrderByDescending(x => x.CorrespondenceDate).ThenByDescending(x => x.CreatedAtUtc).Take(500).ToListAsync(ct);
+        context.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> CreateCorrespondenceAsync(Guid organizationId, CreateCorrespondenceRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeSecretariat(context.User, organizationId)) return Results.Forbid();
+        if (!SecretariatOperationsCodes.Correspondence.IsDirection(request.Direction) || !SecretariatOperationsCodes.Correspondence.IsChannel(request.Channel))
+            return Results.BadRequest(new { message = "Dirección o canal de correspondencia no válido." });
+        if (string.IsNullOrWhiteSpace(request.Folio) || string.IsNullOrWhiteSpace(request.Subject) || string.IsNullOrWhiteSpace(request.Counterparty))
+            return Results.BadRequest(new { message = "Folio, asunto y contraparte son obligatorios." });
+        var folio = request.Folio.Trim();
+        if (await db.LodgeCorrespondence.AnyAsync(x => x.OrganizationId == organizationId && x.Folio == folio, ct))
+            return Results.Conflict(new { message = "El folio ya existe en la correspondencia del Taller." });
+        var entity = new LodgeCorrespondence { OrganizationId = organizationId, Direction = request.Direction, Folio = folio,
+            CorrespondenceDate = request.CorrespondenceDate, Subject = request.Subject.Trim(), Counterparty = request.Counterparty.Trim(),
+            Channel = request.Channel, Reference = NormalizeOptional(request.Reference), Status = "registered", CreatedBySubject = GetSubject(context.User) };
+        db.LodgeCorrespondence.Add(entity);
+        db.AuditEvents.Add(AuditEventFactory.Create(context, "secretariat.correspondence.created", nameof(LodgeCorrespondence), entity.Id.ToString(), organizationId, AuditResults.Success, new { entity.Direction, entity.Folio, entity.Channel }));
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/secretaria/correspondencia/{entity.Id}", entity);
+    }
+
+    private static async Task<IResult> UpdateCorrespondenceStatusAsync(Guid id, UpdateStatusRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        var entity = await db.LodgeCorrespondence.SingleOrDefaultAsync(x => x.Id == id, ct); if (entity is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(context.User, entity.OrganizationId)) return Results.Forbid();
+        if (!SecretariatOperationsCodes.Correspondence.IsStatus(request.Status)) return Results.BadRequest(new { message = "Estado no válido." });
+        entity.Status = request.Status; entity.ClosedAtUtc = request.Status == "closed" ? DateTimeOffset.UtcNow : null; entity.ClosedBySubject = request.Status == "closed" ? GetSubject(context.User) : null;
+        db.AuditEvents.Add(AuditEventFactory.Create(context, "secretariat.correspondence.status_changed", nameof(LodgeCorrespondence), entity.Id.ToString(), entity.OrganizationId, AuditResults.Success, new { entity.Status }));
+        await db.SaveChangesAsync(ct); return Results.Ok(entity);
+    }
+
+    private static async Task<IResult> ListTasksAsync(Guid organizationId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanReadLodgeSecretariatOperations(context.User, organizationId)) return Results.Forbid();
+        var items = await db.LodgeSecretariatTasks.AsNoTracking().Where(x => x.OrganizationId == organizationId)
+            .OrderBy(x => x.Status == "completed" || x.Status == "cancelled").ThenBy(x => x.DueDate).ThenByDescending(x => x.CreatedAtUtc).Take(500).ToListAsync(ct);
+        context.Response.Headers.CacheControl = "private, no-store"; return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> CreateTaskAsync(Guid organizationId, CreateTaskRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeSecretariat(context.User, organizationId)) return Results.Forbid();
+        if (string.IsNullOrWhiteSpace(request.Title) || !SecretariatOperationsCodes.Task.IsPriority(request.Priority)) return Results.BadRequest(new { message = "Título o prioridad no válido." });
+        var entity = new LodgeSecretariatTask { OrganizationId = organizationId, Title = request.Title.Trim(), Detail = NormalizeOptional(request.Detail), DueDate = request.DueDate,
+            Priority = request.Priority, Responsible = NormalizeOptional(request.Responsible), Status = "pending", CreatedBySubject = GetSubject(context.User) };
+        db.LodgeSecretariatTasks.Add(entity); db.AuditEvents.Add(AuditEventFactory.Create(context, "secretariat.task.created", nameof(LodgeSecretariatTask), entity.Id.ToString(), organizationId, AuditResults.Success, new { entity.Priority, entity.DueDate }));
+        await db.SaveChangesAsync(ct); return Results.Created($"/api/secretaria/pendientes/{entity.Id}", entity);
+    }
+
+    private static async Task<IResult> UpdateTaskStatusAsync(Guid id, UpdateStatusRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        var entity = await db.LodgeSecretariatTasks.SingleOrDefaultAsync(x => x.Id == id, ct); if (entity is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(context.User, entity.OrganizationId)) return Results.Forbid();
+        if (!SecretariatOperationsCodes.Task.IsStatus(request.Status)) return Results.BadRequest(new { message = "Estado no válido." });
+        entity.Status = request.Status; entity.CompletedAtUtc = request.Status == "completed" ? DateTimeOffset.UtcNow : null; entity.CompletedBySubject = request.Status == "completed" ? GetSubject(context.User) : null;
+        db.AuditEvents.Add(AuditEventFactory.Create(context, "secretariat.task.status_changed", nameof(LodgeSecretariatTask), entity.Id.ToString(), entity.OrganizationId, AuditResults.Success, new { entity.Status }));
+        await db.SaveChangesAsync(ct); return Results.Ok(entity);
+    }
+
+    private static async Task<IResult> ListAgendaAsync(Guid organizationId, Guid? meetingId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanReadLodgeSecretariatOperations(context.User, organizationId)) return Results.Forbid();
+        var query = db.LodgeAgendaItems.AsNoTracking().Where(x => x.OrganizationId == organizationId);
+        if (meetingId is not null) query = query.Where(x => x.MeetingId == meetingId);
+        var items = await query.OrderBy(x => x.MeetingId).ThenBy(x => x.Order).Take(500).ToListAsync(ct);
+        context.Response.Headers.CacheControl = "private, no-store"; return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> CreateAgendaItemAsync(Guid organizationId, CreateAgendaItemRequest request, HttpContext context, PmgmDbContext db, LodgeManagementDbContext lodgeDb, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeSecretariat(context.User, organizationId)) return Results.Forbid();
+        if (request.Order < 1 || string.IsNullOrWhiteSpace(request.Title)) return Results.BadRequest(new { message = "Orden y título son obligatorios." });
+        if (request.MeetingId is not null && !await lodgeDb.LodgeMeetings.AsNoTracking().AnyAsync(x => x.Id == request.MeetingId && x.OrganizationId == organizationId, ct)) return Results.BadRequest(new { message = "La Tenida vinculada no pertenece al Taller." });
+        if (await db.LodgeAgendaItems.AnyAsync(x => x.OrganizationId == organizationId && x.MeetingId == request.MeetingId && x.Order == request.Order, ct)) return Results.Conflict(new { message = "Ya existe un punto con ese orden para la Tenida." });
+        var entity = new LodgeAgendaItem { OrganizationId = organizationId, MeetingId = request.MeetingId, Order = request.Order, Title = request.Title.Trim(), Detail = NormalizeOptional(request.Detail), Status = "pending", CreatedBySubject = GetSubject(context.User) };
+        db.LodgeAgendaItems.Add(entity); db.AuditEvents.Add(AuditEventFactory.Create(context, "secretariat.agenda_item.created", nameof(LodgeAgendaItem), entity.Id.ToString(), organizationId, AuditResults.Success, new { entity.MeetingId, entity.Order }));
+        await db.SaveChangesAsync(ct); return Results.Created($"/api/secretaria/agenda/{entity.Id}", entity);
+    }
+
+    private static async Task<IResult> UpdateAgendaStatusAsync(Guid id, UpdateStatusRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        var entity = await db.LodgeAgendaItems.SingleOrDefaultAsync(x => x.Id == id, ct); if (entity is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(context.User, entity.OrganizationId)) return Results.Forbid();
+        if (!SecretariatOperationsCodes.Agenda.IsStatus(request.Status)) return Results.BadRequest(new { message = "Estado no válido." });
+        entity.Status = request.Status; entity.UpdatedBySubject = GetSubject(context.User); entity.UpdatedAtUtc = DateTimeOffset.UtcNow;
+        db.AuditEvents.Add(AuditEventFactory.Create(context, "secretariat.agenda_item.status_changed", nameof(LodgeAgendaItem), entity.Id.ToString(), entity.OrganizationId, AuditResults.Success, new { entity.Status }));
+        await db.SaveChangesAsync(ct); return Results.Ok(entity);
+    }
+
     private static async Task<Guid?> FindExistingMemberAsync(
         PmgmDbContext db,
         Guid organizationId,
@@ -1019,3 +1125,8 @@ public sealed record CeremonyAuthorizationCeremonyRef(
     Guid Id,
     string CeremonyType,
     DateOnly? ProposedDate);
+
+public sealed record CreateCorrespondenceRequest(string Direction, string Folio, DateOnly CorrespondenceDate, string Subject, string Counterparty, string Channel, string? Reference);
+public sealed record CreateTaskRequest(string Title, string? Detail, DateOnly? DueDate, string Priority, string? Responsible);
+public sealed record CreateAgendaItemRequest(Guid? MeetingId, int Order, string Title, string? Detail);
+public sealed record UpdateStatusRequest(string Status);

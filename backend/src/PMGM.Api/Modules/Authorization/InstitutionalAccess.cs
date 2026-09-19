@@ -45,6 +45,7 @@ public interface IInstitutionalAccessService
     bool CanManageLodgeOperations(ClaimsPrincipal user);
     bool CanManageLodgeSecretariat(ClaimsPrincipal user, Guid organizationId);
     bool CanReadLodgeSecretariat(ClaimsPrincipal user, Guid organizationId);
+    bool CanReadLodgeSecretariatOperations(ClaimsPrincipal user, Guid organizationId);
     bool CanReviewHistoricalMemberIntake(ClaimsPrincipal user);
     bool CanReviewSecretariatSubmissions(ClaimsPrincipal user);
     bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId);
@@ -137,6 +138,11 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
     public bool CanReadLodgeSecretariat(ClaimsPrincipal user, Guid organizationId)
         => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.RegimenInterior)) ||
+           (HasOrganizationClaim(user, organizationId) &&
+            HasRole(user, InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerVenerable, InstitutionalRoles.TallerOrador));
+
+    public bool CanReadLodgeSecretariatOperations(ClaimsPrincipal user, Guid organizationId)
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin)) ||
            (HasOrganizationClaim(user, organizationId) &&
             HasRole(user, InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerVenerable, InstitutionalRoles.TallerOrador));
 
