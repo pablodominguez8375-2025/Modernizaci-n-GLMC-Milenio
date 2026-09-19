@@ -182,7 +182,7 @@ function ReservationPanel({ api, organizations, ceremonies, availability, workin
   execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshAvailability: () => Promise<void>; refreshCeremonies: () => Promise<void>; fromLocal: string; toLocal: string
 }) {
   const availableSpaces = availability?.items.filter(x => x.isAvailable) ?? []
-  const reservableCeremonies = ceremonies.filter(item => !item.formalAuthorizationIssued && !item.spaceReservationId)
+  const reservableCeremonies = ceremonies.filter(item => item.formalAuthorizationIssued && !item.spaceReservationId)
   const [organizationId, setOrganizationId] = useState('')
   const [ceremonyId, setCeremonyId] = useState('')
   const [spaceId, setSpaceId] = useState('')
@@ -206,11 +206,11 @@ function ReservationPanel({ api, organizations, ceremonies, availability, workin
   }
 
   return <article className="panel"><p className="eyebrow">Reserva</p><h2>Asignar espacio</h2><form className="stack-form" onSubmit={submit}>
-    <Field label="Ceremonia autorizada · opcional"><select value={ceremonyId} onChange={e => setCeremonyId(e.target.value)}><option value="">Reserva general, sin ceremonia</option>{reservableCeremonies.map(item => <option key={item.id} value={item.id}>{ceremonyTypeLabel(item.ceremonyType)} · {item.organizationName}{item.proposedDate ? ` · ${formatDateOnly(item.proposedDate)}` : ''}</option>)}</select></Field>
+    <Field label="Ceremonia con Plancha de Autorización · opcional"><select value={ceremonyId} onChange={e => setCeremonyId(e.target.value)}><option value="">Reserva general, sin ceremonia</option>{reservableCeremonies.map(item => <option key={item.id} value={item.id}>{ceremonyTypeLabel(item.ceremonyType)} · {item.organizationName}{item.proposedDate ? ` · ${formatDateOnly(item.proposedDate)}` : ''}</option>)}</select></Field>
     <Field label="Taller / organización"><select required disabled={!!selectedCeremony} value={effectiveOrganizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field>
     <Field label="Templo o sala disponible"><select required value={spaceId} onChange={e => setSpaceId(e.target.value)}><option value="">Seleccione…</option>{availableSpaces.map(s => <option key={s.id} value={s.id}>{s.name} · {spaceTypeLabel(s.spaceType)}</option>)}</select></Field>
     <Field label="Propósito"><input required maxLength={300} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder={selectedCeremony ? `Ej.: ${ceremonyTypeLabel(selectedCeremony.ceremonyType)}` : 'Ej.: Tenida especial'} /></Field>
-    <small className="form-note">Usa el período consultado arriba. Si selecciona una ceremonia, el Taller queda fijado por la solicitud autorizada y la reserva se vincula automáticamente.</small>
+    <small className="form-note">Usa el período consultado arriba. La programación de una ceremonia sólo está habilitada después de emitir la Plancha de Autorización de Gran Secretaría. Si selecciona una ceremonia, el Taller queda fijado y la reserva se vincula automáticamente.</small>
     <button className="primary-action" disabled={working || !spaceId || !effectiveOrganizationId}>Reservar</button>
   </form></article>
 }
