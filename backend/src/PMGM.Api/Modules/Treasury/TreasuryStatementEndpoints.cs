@@ -11,6 +11,7 @@ public static class TreasuryStatementEndpoints
     public static RouteGroupBuilder MapTreasuryStatementEndpoints(this RouteGroupBuilder group)
     {
         group.MapPost("/talleres/{organizationId:guid}/cuadros", CreateAsync);
+        group.MapGet("/talleres/{organizationId:guid}/cuadros", ListAsync);
         group.MapPost("/cuadros/{statementId:guid}/lineas", AddLineAsync);
         group.MapPost("/cuadros/{statementId:guid}/generar-lineas", GenerateLinesAsync);
         group.MapPost("/cuadros/{statementId:guid}/pagos", AddPaymentAsync);
@@ -24,13 +25,13 @@ public static class TreasuryStatementEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
         if (request.ApprenticeAmount < 0 || request.FellowcraftAmount < 0 || request.MasterAmount < 0)
             return Results.BadRequest(new { message = "Las cuotas base no pueden ser negativas." });
 
         var statement = await db.TreasuryMonthlyStatements.Include(x => x.Lines)
             .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
         if (statement is null) return Results.NotFound();
+        if (!access.CanManageLodgeTreasury(context.User, statement.OrganizationId)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count != 0)
             return Results.Conflict(new { message = "La generación automática requiere un cuadro vacío en borrador." });
 
@@ -111,7 +112,7 @@ public static class TreasuryStatementEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         if (request.PeriodYear is < 2000 or > 2200 || request.PeriodMonth is < 1 or > 12)
             return Results.BadRequest(new { message = "El período indicado no es válido." });
         if (!await db.Organizations.AnyAsync(x => x.Id == organizationId, cancellationToken))
@@ -137,13 +138,46 @@ public static class TreasuryStatementEndpoints
         return Results.Created($"/api/tesoreria/cuadros/{statement.Id}", ToResponse(statement));
     }
 
+    private static async Task<IResult> ListAsync(
+        Guid organizationId,
+        int? year,
+        int? month,
+        HttpContext context,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId) &&
+            !access.CanManageTreasuryRegularity(context.User))
+            return Results.Forbid();
+
+        var query = db.TreasuryMonthlyStatements.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId);
+        if (year is not null) query = query.Where(x => x.PeriodYear == year.Value);
+        if (month is not null) query = query.Where(x => x.PeriodMonth == month.Value);
+
+        var rows = await query
+            .OrderByDescending(x => x.PeriodYear)
+            .ThenByDescending(x => x.PeriodMonth)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .Select(x => new
+            {
+                x.Id, x.OrganizationId, x.PeriodYear, x.PeriodMonth, x.CutoffDate, x.Status,
+                x.SourceReference, x.SubmittedAtUtc, x.ReconciledAtUtc, x.ClosedAtUtc
+            })
+            .Take(24)
+            .ToListAsync(cancellationToken);
+
+        return Results.Ok(new { total = rows.Count, items = rows });
+    }
+
     private static async Task<IResult> AddLineAsync(Guid statementId, AddTreasuryStatementLineRequest request,
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
         var statement = await db.TreasuryMonthlyStatements.FindAsync([statementId], cancellationToken);
         if (statement is null) return Results.NotFound();
+        if (!access.CanManageLodgeTreasury(context.User, statement.OrganizationId)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft)
             return Results.Conflict(new { message = "Sólo se pueden modificar cuadros en borrador." });
         if (!TreasuryCodes.IdentityMatchStatus.IsValid(request.IdentityMatchStatus))
@@ -185,9 +219,9 @@ public static class TreasuryStatementEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
         var statement = await db.TreasuryMonthlyStatements.FindAsync([statementId], cancellationToken);
         if (statement is null) return Results.NotFound();
+        if (!access.CanManageLodgeTreasury(context.User, statement.OrganizationId)) return Results.Forbid();
         if (statement.Status is TreasuryCodes.StatementStatus.Reconciled or TreasuryCodes.StatementStatus.Closed or TreasuryCodes.StatementStatus.Rectified)
             return Results.Conflict(new { message = "El cuadro ya no admite pagos." });
         if (!TreasuryCodes.PaymentMethod.IsValid(request.PaymentMethod) || request.Amount <= 0)
@@ -213,12 +247,16 @@ public static class TreasuryStatementEndpoints
     private static async Task<IResult> SubmitAsync(Guid statementId, HttpContext context, PmgmDbContext db,
         IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
     {
-        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
-        var statement = await db.TreasuryMonthlyStatements.Include(x => x.Lines)
+        var statement = await db.TreasuryMonthlyStatements.Include(x => x.Lines).Include(x => x.Payments)
             .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
         if (statement is null) return Results.NotFound();
+        if (!access.CanManageLodgeTreasury(context.User, statement.OrganizationId)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count == 0)
             return Results.Conflict(new { message = "El cuadro debe estar en borrador y contener líneas antes de enviarse." });
+        var totals = TreasuryStatementTotals.Calculate(statement.Lines, statement.Payments);
+        var unresolved = statement.Lines.Count(x => x.IdentityMatchStatus != TreasuryCodes.IdentityMatchStatus.Matched);
+        if (totals.DifferenceAmount != 0 || unresolved != 0)
+            return Results.Conflict(new { message = "El cuadro no puede enviarse mientras exista diferencia o identidades sin conciliar.", totals, unresolvedIdentities = unresolved });
         statement.Status = TreasuryCodes.StatementStatus.Submitted;
         statement.SubmittedAtUtc = DateTimeOffset.UtcNow;
         audit.Add(context, "treasury.statement.submitted", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
