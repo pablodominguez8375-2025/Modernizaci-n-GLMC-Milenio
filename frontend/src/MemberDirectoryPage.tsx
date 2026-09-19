@@ -67,7 +67,7 @@ export default function MemberDirectoryPage({ api, membershipApi }: { api: PmgmA
 
   return <>
     <section className="page-heading member-heading">
-      <div><p className="eyebrow">Padrón institucional</p><h1>Fichas de miembros</h1><p>Identidad institucional, Taller, grado, cargos e historial con acceso controlado por ámbito.</p></div>
+      <div><p className="eyebrow">Cuadro del Taller</p><h1>Fichas de miembros</h1><p>Identidad institucional, Taller, grado, cargos e historial con acceso controlado por ámbito.</p></div>
       <span className="count-badge">{working ? 'actualizando…' : `${members.length} registros`}</span>
     </section>
 
@@ -89,7 +89,7 @@ export default function MemberDirectoryPage({ api, membershipApi }: { api: PmgmA
 
     <section className="member-layout">
       <article className="panel member-roster">
-        <div className="panel-heading"><div><p className="eyebrow">Taller seleccionado</p><h2>Padrón</h2></div><span className="count-badge">{members.length}</span></div>
+        <div className="panel-heading"><div><p className="eyebrow">Taller seleccionado</p><h2>Fichas e historial</h2></div><span className="count-badge">{members.length}</span></div>
         {loading || working ? <Loading /> : members.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong><span>Pruebe otro filtro o Taller.</span></div> : <div className="member-list">{members.map(item => <button key={item.memberId} type="button" className={item.memberId === selectedId ? 'member-row selected' : 'member-row'} onClick={() => setSelectedId(item.memberId)}><span className="member-avatar">{initials(item.displayName)}</span><span className="member-row-main"><strong>{item.displayName}</strong><small>{degreeLabel(item.currentDegree)} · {item.institutionalNumber ?? 'Sin Nº institucional'}</small></span><span className={statusClass(item.membershipStatus)}>{membershipLabel(item.membershipStatus)}</span></button>)}</div>}
       </article>
 
