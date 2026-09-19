@@ -6,6 +6,7 @@ public sealed class AdmissionCase
     public Guid OrganizationId { get; set; }
     public required string AdmissionType { get; set; }
     public string? AffiliationMode { get; set; }
+    public string? AffiliationProcedure { get; set; }
     public Guid? MemberId { get; set; }
     public Guid PersonId { get; set; }
     public Guid? OriginOrganizationId { get; set; }
