@@ -13,6 +13,7 @@ public sealed class AdmissionEligibilityPolicyTests
         var result = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Standard,
             WithdrawalLetterAttached: true,
             WithdrawalLetterHandwrittenSignatureVerified: true,
             Article23Clear: true,
@@ -31,6 +32,7 @@ public sealed class AdmissionEligibilityPolicyTests
         var result = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Standard,
             WithdrawalLetterAttached: true,
             WithdrawalLetterHandwrittenSignatureVerified: true,
             Article23Clear: true,
@@ -52,6 +54,7 @@ public sealed class AdmissionEligibilityPolicyTests
         var result = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Activation,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Standard,
             WithdrawalLetterAttached: true,
             WithdrawalLetterHandwrittenSignatureVerified: false,
             Article23Clear: true,
@@ -74,6 +77,7 @@ public sealed class AdmissionEligibilityPolicyTests
         AdmissionEligibilityInput Input(DateOnly newDate, bool remedied) => new(
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Standard,
             WithdrawalLetterAttached: true,
             WithdrawalLetterHandwrittenSignatureVerified: true,
             Article23Clear: true,
@@ -238,6 +242,7 @@ public sealed class AdmissionEligibilityPolicyTests
         AdmissionEligibilityInput Input(bool pardon) => new(
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Standard,
             WithdrawalLetterAttached: true,
             WithdrawalLetterHandwrittenSignatureVerified: true,
             Article23Clear: false,
@@ -259,6 +264,7 @@ public sealed class AdmissionEligibilityPolicyTests
         var result = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Standard,
             WithdrawalLetterAttached: true,
             WithdrawalLetterHandwrittenSignatureVerified: true,
             Article23Clear: true,
@@ -330,6 +336,57 @@ public sealed class AdmissionEligibilityPolicyTests
         var valid = AdmissionEligibilityPolicy.EvaluateFirstDegreeBallot(
             new[] { new CandidateBallotRound(1, 5, 4, 1) }, approved: true);
         Assert.True(valid.CanProceed);
+    }
+
+
+    [Fact]
+    public void Reentry_RequiresInformationCommission()
+    {
+        var result = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
+            AdmissionType: CeremonyCodes.Type.Affiliation,
+            AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Reentry,
+            WithdrawalLetterAttached: true,
+            WithdrawalLetterHandwrittenSignatureVerified: true,
+            Article23Clear: true,
+            FirstDegreePresentationRecorded: true,
+            InformationCommissionRequired: AdmissionProcedureRules.RequiresInformationCommission(
+                CeremonyCodes.Type.Affiliation,
+                AdmissionCodes.AffiliationProcedure.Reentry),
+            LodgeThirdDegreeApproved: true,
+            LodgeFirstDegreeBallotApproved: true));
+
+        Assert.False(result.CanProceed);
+        Assert.Contains(result.Requirements, x =>
+            x.Code == AdmissionCodes.Requirement.InformationCommission &&
+            x.Status == CeremonyCodes.ValidationStatus.Rejected);
+    }
+
+    [Fact]
+    public void Transfer_CanUseCamaraDelMedioCommissionWaiver()
+    {
+        var result = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
+            AdmissionType: CeremonyCodes.Type.Affiliation,
+            AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
+            AffiliationProcedure: AdmissionCodes.AffiliationProcedure.Transfer,
+            WithdrawalLetterAttached: true,
+            WithdrawalLetterHandwrittenSignatureVerified: true,
+            Article23Clear: true,
+            FirstDegreePresentationRecorded: true,
+            InformationCommissionRequired: AdmissionProcedureRules.RequiresInformationCommission(
+                CeremonyCodes.Type.Affiliation,
+                AdmissionCodes.AffiliationProcedure.Transfer),
+            InformationCommissionWaived: true,
+            LodgeThirdDegreeApproved: true,
+            LodgeFirstDegreeBallotApproved: true));
+
+        Assert.True(result.CanProceed);
+        Assert.Contains(result.Requirements, x =>
+            x.Code == AdmissionCodes.Requirement.InformationCommission &&
+            x.Status == CeremonyCodes.ValidationStatus.Approved);
+        Assert.Contains(result.Requirements, x =>
+            x.Code == AdmissionCodes.Requirement.InformationCommissionCompleted &&
+            x.Status == CeremonyCodes.ValidationStatus.Approved);
     }
 
 }
