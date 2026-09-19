@@ -20,8 +20,8 @@ public static class LodgeManagementEndpoints
         group.MapGet("/talleres/{organizationId:guid}/miembros/opciones", GetMemberOptionsAsync);
         group.MapPost("/talleres/{organizationId:guid}/tenidas", CreateMeetingAsync);
         group.MapGet("/talleres/{organizationId:guid}/tenidas", GetMeetingsAsync);
-        group.MapPost("/tenidas/{meetingId:guid}/realizar", CloseMeetingAsync);
-        group.MapPost("/tenidas/{meetingId:guid}/cerrar", CloseMeetingAsync); // compatibilidad
+        group.MapPost("/tenidas/{meetingId:guid}/realizar", MarkMeetingHeldAsync);
+        group.MapPost("/tenidas/{meetingId:guid}/cerrar", CloseMeetingAsync);
         group.MapPost("/tenidas/{meetingId:guid}/asistencia", RecordAttendanceAsync);
         group.MapGet("/tenidas/{meetingId:guid}/asistencia", GetCurrentAttendanceAsync);
         group.MapPost("/tenidas/{meetingId:guid}/votaciones", RecordAnonymousBallotAsync);
@@ -150,7 +150,7 @@ public static class LodgeManagementEndpoints
         return Results.Ok(new LodgeMeetingsResponse(meetings.Count, meetings.Select(ToMeetingDto).ToList()));
     }
 
-    private static async Task<IResult> CloseMeetingAsync(
+    private static async Task<IResult> MarkMeetingHeldAsync(
         Guid meetingId,
         HttpContext httpContext,
         PmgmDbContext institutionalDb,
@@ -167,7 +167,8 @@ public static class LodgeManagementEndpoints
             return Results.Conflict(new { message = "Una Tenida cancelada no puede marcarse como realizada." });
 
         meeting.Status = LodgeManagementCodes.MeetingStatus.Held;
-        meeting.ClosedAtUtc = DateTimeOffset.UtcNow;
+        meeting.HeldAtUtc = DateTimeOffset.UtcNow;
+        meeting.ClosedAtUtc = null;
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
             "lodge.meeting.held",
@@ -175,7 +176,57 @@ public static class LodgeManagementEndpoints
             meeting.Id.ToString(),
             meeting.OrganizationId,
             AuditResults.Success,
-            new { meeting.MeetingDate, meeting.Status, meeting.ClosedAtUtc }));
+            new { meeting.MeetingDate, meeting.Status, meeting.HeldAtUtc }));
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(ToMeetingDto(meeting));
+    }
+
+    private static async Task<IResult> CloseMeetingAsync(
+        Guid meetingId,
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        LodgeManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        var meeting = await db.LodgeMeetings.SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
+        if (meeting is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(httpContext.User, meeting.OrganizationId)) return Results.Forbid();
+
+        var record = await institutionalDb.LodgeSecretariatRecords
+            .AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.RecordType == SecretariatOperationsCodes.RecordType.LodgeMeeting &&
+                     x.SourceRecordId == meetingId &&
+                     x.OrganizationId == meeting.OrganizationId,
+                cancellationToken);
+
+        var validation = LodgeMeetingClosurePolicy.Validate(
+            meeting.Status,
+            meeting.CeremonyType,
+            record?.ExtractDocumentVersionId,
+            record?.CeremonyAuthorizationDocumentId);
+        if (validation is not null)
+            return Results.Conflict(new { message = validation });
+
+        meeting.Status = LodgeManagementCodes.MeetingStatus.Closed;
+        meeting.ClosedAtUtc = DateTimeOffset.UtcNow;
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext,
+            "lodge.meeting.closed",
+            nameof(LodgeMeeting),
+            meeting.Id.ToString(),
+            meeting.OrganizationId,
+            AuditResults.Success,
+            new
+            {
+                meeting.MeetingDate,
+                meeting.CeremonyType,
+                meeting.Status,
+                meeting.ClosedAtUtc,
+                record!.ExtractDocumentVersionId,
+                record.CeremonyAuthorizationDocumentId
+            }));
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(ToMeetingDto(meeting));
     }
@@ -530,6 +581,7 @@ public static class LodgeManagementEndpoints
             meeting.Title,
             meeting.Status,
             meeting.CreatedAtUtc,
+            meeting.HeldAtUtc,
             meeting.ClosedAtUtc);
 
     private static LodgeMinuteDto ToMinuteDto(LodgeMinute minute)
@@ -582,6 +634,7 @@ public sealed record LodgeMeetingDto(
     string? Title,
     string Status,
     DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? HeldAtUtc,
     DateTimeOffset? ClosedAtUtc);
 public sealed record LodgeMeetingsResponse(int Total, IReadOnlyList<LodgeMeetingDto> Items);
 
