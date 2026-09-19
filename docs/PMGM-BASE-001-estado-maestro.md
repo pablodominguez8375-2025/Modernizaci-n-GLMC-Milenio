@@ -481,7 +481,7 @@ La línea vigente incluye, como mínimo:
 - Definition of Done de triple salida;
 - demo GitHub Pages funcional con datos ficticios;
 - instalable QA reproducible para `srv01`;
-- kit de regresión QA de 23 controles (QA-001..QA-023);
+- kit de regresión QA de 24 controles (QA-001..QA-024);
 - deploy post-merge de Pages resuelto;
 - Keycloak QA persistido en PostgreSQL;
 - backup/restore de PostgreSQL + MinIO;
@@ -515,7 +515,7 @@ Flujo:
 5. instalar;
 6. ejecutar smoke autenticado;
 7. preparar regresión QA;
-8. cerrar QA-001..QA-023;
+8. cerrar QA-001..QA-024;
 9. corregir P0/P1;
 10. recién entonces congelar UAT.
 
@@ -589,6 +589,33 @@ Trazabilidad objetivo de ceremonia:
 
 **Estado de implementación:** integrado en `dev` mediante PR #110, merge funcional `3833418b8875bd97607557bec07006c924aa56d4`. El backend separa Realizada/Cerrada, bloquea cierres incompletos, vincula la Plancha oficial de Gran Secretaría por referencia y audita el cierre. La migración normaliza los antiguos `closed` a `held` preservando la fecha en `HeldAtUtc`. El frontend y el mock de Pages muestran los requisitos documentales y aplican el mismo flujo. El kit QA incorpora QA-022 y QA-023, pasando a 23 controles. Los gates pre-merge y PMGM CI/Showcase/QA Installable/Pre-UAT post-merge quedaron en `success`. Pages publicó el mismo merge SHA y el ZIP QA público `Proyecto-Centenario-QA-srv01-3833418b8875.zip` con SHA-256 `5d115390bc531cde3c485a2f429f8b099e10d9a487b8086f97315cde66783d50`. El despliegue físico srv01 y la regresión 23/23 siguen pendientes en Issue #97.
 
+
+
+## 17. Incremento activo — Cuadro Mensual de Tesorería y segregación de funciones
+
+El PR #112 `feat(tesoreria): segregar Cuadro Mensual Taller y Gran Tesorería` continúa la automatización financiera desde las fuentes institucionales 2026, reutilizando el dominio Treasury ya existente.
+
+Fuentes verificadas:
+
+- Constitución/Reglamento, art. 12.12: el Tesorero es guardián/depositario del tesoro del Taller e integra las cotizaciones del Cuadro completo en Gran Tesorería dentro de los primeros diez días de cada mes;
+- `CUADRO PAGO GRAN TESORERÍA.xlsx`: Cuadro completo, valor de cuota, rebajas respaldadas, transferencias/depósitos y Diferencia;
+- Matriz Funcional Normativa y Matriz Perfiles/Vistas/Firmas: Tesorero responsable financiero del Cuadro Mensual.
+
+Reglas del incremento:
+
+- Tesorero del Taller prepara/genera el Cuadro de su propia organización;
+- transferencias y depósitos se registran antes del envío;
+- el envío se bloquea mientras `DifferenceAmount != 0` o existan identidades pendientes;
+- una vez enviado, el Taller no puede agregar pagos silenciosamente;
+- Gran Tesorería puede listar/revisar los Cuadros enviados y conserva la conciliación institucional;
+- sólo la conciliación institucional genera/actualiza `FinancialRegularitySnapshot`;
+- Ceremonias continúa consumiendo la regularidad derivada, sin duplicar comprobantes;
+- la demo distingue perfil Tesorero del Taller de Gran Tesorero;
+- QA-024 protege la segregación y eleva la matriz srv01 a 24 controles.
+
+Estado al registrar esta sección: implementación desarrollada en rama `feature/tesoreria-cuadro-mensual-segregacion`, PR #112 abierto; pendiente gates exact-head, merge a `dev` y triple salida post-merge. Issue #97 continúa siendo el gate de despliegue físico.
+
+Siguiente bloque funcional, después de cerrar PR #112: **Hospitalaria del Taller + Gran Hospitalaria**, respetando independencia del Tronco de Beneficencia respecto de Tesorería, Art. 12.13 y fuentes documentales vigentes de Drive.
 
 ---
 
