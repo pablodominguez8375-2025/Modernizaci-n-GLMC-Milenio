@@ -641,6 +641,7 @@ export class PmgmApiClient {
       const ceremony = payload.ceremonyRequestId ? this.mockCeremonies.find(item => item.id === payload.ceremonyRequestId) : undefined
       if (payload.ceremonyRequestId && !ceremony) throw new Error('La ceremonia indicada no existe en la bandeja autorizada.')
       if (ceremony && ceremony.organizationId !== payload.organizationId) throw new Error('La ceremonia no corresponde al Taller indicado.')
+      if (ceremony && !ceremony.formalAuthorizationIssued) throw new Error('No se puede programar la ceremonia antes de emitir la Plancha de Autorización de Gran Secretaría.')
       const id = crypto.randomUUID(); this.mockBusySpaces.add(payload.spaceId)
       if (ceremony) { const space = this.mockSpaces.find(item => item.id === payload.spaceId); ceremony.spaceReservationId = id; ceremony.spaceName = space?.name ?? 'Espacio institucional'; ceremony.reservationStartsAtUtc = payload.startsAtUtc; ceremony.reservationEndsAtUtc = payload.endsAtUtc }
       return { id, status: 'reserved' }
