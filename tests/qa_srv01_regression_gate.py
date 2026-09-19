@@ -8,7 +8,7 @@ import sys
 from urllib.parse import urlparse
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$", re.IGNORECASE)
-EXPECTED_IDS = {f"QA-{i:03d}" for i in range(1, 24)}
+EXPECTED_IDS = {f"QA-{i:03d}" for i in range(1, 25)}
 ALLOWED = {"pending","pass","fail"}
 FORBIDDEN = ("password=", "authorization: bearer", "access_token", "refresh_token", "client_secret", "private_key")
 
@@ -66,8 +66,8 @@ def main():
         fail("dataPolicy inválida")
 
     checks=data.get("checks")
-    if not isinstance(checks,list) or len(checks) != 23:
-        fail("deben existir exactamente 23 controles")
+    if not isinstance(checks,list) or len(checks) != 24:
+        fail("deben existir exactamente 24 controles")
     seen=set()
     failed=[]
     pending=[]
@@ -108,7 +108,7 @@ def main():
         fail("result.decision inválido")
 
     if a.allow_pending:
-        print(f"QA SRV01 TEMPLATE OK: 23 controles; pending={len(pending)}, failed={len(failed)}")
+        print(f"QA SRV01 TEMPLATE OK: 24 controles; pending={len(pending)}, failed={len(failed)}")
         return 0
 
     if failed:
@@ -119,7 +119,7 @@ def main():
         fail("result.decision debe ser pass")
     if not valid_ts(result.get("completedAtUtc","")):
         fail("completedAtUtc obligatorio")
-    print("QA SRV01 REGRESSION PASS: 23/23 controles")
+    print("QA SRV01 REGRESSION PASS: 24/24 controles")
     return 0
 
 if __name__ == "__main__":

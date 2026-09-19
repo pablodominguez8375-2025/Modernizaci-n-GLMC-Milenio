@@ -92,7 +92,7 @@ Luego registrar cada control con `scripts/record-srv01-regression-result.py` y v
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json --allow-pending
 ```
 
-El cierre interno QA exige 23/23 controles `pass`, incluyendo `QA-021` para Consejo de Administración, `QA-022` para el flujo reglamentario integral de insinuaciones y `QA-023` para el cierre documental de Tenidas regulares y ceremoniales. Este cierre de regresión no sustituye la UAT institucional formal ni la aprobación del Sponsor/Product Owner. Consulte `docs/qa/PMGM-SRV01-REGRESSION-KIT.md`.
+El cierre interno QA exige 24/24 controles `pass`, incluyendo `QA-021` para Consejo de Administración, `QA-022` para el flujo reglamentario integral de insinuaciones, `QA-023` para el cierre documental de Tenidas regulares y ceremoniales y `QA-024` para el Cuadro Mensual de Tesorería con segregación Taller/Gran Tesorería. Este cierre de regresión no sustituye la UAT institucional formal ni la aprobación del Sponsor/Product Owner. Consulte `docs/qa/PMGM-SRV01-REGRESSION-KIT.md`.
 
 
 ## Despliegue recomendado desde Pages

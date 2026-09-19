@@ -30,6 +30,12 @@ describe('showcase role profiles', () => {
     }
   })
 
+  it('gives the lodge treasurer the monthly-statement capability without Grand Treasury authority', () => {
+    const profile = getDemoProfile('lodgeTreasurer')
+    expect(profile.capabilities.canManageLodgeTreasury).toBe(true)
+    expect(profile.capabilities.canManageTreasuryRegularity).toBe(false)
+  })
+
   it('gives a Gran Logia authority order-level institutional capabilities', () => {
     const profile = getDemoProfile('grandLodge')
     expect(profile.accessScope).toBe('order')

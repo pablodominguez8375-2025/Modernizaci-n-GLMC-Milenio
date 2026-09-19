@@ -127,6 +127,8 @@ export interface TreasuryStatement {
   lines: TreasuryStatementLine[]; payments: TreasuryStatementPayment[]; submittedAtUtc: string | null; reconciledAtUtc: string | null; closedAtUtc: string | null
 }
 export interface CreateTreasuryStatementRequest { periodYear: number; periodMonth: number; cutoffDate: string; sourceReference?: string | null }
+export interface TreasuryStatementSummary { id: string; organizationId: string; periodYear: number; periodMonth: number; cutoffDate: string; status: string; sourceReference: string | null; submittedAtUtc: string | null; reconciledAtUtc: string | null; closedAtUtc: string | null }
+export interface TreasuryStatementListResponse { total: number; items: TreasuryStatementSummary[] }
 export interface GenerateTreasuryLinesRequest { apprenticeAmount: number; fellowcraftAmount: number; masterAmount: number }
 export interface AddTreasuryPaymentRequest { paymentMethod: 'transfer' | 'deposit'; paymentDate: string; amount: number; payerDisplayName?: string | null; payerRut?: string | null; reference?: string | null }
 export type AccessTokenProvider = () => Promise<string | null>
@@ -429,6 +431,20 @@ export class PmgmApiClient {
     if (this.useMocks) { const snapshot = mockRegularitySnapshot(organizationId, payload, 'treasury'); this.mockTreasury.set(organizationId, snapshot); return snapshot }
     return this.postJson<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad`, payload)
   }
+  async listTreasuryStatements(organizationId: string, year?: number, month?: number): Promise<TreasuryStatementListResponse> {
+    if (this.useMocks) {
+      const items = [...this.mockTreasuryStatements.values()]
+        .filter(item => item.organizationId === organizationId && (year == null || item.periodYear === year) && (month == null || item.periodMonth === month))
+        .sort((a,b) => b.periodYear - a.periodYear || b.periodMonth - a.periodMonth)
+        .map(item => ({ id:item.id, organizationId:item.organizationId, periodYear:item.periodYear, periodMonth:item.periodMonth, cutoffDate:item.cutoffDate, status:item.status, sourceReference:item.sourceReference, submittedAtUtc:item.submittedAtUtc, reconciledAtUtc:item.reconciledAtUtc, closedAtUtc:item.closedAtUtc }))
+      return { total:items.length, items }
+    }
+    const query = new URLSearchParams()
+    if (year != null) query.set('year', String(year))
+    if (month != null) query.set('month', String(month))
+    return this.request<TreasuryStatementListResponse>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/cuadros${query.size ? `?${query}` : ''}`)
+  }
+
   async createTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): Promise<TreasuryStatement> {
     if (this.useMocks) {
       const statement = mockTreasuryStatement(organizationId, payload)
@@ -451,14 +467,21 @@ export class PmgmApiClient {
   async addTreasuryStatementPayment(statementId: string, payload: AddTreasuryPaymentRequest): Promise<TreasuryStatement> {
     if (this.useMocks) {
       const statement = this.requireMockTreasuryStatement(statementId)
-      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName ?? null, reference: payload.reference ?? null, recordedAtUtc: new Date().toISOString() })
+      if (statement.status !== 'draft') throw new Error('Los pagos sólo pueden registrarse mientras el Cuadro está en borrador.')
+      if (payload.amount <= 0 || !payload.payerDisplayName?.trim() || !payload.reference?.trim()) throw new Error('Pagador y referencia/comprobante son obligatorios para registrar el pago.')
+      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName.trim(), reference: payload.reference.trim(), recordedAtUtc: new Date().toISOString() })
       recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
     }
     await this.postJson<unknown>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/pagos`, payload)
     return this.getTreasuryStatement(statementId)
   }
   async submitTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
-    if (this.useMocks) { const statement = this.requireMockTreasuryStatement(statementId); statement.status = 'submitted'; statement.submittedAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      if (statement.lines.length === 0) throw new Error('El cuadro debe contener líneas antes de enviarse.')
+      if (statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0) throw new Error('El cuadro no puede enviarse mientras exista diferencia o identidades sin conciliar.')
+      statement.status = 'submitted'; statement.submittedAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement)
+    }
     return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/enviar`, { method: 'POST' })
   }
   async reconcileTreasuryStatement(statementId: string): Promise<TreasuryStatement> {

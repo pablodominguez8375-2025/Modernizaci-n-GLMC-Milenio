@@ -8,12 +8,13 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 23 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 24 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
 - QA-022: flujo reglamentario de insinuaciones desde presentación en 1.er grado hasta solicitud de Iniciación.
 - QA-023: cierre documental de Tenidas regulares y ceremoniales, distinguiendo Realizada de Cerrada.
+- QA-024: Cuadro Mensual de Tesorería con segregación Taller / Gran Tesorería, cuadre previo y conciliación institucional.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -72,6 +73,19 @@ python3 scripts/record-srv01-regression-result.py \
 
 El control QA-023 debe comprobar, con datos ficticios: que una Tenida regular Realizada no cierre sin Extracto de Acta y sí cierre con Extracto; que una Tenida ceremonial no cierre con sólo uno de sus documentos y requiera simultáneamente Extracto de Acta y Plancha de Autorización de Gran Secretaría; que la Plancha corresponda al Taller/tipo de ceremonia; y que el cierre deje trazabilidad auditable.
 
+Ejemplo de Cuadro Mensual de Tesorería aprobado:
+
+```bash
+python3 scripts/record-srv01-regression-result.py \
+  evidence/PMGM-QA-srv01-<sha>.json \
+  QA-024 pass \
+  --evidence "audit-event:treasury-statement-submitted-demo" \
+  --evidence "audit-event:treasury-statement-reconciled-demo" \
+  --evidence "captura-controlada:qa-cuadro-mensual-tesoreria"
+```
+
+El control QA-024 debe comprobar, con datos ficticios: que el perfil Tesorero del Taller crea el Cuadro sólo para su Taller; genera la nómina desde el Cuadro vigente; toda rebaja conserva referencia de autorización; registra transferencia/depósito antes del envío; el envío se bloquea con Diferencia distinta de 0 o identidades pendientes; el Cuadro enviado queda congelado para pagos; y sólo Gran Tesorería ejecuta la conciliación institucional que actualiza la regularidad financiera.
+
 Ejemplo de fallo:
 
 ```bash
@@ -96,7 +110,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 23/23 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 24/24 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 
@@ -121,7 +135,7 @@ No se guardan en Git:
 
 ## Relación con UAT formal
 
-La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 23/23 pass:
+La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 24/24 pass:
 
 - no promueve automáticamente a `main`;
 - no convierte QA en producción;

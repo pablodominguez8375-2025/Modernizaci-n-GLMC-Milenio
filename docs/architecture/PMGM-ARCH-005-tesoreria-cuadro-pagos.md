@@ -161,16 +161,25 @@ Regla de diseño:
 
 ## 7. Flujo funcional
 
-1. Taller/Tesorería genera borrador del período.
-2. El sistema propone miembros activos y su grado/cargo a la fecha de corte.
-3. Se aplican sólo ajustes vigentes y autorizados.
-4. El responsable revisa y envía el cuadro.
-5. Gran Tesorería revisa identidad, composición y montos.
-6. Se registran transferencias/depósitos.
-7. El sistema recalcula la diferencia en tiempo real.
-8. Si diferencia = 0 y no hay observaciones abiertas, Gran Tesorería concilia.
-9. Al cerrar, se emite el snapshot de regularidad y queda disponible para elegibilidad de ceremonias/reportes.
-10. Una rectificación crea trazabilidad nueva; no reescribe silenciosamente el cuadro cerrado.
+1. El **Tesorero del Taller** crea el borrador del período para su propio Taller.
+2. El sistema propone los integrantes del Cuadro vigentes y su grado/cargo a la fecha de corte.
+3. Se aplican sólo ajustes vigentes y autorizados, conservando la referencia de Plancha/autorización.
+4. Tesorería del Taller registra transferencias y/o depósitos asociados al Cuadro.
+5. El sistema recalcula la diferencia en tiempo real.
+6. **El envío a Gran Tesorería se bloquea mientras Diferencia != 0 o existan identidades pendientes.**
+7. Cuando el Cuadro está cuadrado, el Tesorero del Taller lo envía y el expediente financiero queda congelado para nuevos pagos.
+8. Gran Tesorería recibe/lista el Cuadro enviado y revisa identidad, composición y montos.
+9. Sólo **Gran Tesorería** ejecuta la conciliación institucional; al conciliar se emite/actualiza el `FinancialRegularitySnapshot`.
+10. La regularidad queda disponible para elegibilidad de ceremonias/reportes.
+11. Una rectificación crea trazabilidad nueva; no reescribe silenciosamente un Cuadro ya conciliado/cerrado.
+
+### 7.1 Segregación de funciones
+
+- **Tesorero del Taller / administrador técnico del Taller:** preparar, generar, registrar pagos y enviar el Cuadro de su propia organización.
+- **Gran Tesorería:** revisar y conciliar institucionalmente los Cuadros enviados; es la fuente de verdad de la regularidad financiera.
+- **Administrador de Gran Logia:** conserva bypass administrativo controlado para soporte, no como operación ordinaria.
+- La UI no presenta acciones de preparación al perfil Gran Tesorero.
+- La validación de permisos se aplica en backend; la ocultación visual no sustituye RBAC.
 
 ## 8. Importación del Excel actual
 
@@ -233,3 +242,23 @@ La rama `feature/treasury-payment-table-v1`, aislada del candidato UAT, implemen
 - pruebas unitarias e integración HTTP/PostgreSQL.
 
 Las cuotas base por grado se suministran al generar el cuadro. No se consideran una regla permanente hasta que exista un tarifario institucional versionado y aprobado.
+
+
+## 13. Incremento PR #112 — segregación operativa del Cuadro Mensual
+
+El PR #112 `feat(tesoreria): segregar Cuadro Mensual Taller y Gran Tesorería` implementa sobre el modelo existente, sin crear un módulo paralelo:
+
+- permiso específico `CanPrepareTreasuryStatement`;
+- preparación limitada al Tesorero/administrador del Taller correspondiente;
+- listado de Cuadros por Taller y período para preparación/revisión;
+- bloqueo de envío si `DifferenceAmount != 0` o hay identidades sin resolver;
+- congelamiento de nuevos pagos una vez enviado;
+- conciliación institucional mantenida exclusivamente bajo `CanManageTreasuryRegularity`;
+- interfaz diferenciada entre “Tesorería del Taller · Cuadro mensual” y “Gran Tesorería · revisión institucional”;
+- recuperación de Cuadros existentes por período;
+- demo funcional con perfil Tesorero del Taller;
+- QA-024 y matriz srv01 ampliada a 24 controles.
+
+Fuentes contrastadas: Constitución/Reglamento art. 12.12, `CUADRO PAGO GRAN TESORERÍA.xlsx` y matrices funcionales/normativas 2026 de Drive.
+
+Estado al documentar: implementado en rama `feature/tesoreria-cuadro-mensual-segregacion`, pendiente de gates exact-head e integración a `dev`.

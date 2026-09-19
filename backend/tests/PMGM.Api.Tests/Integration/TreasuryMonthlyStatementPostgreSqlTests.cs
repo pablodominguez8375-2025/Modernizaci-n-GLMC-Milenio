@@ -83,21 +83,38 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         Assert.Equal("treasurer", generatedLine.GetProperty("officeCodeAtCutoff").GetString());
         Assert.Equal("PLANCHA-CI-001", generatedLine.GetProperty("authorizationReference").GetString());
 
-        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken)).StatusCode);
+        var blockedSubmit = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, blockedSubmit.StatusCode);
+
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/pagos", new
         {
             paymentMethod = TreasuryCodes.PaymentMethod.Transfer, paymentDate = new DateOnly(2026, 7, 10),
             amount = 7000m, payerDisplayName = "Tesorero", payerRut = (string?)null, reference = "TRX-1"
         }, cancellationToken)).StatusCode);
 
-        var blocked = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/conciliar", null, cancellationToken);
-        Assert.Equal(HttpStatusCode.Conflict, blocked.StatusCode);
+        var stillBlockedSubmit = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, stillBlockedSubmit.StatusCode);
 
         Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/pagos", new
         {
             paymentMethod = TreasuryCodes.PaymentMethod.Deposit, paymentDate = new DateOnly(2026, 7, 10),
             amount = 1000m, payerDisplayName = "Tesorero", payerRut = (string?)null, reference = "DEP-1"
         }, cancellationToken)).StatusCode);
+
+        var list = await client.GetAsync($"/api/tesoreria/talleres/{organizationId}/cuadros?year=2026&month=7", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, list.StatusCode);
+        var listJson = await list.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(statementId, Assert.Single(listJson.GetProperty("items").EnumerateArray()).GetProperty("id").GetGuid());
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken)).StatusCode);
+
+        var paymentAfterSubmit = await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/pagos", new
+        {
+            paymentMethod = TreasuryCodes.PaymentMethod.Transfer, paymentDate = new DateOnly(2026, 7, 10),
+            amount = 1m, payerDisplayName = "Tesorero", payerRut = (string?)null, reference = "NO-DEBE-ACEPTAR"
+        }, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, paymentAfterSubmit.StatusCode);
+
         var reconciled = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/conciliar", null, cancellationToken);
         Assert.Equal(HttpStatusCode.OK, reconciled.StatusCode);
 
