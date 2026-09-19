@@ -16,6 +16,7 @@ public sealed class AdmissionCase
     public bool WageIncreaseEvidenceApplies { get; set; }
     public bool ExaltationEvidenceApplies { get; set; }
     public bool? HasPeaceAndFriendshipPact { get; set; }
+    public bool? OriginObedienceRecognizedAsRegular { get; set; }
     public DateOnly? PreviousRejectionDate { get; set; }
     public bool? RejectionCausesRemedied { get; set; }
     public required string Status { get; set; }
@@ -23,6 +24,7 @@ public sealed class AdmissionCase
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public ICollection<AdmissionEvidence> Evidence { get; set; } = new List<AdmissionEvidence>();
     public ICollection<AdmissionDecision> Decisions { get; set; } = new List<AdmissionDecision>();
+    public ICollection<AdmissionCommissionAppointment> CommissionAppointments { get; set; } = new List<AdmissionCommissionAppointment>();
 }
 
 public sealed class AdmissionEvidence
@@ -52,6 +54,21 @@ public sealed class AdmissionDecision
     public DateOnly AsOfDate { get; set; }
     public string? SourceReference { get; set; }
     public string? Notes { get; set; }
+    public string? StructuredDataJson { get; set; }
     public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+
+public sealed class AdmissionCommissionAppointment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid AdmissionCaseId { get; set; }
+    public AdmissionCase AdmissionCase { get; set; } = null!;
+    public Guid AppointmentGroupId { get; set; }
+    public Guid MemberId { get; set; }
+    public DateOnly AppointmentDate { get; set; }
+    public required string SourceReference { get; set; }
+    public required string AppointedBySubject { get; set; }
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
