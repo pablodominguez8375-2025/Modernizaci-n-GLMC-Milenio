@@ -30,6 +30,23 @@ describe('showcase role profiles', () => {
     }
   })
 
+  it('separates Hospitalaria management from Venerable inspection and approval', () => {
+    const hospitalario = getDemoProfile('lodgeHospitalaria')
+    expect(hospitalario.capabilities.canReadLodgeHospitalaria).toBe(true)
+    expect(hospitalario.capabilities.canManageLodgeHospitalaria).toBe(true)
+    expect(hospitalario.capabilities.canApproveLodgeExpenses).not.toBe(true)
+    expect(hospitalario.capabilities.canManageHospitalariaRegularity).toBe(false)
+
+    const venerable = getDemoProfile('lodge')
+    expect(venerable.capabilities.canReadLodgeHospitalaria).toBe(true)
+    expect(venerable.capabilities.canManageLodgeHospitalaria).not.toBe(true)
+    expect(venerable.capabilities.canApproveLodgeExpenses).toBe(true)
+
+    const granHospitalaria = getDemoProfile('hospitalaria')
+    expect(granHospitalaria.capabilities.canManageHospitalariaRegularity).toBe(true)
+    expect(granHospitalaria.capabilities.canReadLodgeHospitalaria).not.toBe(true)
+  })
+
   it('gives the lodge treasurer the monthly-statement capability without Grand Treasury authority', () => {
     const profile = getDemoProfile('lodgeTreasurer')
     expect(profile.capabilities.canManageLodgeTreasury).toBe(true)
