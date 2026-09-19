@@ -290,6 +290,24 @@ public sealed class InstitutionalAccessServiceTests
         Assert.True(_service.CanApproveTransfers(user));
     }
 
+    [Fact]
+    public void Daily_secretariat_operations_remain_private_to_workshop_roles()
+    {
+        var organization = Guid.NewGuid();
+        var other = Guid.NewGuid();
+        var secretary = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerSecretaria), new Claim(InstitutionalClaims.Organization, organization.ToString()));
+        var venerable = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable), new Claim(InstitutionalClaims.Organization, organization.ToString()));
+        var internalAffairs = CreateUser(new Claim(InstitutionalClaims.Scope, "order"), new Claim(InstitutionalClaims.Role, InstitutionalRoles.RegimenInterior));
+        var grandSecretariat = CreateUser(new Claim(InstitutionalClaims.Scope, "order"), new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
+
+        Assert.True(_service.CanReadLodgeSecretariatOperations(secretary, organization));
+        Assert.True(_service.CanReadLodgeSecretariatOperations(venerable, organization));
+        Assert.False(_service.CanReadLodgeSecretariatOperations(secretary, other));
+        Assert.False(_service.CanReadLodgeSecretariatOperations(internalAffairs, organization));
+        Assert.False(_service.CanReadLodgeSecretariatOperations(grandSecretariat, organization));
+        Assert.False(_service.CanManageLodgeSecretariat(grandSecretariat, organization));
+    }
+
     private static ClaimsPrincipal CreateUser(params Claim[] claims)
         => new(new ClaimsIdentity(claims, authenticationType: "test"));
 }

@@ -857,7 +857,7 @@ public static class SecretariatOperationsEndpoints
 
     private static async Task<IResult> ListCorrespondenceAsync(Guid organizationId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
-        if (!access.CanReadLodgeSecretariat(context.User, organizationId)) return Results.Forbid();
+        if (!access.CanReadLodgeSecretariatOperations(context.User, organizationId)) return Results.Forbid();
         var items = await db.LodgeCorrespondence.AsNoTracking().Where(x => x.OrganizationId == organizationId)
             .OrderByDescending(x => x.CorrespondenceDate).ThenByDescending(x => x.CreatedAtUtc).Take(500).ToListAsync(ct);
         context.Response.Headers.CacheControl = "private, no-store";
@@ -895,7 +895,7 @@ public static class SecretariatOperationsEndpoints
 
     private static async Task<IResult> ListTasksAsync(Guid organizationId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
-        if (!access.CanReadLodgeSecretariat(context.User, organizationId)) return Results.Forbid();
+        if (!access.CanReadLodgeSecretariatOperations(context.User, organizationId)) return Results.Forbid();
         var items = await db.LodgeSecretariatTasks.AsNoTracking().Where(x => x.OrganizationId == organizationId)
             .OrderBy(x => x.Status == "completed" || x.Status == "cancelled").ThenBy(x => x.DueDate).ThenByDescending(x => x.CreatedAtUtc).Take(500).ToListAsync(ct);
         context.Response.Headers.CacheControl = "private, no-store"; return Results.Ok(new { total = items.Count, items });
@@ -923,7 +923,7 @@ public static class SecretariatOperationsEndpoints
 
     private static async Task<IResult> ListAgendaAsync(Guid organizationId, Guid? meetingId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
-        if (!access.CanReadLodgeSecretariat(context.User, organizationId)) return Results.Forbid();
+        if (!access.CanReadLodgeSecretariatOperations(context.User, organizationId)) return Results.Forbid();
         var query = db.LodgeAgendaItems.AsNoTracking().Where(x => x.OrganizationId == organizationId);
         if (meetingId is not null) query = query.Where(x => x.MeetingId == meetingId);
         var items = await query.OrderBy(x => x.MeetingId).ThenBy(x => x.Order).Take(500).ToListAsync(ct);

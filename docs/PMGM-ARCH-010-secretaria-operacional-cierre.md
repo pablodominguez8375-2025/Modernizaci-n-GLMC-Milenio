@@ -17,12 +17,12 @@
 
 | Operación | Secretaría del Taller propio | Supervisor autorizado | Otro Taller | Gran Secretaría |
 | --- | --- | --- | --- | --- |
-| Consultar operación diaria | Sí | Sólo si `CanReadLodgeSecretariat` | No | No por atribución global |
+| Consultar operación diaria | Sí | Venerable/Orador del propio Taller | No | No por atribución global |
 | Crear/cambiar correspondencia | Sí | No salvo capacidad explícita | No | No |
 | Crear/cambiar pendientes | Sí | No salvo capacidad explícita | No | No |
 | Crear/cambiar agenda | Sí | No salvo capacidad explícita | No | No |
 
-El backend mediante `IInstitutionalAccessService` es la autoridad final. La UI no concede atribuciones.
+El backend mediante `IInstitutionalAccessService` es la autoridad final. La capacidad específica `CanReadLodgeSecretariatOperations` evita que el permiso de Régimen Interior para revisar carga histórica se extienda accidentalmente a correspondencia, pendientes o agenda privada. La UI no concede atribuciones.
 
 ## Privacidad y límites
 
