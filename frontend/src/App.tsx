@@ -113,7 +113,7 @@ export default function App({ api, admissionApi, bootstrapApi, lodgeApi, members
   const canManageLodgeSecretariat = capabilities?.canManageLodgeSecretariat ?? false
   const canAppointAdmissionCommission = capabilities?.canAppointAdmissionCommission ?? false
   const canValidateAdmissionInternalAffairs = capabilities?.canValidateCeremonyInternalAffairs ?? false
-  const canCandidateProfile = canSecretariat || canLodge
+  const canCandidateProfile = canSecretariat || canLodge || canManageLodgeSecretariat
   const canAdmissions = canCeremonies || canReadLodgeSecretariat
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
   const canDocuments = capabilities?.canManageDocuments ?? false
