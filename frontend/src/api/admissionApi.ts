@@ -222,6 +222,9 @@ export class AdmissionApiClient {
     if (this.useMocks) {
       if (payload.admissionType === 'affiliation' && (!payload.affiliationMode || !payload.affiliationProcedure || !payload.memberId))
         throw new Error('La afiliación requiere modalidad, procedimiento y hermano existente.')
+      if (payload.admissionType === 'affiliation' && payload.affiliationProcedure === 'transfer' &&
+          (!payload.originOrganizationId || payload.originOrganizationId === payload.organizationId))
+        throw new Error('El traslado requiere un Taller de origen distinto del Taller de destino.')
       if (payload.admissionType === 'incorporation' && (!payload.originObedience?.trim() || !payload.degree?.trim()))
         throw new Error('La incorporación requiere Obediencia de origen y grado acreditado.')
       const person = demoPeople.find(x => x.personId === payload.personId)
