@@ -633,7 +633,7 @@ El despliegue físico en `srv01`, smoke real, regresión 24/24 y UAT continúan 
 Siguiente bloque funcional: **Hospitalaria del Taller + Gran Hospitalaria**, respetando independencia del Tronco de Beneficencia respecto de Tesorería, Art. 12.13 y fuentes documentales vigentes de Drive.
 
 
-## 18. Incremento activo — Hospitalaria integral Taller + Gran Hospitalaria
+## 18. Incremento integrado — Hospitalaria integral Taller + Gran Hospitalaria
 
 PR #114 `feat(hospitalaria): flujo integral Taller y Gran Hospitalaria`.
 
@@ -666,7 +666,25 @@ Frontera de privacidad:
 - Gran Hospitalaria: no recibe `memberReference`, destino, observación ni detalle de beneficiario;
 - no se registran diagnósticos médicos detallados como parte de este incremento.
 
-Estado al registrar: desarrollado en rama `feature/hospitalaria-flujo-integral`, PR #114 abierto; pendiente gates exact-head, merge a `dev`, Pages/instalable del merge SHA y sincronización de Issue #97/Línea Base Maestra.
+Estado integrado:
+
+- PR #114 fusionado a `dev`;
+- merge funcional: `44b6cc90a56e508c8c45e85d040e928738e1b5d8`;
+- PMGM CI post-merge: `success`;
+- Showcase/Pages post-merge: `success`;
+- QA srv01 Installable: `success`;
+- Pre-UAT Installable: `success`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-44b6cc90a56e.zip`;
+- SHA-256 ZIP público: `c5474a135c879e7df99768bc19130f7774e0583b2e8f06560e99f11bf2d2a6e6`;
+- artifact QA Actions ID `10576091439`, digest `sha256:33556345f71ccbfcfdf87eea7acc646db0423848ca4d87ec53cbcb6819fc64d7`;
+- Pages artifact ID `10576321235`, digest `sha256:c44b93d565c8cfba3557d3544e1191473961e485ca75d362d3848f74203231dd`;
+- Pre-UAT artifact ID `10576206258`, digest `sha256:747436181f673c14538ca8171cc5085443ad0fe8e49742647c35199d26a7b9d6`;
+- kit de regresión vigente: **QA-001..QA-025**, total 25 controles;
+- Issue #97 y Línea Base Maestra de Drive actualizados al corte funcional.
+
+El despliegue físico en `srv01`, smoke real, regresión 25/25 y UAT continúan pendientes y no se declaran ejecutados desde este chat.
+
+El siguiente incremento funcional debe seleccionarse sólo después de reconsultar backlog vigente, documentos oficiales de Drive y HEAD vivo de `dev`; no se fija por conversaciones antiguas.
 
 ---
 
