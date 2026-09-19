@@ -22,6 +22,7 @@ public static class AdmissionNormativeEndpoints
         group.MapPost("/expedientes/{caseId:guid}/decisiones/indulto-gran-maestria", RecordGrandMasterPardonAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/reconocimiento-regularidad", RecordGrandMasterRegularityRecognitionAsync);
         group.MapPost("/expedientes/{caseId:guid}/comision-informacion", AppointInformationCommissionAsync);
+        group.MapPost("/expedientes/{caseId:guid}/comision-informacion/dispensa-traslado", RecordInformationCommissionWaiverAsync);
         group.MapPost("/expedientes/{caseId:guid}/comision-informacion/conclusion", CompleteInformationCommissionAsync);
 
         return endpoints;
@@ -170,8 +171,8 @@ public static class AdmissionNormativeEndpoints
         var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking().SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
         if (!access.CanAppointAdmissionCommission(context.User, admissionCase.OrganizationId)) return Results.Forbid();
-        if (admissionCase.AdmissionType != CeremonyCodes.Type.Incorporation)
-            return Results.BadRequest(new { message = "La comisión de información de este incremento aplica a Incorporación desde otra Obediencia." });
+        if (!AdmissionProcedureRules.RequiresInformationCommission(admissionCase.AdmissionType, admissionCase.AffiliationProcedure))
+            return Results.BadRequest(new { message = "El art. 2.5 exige comisión para reintegro, incorporación y traslado cuando este último no ha sido dispensado por la Cámara del Medio." });
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
             return Results.Conflict(new { message = "El expediente ya está resuelto." });
         if (request.AppointmentDate > ChileToday())
@@ -225,6 +226,50 @@ public static class AdmissionNormativeEndpoints
         });
     }
 
+    private static async Task<IResult> RecordInformationCommissionWaiverAsync(
+        Guid caseId,
+        InformationCommissionWaiverRequest request,
+        HttpContext context,
+        AdmissionsDbContext admissionsDb,
+        PmgmDbContext coreDb,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken ct)
+    {
+        var admissionCase = await admissionsDb.AdmissionCases.SingleOrDefaultAsync(x => x.Id == caseId, ct);
+        if (admissionCase is null) return Results.NotFound();
+        if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId) &&
+            !access.CanAppointAdmissionCommission(context.User, admissionCase.OrganizationId))
+            return Results.Forbid();
+        if (!AdmissionProcedureRules.AllowsInformationCommissionWaiver(admissionCase.AdmissionType, admissionCase.AffiliationProcedure))
+            return Results.BadRequest(new { message = "La dispensa de comisión sólo puede registrarse para una afiliación con traslado, por acuerdo de la Cámara del Medio." });
+        if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
+            return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.AsOfDate > ChileToday())
+            return Results.BadRequest(new { message = "La dispensa no puede registrarse con fecha futura." });
+        if (string.IsNullOrWhiteSpace(request.SourceReference))
+            return Results.BadRequest(new { message = "Debe indicar el acta de la Cámara del Medio que acordó obviar la comisión." });
+
+        var decision = NewDecision(
+            caseId,
+            AdmissionWorkflowCodes.DecisionType.InformationCommissionWaiver,
+            CeremonyCodes.ValidationStatus.Approved,
+            request.AsOfDate,
+            request.SourceReference,
+            request.Notes,
+            GetSubject(context.User),
+            new { waiver = true, basis = "article_2_5_transfer", authority = "camara_del_medio" });
+
+        admissionsDb.AdmissionDecisions.Add(decision);
+        await admissionsDb.SaveChangesAsync(ct);
+        audit.Add(context, "admission.information_commission.waived", nameof(AdmissionDecision), decision.Id.ToString(),
+            admissionCase.OrganizationId, AuditResults.Success,
+            new { decision.AsOfDate, decision.SourceReference, authority = "camara_del_medio" });
+        await coreDb.SaveChangesAsync(ct);
+
+        return Results.Ok(ToDecisionDto(decision));
+    }
+
     private static async Task<IResult> CompleteInformationCommissionAsync(
         Guid caseId,
         CompleteAdmissionCommissionRequest request,
@@ -242,6 +287,8 @@ public static class AdmissionNormativeEndpoints
         if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId) &&
             !access.CanAppointAdmissionCommission(context.User, admissionCase.OrganizationId))
             return Results.Forbid();
+        if (!AdmissionProcedureRules.RequiresInformationCommission(admissionCase.AdmissionType, admissionCase.AffiliationProcedure))
+            return Results.BadRequest(new { message = "Este expediente no requiere comisión de información conforme al art. 2.5." });
         if (request.AsOfDate > ChileToday()) return Results.BadRequest(new { message = "La conclusión no puede registrarse con fecha futura." });
         if (string.IsNullOrWhiteSpace(request.SourceReference)) return Results.BadRequest(new { message = "Debe indicar la referencia del informe/acta de la comisión." });
 
@@ -251,6 +298,8 @@ public static class AdmissionNormativeEndpoints
             .FirstOrDefault();
         if (latestGroup is null || latestGroup.Select(x => x.MemberId).Distinct().Count() != 3)
             return Results.Conflict(new { message = "Debe existir una comisión vigente de tres Maestros antes de registrar su conclusión." });
+        if (request.AsOfDate < latestGroup.Max(x => x.AppointmentDate))
+            return Results.BadRequest(new { message = "La conclusión no puede ser anterior al nombramiento de la comisión vigente." });
 
         var decision = NewDecision(
             caseId,
@@ -336,6 +385,11 @@ public sealed record AppointAdmissionCommissionRequest(
     IReadOnlyCollection<Guid>? MemberIds,
     DateOnly AppointmentDate,
     string SourceReference);
+
+public sealed record InformationCommissionWaiverRequest(
+    DateOnly AsOfDate,
+    string SourceReference,
+    string? Notes);
 
 public sealed record CompleteAdmissionCommissionRequest(
     bool Completed,
