@@ -32,9 +32,9 @@ public sealed class AdmissionEligibilityPolicyTests
             AdmissionType: CeremonyCodes.Type.Affiliation,
             AffiliationMode: AdmissionCodes.AffiliationMode.Simple,
             WithdrawalLetterAttached: true,
-            WithdrawalLetterHandwrittenSignatureVerified: true));
+            WithdrawalLetterHandwrittenSignatureVerified: true,
             Article23Clear: true,
-            FirstDegreePresentationRecorded: true,
+            FirstDegreePresentationRecorded: true));
 
         Assert.False(result.CanProceed);
         Assert.Equal("observed", result.Status);
