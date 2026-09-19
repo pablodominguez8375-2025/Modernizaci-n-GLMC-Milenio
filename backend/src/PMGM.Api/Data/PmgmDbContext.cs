@@ -36,6 +36,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeHospitalariaMovement> LodgeHospitalariaMovements => Set<LodgeHospitalariaMovement>();
     public DbSet<LodgeTreasuryExpense> LodgeTreasuryExpenses => Set<LodgeTreasuryExpense>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
+    public DbSet<HospitalariaMonthlySubmission> HospitalariaMonthlySubmissions => Set<HospitalariaMonthlySubmission>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
@@ -367,6 +368,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.EvidenceReference).HasMaxLength(500);
             entity.Property(x => x.Observation).HasMaxLength(2000);
             entity.Property(x => x.ApprovalStatus).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ApprovalSource).HasMaxLength(30);
             entity.Property(x => x.ApprovedBySubject).HasMaxLength(320);
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
@@ -381,6 +383,27 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.EvidenceReference).HasMaxLength(500); entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired(); entity.Property(x => x.ApprovedBySubject).HasMaxLength(320);
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.ExpenseDate });
+        });
+
+        modelBuilder.Entity<HospitalariaMonthlySubmission>(entity =>
+        {
+            entity.ToTable("hospitalaria_monthly_submissions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.IncomeAmount).HasPrecision(18, 2);
+            entity.Property(x => x.ApprovedExpenseAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PeriodNetAmount).HasPrecision(18, 2);
+            entity.Property(x => x.ReplenishmentDueAmount).HasPrecision(18, 2);
+            entity.Property(x => x.ReplenishmentPaidAmount).HasPrecision(18, 2);
+            entity.Property(x => x.DifferenceAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PaymentReference).HasMaxLength(500);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500);
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth }).IsUnique();
+            entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
         });
 
         modelBuilder.Entity<HospitalariaRegularitySnapshot>(entity =>
