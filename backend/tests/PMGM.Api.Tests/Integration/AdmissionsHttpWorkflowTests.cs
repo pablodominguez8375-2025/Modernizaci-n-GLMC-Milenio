@@ -53,7 +53,9 @@ public sealed class AdmissionsHttpWorkflowTests
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var coreDb = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var admissionsDb = scope.ServiceProvider.GetRequiredService<AdmissionsDbContext>();
             await coreDb.Database.MigrateAsync(cancellationToken);
+            await admissionsDb.Database.MigrateAsync(cancellationToken);
 
             var source = new Organization
             {
