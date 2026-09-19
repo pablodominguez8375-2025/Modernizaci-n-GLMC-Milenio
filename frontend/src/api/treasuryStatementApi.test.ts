@@ -10,6 +10,11 @@ describe('Gran Tesorería monthly statement demo', () => {
     expect(statement.lines).toHaveLength(7)
     expect(statement.lines.some(line => line.authorizationReference?.includes('Plancha'))).toBe(true)
     expect(statement.differenceAmount).toBe(statement.expectedAmount)
+    await expect(api.submitTreasuryStatement(statement.id)).rejects.toThrow('diferencia')
+
+    const listed = await api.listTreasuryStatements(organizationId, 2026, 9)
+    expect(listed.items).toHaveLength(1)
+    expect(listed.items[0].id).toBe(statement.id)
 
     statement = await api.addTreasuryStatementPayment(statement.id, { paymentMethod: 'transfer', paymentDate: '2026-09-12', amount: statement.differenceAmount })
     expect(statement.differenceAmount).toBe(0)
