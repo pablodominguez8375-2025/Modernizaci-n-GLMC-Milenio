@@ -256,7 +256,7 @@ public static class AdmissionLodgeDecisionEndpoints
             .SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
 
-        if (!access.CanReadOrganization(context.User, admissionCase.OrganizationId) &&
+        if (!access.CanReadLodgeSecretariat(context.User, admissionCase.OrganizationId) &&
             !access.CanEvaluateCeremonies(context.User))
             return Results.Forbid();
 
