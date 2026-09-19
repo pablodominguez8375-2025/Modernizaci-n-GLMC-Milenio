@@ -43,8 +43,7 @@ public static class AdmissionEndpoints
         if (request.AdmissionType is not CeremonyCodes.Type.Affiliation and not CeremonyCodes.Type.Incorporation)
             return Results.BadRequest(new { message = "El tipo de expediente debe ser afiliación o incorporación." });
 
-        if (!access.CanManageOrganization(httpContext.User, request.OrganizationId) &&
-            !access.CanEvaluateCeremonies(httpContext.User))
+        if (!access.CanManageLodgeSecretariat(httpContext.User, request.OrganizationId))
             return Results.Forbid();
 
         var organizationExists = await coreDb.Organizations.AsNoTracking()
@@ -299,7 +298,7 @@ public static class AdmissionEndpoints
 
         var admissionCase = await admissionsDb.AdmissionCases.SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(httpContext.User, admissionCase.OrganizationId) &&
+        if (!access.CanManageLodgeSecretariat(httpContext.User, admissionCase.OrganizationId) &&
             !access.CanManageGrandSecretariat(httpContext.User))
             return Results.Forbid();
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
