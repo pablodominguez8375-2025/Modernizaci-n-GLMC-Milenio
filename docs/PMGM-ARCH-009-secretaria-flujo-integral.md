@@ -228,3 +228,71 @@ Este incremento:
 - no expone información interna a Gran Secretaría;
 - no activa todavía el flujo de nuevos iniciados como requisito de puesta en marcha;
 - no declara `srv01` operacional: Issue #97 continúa siendo el hito de despliegue físico y regresión.
+
+## 13. Regla aprobada de cierre documental de Tenidas
+
+Por decisión expresa del Sponsor / Product Owner, se separan funcionalmente los estados **Realizada** y **Cerrada**.
+
+Flujo objetivo:
+
+`Programada → Realizada → Cerrada`
+
+- **Realizada**: la Tenida efectivamente se efectuó y puede continuar completando su documentación.
+- **Cerrada**: cierre documental definitivo de la Tenida, sólo permitido cuando se cumplen los documentos obligatorios según su naturaleza.
+- **Cancelada**: no puede pasar a Realizada ni Cerrada.
+
+### 13.1 Tenida regular o no ceremonial
+
+Para cerrar una Tenida regular/no ceremonial, el único documento obligatorio es:
+
+- **Extracto de Acta en PDF**.
+
+No condicionan el cierre:
+
+- la Plancha de trabajo del hermano, que continúa siendo opcional;
+- el Acta completa, que continúa siendo opcional y privada del Taller.
+
+### 13.2 Tenida ceremonial
+
+Para cerrar una Tenida ceremonial de:
+
+- Iniciación;
+- Aumento de Salario;
+- Exaltación;
+
+deben estar asociados obligatoriamente a la misma Tenida:
+
+1. **Extracto de Acta en PDF**; y
+2. **Plancha de Autorización de Ceremonia emitida por Gran Secretaría**.
+
+La Plancha de Autorización:
+
+- es el documento formal que acredita la autorización institucional de la ceremonia;
+- no es una Plancha de trabajo del hermano;
+- no constituye Decreto;
+- debe corresponder al mismo Taller y a la ceremonia autorizada;
+- debe quedar vinculada/adjunta al expediente de la Tenida ceremonial;
+- forma parte de la trazabilidad institucional de la ceremonia.
+
+El sistema debe bloquear el paso a **Cerrada** si falta cualquiera de los documentos obligatorios.
+
+### 13.3 Trazabilidad objetivo
+
+Para una ceremonia, la continuidad documental queda:
+
+`solicitud → aprobaciones institucionales → Plancha de Autorización de Gran Secretaría → Tenida Realizada → Extracto de Acta → Tenida Cerrada`
+
+### 13.4 Estado de implementación
+
+Esta regla queda **aprobada como requisito funcional vigente y documentada para continuidad**. Al momento de esta decisión, el código de `dev` todavía trata la operación histórica `closed` como equivalente de lectura a Realizada y no fuerza estas validaciones documentales al marcar una Tenida como realizada/cerrada.
+
+Por tanto, el siguiente ajuste funcional deberá:
+
+- incorporar el estado Cerrada con semántica documental propia;
+- mantener compatibilidad con datos históricos;
+- vincular la Plancha de Autorización a la Tenida ceremonial;
+- validar requisitos en backend, no sólo en interfaz;
+- reflejar el estado de documentos obligatorios en Secretaría del Taller;
+- mantener paridad en Demo GitHub Pages e instalable QA;
+- agregar pruebas de no regresión para Tenidas regulares y ceremoniales.
+
