@@ -292,7 +292,8 @@ export default function CandidateWorkflowPanel({ api, requestId, profile, reques
           <label><span>Fecha referencial solicitada (no programación)</span><input type="date" min={chileToday()} value={proposedDate} onChange={event => setProposedDate(event.target.value)} /></label>
           <label><span>Secretaría responsable</span><input value={secretaryName} onChange={event => setSecretaryName(event.target.value)} /></label>
           <label className="candidate-check"><input type="checkbox" checked={venerableApproval} onChange={event => setVenerableApproval(event.target.checked)} /><span>Confirmación del Venerable Maestro</span></label>
-          <label className="wide"><span>Referencia documental</span><input value={initiationReference} onChange={event => setInitiationReference(event.target.value)} /></label>\n          <p className="candidate-form-note">La fecha indicada es sólo referencial. La ceremonia no se puede establecer ni programar hasta que Gran Secretaría emita la Plancha de Autorización.</p>
+          <label className="wide"><span>Referencia documental</span><input value={initiationReference} onChange={event => setInitiationReference(event.target.value)} /></label>
+          <p className="candidate-form-note">La fecha indicada es sólo referencial. La ceremonia no se puede establecer ni programar hasta que Gran Secretaría emita la Plancha de Autorización.</p>
         </div>
         <button className="candidate-primary-button" type="button" disabled={busy || !venerableApproval || !secretaryName.trim() || !initiationReference.trim()} onClick={() => void runAction(
           () => api.submitInitiationRequest(requestId, {
