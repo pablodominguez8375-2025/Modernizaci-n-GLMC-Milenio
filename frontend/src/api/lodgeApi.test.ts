@@ -76,7 +76,7 @@ it('demo mode preserves corrections and minute versions without token or network
   const client = new LodgeApiClient({ useMocks: true, getAccessToken: token })
   const meeting = await client.createMeeting('o1', { meetingDate: '2026-09-08', meetingType: 'regular', grade: 'all', modality: 'in_person', locationReference: 'Templo de prueba' })
   const members = await client.getMemberOptions('o1')
-  await client.closeMeeting(meeting.id)
+  await client.markMeetingHeld(meeting.id)
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'present' })
   await client.recordAttendance(meeting.id, { memberId: members.items[0].id, status: 'excused', excuseReason: 'Rectificación' })
   await client.recordAttendance(meeting.id, { memberId: members.items[1].id, status: 'present' })
@@ -109,6 +109,51 @@ it('demo mode preserves corrections and minute versions without token or network
   expect(instructions.items.some(item => item.id === instruction.id)).toBe(true)
   expect(fetch).not.toHaveBeenCalled()
   expect(token).not.toHaveBeenCalled()
+})
+
+
+it('demo mode requires Extracto before closing a regular Tenida', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const meeting = await client.createMeeting('23232323-2323-2323-2323-232323232323', {
+    meetingDate: '2026-09-19',
+    meetingType: 'regular',
+    grade: 'all',
+    modality: 'in_person',
+    locationReference: 'Templo demostrativo',
+  })
+
+  await client.markMeetingHeld(meeting.id)
+  await expect(client.closeMeeting(meeting.id)).rejects.toThrow('Extracto de Acta')
+
+  await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', meeting.id, {
+    extractDocumentVersionId: 'extracto-demo-regular',
+  })
+  const closed = await client.closeMeeting(meeting.id)
+  expect(closed.status).toBe('closed')
+  expect(closed.heldAtUtc).not.toBeNull()
+  expect(closed.closedAtUtc).not.toBeNull()
+})
+
+it('demo mode requires Extracto and Gran Secretaría authorization before closing a ceremonial Tenida', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const ceremonial = (await client.getMeetings('23232323-2323-2323-2323-232323232323')).items
+    .find(item => item.ceremonyType === 'initiation' && item.status === 'held')
+  expect(ceremonial).toBeDefined()
+
+  const authorizations = await client.getCeremonyAuthorizationOptions('23232323-2323-2323-2323-232323232323')
+  expect(authorizations.items).toHaveLength(1)
+
+  await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', ceremonial!.id, {
+    extractDocumentVersionId: 'extracto-demo-ceremonial',
+  })
+  await expect(client.closeMeeting(ceremonial!.id)).rejects.toThrow('Plancha de Autorización')
+
+  await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', ceremonial!.id, {
+    extractDocumentVersionId: 'extracto-demo-ceremonial',
+    ceremonyAuthorizationDocumentId: authorizations.items[0].id,
+  })
+  const closed = await client.closeMeeting(ceremonial!.id)
+  expect(closed.status).toBe('closed')
 })
 
 it('registers a single pending lodge withdrawal and preserves the institutional review boundary', async () => {
