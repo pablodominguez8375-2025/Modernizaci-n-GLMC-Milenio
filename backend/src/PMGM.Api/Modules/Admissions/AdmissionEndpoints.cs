@@ -98,6 +98,7 @@ public static class AdmissionEndpoints
             WageIncreaseEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && request.WageIncreaseEvidenceApplies,
             ExaltationEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && request.ExaltationEvidenceApplies,
             HasPeaceAndFriendshipPact = request.AdmissionType == CeremonyCodes.Type.Incorporation ? request.HasPeaceAndFriendshipPact : null,
+            OriginObedienceRecognizedAsRegular = request.AdmissionType == CeremonyCodes.Type.Incorporation ? request.OriginObedienceRecognizedAsRegular : null,
             PreviousRejectionDate = request.PreviousRejectionDate,
             RejectionCausesRemedied = request.RejectionCausesRemedied,
             Status = AdmissionWorkflowCodes.CaseStatus.UnderReview,
@@ -113,6 +114,7 @@ public static class AdmissionEndpoints
                 entity.AdmissionType,
                 entity.AffiliationMode,
                 entity.HasPeaceAndFriendshipPact,
+                entity.OriginObedienceRecognizedAsRegular,
                 entity.Status
             });
         await coreDb.SaveChangesAsync(cancellationToken);
@@ -130,6 +132,7 @@ public static class AdmissionEndpoints
         var entity = await admissionsDb.AdmissionCases.AsNoTracking()
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (entity is null) return Results.NotFound();
 
@@ -141,7 +144,18 @@ public static class AdmissionEndpoints
         {
             admissionCase = ToCaseDto(entity),
             evidence = entity.Evidence.OrderByDescending(x => x.CreatedAtUtc).Select(ToEvidenceDto),
-            decisions = entity.Decisions.OrderByDescending(x => x.RecordedAtUtc).Select(ToDecisionDto)
+            decisions = entity.Decisions.OrderByDescending(x => x.RecordedAtUtc).Select(ToDecisionDto),
+            commission = entity.CommissionAppointments
+                .GroupBy(x => x.AppointmentGroupId)
+                .OrderByDescending(x => x.Max(y => y.RecordedAtUtc))
+                .Select(group => new
+                {
+                    appointmentGroupId = group.Key,
+                    appointmentDate = group.Max(x => x.AppointmentDate),
+                    sourceReference = group.OrderByDescending(x => x.RecordedAtUtc).First().SourceReference,
+                    memberIds = group.Select(x => x.MemberId).Distinct().ToArray(),
+                    recordedAtUtc = group.Max(x => x.RecordedAtUtc)
+                })
         });
     }
 
@@ -464,6 +478,7 @@ public static class AdmissionEndpoints
         entity.WageIncreaseEvidenceApplies,
         entity.ExaltationEvidenceApplies,
         entity.HasPeaceAndFriendshipPact,
+        entity.OriginObedienceRecognizedAsRegular,
         entity.PreviousRejectionDate,
         entity.RejectionCausesRemedied,
         entity.Status,
@@ -493,6 +508,7 @@ public static class AdmissionEndpoints
         entity.AsOfDate,
         entity.SourceReference,
         entity.Notes,
+        entity.StructuredDataJson,
         entity.RecordedAtUtc
     };
 }
@@ -511,6 +527,7 @@ public sealed record CreateAdmissionCaseRequest(
     bool WageIncreaseEvidenceApplies,
     bool ExaltationEvidenceApplies,
     bool? HasPeaceAndFriendshipPact,
+    bool? OriginObedienceRecognizedAsRegular,
     DateOnly? PreviousRejectionDate,
     bool? RejectionCausesRemedied);
 
