@@ -4,7 +4,7 @@
 
 En Proyecto Centenario, todo balotaje, votación o sufragio es anónimo. El sistema puede identificar a las personas asistentes y determinar cuáles estaban habilitadas para participar, pero no puede registrar, inferir ni reconstruir cómo votó una persona determinada.
 
-La asistencia y el resultado son registros separados. El padrón o lista de asistencia acredita presencia y habilitación. El resultado conserva únicamente cantidades agregadas y la evidencia institucional del acto.
+La asistencia y el resultado son registros separados. La lista de asistencia acredita presencia y la nómina de habilitados acredita habilitación. En la Gran Asamblea, esa nómina electoral corresponde al Padrón de la Gran Asamblea. El resultado conserva únicamente cantidades agregadas y la evidencia institucional del acto.
 
 ## 2 Terminología
 
@@ -49,7 +49,7 @@ La auditoría registra apertura, cierre, responsables, cantidades y correcciones
 3. El sistema compara asistentes, habilitados y votos o balotas contabilizados.
 4. Una diferencia de recuento no se corrige asignando votos a personas. Debe quedar observada y explicada en el acta.
 5. Toda corrección del resultado genera una nueva versión trazable del escrutinio agregado; la versión anterior se conserva.
-6. El cierre congela el resultado y el padrón de habilitación como evidencias separadas e inmutables.
+6. El cierre congela el resultado y la nómina de habilitados como evidencias separadas e inmutables; en la Gran Asamblea, esa nómina corresponde al Padrón de la Gran Asamblea.
 
 ## 6 Aplicación por proceso
 
@@ -63,7 +63,7 @@ Cada Tenida conserva su asistencia. Cuando exista balotaje o votación, se agreg
 
 ### Asamblea General
 
-El padrón inmutable determina quién podía asistir y sufragar. La asistencia confirma quién estuvo presente. El resultado electoral conserva totales positivos y negativos o totales por candidatura, según el tipo de elección, sin vincularlos a integrantes del padrón.
+El Padrón de la Gran Asamblea, conservado como snapshot inmutable, determina quién podía asistir y sufragar. La asistencia confirma quién estuvo presente. El resultado electoral conserva totales positivos y negativos o totales por candidatura, según el tipo de elección, sin vincularlos a integrantes del Padrón de la Gran Asamblea.
 
 ## 7 Criterios de aceptación
 

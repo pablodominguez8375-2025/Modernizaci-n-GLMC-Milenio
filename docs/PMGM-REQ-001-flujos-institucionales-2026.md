@@ -133,7 +133,7 @@ El Extracto de Acta debe generarse desde la Tenida y sus registros: asistentes, 
 ### PMGM-REQ-001.38 — Evitar doble digitación
 Asistencia, cargos, miembros, resultados de balotaje y demás información ya registrada en el sistema deben incorporarse automáticamente al extracto.
 
-Los resultados de balotaje y votación deben incorporarse sólo como recuentos agregados. La nómina de asistentes y el padrón de habilitados se mantienen separados del escrutinio. El sistema no debe almacenar ni permitir reconstruir cómo votó una persona. En balotaje se registran balotas blancas y negras; en Asamblea, votos positivos y negativos o totales por candidatura, según corresponda.
+Los resultados de balotaje y votación deben incorporarse sólo como recuentos agregados. La nómina de asistentes y la nómina de habilitados se mantienen separadas del escrutinio; cuando se trate de la Gran Asamblea, la nómina electoral habilitada corresponde al Padrón de la Gran Asamblea. El sistema no debe almacenar ni permitir reconstruir cómo votó una persona. En balotaje se registran balotas blancas y negras; en Asamblea, votos positivos y negativos o totales por candidatura, según corresponda.
 
 ## 12. Uso del Gran Templo
 ### PMGM-REQ-001.39 — Solicitud de espacio
