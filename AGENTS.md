@@ -136,6 +136,15 @@ Tesorería y Hospitalaria son ámbitos separados. El Consejo de Administración 
 
 Leer siempre la documentación normativa vigente antes de modificar permisos o flujos.
 
+## 8.1. Terminología institucional obligatoria
+
+- **Cuadro del Taller**: conjunto oficial de hermanos pertenecientes a un Taller.
+- **Cuadro General de la Orden**: vista consolidada institucional de los hermanos de la Orden.
+- **Padrón de la Gran Asamblea**: conjunto de electores vigentes habilitados para participar en la Gran Asamblea.
+- No usar **padrón** como sinónimo de miembros, membresía, listado general, Cuadro del Taller, Cuadro General de la Orden, asistencia o una nómina genérica de habilitados.
+- En procesos de votación distintos de la Gran Asamblea, usar **lista de asistencia**, **nómina de habilitados** o la denominación institucional específica que corresponda.
+- Si una fuente normativa usa literalmente otra expresión, conservarla solo como cita o antecedente y no extender ese término a otras vistas del sistema.
+
 ## 9. Procedimiento de implementación
 
 Para cada cambio:
