@@ -34,6 +34,7 @@ public static class AdmissionCeremonyEndpoints
         var admissionCase = await admissionsDb.AdmissionCases
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
 
