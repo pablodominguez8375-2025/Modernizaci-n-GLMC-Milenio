@@ -25,6 +25,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<HistoricalMemberIntakeOffice> HistoricalMemberIntakeOffices => Set<HistoricalMemberIntakeOffice>();
     public DbSet<LodgeAdministrativeMeeting> LodgeAdministrativeMeetings => Set<LodgeAdministrativeMeeting>();
     public DbSet<LodgeSecretariatRecord> LodgeSecretariatRecords => Set<LodgeSecretariatRecord>();
+    public DbSet<LodgeCorrespondence> LodgeCorrespondence => Set<LodgeCorrespondence>();
+    public DbSet<LodgeSecretariatTask> LodgeSecretariatTasks => Set<LodgeSecretariatTask>();
+    public DbSet<LodgeAgendaItem> LodgeAgendaItems => Set<LodgeAgendaItem>();
     public DbSet<FinancialRegularitySnapshot> FinancialRegularitySnapshots => Set<FinancialRegularitySnapshot>();
     public DbSet<TreasuryMonthlyStatement> TreasuryMonthlyStatements => Set<TreasuryMonthlyStatement>();
     public DbSet<TreasuryMonthlyStatementLine> TreasuryMonthlyStatementLines => Set<TreasuryMonthlyStatementLine>();
@@ -246,6 +249,46 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.RecordType, x.SourceRecordId }).IsUnique();
             entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
             entity.HasIndex(x => x.CeremonyAuthorizationDocumentId);
+        });
+
+        modelBuilder.Entity<LodgeCorrespondence>(entity =>
+        {
+            entity.ToTable("lodge_correspondence"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Direction).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Folio).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Counterparty).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Channel).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(500);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ClosedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => new { x.OrganizationId, x.Folio }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.CorrespondenceDate });
+        });
+
+        modelBuilder.Entity<LodgeSecretariatTask>(entity =>
+        {
+            entity.ToTable("lodge_secretariat_tasks"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(2000);
+            entity.Property(x => x.Priority).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Responsible).HasMaxLength(300);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.CompletedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.DueDate });
+        });
+
+        modelBuilder.Entity<LodgeAgendaItem>(entity =>
+        {
+            entity.ToTable("lodge_agenda_items"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(2000);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.UpdatedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => new { x.OrganizationId, x.MeetingId, x.Order }).IsUnique();
         });
 
         modelBuilder.Entity<FinancialRegularitySnapshot>(entity =>

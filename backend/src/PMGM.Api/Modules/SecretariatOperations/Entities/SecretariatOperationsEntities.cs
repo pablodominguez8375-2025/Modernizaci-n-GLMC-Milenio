@@ -77,3 +77,52 @@ public sealed class LodgeSecretariatRecord
     public DateTimeOffset? ReviewedAtUtc { get; set; }
     public string? ReviewNotes { get; set; }
 }
+
+public sealed class LodgeCorrespondence
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public required string Direction { get; set; }
+    public required string Folio { get; set; }
+    public DateOnly CorrespondenceDate { get; set; }
+    public required string Subject { get; set; }
+    public required string Counterparty { get; set; }
+    public required string Channel { get; set; }
+    public string? Reference { get; set; }
+    public required string Status { get; set; }
+    public required string CreatedBySubject { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public string? ClosedBySubject { get; set; }
+    public DateTimeOffset? ClosedAtUtc { get; set; }
+}
+
+public sealed class LodgeSecretariatTask
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public required string Title { get; set; }
+    public string? Detail { get; set; }
+    public DateOnly? DueDate { get; set; }
+    public required string Priority { get; set; }
+    public string? Responsible { get; set; }
+    public required string Status { get; set; }
+    public required string CreatedBySubject { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public string? CompletedBySubject { get; set; }
+    public DateTimeOffset? CompletedAtUtc { get; set; }
+}
+
+public sealed class LodgeAgendaItem
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Guid? MeetingId { get; set; }
+    public int Order { get; set; }
+    public required string Title { get; set; }
+    public string? Detail { get; set; }
+    public required string Status { get; set; }
+    public required string CreatedBySubject { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public string? UpdatedBySubject { get; set; }
+    public DateTimeOffset? UpdatedAtUtc { get; set; }
+}
