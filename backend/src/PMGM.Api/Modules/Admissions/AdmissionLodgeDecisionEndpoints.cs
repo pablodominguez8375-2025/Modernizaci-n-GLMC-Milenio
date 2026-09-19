@@ -52,9 +52,10 @@ public static class AdmissionLodgeDecisionEndpoints
         var pardon = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterPardon);
         if (article23 is null)
             return Results.Conflict(new { message = "Régimen Interior debe completar primero la revisión del art. 2.3." });
-        if (article23.Status == CeremonyCodes.ValidationStatus.Rejected &&
-            pardon?.Status != CeremonyCodes.ValidationStatus.Approved)
-            return Results.Conflict(new { message = "El expediente mantiene un impedimento del art. 2.3 sin indulto habilitante." });
+        var validPardon = pardon?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                          pardon.RecordedAtUtc >= article23.RecordedAtUtc;
+        if (article23.Status == CeremonyCodes.ValidationStatus.Rejected && !validPardon)
+            return Results.Conflict(new { message = "El expediente mantiene un impedimento del art. 2.3 sin indulto habilitante posterior a la revisión." });
 
         var decision = NewDecision(
             caseId,
@@ -99,9 +100,19 @@ public static class AdmissionLodgeDecisionEndpoints
         if (string.IsNullOrWhiteSpace(request.SourceReference))
             return Results.BadRequest(new { message = "Debe registrar la referencia del acta de 3.er grado." });
 
+        var article23 = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.Article23Review);
+        var pardon = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterPardon);
+        var article23Enabled = article23?.Status == CeremonyCodes.ValidationStatus.Approved ||
+                               (article23?.Status == CeremonyCodes.ValidationStatus.Rejected &&
+                                pardon?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                                pardon.RecordedAtUtc >= article23.RecordedAtUtc);
+        if (!article23Enabled)
+            return Results.Conflict(new { message = "El expediente no tiene un control habilitante vigente del art. 2.3." });
+
         var presentation = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreePresentation);
-        if (presentation?.Status != CeremonyCodes.ValidationStatus.Approved)
-            return Results.Conflict(new { message = "La solicitud debe haber sido presentada y leída en 1.er grado antes de la votación de 3.er grado." });
+        if (presentation?.Status != CeremonyCodes.ValidationStatus.Approved ||
+            presentation.RecordedAtUtc < article23!.RecordedAtUtc)
+            return Results.Conflict(new { message = "La solicitud debe presentarse nuevamente en 1.er grado después del control vigente del art. 2.3." });
         if (request.AsOfDate < presentation.AsOfDate)
             return Results.BadRequest(new { message = "La votación de 3.er grado no puede ser anterior a la presentación en 1.er grado." });
 
