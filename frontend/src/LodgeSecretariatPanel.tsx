@@ -13,6 +13,7 @@ import {
 } from './api/lodgeApi'
 import { useLodgeCouncilApi } from './LodgeCouncilApiContext'
 import './lodgeSecretariat.css'
+import OperationalSecretariatPanel from './OperationalSecretariatPanel'
 
 type Props = {
   organizationId: string
@@ -270,6 +271,8 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
 
     {error && <div className="error-banner" role="alert">{error}</div>}
     {message && <div className="regularity-success" role="status">{message}</div>}
+
+    <OperationalSecretariatPanel organizationId={organizationId} api={lodgeApi} meetings={meetings} canManage={canManage} />
 
     <div className="lodge-secretariat-grid">
       <article className="panel">

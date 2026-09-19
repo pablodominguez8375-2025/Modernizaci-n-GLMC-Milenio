@@ -50,4 +50,19 @@ public sealed class SecretariatOperationsPolicyTests
     [InlineData(SecretariatOperationsCodes.RecordType.Council)]
     public void WorkPaper_IsNeverAttachedToMeetingOrCouncil(string recordType)
         => Assert.False(SecretariatOperationsPolicy.WorkPaperAllowed(recordType, null));
+
+    [Theory]
+    [InlineData("received", true)]
+    [InlineData("sent", true)]
+    [InlineData("internal", false)]
+    public void Correspondence_direction_is_closed_catalog(string value, bool expected)
+        => Assert.Equal(expected, SecretariatOperationsCodes.Correspondence.IsDirection(value));
+
+    [Theory]
+    [InlineData("pending", true)]
+    [InlineData("in_progress", true)]
+    [InlineData("completed", true)]
+    [InlineData("deleted", false)]
+    public void Secretariat_task_status_is_non_destructive_catalog(string value, bool expected)
+        => Assert.Equal(expected, SecretariatOperationsCodes.Task.IsStatus(value));
 }
