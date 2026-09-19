@@ -49,6 +49,7 @@ public sealed class AdmissionCeremonyAuthorizationGuardMiddleware(RequestDelegat
         var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking()
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == admissionCaseId.Value, context.RequestAborted);
 
         if (admissionCase is null)
