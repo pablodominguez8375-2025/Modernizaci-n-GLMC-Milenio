@@ -1,0 +1,39 @@
+# PMGM — Revisión de continuidad del PR #116 (Afiliación / Incorporación 2026)
+
+**Corte de revisión:** 19-09-2026. **Estado:** revisión parcial de código y fuentes, NO aprobación de merge ni validación de ejecución física.
+**Base observada `dev`:** `4a607fcdfbc5bbcd8fcbd32d5acc425f2113bcfe`.
+**HEAD funcional revisado de `feature/admissions-2026-completion`:** `98d5bf750a7fb4b27867462ceeefdddedfb7275c`.
+**`main` verificado:** `6dfb9546a4873baff15955cf86abfd7d47e3d111` (estable; no modificar).
+**Issue:** #66. **PR:** #116 (draft, abierto). **Bloqueador operativo:** #97.
+
+## Fuentes consultadas
+GitHub: `START-HERE.md`, `AGENTS.md`, `README.md`, `docs/PMGM-BASE-001-estado-maestro.md`, `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`, `docs/PMGM-ARCH-004-afiliacion-incorporacion-2026.md`, `docs/PMGM-ARCH-006-balotaje-votacion-anonima.md`, PR #116, Issue #66 y #97. Drive Proyecto Centenario: Línea Base Maestra, Constitución y Reglamento (arts. 2.1–2.6), Protocolo de Trámites de 31-08-2026, Formulario de Solicitud de Ceremonias 2026, START HERE. Toda atribución depende de la fuente institucional, no de la presencia de un endpoint.
+
+## Estado verificado al iniciar
+PR #116: 15 archivos, 22 commits por delante de `dev` y cero por detrás en el checkpoint revisado; cambios sólo en backend, migración y pruebas unitarias de política. Los tres workflows PMGM CI, Showcase Demo y QA srv01 Installable informaron `success` **para el SHA anterior `98d5bf7...`**. Cualquier commit posterior invalida ese checkpoint CI como gate exact-head. No hay frontend/demo equivalente de Admissions en el diff del PR. No consta despliegue físico en `srv01` ni QA-026/UAT de este incremento.
+
+## Hallazgos que bloquean merge
+1. **Comisión art. 2.5**: `AdmissionCaseEligibilityProjector` exige comisión si y sólo si el tipo es `incorporation`; `AdmissionNormativeEndpoints.AppointInformationCommissionAsync` rechaza otros tipos. El art. 2.5 cubre también **afiliación con reingreso** y contempla dispensa **sólo para afiliación con traslado, decidida por Cámara del Medio**. Añadir clasificación del trámite, evidencia de dispensa (órgano, acta, fecha) y matriz calculada; no traducir automáticamente `simple`/`activation` a reingreso/traslado.
+2. **Consistencia de comisión**: `RecordThirdDegreeDecisionAsync` sólo comprueba que existe alguna conclusión aprobada, no que corresponda al **último grupo nombrado** ni que la fecha/acta sea anterior a la votación. El proyector sí compara `appointmentGroupId`; un endpoint no debe aceptar decisiones que la proyección bloquea. Definir reemplazo/revocación de nombramiento y validar orden institucional en servidor.
+3. **Cierre ceremonial documental**: `CompleteAdmissionCeremonyAsync` exige estado autorizado, existencia de plancha emitida y referencia textual del acta; no verifica un vínculo persistido a **Tenida ceremonial realizada** ni adjuntos obligatorios de **plancha de autorización** y **extracto de acta** antes de cerrar. Reutilizar el cierre documental existente de Secretaría/Tenidas (PR #110), sin inventar otro cierre paralelo. Una Tenida regular sólo exige el extracto conforme a la regla vigente.
+4. **Atomicidad/idempotencia**: la materialización de `Member`, `Membership`, estado institucional y finalización de `CeremonyRequest` se guarda primero con `coreDb.SaveChangesAsync`; la resolución de `AdmissionCase`/decisión se guarda después con `admissionsDb.SaveChangesAsync`. Añadir transacción de base de datos compartida o mecanismo de consistencia recuperable probado; validar concurrencia y reintento. Nunca crear pertenencia destino antes de ceremonia/resolución final.
+5. **Actor real y permisos**: `ReconcileCompletionAsync` graba `RecordedBySubject = admissionCase.CreatedBySubject`, que no necesariamente corresponde al ejecutor del cierre. Conservar `sub` del actor que realmente registró la ceremonia, auditar evento y controlar permiso específico de certificación de realización; un permiso amplio de gestión del Taller no debe conceder atribuciones normativas por sí solo.
+6. **Reglas de calendario/estado**: contrastar `CeremonyDate` con fecha real de Tenida y documentos asociados; rechazar fecha inválida/inexistente y cierre a partir de estado autorizado pero no efectivamente realizado. Preservar vínculo con Plancha emitida por Gran Secretaría y su snapshot de habilitación.
+7. **Frontend y demo**: no hay archivos frontend modificados en PR #116; integrar en React/API existentes recorrido, permisos, expedientes, evidencia, votos *agregados*, comisión, decisiones de órganos, solicitud/autorización, Tenida ceremonial y materialización. Publicar Demo Pages con contratos mock equivalentes y datos ficticios desde el SHA integrado, nunca afirmar que el workflow Showcase del PR prueba estas pantallas.
+8. **Cobertura QA**: agregar pruebas de integración con PostgreSQL/autorización/auditoría para casos de éxito y negación, transacciones, concurrencia, migración, creación tardía de pertenencia, historial de origen y rol no autorizado; añadir `QA-026` en kit QA srv01. No guardar identidad ni preferencia individual de votantes, secuencia correlacionable ni PII real en demo.
+
+## QA-026 — borrador de criterios de aceptación (NO ejecutado)
+- Afiliación simple/con activación, reingreso y traslado correctamente diferenciados; incorporación desde otra Obediencia sin membresía destino previa.
+- Carta de Retiro Voluntario y verificación **humana** de firmas manuscritas; documentos legalizados y grado cuando corresponda; versiones documentales enlazadas.
+- Revisión art. 2.3 con indulto expreso sólo para impedimentos previstos; comisión de tres Maestros obligatoria en reingreso/incorporación, dispensa de Cámara del Medio sólo en traslado; orden temporal válido.
+- Presentación y lectura en 1.er grado; resolución de tramitación por dos tercios de Maestros presentes en 3.er grado; balotaje posterior en 1.er grado con resultado agregado sin voto personal; nueva presentación tras un año y subsanación.
+- Reconocimiento de regularidad de otra Obediencia separado de existencia de Pacto y aceptación especial de Gran Maestría. Vistos buenos de Régimen Interior/Gran Tesorería/Gran Hospitalaria/Gran Maestría y Plancha de Gran Secretaría.
+- Tenida ceremonial realizada vinculada a **Plancha emitida adjunta + Extracto de Acta adjunto**, ambos obligatorios para cerrarla; regular: extracto obligatorio. Materialización de miembro y pertenencia exactamente una vez y sólo después de realización y resolución; historial de origen preservado.
+- Roles y ámbito de Taller, prohibiciones de acceso y auditoría; reintentos/concurrencia/rollback; pruebas de API, frontend/mock, despliegue real y regresión `QA-001..QA-026` cuando el incremento quede integrado.
+
+## Gates y handoff
+**Implementado en rama:** backend/migración/políticas y pruebas unitarias preexistentes del PR; este corte añade sólo el presente documento de revisión.
+**Integrado en dev:** el PR #116 NO está integrado. `dev` conserva Hospitalaria post-PR #115.
+**Demo/instalable:** los workflows anteriores son evidencia de compilación/empaquetado del HEAD funcional anterior, no de paridad de Admissions ni de publicación desde `dev` de este incremento.
+**Despliegue físico `srv01`:** pendiente. **Smoke/regresión QA-001..QA-025:** pendiente (#97). **QA-026/UAT:** no ejecutados.
+**Antes de merge:** corregir hallazgos, completar frontend y mocks, integrar QA-026 y documentación, revalidar workflows sobre el HEAD exacto final, mantener PR draft hasta entonces. El presente commit documental requiere nueva comprobación de los gates y no se interpreta como aprobación de funcionalidad.
