@@ -2,7 +2,7 @@ export type LodgeMeetingType = 'regular' | 'solemn' | 'instruction' | 'anniversa
 export type LodgeGrade = 'apprentice' | 'fellowcraft' | 'master' | 'all'
 export type LodgeMeetingStatus = 'scheduled' | 'open' | 'held' | 'closed' | 'cancelled'
 export type LodgeMeetingModality = 'in_person' | 'virtual'
-export type LodgeCeremonyType = 'initiation' | 'wage_increase' | 'exaltation'
+export type LodgeCeremonyType = 'initiation' | 'affiliation' | 'wage_increase' | 'exaltation' | 'incorporation'
 export type LodgeAttendanceStatus = 'present' | 'excused' | 'absent'
 export type LodgeMinuteStatus = 'draft' | 'approved' | 'superseded'
 
@@ -168,6 +168,11 @@ export const demoLodgeSeed = {
       grade: 'apprentice' as const, ceremonyType: 'initiation' as const, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida de Iniciación · demo', status: 'held' as const, createdAtUtc: '2026-09-10T15:00:00Z', heldAtUtc: '2026-09-19T00:30:00Z', closedAtUtc: null,
     },
     {
+      id: 'bbbbbbbb-2309-0018-0000-000000000006', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-18', meetingType: 'solemn' as const,
+      grade: 'master' as const, ceremonyType: 'affiliation' as const, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null,
+      title: 'Tenida de Afiliación · demo', status: 'closed' as const, createdAtUtc: '2026-09-12T15:00:00Z', heldAtUtc: '2026-09-19T00:10:00Z', closedAtUtc: '2026-09-19T02:20:00Z',
+    },
+    {
       id: 'bbbbbbbb-0109-0019-0000-000000000004', organizationId: DEMO_LODGE_1_ID, meetingDate: '2026-09-19', meetingType: 'solemn' as const,
       grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', heldAtUtc: null, closedAtUtc: null,
     },
@@ -185,6 +190,15 @@ export const demoLodgeSeed = {
   ballots: [{ id: 'ffffffff-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1, ballotType: 'white_black' as const, procedureNumber: 1 as const, subject: 'Admisión de Persona Demostrativa', attendeeCount: 2, eligibleCount: 2, positiveCount: 2, negativeCount: 0, recountObservation: null, status: 'closed' as const, recordedAtUtc: '2026-09-06T01:15:00Z' }] satisfies LodgeAnonymousBallot[],
   ceremonyAuthorizations: [
     {
+      id: 'abababab-5555-2222-3333-444444444444',
+      documentCode: 'PLA-AUT-CER-2026-AFI0001',
+      title: 'Plancha de Autorización de Ceremonia — affiliation',
+      ceremonyRequestId: 'ac000000-0000-0000-0000-000000000003',
+      ceremonyType: 'affiliation' as const,
+      proposedDate: '2026-09-18',
+      issuedAtUtc: '2026-09-17T18:00:00Z',
+    },
+    {
       id: 'abababab-1111-2222-3333-444444444444',
       documentCode: 'PLA-AUT-CER-2026-DEMO0001',
       title: 'Plancha de Autorización de Ceremonia — initiation',
@@ -194,6 +208,15 @@ export const demoLodgeSeed = {
       issuedAtUtc: '2026-09-16T18:00:00Z',
     },
   ] satisfies LodgeCeremonyAuthorizationOption[],
+  secretariatRecords: [
+    {
+      id: 'edededed-2309-0018-0000-000000000006', organizationId: DEMO_LODGE_23_ID, recordType: 'tenida' as const,
+      sourceRecordId: 'bbbbbbbb-2309-0018-0000-000000000006', eventDate: '2026-09-18', title: 'Tenida de Afiliación · demo',
+      workPaperDocumentVersionId: null, workPaperAuthorMemberId: null, extractDocumentVersionId: 'edededed-extract-0018-000000000006',
+      fullMinuteDocumentVersionId: null, ceremonyAuthorizationDocumentId: 'abababab-5555-2222-3333-444444444444',
+      status: 'submitted' as const, createdAtUtc: '2026-09-19T01:40:00Z', submittedAtUtc: '2026-09-19T02:25:00Z', reviewedAtUtc: null, reviewNotes: null,
+    },
+  ] satisfies LodgeSecretariatRecord[],
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
@@ -214,7 +237,7 @@ export class LodgeApiClient {
   private readonly mockWithdrawals: LodgeWithdrawal[] = []
   private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
-  private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = []
+  private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = demoLodgeSeed.secretariatRecords.map(item => ({ ...item }))
   private readonly mockCeremonyAuthorizations: LodgeCeremonyAuthorizationOption[] = demoLodgeSeed.ceremonyAuthorizations.map(item => ({ ...item }))
 
   constructor(options: LodgeApiClientOptions = {}) {
