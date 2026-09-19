@@ -80,4 +80,18 @@ El gate de regresión srv01 pasa a **23/23**.
 
 ## Estado
 
-El PR #110 debe completar PMGM CI, Showcase y QA Installable sobre su HEAD exacto antes de merge. Después del merge se debe verificar la triple salida del mismo SHA y actualizar Línea Base Maestra/Issue #97. El despliegue físico en `srv01` continúa siendo validación operacional posterior.
+PR #110 fusionado a `dev`. Merge SHA: `3833418b8875bd97607557bec07006c924aa56d4`.
+
+Evidencia post-merge:
+
+- PMGM CI: `success`;
+- Showcase/Pages: `success`; Pages desplegó `3833418b8875bd97607557bec07006c924aa56d4`;
+- QA srv01 Installable: `success`;
+- Pre-UAT Installable: `success`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-3833418b8875.zip`;
+- SHA-256 ZIP público: `5d115390bc531cde3c485a2f429f8b099e10d9a487b8086f97315cde66783d50`;
+- artifact QA Actions ID: `10573539603`;
+- digest artifact: `sha256:053cd3e60f4ab3b75cc4e582df69ae5b3ae6a87da57c3fe5ec2e437cc1406333`;
+- regresión versionada: 23 controles, con QA-022 y QA-023.
+
+Pendiente operacional: despliegue físico en `srv01`, smoke/regresión 23/23 y UAT. La Línea Base Maestra e Issue #97 deben apuntar al HEAD vivo de `dev` después de la sincronización documental final.

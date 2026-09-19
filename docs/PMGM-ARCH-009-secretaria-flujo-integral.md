@@ -286,7 +286,7 @@ Para una ceremonia, la continuidad documental queda:
 
 ### 13.4 Estado de implementación
 
-La regla está **implementada en el PR #110** sobre la rama `feature/tenidas-cierre-documental-v1`, pendiente del gate exact-head y de su integración a `dev`.
+La regla quedó **integrada en `dev` mediante PR #110**. Merge SHA histórico del incremento funcional: `3833418b8875bd97607557bec07006c924aa56d4`. Los gates exact-head pre-merge y los workflows post-merge PMGM CI, Showcase, QA srv01 Installable y Pre-UAT Installable finalizaron en `success`.
 
 El incremento:
 
@@ -303,3 +303,17 @@ El incremento:
 
 La Plancha de Autorización permanece como documento maestro de Gran Secretaría; el Taller conserva sólo el vínculo institucional necesario para acreditar y cerrar la Tenida ceremonial.
 
+
+### 13.5 Evidencia del corte integrado
+
+- merge funcional PR #110: `3833418b8875bd97607557bec07006c924aa56d4`;
+- GitHub Pages: despliegue `success` con `pages_build_version=3833418b8875bd97607557bec07006c924aa56d4`;
+- URL Pages: `https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-3833418b8875.zip`;
+- SHA-256 ZIP QA público: `5d115390bc531cde3c485a2f429f8b099e10d9a487b8086f97315cde66783d50`;
+- artifact QA Actions: `proyecto-centenario-qa-srv01-3833418b8875bd97607557bec07006c924aa56d4`;
+- artifact ID: `10573539603`;
+- digest artifact Actions: `sha256:053cd3e60f4ab3b75cc4e582df69ae5b3ae6a87da57c3fe5ec2e437cc1406333`;
+- plantilla de regresión validada con **23 controles**.
+
+El despliegue físico en `srv01`, smoke del servidor, regresión 23/23 y UAT continúan pendientes y se trazan en Issue #97. Los SHA de esta sección son evidencia histórica del incremento; el puntero operativo sigue siendo el HEAD vivo de `dev`.

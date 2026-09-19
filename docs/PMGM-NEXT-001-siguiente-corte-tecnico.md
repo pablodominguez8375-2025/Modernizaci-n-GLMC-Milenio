@@ -65,7 +65,7 @@ No usar la RC1 histórica como evidencia de aceptación del código actual.
 
 ## Ajuste funcional prioritario — cierre documental de Tenidas
 
-La regla aprobada por el Sponsor / Product Owner está implementada en PR #110 y debe integrarse sólo después de sus gates exact-head:
+La regla aprobada por el Sponsor / Product Owner quedó integrada mediante PR #110 y sus gates exact-head finalizaron correctamente:
 
 - separar **Realizada** de **Cerrada**;
 - Tenida regular/no ceremonial: exigir **Extracto de Acta PDF** para cerrar;
@@ -90,10 +90,14 @@ Criterios mínimos de aceptación:
 
 ## Estado del corte PR #110
 
-- backend: implementación completada en rama;
-- migración EF Core: agregada y trazable;
-- frontend Secretaría: requisitos y cierre conectados;
-- demo Pages: contrato mock actualizado con datos ficticios;
-- QA: QA-022 consolidado + QA-023 agregado; gate objetivo 23/23;
-- documentación: ARCH-009, Estado Maestro, NEXT, instalación QA y kit de regresión sincronizados;
-- pendiente: CI/Showcase/QA Installable exact-head del PR, merge a `dev`, publicación post-merge del mismo SHA y despliegue físico en `srv01`.
+- merge funcional: `3833418b8875bd97607557bec07006c924aa56d4`;
+- backend y migración EF Core: integrados;
+- frontend Secretaría y demo Pages: integrados con la misma regla funcional;
+- PMGM CI post-merge: `success`;
+- Showcase/Pages post-merge: `success`, `pages_build_version=3833418b8875bd97607557bec07006c924aa56d4`;
+- QA srv01 Installable: `success`, artifact ID `10573539603`;
+- Pre-UAT Installable: `success`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-3833418b8875.zip`, SHA-256 `5d115390bc531cde3c485a2f429f8b099e10d9a487b8086f97315cde66783d50`;
+- QA: QA-022 consolidado + QA-023 agregado; objetivo operacional **23/23**;
+- PR #107: cerrado como supersedido por este corte;
+- pendiente: desplegar el HEAD vivo de `dev` en `srv01`, ejecutar smoke/regresión 23/23 y luego UAT institucional.
