@@ -558,6 +558,38 @@ La Línea Base Maestra de Google Drive contiene el mismo acuerdo en su sección 
 > Nota de frescura: este apartado describe reglas integradas. El SHA operativo vigente debe obtenerse siempre del HEAD vivo de `dev`; actualmente, al sincronizar esta documentación, `dev` está en `125635e5cbf23919d135965311f7c24bb086cea1` por integración posterior del PR #106.
 
 
+## 16. Regla funcional aprobada — cierre documental de Tenidas
+
+Por decisión del Sponsor / Product Owner se fija para continuidad la siguiente regla:
+
+- el flujo funcional objetivo de una Tenida es **Programada → Realizada → Cerrada**;
+- **Realizada** significa que la Tenida se efectuó, pero todavía puede estar completando documentación;
+- **Cerrada** significa cierre documental definitivo.
+
+### Tenida regular / no ceremonial
+
+Para cerrar una Tenida regular, el único documento obligatorio es el **Extracto de Acta en PDF**.
+
+La Plancha de trabajo del hermano continúa siendo opcional. El Acta completa continúa siendo opcional y privada del Taller.
+
+### Tenida ceremonial
+
+Para cerrar una Tenida de **Iniciación, Aumento de Salario o Exaltación** son obligatorios:
+
+1. **Extracto de Acta en PDF**; y
+2. **Plancha de Autorización de Ceremonia emitida por Gran Secretaría**, vinculada/adjunta a esa misma Tenida.
+
+La Plancha de Autorización no es una Plancha de trabajo ni un Decreto. Debe corresponder al Taller y a la ceremonia autorizada y conservar la trazabilidad con la solicitud y las aprobaciones previas.
+
+El sistema deberá impedir el cierre cuando falte cualquiera de los documentos exigidos.
+
+Trazabilidad objetivo de ceremonia:
+
+`solicitud → aprobaciones → Plancha de Autorización → Tenida Realizada → Extracto de Acta → Tenida Cerrada`
+
+**Estado al registrar esta decisión:** requisito aprobado y documentado; pendiente de ajuste funcional en código para separar Realizada/Cerrada y aplicar las validaciones obligatorias en backend, frontend, demo y QA. Esta decisión no debe perderse ni ser reemplazada por la compatibilidad histórica actual de `closed`.
+
+
 ---
 
 **Este documento es la referencia canónica de continuidad funcional/técnica del Proyecto Centenario.**
