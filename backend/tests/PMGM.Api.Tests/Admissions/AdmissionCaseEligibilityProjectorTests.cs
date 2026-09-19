@@ -9,6 +9,31 @@ namespace PMGM.Api.Tests.Admissions;
 public sealed class AdmissionCaseEligibilityProjectorTests
 {
     [Fact]
+    public void Transfer_without_previous_rejection_can_proceed_with_valid_waiver()
+    {
+        var admissionCase = BuildTransferCase();
+        var thirdDegree = admissionCase.Decisions.Single(x => x.DecisionType == AdmissionWorkflowCodes.DecisionType.LodgeThirdDegreeApproval);
+
+        admissionCase.Decisions.Add(new AdmissionDecision
+        {
+            AdmissionCaseId = admissionCase.Id,
+            DecisionType = AdmissionWorkflowCodes.DecisionType.InformationCommissionWaiver,
+            Status = CeremonyCodes.ValidationStatus.Approved,
+            AsOfDate = thirdDegree.AsOfDate.AddDays(-1),
+            SourceReference = "ACTA-CAMARA-MEDIO",
+            StructuredDataJson = JsonSerializer.Serialize(new { waiver = true, basis = "article_2_5_transfer", authority = "camara_del_medio" }),
+            RecordedBySubject = "secretaria",
+            RecordedAtUtc = thirdDegree.RecordedAtUtc.AddDays(-1)
+        });
+
+        var projection = AdmissionCaseEligibilityProjector.Evaluate(admissionCase);
+
+        Assert.True(projection.Decision.CanProceed);
+        Assert.DoesNotContain(projection.Decision.Requirements, x =>
+            x.Code == AdmissionCodes.Requirement.RePresentation);
+    }
+
+    [Fact]
     public void Transfer_does_not_accept_commission_waiver_recorded_after_third_degree()
     {
         var admissionCase = BuildTransferCase();
