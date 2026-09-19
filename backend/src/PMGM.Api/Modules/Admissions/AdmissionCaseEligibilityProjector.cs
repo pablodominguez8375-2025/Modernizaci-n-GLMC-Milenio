@@ -6,8 +6,14 @@ namespace PMGM.Api.Modules.Admissions;
 public sealed record AdmissionCaseEligibilityProjection(
     AdmissionEligibilityDecision Decision,
     Guid? WithdrawalLetterId,
+    Guid? Article23ReviewDecisionId,
+    Guid? FirstDegreePresentationDecisionId,
+    Guid? CommissionAppointmentGroupId,
+    Guid? CommissionCompletionDecisionId,
     Guid? ThirdDegreeDecisionId,
     Guid? FirstDegreeBallotDecisionId,
+    Guid? GrandMasterPardonDecisionId,
+    Guid? GrandMasterRegularityRecognitionDecisionId,
     Guid? GrandMasterSpecialAcceptanceDecisionId);
 
 public static class AdmissionCaseEligibilityProjector
@@ -21,15 +27,33 @@ public static class AdmissionCaseEligibilityProjector
         var degreeEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.Degree, approvedOnly: true);
 
         var signature = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.WithdrawalLetterHandwrittenSignature);
+        var article23 = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.Article23Review);
+        var pardon = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterPardon);
+        var presentation = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreePresentation);
+        var commissionCompletion = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionCompleted);
         var thirdDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeThirdDegreeApproval);
         var firstDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreeBallot);
+        var regularityRecognition = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterRegularityRecognition);
         var grandMasterSpecial = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
+
+        var latestCommissionGroup = admissionCase.CommissionAppointments
+            .GroupBy(x => x.AppointmentGroupId)
+            .OrderByDescending(x => x.Max(y => y.RecordedAtUtc))
+            .FirstOrDefault();
+        var commissionAppointed = latestCommissionGroup is not null &&
+                                  latestCommissionGroup.Select(x => x.MemberId).Distinct().Count() == 3;
 
         var decision = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: admissionCase.AdmissionType,
             AffiliationMode: admissionCase.AffiliationMode,
             WithdrawalLetterAttached: withdrawalLetter is not null,
             WithdrawalLetterHandwrittenSignatureVerified: signature?.Status == CeremonyCodes.ValidationStatus.Approved,
+            Article23Clear: ToDecisionState(article23),
+            GrandMasterPardonApproved: pardon?.Status == CeremonyCodes.ValidationStatus.Approved,
+            FirstDegreePresentationRecorded: presentation?.Status == CeremonyCodes.ValidationStatus.Approved,
+            InformationCommissionRequired: admissionCase.AdmissionType == CeremonyCodes.Type.Incorporation,
+            InformationCommissionAppointed: commissionAppointed,
+            InformationCommissionCompleted: commissionCompletion?.Status == CeremonyCodes.ValidationStatus.Approved,
             LodgeThirdDegreeApproved: ToDecisionState(thirdDegree),
             LodgeFirstDegreeBallotApproved: ToDecisionState(firstDegree),
             LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
@@ -38,17 +62,25 @@ public static class AdmissionCaseEligibilityProjector
             ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
             LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
             DegreeEvidenceAttached: degreeEvidence is not null,
+            OriginObedienceRecognizedAsRegular: admissionCase.OriginObedienceRecognizedAsRegular,
+            GrandMasterRegularityRecognitionApproved: regularityRecognition?.Status == CeremonyCodes.ValidationStatus.Approved,
             HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
             GrandMasterSpecialAcceptanceApproved: grandMasterSpecial?.Status == CeremonyCodes.ValidationStatus.Approved,
             PreviousRejectionDate: admissionCase.PreviousRejectionDate,
-            NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
+            NewPresentationDate: presentation?.AsOfDate ?? ChileDate(admissionCase.CreatedAtUtc),
             RejectionCausesRemedied: admissionCase.RejectionCausesRemedied));
 
         return new AdmissionCaseEligibilityProjection(
             decision,
             withdrawalLetter?.Id,
+            article23?.Id,
+            presentation?.Id,
+            latestCommissionGroup?.Key,
+            commissionCompletion?.Id,
             thirdDegree?.Id,
             firstDegree?.Id,
+            pardon?.Id,
+            regularityRecognition?.Id,
             grandMasterSpecial?.Id);
     }
 
