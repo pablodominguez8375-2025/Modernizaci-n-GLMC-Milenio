@@ -111,6 +111,8 @@ export default function App({ api, admissionApi, bootstrapApi, lodgeApi, members
   const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
   const canReadLodgeSecretariat = capabilities?.canReadLodgeSecretariat ?? false
   const canManageLodgeSecretariat = capabilities?.canManageLodgeSecretariat ?? false
+  const canAppointAdmissionCommission = capabilities?.canAppointAdmissionCommission ?? false
+  const canValidateAdmissionInternalAffairs = capabilities?.canValidateCeremonyInternalAffairs ?? false
   const canCandidateProfile = canSecretariat || canLodge
   const canAdmissions = canCeremonies || canReadLodgeSecretariat
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
@@ -189,7 +191,7 @@ export default function App({ api, admissionApi, bootstrapApi, lodgeApi, members
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
-        {view === 'admissions' && canAdmissions && <AdmissionsPage api={admissionApi} pmgmApi={api} lodgeApi={lodgeApi} canManageSecretariat={canManageLodgeSecretariat} />}
+        {view === 'admissions' && canAdmissions && <AdmissionsPage api={admissionApi} pmgmApi={api} lodgeApi={lodgeApi} canManageSecretariat={canManageLodgeSecretariat} canAppointCommission={canAppointAdmissionCommission} canValidateInternalAffairs={canValidateAdmissionInternalAffairs} />}
         {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
