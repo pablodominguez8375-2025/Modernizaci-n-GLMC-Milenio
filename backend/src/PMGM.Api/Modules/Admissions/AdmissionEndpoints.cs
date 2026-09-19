@@ -6,6 +6,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.Admissions;
 
