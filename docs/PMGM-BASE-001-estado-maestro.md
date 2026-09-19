@@ -587,7 +587,7 @@ Trazabilidad objetivo de ceremonia:
 
 `solicitud → aprobaciones → Plancha de Autorización → Tenida Realizada → Extracto de Acta → Tenida Cerrada`
 
-**Estado de implementación:** desarrollado en PR #110 `feat(tenidas): cierre documental regular y ceremonial`. El backend separa Realizada/Cerrada, bloquea cierres incompletos, vincula la Plancha oficial de Gran Secretaría por referencia y audita el cierre. La migración normaliza los antiguos `closed` a `held` preservando la fecha en `HeldAtUtc`. El frontend y el mock de Pages muestran los requisitos documentales y aplican el mismo flujo. El kit QA incorpora QA-022 y QA-023, pasando a 23 controles. La integración definitiva a `dev`, publicación Pages e instalable del merge SHA deben verificarse mediante el flujo de PR/CI antes de declarar completo el incremento.
+**Estado de implementación:** integrado en `dev` mediante PR #110, merge funcional `3833418b8875bd97607557bec07006c924aa56d4`. El backend separa Realizada/Cerrada, bloquea cierres incompletos, vincula la Plancha oficial de Gran Secretaría por referencia y audita el cierre. La migración normaliza los antiguos `closed` a `held` preservando la fecha en `HeldAtUtc`. El frontend y el mock de Pages muestran los requisitos documentales y aplican el mismo flujo. El kit QA incorpora QA-022 y QA-023, pasando a 23 controles. Los gates pre-merge y PMGM CI/Showcase/QA Installable/Pre-UAT post-merge quedaron en `success`. Pages publicó el mismo merge SHA y el ZIP QA público `Proyecto-Centenario-QA-srv01-3833418b8875.zip` con SHA-256 `5d115390bc531cde3c485a2f429f8b099e10d9a487b8086f97315cde66783d50`. El despliegue físico srv01 y la regresión 23/23 siguen pendientes en Issue #97.
 
 
 ---
