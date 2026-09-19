@@ -40,7 +40,7 @@ public static class AdmissionLodgeDecisionEndpoints
             .Include(x => x.Decisions)
             .SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId)) return Results.Forbid();
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId)) return Results.Forbid();
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
             return Results.Conflict(new { message = "El expediente ya está resuelto." });
         if (request.PresentationDate > ChileToday())
@@ -92,7 +92,7 @@ public static class AdmissionLodgeDecisionEndpoints
             .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId)) return Results.Forbid();
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId)) return Results.Forbid();
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
             return Results.Conflict(new { message = "El expediente ya está resuelto." });
         if (request.AsOfDate > ChileToday())
@@ -192,7 +192,7 @@ public static class AdmissionLodgeDecisionEndpoints
             .Include(x => x.Decisions)
             .SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId)) return Results.Forbid();
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId)) return Results.Forbid();
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
             return Results.Conflict(new { message = "El expediente ya está resuelto." });
         if (request.AsOfDate > ChileToday())
