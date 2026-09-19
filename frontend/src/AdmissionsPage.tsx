@@ -9,11 +9,15 @@ export default function AdmissionsPage({
   pmgmApi,
   lodgeApi,
   canManageSecretariat,
+  canAppointCommission,
+  canValidateInternalAffairs,
 }: {
   api: AdmissionApiClient
   pmgmApi: PmgmApiClient
   lodgeApi: LodgeApiClient
   canManageSecretariat: boolean
+  canAppointCommission: boolean
+  canValidateInternalAffairs: boolean
 }) {
   const [organizations,setOrganizations]=useState<OrganizationOption[]>([])
   const [organizationId,setOrganizationId]=useState('')
@@ -76,16 +80,18 @@ export default function AdmissionsPage({
   useEffect(()=>{
     if(!organizationId){setMembers([]);setMeetings([]);return}
     let active=true
-    lodgeApi.getMemberOptions(organizationId)
-      .then(result=>{if(active)setMembers(result.items)})
-      .catch(()=>{if(active)setMembers([])})
+    if(canManageSecretariat||canAppointCommission){
+      lodgeApi.getMemberOptions(organizationId)
+        .then(result=>{if(active)setMembers(result.items)})
+        .catch(()=>{if(active)setMembers([])})
+    } else setMembers([])
     if(canManageSecretariat){
       lodgeApi.getMeetings(organizationId)
         .then(result=>{if(active)setMeetings(result.items)})
         .catch(()=>{if(active)setMeetings([])})
     } else setMeetings([])
     return()=>{active=false}
-  },[canManageSecretariat,lodgeApi,organizationId])
+  },[canAppointCommission,canManageSecretariat,lodgeApi,organizationId])
 
   const reload=async(caseId?:string)=>{
     const result=await api.listCases(organizationId)
@@ -110,7 +116,7 @@ export default function AdmissionsPage({
     {error&&<div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{error}</span></div>}
     {notice&&<div className="admissions-notice" role="status">{notice}</div>}
 
-    <CreateCasePanel api={api} organizationId={organizationId} organizations={organizations} disabled={working||!organizationId} onCreated={id=>void reload(id)} />
+    {canManageSecretariat&&<CreateCasePanel api={api} organizationId={organizationId} organizations={organizations} disabled={working||!organizationId} onCreated={id=>void reload(id)} />}
 
     <section className="admissions-layout">
       <article className="panel admissions-list">
@@ -127,6 +133,9 @@ export default function AdmissionsPage({
           disabled={working}
           onAction={act}
           api={api}
+          canManageSecretariat={canManageSecretariat}
+          canAppointCommission={canAppointCommission}
+          canValidateInternalAffairs={canValidateInternalAffairs}
         />}
       </article>
     </section>
@@ -189,7 +198,7 @@ function CreateCasePanel({api,organizationId,organizations,disabled,onCreated}:{
   </section>
 }
 
-function CaseDetail({detail,eligibility,members,meetings,disabled,onAction,api}:{detail:AdmissionCaseDetail;eligibility:AdmissionEligibilityResponse;members:LodgeMemberOption[];meetings:LodgeMeeting[];disabled:boolean;onAction:(label:string,fn:()=>Promise<unknown>)=>Promise<void>;api:AdmissionApiClient}){
+function CaseDetail({detail,eligibility,members,meetings,disabled,onAction,api,canManageSecretariat,canAppointCommission,canValidateInternalAffairs}:{detail:AdmissionCaseDetail;eligibility:AdmissionEligibilityResponse;members:LodgeMemberOption[];meetings:LodgeMeeting[];disabled:boolean;onAction:(label:string,fn:()=>Promise<unknown>)=>Promise<void>;api:AdmissionApiClient;canManageSecretariat:boolean;canAppointCommission:boolean;canValidateInternalAffairs:boolean}){
   const c=detail.admissionCase
   const [date,setDate]=useState(todaySantiago())
   const [source,setSource]=useState('ACTA-DEMO-2026')
@@ -228,31 +237,32 @@ function CaseDetail({detail,eligibility,members,meetings,disabled,onAction,api}:
     <section className="admission-actions">
       <div className="admission-action-context"><label><span>Fecha actuación</span><input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label><span>Referencia de acta/fuente</span><input value={source} onChange={e=>setSource(e.target.value)}/></label></div>
 
-      <ActionCard title="1. Controles previos" detail="Art. 2.3 y presentación en Cámara de Primer Grado.">
-        <button disabled={disabled} onClick={()=>call('Revisión art. 2.3 registrada.',()=>api.recordArticle23(c.id,{hasRayamiento:false,hasTribunalForcedWithdrawal:false,asOfDate:date,sourceReference:source}))}>Art. 2.3 sin impedimento</button>
-        <button disabled={disabled} onClick={()=>call('Presentación de 1.er grado registrada.',()=>api.recordFirstDegreePresentation(c.id,{presentationDate:date,sourceReference:source}))}>Registrar presentación 1G</button>
+      <ActionCard title="1. Controles previos" detail="Régimen Interior registra el art. 2.3; Secretaría registra la presentación en Cámara de Primer Grado.">
+        {canValidateInternalAffairs&&<button disabled={disabled} onClick={()=>call('Revisión art. 2.3 registrada.',()=>api.recordArticle23(c.id,{hasRayamiento:false,hasTribunalForcedWithdrawal:false,asOfDate:date,sourceReference:source}))}>Art. 2.3 sin impedimento</button>}
+        {canManageSecretariat&&<button disabled={disabled} onClick={()=>call('Presentación de 1.er grado registrada.',()=>api.recordFirstDegreePresentation(c.id,{presentationDate:date,sourceReference:source}))}>Registrar presentación 1G</button>}
+        {!canValidateInternalAffairs&&!canManageSecretariat&&<ReadOnlyAction/>}
       </ActionCard>
 
       {(c.admissionType==='incorporation'||c.affiliationProcedure==='reentry'||c.affiliationProcedure==='transfer')&&<ActionCard title="2. Comisión art. 2.5" detail={c.affiliationProcedure==='transfer'?'Traslado: comisión o dispensa expresa de Cámara del Medio.':'Reintegro/Incorporación: comisión de tres Maestros obligatoria.'}>
-        <div className="commission-members">{members.map(m=><label key={m.id}><input type="checkbox" checked={selectedMembers.includes(m.id)} onChange={()=>toggleMember(m.id)}/><span>{m.displayName}</span></label>)}</div>
-        <button disabled={disabled||selectedMembers.length!==3} onClick={()=>call('Comisión de tres Maestros nombrada.',()=>api.appointCommission(c.id,{memberIds:selectedMembers,appointmentDate:date,sourceReference:source}))}>Nombrar comisión ({selectedMembers.length}/3)</button>
-        {c.affiliationProcedure==='transfer'&&<button disabled={disabled} onClick={()=>call('Dispensa de Cámara del Medio registrada.',()=>api.waiveTransferCommission(c.id,{asOfDate:date,sourceReference:source}))}>Registrar dispensa de traslado</button>}
-        <button disabled={disabled||detail.commission.length===0} onClick={()=>call('Conclusión de comisión registrada.',()=>api.completeCommission(c.id,{completed:true,asOfDate:date,sourceReference:source}))}>Concluir comisión vigente</button>
+        {canAppointCommission&&<><div className="commission-members">{members.map(m=><label key={m.id}><input type="checkbox" checked={selectedMembers.includes(m.id)} onChange={()=>toggleMember(m.id)}/><span>{m.displayName}</span></label>)}</div><button disabled={disabled||selectedMembers.length!==3} onClick={()=>call('Comisión de tres Maestros nombrada.',()=>api.appointCommission(c.id,{memberIds:selectedMembers,appointmentDate:date,sourceReference:source}))}>Nombrar comisión ({selectedMembers.length}/3)</button></>}
+        {c.affiliationProcedure==='transfer'&&(canManageSecretariat||canAppointCommission)&&<button disabled={disabled} onClick={()=>call('Dispensa de Cámara del Medio registrada.',()=>api.waiveTransferCommission(c.id,{asOfDate:date,sourceReference:source}))}>Registrar dispensa de traslado</button>}
+        {(canManageSecretariat||canAppointCommission)&&<button disabled={disabled||detail.commission.length===0} onClick={()=>call('Conclusión de comisión registrada.',()=>api.completeCommission(c.id,{completed:true,asOfDate:date,sourceReference:source}))}>Concluir comisión vigente</button>}
+        {!canManageSecretariat&&!canAppointCommission&&<ReadOnlyAction/>}
       </ActionCard>}
 
       <ActionCard title="3. Cámara del Medio" detail="Decisión de 3.er grado con mayoría reglamentaria; sólo se conservan totales.">
         <div className="vote-grid"><NumberField label="Presentes" value={present} set={setPresent}/><NumberField label="A favor" value={favor} set={setFavor}/><NumberField label="En contra" value={against} set={setAgainst}/><NumberField label="Abstenciones" value={abstentions} set={setAbstentions}/></div>
-        <button disabled={disabled} onClick={()=>call('Decisión de 3.er grado registrada.',()=>api.recordThirdDegree(c.id,{asOfDate:date,sourceReference:source,presentMasters:present,votesInFavor:favor,votesAgainst:against,abstentions}))}>Registrar decisión 3G</button>
+        {canManageSecretariat?<button disabled={disabled} onClick={()=>call('Decisión de 3.er grado registrada.',()=>api.recordThirdDegree(c.id,{asOfDate:date,sourceReference:source,presentMasters:present,votesInFavor:favor,votesAgainst:against,abstentions}))}>Registrar decisión 3G</button>:<ReadOnlyAction/>}
       </ActionCard>
 
       <ActionCard title="4. Balotaje posterior en 1.er grado" detail="Voto secreto: el sistema conserva sólo el recuento agregado de balotas.">
         <div className="vote-grid"><NumberField label="Habilitados" value={eligible} set={setEligible}/><NumberField label="Blancas" value={white} set={setWhite}/><NumberField label="Negras" value={black} set={setBlack}/></div>
-        <button disabled={disabled} onClick={()=>call('Balotaje de 1.er grado registrado.',()=>api.recordFirstDegreeBallot(c.id,{asOfDate:date,sourceReference:source,ballots:[{procedureNumber:1,eligibleVoters:eligible,whiteBallots:white,blackBallots:black}],ballotApproved:white>black}))}>Registrar balotaje agregado</button>
+        {canManageSecretariat?<button disabled={disabled} onClick={()=>call('Balotaje de 1.er grado registrado.',()=>api.recordFirstDegreeBallot(c.id,{asOfDate:date,sourceReference:source,ballots:[{procedureNumber:1,eligibleVoters:eligible,whiteBallots:white,blackBallots:black}],ballotApproved:white>black}))}>Registrar balotaje agregado</button>:<ReadOnlyAction/>}
       </ActionCard>
 
       <ActionCard title="5. Ceremonia y cierre documental" detail="Gran Secretaría emite la Plancha. La Tenida debe cerrar con Plancha + Extracto antes de materializar.">
-        {!ceremonyRequestId?<div className="admission-inline-form"><label><span>Fecha propuesta</span><input type="date" value={proposedDate} onChange={e=>setProposedDate(e.target.value)}/></label><button disabled={disabled||!eligibility.eligibility.canProceed} onClick={()=>call('Solicitud de ceremonia creada; continúa por aprobaciones institucionales y Gran Secretaría.',()=>api.createCeremonyRequest(c.id,{proposedDate}))}>Crear solicitud de ceremonia</button></div>:<p className="admission-reference">Solicitud vinculada: <code>{ceremonyRequestId}</code></p>}
-        {ceremonyRequestId&&!completed&&<div className="admission-inline-form"><label><span>Tenida cerrada</span><select value={meetingId} onChange={e=>setMeetingId(e.target.value)}><option value="">Seleccione…</option>{matchingMeetings.map(m=><option key={m.id} value={m.id}>{formatDate(m.meetingDate)} · {m.title??typeLabel(c.admissionType)}</option>)}</select></label><button disabled={disabled||!meetingId} onClick={()=>{const meeting=matchingMeetings.find(x=>x.id===meetingId);if(meeting)call('Admisión materializada desde Tenida cerrada con evidencia documental.',()=>api.completeCeremony(ceremonyRequestId,{meetingId:meeting.id,ceremonyDate:meeting.meetingDate}))}}>Materializar admisión</button></div>}
+        {!ceremonyRequestId?(canManageSecretariat?<div className="admission-inline-form"><label><span>Fecha propuesta</span><input type="date" value={proposedDate} onChange={e=>setProposedDate(e.target.value)}/></label><button disabled={disabled||!eligibility.eligibility.canProceed} onClick={()=>call('Solicitud de ceremonia creada; continúa por aprobaciones institucionales y Gran Secretaría.',()=>api.createCeremonyRequest(c.id,{proposedDate}))}>Crear solicitud de ceremonia</button></div>:<ReadOnlyAction/>):<p className="admission-reference">Solicitud vinculada: <code>{ceremonyRequestId}</code></p>}
+        {ceremonyRequestId&&!completed&&canManageSecretariat&&<div className="admission-inline-form"><label><span>Tenida cerrada</span><select value={meetingId} onChange={e=>setMeetingId(e.target.value)}><option value="">Seleccione…</option>{matchingMeetings.map(m=><option key={m.id} value={m.id}>{formatDate(m.meetingDate)} · {m.title??typeLabel(c.admissionType)}</option>)}</select></label><button disabled={disabled||!meetingId} onClick={()=>{const meeting=matchingMeetings.find(x=>x.id===meetingId);if(meeting)call('Admisión materializada desde Tenida cerrada con evidencia documental.',()=>api.completeCeremony(ceremonyRequestId,{meetingId:meeting.id,ceremonyDate:meeting.meetingDate}))}}>Materializar admisión</button></div>}
         {completed&&<p className="admission-completed"><strong>Materialización completada.</strong> El reintento es idempotente y no crea una segunda pertenencia.</p>}
         {ceremonyRequestId&&matchingMeetings.length===0&&!completed&&<p className="admission-warning">No existe una Tenida cerrada del mismo tipo. Secretaría debe realizarla y cerrarla con Plancha de Gran Secretaría + Extracto de Acta.</p>}
       </ActionCard>
@@ -260,6 +270,7 @@ function CaseDetail({detail,eligibility,members,meetings,disabled,onAction,api}:
   </>
 }
 
+function ReadOnlyAction(){return <span className="admission-readonly">Vista de consulta: esta actuación corresponde a otro perfil institucional.</span>}
 function ActionCard({title,detail,children}:{title:string;detail:string;children:ReactNode}){return <section className="admission-action-card"><div><h4>{title}</h4><p>{detail}</p></div><div className="admission-action-controls">{children}</div></section>}
 function Summary({label,value}:{label:string;value:string}){return <div><span>{label}</span><strong>{value}</strong></div>}
 function NumberField({label,value,set}:{label:string;value:number;set:(value:number)=>void}){return <label><span>{label}</span><input type="number" min={0} value={value} onChange={e=>set(Math.max(0,Number(e.target.value)||0))}/></label>}
