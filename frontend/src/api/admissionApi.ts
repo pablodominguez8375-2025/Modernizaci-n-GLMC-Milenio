@@ -400,8 +400,17 @@ function mockEligibility(row: AdmissionCaseListItem, p: DemoProgress): Admission
 }
 function req(code:string,ok:boolean,yes:string,no:string):AdmissionRequirement{return{code,status:ok?'approved':'rejected',reason:ok?yes:no}}
 function mockDecisions(caseId:string,p:DemoProgress):AdmissionDecision[]{
-  const rows:Array<[string,boolean]>= [['article_2_3_review',p.article23],['lodge_first_degree_presentation',p.presentation],['information_commission_waiver',p.commissionWaived],['information_commission_completed',p.commissionCompleted],['lodge_third_degree_decision',p.thirdDegree],['lodge_first_degree_ballot',p.ballot],['ceremony_completed',p.materialized]]
-  return rows.filter(([,ok])=>ok).map(([type],index)=>({id:`demo-decision-${index}-${caseId}`,admissionCaseId:caseId,decisionType:type,status:'approved',asOfDate:'2026-09-18',sourceReference:'DEMO',notes:null,structuredDataJson:null,recordedAtUtc:'2026-09-18T20:00:00Z'}))
+  const rows:Array<{type:string;ok:boolean;source:string}>=[
+    {type:'article_2_3_review',ok:p.article23,source:'ACTA-RI-DEMO'},
+    {type:'lodge_first_degree_presentation',ok:p.presentation,source:'ACTA-1G-DEMO'},
+    {type:'information_commission_waiver',ok:p.commissionWaived,source:'ACTA-CAMARA-MEDIO-DEMO'},
+    {type:'information_commission_completed',ok:p.commissionCompleted,source:'INFORME-COMISION-DEMO'},
+    {type:'lodge_third_degree_approval',ok:p.thirdDegree,source:'ACTA-3G-DEMO'},
+    {type:'lodge_first_degree_ballot',ok:p.ballot,source:'ACTA-BALOTAJE-DEMO'},
+    {type:'ceremony_request_created',ok:Boolean(p.ceremonyRequestId),source:p.ceremonyRequestId??''},
+    {type:'ceremony_completed',ok:p.materialized,source:p.ceremonyRequestId??'DEMO'},
+  ]
+  return rows.filter(x=>x.ok).map((row,index)=>({id:`demo-decision-${index}-${caseId}`,admissionCaseId:caseId,decisionType:row.type,status:'approved',asOfDate:'2026-09-18',sourceReference:row.source,notes:null,structuredDataJson:null,recordedAtUtc:'2026-09-18T20:00:00Z'}))
 }
 function cloneRow(row:AdmissionCaseListItem):AdmissionCaseListItem{return{...row,admissionCase:{...row.admissionCase}}}
 function normalizedCreatePayload(payload:CreateAdmissionCasePayload){
