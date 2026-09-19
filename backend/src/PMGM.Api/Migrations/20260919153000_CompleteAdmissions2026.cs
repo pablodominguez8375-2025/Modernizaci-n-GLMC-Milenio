@@ -12,6 +12,14 @@ public partial class CompleteAdmissions2026 : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.AddColumn<string>(
+            name: "AffiliationProcedure",
+            schema: "core",
+            table: "admission_cases",
+            type: "character varying(40)",
+            maxLength: 40,
+            nullable: true);
+
         migrationBuilder.AddColumn<bool>(
             name: "OriginObedienceRecognizedAsRegular",
             schema: "core",
@@ -70,5 +78,6 @@ public partial class CompleteAdmissions2026 : Migration
         migrationBuilder.DropTable(name: "admission_commission_appointments", schema: "core");
         migrationBuilder.DropColumn(name: "StructuredDataJson", schema: "core", table: "admission_decisions");
         migrationBuilder.DropColumn(name: "OriginObedienceRecognizedAsRegular", schema: "core", table: "admission_cases");
+        migrationBuilder.DropColumn(name: "AffiliationProcedure", schema: "core", table: "admission_cases");
     }
 }
