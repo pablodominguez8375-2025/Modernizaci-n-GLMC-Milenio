@@ -226,6 +226,8 @@ public static class TreasuryStatementEndpoints
             return Results.Conflict(new { message = "Los pagos sólo pueden registrarse mientras el Cuadro está en borrador." });
         if (!TreasuryCodes.PaymentMethod.IsValid(request.PaymentMethod) || request.Amount <= 0)
             return Results.BadRequest(new { message = "El medio de pago o el monto no es válido." });
+        if (string.IsNullOrWhiteSpace(request.PayerDisplayName) || string.IsNullOrWhiteSpace(request.Reference))
+            return Results.BadRequest(new { message = "Pagador y referencia/comprobante son obligatorios para registrar el pago." });
 
         var payment = new TreasuryPayment
         {
