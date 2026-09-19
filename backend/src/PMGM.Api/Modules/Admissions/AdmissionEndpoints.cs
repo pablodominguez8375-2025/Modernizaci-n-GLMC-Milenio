@@ -351,6 +351,7 @@ public static class AdmissionEndpoints
         var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking()
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
 
@@ -358,49 +359,25 @@ public static class AdmissionEndpoints
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var withdrawalLetter = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.WithdrawalLetter);
-        var initiationEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedInitiation);
-        var wageEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedWageIncrease);
-        var exaltationEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedExaltation);
-        var degreeEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.Degree);
-
-        var signatureDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.WithdrawalLetterHandwrittenSignature);
-        var gmSpecialDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
-
-        var input = new AdmissionEligibilityInput(
-            AdmissionType: admissionCase.AdmissionType,
-            AffiliationMode: admissionCase.AffiliationMode,
-            WithdrawalLetterAttached: withdrawalLetter is not null,
-            WithdrawalLetterHandwrittenSignatureVerified: signatureDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
-            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
-            LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
-            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
-            LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
-            DegreeEvidenceAttached: degreeEvidence is not null,
-            HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
-            GrandMasterSpecialAcceptanceApproved: gmSpecialDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            PreviousRejectionDate: admissionCase.PreviousRejectionDate,
-            NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
-            RejectionCausesRemedied: admissionCase.RejectionCausesRemedied);
-
-        var decision = AdmissionEligibilityPolicy.Evaluate(input);
-
+        var projection = AdmissionCaseEligibilityProjector.Evaluate(admissionCase);
         return Results.Ok(new
         {
             caseId,
             admissionCase.AdmissionType,
             admissionCase.Status,
-            eligibility = decision,
+            eligibility = projection.Decision,
             evidence = new
             {
-                withdrawalLetterId = withdrawalLetter?.Id,
-                legalizedInitiationEvidenceId = initiationEvidence?.Id,
-                legalizedWageIncreaseEvidenceId = wageEvidence?.Id,
-                legalizedExaltationEvidenceId = exaltationEvidence?.Id,
-                degreeEvidenceId = degreeEvidence?.Id,
-                handwrittenSignatureDecisionId = signatureDecision?.Id,
-                grandMasterSpecialAcceptanceDecisionId = gmSpecialDecision?.Id
+                projection.WithdrawalLetterId,
+                projection.Article23ReviewDecisionId,
+                projection.FirstDegreePresentationDecisionId,
+                projection.CommissionAppointmentGroupId,
+                projection.CommissionCompletionDecisionId,
+                projection.ThirdDegreeDecisionId,
+                projection.FirstDegreeBallotDecisionId,
+                projection.GrandMasterPardonDecisionId,
+                projection.GrandMasterRegularityRecognitionDecisionId,
+                projection.GrandMasterSpecialAcceptanceDecisionId
             }
         });
     }
