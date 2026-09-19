@@ -23,7 +23,7 @@ describe('showcase role profiles', () => {
   })
 
   it('exposes each administrative and teaching Taller role in the QA switcher model', () => {
-    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeHospitalaria', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
+    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
       const profile = getDemoProfile(key)
       expect(profile.accessScope).toBe('organization')
       expect(profile.capabilities.canManageLodgeOperations).toBe(true)
@@ -32,6 +32,7 @@ describe('showcase role profiles', () => {
 
   it('separates Hospitalaria management from Venerable inspection and approval', () => {
     const hospitalario = getDemoProfile('lodgeHospitalaria')
+    expect(hospitalario.capabilities.canManageLodgeOperations).toBe(false)
     expect(hospitalario.capabilities.canReadLodgeHospitalaria).toBe(true)
     expect(hospitalario.capabilities.canManageLodgeHospitalaria).toBe(true)
     expect(hospitalario.capabilities.canApproveLodgeExpenses).not.toBe(true)
