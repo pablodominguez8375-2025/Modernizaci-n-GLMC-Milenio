@@ -9,6 +9,8 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.LodgeManagement;
+using PMGM.Api.Modules.SecretariatOperations;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
 
@@ -44,7 +46,7 @@ public static class AdmissionCeremonyEndpoints
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
 
-        if (!access.CanManageOrganization(httpContext.User, admissionCase.OrganizationId))
+        if (!access.CanManageLodgeSecretariat(httpContext.User, admissionCase.OrganizationId))
             return Results.Forbid();
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
             return Results.Conflict(new { message = "El expediente ya se encuentra resuelto." });
@@ -55,7 +57,13 @@ public static class AdmissionCeremonyEndpoints
             .SingleOrDefaultAsync(x => x.AdmissionCaseId == caseId, cancellationToken);
         if (existing is not null)
         {
-            await ReconcileCaseLinkAsync(admissionCase, existing.Id, admissionsDb, cancellationToken);
+            var recordedBySubject = await FindAuditActorAsync(
+                coreDb,
+                "admission.ceremony_request.created",
+                nameof(CeremonyRequest),
+                existing.Id,
+                cancellationToken) ?? GetSubject(httpContext.User);
+            await ReconcileCaseLinkAsync(admissionCase, existing.Id, recordedBySubject, admissionsDb, cancellationToken);
             return Results.Ok(new
             {
                 existing.Id,
@@ -125,7 +133,12 @@ public static class AdmissionCeremonyEndpoints
             });
 
         await coreDb.SaveChangesAsync(cancellationToken);
-        await ReconcileCaseLinkAsync(admissionCase, ceremony.Id, admissionsDb, cancellationToken);
+        await ReconcileCaseLinkAsync(
+            admissionCase,
+            ceremony.Id,
+            GetSubject(httpContext.User),
+            admissionsDb,
+            cancellationToken);
 
         return Results.Created($"/api/ceremonias/solicitudes/{ceremony.Id}", new
         {
@@ -148,32 +161,101 @@ public static class AdmissionCeremonyEndpoints
         PmgmDbContext coreDb,
         AdmissionsDbContext admissionsDb,
         GrandSecretariatDbContext secretariatDb,
+        LodgeManagementDbContext lodgeDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
     {
-        var ceremony = await coreDb.CeremonyRequests
+        var ceremonySnapshot = await coreDb.CeremonyRequests
+            .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
-        if (ceremony is null || ceremony.AdmissionCaseId is null)
+        if (ceremonySnapshot is null || ceremonySnapshot.AdmissionCaseId is null)
             return Results.NotFound(new { message = "La ceremonia de afiliación/incorporación no existe." });
 
-        if (ceremony.CeremonyType is not CeremonyCodes.Type.Affiliation and not CeremonyCodes.Type.Incorporation)
+        if (ceremonySnapshot.CeremonyType is not CeremonyCodes.Type.Affiliation and not CeremonyCodes.Type.Incorporation)
             return Results.BadRequest(new { message = "Esta operación sólo corresponde a Afiliación o Incorporación." });
 
         var admissionCase = await admissionsDb.AdmissionCases
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
             .Include(x => x.CommissionAppointments)
-            .SingleOrDefaultAsync(x => x.Id == ceremony.AdmissionCaseId.Value, cancellationToken);
+            .SingleOrDefaultAsync(x => x.Id == ceremonySnapshot.AdmissionCaseId.Value, cancellationToken);
         if (admissionCase is null)
             return Results.Conflict(new { message = "La ceremonia no tiene un expediente de admisión disponible." });
 
-        if (!access.CanManageOrganization(httpContext.User, admissionCase.OrganizationId))
+        if (!access.CanManageLodgeSecretariat(httpContext.User, admissionCase.OrganizationId))
             return Results.Forbid();
+
+        if (request.CeremonyDate > ChileToday())
+            return Results.BadRequest(new { message = "La fecha de la ceremonia no puede estar en el futuro." });
+
+        var meeting = await lodgeDb.LodgeMeetings.AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.Id == request.MeetingId && x.OrganizationId == admissionCase.OrganizationId,
+                cancellationToken);
+        if (meeting is null)
+            return Results.NotFound(new { message = "La Tenida ceremonial vinculada no existe en el Taller." });
+        if (meeting.Status != LodgeManagementCodes.MeetingStatus.Closed || meeting.ClosedAtUtc is null)
+            return Results.Conflict(new { message = "La Tenida ceremonial debe estar cerrada documentalmente antes de materializar la admisión. El cierre exige Extracto de Acta y Plancha de Autorización." });
+        if (!string.Equals(meeting.CeremonyType, ceremonySnapshot.CeremonyType, StringComparison.Ordinal))
+            return Results.Conflict(new { message = "El tipo de ceremonia de la Tenida no corresponde al expediente de admisión." });
+        if (meeting.MeetingDate != request.CeremonyDate)
+            return Results.BadRequest(new { message = "La fecha informada debe coincidir con la fecha real de la Tenida ceremonial." });
+        if (ceremonySnapshot.ProposedDate is not null && ceremonySnapshot.ProposedDate.Value != meeting.MeetingDate)
+            return Results.Conflict(new { message = "La Tenida no coincide con la fecha autorizada en la solicitud de ceremonia." });
+
+        var record = await coreDb.LodgeSecretariatRecords.AsNoTracking()
+            .SingleOrDefaultAsync(
+                x => x.RecordType == SecretariatOperationsCodes.RecordType.LodgeMeeting &&
+                     x.SourceRecordId == meeting.Id &&
+                     x.OrganizationId == admissionCase.OrganizationId,
+                cancellationToken);
+        if (record?.ExtractDocumentVersionId is null)
+            return Results.Conflict(new { message = "La Tenida ceremonial cerrada debe conservar el Extracto de Acta adjunto." });
+        if (record.CeremonyAuthorizationDocumentId is null)
+            return Results.Conflict(new { message = "La Tenida ceremonial cerrada debe conservar la Plancha de Autorización de Gran Secretaría adjunta." });
+
+        var authorization = await secretariatDb.SecretariatDocuments.AsNoTracking()
+            .Where(x => x.Id == record.CeremonyAuthorizationDocumentId.Value &&
+                        x.OrganizationId == admissionCase.OrganizationId &&
+                        x.RelatedCeremonyRequestId == requestId &&
+                        ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                          x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy) &&
+                        x.Status == GrandSecretariatCodes.DocumentStatus.Issued)
+            .Select(x => new { x.Id, x.DocumentCode })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (authorization is null)
+            return Results.Conflict(new { message = "La Plancha adjunta no es la autorización vigente emitida por Gran Secretaría para esta ceremonia." });
+
+        await using var coreTransaction = await coreDb.Database.BeginTransactionAsync(cancellationToken);
+        var ceremony = await coreDb.CeremonyRequests
+            .FromSqlInterpolated($@"SELECT * FROM core.ceremony_requests WHERE ""Id"" = {requestId} FOR UPDATE")
+            .SingleOrDefaultAsync(cancellationToken);
+        if (ceremony is null || ceremony.AdmissionCaseId != admissionCase.Id)
+            return Results.Conflict(new { message = "La solicitud de ceremonia cambió durante la operación." });
 
         if (ceremony.Status == CeremonyCodes.RequestStatus.Completed)
         {
-            await ReconcileCompletionAsync(admissionCase, ceremony, request, admissionsDb, cancellationToken);
+            await coreTransaction.CommitAsync(cancellationToken);
+            var originalActor = await FindAuditActorAsync(
+                coreDb,
+                "admission.ceremony.completed",
+                nameof(CeremonyRequest),
+                ceremony.Id,
+                cancellationToken) ?? GetSubject(httpContext.User);
+            await ReconcileCompletionAsync(
+                admissionCase,
+                ceremony,
+                request.CeremonyDate,
+                meeting.Id,
+                record.ExtractDocumentVersionId.Value,
+                authorization.Id,
+                originalActor,
+                admissionsDb,
+                cancellationToken);
+
             return Results.Ok(new
             {
                 ceremony.Id,
@@ -181,35 +263,28 @@ public static class AdmissionCeremonyEndpoints
                 ceremony.MemberId,
                 admissionCaseId = admissionCase.Id,
                 admissionStatus = admissionCase.Status,
+                meetingId = meeting.Id,
                 alreadyCompleted = true
             });
         }
 
         if (ceremony.Status != CeremonyCodes.RequestStatus.Authorized)
             return Results.Conflict(new { message = "La ceremonia debe estar institucionalmente autorizada antes de registrar su realización." });
-        if (request.CeremonyDate > ChileToday())
-            return Results.BadRequest(new { message = "La fecha de la ceremonia no puede estar en el futuro." });
-        if (string.IsNullOrWhiteSpace(request.MinuteReference))
-            return Results.BadRequest(new { message = "La referencia del acta/extracto de la ceremonia es obligatoria." });
+
+        admissionsDb.ChangeTracker.Clear();
+        admissionCase = await admissionsDb.AdmissionCases
+            .Include(x => x.Evidence)
+            .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
+            .SingleOrDefaultAsync(x => x.Id == ceremony.AdmissionCaseId.Value, cancellationToken);
+        if (admissionCase is null)
+            return Results.Conflict(new { message = "El expediente de admisión ya no está disponible." });
 
         var projection = AdmissionCaseEligibilityProjector.Evaluate(admissionCase);
         if (!projection.Decision.CanProceed)
             return Results.Conflict(new { message = "El expediente dejó de estar habilitado y no puede materializar la admisión.", eligibility = projection.Decision });
 
-        var authorization = await secretariatDb.SecretariatDocuments.AsNoTracking()
-            .Where(x => x.RelatedCeremonyRequestId == requestId &&
-                        ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
-                          x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
-                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
-                         x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy) &&
-                        x.Status == GrandSecretariatCodes.DocumentStatus.Issued)
-            .OrderByDescending(x => x.IssuedAtUtc)
-            .Select(x => new { x.DocumentCode })
-            .FirstOrDefaultAsync(cancellationToken);
-        if (authorization is null)
-            return Results.Conflict(new { message = "No puede registrarse la admisión sin una Plancha de Autorización vigente emitida por Gran Secretaría." });
-
-        var evidenceReference = $"{authorization.DocumentCode}; {request.MinuteReference.Trim()}; admission:{admissionCase.Id}";
+        var evidenceReference = $"plancha:{authorization.DocumentCode}; authorization:{authorization.Id}; extract:{record.ExtractDocumentVersionId.Value}; meeting:{meeting.Id}; admission:{admissionCase.Id}";
         Guid memberId;
 
         if (admissionCase.AdmissionType == CeremonyCodes.Type.Affiliation)
@@ -287,6 +362,7 @@ public static class AdmissionCeremonyEndpoints
         }
 
         ceremony.Status = CeremonyCodes.RequestStatus.Completed;
+        var actorSubject = GetSubject(httpContext.User);
         audit.Add(
             httpContext,
             "admission.ceremony.completed",
@@ -299,12 +375,25 @@ public static class AdmissionCeremonyEndpoints
                 ceremony.CeremonyType,
                 memberId,
                 request.CeremonyDate,
-                authorization.DocumentCode,
+                meetingId = meeting.Id,
+                authorizationDocumentId = authorization.Id,
+                extractDocumentVersionId = record.ExtractDocumentVersionId.Value,
                 admissionCaseId = admissionCase.Id
             });
 
         await coreDb.SaveChangesAsync(cancellationToken);
-        await ReconcileCompletionAsync(admissionCase, ceremony, request, admissionsDb, cancellationToken);
+        await coreTransaction.CommitAsync(cancellationToken);
+
+        await ReconcileCompletionAsync(
+            admissionCase,
+            ceremony,
+            request.CeremonyDate,
+            meeting.Id,
+            record.ExtractDocumentVersionId.Value,
+            authorization.Id,
+            actorSubject,
+            admissionsDb,
+            cancellationToken);
 
         return Results.Ok(new
         {
@@ -314,7 +403,9 @@ public static class AdmissionCeremonyEndpoints
             admissionCaseId = admissionCase.Id,
             admissionStatus = admissionCase.Status,
             effectiveDate = request.CeremonyDate,
-            authorization.DocumentCode,
+            meetingId = meeting.Id,
+            authorizationDocumentId = authorization.Id,
+            extractDocumentVersionId = record.ExtractDocumentVersionId.Value,
             alreadyCompleted = false
         });
     }
@@ -322,7 +413,11 @@ public static class AdmissionCeremonyEndpoints
     private static async Task ReconcileCompletionAsync(
         AdmissionCase admissionCase,
         CeremonyRequest ceremony,
-        CompleteAdmissionCeremonyRequest request,
+        DateOnly ceremonyDate,
+        Guid meetingId,
+        Guid extractDocumentVersionId,
+        Guid authorizationDocumentId,
+        string recordedBySubject,
         AdmissionsDbContext admissionsDb,
         CancellationToken cancellationToken)
     {
@@ -339,17 +434,20 @@ public static class AdmissionCeremonyEndpoints
                 AdmissionCaseId = admissionCase.Id,
                 DecisionType = AdmissionWorkflowCodes.DecisionType.CeremonyCompleted,
                 Status = CeremonyCodes.ValidationStatus.Approved,
-                AsOfDate = request.CeremonyDate,
+                AsOfDate = ceremonyDate,
                 SourceReference = reference,
-                Notes = Normalize(request.MinuteReference),
+                Notes = "Tenida ceremonial cerrada con Plancha de Gran Secretaría y Extracto de Acta adjuntos.",
                 StructuredDataJson = JsonSerializer.Serialize(new
                 {
                     ceremonyRequestId = ceremony.Id,
                     ceremony.CeremonyType,
                     ceremony.MemberId,
-                    request.CeremonyDate
+                    ceremonyDate,
+                    meetingId,
+                    extractDocumentVersionId,
+                    authorizationDocumentId
                 }),
-                RecordedBySubject = admissionCase.CreatedBySubject
+                RecordedBySubject = recordedBySubject
             });
         }
 
@@ -359,6 +457,7 @@ public static class AdmissionCeremonyEndpoints
     private static async Task ReconcileCaseLinkAsync(
         AdmissionCase admissionCase,
         Guid ceremonyRequestId,
+        string recordedBySubject,
         AdmissionsDbContext admissionsDb,
         CancellationToken cancellationToken)
     {
@@ -379,12 +478,30 @@ public static class AdmissionCeremonyEndpoints
                 AsOfDate = ChileToday(),
                 SourceReference = reference,
                 Notes = "Solicitud de ceremonia creada desde expediente habilitado.",
-                RecordedBySubject = admissionCase.CreatedBySubject
+                RecordedBySubject = recordedBySubject
             });
         }
 
         await admissionsDb.SaveChangesAsync(cancellationToken);
     }
+
+    private static async Task<string?> FindAuditActorAsync(
+        PmgmDbContext coreDb,
+        string action,
+        string entityType,
+        Guid entityId,
+        CancellationToken cancellationToken)
+        => await coreDb.AuditEvents.AsNoTracking()
+            .Where(x => x.Action == action &&
+                        x.EntityType == entityType &&
+                        x.EntityId == entityId.ToString() &&
+                        x.Result == AuditResults.Success)
+            .OrderBy(x => x.OccurredAtUtc)
+            .Select(x => x.ActorSubject)
+            .FirstOrDefaultAsync(cancellationToken);
+
+    private static string GetSubject(ClaimsPrincipal user)
+        => user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
 
     private static string? NormalizeDegree(string? value)
     {
@@ -420,5 +537,5 @@ public static class AdmissionCeremonyEndpoints
 public sealed record CreateAdmissionCeremonyRequest(DateOnly? ProposedDate, string? Notes);
 
 public sealed record CompleteAdmissionCeremonyRequest(
-    DateOnly CeremonyDate,
-    string MinuteReference);
+    Guid MeetingId,
+    DateOnly CeremonyDate);
