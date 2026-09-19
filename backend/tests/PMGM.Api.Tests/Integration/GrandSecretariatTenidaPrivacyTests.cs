@@ -57,7 +57,8 @@ public sealed class GrandSecretariatTenidaPrivacyTests
                 LocationReference = null,
                 Title = "Tenida privacidad CI",
                 Status = LodgeManagementCodes.MeetingStatus.Held,
-                ClosedAtUtc = DateTimeOffset.UtcNow
+                HeldAtUtc = DateTimeOffset.UtcNow,
+                ClosedAtUtc = null
             };
             lodgeDb.LodgeMeetings.Add(meeting);
 
