@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem } from './api/candidateIntakeApi'
+import { type CandidateDraftCreatePayload, type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import './CandidateWorkshopIntakePage.css'
 
@@ -47,6 +47,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [newDraft, setNewDraft] = useState<CandidateDraftCreatePayload>({ firstNames: '', paternalSurname: '', maternalSurname: '', insinuationDate: chileToday(), proposedDate: null })
 
   const selected = useMemo(() => queue.find(item => item.ceremonyRequestId === selectedId) ?? null, [queue, selectedId])
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
@@ -133,6 +135,34 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     }
   }
 
+  async function createNewInsinuado() {
+    if (busy) return
+    if (!newDraft.firstNames.trim() || !newDraft.paternalSurname.trim()) {
+      setError('Nombres y apellido paterno son obligatorios para iniciar el expediente.')
+      return
+    }
+    if (!newDraft.insinuationDate) {
+      setError('Debe registrar la fecha de insinuación.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const created = await api.createDraftRequest({ ...newDraft, firstNames: newDraft.firstNames.trim(), paternalSurname: newDraft.paternalSurname.trim(), maternalSurname: newDraft.maternalSurname?.trim() || null })
+      const queueResult = await api.getWorkshopQueue()
+      setQueue(queueResult.items)
+      setSelectedId(created.ceremonyRequestId)
+      setShowNewForm(false)
+      setNewDraft({ firstNames: '', paternalSurname: '', maternalSurname: '', insinuationDate: chileToday(), proposedDate: null })
+      setMessage('Nuevo insinuado iniciado. Complete la ficha y envíela a revisión de Gran Secretaría.')
+    } catch (reason) {
+      setError(errorMessage(reason, 'No fue posible iniciar el expediente del insinuado.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function save() {
     if (!selected || busy || locked) return
     const presenters = parsePresenters(presentersText)
@@ -205,6 +235,16 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     <section className="workshop-intake-layout">
       <aside className="candidate-product-card workshop-intake-queue">
         <div className="candidate-section-title"><span>▤</span><h2>Solicitudes de iniciación</h2><em>{queue.length}</em></div>
+        <button className="candidate-primary-button workshop-new-candidate-button" type="button" onClick={() => { setShowNewForm(true); setError(null); setMessage(null) }}>+ Nuevo insinuado</button>
+        {showNewForm && <div className="workshop-new-candidate-form">
+          <h3>Iniciar expediente de insinuado</h3>
+          <label><span>Nombres *</span><input value={newDraft.firstNames} onChange={event => setNewDraft({ ...newDraft, firstNames: event.target.value })} /></label>
+          <label><span>Apellido paterno *</span><input value={newDraft.paternalSurname} onChange={event => setNewDraft({ ...newDraft, paternalSurname: event.target.value })} /></label>
+          <label><span>Apellido materno</span><input value={newDraft.maternalSurname ?? ''} onChange={event => setNewDraft({ ...newDraft, maternalSurname: event.target.value })} /></label>
+          <label><span>Fecha de insinuación *</span><input type="date" value={newDraft.insinuationDate} onChange={event => setNewDraft({ ...newDraft, insinuationDate: event.target.value })} /></label>
+          <label><span>Fecha propuesta de ceremonia</span><input type="date" value={newDraft.proposedDate ?? ''} min={newDraft.insinuationDate} onChange={event => setNewDraft({ ...newDraft, proposedDate: event.target.value || null })} /></label>
+          <div className="workshop-new-candidate-actions"><button className="candidate-primary-button" type="button" disabled={busy} onClick={() => void createNewInsinuado()}>{busy ? 'Iniciando…' : 'Iniciar expediente'}</button><button className="candidate-secondary-button" type="button" disabled={busy} onClick={() => setShowNewForm(false)}>Cancelar</button></div>
+        </div>}
         {loading && queue.length === 0 ? <p>Cargando solicitudes…</p> : queue.length === 0 ? <p>No existen solicitudes de iniciación disponibles para este Taller.</p> : <div className="workshop-intake-list">{queue.map(item => <button key={item.ceremonyRequestId} type="button" className={item.ceremonyRequestId === selectedId ? 'active' : ''} onClick={() => setSelectedId(item.ceremonyRequestId)}><strong>{item.displayName || 'Insinuado sin nombre'}</strong><span>{item.workshopName}{item.workshopNumber ? ` · Nº ${item.workshopNumber}` : ''}</span><small>{statusLabel(item.reviewStatus)} · {item.profileAvailable ? 'Ficha registrada' : 'Ficha pendiente'}</small></button>)}</div>}
       </aside>
 
