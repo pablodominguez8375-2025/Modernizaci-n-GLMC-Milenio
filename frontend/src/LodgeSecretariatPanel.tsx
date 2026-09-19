@@ -210,6 +210,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         workPaperAuthorMemberId: kind === 'work_paper' ? workPaperAuthorMemberId : current?.workPaperAuthorMemberId ?? null,
         extractDocumentVersionId: kind === 'extract' ? uploaded.version.id : current?.extractDocumentVersionId ?? null,
         fullMinuteDocumentVersionId: kind === 'full_minute' ? uploaded.version.id : current?.fullMinuteDocumentVersionId ?? null,
+        ceremonyAuthorizationDocumentId: current?.ceremonyAuthorizationDocumentId ?? null,
       }
       await lodgeApi.upsertSecretariatRecord(organizationId, recordType, sourceRecordId, payload)
       await refreshRecords()
@@ -221,9 +222,33 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
     } catch (reason) { setError(toMessage(reason)) } finally { setUploadingKind(null) }
   }
 
+  const linkCeremonyAuthorization = async (authorizationId: string) => {
+    if (!sourceRecordId || !currentSource?.ceremonial) return
+    const current = currentRecord
+    await execute(async () => {
+      await lodgeApi.upsertSecretariatRecord(organizationId, 'tenida', sourceRecordId, {
+        workPaperDocumentVersionId: current?.workPaperDocumentVersionId ?? null,
+        workPaperAuthorMemberId: current?.workPaperAuthorMemberId ?? null,
+        extractDocumentVersionId: current?.extractDocumentVersionId ?? null,
+        fullMinuteDocumentVersionId: current?.fullMinuteDocumentVersionId ?? null,
+        ceremonyAuthorizationDocumentId: authorizationId || null,
+      })
+      await refreshRecords()
+    }, authorizationId ? 'Plancha de Autorización de Gran Secretaría vinculada a la Tenida ceremonial.' : 'Vínculo de Plancha de Autorización retirado.')
+  }
+
+  const closeTenida = async () => {
+    if (!canCloseTenida || !sourceRecordId) return
+    await execute(async () => {
+      await lodgeApi.closeMeeting(sourceRecordId)
+      await refreshRecords()
+      await onMeetingChanged?.(sourceRecordId)
+    }, 'Tenida cerrada documentalmente. Se verificaron los documentos obligatorios.')
+  }
+
   const submitExtract = async () => {
     if (!canSubmitToGrandSecretariat || !sourceRecordId) return
-    await execute(async () => { await lodgeApi.submitTenidaExtract(organizationId, sourceRecordId); await refreshRecords() }, 'Extracto PDF remitido a Gran Secretaría. La plancha y el acta completa permanecen privadas del Taller.')
+    await execute(async () => { await lodgeApi.submitTenidaExtract(organizationId, sourceRecordId); await refreshRecords() }, 'Extracto PDF remitido a Gran Secretaría. La plancha de trabajo y el acta completa permanecen privadas del Taller.')
   }
 
   const execute = async (action: () => Promise<void>, success: string | null) => {
