@@ -189,7 +189,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
         {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
-        {view === 'treasuryStatement' && canTreasuryStatement && <TreasuryStatementPage api={api} canPrepare={canLodgeTreasury || canTreasury} canReview={canTreasury} />}
+        {view === 'treasuryStatement' && canTreasuryStatement && <TreasuryStatementPage api={api} canPrepare={canLodgeTreasury && !canTreasury} canReview={canTreasury} />}
         {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
