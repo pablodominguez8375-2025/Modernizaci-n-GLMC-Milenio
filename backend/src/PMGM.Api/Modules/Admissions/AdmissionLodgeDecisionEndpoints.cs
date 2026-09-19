@@ -116,17 +116,27 @@ public static class AdmissionLodgeDecisionEndpoints
         if (request.AsOfDate < presentation.AsOfDate)
             return Results.BadRequest(new { message = "La votación de 3.er grado no puede ser anterior a la presentación en 1.er grado." });
 
-        if (admissionCase.AdmissionType == CeremonyCodes.Type.Incorporation)
+        if (AdmissionProcedureRules.RequiresInformationCommission(admissionCase.AdmissionType, admissionCase.AffiliationProcedure))
         {
-            var commissionGroup = admissionCase.CommissionAppointments
-                .GroupBy(x => x.AppointmentGroupId)
-                .OrderByDescending(x => x.Max(y => y.RecordedAtUtc))
-                .FirstOrDefault();
-            var commissionCompleted = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionCompleted);
-            if (commissionGroup is null ||
-                commissionGroup.Select(x => x.MemberId).Distinct().Count() != 3 ||
-                commissionCompleted?.Status != CeremonyCodes.ValidationStatus.Approved)
-                return Results.Conflict(new { message = "La Incorporación requiere comisión de tres Maestros y conclusión registrada antes de la decisión de 3.er grado." });
+            var waiver = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionWaiver);
+            var waiverValid = waiver?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                              AdmissionProcedureRules.AllowsInformationCommissionWaiver(admissionCase.AdmissionType, admissionCase.AffiliationProcedure) &&
+                              waiver.AsOfDate <= request.AsOfDate;
+            if (!waiverValid)
+            {
+                var commissionGroup = admissionCase.CommissionAppointments
+                    .GroupBy(x => x.AppointmentGroupId)
+                    .OrderByDescending(x => x.Max(y => y.RecordedAtUtc))
+                    .FirstOrDefault();
+                var commissionCompleted = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionCompleted);
+                if (commissionGroup is null ||
+                    commissionGroup.Select(x => x.MemberId).Distinct().Count() != 3 ||
+                    commissionCompleted?.Status != CeremonyCodes.ValidationStatus.Approved ||
+                    !DecisionReferencesAppointmentGroup(commissionCompleted, commissionGroup.Key) ||
+                    commissionCompleted.AsOfDate < commissionGroup.Max(x => x.AppointmentDate) ||
+                    commissionCompleted.AsOfDate > request.AsOfDate)
+                    return Results.Conflict(new { message = "El art. 2.5 exige que la comisión vigente de tres Maestros esté concluida antes de la decisión de 3.er grado; sólo el traslado puede omitirla mediante dispensa registrada de Cámara del Medio." });
+            }
         }
 
         var result = AdmissionEligibilityPolicy.EvaluateThirdDegreeVote(
@@ -294,6 +304,23 @@ public static class AdmissionLodgeDecisionEndpoints
             StructuredDataJson = JsonSerializer.Serialize(structuredData),
             RecordedBySubject = subject
         };
+
+    private static bool DecisionReferencesAppointmentGroup(AdmissionDecision decision, Guid groupId)
+    {
+        if (string.IsNullOrWhiteSpace(decision.StructuredDataJson)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(decision.StructuredDataJson);
+            return document.RootElement.TryGetProperty("appointmentGroupId", out var property) &&
+                   property.ValueKind == JsonValueKind.String &&
+                   Guid.TryParse(property.GetString(), out var parsed) &&
+                   parsed == groupId;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static AdmissionDecision? LatestDecision(AdmissionCase admissionCase, string decisionType)
         => admissionCase.Decisions
