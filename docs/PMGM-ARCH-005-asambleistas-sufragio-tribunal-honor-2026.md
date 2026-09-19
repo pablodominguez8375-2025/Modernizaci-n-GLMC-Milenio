@@ -24,7 +24,7 @@ El **Departamento de Régimen Interior** es el órgano encargado de revisar y de
 
 - asistir a una Asamblea General;
 - ejercer derecho a sufragio;
-- figurar en el padrón oficial de asambleístas habilitados.
+- figurar en el Padrón de la Gran Asamblea.
 
 La habilitación deberá calcularse para cada Asamblea y quedar registrada como una decisión trazable.
 
@@ -184,9 +184,9 @@ La asistencia podrá manejarse de forma independiente:
 
 De esta forma, si la normativa permitiera en algún caso asistir sin votar, el sistema podrá representarlo sin cambiar el modelo.
 
-## 10. Padrón de Asamblea
+## 10. Padrón de la Gran Asamblea
 
-Antes de cada Asamblea, Régimen Interior deberá poder generar un padrón con:
+Antes de cada Gran Asamblea, Régimen Interior deberá poder generar el Padrón de la Gran Asamblea con:
 
 - nombre del asambleísta;
 - Taller;
@@ -198,9 +198,9 @@ Antes de cada Asamblea, Régimen Interior deberá poder generar un padrón con:
 - causal de inhabilidad visible solo a perfiles autorizados;
 - fecha y hora del último cálculo.
 
-El padrón deberá poder cerrarse en una fecha de corte y conservarse como **snapshot inmutable**, de modo que posteriormente pueda auditarse quién estaba habilitado para sufragar en esa Asamblea y por qué.
+El Padrón de la Gran Asamblea deberá poder cerrarse en una fecha de corte y conservarse como **snapshot inmutable**, de modo que posteriormente pueda auditarse quién estaba habilitado para sufragar en esa Gran Asamblea y por qué.
 
-El padrón y la asistencia no deben vincularse al sentido del voto. El sufragio es anónimo: Centenario conserva únicamente resultados agregados positivos/negativos o totales por candidatura. No se almacena un voto individual ni se genera una auditoría que permita atribuirlo o inferirlo. Las reglas completas se establecen en `PMGM-ARCH-006`.
+El Padrón de la Gran Asamblea y la asistencia no deben vincularse al sentido del voto. El sufragio es anónimo: Centenario conserva únicamente resultados agregados positivos/negativos o totales por candidatura. No se almacena un voto individual ni se genera una auditoría que permita atribuirlo o inferirlo. Las reglas completas se establecen en `PMGM-ARCH-006`.
 
 ## 11. Seguridad y confidencialidad
 
@@ -215,17 +215,17 @@ Toda consulta, modificación o descarga de antecedentes disciplinarios deberá q
 - **Tribunal de Honor:** entrega restricciones o pérdida de derechos aplicables.
 - **Gestión de Talleres y cargos:** acredita períodos como Venerable Maestro y condición de representante.
 - **Identidad / ficha del Hermano:** conserva historial de grados, cargos, derechos y sanciones.
-- **Asamblea General:** genera padrón, control de asistencia y control de sufragio.
+- **Gran Asamblea:** genera el Padrón de la Gran Asamblea, control de asistencia y control de sufragio.
 
 ## 13. Criterios de aceptación iniciales
 
 1. El sistema identifica automáticamente a quienes cumplen la condición de ex Venerable Maestro o representante.
-2. Régimen Interior puede revisar y validar el padrón antes de una Asamblea.
+2. Régimen Interior puede revisar y validar el Padrón de la Gran Asamblea antes de su realización.
 3. Un Taller moroso bloquea el derecho a sufragio de sus asambleístas conforme a la regla institucional configurada.
 4. Una restricción vigente de Régimen Interior puede bloquear asistencia y/o sufragio según su alcance.
 5. Una sanción vigente del Tribunal de Honor puede bloquear automáticamente los derechos correspondientes sin exponer el expediente disciplinario a usuarios no autorizados.
 6. La expulsión total deja a la persona sin derechos masónicos vigentes, conservando íntegro su historial institucional y disciplinario.
-7. Cada Asamblea conserva un snapshot del padrón y de las causales de habilitación/inhabilitación para auditoría posterior.
+7. Cada Gran Asamblea conserva un snapshot del Padrón de la Gran Asamblea y de las causales de habilitación/inhabilitación para auditoría posterior.
 8. Toda modificación manual de una habilitación exige motivo, usuario responsable, fecha/hora y queda registrada en auditoría.
 
 ## 14. Pendiente normativo para cierre funcional

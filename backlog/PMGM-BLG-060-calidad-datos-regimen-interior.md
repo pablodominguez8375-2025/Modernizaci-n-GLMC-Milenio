@@ -7,7 +7,7 @@
 
 ## Objetivo
 
-Permitir que Régimen Interior detecte automáticamente fechas, secuencias y relaciones históricas que requieren corroboración, sin modificar el padrón ni reescribir la historia institucional de forma automática.
+Permitir que Régimen Interior detecte automáticamente fechas, secuencias y relaciones históricas que requieren corroboración, sin modificar el Cuadro General de la Orden ni reescribir la historia institucional de forma automática.
 
 ## Alcance v0.27
 
@@ -141,4 +141,4 @@ Controles:
 - resolución de observación con auditoría;
 - reglas estatutarias configurables;
 - exportación autorizada del informe de inconsistencias;
-- métricas de calidad de padrón por Taller y por Orden.
+- métricas de calidad del Cuadro del Taller y del Cuadro General de la Orden.
