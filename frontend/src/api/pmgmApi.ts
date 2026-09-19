@@ -14,6 +14,7 @@ export interface SessionCapabilities {
   canManagePrivacy: boolean
   canReadLodgeSecretariat?: boolean
   canManageLodgeSecretariat?: boolean
+  canAppointAdmissionCommission?: boolean
   canManageLodgeTreasury?: boolean
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
