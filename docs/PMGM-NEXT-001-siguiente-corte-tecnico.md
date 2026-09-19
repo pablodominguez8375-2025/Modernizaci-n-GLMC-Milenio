@@ -1,103 +1,79 @@
 # PMGM-NEXT-001 — Siguiente corte técnico
 
-## Hito bloqueante vigente: QA srv01
+## 1. Hito operacional bloqueante vigente: QA srv01
 
-Antes de abrir un nuevo incremento funcional, el Proyecto Centenario debe cerrar el corte operativo vigente en `srv01`.
+Issue #97 continúa abierto. El despliegue físico en `srv01` sigue siendo obligatorio antes de UAT/promoción a `main`.
 
-Orden obligatorio:
+Orden operacional:
 
-1. publicar Demo GitHub Pages del mismo SHA;
-2. publicar instalable QA del mismo SHA;
-3. desplegar el instalable exacto en `srv01`;
-4. validar SHA-256 y `MANIFEST.sha256`;
+1. tomar HEAD vivo de `dev`;
+2. verificar Pages + `qa-current.json` + instalable del mismo SHA;
+3. desplegar ese SHA exacto en `srv01`;
+4. validar SHA-256, `BUILD-INFO.txt` y `MANIFEST.sha256`;
 5. ejecutar smoke autenticado;
-6. probar Consejo de Administración con perfil autorizado;
-7. ejecutar regresión QA-001..QA-023;
-8. corregir defectos P0/P1 detectados;
-9. congelar un nuevo candidato UAT desde el código realmente probado;
-10. ejecutar UAT institucional;
-11. promover a `main` sólo con aprobación expresa.
+6. ejecutar regresión QA completa;
+7. corregir P0/P1;
+8. congelar candidato UAT desde el código realmente probado;
+9. ejecutar UAT institucional;
+10. promover a `main` sólo con aprobación expresa.
 
-La automatización vigente está documentada en:
+La automatización está documentada en `docs/installation/QA-SRV01-AUTODEPLOY.md` y el estado operacional dinámico se mantiene en Issue #97.
 
-`docs/installation/QA-SRV01-AUTODEPLOY.md`
+## 2. Autorización de avance funcional en paralelo
 
-y se traza en Issue #97.
+El Sponsor / Product Owner instruyó el 18-09-2026 continuar desarrollo, pruebas y documentación mientras Issue #97 siga abierto. Esta autorización **no reemplaza QA/UAT** ni permite declarar operacional un SHA no desplegado físicamente.
 
-## Autorización de avance funcional en paralelo — 18-09-2026
+## 3. Funciones ya integradas que no son trabajo futuro
 
-El Sponsor / Product Owner instruyó expresamente continuar desarrollo, pruebas, documentación y siguientes funciones desde el estado vivo de `dev`.
+No deben reabrirse como “siguiente incremento”:
 
-Esta autorización permite trabajar el siguiente incremento funcional en una rama `feature/*` mientras Issue #97 permanece abierto. **No elimina el gate operacional de QA**: no se puede declarar el corte operacional, ejecutar UAT como evidencia del código nuevo ni promover a `main` hasta desplegar en `srv01` el SHA correspondiente y completar smoke/regresión.
+- Secretaría integral: PR #105;
+- flujo reglamentario de insinuaciones: PR #106;
+- continuidad Secretaría: PR #108;
+- regla documental de cierre de Tenidas: PR #109;
+- implementación Programada → Realizada → Cerrada: PR #110;
+- cierre documental/continuidad post-merge: PR #111.
 
-El flujo reglamentario de insinuaciones fue integrado mediante PR #106. El incremento funcional activo de este corte es PR #110, `feat(tenidas): cierre documental regular y ceremonial`, que implementa la regla aprobada de separación Realizada/Cerrada.
+## 4. Incremento funcional activo — PR #112
 
-## Siguiente incremento funcional después de QA
+PR #112: `feat(tesoreria): segregar Cuadro Mensual Taller y Gran Tesorería`.
 
-Una vez cerrado el hito anterior, continuar con el expediente de insinuación y sus transiciones reglamentarias. La fuente de verdad será dominio/backend antes que interfaz.
+Objetivo: completar el Cuadro de Pago oficial 2026 reutilizando el dominio Treasury existente y respetando las responsabilidades del Taller y de Gran Tesorería.
 
-### Primera entrega demostrable
+Criterios del corte:
 
-1. crear expediente;
-2. registrar presentación en 1.er grado;
-3. impedir revisión antes de 7 días;
-4. registrar unanimidad/no unanimidad;
-5. publicar;
-6. calcular 20 días corridos;
-7. registrar entrevistas y antecedentes;
-8. habilitar o bloquear revisión de 3.er grado;
-9. habilitar o bloquear balotaje;
-10. producir historial auditable de estados.
+1. Tesorero del Taller crea el Cuadro sólo para su Taller;
+2. la nómina se deriva del Cuadro/membresías vigentes y conserva grado/cargo al corte;
+3. rebajas/exenciones requieren referencia autorizante;
+4. transferencias/depósitos se registran antes del envío;
+5. Diferencia se calcula automáticamente;
+6. envío bloqueado si Diferencia != 0;
+7. envío bloqueado si hay identidades pendientes;
+8. después del envío no se agregan pagos silenciosamente;
+9. Gran Tesorería lista/revisa Cuadros enviados;
+10. sólo Gran Tesorería concilia institucionalmente;
+11. la conciliación emite la regularidad consumida por Ceremonias;
+12. demo Pages y backend mantienen el mismo contrato;
+13. QA-024 protege el flujo; matriz pasa a 24 controles.
 
-### Segunda entrega
+Fuentes: Constitución/Reglamento art. 12.12, `CUADRO PAGO GRAN TESORERÍA.xlsx`, Matriz Funcional Normativa de Cargos de Taller y Matriz Perfiles/Vistas/Firmas 2026.
 
-Conectar `ballot_approved` con creación de solicitud de iniciación y con PMGM-ARCH-003.
+## 5. Siguiente incremento funcional después de PR #112
 
-### Pruebas mínimas
+Continuar **Hospitalaria del Taller + Gran Hospitalaria**, reutilizando el módulo existente y contrastando antes de programar:
 
-- transición válida;
-- salto de etapa rechazado;
-- plazo insuficiente rechazado;
-- corrección dentro del mismo expediente;
-- reingreso tras rechazo con vínculo histórico.
+- Art. 12.13 del Reglamento;
+- formularios/planillas vigentes de Hospitalaria en Drive;
+- obligaciones/reposiciones que participan en elegibilidad de ceremonias;
+- independencia del Tronco de Beneficencia respecto de Tesorería;
+- aprobación del Venerable Maestro para egresos del Taller;
+- estado mensual/caja y trazabilidad hacia el Consejo de Administración;
+- fuente de verdad de Gran Hospitalaria para regularidad institucional.
 
-No usar la RC1 histórica como evidencia de aceptación del código actual.
+No crear un segundo módulo de Hospitalaria ni mezclar sus fondos con Tesorería.
 
-## Ajuste funcional prioritario — cierre documental de Tenidas
+## 6. QA vigente del corte
 
-La regla aprobada por el Sponsor / Product Owner quedó integrada mediante PR #110 y sus gates exact-head finalizaron correctamente:
+En la rama de PR #112 el kit queda en **QA-001..QA-024**. QA-024 valida Cuadro Mensual y segregación Tesorero del Taller / Gran Tesorería.
 
-- separar **Realizada** de **Cerrada**;
-- Tenida regular/no ceremonial: exigir **Extracto de Acta PDF** para cerrar;
-- Tenida ceremonial de Iniciación, Aumento de Salario o Exaltación: exigir **Extracto de Acta PDF + Plancha de Autorización de Ceremonia emitida por Gran Secretaría**;
-- vincular la Plancha de Autorización al expediente de la Tenida correspondiente;
-- bloquear el cierre en backend cuando falte un requisito;
-- mostrar en Secretaría del Taller el estado de cumplimiento documental;
-- mantener Plancha de trabajo del hermano y Acta completa como documentos opcionales que no condicionan el cierre;
-- conservar compatibilidad/migración de registros históricos;
-- actualizar pruebas, Demo GitHub Pages, instalable QA y kit de regresión.
-
-Criterios mínimos de aceptación:
-
-1. una Tenida regular sin Extracto no puede cerrarse;
-2. una Tenida regular con Extracto puede cerrarse aunque no tenga Plancha de trabajo ni Acta completa;
-3. una Tenida ceremonial con sólo Extracto no puede cerrarse;
-4. una Tenida ceremonial con sólo Plancha de Autorización no puede cerrarse;
-5. una Tenida ceremonial sólo puede cerrarse con ambos documentos válidos y vinculados;
-6. la validación se aplica server-side y queda auditada;
-7. la demo y el instalable QA reproducen el mismo comportamiento.
-
-
-## Estado del corte PR #110
-
-- merge funcional: `3833418b8875bd97607557bec07006c924aa56d4`;
-- backend y migración EF Core: integrados;
-- frontend Secretaría y demo Pages: integrados con la misma regla funcional;
-- PMGM CI post-merge: `success`;
-- Showcase/Pages post-merge: `success`, `pages_build_version=3833418b8875bd97607557bec07006c924aa56d4`;
-- QA srv01 Installable: `success`, artifact ID `10573539603`;
-- Pre-UAT Installable: `success`;
-- ZIP QA público: `Proyecto-Centenario-QA-srv01-3833418b8875.zip`, SHA-256 `5d115390bc531cde3c485a2f429f8b099e10d9a487b8086f97315cde66783d50`;
-- QA: QA-022 consolidado + QA-023 agregado; objetivo operacional **23/23**;
-- PR #107: cerrado como supersedido por este corte;
-- pendiente: desplegar el HEAD vivo de `dev` en `srv01`, ejecutar smoke/regresión 23/23 y luego UAT institucional.
+Después de integrar PR #112, Issue #97 y Línea Base Maestra deben actualizarse al nuevo HEAD vivo y al instalable/Pages del mismo SHA.
