@@ -94,7 +94,9 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const currentRecord = records.find(x => x.recordType === recordType && x.sourceRecordId === sourceRecordId) ?? null
   const currentSource = sources.find(x => x.id === sourceRecordId) ?? null
   const planchaAllowed = recordType === 'tenida' && currentSource && !currentSource.ceremonial
-  const matchingAuthorizations = currentSource?.ceremonyType ? ceremonyAuthorizations.filter(x => x.ceremonyType === currentSource.ceremonyType) : []
+  const matchingAuthorizations = currentSource?.ceremonyType
+    ? ceremonyAuthorizations.filter(x => x.ceremonyType === currentSource.ceremonyType && x.proposedDate === currentSource.date)
+    : []
   const extractReady = !!currentRecord?.extractDocumentVersionId
   const authorizationRequired = recordType === 'tenida' && !!currentSource?.ceremonial
   const authorizationReady = !authorizationRequired || !!currentRecord?.ceremonyAuthorizationDocumentId
