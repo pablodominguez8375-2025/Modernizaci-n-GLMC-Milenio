@@ -69,6 +69,31 @@ it('demo reentry requires a three-Master commission before third degree', async 
   expect(final.eligibility.canProceed).toBe(true)
 })
 
+it('demo transfer creation requires a distinct source workshop', async () => {
+  const client = new AdmissionApiClient({ useMocks: true })
+  const person = (await client.searchPeople('23232323-2323-2323-2323-232323232323', 'Traslado')).items[0]
+  expect(person?.memberId).toBeTruthy()
+
+  await expect(client.createCase({
+    organizationId: '23232323-2323-2323-2323-232323232323',
+    admissionType: 'affiliation',
+    affiliationMode: 'simple',
+    affiliationProcedure: 'transfer',
+    memberId: person.memberId,
+    personId: person.personId,
+  })).rejects.toThrow('Taller de origen')
+
+  await expect(client.createCase({
+    organizationId: '23232323-2323-2323-2323-232323232323',
+    admissionType: 'affiliation',
+    affiliationMode: 'simple',
+    affiliationProcedure: 'transfer',
+    memberId: person.memberId,
+    personId: person.personId,
+    originOrganizationId: '23232323-2323-2323-2323-232323232323',
+  })).rejects.toThrow('distinto')
+})
+
 it('demo permits commission waiver only for affiliation with transfer', async () => {
   const client = new AdmissionApiClient({ useMocks: true })
   const rows = (await client.listCases()).items
