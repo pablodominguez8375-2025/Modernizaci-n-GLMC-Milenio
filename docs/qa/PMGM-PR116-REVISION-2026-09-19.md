@@ -46,3 +46,12 @@ La fuente oficial 2026 contempla respaldo de Secretario/a y Venerable Maestro. E
 PR #116 permanece **draft** y fuera de `dev`. Los workflows deben evaluarse siempre sobre el HEAD exacto posterior al último cambio; un verde de un SHA anterior no habilita merge. La publicación de GitHub Pages y el paquete QA instalable no equivalen a despliegue físico.
 
 Antes de promover: exigir PMGM CI + PMGM Showcase Demo + Proyecto Centenario QA srv01 Installable en verde para el HEAD final y registrar ese SHA en este documento/Drive. Por decisión del Product Owner de 19-09-2026, la validación física en `srv01` queda temporalmente diferida y no bloquea el avance inmediato; debe permanecer pendiente y trazable en Issue #97, sin declarar el ambiente operacional. La revisión funcional, de permisos y `UAT-FLUJOS-017` continúan vigentes y esta excepción no constituye por sí sola autorización de merge.
+
+
+## Addendum — alineación con Protocolo de Trámites 2026
+
+Se contrastó el circuito vigente con el documento oficial PROTOCOLO-PARA-LA-TRAMITACIÓN-DE-INSINUACIONES-AFILIACIONES-Y-SOLICITUDES-DE-CEREMONIAS-2026.docx (31-08-2026). Quedan explícitos estos controles: formulario completo y patrocinio; presentación en 1.er grado; espera mínima de 7 días y unanimidad inicial; publicación mínima de 20 días; tres entrevistas más Cuestionario Confidencial y autobiografía; revisión y votación abierta de 3.er grado; balotaje de 1.er grado; antecedentes y vistos buenos institucionales; y Plancha de Gran Secretaría.
+
+La fecha ingresada antes de la autorización se conserva únicamente como fecha referencial solicitada. La reserva o programación de ceremonia está bloqueada hasta la existencia de Plancha de Autorización emitida. La Tenida ceremonial sólo puede cerrarse con Extracto de Acta y Plancha adjuntos; las Tenidas regulares mantienen sólo Extracto de Acta obligatorio.
+
+Implementación de esta regla: HEAD 6a03030a12a67e72e88b986c084502c276b88625, PR #116 draft/no fusionado. Deben regenerarse los tres gates exact-head y publicar el mismo SHA en Pages/QA antes de UAT final.
