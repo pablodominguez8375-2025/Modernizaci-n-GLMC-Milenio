@@ -55,9 +55,15 @@ public static class AdmissionCaseEligibilityProjector
         var commissionCompletionValid = commissionCompletion?.Status == CeremonyCodes.ValidationStatus.Approved &&
                                         latestCommissionGroup is not null &&
                                         DecisionReferencesAppointmentGroup(commissionCompletion, latestCommissionGroup.Key) &&
-                                        commissionCompletion.AsOfDate >= latestCommissionGroup.Max(x => x.AppointmentDate);
+                                        commissionCompletion.AsOfDate >= latestCommissionGroup.Max(x => x.AppointmentDate) &&
+                                        (thirdDegree is null ||
+                                         (commissionCompletion.AsOfDate <= thirdDegree.AsOfDate &&
+                                          commissionCompletion.RecordedAtUtc <= thirdDegree.RecordedAtUtc));
         var commissionWaiverValid = commissionWaiver?.Status == CeremonyCodes.ValidationStatus.Approved &&
-                                    AdmissionProcedureRules.AllowsInformationCommissionWaiver(admissionCase.AdmissionType, admissionCase.AffiliationProcedure);
+                                    AdmissionProcedureRules.AllowsInformationCommissionWaiver(admissionCase.AdmissionType, admissionCase.AffiliationProcedure) &&
+                                    (thirdDegree is null ||
+                                     (commissionWaiver.AsOfDate <= thirdDegree.AsOfDate &&
+                                      commissionWaiver.RecordedAtUtc <= thirdDegree.RecordedAtUtc));
         var thirdDegreeState = presentationValid &&
                                thirdDegree is not null &&
                                thirdDegree.RecordedAtUtc >= presentation!.RecordedAtUtc &&
