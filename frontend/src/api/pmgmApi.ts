@@ -467,7 +467,9 @@ export class PmgmApiClient {
   async addTreasuryStatementPayment(statementId: string, payload: AddTreasuryPaymentRequest): Promise<TreasuryStatement> {
     if (this.useMocks) {
       const statement = this.requireMockTreasuryStatement(statementId)
-      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName ?? null, reference: payload.reference ?? null, recordedAtUtc: new Date().toISOString() })
+      if (statement.status !== 'draft') throw new Error('Los pagos sólo pueden registrarse mientras el Cuadro está en borrador.')
+      if (payload.amount <= 0 || !payload.payerDisplayName?.trim() || !payload.reference?.trim()) throw new Error('Pagador y referencia/comprobante son obligatorios para registrar el pago.')
+      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName.trim(), reference: payload.reference.trim(), recordedAtUtc: new Date().toISOString() })
       recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
     }
     await this.postJson<unknown>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/pagos`, payload)
