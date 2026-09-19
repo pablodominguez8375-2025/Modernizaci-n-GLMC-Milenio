@@ -11,6 +11,7 @@ public sealed record AdmissionCaseEligibilityProjection(
     Guid? FirstDegreePresentationDecisionId,
     Guid? CommissionAppointmentGroupId,
     Guid? CommissionCompletionDecisionId,
+    Guid? CommissionWaiverDecisionId,
     Guid? ThirdDegreeDecisionId,
     Guid? FirstDegreeBallotDecisionId,
     Guid? GrandMasterPardonDecisionId,
@@ -32,6 +33,7 @@ public static class AdmissionCaseEligibilityProjector
         var pardon = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterPardon);
         var presentation = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreePresentation);
         var commissionCompletion = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionCompleted);
+        var commissionWaiver = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionWaiver);
         var thirdDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeThirdDegreeApproval);
         var firstDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreeBallot);
         var regularityRecognition = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterRegularityRecognition);
@@ -52,7 +54,10 @@ public static class AdmissionCaseEligibilityProjector
                                 presentation.RecordedAtUtc >= article23.RecordedAtUtc;
         var commissionCompletionValid = commissionCompletion?.Status == CeremonyCodes.ValidationStatus.Approved &&
                                         latestCommissionGroup is not null &&
-                                        DecisionReferencesAppointmentGroup(commissionCompletion, latestCommissionGroup.Key);
+                                        DecisionReferencesAppointmentGroup(commissionCompletion, latestCommissionGroup.Key) &&
+                                        commissionCompletion.AsOfDate >= latestCommissionGroup.Max(x => x.AppointmentDate);
+        var commissionWaiverValid = commissionWaiver?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                                    AdmissionProcedureRules.AllowsInformationCommissionWaiver(admissionCase.AdmissionType, admissionCase.AffiliationProcedure);
         var thirdDegreeState = presentationValid &&
                                thirdDegree is not null &&
                                thirdDegree.RecordedAtUtc >= presentation!.RecordedAtUtc &&
@@ -69,12 +74,14 @@ public static class AdmissionCaseEligibilityProjector
         var decision = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: admissionCase.AdmissionType,
             AffiliationMode: admissionCase.AffiliationMode,
+            AffiliationProcedure: admissionCase.AffiliationProcedure,
             WithdrawalLetterAttached: withdrawalLetter is not null,
             WithdrawalLetterHandwrittenSignatureVerified: signature?.Status == CeremonyCodes.ValidationStatus.Approved,
             Article23Clear: ToDecisionState(article23),
             GrandMasterPardonApproved: pardonValid,
             FirstDegreePresentationRecorded: presentationValid,
-            InformationCommissionRequired: admissionCase.AdmissionType == CeremonyCodes.Type.Incorporation,
+            InformationCommissionRequired: AdmissionProcedureRules.RequiresInformationCommission(admissionCase.AdmissionType, admissionCase.AffiliationProcedure),
+            InformationCommissionWaived: commissionWaiverValid,
             InformationCommissionAppointed: commissionAppointed,
             InformationCommissionCompleted: commissionCompletionValid,
             LodgeThirdDegreeApproved: thirdDegreeState,
@@ -100,6 +107,7 @@ public static class AdmissionCaseEligibilityProjector
             presentation?.Id,
             latestCommissionGroup?.Key,
             commissionCompletion?.Id,
+            commissionWaiver?.Id,
             thirdDegree?.Id,
             firstDegree?.Id,
             pardon?.Id,
