@@ -338,7 +338,9 @@ export class AdmissionApiClient {
     if (this.useMocks) {
       const entry=[...this.mockProgress.entries()].find(([,p])=>p.ceremonyRequestId===requestId)
       if(!entry) throw new Error('La solicitud de ceremonia no existe.')
-      const progress=entry[1]; if(progress.ceremonyStatus!=='authorized') throw new Error('La ceremonia debe estar autorizada por el flujo institucional.')
+      const progress=entry[1]
+      if(progress.ceremonyStatus==='completed' && progress.materialized) return
+      if(progress.ceremonyStatus!=='authorized') throw new Error('La ceremonia debe estar autorizada por el flujo institucional.')
       if(!payload.meetingId) throw new Error('Debe seleccionar una Tenida ceremonial cerrada.')
       progress.materialized=true; progress.ceremonyStatus='completed'
       const row=this.requireRow(entry[0]); row.admissionCase.status='resolved'
