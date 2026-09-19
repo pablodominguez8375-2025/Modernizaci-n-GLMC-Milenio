@@ -325,9 +325,14 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
           {currentRecord?.workPaperDocumentVersionId && <small>Plancha vinculada al registro.</small>}
         </div>
         <div className="secretariat-document-card">
-          <strong>Extracto</strong><span>PDF · obligatorio para remitir una Tenida a Gran Secretaría.</span>
+          <strong>Extracto</strong><span>PDF · obligatorio para cerrar cualquier Tenida y para remitirla a Gran Secretaría.</span>
           <FileButton disabled={!!uploadingKind} accept=".pdf,application/pdf" label={currentRecord?.extractDocumentVersionId?'Reemplazar extracto PDF':'Cargar extracto PDF'} onFile={file=>void uploadDocument('extract',file)} />
-          {currentRecord?.extractDocumentVersionId && <small>Extracto PDF disponible.</small>}
+          <small>{currentRecord?.extractDocumentVersionId?'✅ Extracto PDF disponible.':'❌ Extracto pendiente.'}</small>
+        </div>
+        <div className="secretariat-document-card">
+          <strong>Plancha de Autorización</strong><span>{currentSource.ceremonial?'Obligatoria para cerrar esta Tenida ceremonial · emitida por Gran Secretaría.':'No corresponde a una Tenida no ceremonial.'}</span>
+          {currentSource.ceremonial && <select aria-label="Plancha de Autorización de Ceremonia" value={currentRecord?.ceremonyAuthorizationDocumentId??''} disabled={working} onChange={e=>void linkCeremonyAuthorization(e.target.value)}><option value="">Seleccione autorización…</option>{matchingAuthorizations.map(item=><option key={item.id} value={item.id}>{item.documentCode} · {ceremonyTypeLabel(item.ceremonyType)}{item.proposedDate?` · ${formatDate(item.proposedDate)}`:''}</option>)}</select>}
+          {currentSource.ceremonial && <small>{currentRecord?.ceremonyAuthorizationDocumentId?'✅ Plancha de Autorización vinculada.':matchingAuthorizations.length?'❌ Falta vincular la Plancha de Autorización.':'❌ Gran Secretaría aún no tiene una Plancha de Autorización compatible disponible.'}</small>}
         </div>
         <div className="secretariat-document-card">
           <strong>Acta completa</strong><span>Opcional · PDF o Word · siempre privada del Taller.</span>
@@ -336,7 +341,12 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         </div>
       </div>}
 
-      {canManage && recordType==='tenida' && currentSource && <div className="lodge-secretariat-submit"><button type="button" className="regularity-primary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button><small>Solo se remiten datos básicos de la Tenida y el extracto PDF.</small></div>}
+      {canManage && recordType==='tenida' && currentSource && <div className="lodge-secretariat-submit">
+        <div><strong>Cierre documental</strong><small>Extracto {extractReady?'✅':'❌'}{currentSource.ceremonial?` · Plancha de Autorización ${authorizationReady?'✅':'❌'}`:' · Tenida no ceremonial'}</small></div>
+        <button type="button" className="regularity-primary" disabled={working||!canCloseTenida||currentSource.status==='closed'} onClick={()=>void closeTenida()}>{currentSource.status==='closed'?'Tenida Cerrada':'Cerrar Tenida'}</button>
+        <button type="button" className="regularity-secondary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button>
+        <small>Gran Secretaría recibe sólo los datos básicos y el Extracto; la Plancha de Autorización queda vinculada al expediente ceremonial del Taller.</small>
+      </div>}
     </article>
   </section>
 }
@@ -348,6 +358,7 @@ function formatDate(value:string){const [y,m,d]=value.split('-');return y&&m&&d?
 function degreeLabel(value:string){return value==='master'?'Maestro':value==='fellowcraft'?'Compañero':'Aprendiz'}
 function intakeStatusLabel(value:string){return value==='draft'?'Borrador':value==='submitted'?'Enviado a RI':value==='observed'?'Observado por RI':value==='approved'?'Validado por RI':'Rechazado'}
 function meetingTypeLabel(value:string){return value==='regular'?'Tenida Regular':value==='solemn'?'Tenida Solemne':value==='instruction'?'Tenida de Instrucción':value==='anniversary'?'Tenida de Aniversario':value==='funeral'?'Tenida Fúnebre':'Tenida Especial'}
+function ceremonyTypeLabel(value:string){return value==='initiation'?'Iniciación':value==='wage_increase'?'Aumento de Salario':value==='exaltation'?'Exaltación':value}
 function toMessage(reason:unknown){return reason instanceof Error?reason.message:'No fue posible completar la operación.'}
 function downloadBlob(blob:Blob,fileName:string){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)}
 function isPdfOrWord(file:File){return file.type==='application/pdf'||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
