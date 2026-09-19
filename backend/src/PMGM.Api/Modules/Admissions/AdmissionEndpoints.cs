@@ -142,7 +142,7 @@ public static class AdmissionEndpoints
             if (!access.CanEvaluateCeremonies(httpContext.User))
                 return Results.Forbid();
         }
-        else if (!access.CanReadOrganization(httpContext.User, organizationId.Value) &&
+        else if (!access.CanReadLodgeSecretariat(httpContext.User, organizationId.Value) &&
                  !access.CanEvaluateCeremonies(httpContext.User))
         {
             return Results.Forbid();
@@ -195,7 +195,7 @@ public static class AdmissionEndpoints
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (entity is null) return Results.NotFound();
 
-        if (!access.CanReadOrganization(httpContext.User, entity.OrganizationId) &&
+        if (!access.CanReadLodgeSecretariat(httpContext.User, entity.OrganizationId) &&
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
@@ -414,7 +414,7 @@ public static class AdmissionEndpoints
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
 
-        if (!access.CanReadOrganization(httpContext.User, admissionCase.OrganizationId) &&
+        if (!access.CanReadLodgeSecretariat(httpContext.User, admissionCase.OrganizationId) &&
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
