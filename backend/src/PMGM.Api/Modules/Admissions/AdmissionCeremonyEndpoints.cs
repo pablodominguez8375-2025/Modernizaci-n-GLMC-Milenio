@@ -180,7 +180,7 @@ public static class AdmissionCeremonyEndpoints
                 ceremony.Status,
                 ceremony.MemberId,
                 admissionCaseId = admissionCase.Id,
-                admissionCase.Status,
+                admissionStatus = admissionCase.Status,
                 alreadyCompleted = true
             });
         }
@@ -227,7 +227,7 @@ public static class AdmissionCeremonyEndpoints
             if (duplicate)
                 return Results.Conflict(new { message = "El hermano ya registra una pertenencia activa al Taller destino." });
 
-            coreDb.Memberships.Add(new Membership
+            coreDb.Memberships.Add(new PMGM.Api.Modules.Membership.Entities.Membership
             {
                 MemberId = memberId,
                 OrganizationId = admissionCase.OrganizationId,
@@ -264,7 +264,7 @@ public static class AdmissionCeremonyEndpoints
                 CurrentDegree = degree
             };
             coreDb.Members.Add(member);
-            coreDb.Memberships.Add(new Membership
+            coreDb.Memberships.Add(new PMGM.Api.Modules.Membership.Entities.Membership
             {
                 Member = member,
                 OrganizationId = admissionCase.OrganizationId,
@@ -312,7 +312,7 @@ public static class AdmissionCeremonyEndpoints
             ceremony.Status,
             memberId,
             admissionCaseId = admissionCase.Id,
-            admissionCase.Status,
+            admissionStatus = admissionCase.Status,
             effectiveDate = request.CeremonyDate,
             authorization.DocumentCode,
             alreadyCompleted = false
