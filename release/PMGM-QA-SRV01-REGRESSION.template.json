@@ -230,6 +230,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-025",
+      "category": "hospitalaria",
+      "title": "Hospitalaria: Tronco independiente, socorros autorizados y rendición agregada a Gran Hospitalaria",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
