@@ -62,3 +62,28 @@ Conectar `ballot_approved` con creación de solicitud de iniciación y con PMGM-
 - reingreso tras rechazo con vínculo histórico.
 
 No usar la RC1 histórica como evidencia de aceptación del código actual.
+
+## Ajuste funcional prioritario aprobado — cierre documental de Tenidas
+
+Antes de considerar cerrado funcionalmente el circuito de Secretaría/Tenidas, implementar la regla aprobada por el Sponsor / Product Owner:
+
+- separar **Realizada** de **Cerrada**;
+- Tenida regular/no ceremonial: exigir **Extracto de Acta PDF** para cerrar;
+- Tenida ceremonial de Iniciación, Aumento de Salario o Exaltación: exigir **Extracto de Acta PDF + Plancha de Autorización de Ceremonia emitida por Gran Secretaría**;
+- vincular la Plancha de Autorización al expediente de la Tenida correspondiente;
+- bloquear el cierre en backend cuando falte un requisito;
+- mostrar en Secretaría del Taller el estado de cumplimiento documental;
+- mantener Plancha de trabajo del hermano y Acta completa como documentos opcionales que no condicionan el cierre;
+- conservar compatibilidad/migración de registros históricos;
+- actualizar pruebas, Demo GitHub Pages, instalable QA y kit de regresión.
+
+Criterios mínimos de aceptación:
+
+1. una Tenida regular sin Extracto no puede cerrarse;
+2. una Tenida regular con Extracto puede cerrarse aunque no tenga Plancha de trabajo ni Acta completa;
+3. una Tenida ceremonial con sólo Extracto no puede cerrarse;
+4. una Tenida ceremonial con sólo Plancha de Autorización no puede cerrarse;
+5. una Tenida ceremonial sólo puede cerrarse con ambos documentos válidos y vinculados;
+6. la validación se aplica server-side y queda auditada;
+7. la demo y el instalable QA reproducen el mismo comportamiento.
+
