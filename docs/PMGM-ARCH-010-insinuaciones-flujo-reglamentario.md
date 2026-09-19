@@ -114,3 +114,18 @@ Después de integrar a `dev`, la triple salida debe regenerarse desde el mismo S
 3. instalable QA srv01.
 
 Luego deberá desplegarse ese SHA en `srv01`, ejecutar smoke y la regresión vigente antes de UAT/promoción a `main`.
+
+
+## 10. Solicitud de ceremonias y Plancha — regla de programación
+
+La implementación se alinea con el **Protocolo para la tramitación de insinuaciones, afiliaciones y solicitudes de ceremonias 2026** (31-08-2026):
+
+- sólo se completa la solicitud formal de ceremonia después de publicación cumplida, entrevistas, revisión/votación abierta de 3.er grado y balotaje favorable de 1.er grado;
+- la solicitud conserva la fecha indicada como **referencial solicitada**, no como fecha programada;
+- se mantiene la revisión de antecedentes y vistos buenos de Régimen Interior, Gran Tesorería, Gran Hospitalidad y Gran Maestría;
+- Gran Secretaría emite la **Plancha de Autorización de Ceremonia** una vez cumplidos los requisitos y el visto bueno superior;
+- ninguna ceremonia puede establecerse, reservarse o programarse antes de que exista esa Plancha emitida y vigente;
+- la reserva vinculada a ceremonia se habilita sólo después de la Plancha. La Plancha puede emitirse dejando constancia de que la sala aún no está asignada;
+- para cerrar la Tenida ceremonial y materializar el expediente son obligatorios el Extracto de Acta y la Plancha adjunta, vinculados a la misma solicitud. En Tenidas regulares sigue siendo obligatorio sólo el Extracto de Acta.
+
+La API real y el adaptador mock aplican el mismo bloqueo; el backend es la autoridad final.
