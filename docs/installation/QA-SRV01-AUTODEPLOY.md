@@ -62,7 +62,7 @@ El script:
 9. instala el nuevo corte;
 10. ejecuta smoke autenticado;
 11. actualiza `/opt/centenario/current`;
-12. prepara la evidencia de regresión de 21 controles.
+12. prepara la evidencia de regresión de 26 controles.
 
 ## Persistencia QA
 
@@ -123,14 +123,14 @@ Después de un deploy exitoso queda preparada:
 /opt/centenario/evidence/PMGM-QA-srv01-<SHA12>.json
 ```
 
-Registrar QA-001..QA-021 y cerrar con:
+Registrar QA-001..QA-026 y cerrar con:
 
 ```bash
 python3 /opt/centenario/current/tests/qa_srv01_regression_gate.py \
   /opt/centenario/evidence/PMGM-QA-srv01-<SHA12>.json
 ```
 
-Se exige 21/21 `pass`.
+Se exige 26/26 `pass`.
 
 ## Seguridad
 
@@ -150,5 +150,5 @@ Un deploy sólo puede registrarse como operacional cuando:
 - manifest interno válido;
 - smoke autenticado = OK;
 - Consejo de Administración accesible con perfil autorizado;
-- regresión QA = 21/21;
+- regresión QA = 26/26;
 - evidencia registrada.
