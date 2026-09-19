@@ -16,6 +16,7 @@ permissions:
 
 # PR validation is isolated by exact head SHA so a stale/cancelled run cannot block
 # evidence for the current PR head. Pushes to dev remain serialized by branch/ref.
+# During authorized UAT, an open PR also deploys the exact candidate SHA to Pages temporarily.
 concurrency:
   group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'pull_request' }}
@@ -270,13 +271,13 @@ jobs:
           PY
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
+        if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
         uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
 
   deploy:
-    if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: Deploy testing showcase
     needs: build
     environment:
