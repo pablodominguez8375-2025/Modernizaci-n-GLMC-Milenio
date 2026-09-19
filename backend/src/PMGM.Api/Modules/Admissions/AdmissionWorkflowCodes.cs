@@ -36,6 +36,7 @@ public static class AdmissionWorkflowCodes
         public const string LodgeFirstDegreeBallot = "lodge_first_degree_ballot";
         public const string GrandMasterSpecialAcceptance = "grand_master_special_acceptance";
         public const string CeremonyRequestCreated = "ceremony_request_created";
+        public const string CeremonyCompleted = "ceremony_completed";
         public const string EvidenceReviewPrefix = "evidence_review:";
 
         public static string EvidenceReview(Guid evidenceId) => $"{EvidenceReviewPrefix}{evidenceId:D}";
