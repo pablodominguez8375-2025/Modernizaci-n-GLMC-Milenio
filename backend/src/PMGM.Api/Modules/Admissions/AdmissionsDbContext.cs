@@ -8,6 +8,7 @@ public sealed class AdmissionsDbContext(DbContextOptions<AdmissionsDbContext> op
     public DbSet<AdmissionCase> AdmissionCases => Set<AdmissionCase>();
     public DbSet<AdmissionEvidence> AdmissionEvidence => Set<AdmissionEvidence>();
     public DbSet<AdmissionDecision> AdmissionDecisions => Set<AdmissionDecision>();
+    public DbSet<AdmissionCommissionAppointment> AdmissionCommissionAppointments => Set<AdmissionCommissionAppointment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -58,6 +59,7 @@ public sealed class AdmissionsDbContext(DbContextOptions<AdmissionsDbContext> op
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.SourceReference).HasMaxLength(500);
             entity.Property(x => x.Notes).HasMaxLength(4000);
+            entity.Property(x => x.StructuredDataJson).HasColumnType("jsonb");
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.RecordedAtUtc).IsRequired();
             entity.HasOne(x => x.AdmissionCase)
@@ -65,6 +67,20 @@ public sealed class AdmissionsDbContext(DbContextOptions<AdmissionsDbContext> op
                 .HasForeignKey(x => x.AdmissionCaseId)
                 .OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.AdmissionCaseId, x.DecisionType, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<AdmissionCommissionAppointment>(entity =>
+        {
+            entity.ToTable("admission_commission_appointments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SourceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.AppointedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.AdmissionCase)
+                .WithMany(x => x.CommissionAppointments)
+                .HasForeignKey(x => x.AdmissionCaseId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => new { x.AdmissionCaseId, x.AppointmentGroupId });
+            entity.HasIndex(x => x.MemberId);
         });
     }
 }
