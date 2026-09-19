@@ -302,7 +302,7 @@ public static class AdmissionCeremonyEndpoints
             if (duplicate)
                 return Results.Conflict(new { message = "El hermano ya registra una pertenencia activa al Taller destino." });
 
-            var targetMembership = new Membership
+            var targetMembership = new PMGM.Api.Modules.Membership.Entities.Membership
             {
                 MemberId = memberId,
                 OrganizationId = admissionCase.OrganizationId,
