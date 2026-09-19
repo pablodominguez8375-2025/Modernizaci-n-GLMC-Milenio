@@ -302,7 +302,7 @@ public static class AdmissionCeremonyEndpoints
             if (duplicate)
                 return Results.Conflict(new { message = "El hermano ya registra una pertenencia activa al Taller destino." });
 
-            coreDb.Memberships.Add(new PMGM.Api.Modules.Membership.Entities.Membership
+            var targetMembership = new Membership
             {
                 MemberId = memberId,
                 OrganizationId = admissionCase.OrganizationId,
@@ -310,18 +310,95 @@ public static class AdmissionCeremonyEndpoints
                 StartDate = request.CeremonyDate,
                 Status = MembershipCodes.MembershipStatus.Active,
                 EvidenceReference = evidenceReference
-            });
-            coreDb.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
+            };
+
+            if (admissionCase.AffiliationProcedure == AdmissionCodes.AffiliationProcedure.Transfer)
             {
-                MemberId = memberId,
-                OrganizationId = admissionCase.OrganizationId,
-                EventType = MembershipCodes.InstitutionalStatus.Active,
-                EffectiveDate = request.CeremonyDate,
-                EvidenceReference = evidenceReference,
-                Reason = admissionCase.AffiliationMode == AdmissionCodes.AffiliationMode.Activation
-                    ? "Activación por ceremonia de Afiliación realizada."
-                    : "Ingreso al Cuadro por ceremonia de Afiliación realizada."
-            });
+                if (admissionCase.OriginOrganizationId is null)
+                    return Results.Conflict(new { message = "La afiliación con traslado no identifica el Taller de origen." });
+                if (admissionCase.OriginOrganizationId.Value == admissionCase.OrganizationId)
+                    return Results.Conflict(new { message = "El Taller de origen y el Taller de destino de un traslado deben ser distintos." });
+
+                var sourceMemberships = await coreDb.Memberships
+                    .Where(x => x.MemberId == memberId &&
+                                x.OrganizationId == admissionCase.OriginOrganizationId.Value &&
+                                x.Status == MembershipCodes.MembershipStatus.Active &&
+                                x.EndDate == null)
+                    .ToListAsync(cancellationToken);
+                if (sourceMemberships.Count != 1)
+                    return Results.Conflict(new { message = "El traslado requiere exactamente una pertenencia activa en el Taller de origen indicado." });
+
+                var sourceMembership = sourceMemberships[0];
+                if (sourceMembership.StartDate is not null && request.CeremonyDate <= sourceMembership.StartDate.Value)
+                    return Results.BadRequest(new { message = "La fecha efectiva del traslado debe ser posterior al inicio de la pertenencia de origen." });
+
+                sourceMembership.EndDate = request.CeremonyDate.AddDays(-1);
+                sourceMembership.Status = MembershipCodes.MembershipStatus.Transferred;
+                sourceMembership.EndReason = "Afiliación con traslado a otro Taller";
+
+                var transfer = new MemberTransfer
+                {
+                    MemberId = memberId,
+                    SourceMembershipId = sourceMembership.Id,
+                    SourceOrganizationId = sourceMembership.OrganizationId,
+                    TargetOrganizationId = admissionCase.OrganizationId,
+                    TargetMembership = targetMembership,
+                    RequestedDate = request.CeremonyDate,
+                    ProposedEffectiveDate = request.CeremonyDate,
+                    ApprovedEffectiveDate = request.CeremonyDate,
+                    Status = MembershipCodes.TransferStatus.Executed,
+                    Reason = "Afiliación con traslado aprobada por el procedimiento institucional.",
+                    Resolution = "Ejecutada al materializar la ceremonia de Afiliación.",
+                    EvidenceReference = evidenceReference,
+                    ExecutedAtUtc = DateTimeOffset.UtcNow
+                };
+
+                coreDb.MemberTransfers.Add(transfer);
+                coreDb.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
+                {
+                    MemberId = memberId,
+                    OrganizationId = admissionCase.OrganizationId,
+                    EventType = MembershipCodes.InstitutionalStatus.WorkshopTransfer,
+                    EffectiveDate = request.CeremonyDate,
+                    EvidenceReference = evidenceReference,
+                    Reason = transfer.Resolution,
+                    Notes = $"Transferencia desde {sourceMembership.OrganizationId} hacia {admissionCase.OrganizationId}."
+                });
+
+                audit.Add(
+                    httpContext,
+                    "membership.transfer.executed",
+                    nameof(MemberTransfer),
+                    transfer.Id.ToString(),
+                    sourceMembership.OrganizationId,
+                    AuditResults.Success,
+                    new
+                    {
+                        transfer.MemberId,
+                        transfer.SourceOrganizationId,
+                        transfer.TargetOrganizationId,
+                        effectiveDate = request.CeremonyDate,
+                        sourceMembershipId = sourceMembership.Id,
+                        targetMembershipId = targetMembership.Id,
+                        admissionCaseId = admissionCase.Id
+                    });
+            }
+            else
+            {
+                coreDb.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
+                {
+                    MemberId = memberId,
+                    OrganizationId = admissionCase.OrganizationId,
+                    EventType = MembershipCodes.InstitutionalStatus.Active,
+                    EffectiveDate = request.CeremonyDate,
+                    EvidenceReference = evidenceReference,
+                    Reason = admissionCase.AffiliationMode == AdmissionCodes.AffiliationMode.Activation
+                        ? "Activación por ceremonia de Afiliación realizada."
+                        : "Ingreso al Cuadro por ceremonia de Afiliación realizada."
+                });
+            }
+
+            coreDb.Memberships.Add(targetMembership);
             ceremony.MemberId = memberId;
         }
         else
