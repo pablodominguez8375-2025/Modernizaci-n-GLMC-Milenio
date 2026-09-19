@@ -281,7 +281,7 @@ jobs:
     name: Deploy testing showcase
     needs: build
     environment:
-      name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && 'github-pages-merged' || 'github-pages' }}
+      name: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && 'github-pages-preview' || github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && 'github-pages-merged' || 'github-pages' }}
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
