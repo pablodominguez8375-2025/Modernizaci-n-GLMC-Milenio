@@ -1,0 +1,48 @@
+# PMGM — Revisión de continuidad del PR #116 (Afiliación / Incorporación 2026)
+
+**Corte:** 19-09-2026.  
+**Base activa `dev`:** `40a0fbfba30b7efd2399ab5cb6e8f8017ae90d9e`.  
+**`main` estable:** `6dfb9546a4873baff15955cf86abfd7d47e3d111`.  
+**Rama:** `feature/admissions-2026-completion`. **PR #116:** draft, no fusionado. **Issue:** #66. **QA física:** #97.  
+**Estado de este documento:** registro de avance; no equivale a autorización de merge ni a despliegue físico en `srv01`.
+
+## Fuentes consultadas
+GitHub: `START-HERE.md`, `AGENTS.md`, Estado Maestro, NEXT, ADR/arquitectura, PR #116, Issues #66/#97 y modelo de transferencias `PMGM-REQ-023` / `PMGM-DB-002`. Drive Proyecto Centenario: Línea Base Maestra, Constitución y Reglamento General (arts. 2.1–2.6), Protocolo de Trámites 31-08-2026 y Formulario de Solicitud de Ceremonias 2026.
+
+## Cierre de hallazgos de revisión
+
+1. **Comisión art. 2.5 — implementado en rama.** Se separó `standard | reentry | transfer` de `simple | activation`. Reintegro e Incorporación requieren comisión de tres Maestros; traslado sólo puede omitirla mediante dispensa expresa de Cámara del Medio. El Venerable nombra la comisión.
+2. **Consistencia temporal de comisión — implementado y probado.** Conclusión vinculada al último `appointmentGroupId`, posterior al nombramiento y anterior a la decisión de 3.er grado. Una conclusión o dispensa registrada después del 3.er grado no sanea retroactivamente el expediente.
+3. **Cierre ceremonial documental — implementado.** Materialización exige Tenida cerrada del mismo Taller/tipo/fecha, Extracto adjunto y Plancha de Gran Secretaría emitida y vinculada a la misma solicitud. Se reutiliza el cierre de Secretaría/Tenidas.
+4. **Consistencia/idempotencia — implementado como consistencia recuperable.** Miembro/pertenencias/traslado/ceremonia se confirman en transacción institucional; la reconciliación del expediente es idempotente y recuperable por reintento. No se afirma transacción distribuida atómica entre `PmgmDbContext` y `AdmissionsDbContext`.
+5. **Actor y permisos — implementado.** La decisión final conserva al actor real; en reintentos recupera actor desde auditoría. Backend y UI segregan Régimen Interior, Secretaría y Venerable. Se eliminó dependencia de `CanManageOrganization` en actuaciones de Admisiones donde era demasiado amplia.
+6. **Calendario/estado — implementado.** La fecha efectiva debe coincidir con la Tenida cerrada y, cuando existe, con la fecha propuesta/autorizada. No se materializa desde una ceremonia no autorizada ni una Tenida sin cierre documental.
+7. **Frontend/demo — implementado en la misma aplicación React.** Existe módulo Afiliaciones e incorporaciones, cliente API real/mock, cola de expedientes, selector minimizado de personas, flujo de comisión, votaciones agregadas, ceremonia y materialización; Showcase captura la nueva vista.
+8. **QA automatizada — implementada en rama.** `QA-026` se añadió al kit/regression gate; UAT-017 documenta el flujo. Existen pruebas unitarias de política/proyector, pruebas frontend/mock y prueba PostgreSQL de materialización de traslado e idempotencia.
+
+## Regla específica de traslado
+Una Afiliación con traslado debe identificar `OriginOrganizationId` y no permite origen=destino. La materialización cierra la pertenencia activa de origen, conserva su historia, crea una nueva pertenencia en destino para el mismo `MemberId`, registra `MemberTransfer` ejecutado y el hito `workshop_transfer`. La operación no duplica al hermano.
+
+## Privacidad de votaciones
+La decisión de 3.er grado y el balotaje se almacenan como totales agregados. No se guarda identidad/preferencia individual, asociación votante-voto ni secuencia correlacionable.
+
+## Respaldo del Formulario de Ceremonia
+La fuente oficial 2026 contempla respaldo de Secretario/a y Venerable Maestro. El PR no inventa una cofirma digital nueva; esa eventual digitalización queda como decisión funcional separada. La Plancha institucional de Gran Secretaría y el cierre documental de Tenida sí son obligatorios en el flujo implementado.
+
+## QA-026 — criterios
+- distinguir modalidad `simple/activation` de procedimiento `standard/reentry/transfer`;
+- carta de retiro + verificación humana de firma manuscrita;
+- art. 2.3 e indulto cuando corresponda;
+- comisión art. 2.5 y dispensa sólo para traslado;
+- conclusión/dispensa anteriores al 3.er grado y vinculadas al último nombramiento;
+- decisión de 3.er grado por totales agregados y balotaje posterior en 1.er grado;
+- regularidad/Pacto/Gran Maestría en Incorporación;
+- Plancha + Extracto + Tenida cerrada antes de materializar;
+- traslado: misma identidad, cierre origen, alta destino, historial preservado;
+- reintento sin duplicar pertenencia/`MemberTransfer`;
+- permisos por rol, auditoría y demo sin PII real.
+
+## Estado operativo y handoff
+PR #116 permanece **draft** y fuera de `dev`. Los workflows deben evaluarse siempre sobre el HEAD exacto posterior al último cambio; un verde de un SHA anterior no habilita merge. La publicación de GitHub Pages y el paquete QA instalable no equivalen a despliegue físico.
+
+Antes de promover: exigir PMGM CI + PMGM Showcase Demo + Proyecto Centenario QA srv01 Installable en verde para el HEAD final, registrar ese SHA en este documento/Drive, y luego ejecutar despliegue físico `srv01` + regresión `QA-001..QA-026`/UAT según Issue #97.

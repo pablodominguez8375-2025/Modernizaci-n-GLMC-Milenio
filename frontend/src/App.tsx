@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import AdmissionsPage from './AdmissionsPage'
 import BootstrapPage from './BootstrapPage'
 import CalendarPage from './CalendarPage'
 import CandidateProfilePage from './CandidateProfilePage'
@@ -27,6 +28,7 @@ import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
 import TreasuryStatementPage from './TreasuryStatementPage'
 import SystemConfigurationPage from './SystemConfigurationPage'
+import { type AdmissionApiClient } from './api/admissionApi'
 import { type BootstrapApiClient } from './api/bootstrapApi'
 import { type CalendarApiClient } from './api/calendarApi'
 import { type CandidateIntakeApiClient } from './api/candidateIntakeApi'
@@ -42,11 +44,12 @@ import { type CandidatePublication, type CandidatePortalResponse, type PmgmApiCl
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
-type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
+type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'admissions' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
+  admissionApi: AdmissionApiClient
   bootstrapApi: BootstrapApiClient
   lodgeApi: LodgeApiClient
   membershipApi: MembershipApiClient
@@ -62,7 +65,7 @@ interface AppProps {
   onLogout?: () => void
 }
 
-export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, candidateIntakeApi, onLogout }: AppProps) {
+export default function App({ api, admissionApi, bootstrapApi, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, candidateIntakeApi, onLogout }: AppProps) {
   const [view, setView] = useState<View>('memberPortal')
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
@@ -108,7 +111,10 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
   const canReadLodgeSecretariat = capabilities?.canReadLodgeSecretariat ?? false
   const canManageLodgeSecretariat = capabilities?.canManageLodgeSecretariat ?? false
+  const canAppointAdmissionCommission = capabilities?.canAppointAdmissionCommission ?? false
+  const canValidateAdmissionInternalAffairs = capabilities?.canValidateCeremonyInternalAffairs ?? false
   const canCandidateProfile = canSecretariat || canLodge
+  const canAdmissions = canCeremonies || canReadLodgeSecretariat
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
   const canDocuments = capabilities?.canManageDocuments ?? false
   const canGrandArchive = capabilities?.canManageGrandArchive ?? false
@@ -147,6 +153,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('candidates')}><NavIcon name="candidate" /> Insinuados publicados</button>
         <ModuleAccess icon="candidate" label={canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados'} allowed={canCandidateProfile} active={view === 'candidateProfile'} onOpen={canCandidateProfile ? () => setView('candidateProfile') : undefined} />
         <ModuleAccess icon="ceremony" label="Circuito de Iniciación" allowed={canCandidateProfile || canCeremonies} active={view === 'initiationCircuit'} onOpen={canCandidateProfile || canCeremonies ? () => setView('initiationCircuit') : undefined} />
+        <ModuleAccess icon="ceremony" label="Afiliaciones e incorporaciones" allowed={canAdmissions} active={view === 'admissions'} onOpen={canAdmissions ? () => setView('admissions') : undefined} />
         {hasInstitutionalManagement && <>
           <div className="nav-section">Gestión institucional</div>
           <ModuleAccess icon="members" label="Fichas de miembros" allowed={canMembers} active={view === 'members'} onOpen={canMembers ? () => setView('members') : undefined} />
@@ -184,6 +191,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
+        {view === 'admissions' && canAdmissions && <AdmissionsPage api={admissionApi} pmgmApi={api} lodgeApi={lodgeApi} canManageSecretariat={canManageLodgeSecretariat} canAppointCommission={canAppointAdmissionCommission} canValidateInternalAffairs={canValidateAdmissionInternalAffairs} />}
         {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}

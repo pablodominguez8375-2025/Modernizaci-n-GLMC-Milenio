@@ -41,7 +41,9 @@ public static class LodgeManagementEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageOrganization(httpContext.User, organizationId)) return Results.Forbid();
+        if (!access.CanManageOrganization(httpContext.User, organizationId) &&
+            !access.CanAppointAdmissionCommission(httpContext.User, organizationId))
+            return Results.Forbid();
 
         var items = await institutionalDb.Memberships
             .AsNoTracking()

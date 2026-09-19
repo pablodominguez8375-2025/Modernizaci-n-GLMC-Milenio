@@ -239,6 +239,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-026",
+      "category": "admissions",
+      "title": "Afiliación/Incorporación: art. 2.5, cierre documental e idempotencia",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {

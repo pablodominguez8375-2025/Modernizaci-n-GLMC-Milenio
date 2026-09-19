@@ -1,143 +1,108 @@
 # PMGM-ARCH-004 — Afiliación e incorporación 2026
 
 ## Objetivo
-Separar correctamente los expedientes de **Afiliación** e **Incorporación** del flujo de aumento de salario/exaltación y del flujo de insinuación, respetando el Protocolo de trámites ante la Gran Secretaría y el Formulario de Solicitud de Ceremonias 2026.
+Separar los expedientes de **Afiliación** e **Incorporación** del flujo de insinuación y de aumento de salario/exaltación, aplicando el Reglamento General (arts. 2.1–2.6), el Protocolo de Trámites 2026 y el Formulario de Solicitud de Ceremonias 2026.
 
 ## Regla de arquitectura
-El sistema no debe asumir que toda ceremonia distinta de iniciación corresponde a una persona con pertenencia vigente al Taller solicitante. Esa regla sirve para aumento de salario y exaltación, pero no para afiliación ni para incorporación desde otra Obediencia.
+`AdmissionCase` contiene el procedimiento, antecedentes y decisiones. `CeremonyRequest` representa la ceremonia institucional posterior. Nunca se crea una pertenencia activa en el Taller destino antes de que el expediente esté habilitado, la ceremonia esté autorizada y la Tenida ceremonial correspondiente haya sido cerrada documentalmente.
 
-## Afiliación
-El sistema debe admitir al menos dos modalidades:
+## Clasificación de Afiliación
+La modalidad y el procedimiento son dimensiones distintas y no deben inferirse entre sí.
 
-- **simple**;
-- **con activación**.
+**Modalidad `AffiliationMode`:**
+- `simple`: hermano activo de la Obediencia;
+- `activation`: hermano en sueño que debe activarse.
 
-El expediente debe registrar como mínimo:
+**Procedimiento `AffiliationProcedure`:**
+- `standard`: afiliación que no corresponde a reintegro ni traslado;
+- `reentry`: reintegro;
+- `transfer`: cambio desde un Taller de origen hacia un Taller destino.
 
-- persona/hermano que solicita la afiliación;
-- Taller solicitante (destino);
-- Taller de origen y número;
-- grado;
-- fechas, logias y Obediencias de iniciación, aumento de salario y exaltación según corresponda;
-- fecha, tipo y motivo del retiro;
-- modalidad de afiliación;
-- si corresponde a primera o nueva presentación;
-- fecha de rechazo anterior cuando exista;
-- constancia de subsanación de las causas del rechazo cuando corresponda;
-- aprobación de tercer grado y su acta;
-- balotaje de primer grado y su acta;
-- documentos y comprobantes exigidos para solicitudes de ceremonia.
+La Incorporación desde otra Obediencia se identifica mediante `AdmissionType = incorporation`; no se disfraza como modalidad o procedimiento de Afiliación.
 
-### Carta de Retiro Voluntario
-La solicitud de afiliación debe incluir copia de la Carta de Retiro Voluntario del Taller de origen. El expediente debe registrar una verificación de que el original se encuentra firmado de puño y letra por quienes corresponda. El protocolo no acepta firmas digitalizadas ni imágenes de firmas insertadas electrónicamente.
+## Controles reglamentarios
+El flujo debe conservar como decisiones/evidencias trazables:
 
-No se implementará una validación automática de autenticidad manuscrita. Milenio almacenará el documento y la **declaración de verificación humana** realizada por el rol autorizado, conservando fecha, actor y evidencia documental.
+- revisión del art. 2.3 por Régimen Interior y, si corresponde, indulto de Gran Maestría;
+- presentación escrita y lectura en Cámara de Primer Grado;
+- comisión de información del art. 2.5 cuando corresponda;
+- decisión de tramitación en Cámara del Medio por al menos dos tercios de los Maestros presentes;
+- balotaje secreto posterior en Cámara de Primer Grado, guardando sólo recuentos agregados;
+- nueva presentación y subsanación cuando exista rechazo previo;
+- reconocimiento de regularidad y aceptación especial de Gran Maestría cuando corresponda a Incorporación.
+
+### Comisión del art. 2.5
+El Venerable Maestro nombra una comisión de **tres Maestros** para reintegro e Incorporación. En Afiliación con traslado la comisión también se considera requerida, pero la Cámara del Medio puede dispensarla expresamente. Esa dispensa sólo es válida para `transfer` y debe registrar fecha, acta/fuente y actor.
+
+Una conclusión de comisión debe corresponder al **último grupo nombrado** y no puede anteceder al nombramiento ni registrarse después de la decisión de 3.er grado que pretende habilitar. Una dispensa posterior a la decisión de 3.er grado tampoco sanea retroactivamente el expediente.
+
+## Carta de Retiro Voluntario
+La Carta de Retiro Voluntario debe estar vinculada como documento trazable. El sistema registra una **verificación humana** de la firma original de puño y letra; no intenta autenticar automáticamente una firma ni considera suficiente una imagen o firma digitalizada cuando la fuente institucional exige original manuscrito.
 
 ## Incorporación desde otra Obediencia
-La incorporación debe utilizar un expediente propio, porque la persona puede no existir todavía como miembro institucional de la GLMCh.
+La persona puede no existir como Miembro GLMCh. Antes de materializar debe constar, según corresponda:
 
-El expediente debe registrar:
+- Obediencia y Logia de origen;
+- grado y antecedentes legalizados de iniciación/aumento/exaltación;
+- Carta de Retiro y verificación manuscrita;
+- reconocimiento de regularidad cuando la Obediencia no sea reconocida;
+- existencia o no de Pacto de Paz y Amistad;
+- aceptación especial de Gran Maestría cuando no exista Pacto;
+- decisiones y antecedentes exigidos por el procedimiento y por la matriz de ceremonia.
 
-- persona solicitante;
-- Obediencia de origen;
-- Taller de origen y número;
-- grado masónico;
-- fecha, logia y Obediencia de iniciación;
-- fecha, logia y Obediencia del aumento de salario, cuando corresponda;
-- fecha, logia y Obediencia de la exaltación, cuando corresponda;
-- tipo, fecha y motivo del retiro;
-- Carta de Retiro Voluntario y su verificación de firma manuscrita;
-- documentos legalizados por la Obediencia de procedencia;
-- autorización de Gran Maestría para asistir a tenidas, cuando corresponda;
-- logias de la GLMCh visitadas y total de asistencias cuando esos antecedentes sean utilizados;
-- existencia o no de Pacto de Paz y Amistad entre la Obediencia de origen y la GLMCh;
-- aprobación específica de Gran Maestría cuando no exista Pacto de Paz y Amistad;
-- vistos buenos de Régimen Interior, Gran Tesorería, Gran Hospitalidad y Gran Maestría;
-- antecedentes generales exigidos para la Solicitud de Ceremonias.
+La creación de `Member` y de la pertenencia GLMCh ocurre sólo en la materialización final.
 
-### Regla por Pacto de Paz y Amistad
-Cuando la Obediencia de origen **no mantenga Pacto de Paz y Amistad con la GLMCh**, la aceptación de la incorporación es facultad de quien ejerza la Gran Maestría. El sistema deberá bloquear el avance final mientras no exista una resolución registrada de Gran Maestría.
+## Afiliación con traslado y continuidad histórica
+`transfer` exige `OriginOrganizationId` explícito, distinto del Taller destino, y una pertenencia activa del mismo `MemberId` en el Taller de origen.
 
-## Documentos comunes de solicitud de ceremonia
-Según el protocolo, la tramitación puede requerir, según corresponda:
+Al materializar la ceremonia el sistema reutiliza la semántica institucional de `MemberTransfer`:
 
-- Cuadro del Taller del último pago a Gran Tesorería;
-- comprobante de pago de cuota mensual vigente;
-- pago del derecho de ceremonia;
-- incorporación al Fondo de Defunción en los casos aplicables;
-- reposiciones del Fondo de Defunción;
-- cuota de Hospitalidad para logias de Santiago;
-- certificado de antecedentes para fines especiales y documento de identidad para personas chilenas;
-- cumplimiento del Decreto n.º 1719 de 29 de abril de 2025 para personas extranjeras.
+1. bloquea la solicitud de ceremonia dentro de la transacción principal;
+2. cierra la pertenencia de origen con fecha de término igual al día anterior a la fecha efectiva;
+3. conserva intactos los registros históricos del Taller de origen;
+4. crea la nueva pertenencia en el Taller destino para el **mismo `MemberId`**;
+5. crea `MemberTransfer` ejecutado y el hito `workshop_transfer`;
+6. audita actor, origen, destino y referencias documentales.
 
-La arquitectura debe representar estos antecedentes como **requisitos documentales configurables**, no como columnas rígidas en la entidad principal.
+No se crea un segundo Miembro por traslado y no se sobrescribe la pertenencia histórica.
 
-## Nueva presentación después de rechazo
-El protocolo extiende a iniciación y afiliación la regla de nueva presentación: al menos un año desde el rechazo y constancia de subsanación de las causas. Esta regla reutilizará `CandidateIntakeWorkflowPolicy.EvaluateRePresentation` o una política común equivalente, evitando duplicar lógica.
+## Cierre documental de la Tenida ceremonial
+Afiliación e Incorporación usan el mismo flujo de Secretaría/Tenidas ya existente; no existe un cierre paralelo.
 
-## Modelo propuesto
+Para materializar se requiere:
 
-### AdmissionCase
-Expediente de ingreso/afiliación separado de `CeremonyRequest`.
+- `CeremonyRequest` autorizada;
+- Tenida del mismo Taller, mismo tipo de ceremonia y fecha efectiva;
+- Tenida en estado `closed`;
+- `LodgeSecretariatRecord` con **Extracto de Acta adjunto**;
+- **Plancha de Autorización de Gran Secretaría adjunta**, emitida y vinculada a la misma solicitud de ceremonia.
 
-Campos conceptuales:
+Una Tenida regular conserva su regla vigente: Extracto de Acta obligatorio para cerrar. Una Tenida ceremonial exige Extracto + Plancha.
 
-- `Id`;
-- `OrganizationId` (Taller destino);
-- `AdmissionType`: `affiliation` | `incorporation`;
-- `AffiliationMode`: `simple` | `activation` | `not_applicable`;
-- `MemberId` nullable;
-- `PersonId`;
-- `OriginOrganizationId` nullable;
-- `OriginLodgeName`;
-- `OriginLodgeNumber`;
-- `OriginObedience`;
-- `Degree`;
-- `HasPeaceAndFriendshipPact` nullable;
-- `PreviousRejectionDate` nullable;
-- `RejectionCausesRemedied` nullable;
-- `Status`;
-- `CreatedAtUtc`.
+## Actor, permisos y privacidad
+Las actuaciones se segregan por atribución:
 
-### AdmissionEvidence
-Antecedentes y documentos asociados al expediente:
+- Régimen Interior: control del art. 2.3;
+- Secretaría del Taller: creación/gestión del expediente, presentación, registro agregado de decisiones/votaciones, solicitud de ceremonia y materialización documental;
+- Venerable Maestro: nombramiento de la comisión de tres Maestros; puede registrar las actuaciones de comisión autorizadas por el flujo;
+- Gran Maestría, Gran Secretaría y otros órganos: mantienen sus permisos institucionales ya definidos para decisiones, autorización y plancha.
 
-- tipo de antecedente;
-- documento/version documental;
-- fecha del antecedente;
-- referencia a acta o plancha;
-- estado de revisión;
-- actor que revisó;
-- fecha de revisión;
-- observaciones.
+El frontend expone las acciones según capacidad, pero el backend sigue siendo la autoridad final.
 
-### AdmissionDecision
-Decisiones append-only:
+El balotaje nunca almacena identidad del votante, preferencia individual ni una secuencia correlacionable; sólo totales agregados.
 
-- deliberación/aprobación del Taller;
-- revisión de Régimen Interior;
-- Gran Tesorería;
-- Gran Hospitalidad;
-- Gran Maestría;
-- aprobación especial por ausencia de Pacto de Paz y Amistad;
-- resolución final.
+## Consistencia e idempotencia
+Miembro/pertenencias/`MemberTransfer`/`CeremonyRequest` se actualizan dentro de la transacción principal del contexto institucional. La reconciliación de `AdmissionCase` vive en su contexto de admisiones y es **recuperable e idempotente**: un reintento sobre una ceremonia ya completada no crea otra pertenencia ni otro traspaso y repone, si fuera necesario, la decisión `ceremony_completed` conservando el actor original desde auditoría.
 
-## Integración con CeremonyRequest
-`CeremonyRequest` seguirá representando la **ceremonia a autorizar**. El expediente `AdmissionCase` contendrá el procedimiento y sus antecedentes. Cuando el expediente quede habilitado, la solicitud de ceremonia se vinculará al `AdmissionCase` en vez de forzar al sistema a fingir una pertenencia vigente al Taller destino.
+Esto es un mecanismo de consistencia recuperable entre contextos, no una afirmación de transacción distribuida atómica.
 
-## Reglas de no sustitución
+## Respaldo Secretario + Venerable
+El Formulario de Solicitud de Ceremonias 2026 identifica a Secretario/a y Venerable Maestro como firmantes. Este incremento no inventa una nueva firma digital equivalente: conserva esa exigencia como respaldo documental/procedimental. Cualquier cofirma digital nativa debe definirse como decisión funcional separada y auditable.
 
-- No crear una membresía activa en el Taller destino antes de la resolución correspondiente.
-- No sobrescribir el historial del Taller de origen.
-- No convertir automáticamente una incorporación externa en afiliación interna.
-- No considerar una imagen de firma como prueba de firma manuscrita.
-- No inferir el contenido de los artículos 2.3, 2.4 y 2.5 del Reglamento General si su texto no está incorporado al repositorio documental; el sistema sólo debe registrar que el protocolo exige su cumplimiento hasta disponer de la fuente normativa completa.
+## Modelo principal
+`AdmissionCase` contiene, entre otros: `OrganizationId`, `AdmissionType`, `AffiliationMode`, `AffiliationProcedure`, `MemberId`, `PersonId`, `OriginOrganizationId`, datos de origen, grado, Pacto, regularidad, rechazo previo y estado.
 
-## Siguiente implementación
+`AdmissionEvidence` mantiene documento/version, tipo, fecha, revisión, actor y observaciones. `AdmissionDecision` mantiene decisiones append-only, fecha efectiva, fuente, datos estructurados y actor. Los nombramientos de comisión conservan un `AppointmentGroupId` para invalidar conclusiones de grupos reemplazados.
 
-1. agregar tipos `affiliation` e `incorporation` al catálogo de ceremonias;
-2. crear `AdmissionCase`, `AdmissionEvidence` y decisiones append-only;
-3. crear validación documental de Carta de Retiro Voluntario;
-4. modelar Pacto de Paz y Amistad y aprobación especial de Gran Maestría;
-5. conectar la matriz institucional de habilitación;
-6. generar la plancha sólo con expediente habilitado y snapshot de evidencias.
+## Fuentes normativas vigentes
+La implementación fue contrastada el 19-09-2026 con la Constitución y Reglamento General, Protocolo de Trámites de 31-08-2026 y Formulario de Solicitud de Ceremonias 2026 disponibles en la carpeta institucional Proyecto Centenario de Google Drive. Las futuras modificaciones normativas deben revisarse contra la fuente oficial vigente antes de cambiar estas reglas.

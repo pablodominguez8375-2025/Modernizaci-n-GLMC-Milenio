@@ -110,6 +110,11 @@ public static class CeremonyEndpoints
             return Results.BadRequest(new { message = "El tipo de ceremonia indicado no es válido." });
         }
 
+        if (request.CeremonyType is CeremonyCodes.Type.Affiliation or CeremonyCodes.Type.Incorporation)
+        {
+            return Results.BadRequest(new { message = "Afiliación e Incorporación deben crearse exclusivamente desde un expediente habilitado de Admisiones." });
+        }
+
         if (!access.CanManageOrganization(httpContext.User, request.OrganizationId) &&
             !access.CanEvaluateCeremonies(httpContext.User))
         {

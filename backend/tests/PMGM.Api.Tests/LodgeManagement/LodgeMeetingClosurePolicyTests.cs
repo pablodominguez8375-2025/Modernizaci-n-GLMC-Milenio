@@ -51,6 +51,25 @@ public sealed class LodgeMeetingClosurePolicyTests
         Assert.Null(valid);
     }
 
+
+    [Theory]
+    [InlineData("affiliation")]
+    [InlineData("incorporation")]
+    public void Admission_ceremonies_require_extract_and_grand_secretariat_plancha(string ceremonyType)
+    {
+        Assert.Contains("Plancha de Autorización", LodgeMeetingClosurePolicy.Validate(
+            LodgeManagementCodes.MeetingStatus.Held,
+            ceremonyType,
+            ExtractId,
+            null));
+
+        Assert.Null(LodgeMeetingClosurePolicy.Validate(
+            LodgeManagementCodes.MeetingStatus.Held,
+            ceremonyType,
+            ExtractId,
+            AuthorizationId));
+    }
+
     [Fact]
     public void Meeting_must_be_realized_before_document_closure()
     {

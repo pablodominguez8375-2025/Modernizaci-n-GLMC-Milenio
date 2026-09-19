@@ -48,6 +48,15 @@ describe('showcase role profiles', () => {
     expect(granHospitalaria.capabilities.canReadLodgeHospitalaria).not.toBe(true)
   })
 
+  it('separates Venerable commission appointment from Secretariat case management', () => {
+    const venerable = getDemoProfile('lodge')
+    const secretaria = getDemoProfile('lodgeSecretary')
+    expect(venerable.capabilities.canAppointAdmissionCommission).toBe(true)
+    expect(venerable.capabilities.canManageLodgeSecretariat).toBe(false)
+    expect(secretaria.capabilities.canManageLodgeSecretariat).toBe(true)
+    expect(secretaria.capabilities.canAppointAdmissionCommission).not.toBe(true)
+  })
+
   it('gives the lodge treasurer the monthly-statement capability without Grand Treasury authority', () => {
     const profile = getDemoProfile('lodgeTreasurer')
     expect(profile.capabilities.canManageLodgeTreasury).toBe(true)

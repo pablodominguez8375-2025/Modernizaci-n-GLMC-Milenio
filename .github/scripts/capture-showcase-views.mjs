@@ -16,6 +16,7 @@ const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
   { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
+  { slug: 'admisiones', profile: 'lodgeSecretary', label: 'Afiliaciones e incorporaciones' },
   { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería' },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },

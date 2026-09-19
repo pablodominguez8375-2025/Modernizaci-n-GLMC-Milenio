@@ -141,7 +141,9 @@ it('demo mode requires Extracto and Gran Secretaría authorization before closin
   expect(ceremonial).toBeDefined()
 
   const authorizations = await client.getCeremonyAuthorizationOptions('23232323-2323-2323-2323-232323232323')
-  expect(authorizations.items).toHaveLength(1)
+  const initiationAuthorization = authorizations.items.find(item => item.ceremonyType === 'initiation')
+  expect(initiationAuthorization).toBeDefined()
+  expect(authorizations.items.some(item => item.ceremonyType === 'affiliation')).toBe(true)
 
   await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', ceremonial!.id, {
     extractDocumentVersionId: 'extracto-demo-ceremonial',
@@ -150,7 +152,7 @@ it('demo mode requires Extracto and Gran Secretaría authorization before closin
 
   await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', ceremonial!.id, {
     extractDocumentVersionId: 'extracto-demo-ceremonial',
-    ceremonyAuthorizationDocumentId: authorizations.items[0].id,
+    ceremonyAuthorizationDocumentId: initiationAuthorization!.id,
   })
   const closed = await client.closeMeeting(ceremonial!.id)
   expect(closed.status).toBe('closed')
