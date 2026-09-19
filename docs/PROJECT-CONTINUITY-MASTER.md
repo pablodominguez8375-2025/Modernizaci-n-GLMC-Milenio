@@ -25,7 +25,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | Fecha | Conversación / decisión | Resultado |
 |---|---|---|
 | 13-09-2026 | Se solicita centralizar todas las conversaciones del proyecto en un único documento para preservar continuidad. | Regla permanente adoptada; este documento queda como registro maestro. |
-| 13-09-2026 | Se detecta diferencia entre el reporte de Régimen Interior y el padrón QA. | Reporte alineado a 20 Talleres, 480 integrantes y distribución 12/5/5/2 por Taller. |
+| 13-09-2026 | Se detecta diferencia entre el reporte de Régimen Interior y el Cuadro QA. | Reporte alineado a 20 Talleres, 480 integrantes y distribución 12/5/5/2 por Taller. |
 | 13-09-2026 | Se solicita demo operacional con cargas temporales. | Demo QA habilitada para fotografías JPG/PNG y antecedentes Word/PDF durante la sesión. |
 | 13-09-2026 | Se solicita alerta transversal por rechazo en Cámara del Medio. | Antecedente protegido consultable por Régimen Interior y visible como alerta al Taller. |
 | 14-09-2026 | Se solicita un menú Sistema ampliamente parametrizable por administradores. | Se implementa catálogo versionado y auditable para flujos, plazos, Biblioteca, Gestor Documental, Gran Archivo, Tesorería, Hospitalaria, notificaciones y seguridad. |
@@ -36,6 +36,8 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 14-09-2026 | Se continúa el diseñador de accesos. | Se agrega simulación de acceso efectivo, prevención de escalamiento Taller→Orden y protección contra bloqueo del administrador principal. |
 | 14-09-2026 | Se continúa la aplicación de perfiles. | Se agregan asignaciones múltiples por usuario, alcance, vigencia, acceso acumulado y revocación histórica. |
 | 14-09-2026 | Se continúa la gobernanza de accesos. | Se agrega auditoría, clasificación de riesgo, certificación/revocación y exportación de revisión de accesos. |
+| 19-09-2026 | Se completa la verificación independiente del artifact pre-merge de PR #116. | Artifact `10589425902` íntegro, `SOURCE_SHA=813edb9a…`, manifest completo y kit QA-001..QA-026 confirmados; evidencia registrada en Issue #97. Despliegue físico, QA 26/26 y UAT-017 continúan pendientes. |
+| 19-09-2026 | Se consolida el handoff operativo para continuidad multichat/IA. | Se agrega `docs/qa/PMGM-HANDOFF-PR116-SRV01-2026-09-19.md`; PR #116 y PR #119 permanecen draft, sin fusión ni movimiento de `dev`/`main`. |
 
 ## Última conversación recuperada
 
@@ -65,7 +67,7 @@ La auditoría completa de todos los modelos y cartas sigue siendo una tarea de c
 6. Los egresos de Tesorería y Hospitalaria requieren autorización del Venerable Maestro; el Orador participa como firmante cuando corresponda, especialmente en comunicaciones y retiros.
 7. Los Talleres deben estar al día con Gran Tesorería y Gran Hospitalaria antes de autorizar ceremonias.
 8. La publicación del insinuado debe cumplir el plazo configurable antes de continuar.
-9. El padrón de asambleístas separa calidad histórica, habilitación para asistir y habilitación para sufragar; nunca registra el voto individual.
+9. El Padrón de la Gran Asamblea separa calidad histórica, habilitación para asistir y habilitación para sufragar; nunca registra el voto individual.
 10. Biblioteca Virtual y Gran Archivero son ámbitos separados; el Gran Archivero no forma parte del alcance operativo actual.
 11. El diseño considera minimización, trazabilidad, control de acceso y retención conforme a la Ley 21.719.
 
@@ -101,4 +103,6 @@ Estos cargos no deben reemplazarse entre sí en los permisos, formularios, firma
 
 ## Próximo trabajo prioritario
 
-Cerrar la auditoría documental de Google Drive: extraer cargos, firmantes, orden de aprobación y requisitos de cada documento, compararlos con los endpoints y pantallas, y registrar las brechas como requisitos o pruebas UAT antes de declarar v1.0.
+Completar el despliegue físico pre-merge del SHA `813edb9af016f8d0f55c799d91b405c8e41f8fb4` en `srv01`, ejecutar smoke autenticado, cerrar QA-001..QA-026 y realizar UAT institucional incluyendo UAT-017. El procedimiento exacto queda en `docs/qa/PMGM-HANDOFF-PR116-SRV01-2026-09-19.md` e Issue #97.
+
+Después del gate operacional, cerrar la auditoría documental de Google Drive: extraer cargos, firmantes, orden de aprobación y requisitos de cada documento, compararlos con los endpoints y pantallas, y registrar las brechas como requisitos o pruebas UAT antes de declarar v1.0.

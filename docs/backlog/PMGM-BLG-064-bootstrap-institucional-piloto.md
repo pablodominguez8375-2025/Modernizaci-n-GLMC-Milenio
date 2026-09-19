@@ -17,7 +17,7 @@ Estado objetivo: **Done v0.33** una vez que el mismo head supere CI completo.
 - Plantilla institucional v1 sin datos personales.
 
 ## Fuera de alcance
-- Carga de padrón de personas reales.
+- Carga masiva de personas reales o del Cuadro General de la Orden.
 - RUT, email, teléfono o domicilio.
 - Creación automática de cuentas nominales de Taller.
 - Perfilado granular de soporte en Keycloak; el catálogo deja preparada esa evolución para v1.x.

@@ -1,4 +1,4 @@
-# PMGM-BLG-056 — Fichas de miembros y padrón de Taller
+# PMGM-BLG-056 — Fichas de miembros y Cuadro del Taller
 
 **Estado:** En implementación  
 **Prioridad:** P1  
@@ -11,7 +11,7 @@ Convertir la información institucional ya persistida de cada miembro en una fic
 
 ## Alcance del corte
 
-- padrón filtrable por Taller;
+- Cuadro del Taller filtrable;
 - búsqueda por nombre o número institucional;
 - estado de membresía y grado actual;
 - ficha con afiliación vigente, cargos y trayectoria;
@@ -31,16 +31,16 @@ La funcionalidad queda cubierta por `PMGM-DPA-001 Core/Membresía` del manifiest
 ## Criterios de aceptación
 
 1. Un usuario sin alcance del Taller recibe 403.
-2. El padrón no devuelve correo, teléfono ni dirección.
+2. El Cuadro del Taller no devuelve correo, teléfono ni dirección.
 3. La ficha devuelve `contactVisible=false` y `contact=null` cuando el rol no necesita contacto.
 4. Un rol administrativo autorizado puede ver el contacto.
 5. El historial mantiene afiliaciones anteriores después de un cambio de Taller.
-6. El showcase contiene datos ficticios para demostrar padrón, ficha y traslado.
+6. El showcase contiene datos ficticios para demostrar Cuadro del Taller, ficha y traslado.
 7. Frontend y backend pasan CI, incluyendo gates de Ley 21.719.
 
 ## Siguiente incremento
 
 - edición controlada de datos personales con auditoría y motivo;
 - ficha del Taller con autoridades/cargos vigentes;
-- reportes ejecutivos del padrón por Taller y Orden;
+- reportes ejecutivos del Cuadro del Taller y del Cuadro General de la Orden;
 - enlace directo desde Gestión Logial, Régimen Interior y ceremonias hacia la ficha autorizada.

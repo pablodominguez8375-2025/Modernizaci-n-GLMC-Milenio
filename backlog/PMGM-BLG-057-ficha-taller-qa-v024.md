@@ -7,7 +7,7 @@
 
 ## Objetivo
 
-Entregar una vista institucional única del Taller sin crear una nueva fuente de verdad: identidad, padrón agregado, grados, autoridades vigentes, regularidad autorizada y actividad reciente se proyectan desde los módulos ya existentes.
+Entregar una vista institucional única del Taller sin crear una nueva fuente de verdad: identidad, composición agregada del Cuadro del Taller, grados, autoridades vigentes, regularidad autorizada y actividad reciente se proyectan desde los módulos ya existentes.
 
 ## Alcance
 
@@ -43,5 +43,5 @@ La proyección reutiliza los tratamientos existentes de Core/Membresía, Gestió
 
 - reportes ejecutivos comparativos por Taller y Orden;
 - indicadores de actividad/asistencia en períodos configurables;
-- enlaces contextuales entre Ficha de Taller, padrón, Régimen Interior y ceremonias;
+- enlaces contextuales entre Ficha de Taller, Cuadro del Taller, Régimen Interior y ceremonias;
 - panel de alertas institucionales por regularidad y documentación pendiente.
