@@ -8,7 +8,7 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 25 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 26 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
@@ -16,6 +16,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 25 contro
 - QA-023: cierre documental de Tenidas regulares y ceremoniales, distinguiendo Realizada de Cerrada.
 - QA-024: Cuadro Mensual de Tesorería con segregación Taller / Gran Tesorería, cuadre previo y conciliación institucional.
 - QA-025: Hospitalaria integral: Tronco independiente, socorros autorizados, revisión mensual del Consejo y rendición agregada a Gran Hospitalaria.
+- QA-026: Afiliación/Incorporación 2026: clasificación estándar/reintegro/traslado, comisión del art. 2.5, dispensa sólo para traslado, cierre documental y materialización idempotente.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -100,6 +101,19 @@ python3 scripts/record-srv01-regression-result.py \
 
 El control QA-025 debe comprobar, con datos ficticios: independencia del Tronco de Beneficencia respecto de Tesorería; aportes por Hospitalaria; socorros con respaldo; autorización válida por Venerable Maestro o acuerdo auditable del Consejo; estado mensual revisado por Consejo; rendición agregada hacia Gran Hospitalaria sin beneficiarios, destinos ni observaciones privadas; reposición/comprobante; conciliación institucional; y actualización de la regularidad que consume Ceremonias.
 
+Ejemplo de Admisiones 2026 aprobado:
+
+```bash
+python3 scripts/record-srv01-regression-result.py \
+  evidence/PMGM-QA-srv01-<sha>.json \
+  QA-026 pass \
+  --evidence "audit-event:admission-information-commission-demo" \
+  --evidence "audit-event:admission-ceremony-completed-demo" \
+  --evidence "captura-controlada:qa-admisiones-cierre-documental"
+```
+
+El control QA-026 debe comprobar, siempre con datos ficticios: clasificación explícita `standard/reentry/transfer` separada de `simple/activation`; comisión de tres Maestros para reintegro e incorporación; para traslado, comisión salvo dispensa expresa de Cámara del Medio con acta y fecha; conclusión vinculada al último grupo nombrado y anterior a la decisión de 3.er grado; balotaje posterior en 1.er grado con recuento agregado sin voto individual; Plancha de Gran Secretaría y Extracto de Acta adjuntos a una Tenida ceremonial del mismo Taller/tipo/fecha; Tenida cerrada antes de materializar; creación de miembro/pertenencia exactamente una vez; reintento sin duplicados; y actor real conservado en auditoría/reconciliación.
+
 Ejemplo de fallo:
 
 ```bash
@@ -124,7 +138,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 25/25 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 26/26 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 
