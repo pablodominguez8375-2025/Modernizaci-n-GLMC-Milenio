@@ -110,7 +110,7 @@ export default function AdmissionsPage({
     {error&&<div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{error}</span></div>}
     {notice&&<div className="admissions-notice" role="status">{notice}</div>}
 
-    <CreateCasePanel api={api} organizationId={organizationId} disabled={working||!organizationId} onCreated={id=>void reload(id)} />
+    <CreateCasePanel api={api} organizationId={organizationId} organizations={organizations} disabled={working||!organizationId} onCreated={id=>void reload(id)} />
 
     <section className="admissions-layout">
       <article className="panel admissions-list">
@@ -133,7 +133,7 @@ export default function AdmissionsPage({
   </>
 }
 
-function CreateCasePanel({api,organizationId,disabled,onCreated}:{api:AdmissionApiClient;organizationId:string;disabled:boolean;onCreated:(id:string)=>void}){
+function CreateCasePanel({api,organizationId,organizations,disabled,onCreated}:{api:AdmissionApiClient;organizationId:string;organizations:OrganizationOption[];disabled:boolean;onCreated:(id:string)=>void}){
   const [open,setOpen]=useState(false)
   const [type,setType]=useState<AdmissionType>('affiliation')
   const [mode,setMode]=useState<AffiliationMode>('simple')
@@ -141,6 +141,7 @@ function CreateCasePanel({api,organizationId,disabled,onCreated}:{api:AdmissionA
   const [query,setQuery]=useState('')
   const [people,setPeople]=useState<AdmissionPersonOption[]>([])
   const [personId,setPersonId]=useState('')
+  const [originOrganizationId,setOriginOrganizationId]=useState('')
   const [originObedience,setOriginObedience]=useState('')
   const [originLodge,setOriginLodge]=useState('')
   const [degree,setDegree]=useState('master')
@@ -157,11 +158,13 @@ function CreateCasePanel({api,organizationId,disabled,onCreated}:{api:AdmissionA
     event.preventDefault();setLocalError(null)
     if(!selected){setLocalError('Seleccione una persona desde la búsqueda.');return}
     if(type==='affiliation'&&!selected.memberId){setLocalError('La Afiliación requiere que la persona ya tenga ficha de Hermano en la Orden.');return}
+    if(type==='affiliation'&&procedure==='transfer'&&!originOrganizationId){setLocalError('El traslado debe identificar el Taller de origen.');return}
     setBusy(true)
     try{
       const created=await api.createCase({
         organizationId,admissionType:type,personId:selected.personId,memberId:type==='affiliation'?selected.memberId:null,
         affiliationMode:type==='affiliation'?mode:null,affiliationProcedure:type==='affiliation'?procedure:null,
+        originOrganizationId:type==='affiliation'&&procedure==='transfer'?originOrganizationId:null,
         originLodgeName:originLodge||null,originObedience:type==='incorporation'?originObedience:null,degree:type==='incorporation'?degree:null,
         wageIncreaseEvidenceApplies:type==='incorporation',exaltationEvidenceApplies:type==='incorporation',
         hasPeaceAndFriendshipPact:type==='incorporation'?false:null,originObedienceRecognizedAsRegular:type==='incorporation'?true:null,
@@ -175,7 +178,7 @@ function CreateCasePanel({api,organizationId,disabled,onCreated}:{api:AdmissionA
     <div className="panel-heading"><div><p className="eyebrow">Secretaría / revisión institucional</p><h2>Nuevo expediente</h2></div><button type="button" className="secondary-action" onClick={()=>setOpen(v=>!v)}>{open?'Cerrar formulario':'Crear expediente'}</button></div>
     {open&&<form className="admissions-create-form" onSubmit={submit}>
       <label><span>Tipo</span><select value={type} onChange={e=>setType(e.target.value as AdmissionType)}><option value="affiliation">Afiliación</option><option value="incorporation">Incorporación</option></select></label>
-      {type==='affiliation'&&<><label><span>Modalidad</span><select value={mode} onChange={e=>setMode(e.target.value as AffiliationMode)}><option value="simple">Simple</option><option value="activation">Con activación</option></select></label><label><span>Procedimiento</span><select value={procedure} onChange={e=>setProcedure(e.target.value as AffiliationProcedure)}><option value="standard">Estándar</option><option value="reentry">Reintegro</option><option value="transfer">Traslado</option></select></label></>}
+      {type==='affiliation'&&<><label><span>Modalidad</span><select value={mode} onChange={e=>setMode(e.target.value as AffiliationMode)}><option value="simple">Simple</option><option value="activation">Con activación</option></select></label><label><span>Procedimiento</span><select value={procedure} onChange={e=>setProcedure(e.target.value as AffiliationProcedure)}><option value="standard">Estándar</option><option value="reentry">Reintegro</option><option value="transfer">Traslado</option></select></label>{procedure==='transfer'&&<label><span>Taller de origen</span><select required value={originOrganizationId} onChange={e=>setOriginOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.filter(o=>o.id!==organizationId).map(o=><option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></label>}</>}
       <label className="admissions-person-search"><span>Buscar persona</span><div><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nombre o apellido" minLength={2}/><button type="button" onClick={()=>void search()} disabled={query.trim().length<2}>Buscar</button></div></label>
       <label><span>Persona</span><select value={personId} onChange={e=>setPersonId(e.target.value)}><option value="">Seleccione…</option>{people.map(p=><option key={p.personId} value={p.personId}>{p.displayName}{p.memberId?' · Hermano registrado':' · sin membresía GLMCh'}</option>)}</select></label>
       <label><span>Logia/Taller de origen</span><input value={originLodge} onChange={e=>setOriginLodge(e.target.value)} placeholder="Opcional"/></label>
