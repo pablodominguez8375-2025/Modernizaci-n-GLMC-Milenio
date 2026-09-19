@@ -36,6 +36,8 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 14-09-2026 | Se continúa el diseñador de accesos. | Se agrega simulación de acceso efectivo, prevención de escalamiento Taller→Orden y protección contra bloqueo del administrador principal. |
 | 14-09-2026 | Se continúa la aplicación de perfiles. | Se agregan asignaciones múltiples por usuario, alcance, vigencia, acceso acumulado y revocación histórica. |
 | 14-09-2026 | Se continúa la gobernanza de accesos. | Se agrega auditoría, clasificación de riesgo, certificación/revocación y exportación de revisión de accesos. |
+| 19-09-2026 | Se completa la verificación independiente del artifact pre-merge de PR #116. | Artifact `10589425902` íntegro, `SOURCE_SHA=813edb9a…`, manifest completo y kit QA-001..QA-026 confirmados; evidencia registrada en Issue #97. Despliegue físico, QA 26/26 y UAT-017 continúan pendientes. |
+| 19-09-2026 | Se consolida el handoff operativo para continuidad multichat/IA. | Se agrega `docs/qa/PMGM-HANDOFF-PR116-SRV01-2026-09-19.md`; PR #116 y PR #119 permanecen draft, sin fusión ni movimiento de `dev`/`main`. |
 
 ## Última conversación recuperada
 
@@ -101,4 +103,6 @@ Estos cargos no deben reemplazarse entre sí en los permisos, formularios, firma
 
 ## Próximo trabajo prioritario
 
-Cerrar la auditoría documental de Google Drive: extraer cargos, firmantes, orden de aprobación y requisitos de cada documento, compararlos con los endpoints y pantallas, y registrar las brechas como requisitos o pruebas UAT antes de declarar v1.0.
+Completar el despliegue físico pre-merge del SHA `813edb9af016f8d0f55c799d91b405c8e41f8fb4` en `srv01`, ejecutar smoke autenticado, cerrar QA-001..QA-026 y realizar UAT institucional incluyendo UAT-017. El procedimiento exacto queda en `docs/qa/PMGM-HANDOFF-PR116-SRV01-2026-09-19.md` e Issue #97.
+
+Después del gate operacional, cerrar la auditoría documental de Google Drive: extraer cargos, firmantes, orden de aprobación y requisitos de cada documento, compararlos con los endpoints y pantallas, y registrar las brechas como requisitos o pruebas UAT antes de declarar v1.0.
