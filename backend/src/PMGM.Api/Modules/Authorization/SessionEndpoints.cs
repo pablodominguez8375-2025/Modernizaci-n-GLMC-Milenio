@@ -52,6 +52,7 @@ public sealed record SessionCapabilitiesDto(
     bool CanManageLodgeOperations,
     bool CanReadLodgeSecretariat,
     bool CanManageLodgeSecretariat,
+    bool CanAppointAdmissionCommission,
     bool CanManageLodgeTreasury,
     bool CanReadLodgeHospitalaria,
     bool CanManageLodgeHospitalaria,
@@ -107,6 +108,9 @@ public static class SessionProfileBuilder
                 CanManageLodgeOperations: access.CanManageLodgeOperations(user),
                 CanReadLodgeSecretariat: organizationId is not null && access.CanReadLodgeSecretariat(user, organizationId.Value),
                 CanManageLodgeSecretariat: organizationId is not null && access.CanManageLodgeSecretariat(user, organizationId.Value),
+                CanAppointAdmissionCommission: organizationId is not null
+                    ? access.CanAppointAdmissionCommission(user, organizationId.Value)
+                    : access.HasOrderScope(user) && access.HasRole(user, InstitutionalRoles.GranLogiaAdmin),
                 CanManageLodgeTreasury: organizationId is not null && access.CanManageLodgeTreasury(user, organizationId.Value),
                 CanReadLodgeHospitalaria: organizationId is not null && access.CanReadLodgeHospitalaria(user, organizationId.Value),
                 CanManageLodgeHospitalaria: organizationId is not null && access.CanManageLodgeHospitalaria(user, organizationId.Value),
