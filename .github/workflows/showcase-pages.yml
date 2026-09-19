@@ -14,11 +14,11 @@ permissions:
   deployments: read
   id-token: write
 
-# PR validation must never cancel an in-flight deployment.
-# Each source keeps an independent deployment group.
+# PR validation is isolated by exact head SHA so a stale/cancelled run cannot block
+# evidence for the current PR head. Pushes to dev remain serialized by branch/ref.
 concurrency:
-  group: pmgm-showcase-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 jobs:
   build:
