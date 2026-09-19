@@ -521,11 +521,11 @@ Flujo:
 
 ### Siguiente incremento funcional
 
-No abrir un nuevo incremento funcional mientras Issue #97 continúe bloqueando el corte QA, salvo decisión expresa del Sponsor / Product Owner.
+Issue #97 continúa siendo el gate operacional de despliegue físico/QA. El Sponsor / Product Owner mantiene autorización expresa para continuar desarrollo funcional en paralelo sin atribuir aceptación operacional al código no desplegado.
 
-Después de cerrar QA, continuar con el expediente de insinuación definido en `PMGM-NEXT-001`.
+El flujo reglamentario de insinuaciones ya está integrado por PR #106 y el Cuadro Mensual de Tesorería por PR #112. El siguiente bloque funcional es **Hospitalaria del Taller + Gran Hospitalaria**, reutilizando el módulo existente y contrastando Art. 12.13, formularios/planillas vigentes de Drive y reglas de reposición antes de programar.
 
-No reutilizar la RC1 histórica o evidencia de un SHA anterior para atribuir aceptación al código vivo.
+No reutilizar la RC1 histórica ni evidencia de un SHA anterior para atribuir aceptación al código vivo.
 
 
 ## 15. Secretaría integral — estado integrado y reglas de continuidad
@@ -591,7 +591,7 @@ Trazabilidad objetivo de ceremonia:
 
 
 
-## 17. Incremento activo — Cuadro Mensual de Tesorería y segregación de funciones
+## 17. Incremento integrado — Cuadro Mensual de Tesorería y segregación de funciones
 
 El PR #112 `feat(tesoreria): segregar Cuadro Mensual Taller y Gran Tesorería` continúa la automatización financiera desde las fuentes institucionales 2026, reutilizando el dominio Treasury ya existente.
 
@@ -613,9 +613,24 @@ Reglas del incremento:
 - la demo distingue perfil Tesorero del Taller de Gran Tesorero;
 - QA-024 protege la segregación y eleva la matriz srv01 a 24 controles.
 
-Estado al registrar esta sección: implementación desarrollada en rama `feature/tesoreria-cuadro-mensual-segregacion`, PR #112 abierto; pendiente gates exact-head, merge a `dev` y triple salida post-merge. Issue #97 continúa siendo el gate de despliegue físico.
+Estado integrado:
 
-Siguiente bloque funcional, después de cerrar PR #112: **Hospitalaria del Taller + Gran Hospitalaria**, respetando independencia del Tronco de Beneficencia respecto de Tesorería, Art. 12.13 y fuentes documentales vigentes de Drive.
+- PR #112 fusionado a `dev`;
+- merge SHA funcional: `f2679b7cccd652d7cbb9fcd7688eee4d0c3a4bc3`;
+- PMGM CI post-merge: `success`;
+- Showcase/Pages post-merge: `success`;
+- QA srv01 Installable: `success`;
+- Pre-UAT Installable: `success`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-f2679b7cccd6.zip`;
+- SHA-256 ZIP público: `cae2bae623554ec0b42daedc78dda3703dd1042a63d47b059d480485b45ba159`;
+- artifact QA Actions ID `10575826365`, digest `sha256:3447dbabb50194cd2a0da38c24d66e5c08028c4f296653d6f9db187d5d1ed640`;
+- Pages artifact ID `10575473010`, digest `sha256:a7c152f4674fc466f9fab80e7ccd6f79f3a0472d1189ec44cc714d06743f3b4d`;
+- kit de regresión vigente: **QA-001..QA-024**, total 24 controles;
+- Issue #97 y Línea Base Maestra de Drive actualizados al corte funcional.
+
+El despliegue físico en `srv01`, smoke real, regresión 24/24 y UAT continúan pendientes y no se declaran ejecutados desde este chat.
+
+Siguiente bloque funcional: **Hospitalaria del Taller + Gran Hospitalaria**, respetando independencia del Tronco de Beneficencia respecto de Tesorería, Art. 12.13 y fuentes documentales vigentes de Drive.
 
 ---
 

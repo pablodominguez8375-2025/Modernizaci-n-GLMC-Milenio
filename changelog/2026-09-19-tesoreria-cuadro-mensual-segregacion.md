@@ -68,4 +68,16 @@ Se agrega `CanPrepareTreasuryStatement`:
 
 ## Estado
 
-Implementado en rama del PR #112. Pendiente gates exact-head, merge, Pages/instalable post-merge y actualización de Issue #97/Línea Base Maestra con el SHA vivo.
+Integrado a `dev` mediante PR #112.
+
+- merge funcional: `f2679b7cccd652d7cbb9fcd7688eee4d0c3a4bc3`;
+- PMGM CI post-merge: `success`;
+- Showcase/Pages post-merge: `success`;
+- QA srv01 Installable: `success`;
+- Pre-UAT Installable: `success`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-f2679b7cccd6.zip`;
+- SHA-256 ZIP público: `cae2bae623554ec0b42daedc78dda3703dd1042a63d47b059d480485b45ba159`;
+- QA vigente: 24 controles, QA-001..QA-024;
+- Issue #97 y Línea Base Maestra actualizados al corte funcional.
+
+Pendiente operacional: despliegue físico `srv01`, smoke real, regresión 24/24 y posterior UAT institucional.
