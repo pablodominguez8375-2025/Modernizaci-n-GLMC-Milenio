@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PMGM.Api.Modules.Admissions.Entities;
 using PMGM.Api.Modules.Ceremonies;
 
@@ -43,19 +44,41 @@ public static class AdmissionCaseEligibilityProjector
         var commissionAppointed = latestCommissionGroup is not null &&
                                   latestCommissionGroup.Select(x => x.MemberId).Distinct().Count() == 3;
 
+        var pardonValid = pardon?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                          article23 is not null &&
+                          pardon.RecordedAtUtc >= article23.RecordedAtUtc;
+        var presentationValid = presentation?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                                article23 is not null &&
+                                presentation.RecordedAtUtc >= article23.RecordedAtUtc;
+        var commissionCompletionValid = commissionCompletion?.Status == CeremonyCodes.ValidationStatus.Approved &&
+                                        latestCommissionGroup is not null &&
+                                        DecisionReferencesAppointmentGroup(commissionCompletion, latestCommissionGroup.Key);
+        var thirdDegreeState = presentationValid &&
+                               thirdDegree is not null &&
+                               thirdDegree.RecordedAtUtc >= presentation!.RecordedAtUtc &&
+                               thirdDegree.AsOfDate >= presentation.AsOfDate
+            ? ToDecisionState(thirdDegree)
+            : null;
+        var firstDegreeState = thirdDegreeState == true &&
+                               firstDegree is not null &&
+                               firstDegree.RecordedAtUtc >= thirdDegree!.RecordedAtUtc &&
+                               firstDegree.AsOfDate > thirdDegree.AsOfDate
+            ? ToDecisionState(firstDegree)
+            : null;
+
         var decision = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: admissionCase.AdmissionType,
             AffiliationMode: admissionCase.AffiliationMode,
             WithdrawalLetterAttached: withdrawalLetter is not null,
             WithdrawalLetterHandwrittenSignatureVerified: signature?.Status == CeremonyCodes.ValidationStatus.Approved,
             Article23Clear: ToDecisionState(article23),
-            GrandMasterPardonApproved: pardon?.Status == CeremonyCodes.ValidationStatus.Approved,
-            FirstDegreePresentationRecorded: presentation?.Status == CeremonyCodes.ValidationStatus.Approved,
+            GrandMasterPardonApproved: pardonValid,
+            FirstDegreePresentationRecorded: presentationValid,
             InformationCommissionRequired: admissionCase.AdmissionType == CeremonyCodes.Type.Incorporation,
             InformationCommissionAppointed: commissionAppointed,
-            InformationCommissionCompleted: commissionCompletion?.Status == CeremonyCodes.ValidationStatus.Approved,
-            LodgeThirdDegreeApproved: ToDecisionState(thirdDegree),
-            LodgeFirstDegreeBallotApproved: ToDecisionState(firstDegree),
+            InformationCommissionCompleted: commissionCompletionValid,
+            LodgeThirdDegreeApproved: thirdDegreeState,
+            LodgeFirstDegreeBallotApproved: firstDegreeState,
             LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
             WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
             LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
@@ -98,6 +121,23 @@ public static class AdmissionCaseEligibilityProjector
             .Where(x => x.DecisionType == decisionType)
             .OrderByDescending(x => x.RecordedAtUtc)
             .FirstOrDefault();
+
+    private static bool DecisionReferencesAppointmentGroup(AdmissionDecision decision, Guid groupId)
+    {
+        if (string.IsNullOrWhiteSpace(decision.StructuredDataJson)) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(decision.StructuredDataJson);
+            return document.RootElement.TryGetProperty("appointmentGroupId", out var property) &&
+                   property.ValueKind == JsonValueKind.String &&
+                   Guid.TryParse(property.GetString(), out var parsed) &&
+                   parsed == groupId;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static bool? ToDecisionState(AdmissionDecision? decision)
         => decision?.Status switch
