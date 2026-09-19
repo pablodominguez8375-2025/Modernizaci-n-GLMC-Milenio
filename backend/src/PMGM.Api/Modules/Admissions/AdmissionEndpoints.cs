@@ -61,6 +61,8 @@ public static class AdmissionEndpoints
         {
             if (!AdmissionCodes.AffiliationMode.IsValid(request.AffiliationMode))
                 return Results.BadRequest(new { message = "La afiliación debe indicar modalidad simple o con activación." });
+            if (!AdmissionCodes.AffiliationProcedure.IsValid(request.AffiliationProcedure))
+                return Results.BadRequest(new { message = "La afiliación debe clasificar expresamente el procedimiento como estándar, reintegro o traslado." });
             if (request.MemberId is null)
                 return Results.BadRequest(new { message = "Una afiliación requiere un hermano ya registrado en la base maestra." });
 
@@ -77,6 +79,8 @@ public static class AdmissionEndpoints
                 return Results.BadRequest(new { message = "Una incorporación desde otra Obediencia no debe crear ni exigir membresía GLMCh antes de su resolución." });
             if (!string.IsNullOrWhiteSpace(request.AffiliationMode))
                 return Results.BadRequest(new { message = "La modalidad simple/con activación sólo aplica a afiliaciones." });
+            if (!string.IsNullOrWhiteSpace(request.AffiliationProcedure))
+                return Results.BadRequest(new { message = "La clasificación estándar/reintegro/traslado sólo aplica a afiliaciones; la incorporación se identifica por su tipo de expediente." });
             if (string.IsNullOrWhiteSpace(request.OriginObedience))
                 return Results.BadRequest(new { message = "La incorporación debe registrar la Obediencia de origen." });
             if (string.IsNullOrWhiteSpace(request.Degree))
@@ -88,6 +92,7 @@ public static class AdmissionEndpoints
             OrganizationId = request.OrganizationId,
             AdmissionType = request.AdmissionType,
             AffiliationMode = Normalize(request.AffiliationMode),
+            AffiliationProcedure = Normalize(request.AffiliationProcedure),
             MemberId = request.MemberId,
             PersonId = request.PersonId,
             OriginOrganizationId = request.OriginOrganizationId,
@@ -113,6 +118,7 @@ public static class AdmissionEndpoints
             {
                 entity.AdmissionType,
                 entity.AffiliationMode,
+                entity.AffiliationProcedure,
                 entity.HasPeaceAndFriendshipPact,
                 entity.OriginObedienceRecognizedAsRegular,
                 entity.Status
@@ -445,6 +451,7 @@ public static class AdmissionEndpoints
         entity.OrganizationId,
         entity.AdmissionType,
         entity.AffiliationMode,
+        entity.AffiliationProcedure,
         entity.MemberId,
         entity.PersonId,
         entity.OriginOrganizationId,
@@ -494,6 +501,7 @@ public sealed record CreateAdmissionCaseRequest(
     Guid OrganizationId,
     string AdmissionType,
     string? AffiliationMode,
+    string? AffiliationProcedure,
     Guid? MemberId,
     Guid PersonId,
     Guid? OriginOrganizationId,
