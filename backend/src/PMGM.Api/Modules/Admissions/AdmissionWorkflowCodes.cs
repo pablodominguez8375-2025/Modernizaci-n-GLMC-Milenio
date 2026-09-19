@@ -31,6 +31,7 @@ public static class AdmissionWorkflowCodes
         public const string GrandMasterPardon = "grand_master_pardon";
         public const string LodgeFirstDegreePresentation = "lodge_first_degree_presentation";
         public const string InformationCommissionCompleted = "information_commission_completed";
+        public const string InformationCommissionWaiver = "information_commission_waiver";
         public const string GrandMasterRegularityRecognition = "grand_master_regularity_recognition";
         public const string LodgeThirdDegreeApproval = "lodge_third_degree_approval";
         public const string LodgeFirstDegreeBallot = "lodge_first_degree_ballot";
