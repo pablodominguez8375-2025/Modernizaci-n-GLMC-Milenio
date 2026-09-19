@@ -441,10 +441,12 @@ public static class LodgeHospitalariaEndpoints
             .Include(x => x.Session)
             .SingleOrDefaultAsync(x => x.Id == submission.CouncilFinancialReviewId.Value, ct);
 
+        var expectedPeriodLabel = $"{submission.PeriodYear}-{submission.PeriodMonth:00}";
         if (councilReview is null ||
             councilReview.Session.OrganizationId != submission.OrganizationId ||
-            councilReview.ControlArea != LodgeCouncilCodes.ControlArea.Hospitalaria)
-            return Results.BadRequest(new { message = "La revisión del Consejo no corresponde a Hospitalaria de este Taller." });
+            councilReview.ControlArea != LodgeCouncilCodes.ControlArea.Hospitalaria ||
+            !string.Equals(councilReview.PeriodLabel?.Trim(), expectedPeriodLabel, StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { message = "La revisión del Consejo no corresponde a Hospitalaria de este Taller y período." });
 
         submission.Status = HospitalariaCodes.SubmissionStatus.Submitted;
         submission.SubmittedAtUtc = DateTimeOffset.UtcNow;
