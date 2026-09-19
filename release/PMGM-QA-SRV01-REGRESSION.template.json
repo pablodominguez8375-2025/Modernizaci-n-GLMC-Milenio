@@ -221,6 +221,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-024",
+      "category": "treasury",
+      "title": "Tesorería: Cuadro mensual preparado por Taller y conciliado por Gran Tesorería",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
