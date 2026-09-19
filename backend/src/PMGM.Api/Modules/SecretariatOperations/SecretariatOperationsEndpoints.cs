@@ -741,8 +741,11 @@ public static class SecretariatOperationsEndpoints
 
             var ceremony = await db.CeremonyRequests.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == authorization!.RelatedCeremonyRequestId!.Value, cancellationToken);
-            if (ceremony is null || ceremony.OrganizationId != organizationId || ceremony.CeremonyType != ceremonyType)
-                return Results.BadRequest(new { message = "La Plancha de Autorización no corresponde al Taller o al tipo de ceremonia de esta Tenida." });
+            if (ceremony is null ||
+                ceremony.OrganizationId != organizationId ||
+                ceremony.CeremonyType != ceremonyType ||
+                ceremony.ProposedDate != eventDate)
+                return Results.BadRequest(new { message = "La Plancha de Autorización no corresponde al Taller, tipo o fecha de esta Tenida ceremonial." });
         }
 
         var record = await db.LodgeSecretariatRecords.SingleOrDefaultAsync(
