@@ -68,6 +68,32 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
+    public void LodgeTreasurer_CanPrepareMonthlyStatementOnlyForOwnWorkshop()
+    {
+        var ownOrganization = Guid.NewGuid();
+        var otherOrganization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerTesoreria),
+            new Claim(InstitutionalClaims.Organization, ownOrganization.ToString()));
+
+        Assert.True(_service.CanPrepareTreasuryStatement(user, ownOrganization));
+        Assert.False(_service.CanPrepareTreasuryStatement(user, otherOrganization));
+        Assert.False(_service.CanManageTreasuryRegularity(user));
+    }
+
+    [Fact]
+    public void GrandTreasurer_ReviewsButDoesNotPrepareWorkshopStatement()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranTesoreria));
+
+        Assert.True(_service.CanManageTreasuryRegularity(user));
+        Assert.False(_service.CanPrepareTreasuryStatement(user, organization));
+    }
+
+    [Fact]
     public void LodgeHospitalaria_CanManageOwnHospitalariaOnly()
     {
         var ownOrganization = Guid.NewGuid();
