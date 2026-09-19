@@ -15,6 +15,9 @@ export interface SessionCapabilities {
   canReadLodgeSecretariat?: boolean
   canManageLodgeSecretariat?: boolean
   canManageLodgeTreasury?: boolean
+  canReadLodgeHospitalaria?: boolean
+  canManageLodgeHospitalaria?: boolean
+  canApproveLodgeExpenses?: boolean
   canConfigureSystem?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
