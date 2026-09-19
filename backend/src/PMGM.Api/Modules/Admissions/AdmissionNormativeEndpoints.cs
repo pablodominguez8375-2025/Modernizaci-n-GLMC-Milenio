@@ -238,7 +238,7 @@ public static class AdmissionNormativeEndpoints
     {
         var admissionCase = await admissionsDb.AdmissionCases.SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId) &&
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId) &&
             !access.CanAppointAdmissionCommission(context.User, admissionCase.OrganizationId))
             return Results.Forbid();
         if (!AdmissionProcedureRules.AllowsInformationCommissionWaiver(admissionCase.AdmissionType, admissionCase.AffiliationProcedure))
@@ -284,7 +284,7 @@ public static class AdmissionNormativeEndpoints
             .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, ct);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(context.User, admissionCase.OrganizationId) &&
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId) &&
             !access.CanAppointAdmissionCommission(context.User, admissionCase.OrganizationId))
             return Results.Forbid();
         if (!AdmissionProcedureRules.RequiresInformationCommission(admissionCase.AdmissionType, admissionCase.AffiliationProcedure))
