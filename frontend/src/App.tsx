@@ -11,6 +11,7 @@ import DocumentManagementPage from './DocumentManagementPage'
 import ExecutiveReportingPage from './ExecutiveReportingPage'
 import GrandArchivePage from './GrandArchivePage'
 import GrandSecretariatPage from './GrandSecretariatPage'
+import HospitalariaPage from './HospitalariaPage'
 import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 import InternalAffairsDataQualityPage from './InternalAffairsDataQualityPage'
 import InternalAffairsMemberControlPage from './InternalAffairsMemberControlPage'
@@ -42,7 +43,7 @@ import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
 type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean }
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -99,6 +100,10 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
   const canTreasuryStatement = canTreasury || canLodgeTreasury
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
+  const canReadLodgeHospitalaria = capabilities?.canReadLodgeHospitalaria ?? false
+  const canManageLodgeHospitalaria = capabilities?.canManageLodgeHospitalaria ?? false
+  const canApproveLodgeExpenses = capabilities?.canApproveLodgeExpenses ?? false
+  const canHospitalariaWorkspace = canHospitalaria || canReadLodgeHospitalaria
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
   const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
   const canReadLodgeSecretariat = capabilities?.canReadLodgeSecretariat ?? false
@@ -157,11 +162,12 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
           <ModuleAccess icon="archive" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
         </>}
-        {(canLodgeProfile || canLodge) && <>
+        {(canLodgeProfile || canLodge || canReadLodgeHospitalaria) && <>
           <div className="nav-section">Taller</div>
           <ModuleAccess icon="lodge" label="Ficha de Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
           <ModuleAccess icon="lodge" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />
           {canLodgeTreasury && !canTreasury && <ModuleAccess icon="treasury" label="Cuadro mensual Tesorería" allowed active={view === 'treasuryStatement'} onOpen={() => setView('treasuryStatement')} />}
+          {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
         </>}
         {(canLibrary || canDocuments) && <>
           <div className="nav-section">Conocimiento</div>
@@ -190,7 +196,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
         {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
         {view === 'treasuryStatement' && canTreasuryStatement && <TreasuryStatementPage api={api} canPrepare={canLodgeTreasury && !canTreasury} canReview={canTreasury} />}
-        {view === 'hospitalaria' && canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}
+        {view === 'hospitalaria' && canHospitalariaWorkspace && <><HospitalariaPage api={api} canReadLocal={canReadLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canHospitalaria} />{canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}</>}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
         {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat} />}

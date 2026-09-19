@@ -94,7 +94,7 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
-    public void LodgeHospitalaria_CanManageOwnHospitalariaOnly()
+    public void LodgeHospitalaria_CanManageAndReadOwnHospitalariaOnly()
     {
         var ownOrganization = Guid.NewGuid();
         var otherOrganization = Guid.NewGuid();
@@ -103,7 +103,49 @@ public sealed class InstitutionalAccessServiceTests
             new Claim(InstitutionalClaims.Organization, ownOrganization.ToString()));
 
         Assert.True(_service.CanManageLodgeHospitalaria(user, ownOrganization));
+        Assert.True(_service.CanReadLodgeHospitalaria(user, ownOrganization));
         Assert.False(_service.CanManageLodgeHospitalaria(user, otherOrganization));
+        Assert.False(_service.CanReadLodgeHospitalaria(user, otherOrganization));
+        Assert.False(_service.CanApproveLodgeExpenses(user, ownOrganization));
+    }
+
+    [Fact]
+    public void LodgeVenerable_ReadsAndApprovesHospitalariaWithoutEditingIt()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.True(_service.CanReadLodgeHospitalaria(user, organization));
+        Assert.True(_service.CanApproveLodgeExpenses(user, organization));
+        Assert.False(_service.CanManageLodgeHospitalaria(user, organization));
+    }
+
+    [Fact]
+    public void LodgeSecretary_DoesNotManageOrReadHospitalaria()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerSecretaria),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.False(_service.CanManageLodgeHospitalaria(user, organization));
+        Assert.False(_service.CanReadLodgeHospitalaria(user, organization));
+        Assert.False(_service.CanApproveLodgeExpenses(user, organization));
+    }
+
+    [Fact]
+    public void GrandHospitalaria_ManagesRegularityButCannotReadPrivateWorkshopAidLedger()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranHospitalaria));
+
+        Assert.True(_service.CanManageHospitalariaRegularity(user));
+        Assert.False(_service.CanManageLodgeHospitalaria(user, organization));
+        Assert.False(_service.CanReadLodgeHospitalaria(user, organization));
     }
 
     [Theory]

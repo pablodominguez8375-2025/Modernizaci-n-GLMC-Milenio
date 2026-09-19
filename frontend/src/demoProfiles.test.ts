@@ -23,11 +23,29 @@ describe('showcase role profiles', () => {
   })
 
   it('exposes each administrative and teaching Taller role in the QA switcher model', () => {
-    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeHospitalaria', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
+    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
       const profile = getDemoProfile(key)
       expect(profile.accessScope).toBe('organization')
       expect(profile.capabilities.canManageLodgeOperations).toBe(true)
     }
+  })
+
+  it('separates Hospitalaria management from Venerable inspection and approval', () => {
+    const hospitalario = getDemoProfile('lodgeHospitalaria')
+    expect(hospitalario.capabilities.canManageLodgeOperations).toBe(false)
+    expect(hospitalario.capabilities.canReadLodgeHospitalaria).toBe(true)
+    expect(hospitalario.capabilities.canManageLodgeHospitalaria).toBe(true)
+    expect(hospitalario.capabilities.canApproveLodgeExpenses).not.toBe(true)
+    expect(hospitalario.capabilities.canManageHospitalariaRegularity).toBe(false)
+
+    const venerable = getDemoProfile('lodge')
+    expect(venerable.capabilities.canReadLodgeHospitalaria).toBe(true)
+    expect(venerable.capabilities.canManageLodgeHospitalaria).not.toBe(true)
+    expect(venerable.capabilities.canApproveLodgeExpenses).toBe(true)
+
+    const granHospitalaria = getDemoProfile('hospitalaria')
+    expect(granHospitalaria.capabilities.canManageHospitalariaRegularity).toBe(true)
+    expect(granHospitalaria.capabilities.canReadLodgeHospitalaria).not.toBe(true)
   })
 
   it('gives the lodge treasurer the monthly-statement capability without Grand Treasury authority', () => {
