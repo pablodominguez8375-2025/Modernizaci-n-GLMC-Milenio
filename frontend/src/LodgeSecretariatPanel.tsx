@@ -5,6 +5,7 @@ import {
   type HistoricalMemberIntake,
   type LodgeAdministrativeMeeting,
   type LodgeApiClient,
+  type LodgeCeremonyAuthorizationOption,
   type LodgeMeeting,
   type LodgeMemberOption,
   type LodgeSecretariatRecord,
@@ -20,15 +21,17 @@ type Props = {
   meetings: LodgeMeeting[]
   members: LodgeMemberOption[]
   canManage: boolean
+  onMeetingChanged?: (meetingId: string) => Promise<void> | void
 }
 
 type DocumentKind = 'work_paper' | 'extract' | 'full_minute'
 
-export default function LodgeSecretariatPanel({ organizationId, lodgeApi, documentApi, meetings, members, canManage }: Props) {
+export default function LodgeSecretariatPanel({ organizationId, lodgeApi, documentApi, meetings, members, canManage, onMeetingChanged }: Props) {
   const councilApi = useLodgeCouncilApi()
   const [intakes, setIntakes] = useState<HistoricalMemberIntake[]>([])
   const [adminMeetings, setAdminMeetings] = useState<LodgeAdministrativeMeeting[]>([])
   const [records, setRecords] = useState<LodgeSecretariatRecord[]>([])
+  const [ceremonyAuthorizations, setCeremonyAuthorizations] = useState<LodgeCeremonyAuthorizationOption[]>([])
   const [councilSessions, setCouncilSessions] = useState<Array<{ id: string; sessionDate: string; title: string | null; status: string }>>([])
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -65,21 +68,23 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       lodgeApi.getHistoricalMemberIntakes(organizationId),
       lodgeApi.getAdministrativeMeetings(organizationId),
       lodgeApi.getSecretariatRecords(organizationId),
+      lodgeApi.getCeremonyAuthorizationOptions(organizationId),
       councilApi.getSessions(organizationId),
-    ]).then(([historical, reunions, secretariatRecords, councils]) => {
+    ]).then(([historical, reunions, secretariatRecords, authorizations, councils]) => {
       if (!active) return
       setIntakes(historical.items)
       setAdminMeetings(reunions.items)
       setRecords(secretariatRecords.items)
+      setCeremonyAuthorizations(authorizations.items)
       setCouncilSessions(councils.items)
     }).catch(reason => { if (active) setError(toMessage(reason)) })
     return () => { active = false }
   }, [organizationId, lodgeApi, councilApi])
 
   const sources = useMemo(() => {
-    if (recordType === 'tenida') return meetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title || meetingTypeLabel(x.meetingType)}`, date: x.meetingDate, status: x.status, ceremonial: !!x.ceremonyType }))
-    if (recordType === 'reunion') return adminMeetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title}`, date: x.meetingDate, status: x.status, ceremonial: false }))
-    return councilSessions.map(x => ({ id: x.id, label: `${formatDate(x.sessionDate)} · ${x.title || 'Consejo de Administración'}`, date: x.sessionDate, status: x.status, ceremonial: false }))
+    if (recordType === 'tenida') return meetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title || meetingTypeLabel(x.meetingType)}`, date: x.meetingDate, status: x.status, ceremonial: !!x.ceremonyType, ceremonyType: x.ceremonyType }))
+    if (recordType === 'reunion') return adminMeetings.map(x => ({ id: x.id, label: `${formatDate(x.meetingDate)} · ${x.title}`, date: x.meetingDate, status: x.status, ceremonial: false, ceremonyType: null }))
+    return councilSessions.map(x => ({ id: x.id, label: `${formatDate(x.sessionDate)} · ${x.title || 'Consejo de Administración'}`, date: x.sessionDate, status: x.status, ceremonial: false, ceremonyType: null }))
   }, [recordType, meetings, adminMeetings, councilSessions])
 
   useEffect(() => {
@@ -89,6 +94,13 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const currentRecord = records.find(x => x.recordType === recordType && x.sourceRecordId === sourceRecordId) ?? null
   const currentSource = sources.find(x => x.id === sourceRecordId) ?? null
   const planchaAllowed = recordType === 'tenida' && currentSource && !currentSource.ceremonial
+  const matchingAuthorizations = currentSource?.ceremonyType
+    ? ceremonyAuthorizations.filter(x => x.ceremonyType === currentSource.ceremonyType && x.proposedDate === currentSource.date)
+    : []
+  const extractReady = !!currentRecord?.extractDocumentVersionId
+  const authorizationRequired = recordType === 'tenida' && !!currentSource?.ceremonial
+  const authorizationReady = !authorizationRequired || !!currentRecord?.ceremonyAuthorizationDocumentId
+  const canCloseTenida = recordType === 'tenida' && currentSource?.status === 'held' && extractReady && authorizationReady
   const canSubmitToGrandSecretariat =
     recordType === 'tenida' &&
     currentSource &&
@@ -200,6 +212,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         workPaperAuthorMemberId: kind === 'work_paper' ? workPaperAuthorMemberId : current?.workPaperAuthorMemberId ?? null,
         extractDocumentVersionId: kind === 'extract' ? uploaded.version.id : current?.extractDocumentVersionId ?? null,
         fullMinuteDocumentVersionId: kind === 'full_minute' ? uploaded.version.id : current?.fullMinuteDocumentVersionId ?? null,
+        ceremonyAuthorizationDocumentId: current?.ceremonyAuthorizationDocumentId ?? null,
       }
       await lodgeApi.upsertSecretariatRecord(organizationId, recordType, sourceRecordId, payload)
       await refreshRecords()
@@ -211,9 +224,33 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
     } catch (reason) { setError(toMessage(reason)) } finally { setUploadingKind(null) }
   }
 
+  const linkCeremonyAuthorization = async (authorizationId: string) => {
+    if (!sourceRecordId || !currentSource?.ceremonial) return
+    const current = currentRecord
+    await execute(async () => {
+      await lodgeApi.upsertSecretariatRecord(organizationId, 'tenida', sourceRecordId, {
+        workPaperDocumentVersionId: current?.workPaperDocumentVersionId ?? null,
+        workPaperAuthorMemberId: current?.workPaperAuthorMemberId ?? null,
+        extractDocumentVersionId: current?.extractDocumentVersionId ?? null,
+        fullMinuteDocumentVersionId: current?.fullMinuteDocumentVersionId ?? null,
+        ceremonyAuthorizationDocumentId: authorizationId || null,
+      })
+      await refreshRecords()
+    }, authorizationId ? 'Plancha de Autorización de Gran Secretaría vinculada a la Tenida ceremonial.' : 'Vínculo de Plancha de Autorización retirado.')
+  }
+
+  const closeTenida = async () => {
+    if (!canCloseTenida || !sourceRecordId) return
+    await execute(async () => {
+      await lodgeApi.closeMeeting(sourceRecordId)
+      await refreshRecords()
+      await onMeetingChanged?.(sourceRecordId)
+    }, 'Tenida cerrada documentalmente. Se verificaron los documentos obligatorios.')
+  }
+
   const submitExtract = async () => {
     if (!canSubmitToGrandSecretariat || !sourceRecordId) return
-    await execute(async () => { await lodgeApi.submitTenidaExtract(organizationId, sourceRecordId); await refreshRecords() }, 'Extracto PDF remitido a Gran Secretaría. La plancha y el acta completa permanecen privadas del Taller.')
+    await execute(async () => { await lodgeApi.submitTenidaExtract(organizationId, sourceRecordId); await refreshRecords() }, 'Extracto PDF remitido a Gran Secretaría. La plancha de trabajo y el acta completa permanecen privadas del Taller.')
   }
 
   const execute = async (action: () => Promise<void>, success: string | null) => {
@@ -290,9 +327,14 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
           {currentRecord?.workPaperDocumentVersionId && <small>Plancha vinculada al registro.</small>}
         </div>
         <div className="secretariat-document-card">
-          <strong>Extracto</strong><span>PDF · obligatorio para remitir una Tenida a Gran Secretaría.</span>
+          <strong>Extracto</strong><span>PDF · obligatorio para cerrar cualquier Tenida y para remitirla a Gran Secretaría.</span>
           <FileButton disabled={!!uploadingKind} accept=".pdf,application/pdf" label={currentRecord?.extractDocumentVersionId?'Reemplazar extracto PDF':'Cargar extracto PDF'} onFile={file=>void uploadDocument('extract',file)} />
-          {currentRecord?.extractDocumentVersionId && <small>Extracto PDF disponible.</small>}
+          <small>{currentRecord?.extractDocumentVersionId?'✅ Extracto PDF disponible.':'❌ Extracto pendiente.'}</small>
+        </div>
+        <div className="secretariat-document-card">
+          <strong>Plancha de Autorización</strong><span>{currentSource.ceremonial?'Obligatoria para cerrar esta Tenida ceremonial · emitida por Gran Secretaría.':'No corresponde a una Tenida no ceremonial.'}</span>
+          {currentSource.ceremonial && <select aria-label="Plancha de Autorización de Ceremonia" value={currentRecord?.ceremonyAuthorizationDocumentId??''} disabled={working} onChange={e=>void linkCeremonyAuthorization(e.target.value)}><option value="">Seleccione autorización…</option>{matchingAuthorizations.map(item=><option key={item.id} value={item.id}>{item.documentCode} · {ceremonyTypeLabel(item.ceremonyType)}{item.proposedDate?` · ${formatDate(item.proposedDate)}`:''}</option>)}</select>}
+          {currentSource.ceremonial && <small>{currentRecord?.ceremonyAuthorizationDocumentId?'✅ Plancha de Autorización vinculada.':matchingAuthorizations.length?'❌ Falta vincular la Plancha de Autorización.':'❌ Gran Secretaría aún no tiene una Plancha de Autorización compatible disponible.'}</small>}
         </div>
         <div className="secretariat-document-card">
           <strong>Acta completa</strong><span>Opcional · PDF o Word · siempre privada del Taller.</span>
@@ -301,7 +343,12 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         </div>
       </div>}
 
-      {canManage && recordType==='tenida' && currentSource && <div className="lodge-secretariat-submit"><button type="button" className="regularity-primary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button><small>Solo se remiten datos básicos de la Tenida y el extracto PDF.</small></div>}
+      {canManage && recordType==='tenida' && currentSource && <div className="lodge-secretariat-submit">
+        <div><strong>Cierre documental</strong><small>Extracto {extractReady?'✅':'❌'}{currentSource.ceremonial?` · Plancha de Autorización ${authorizationReady?'✅':'❌'}`:' · Tenida no ceremonial'}</small></div>
+        <button type="button" className="regularity-primary" disabled={working||!canCloseTenida||currentSource.status==='closed'} onClick={()=>void closeTenida()}>{currentSource.status==='closed'?'Tenida Cerrada':'Cerrar Tenida'}</button>
+        <button type="button" className="regularity-secondary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button>
+        <small>Gran Secretaría recibe sólo los datos básicos y el Extracto; la Plancha de Autorización queda vinculada al expediente ceremonial del Taller.</small>
+      </div>}
     </article>
   </section>
 }
@@ -313,6 +360,7 @@ function formatDate(value:string){const [y,m,d]=value.split('-');return y&&m&&d?
 function degreeLabel(value:string){return value==='master'?'Maestro':value==='fellowcraft'?'Compañero':'Aprendiz'}
 function intakeStatusLabel(value:string){return value==='draft'?'Borrador':value==='submitted'?'Enviado a RI':value==='observed'?'Observado por RI':value==='approved'?'Validado por RI':'Rechazado'}
 function meetingTypeLabel(value:string){return value==='regular'?'Tenida Regular':value==='solemn'?'Tenida Solemne':value==='instruction'?'Tenida de Instrucción':value==='anniversary'?'Tenida de Aniversario':value==='funeral'?'Tenida Fúnebre':'Tenida Especial'}
+function ceremonyTypeLabel(value:string){return value==='initiation'?'Iniciación':value==='wage_increase'?'Aumento de Salario':value==='exaltation'?'Exaltación':value}
 function toMessage(reason:unknown){return reason instanceof Error?reason.message:'No fue posible completar la operación.'}
 function downloadBlob(blob:Blob,fileName:string){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)}
 function isPdfOrWord(file:File){return file.type==='application/pdf'||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'}

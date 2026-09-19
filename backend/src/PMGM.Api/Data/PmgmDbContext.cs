@@ -244,6 +244,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.OrganizationId, x.RecordType, x.EventDate });
             entity.HasIndex(x => new { x.RecordType, x.SourceRecordId }).IsUnique();
             entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
+            entity.HasIndex(x => x.CeremonyAuthorizationDocumentId);
         });
 
         modelBuilder.Entity<FinancialRegularitySnapshot>(entity =>

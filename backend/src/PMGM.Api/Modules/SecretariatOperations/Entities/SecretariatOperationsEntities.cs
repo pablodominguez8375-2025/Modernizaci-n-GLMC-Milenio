@@ -67,6 +67,7 @@ public sealed class LodgeSecretariatRecord
     public Guid? WorkPaperAuthorMemberId { get; set; }
     public Guid? ExtractDocumentVersionId { get; set; }
     public Guid? FullMinuteDocumentVersionId { get; set; }
+    public Guid? CeremonyAuthorizationDocumentId { get; set; }
     public required string Status { get; set; }
     public required string CreatedBySubject { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;

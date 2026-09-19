@@ -21,6 +21,7 @@ export interface LodgeMeeting {
   title: string | null
   status: LodgeMeetingStatus
   createdAtUtc: string
+  heldAtUtc: string | null
   closedAtUtc: string | null
 }
 export interface LodgeMeetingsResponse { total: number; items: LodgeMeeting[] }
@@ -107,14 +108,21 @@ export type LodgeSecretariatRecordType = 'tenida' | 'reunion' | 'consejo'
 export interface LodgeSecretariatRecord {
   id: string; organizationId: string; recordType: LodgeSecretariatRecordType; sourceRecordId: string; eventDate: string; title: string
   workPaperDocumentVersionId: string | null; workPaperAuthorMemberId: string | null; extractDocumentVersionId: string | null
-  fullMinuteDocumentVersionId: string | null; status: 'draft' | 'submitted' | 'received' | 'observed'
+  fullMinuteDocumentVersionId: string | null; ceremonyAuthorizationDocumentId: string | null
+  status: 'draft' | 'submitted' | 'received' | 'observed'
   createdAtUtc: string; submittedAtUtc: string | null; reviewedAtUtc: string | null; reviewNotes: string | null
 }
 export interface LodgeSecretariatRecordsResponse { total: number; items: LodgeSecretariatRecord[] }
 export interface UpsertLodgeSecretariatRecordRequest {
   workPaperDocumentVersionId?: string | null; workPaperAuthorMemberId?: string | null
   extractDocumentVersionId?: string | null; fullMinuteDocumentVersionId?: string | null
+  ceremonyAuthorizationDocumentId?: string | null
 }
+export interface LodgeCeremonyAuthorizationOption {
+  id: string; documentCode: string; title: string; ceremonyRequestId: string; ceremonyType: LodgeCeremonyType
+  proposedDate: string | null; issuedAtUtc: string
+}
+export interface LodgeCeremonyAuthorizationOptionsResponse { total: number; items: LodgeCeremonyAuthorizationOption[] }
 
 export type LodgeAccessTokenProvider = () => Promise<string | null>
 
@@ -145,19 +153,23 @@ export const demoLodgeSeed = {
   meetings: [
     {
       id: 'bbbbbbbb-2309-0012-0000-000000000001', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-12', meetingType: 'regular' as const,
-      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Ordinaria · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-01T15:00:00Z', closedAtUtc: null,
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Ordinaria · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-01T15:00:00Z', heldAtUtc: null, closedAtUtc: null,
     },
     {
       id: 'bbbbbbbb-2309-0026-0000-000000000002', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-26', meetingType: 'instruction' as const,
-      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida de Instrucción · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-02T15:00:00Z', closedAtUtc: null,
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida de Instrucción · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-02T15:00:00Z', heldAtUtc: null, closedAtUtc: null,
     },
     {
       id: 'bbbbbbbb-2309-0005-0000-000000000003', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-05', meetingType: 'regular' as const,
-      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Ordinaria anterior · demo', status: 'held' as const, createdAtUtc: '2026-08-25T15:00:00Z', closedAtUtc: '2026-09-06T01:20:00Z',
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Ordinaria anterior · demo', status: 'held' as const, createdAtUtc: '2026-08-25T15:00:00Z', heldAtUtc: '2026-09-06T01:20:00Z', closedAtUtc: null,
+    },
+    {
+      id: 'bbbbbbbb-2309-0018-0000-000000000005', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-18', meetingType: 'solemn' as const,
+      grade: 'apprentice' as const, ceremonyType: 'initiation' as const, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida de Iniciación · demo', status: 'held' as const, createdAtUtc: '2026-09-10T15:00:00Z', heldAtUtc: '2026-09-19T00:30:00Z', closedAtUtc: null,
     },
     {
       id: 'bbbbbbbb-0109-0019-0000-000000000004', organizationId: DEMO_LODGE_1_ID, meetingDate: '2026-09-19', meetingType: 'solemn' as const,
-      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', closedAtUtc: null,
+      grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', heldAtUtc: null, closedAtUtc: null,
     },
   ] satisfies LodgeMeeting[],
   attendance: [
@@ -171,6 +183,17 @@ export const demoLodgeSeed = {
     status: 'approved' as const, createdAtUtc: '2026-09-06T01:25:00Z', approvedAtUtc: '2026-09-06T01:40:00Z',
   } satisfies LodgeMinute,
   ballots: [{ id: 'ffffffff-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1, ballotType: 'white_black' as const, procedureNumber: 1 as const, subject: 'Admisión de Persona Demostrativa', attendeeCount: 2, eligibleCount: 2, positiveCount: 2, negativeCount: 0, recountObservation: null, status: 'closed' as const, recordedAtUtc: '2026-09-06T01:15:00Z' }] satisfies LodgeAnonymousBallot[],
+  ceremonyAuthorizations: [
+    {
+      id: 'abababab-1111-2222-3333-444444444444',
+      documentCode: 'PLA-AUT-CER-2026-DEMO0001',
+      title: 'Plancha de Autorización de Ceremonia — initiation',
+      ceremonyRequestId: 'cdcdcdcd-1111-2222-3333-444444444444',
+      ceremonyType: 'initiation' as const,
+      proposedDate: '2026-09-18',
+      issuedAtUtc: '2026-09-16T18:00:00Z',
+    },
+  ] satisfies LodgeCeremonyAuthorizationOption[],
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
@@ -192,6 +215,7 @@ export class LodgeApiClient {
   private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
   private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = []
+  private readonly mockCeremonyAuthorizations: LodgeCeremonyAuthorizationOption[] = demoLodgeSeed.ceremonyAuthorizations.map(item => ({ ...item }))
 
   constructor(options: LodgeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -260,13 +284,21 @@ export class LodgeApiClient {
     return this.request<LodgeAdministrativeMeeting>(`/api/secretaria/reuniones/${encodeURIComponent(meetingId)}/realizar`,{method:'POST'})
   }
 
+  async getCeremonyAuthorizationOptions(organizationId:string):Promise<LodgeCeremonyAuthorizationOptionsResponse>{
+    if(this.useMocks){
+      const items = organizationId === DEMO_LODGE_23_ID ? this.mockCeremonyAuthorizations.map(item=>({...item})) : []
+      return { total:items.length, items }
+    }
+    return this.request<LodgeCeremonyAuthorizationOptionsResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/autorizaciones-ceremonia`)
+  }
+
   async getSecretariatRecords(organizationId:string):Promise<LodgeSecretariatRecordsResponse>{
     if(this.useMocks){ const items=this.mockSecretariatRecords.filter(x=>x.organizationId===organizationId).map(x=>({...x})); return {total:items.length,items} }
     return this.request<LodgeSecretariatRecordsResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/registros`)
   }
 
   async upsertSecretariatRecord(organizationId:string,recordType:LodgeSecretariatRecordType,sourceRecordId:string,payload:UpsertLodgeSecretariatRecordRequest):Promise<LodgeSecretariatRecord>{
-    if(this.useMocks){ let item=this.mockSecretariatRecords.find(x=>x.recordType===recordType&&x.sourceRecordId===sourceRecordId); if(!item){ item={id:crypto.randomUUID(),organizationId,recordType,sourceRecordId,eventDate:new Date().toISOString().slice(0,10),title:`${recordType} demostrativo`,workPaperDocumentVersionId:null,workPaperAuthorMemberId:null,extractDocumentVersionId:null,fullMinuteDocumentVersionId:null,status:'draft',createdAtUtc:new Date().toISOString(),submittedAtUtc:null,reviewedAtUtc:null,reviewNotes:null}; this.mockSecretariatRecords.unshift(item) } Object.assign(item,payload); return {...item} }
+    if(this.useMocks){ let item=this.mockSecretariatRecords.find(x=>x.recordType===recordType&&x.sourceRecordId===sourceRecordId); if(!item){ item={id:crypto.randomUUID(),organizationId,recordType,sourceRecordId,eventDate:new Date().toISOString().slice(0,10),title:`${recordType} demostrativo`,workPaperDocumentVersionId:null,workPaperAuthorMemberId:null,extractDocumentVersionId:null,fullMinuteDocumentVersionId:null,ceremonyAuthorizationDocumentId:null,status:'draft',createdAtUtc:new Date().toISOString(),submittedAtUtc:null,reviewedAtUtc:null,reviewNotes:null}; this.mockSecretariatRecords.unshift(item) } Object.assign(item,payload); return {...item} }
     return this.putJson<LodgeSecretariatRecord>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/registros/${encodeURIComponent(recordType)}/${encodeURIComponent(sourceRecordId)}`,payload)
   }
 
@@ -325,6 +357,7 @@ export class LodgeApiClient {
         title: payload.title?.trim() || null,
         status: 'scheduled',
         createdAtUtc: new Date().toISOString(),
+        heldAtUtc: null,
         closedAtUtc: null,
       }
       this.mockMeetings.unshift(meeting)
@@ -333,14 +366,31 @@ export class LodgeApiClient {
     return this.postJson<LodgeMeeting>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/tenidas`, payload)
   }
 
-  async closeMeeting(meetingId: string): Promise<LodgeMeeting> {
+  async markMeetingHeld(meetingId: string): Promise<LodgeMeeting> {
     if (this.useMocks) {
       const meeting = this.requireMeeting(meetingId)
       if (meeting.status === 'held' || meeting.status === 'closed') throw new Error('La Tenida ya se encuentra realizada.')
-      meeting.status = 'held'; meeting.closedAtUtc = new Date().toISOString()
+      if (meeting.status === 'cancelled') throw new Error('Una Tenida cancelada no puede marcarse como realizada.')
+      meeting.status = 'held'
+      meeting.heldAtUtc = new Date().toISOString()
+      meeting.closedAtUtc = null
       return { ...meeting }
     }
     return this.request<LodgeMeeting>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/realizar`, { method: 'POST' })
+  }
+
+  async closeMeeting(meetingId: string): Promise<LodgeMeeting> {
+    if (this.useMocks) {
+      const meeting = this.requireMeeting(meetingId)
+      if (meeting.status !== 'held') throw new Error(meeting.status === 'closed' ? 'La Tenida ya se encuentra cerrada.' : 'La Tenida debe estar Realizada antes de iniciar su cierre documental.')
+      const record = this.mockSecretariatRecords.find(item => item.recordType === 'tenida' && item.sourceRecordId === meetingId)
+      if (!record?.extractDocumentVersionId) throw new Error('Debe adjuntar el Extracto de Acta en PDF antes de cerrar la Tenida.')
+      if (meeting.ceremonyType && !record.ceremonyAuthorizationDocumentId) throw new Error('Una Tenida ceremonial requiere la Plancha de Autorización de Ceremonia emitida por Gran Secretaría antes de cerrarse.')
+      meeting.status = 'closed'
+      meeting.closedAtUtc = new Date().toISOString()
+      return { ...meeting }
+    }
+    return this.request<LodgeMeeting>(`/api/gestion-logial/tenidas/${encodeURIComponent(meetingId)}/cerrar`, { method: 'POST' })
   }
 
   async getAttendance(meetingId: string): Promise<LodgeAttendanceResponse> {

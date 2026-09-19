@@ -14,6 +14,7 @@ public sealed class LodgeMeeting
     public string? Title { get; set; }
     public required string Status { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? HeldAtUtc { get; set; }
     public DateTimeOffset? ClosedAtUtc { get; set; }
 }
 

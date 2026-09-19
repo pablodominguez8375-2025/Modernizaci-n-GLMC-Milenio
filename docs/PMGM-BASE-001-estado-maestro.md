@@ -481,7 +481,7 @@ La línea vigente incluye, como mínimo:
 - Definition of Done de triple salida;
 - demo GitHub Pages funcional con datos ficticios;
 - instalable QA reproducible para `srv01`;
-- kit de regresión QA de 21 controles;
+- kit de regresión QA de 23 controles (QA-001..QA-023);
 - deploy post-merge de Pages resuelto;
 - Keycloak QA persistido en PostgreSQL;
 - backup/restore de PostgreSQL + MinIO;
@@ -515,7 +515,7 @@ Flujo:
 5. instalar;
 6. ejecutar smoke autenticado;
 7. preparar regresión QA;
-8. cerrar QA-001..QA-021;
+8. cerrar QA-001..QA-023;
 9. corregir P0/P1;
 10. recién entonces congelar UAT.
 
@@ -555,7 +555,7 @@ Fuentes técnicas canónicas del incremento:
 
 La Línea Base Maestra de Google Drive contiene el mismo acuerdo en su sección **32. Secretaría integral — Cuadro del Taller, Tenidas y Gran Secretaría**.
 
-> Nota de frescura: este apartado describe reglas integradas. El SHA operativo vigente debe obtenerse siempre del HEAD vivo de `dev`; actualmente, al sincronizar esta documentación, `dev` está en `125635e5cbf23919d135965311f7c24bb086cea1` por integración posterior del PR #106.
+> Nota de frescura: este apartado describe reglas integradas. El SHA operativo vigente debe obtenerse siempre del HEAD vivo de `dev`; los SHA históricos citados aquí no son punteros de trabajo.
 
 
 ## 16. Regla funcional aprobada — cierre documental de Tenidas
@@ -587,7 +587,7 @@ Trazabilidad objetivo de ceremonia:
 
 `solicitud → aprobaciones → Plancha de Autorización → Tenida Realizada → Extracto de Acta → Tenida Cerrada`
 
-**Estado al registrar esta decisión:** requisito aprobado y documentado; pendiente de ajuste funcional en código para separar Realizada/Cerrada y aplicar las validaciones obligatorias en backend, frontend, demo y QA. Esta decisión no debe perderse ni ser reemplazada por la compatibilidad histórica actual de `closed`.
+**Estado de implementación:** desarrollado en PR #110 `feat(tenidas): cierre documental regular y ceremonial`. El backend separa Realizada/Cerrada, bloquea cierres incompletos, vincula la Plancha oficial de Gran Secretaría por referencia y audita el cierre. La migración normaliza los antiguos `closed` a `held` preservando la fecha en `HeldAtUtc`. El frontend y el mock de Pages muestran los requisitos documentales y aplican el mismo flujo. El kit QA incorpora QA-022 y QA-023, pasando a 23 controles. La integración definitiva a `dev`, publicación Pages e instalable del merge SHA deben verificarse mediante el flujo de PR/CI antes de declarar completo el incremento.
 
 
 ---

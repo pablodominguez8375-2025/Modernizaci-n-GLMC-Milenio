@@ -48,10 +48,11 @@ public static class LodgeManagementCodes
         public const string Scheduled = "scheduled";
         public const string Open = "open";
         public const string Held = "held";
-        public const string Closed = "closed"; // legado: se lee como realizada
+        public const string Closed = "closed";
         public const string Cancelled = "cancelled";
 
         public static bool IsHeld(string value) => value is Held or Closed;
+        public static bool IsClosed(string value) => value == Closed;
     }
 
     public static class AttendanceStatus

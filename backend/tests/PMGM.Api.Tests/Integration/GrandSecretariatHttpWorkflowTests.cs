@@ -172,6 +172,17 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.True(queueAfterItem.GetProperty("formalAuthorizationIssued").GetBoolean());
         Assert.Equal(reservationId, queueAfterItem.GetProperty("spaceReservationId").GetGuid());
 
+        var lodgeAuthorizationOptions = await client.GetAsync(
+            $"/api/secretaria/talleres/{organizationId}/autorizaciones-ceremonia",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, lodgeAuthorizationOptions.StatusCode);
+        var lodgeAuthorizationOptionsJson = await lodgeAuthorizationOptions.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var lodgeAuthorizationOption = lodgeAuthorizationOptionsJson.GetProperty("items").EnumerateArray().Single();
+        Assert.Equal(authorizationJson.GetProperty("id").GetGuid(), lodgeAuthorizationOption.GetProperty("id").GetGuid());
+        Assert.Equal(ceremonyId, lodgeAuthorizationOption.GetProperty("ceremonyRequestId").GetGuid());
+        Assert.Equal(CeremonyCodes.Type.WageIncrease, lodgeAuthorizationOption.GetProperty("ceremonyType").GetString());
+        Assert.StartsWith("PLA-AUT-CER-", lodgeAuthorizationOption.GetProperty("documentCode").GetString());
+
         var duplicateAuthorization = await client.PostAsJsonAsync(
             $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
             new { spaceReservationId = reservationId },

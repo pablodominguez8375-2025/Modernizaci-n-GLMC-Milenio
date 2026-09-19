@@ -12,7 +12,7 @@ Orden obligatorio:
 4. validar SHA-256 y `MANIFEST.sha256`;
 5. ejecutar smoke autenticado;
 6. probar Consejo de Administración con perfil autorizado;
-7. ejecutar regresión QA-001..QA-021;
+7. ejecutar regresión QA-001..QA-023;
 8. corregir defectos P0/P1 detectados;
 9. congelar un nuevo candidato UAT desde el código realmente probado;
 10. ejecutar UAT institucional;
@@ -30,7 +30,7 @@ El Sponsor / Product Owner instruyó expresamente continuar desarrollo, pruebas,
 
 Esta autorización permite trabajar el siguiente incremento funcional en una rama `feature/*` mientras Issue #97 permanece abierto. **No elimina el gate operacional de QA**: no se puede declarar el corte operacional, ejecutar UAT como evidencia del código nuevo ni promover a `main` hasta desplegar en `srv01` el SHA correspondiente y completar smoke/regresión.
 
-El incremento activo es `feature/insinuaciones-flujo-reglamentario-v2`, que extiende el flujo real de insinuaciones ya existente y corrige brechas de alineamiento con el protocolo 2026.
+El flujo reglamentario de insinuaciones fue integrado mediante PR #106. El incremento funcional activo de este corte es PR #110, `feat(tenidas): cierre documental regular y ceremonial`, que implementa la regla aprobada de separación Realizada/Cerrada.
 
 ## Siguiente incremento funcional después de QA
 
@@ -63,9 +63,9 @@ Conectar `ballot_approved` con creación de solicitud de iniciación y con PMGM-
 
 No usar la RC1 histórica como evidencia de aceptación del código actual.
 
-## Ajuste funcional prioritario aprobado — cierre documental de Tenidas
+## Ajuste funcional prioritario — cierre documental de Tenidas
 
-Antes de considerar cerrado funcionalmente el circuito de Secretaría/Tenidas, implementar la regla aprobada por el Sponsor / Product Owner:
+La regla aprobada por el Sponsor / Product Owner está implementada en PR #110 y debe integrarse sólo después de sus gates exact-head:
 
 - separar **Realizada** de **Cerrada**;
 - Tenida regular/no ceremonial: exigir **Extracto de Acta PDF** para cerrar;
@@ -87,3 +87,13 @@ Criterios mínimos de aceptación:
 6. la validación se aplica server-side y queda auditada;
 7. la demo y el instalable QA reproducen el mismo comportamiento.
 
+
+## Estado del corte PR #110
+
+- backend: implementación completada en rama;
+- migración EF Core: agregada y trazable;
+- frontend Secretaría: requisitos y cierre conectados;
+- demo Pages: contrato mock actualizado con datos ficticios;
+- QA: QA-022 consolidado + QA-023 agregado; gate objetivo 23/23;
+- documentación: ARCH-009, Estado Maestro, NEXT, instalación QA y kit de regresión sincronizados;
+- pendiente: CI/Showcase/QA Installable exact-head del PR, merge a `dev`, publicación post-merge del mismo SHA y despliegue físico en `srv01`.

@@ -6,6 +6,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.GrandSecretariat;
 using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
@@ -44,6 +45,7 @@ public static class SecretariatOperationsEndpoints
         group.MapPost("/reuniones/talleres/{organizationId:guid}", CreateAdministrativeMeetingAsync);
         group.MapPost("/reuniones/{meetingId:guid}/realizar", MarkAdministrativeMeetingHeldAsync);
 
+        group.MapGet("/talleres/{organizationId:guid}/autorizaciones-ceremonia", ListCeremonyAuthorizationsAsync);
         group.MapGet("/talleres/{organizationId:guid}/registros", ListLodgeRecordsAsync);
         group.MapPut("/talleres/{organizationId:guid}/registros/{recordType}/{sourceRecordId:guid}", UpsertLodgeRecordAsync);
         group.MapPost("/talleres/{organizationId:guid}/tenidas/{meetingId:guid}/remitir-extracto", SubmitTenidaExtractAsync);
@@ -562,6 +564,64 @@ public static class SecretariatOperationsEndpoints
         return Results.Ok(entity);
     }
 
+    private static async Task<IResult> ListCeremonyAuthorizationsAsync(
+        Guid organizationId,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        GrandSecretariatDbContext grandSecretariatDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanReadLodgeSecretariat(httpContext.User, organizationId)) return Results.Forbid();
+
+        var documents = await grandSecretariatDb.SecretariatDocuments.AsNoTracking()
+            .Where(x =>
+                x.OrganizationId == organizationId &&
+                x.Status == GrandSecretariatCodes.DocumentStatus.Issued &&
+                x.RelatedCeremonyRequestId != null &&
+                ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                  x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                 x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                 x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy))
+            .OrderByDescending(x => x.IssuedAtUtc)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+
+        var requestIds = documents
+            .Where(x => x.RelatedCeremonyRequestId is not null)
+            .Select(x => x.RelatedCeremonyRequestId!.Value)
+            .Distinct()
+            .ToArray();
+
+        var ceremonies = requestIds.Length == 0
+            ? new Dictionary<Guid, CeremonyAuthorizationCeremonyRef>()
+            : await db.CeremonyRequests.AsNoTracking()
+                .Where(x => requestIds.Contains(x.Id) && x.OrganizationId == organizationId)
+                .Select(x => new CeremonyAuthorizationCeremonyRef(x.Id, x.CeremonyType, x.ProposedDate))
+                .ToDictionaryAsync(x => x.Id, cancellationToken);
+
+        var items = documents
+            .Where(x => x.RelatedCeremonyRequestId is not null && ceremonies.ContainsKey(x.RelatedCeremonyRequestId.Value))
+            .Select(x =>
+            {
+                var ceremony = ceremonies[x.RelatedCeremonyRequestId!.Value];
+                return new
+                {
+                    id = x.Id,
+                    documentCode = x.DocumentCode,
+                    title = x.Title,
+                    ceremonyRequestId = ceremony.Id,
+                    ceremonyType = ceremony.CeremonyType,
+                    proposedDate = ceremony.ProposedDate,
+                    issuedAtUtc = x.IssuedAtUtc
+                };
+            })
+            .ToList();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
+    }
+
     private static async Task<IResult> ListLodgeRecordsAsync(
         Guid organizationId,
         HttpContext httpContext,
@@ -587,6 +647,7 @@ public static class SecretariatOperationsEndpoints
         PmgmDbContext db,
         LodgeManagementDbContext lodgeDb,
         DocumentManagementDbContext documentDb,
+        GrandSecretariatDbContext grandSecretariatDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -660,6 +721,33 @@ public static class SecretariatOperationsEndpoints
             if (!valid) return Results.BadRequest(new { message = "El acta completa debe ser un documento disponible del Taller en PDF o Word." });
         }
 
+        if (request.CeremonyAuthorizationDocumentId is not null)
+        {
+            if (recordType != SecretariatOperationsCodes.RecordType.LodgeMeeting || ceremonyType is null)
+                return Results.BadRequest(new { message = "La Plancha de Autorización sólo puede vincularse a una Tenida ceremonial." });
+
+            var authorization = await grandSecretariatDb.SecretariatDocuments.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == request.CeremonyAuthorizationDocumentId.Value, cancellationToken);
+            var validAuthorization = authorization is not null &&
+                authorization.OrganizationId == organizationId &&
+                authorization.Status == GrandSecretariatCodes.DocumentStatus.Issued &&
+                authorization.RelatedCeremonyRequestId is not null &&
+                ((authorization.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                  authorization.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                 authorization.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                 authorization.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy);
+            if (!validAuthorization)
+                return Results.BadRequest(new { message = "La Plancha de Autorización indicada no es una autorización vigente de Gran Secretaría para este Taller." });
+
+            var ceremony = await db.CeremonyRequests.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == authorization!.RelatedCeremonyRequestId!.Value, cancellationToken);
+            if (ceremony is null ||
+                ceremony.OrganizationId != organizationId ||
+                ceremony.CeremonyType != ceremonyType ||
+                ceremony.ProposedDate != eventDate)
+                return Results.BadRequest(new { message = "La Plancha de Autorización no corresponde al Taller, tipo o fecha de esta Tenida ceremonial." });
+        }
+
         var record = await db.LodgeSecretariatRecords.SingleOrDefaultAsync(
             x => x.RecordType == recordType && x.SourceRecordId == sourceRecordId, cancellationToken);
 
@@ -682,6 +770,7 @@ public static class SecretariatOperationsEndpoints
         record.WorkPaperAuthorMemberId = request.WorkPaperDocumentVersionId is null ? null : request.WorkPaperAuthorMemberId;
         record.ExtractDocumentVersionId = request.ExtractDocumentVersionId;
         record.FullMinuteDocumentVersionId = request.FullMinuteDocumentVersionId;
+        record.CeremonyAuthorizationDocumentId = request.CeremonyAuthorizationDocumentId;
 
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(record);
@@ -923,4 +1012,10 @@ public sealed record UpsertLodgeSecretariatRecordRequest(
     Guid? WorkPaperDocumentVersionId,
     Guid? WorkPaperAuthorMemberId,
     Guid? ExtractDocumentVersionId,
-    Guid? FullMinuteDocumentVersionId);
+    Guid? FullMinuteDocumentVersionId,
+    Guid? CeremonyAuthorizationDocumentId);
+
+public sealed record CeremonyAuthorizationCeremonyRef(
+    Guid Id,
+    string CeremonyType,
+    DateOnly? ProposedDate);

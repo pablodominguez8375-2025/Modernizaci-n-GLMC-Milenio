@@ -1,6 +1,6 @@
 # PMGM-ARCH-010 — Flujo reglamentario de insinuaciones
 
-Estado: implementación candidata en rama `feature/insinuaciones-flujo-reglamentario-v2`  
+Estado: **integrado en `dev` mediante PR #106**  
 Fecha: 2026-09-18
 
 ## 1. Fuentes
@@ -101,7 +101,7 @@ Cobertura agregada:
 - distinción del motivo del rechazo;
 - recorrido demo completo desde flujo inicial hasta solicitud de Iniciación.
 
-La integración a `dev` sólo procede con CI del HEAD exacto en verde.
+La integración a `dev` se realizó con CI del HEAD exacto del PR #106 en verde. El cierre de QA srv01 incorpora además el control `QA-022` para validar operacionalmente este flujo.
 
 ## 9. Relación con QA srv01
 

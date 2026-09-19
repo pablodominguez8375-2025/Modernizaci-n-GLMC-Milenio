@@ -63,8 +63,10 @@ RUT y número institucional se utilizan para identificar al hermano de manera tr
 
 - `scheduled` — **Programada**
 - `held` — **Realizada**
-- `closed` — sólo compatibilidad histórica de lectura, interpretado como Realizada
+- `closed` — **Cerrada** documentalmente
 - `cancelled` — Cancelada
+
+Desde PR #110, `held` y `closed` tienen semántica distinta. La migración del incremento normaliza registros históricos `closed` a `held`, preservando su fecha previa en `HeldAtUtc`, para no atribuirles un cierre documental que nunca pasó por la nueva validación.
 
 ### 4.2 Modalidad
 
@@ -284,15 +286,20 @@ Para una ceremonia, la continuidad documental queda:
 
 ### 13.4 Estado de implementación
 
-Esta regla queda **aprobada como requisito funcional vigente y documentada para continuidad**. Al momento de esta decisión, el código de `dev` todavía trata la operación histórica `closed` como equivalente de lectura a Realizada y no fuerza estas validaciones documentales al marcar una Tenida como realizada/cerrada.
+La regla está **implementada en el PR #110** sobre la rama `feature/tenidas-cierre-documental-v1`, pendiente del gate exact-head y de su integración a `dev`.
 
-Por tanto, el siguiente ajuste funcional deberá:
+El incremento:
 
-- incorporar el estado Cerrada con semántica documental propia;
-- mantener compatibilidad con datos históricos;
-- vincular la Plancha de Autorización a la Tenida ceremonial;
-- validar requisitos en backend, no sólo en interfaz;
-- reflejar el estado de documentos obligatorios en Secretaría del Taller;
-- mantener paridad en Demo GitHub Pages e instalable QA;
-- agregar pruebas de no regresión para Tenidas regulares y ceremoniales.
+- separa `HeldAtUtc` (Realizada) de `ClosedAtUtc` (Cerrada);
+- migra registros históricos `closed` a `held` sin perder la fecha de realización;
+- aplica `LodgeMeetingClosurePolicy` en backend para impedir cierres incompletos;
+- exige Extracto de Acta a toda Tenida;
+- exige adicionalmente Plancha de Autorización de Gran Secretaría a Iniciación, Aumento de Salario y Exaltación;
+- vincula la Plancha oficial por referencia, sin duplicar el documento;
+- valida Taller, tipo de ceremonia y fecha propuesta frente a la Tenida;
+- muestra en Secretaría del Taller el cumplimiento documental con estados visibles;
+- reproduce el mismo comportamiento en el mock funcional de GitHub Pages;
+- consolida QA-022 y agrega QA-023, elevando la regresión srv01 a 23 controles.
+
+La Plancha de Autorización permanece como documento maestro de Gran Secretaría; el Taller conserva sólo el vínculo institucional necesario para acreditar y cerrar la Tenida ceremonial.
 

@@ -19,6 +19,8 @@ using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
+using PMGM.Api.Modules.SecretariatOperations;
+using PMGM.Api.Modules.SecretariatOperations.Entities;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -104,8 +106,15 @@ public sealed class LodgeManagementHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, prematureAttendance.StatusCode);
 
-        var closeResponse = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, closeResponse.StatusCode);
+        var prematureClose = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, prematureClose.StatusCode);
+
+        var heldResponse = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/realizar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, heldResponse.StatusCode);
+        var heldJson = await heldResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(LodgeManagementCodes.MeetingStatus.Held, heldJson.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.String, heldJson.GetProperty("heldAtUtc").ValueKind);
+        Assert.Equal(JsonValueKind.Null, heldJson.GetProperty("closedAtUtc").ValueKind);
 
         var presentResponse = await client.PostAsJsonAsync(
             $"/api/gestion-logial/tenidas/{meetingId}/asistencia",
@@ -162,6 +171,32 @@ public sealed class LodgeManagementHttpWorkflowTests
         var minutesJson = await minutesResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(2, minutesJson.GetProperty("total").GetInt32());
 
+        var closeWithoutExtract = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, closeWithoutExtract.StatusCode);
+
+        await using (var closureScope = factory.Services.CreateAsyncScope())
+        {
+            var institutionalDb = closureScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            institutionalDb.LodgeSecretariatRecords.Add(new LodgeSecretariatRecord
+            {
+                OrganizationId = organizationId,
+                RecordType = SecretariatOperationsCodes.RecordType.LodgeMeeting,
+                SourceRecordId = meetingId,
+                EventDate = new DateOnly(2026, 9, 8),
+                Title = "Tenida ordinaria de integración",
+                ExtractDocumentVersionId = Guid.NewGuid(),
+                Status = SecretariatOperationsCodes.SubmissionStatus.Draft,
+                CreatedBySubject = "ci-lodge-admin"
+            });
+            await institutionalDb.SaveChangesAsync(cancellationToken);
+        }
+
+        var finalClose = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, finalClose.StatusCode);
+        var finalCloseJson = await finalClose.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(LodgeManagementCodes.MeetingStatus.Closed, finalCloseJson.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.String, finalCloseJson.GetProperty("closedAtUtc").ValueKind);
+
         await using var verificationScope = factory.Services.CreateAsyncScope();
         var lodgeDb = verificationScope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
 
@@ -191,6 +226,8 @@ public sealed class LodgeManagementHttpWorkflowTests
             .Select(x => x.Action)
             .ToListAsync(cancellationToken);
         Assert.Contains("lodge.meeting.created", auditActions);
+        Assert.Contains("lodge.meeting.held", auditActions);
+        Assert.Contains("lodge.meeting.closed", auditActions);
         Assert.Equal(2, auditActions.Count(x => x == "lodge.attendance.recorded"));
         Assert.Equal(2, auditActions.Count(x => x == "lodge.minute.version_created"));
         Assert.Equal(2, auditActions.Count(x => x == "lodge.minute.approved"));
