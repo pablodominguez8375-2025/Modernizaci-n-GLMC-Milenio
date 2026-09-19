@@ -222,8 +222,8 @@ public static class TreasuryStatementEndpoints
         var statement = await db.TreasuryMonthlyStatements.FindAsync([statementId], cancellationToken);
         if (statement is null) return Results.NotFound();
         if (!access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId)) return Results.Forbid();
-        if (statement.Status is TreasuryCodes.StatementStatus.Reconciled or TreasuryCodes.StatementStatus.Closed or TreasuryCodes.StatementStatus.Rectified)
-            return Results.Conflict(new { message = "El cuadro ya no admite pagos." });
+        if (statement.Status != TreasuryCodes.StatementStatus.Draft)
+            return Results.Conflict(new { message = "Los pagos sólo pueden registrarse mientras el Cuadro está en borrador." });
         if (!TreasuryCodes.PaymentMethod.IsValid(request.PaymentMethod) || request.Amount <= 0)
             return Results.BadRequest(new { message = "El medio de pago o el monto no es válido." });
 
