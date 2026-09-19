@@ -74,6 +74,23 @@ public static class AdmissionEndpoints
                 return Results.NotFound(new { message = "El hermano indicado no existe." });
             if (member.PersonId != request.PersonId)
                 return Results.BadRequest(new { message = "El hermano y la persona indicados no corresponden al mismo registro maestro." });
+
+            if (request.AffiliationProcedure == AdmissionCodes.AffiliationProcedure.Transfer)
+            {
+                if (request.OriginOrganizationId is null)
+                    return Results.BadRequest(new { message = "La afiliación con traslado debe identificar el Taller de origen." });
+                if (request.OriginOrganizationId.Value == request.OrganizationId)
+                    return Results.BadRequest(new { message = "El Taller de origen y el Taller de destino deben ser distintos." });
+
+                var activeSourceMembership = await coreDb.Memberships.AsNoTracking().AnyAsync(
+                    x => x.MemberId == request.MemberId.Value &&
+                         x.OrganizationId == request.OriginOrganizationId.Value &&
+                         x.Status == MembershipCodes.MembershipStatus.Active &&
+                         x.EndDate == null,
+                    cancellationToken);
+                if (!activeSourceMembership)
+                    return Results.Conflict(new { message = "El traslado requiere una pertenencia activa del hermano en el Taller de origen indicado." });
+            }
         }
         else
         {
