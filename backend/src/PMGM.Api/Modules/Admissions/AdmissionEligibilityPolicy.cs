@@ -14,9 +14,20 @@ public static class AdmissionCodes
             => value is Simple or Activation;
     }
 
+    public static class AffiliationProcedure
+    {
+        public const string Standard = "standard";
+        public const string Reentry = "reentry";
+        public const string Transfer = "transfer";
+
+        public static bool IsValid(string? value)
+            => value is Standard or Reentry or Transfer;
+    }
+
     public static class Requirement
     {
         public const string AffiliationMode = "affiliation_mode";
+        public const string AffiliationProcedure = "affiliation_procedure";
         public const string Article23Clearance = "article_2_3_clearance";
         public const string FirstDegreePresentation = "first_degree_presentation";
         public const string WithdrawalLetter = "withdrawal_letter";
@@ -36,15 +47,29 @@ public static class AdmissionCodes
     }
 }
 
+public static class AdmissionProcedureRules
+{
+    public static bool RequiresInformationCommission(string admissionType, string? affiliationProcedure)
+        => admissionType == CeremonyCodes.Type.Incorporation ||
+           (admissionType == CeremonyCodes.Type.Affiliation &&
+            affiliationProcedure is AdmissionCodes.AffiliationProcedure.Reentry or AdmissionCodes.AffiliationProcedure.Transfer);
+
+    public static bool AllowsInformationCommissionWaiver(string admissionType, string? affiliationProcedure)
+        => admissionType == CeremonyCodes.Type.Affiliation &&
+           affiliationProcedure == AdmissionCodes.AffiliationProcedure.Transfer;
+}
+
 public sealed record AdmissionEligibilityInput(
     string AdmissionType,
     string? AffiliationMode,
+    string? AffiliationProcedure,
     bool WithdrawalLetterAttached,
     bool WithdrawalLetterHandwrittenSignatureVerified,
     bool? Article23Clear = null,
     bool GrandMasterPardonApproved = false,
     bool FirstDegreePresentationRecorded = false,
     bool InformationCommissionRequired = false,
+    bool InformationCommissionWaived = false,
     bool InformationCommissionAppointed = false,
     bool InformationCommissionCompleted = false,
     bool? LodgeThirdDegreeApproved = null,
@@ -80,7 +105,10 @@ public static class AdmissionEligibilityPolicy
         var requirements = new List<AdmissionRequirementResult>();
 
         if (input.AdmissionType == CeremonyCodes.Type.Affiliation)
+        {
             requirements.Add(EvaluateAffiliationMode(input.AffiliationMode));
+            requirements.Add(EvaluateAffiliationProcedure(input.AffiliationProcedure));
+        }
 
         requirements.Add(EvaluateArticle23(input.Article23Clear, input.GrandMasterPardonApproved));
 
@@ -104,17 +132,30 @@ public static class AdmissionEligibilityPolicy
 
         if (input.InformationCommissionRequired)
         {
-            requirements.Add(EvaluateRequiredBoolean(
-                AdmissionCodes.Requirement.InformationCommission,
-                input.InformationCommissionAppointed,
-                "Consta la comisión de información integrada por tres Maestros.",
-                "El art. 2.5 exige una comisión de tres Maestros para este expediente."));
+            if (input.InformationCommissionWaived &&
+                AdmissionProcedureRules.AllowsInformationCommissionWaiver(input.AdmissionType, input.AffiliationProcedure))
+            {
+                requirements.Add(Approved(
+                    AdmissionCodes.Requirement.InformationCommission,
+                    "La Cámara del Medio dispensó expresamente la comisión de información por tratarse de una afiliación con traslado, conforme al art. 2.5."));
+                requirements.Add(Approved(
+                    AdmissionCodes.Requirement.InformationCommissionCompleted,
+                    "La comisión no corresponde por existir dispensa válida de la Cámara del Medio para el traslado."));
+            }
+            else
+            {
+                requirements.Add(EvaluateRequiredBoolean(
+                    AdmissionCodes.Requirement.InformationCommission,
+                    input.InformationCommissionAppointed,
+                    "Consta la comisión de información integrada por tres Maestros.",
+                    "El art. 2.5 exige una comisión de tres Maestros para este expediente."));
 
-            requirements.Add(EvaluateRequiredBoolean(
-                AdmissionCodes.Requirement.InformationCommissionCompleted,
-                input.InformationCommissionCompleted,
-                "La comisión de información dejó constancia de haber concluido su encargo.",
-                "La comisión de información debe completar su encargo antes de resolver la tramitación."));
+                requirements.Add(EvaluateRequiredBoolean(
+                    AdmissionCodes.Requirement.InformationCommissionCompleted,
+                    input.InformationCommissionCompleted,
+                    "La comisión de información dejó constancia de haber concluido su encargo.",
+                    "La comisión de información debe completar su encargo antes de resolver la tramitación."));
+            }
         }
 
         requirements.Add(EvaluateDecision(
@@ -180,6 +221,11 @@ public static class AdmissionEligibilityPolicy
         => AdmissionCodes.AffiliationMode.IsValid(mode)
             ? Approved(AdmissionCodes.Requirement.AffiliationMode, "Se indicó la modalidad de afiliación simple o con activación.")
             : Rejected(AdmissionCodes.Requirement.AffiliationMode, "Debe indicarse si la afiliación es simple o con activación.");
+
+    private static AdmissionRequirementResult EvaluateAffiliationProcedure(string? procedure)
+        => AdmissionCodes.AffiliationProcedure.IsValid(procedure)
+            ? Approved(AdmissionCodes.Requirement.AffiliationProcedure, "Se clasificó expresamente el procedimiento como estándar, reintegro o traslado.")
+            : Rejected(AdmissionCodes.Requirement.AffiliationProcedure, "Debe clasificarse expresamente el procedimiento de afiliación como estándar, reintegro o traslado; no se infiere desde simple/con activación.");
 
     private static AdmissionRequirementResult EvaluateDecision(
         string code,
