@@ -55,7 +55,12 @@ El cálculo mensual debe admitir cuota normal, excepciones con referencia de pla
 ### UAT-016 — Fondo de Defunción
 Cuando el trámite requiere incorporación o reposiciones, la falta del antecedente correspondiente debe dejar la validación no conforme.
 
-### UAT-017 — Afiliación, reintegro, traslado e incorporación
+### UAT-FLUJOS-017 — Afiliación, reintegro, traslado e incorporación
+
+**Referencia histórica/corta:** `UAT-017`. El identificador canónico de este catálogo es
+`UAT-FLUJOS-017` para evitar colisión con `UAT-RC1-017` (Biblioteca) del catálogo
+base de aceptación de la release v1.0.0-rc1.
+
 El flujo debe distinguir modalidad de afiliación `simple/con activación` de la clasificación procedimental `estándar/reintegro/traslado`. Reintegro e incorporación requieren comisión de tres Maestros; un traslado sólo puede obviarla mediante dispensa expresa de Cámara del Medio. La decisión de 3.er grado no debe admitir una conclusión de comisión antigua o posterior. La materialización sólo puede ocurrir cuando la Tenida ceremonial correspondiente esté cerrada con Plancha de Gran Secretaría y Extracto de Acta adjuntos, y un reintento no debe crear una segunda pertenencia ni alterar el actor real auditado.
 
 ## Evidencia por ejecución
