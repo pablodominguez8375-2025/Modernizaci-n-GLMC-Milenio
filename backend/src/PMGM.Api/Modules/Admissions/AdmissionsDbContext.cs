@@ -20,6 +20,7 @@ public sealed class AdmissionsDbContext(DbContextOptions<AdmissionsDbContext> op
             entity.HasKey(x => x.Id);
             entity.Property(x => x.AdmissionType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.AffiliationMode).HasMaxLength(40);
+            entity.Property(x => x.AffiliationProcedure).HasMaxLength(40);
             entity.Property(x => x.OriginLodgeName).HasMaxLength(240);
             entity.Property(x => x.OriginLodgeNumber).HasMaxLength(80);
             entity.Property(x => x.OriginObedience).HasMaxLength(240);
