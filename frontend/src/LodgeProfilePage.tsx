@@ -42,7 +42,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi }: { api:
 
   return <>
     <section className="page-heading lodge-profile-heading">
-      <div><p className="eyebrow">Identidad y gobierno del Taller</p><h1>Ficha de Taller</h1><p>Autoridades, padrón agregado, regularidad y actividad reciente en una sola proyección institucional.</p></div>
+      <div><p className="eyebrow">Identidad y gobierno del Taller</p><h1>Ficha de Taller</h1><p>Autoridades, composición del Cuadro del Taller, regularidad y actividad reciente en una sola proyección institucional.</p></div>
       <label className="lodge-profile-selector"><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
     </section>
 
