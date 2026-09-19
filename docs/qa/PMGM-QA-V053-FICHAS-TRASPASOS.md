@@ -6,11 +6,11 @@ Consolidar la ficha institucional del hermano como registro único y mantener la
 
 ## Criterios de aceptación
 
-- El padrón permite filtrar por Taller, nombre, número institucional y estado.
+- El Cuadro General de la Orden permite filtrar por Taller, nombre, número institucional y estado.
 - La ficha muestra identidad, grado, cargos, regularidad y eventos institucionales según el ámbito autorizado.
 - Un traslado ejecutado cierra la pertenencia de origen y crea la pertenencia destino con fecha efectiva, resolución y referencia de respaldo.
 - El historial anterior permanece consultable y no se duplica la identidad personal.
-- Los datos de contacto se minimizan por rol; una consulta de padrón no expone información innecesaria.
+- Los datos de contacto se minimizan por rol; una consulta del Cuadro General de la Orden no expone información innecesaria.
 - Una transferencia pendiente o aprobada no puede duplicarse para el mismo hermano.
 - Las operaciones de solicitud, aprobación y ejecución quedan auditadas.
 

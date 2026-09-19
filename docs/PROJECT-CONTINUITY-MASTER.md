@@ -25,7 +25,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | Fecha | Conversación / decisión | Resultado |
 |---|---|---|
 | 13-09-2026 | Se solicita centralizar todas las conversaciones del proyecto en un único documento para preservar continuidad. | Regla permanente adoptada; este documento queda como registro maestro. |
-| 13-09-2026 | Se detecta diferencia entre el reporte de Régimen Interior y el padrón QA. | Reporte alineado a 20 Talleres, 480 integrantes y distribución 12/5/5/2 por Taller. |
+| 13-09-2026 | Se detecta diferencia entre el reporte de Régimen Interior y el Cuadro QA. | Reporte alineado a 20 Talleres, 480 integrantes y distribución 12/5/5/2 por Taller. |
 | 13-09-2026 | Se solicita demo operacional con cargas temporales. | Demo QA habilitada para fotografías JPG/PNG y antecedentes Word/PDF durante la sesión. |
 | 13-09-2026 | Se solicita alerta transversal por rechazo en Cámara del Medio. | Antecedente protegido consultable por Régimen Interior y visible como alerta al Taller. |
 | 14-09-2026 | Se solicita un menú Sistema ampliamente parametrizable por administradores. | Se implementa catálogo versionado y auditable para flujos, plazos, Biblioteca, Gestor Documental, Gran Archivo, Tesorería, Hospitalaria, notificaciones y seguridad. |
@@ -65,7 +65,7 @@ La auditoría completa de todos los modelos y cartas sigue siendo una tarea de c
 6. Los egresos de Tesorería y Hospitalaria requieren autorización del Venerable Maestro; el Orador participa como firmante cuando corresponda, especialmente en comunicaciones y retiros.
 7. Los Talleres deben estar al día con Gran Tesorería y Gran Hospitalaria antes de autorizar ceremonias.
 8. La publicación del insinuado debe cumplir el plazo configurable antes de continuar.
-9. El padrón de asambleístas separa calidad histórica, habilitación para asistir y habilitación para sufragar; nunca registra el voto individual.
+9. El Padrón de la Gran Asamblea separa calidad histórica, habilitación para asistir y habilitación para sufragar; nunca registra el voto individual.
 10. Biblioteca Virtual y Gran Archivero son ámbitos separados; el Gran Archivero no forma parte del alcance operativo actual.
 11. El diseño considera minimización, trazabilidad, control de acceso y retención conforme a la Ley 21.719.
 

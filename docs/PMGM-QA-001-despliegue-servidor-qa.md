@@ -182,7 +182,7 @@ Hasta definir el proveedor definitivo, el ambiente puede validar infraestructura
 
 ## 13. Datos de QA
 Reglas obligatorias:
-- no importar padrón real completo para pruebas ordinarias;
+- no importar el Cuadro General de la Orden con datos reales completos para pruebas ordinarias;
 - preferir datos sintéticos;
 - si excepcionalmente se autorizan datos reales, aplicar minimización, autorización, finalidad, acceso y plazo de eliminación conforme a PMGM-REQ-026;
 - separar totalmente credenciales y bases QA/producción.
