@@ -62,9 +62,9 @@ public static class AdmissionProcedureRules
 public sealed record AdmissionEligibilityInput(
     string AdmissionType,
     string? AffiliationMode,
-    string? AffiliationProcedure,
     bool WithdrawalLetterAttached,
     bool WithdrawalLetterHandwrittenSignatureVerified,
+    string? AffiliationProcedure = null,
     bool? Article23Clear = null,
     bool GrandMasterPardonApproved = false,
     bool FirstDegreePresentationRecorded = false,
