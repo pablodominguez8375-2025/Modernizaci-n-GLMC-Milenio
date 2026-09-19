@@ -192,6 +192,19 @@ public static class GrandSecretariatEndpoints
             {
                 return Results.Conflict(new { message = "Una reserva vinculada a ceremonia requiere que la ceremonia esté previamente autorizada." });
             }
+
+            var planchaIssued = await db.SecretariatDocuments
+                .AsNoTracking()
+                .AnyAsync(
+                    x => x.RelatedCeremonyRequestId == ceremony.Id &&
+                         x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                         x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization &&
+                         x.Status == GrandSecretariatCodes.DocumentStatus.Issued,
+                    cancellationToken);
+            if (!planchaIssued)
+            {
+                return Results.Conflict(new { message = "No se puede programar la ceremonia antes de emitir la Plancha de Autorización de Gran Secretaría." });
+            }
         }
 
         var space = await db.InstitutionalSpaces
