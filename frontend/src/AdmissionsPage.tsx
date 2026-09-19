@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
 import type { AdmissionApiClient, AdmissionCaseListItem, AdmissionCaseDetail, AdmissionEligibilityResponse, AdmissionPersonOption, AdmissionType, AffiliationMode, AffiliationProcedure } from './api/admissionApi'
 import type { LodgeApiClient, LodgeMeeting, LodgeMemberOption } from './api/lodgeApi'
 import type { OrganizationOption, PmgmApiClient } from './api/pmgmApi'
@@ -203,7 +203,7 @@ function CaseDetail({detail,eligibility,members,meetings,disabled,onAction,api}:
   const completed=detail.decisions.some(x=>x.decisionType==='ceremony_completed')
   const matchingMeetings=useMemo(()=>meetings.filter(x=>x.status==='closed'&&x.ceremonyType===c.admissionType),[meetings,c.admissionType])
   const [meetingId,setMeetingId]=useState(matchingMeetings[0]?.id??'')
-  useEffect(()=>{setMeetingId(matchingMeetings[0]?.id??'')},[c.id,matchingMeetings.length])
+  useEffect(()=>{setMeetingId(matchingMeetings[0]?.id??'')},[c.id,matchingMeetings])
 
   const toggleMember=(id:string)=>setSelectedMembers(current=>current.includes(id)?current.filter(x=>x!==id):current.length<3?[...current,id]:current)
   const call=(label:string,fn:()=>Promise<unknown>)=>void onAction(label,fn)
@@ -257,7 +257,7 @@ function CaseDetail({detail,eligibility,members,meetings,disabled,onAction,api}:
   </>
 }
 
-function ActionCard({title,detail,children}:{title:string;detail:string;children:React.ReactNode}){return <section className="admission-action-card"><div><h4>{title}</h4><p>{detail}</p></div><div className="admission-action-controls">{children}</div></section>}
+function ActionCard({title,detail,children}:{title:string;detail:string;children:ReactNode}){return <section className="admission-action-card"><div><h4>{title}</h4><p>{detail}</p></div><div className="admission-action-controls">{children}</div></section>}
 function Summary({label,value}:{label:string;value:string}){return <div><span>{label}</span><strong>{value}</strong></div>}
 function NumberField({label,value,set}:{label:string;value:number;set:(value:number)=>void}){return <label><span>{label}</span><input type="number" min={0} value={value} onChange={e=>set(Math.max(0,Number(e.target.value)||0))}/></label>}
 function Loading(){return <div className="loading-rows"><span/><span/><span/></div>}
