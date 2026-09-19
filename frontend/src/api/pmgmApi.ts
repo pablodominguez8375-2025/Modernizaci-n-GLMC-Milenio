@@ -118,6 +118,40 @@ export interface WorkshopRegularitySnapshot {
   id?: string; organizationId?: string; memberId?: string | null; scope?: string; status: string; asOfDate: string; sourceReference?: string | null; notes?: string | null; recordedAtUtc?: string
 }
 export interface WorkshopRegularityRequest { status: string; asOfDate: string; sourceReference?: string | null; notes?: string | null }
+
+export type HospitalariaMovementType = 'income' | 'expense'
+export type HospitalariaMovementCategory = 'death_replenishment' | 'annual_replenishment_fund' | 'charity_bag' | 'voluntary_contribution' | 'initiation_fee' | 'charity_aid' | 'supplies' | 'ceremony'
+export interface LodgeHospitalariaMovement {
+  id:string; organizationId:string; movementType:HospitalariaMovementType; category:HospitalariaMovementCategory; amount:number; movementDate:string
+  memberReference:string|null; destination:string|null; evidenceReference:string|null; observation:string|null
+  approvalStatus:'pending_approval'|'approved'|'not_required'; approvalSource:'venerable_master'|'lodge_council'|null; councilDecisionId:string|null
+  approvedBySubject:string|null; approvedAtUtc:string|null; recordedAtUtc:string
+}
+export interface CreateLodgeHospitalariaMovementRequest {
+  movementType:HospitalariaMovementType; category:HospitalariaMovementCategory; amount:number; movementDate:string
+  memberReference?:string|null; destination?:string|null; evidenceReference?:string|null; observation?:string|null
+}
+export interface LodgeHospitalariaSummary {
+  organizationId:string; from:string; to:string; income:number; approvedExpenses:number; periodNet:number; pendingExpenses:number; movements:number
+  categories:Array<{category:string;total:number;count:number}>; items:LodgeHospitalariaMovement[]
+}
+export interface HospitalariaCouncilAidDecision { id:string; sessionId:string; sessionDate:string; subject:string; amount:number|null }
+export interface HospitalariaCouncilFinancialReview { id:string; sessionId:string; sessionDate:string; periodLabel:string; conclusion:string }
+export interface HospitalariaMonthlySubmission {
+  id:string; organizationId:string; periodYear:number; periodMonth:number; cutoffDate:string
+  incomeAmount:number; approvedExpenseAmount:number; periodNetAmount:number; movementCount:number; pendingExpenseCount:number
+  replenishmentDueAmount:number; replenishmentPaidAmount:number; differenceAmount:number; paymentReference:string|null
+  councilFinancialReviewId:string|null; status:'draft'|'submitted'|'observed'|'reconciled'; sourceReference:string|null
+  createdAtUtc:string; submittedAtUtc:string|null; reviewedAtUtc:string|null; reviewNotes:string|null
+}
+export interface UpsertHospitalariaMonthlySubmissionRequest {
+  replenishmentDueAmount:number; replenishmentPaidAmount:number; paymentReference?:string|null; councilFinancialReviewId?:string|null; sourceReference?:string|null
+}
+export interface GrandHospitalariaSubmission extends HospitalariaMonthlySubmission {
+  organizationName:string; organizationNumber:string|null
+}
+export interface HospitalariaSubmissionListResponse<T = HospitalariaMonthlySubmission> { total:number; items:T[] }
+
 export interface TreasuryStatementLine {
   id: string; memberId: string | null; membershipId: string | null; degreeCodeAtCutoff: string; officeCodeAtCutoff: string | null
   baseAmount: number; adjustmentAmount: number; payableAmount: number; adjustmentType: string | null; authorizationReference: string | null
@@ -264,6 +298,8 @@ export class PmgmApiClient {
   private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
   private readonly mockTreasuryStatements = new Map<string, TreasuryStatement>()
   private readonly mockHospitalaria = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'hospitalaria-demo-1', organizationId: defaultMockOrganizations[0].id, status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:05:00Z' }]])
+  private readonly mockLodgeHospitalariaMovements = new Map<string, LodgeHospitalariaMovement[]>()
+  private readonly mockHospitalariaSubmissions = new Map<string, HospitalariaMonthlySubmission>()
   private readonly mockLodgeFeePlans = new Map<string, LodgeFeePlan[]>()
   private readonly mockLodgeTreasurySummaries = new Map<string, LodgeTreasurySummary>()
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
@@ -492,6 +528,79 @@ export class PmgmApiClient {
     return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/conciliar`, { method: 'POST' })
   }
   async getTreasuryStatement(statementId: string): Promise<TreasuryStatement> { if (this.useMocks) return cloneTreasuryStatement(this.requireMockTreasuryStatement(statementId)); return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}`) }
+  async getLodgeHospitalariaSummary(organizationId:string, from?:string, to?:string):Promise<LodgeHospitalariaSummary>{
+    if(this.useMocks){
+      const items=this.ensureMockHospitalariaMovements(organizationId).filter(item=>(!from||item.movementDate>=from)&&(!to||item.movementDate<=to))
+      return summarizeMockHospitalaria(organizationId,from??currentMonthStart(),to??currentMonthEnd(),items)
+    }
+    const query=new URLSearchParams(); if(from)query.set('from',from); if(to)query.set('to',to)
+    return this.request<LodgeHospitalariaSummary>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/resumen${query.size?`?${query}`:''}`)
+  }
+
+  async createLodgeHospitalariaMovement(organizationId:string,payload:CreateLodgeHospitalariaMovementRequest):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){
+      if(payload.amount<=0)throw new Error('El monto debe ser mayor que cero.')
+      if(payload.movementType==='expense'&&!payload.evidenceReference?.trim())throw new Error('Todo egreso de Hospitalaria debe conservar una referencia de respaldo.')
+      const item:LodgeHospitalariaMovement={id:crypto.randomUUID(),organizationId,...payload,memberReference:payload.memberReference?.trim()||null,destination:payload.destination?.trim()||null,evidenceReference:payload.evidenceReference?.trim()||null,observation:payload.observation?.trim()||null,approvalStatus:payload.movementType==='expense'?'pending_approval':'not_required',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()}
+      this.ensureMockHospitalariaMovements(organizationId).push(item); return {...item}
+    }
+    return this.postJson<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/movimientos`,payload)
+  }
+
+  async approveLodgeHospitalariaExpense(movementId:string):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){const item=this.requireMockHospitalariaMovement(movementId);if(item.approvalStatus!=='pending_approval')throw new Error('El egreso no está pendiente.');item.approvalStatus='approved';item.approvalSource='venerable_master';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return {...item}}
+    return this.request<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/movimientos/${encodeURIComponent(movementId)}/aprobar`,{method:'POST'})
+  }
+
+  async approveLodgeHospitalariaExpenseByCouncil(movementId:string,councilDecisionId:string):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){const item=this.requireMockHospitalariaMovement(movementId);const decision=mockHospitalariaCouncilAidDecisions(item.organizationId).find(x=>x.id===councilDecisionId);if(!decision||decision.amount!==item.amount||item.category!=='charity_aid')throw new Error('El acuerdo del Consejo no corresponde al socorro.');item.approvalStatus='approved';item.approvalSource='lodge_council';item.councilDecisionId=decision.id;item.approvedBySubject=`council:${decision.id}`;item.approvedAtUtc=new Date().toISOString();return {...item}}
+    return this.postJson<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/movimientos/${encodeURIComponent(movementId)}/aprobar-consejo`,{councilDecisionId})
+  }
+
+  async getHospitalariaCouncilAidDecisions(organizationId:string):Promise<{total:number;items:HospitalariaCouncilAidDecision[]}>{
+    if(this.useMocks){const items=mockHospitalariaCouncilAidDecisions(organizationId);return{total:items.length,items}}
+    return this.request<{total:number;items:HospitalariaCouncilAidDecision[]}>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/acuerdos-socorro`)
+  }
+
+  async getHospitalariaCouncilFinancialReviews(organizationId:string):Promise<{total:number;items:HospitalariaCouncilFinancialReview[]}>{
+    if(this.useMocks){const items=mockHospitalariaCouncilFinancialReviews(organizationId);return{total:items.length,items}}
+    return this.request<{total:number;items:HospitalariaCouncilFinancialReview[]}>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/revisiones-consejo`)
+  }
+
+  async upsertHospitalariaMonthlySubmission(organizationId:string,year:number,month:number,payload:UpsertHospitalariaMonthlySubmissionRequest):Promise<HospitalariaMonthlySubmission>{
+    if(this.useMocks){
+      const key=`${organizationId}:${year}-${String(month).padStart(2,'0')}`;const existing=this.mockHospitalariaSubmissions.get(key)
+      if(existing&&['submitted','reconciled'].includes(existing.status))throw new Error('La rendición enviada o conciliada no puede modificarse.')
+      const start=`${year}-${String(month).padStart(2,'0')}-01`;const end=monthEnd(year,month);const summary=await this.getLodgeHospitalariaSummary(organizationId,start,end)
+      if(payload.replenishmentPaidAmount>0&&!payload.paymentReference?.trim())throw new Error('Debe registrar la referencia/comprobante de la reposición pagada.')
+      const item:HospitalariaMonthlySubmission={id:existing?.id??crypto.randomUUID(),organizationId,periodYear:year,periodMonth:month,cutoffDate:end,incomeAmount:summary.income,approvedExpenseAmount:summary.approvedExpenses,periodNetAmount:summary.periodNet,movementCount:summary.movements,pendingExpenseCount:summary.pendingExpenses,replenishmentDueAmount:payload.replenishmentDueAmount,replenishmentPaidAmount:payload.replenishmentPaidAmount,differenceAmount:payload.replenishmentDueAmount-payload.replenishmentPaidAmount,paymentReference:payload.paymentReference?.trim()||null,councilFinancialReviewId:payload.councilFinancialReviewId??null,status:'draft',sourceReference:payload.sourceReference?.trim()||null,createdAtUtc:existing?.createdAtUtc??new Date().toISOString(),submittedAtUtc:null,reviewedAtUtc:null,reviewNotes:null}
+      this.mockHospitalariaSubmissions.set(key,item);return cloneHospitalariaSubmission(item)
+    }
+    return this.request<HospitalariaMonthlySubmission>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/rendiciones/${year}/${month}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  }
+
+  async getHospitalariaMonthlySubmissions(organizationId:string,year?:number,month?:number):Promise<HospitalariaSubmissionListResponse>{
+    if(this.useMocks){const items=[...this.mockHospitalariaSubmissions.values()].filter(x=>x.organizationId===organizationId&&(year==null||x.periodYear===year)&&(month==null||x.periodMonth===month)).map(cloneHospitalariaSubmission);return{total:items.length,items}}
+    const query=new URLSearchParams();if(year!=null)query.set('year',String(year));if(month!=null)query.set('month',String(month))
+    return this.request<HospitalariaSubmissionListResponse>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/rendiciones${query.size?`?${query}`:''}`)
+  }
+
+  async submitHospitalariaMonthlySubmission(submissionId:string):Promise<HospitalariaMonthlySubmission>{
+    if(this.useMocks){const item=this.requireMockHospitalariaSubmission(submissionId);if(item.pendingExpenseCount!==0)throw new Error('No puede enviarse la rendición mientras existan egresos pendientes de autorización.');if(!item.councilFinancialReviewId)throw new Error('Debe vincular la revisión mensual de Hospitalaria del Consejo de Administración.');item.status='submitted';item.submittedAtUtc=new Date().toISOString();return cloneHospitalariaSubmission(item)}
+    return this.request<HospitalariaMonthlySubmission>(`/api/gestion-logial/hospitalaria/rendiciones/${encodeURIComponent(submissionId)}/enviar`,{method:'POST'})
+  }
+
+  async getGrandHospitalariaSubmissions(filters:{organizationId?:string;year?:number;month?:number;status?:string}={}):Promise<HospitalariaSubmissionListResponse<GrandHospitalariaSubmission>>{
+    if(this.useMocks){const items=[...this.mockHospitalariaSubmissions.values()].filter(x=>x.status!=='draft'&&(!filters.organizationId||x.organizationId===filters.organizationId)&&(filters.year==null||x.periodYear===filters.year)&&(filters.month==null||x.periodMonth===filters.month)&&(!filters.status||x.status===filters.status)).map(x=>{const org=this.mockOrganizations.find(o=>o.id===x.organizationId);return{...cloneHospitalariaSubmission(x),organizationName:org?.name??'Taller',organizationNumber:org?.number??null}});return{total:items.length,items}}
+    const query=new URLSearchParams();if(filters.organizationId)query.set('organizationId',filters.organizationId);if(filters.year!=null)query.set('year',String(filters.year));if(filters.month!=null)query.set('month',String(filters.month));if(filters.status)query.set('status',filters.status)
+    return this.request<HospitalariaSubmissionListResponse<GrandHospitalariaSubmission>>(`/api/hospitalaria/rendiciones${query.size?`?${query}`:''}`)
+  }
+
+  async reviewGrandHospitalariaSubmission(submissionId:string,decision:'observed'|'reconciled',notes?:string|null):Promise<{id:string;organizationId:string;status:string;reviewedAtUtc:string;reviewNotes:string|null}>{
+    if(this.useMocks){const item=this.requireMockHospitalariaSubmission(submissionId);if(item.status!=='submitted')throw new Error('Sólo una rendición enviada puede ser revisada.');if(decision==='reconciled'&&item.differenceAmount>0)throw new Error('No puede conciliarse una rendición con reposiciones pendientes.');if(decision==='observed'&&!notes?.trim())throw new Error('Una observación debe indicar motivo.');item.status=decision;item.reviewedAtUtc=new Date().toISOString();item.reviewNotes=notes?.trim()||null;if(decision==='reconciled')this.mockHospitalaria.set(item.organizationId,{id:`hospitalaria-${crypto.randomUUID()}`,organizationId:item.organizationId,status:'up_to_date',asOfDate:item.cutoffDate,sourceReference:`hospitalaria-rendicion:${item.id}`,notes:'Regularidad derivada de rendición conciliada.',recordedAtUtc:new Date().toISOString()});return{id:item.id,organizationId:item.organizationId,status:item.status,reviewedAtUtc:item.reviewedAtUtc,reviewNotes:item.reviewNotes}}
+    return this.postJson(`/api/hospitalaria/rendiciones/${encodeURIComponent(submissionId)}/revision`,{decision,notes:notes??null})
+  }
+
   async getHospitalariaWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
     if (this.useMocks) return mockSnapshotAsOf(this.mockHospitalaria.get(organizationId), asOf)
     const query = new URLSearchParams(); if (asOf) query.set('asOf', asOf)
@@ -548,6 +657,13 @@ export class PmgmApiClient {
 
   private requireMockReviewCeremony(id: string): CeremonyReviewQueueItem { const item = this.mockReviewCeremonies.find(value => value.id === id); if (!item) throw new Error('La ceremonia indicada no existe en la bandeja.'); return item }
   private requireMockTreasuryStatement(id: string): TreasuryStatement { const item = this.mockTreasuryStatements.get(id); if (!item) throw new Error('El cuadro mensual indicado no existe.'); return item }
+  private ensureMockHospitalariaMovements(organizationId:string):LodgeHospitalariaMovement[]{
+    let items=this.mockLodgeHospitalariaMovements.get(organizationId)
+    if(!items){items=defaultHospitalariaMovements(organizationId);this.mockLodgeHospitalariaMovements.set(organizationId,items)}
+    return items
+  }
+  private requireMockHospitalariaMovement(id:string):LodgeHospitalariaMovement{for(const rows of this.mockLodgeHospitalariaMovements.values()){const item=rows.find(x=>x.id===id);if(item)return item}throw new Error('El movimiento de Hospitalaria no existe.')}
+  private requireMockHospitalariaSubmission(id:string):HospitalariaMonthlySubmission{const item=[...this.mockHospitalariaSubmissions.values()].find(x=>x.id===id);if(!item)throw new Error('La rendición de Hospitalaria no existe.');return item}
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -579,6 +695,19 @@ function mockInitialDeliberation(ceremonyRequestId: string, payload: InitialDeli
 }
 function dateOnlyDayNumber(value: string) { const [year, month, day] = value.split('-').map(Number); if (!year || !month || !day) throw new Error('La fecha de deliberación no es válida.'); return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000) }
 function ceremonyTypeLabel(type: CeremonyType) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
+function defaultHospitalariaMovements(organizationId:string):LodgeHospitalariaMovement[]{
+  return [
+    {id:`hosp-income-${organizationId}`,organizationId,movementType:'income',category:'charity_bag',amount:185000,movementDate:'2026-09-05',memberReference:null,destination:null,evidenceReference:'TENIDA-DEMO-2026-09-05',observation:'Tronco de Beneficencia · dato ficticio',approvalStatus:'not_required',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-05T23:00:00Z'},
+    {id:`hosp-aid-${organizationId}`,organizationId,movementType:'expense',category:'charity_aid',amount:45000,movementDate:'2026-09-10',memberReference:'Referencia reservada DEMO-001',destination:'Socorro reservado · demo',evidenceReference:'AYUDA-DEMO-001',observation:'Antecedente sensible ficticio; sólo Taller.',approvalStatus:'pending_approval',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-10T18:00:00Z'}
+  ]
+}
+function mockHospitalariaCouncilAidDecisions(organizationId:string):HospitalariaCouncilAidDecision[]{return[{id:`council-aid-${organizationId}`,sessionId:`council-session-${organizationId}`,sessionDate:'2026-09-11',subject:'Socorro reservado · referencia demo',amount:45000}]}
+function mockHospitalariaCouncilFinancialReviews(organizationId:string):HospitalariaCouncilFinancialReview[]{return[{id:`council-review-${organizationId}`,sessionId:`council-session-review-${organizationId}`,sessionDate:'2026-09-15',periodLabel:'2026-09',conclusion:'Estado mensual de Hospitalaria revisado por Consejo · demo'}]}
+function summarizeMockHospitalaria(organizationId:string,from:string,to:string,items:LodgeHospitalariaMovement[]):LodgeHospitalariaSummary{const income=items.filter(x=>x.movementType==='income').reduce((a,x)=>a+x.amount,0);const approvedExpenses=items.filter(x=>x.movementType==='expense'&&x.approvalStatus==='approved').reduce((a,x)=>a+x.amount,0);const pendingExpenses=items.filter(x=>x.movementType==='expense'&&x.approvalStatus==='pending_approval').length;const categories=[...new Set(items.map(x=>x.category))].map(category=>({category,total:items.filter(x=>x.category===category).reduce((a,x)=>a+x.amount,0),count:items.filter(x=>x.category===category).length}));return{organizationId,from,to,income,approvedExpenses,periodNet:income-approvedExpenses,pendingExpenses,movements:items.length,categories,items:items.map(x=>({...x}))}}
+function currentMonthStart(){const d=new Date();return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit'}).format(d)+'-01'}
+function currentMonthEnd(){const p=currentMonthStart().slice(0,7).split('-').map(Number);return monthEnd(p[0],p[1])}
+function monthEnd(year:number,month:number){return `${year}-${String(month).padStart(2,'0')}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,'0')}`}
+function cloneHospitalariaSubmission(item:HospitalariaMonthlySubmission):HospitalariaMonthlySubmission{return{...item}}
 function mockSnapshotAsOf(snapshot: WorkshopRegularitySnapshot | undefined, asOf?: string): WorkshopRegularitySnapshot | null { if (!snapshot) return null; if (asOf && snapshot.asOfDate > asOf) return null; return { ...snapshot } }
 function defaultLodgeFeePlans(organizationId: string): LodgeFeePlan[] { return [
   { id: `fee-normal-${organizationId}`, organizationId, feeType: 'normal', memberAmount: 26000, grandTreasuryAmount: 21000, workshopAmount: 5000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
