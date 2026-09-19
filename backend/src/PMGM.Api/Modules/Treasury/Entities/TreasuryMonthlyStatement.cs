@@ -134,6 +134,8 @@ public sealed class LodgeHospitalariaMovement
     public string? EvidenceReference { get; set; }
     public string? Observation { get; set; }
     public required string ApprovalStatus { get; set; }
+    public string? ApprovalSource { get; set; }
+    public Guid? CouncilDecisionId { get; set; }
     public string? ApprovedBySubject { get; set; }
     public DateTimeOffset? ApprovedAtUtc { get; set; }
     public required string RecordedBySubject { get; set; }
