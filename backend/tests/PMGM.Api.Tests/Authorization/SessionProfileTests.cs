@@ -66,6 +66,22 @@ public sealed class SessionProfileTests
     }
 
     [Fact]
+    public void Venerable_ReceivesCommissionCapabilityWithoutSecretariatManagement()
+    {
+        var organizationId = Guid.NewGuid();
+        var principal = Principal(
+            new Claim(ClaimTypes.Name, "Venerable Maestro"),
+            new Claim(InstitutionalClaims.Organization, organizationId.ToString()),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable));
+
+        var profile = SessionProfileBuilder.Build(principal, new InstitutionalAccessService());
+
+        Assert.True(profile.Capabilities.CanReadLodgeSecretariat);
+        Assert.False(profile.Capabilities.CanManageLodgeSecretariat);
+        Assert.True(profile.Capabilities.CanAppointAdmissionCommission);
+    }
+
+    [Fact]
     public void GranTesoreria_DoesNotGainCeremonyReviewCapabilityFromOrderScope()
     {
         var principal = Principal(
