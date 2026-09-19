@@ -85,4 +85,16 @@ Puede observar o conciliar. Conciliar genera `HospitalariaRegularitySnapshot(up_
 
 ## Estado
 
-Implementado en rama del PR #114. Pendiente gates exact-head, merge a `dev`, triple salida post-merge y actualización de Issue #97/Línea Base Maestra.
+Integrado mediante PR #114.
+
+- merge SHA: `44b6cc90a56e508c8c45e85d040e928738e1b5d8`;
+- PMGM CI: `success`;
+- Showcase/Pages: `success`;
+- QA srv01 Installable: `success`;
+- Pre-UAT Installable: `success`;
+- ZIP QA público: `Proyecto-Centenario-QA-srv01-44b6cc90a56e.zip`;
+- SHA-256: `c5474a135c879e7df99768bc19130f7774e0583b2e8f06560e99f11bf2d2a6e6`;
+- QA vigente: 25 controles;
+- Issue #97 y Línea Base Maestra actualizados.
+
+Pendiente operacional: despliegue físico en `srv01`, smoke real, regresión 25/25 y UAT institucional.
