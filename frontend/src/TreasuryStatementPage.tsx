@@ -17,6 +17,11 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
   const [organizationId, setOrganizationId] = useState('')
   const [period, setPeriod] = useState(currentPeriodInChile())
   const [baseAmount, setBaseAmount] = useState(21000)
+  const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'deposit'>('transfer')
+  const [paymentDate, setPaymentDate] = useState(todayInChile())
+  const [paymentAmount, setPaymentAmount] = useState(0)
+  const [payerDisplayName, setPayerDisplayName] = useState('Tesorería del Taller')
+  const [paymentReference, setPaymentReference] = useState('')
   const [statement, setStatement] = useState<TreasuryStatement | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadingStatement, setLoadingStatement] = useState(false)
@@ -88,16 +93,23 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
     'Nómina generada desde el Cuadro vigente del Taller y sus ajustes autorizados.',
   )
 
-  const payDifference = () => statement && run(
-    () => api.addTreasuryStatementPayment(statement.id, {
-      paymentMethod: 'transfer',
-      paymentDate: todayInChile(),
-      amount: statement.differenceAmount,
-      payerDisplayName: 'Tesorería del Taller',
-      reference: 'Transferencia demostrativa · reemplazar por referencia bancaria real en QA/producción',
-    }),
-    'Transferencia registrada y diferencia recalculada.',
-  )
+  const registerPayment = () => {
+    if (!statement) return
+    const amount = paymentAmount
+    void run(
+      () => api.addTreasuryStatementPayment(statement.id, {
+        paymentMethod,
+        paymentDate,
+        amount,
+        payerDisplayName: payerDisplayName.trim() || null,
+        reference: paymentReference.trim() || null,
+      }),
+      'Pago registrado y diferencia recalculada.',
+    ).then(() => {
+      setPaymentAmount(0)
+      setPaymentReference('')
+    })
+  }
 
   const submit = () => statement && run(
     () => api.submitTreasuryStatement(statement.id),
@@ -142,7 +154,6 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
         <label className="regularity-field"><span>Cuota base Gran Tesorería</span><input type="number" min="0" step="1000" value={baseAmount} disabled={busy} onChange={event => setBaseAmount(Number(event.target.value))} /></label>
         <button className="regularity-primary" type="button" disabled={busy || baseAmount < 0} onClick={generate}>Generar nómina</button>
       </>}
-      {canPrepare && statement?.status === 'draft' && statement.lines.length > 0 && statement.differenceAmount > 0 && <button className="regularity-secondary" type="button" disabled={busy} onClick={payDifference}>Registrar transferencia por {money.format(statement.differenceAmount)}</button>}
       {canPrepare && statement?.status === 'draft' && statement.lines.length > 0 && <button className="regularity-primary" type="button" disabled={busy || !canSubmit} onClick={submit}>Enviar a Gran Tesorería</button>}
       {canReview && (statement?.status === 'submitted' || statement?.status === 'observed') && <button className="regularity-primary" type="button" disabled={busy || statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0} onClick={reconcile}>Conciliar institucionalmente</button>}
     </section>
@@ -176,9 +187,17 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
 
         <section className="panel treasury-payments">
           <div><p className="eyebrow">Forma de pago</p><h2>Transferencias y depósitos</h2></div>
+          {canPrepare && statement.status === 'draft' && <div className="treasury-toolbar">
+            <label className="regularity-field"><span>Medio</span><select value={paymentMethod} disabled={busy} onChange={event => setPaymentMethod(event.target.value as 'transfer' | 'deposit')}><option value="transfer">Transferencia</option><option value="deposit">Depósito</option></select></label>
+            <label className="regularity-field"><span>Fecha</span><input type="date" value={paymentDate} disabled={busy} onChange={event => setPaymentDate(event.target.value)} /></label>
+            <label className="regularity-field"><span>Monto</span><input type="number" min="1" step="1" value={paymentAmount || ''} disabled={busy} onChange={event => setPaymentAmount(Number(event.target.value))} /></label>
+            <label className="regularity-field"><span>Pagador</span><input value={payerDisplayName} disabled={busy} onChange={event => setPayerDisplayName(event.target.value)} /></label>
+            <label className="regularity-field"><span>Referencia / comprobante</span><input value={paymentReference} disabled={busy} onChange={event => setPaymentReference(event.target.value)} placeholder="Ej.: TRX-2026-000123" /></label>
+            <button className="regularity-secondary" type="button" disabled={busy || paymentAmount <= 0 || !paymentReference.trim()} onClick={registerPayment}>Registrar pago</button>
+          </div>}
           {statement.payments.length === 0
             ? <p>No hay pagos registrados.</p>
-            : statement.payments.map(payment => <div className="payment-row" key={payment.id}><span>{payment.paymentMethod === 'transfer' ? 'Transferencia' : 'Depósito'} · {payment.paymentDate}</span><strong>{money.format(payment.amount)}</strong><small>{payment.reference}</small></div>)}
+            : statement.payments.map(payment => <div className="payment-row" key={payment.id}><span>{payment.paymentMethod === 'transfer' ? 'Transferencia' : 'Depósito'} · {payment.paymentDate}</span><strong>{money.format(payment.amount)}</strong><small>{payment.reference || 'Sin referencia'}</small></div>)}
         </section>
       </>}
   </>
