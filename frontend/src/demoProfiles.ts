@@ -12,6 +12,9 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canManageLodgeSecretariat?: boolean
   canConfigureSystem?: boolean
   canManageLodgeTreasury?: boolean
+  canReadLodgeHospitalaria?: boolean
+  canManageLodgeHospitalaria?: boolean
+  canApproveLodgeExpenses?: boolean
 }
 
 export type DemoSessionProfile = Omit<SessionProfile, 'capabilities'> & {
@@ -55,6 +58,8 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManageLodgeOperations: true,
       canReadLodgeSecretariat: true,
       canManageLodgeSecretariat: false,
+      canReadLodgeHospitalaria: true,
+      canApproveLodgeExpenses: true,
       canManageDocuments: true,
       canManageGrandArchive: false,
       canBootstrapInstitutional: false,
@@ -70,7 +75,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeHospitalaria: {
     displayName: 'Hospitalaria del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeHospitalaria: true, canManageLodgeHospitalaria: true, canManageDocuments: true },
   },
   lodgeOrator: {
     displayName: 'Orador del Taller · Demostración', accessScope: 'organization',
