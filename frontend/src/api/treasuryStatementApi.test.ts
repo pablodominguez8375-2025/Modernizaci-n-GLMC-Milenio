@@ -16,7 +16,8 @@ describe('Gran Tesorería monthly statement demo', () => {
     expect(listed.items).toHaveLength(1)
     expect(listed.items[0].id).toBe(statement.id)
 
-    statement = await api.addTreasuryStatementPayment(statement.id, { paymentMethod: 'transfer', paymentDate: '2026-09-12', amount: statement.differenceAmount })
+    await expect(api.addTreasuryStatementPayment(statement.id, { paymentMethod: 'transfer', paymentDate: '2026-09-12', amount: statement.differenceAmount })).rejects.toThrow('Pagador')
+    statement = await api.addTreasuryStatementPayment(statement.id, { paymentMethod: 'transfer', paymentDate: '2026-09-12', amount: statement.differenceAmount, payerDisplayName: 'Tesorería del Taller', reference: 'TRX-DEMO-001' })
     expect(statement.differenceAmount).toBe(0)
     statement = await api.submitTreasuryStatement(statement.id)
     expect(statement.status).toBe('submitted')
