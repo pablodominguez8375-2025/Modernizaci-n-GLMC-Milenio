@@ -12,6 +12,9 @@
 - Una Tenida ceremonial no puede programarse sin Plancha de Autorización emitida por Gran Secretaría y coincidente en Taller, tipo y fecha. Desde la Plancha se crea la Tenida y se vincula automáticamente la autorización.
 - La elegibilidad de Aumento de Salario y Exaltación se calcula con evidencias reales del grado de origen y reglas institucionales versionadas: 24 meses continuados, asistencias a Tenidas, asistencias a instrucciones y dos Planchas de Trabajo. Para Aumento rigen 30 Tenidas y 10 instrucciones de 1.er grado; para Exaltación, 10 Tenidas y 10 instrucciones de 2.º grado.
 - Una dispensa exige acuerdo afirmativo de Cámara del Medio, acta, identificación del requisito y validación de Régimen Interior. Nunca puede reducir un requisito en más de 50%; Gran Secretaría no puede autorizar mientras los controles ordinarios o la dispensa permanezcan incumplidos.
+- Corte funcional validado: PR #116 HEAD `8646bab18154639c36a70ec817a0fcfa4e4989a5`; PMGM CI #1369, Showcase Demo/Pages #595 y QA srv01 Installable #233 en `SUCCESS`.
+- Artefacto instalable exact-head: ID `10612530517`, digest `sha256:8306d627784507a2cf96d6ec706628b23fc25d60815d57ef35f93993318b11b6`.
+- PR #116 continúa `draft` y no fusionado. `dev` permanece en `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`; `main`, en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` físico sigue diferido/no validado.
 
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
