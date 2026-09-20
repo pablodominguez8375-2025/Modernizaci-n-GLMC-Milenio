@@ -1,10 +1,10 @@
 :root {
-  --brand-navy: #102c54;
-  --brand-navy-dark: #0d2749;
-  --brand-blue: #173b6e;
-  --brand-gold: #b48a37;
-  --brand-gold-strong: #c79d45;
-  --brand-gold-soft: #f7f0df;
+  --brand-navy: #06148e;
+  --brand-navy-dark: #03105f;
+  --brand-blue: #004ad4;
+  --brand-gold: #f3c609;
+  --brand-gold-strong: #fbae17;
+  --brand-gold-soft: #fff9d8;
   --brand-canvas: #f3f6f9;
   --brand-surface: #ffffff;
   --brand-ink: #20304d;
@@ -110,7 +110,8 @@ textarea {
 
 .sidebar .nav-item.active {
   color: #fff;
-  background: linear-gradient(135deg, #a67d2f 0%, var(--brand-gold-strong) 100%);
+  background: linear-gradient(135deg, var(--brand-navy) 0%, var(--brand-blue) 100%);
+  border-color: var(--brand-gold);
   border-color: rgba(255, 255, 255, .12);
   box-shadow: 0 8px 20px rgba(0, 0, 0, .13);
 }
@@ -153,7 +154,7 @@ h2 {
 
 .eyebrow,
 .member-card-kicker {
-  color: var(--brand-gold);
+  color: #765d00;
 }
 
 button:focus-visible,
