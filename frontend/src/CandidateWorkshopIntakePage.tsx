@@ -48,7 +48,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showNewForm, setShowNewForm] = useState(false)
-  const [newDraft, setNewDraft] = useState<CandidateDraftCreatePayload>({ firstNames: '', paternalSurname: '', maternalSurname: '', insinuationDate: chileToday(), proposedDate: null })
+  const [newDraft, setNewDraft] = useState<CandidateDraftCreatePayload>({ firstNames: '', paternalSurname: '', maternalSurname: '', insinuationDate: chileToday() })
 
   const selected = useMemo(() => queue.find(item => item.ceremonyRequestId === selectedId) ?? null, [queue, selectedId])
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
@@ -154,7 +154,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
       setQueue(queueResult.items)
       setSelectedId(created.ceremonyRequestId)
       setShowNewForm(false)
-      setNewDraft({ firstNames: '', paternalSurname: '', maternalSurname: '', insinuationDate: chileToday(), proposedDate: null })
+      setNewDraft({ firstNames: '', paternalSurname: '', maternalSurname: '', insinuationDate: chileToday() })
       setMessage('Nuevo insinuado iniciado. Complete la ficha y envíela a revisión de Gran Secretaría.')
     } catch (reason) {
       setError(errorMessage(reason, 'No fue posible iniciar el expediente del insinuado.'))
@@ -242,7 +242,6 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
           <label><span>Apellido paterno *</span><input value={newDraft.paternalSurname} onChange={event => setNewDraft({ ...newDraft, paternalSurname: event.target.value })} /></label>
           <label><span>Apellido materno</span><input value={newDraft.maternalSurname ?? ''} onChange={event => setNewDraft({ ...newDraft, maternalSurname: event.target.value })} /></label>
           <label><span>Fecha de insinuación *</span><input type="date" value={newDraft.insinuationDate} onChange={event => setNewDraft({ ...newDraft, insinuationDate: event.target.value })} /></label>
-          <label><span>Fecha propuesta de ceremonia</span><input type="date" value={newDraft.proposedDate ?? ''} min={newDraft.insinuationDate} onChange={event => setNewDraft({ ...newDraft, proposedDate: event.target.value || null })} /></label>
           <div className="workshop-new-candidate-actions"><button className="candidate-primary-button" type="button" disabled={busy} onClick={() => void createNewInsinuado()}>{busy ? 'Iniciando…' : 'Iniciar expediente'}</button><button className="candidate-secondary-button" type="button" disabled={busy} onClick={() => setShowNewForm(false)}>Cancelar</button></div>
         </div>}
         {loading && queue.length === 0 ? <p>Cargando solicitudes…</p> : queue.length === 0 ? <p>No existen solicitudes de iniciación disponibles para este Taller.</p> : <div className="workshop-intake-list">{queue.map(item => <button key={item.ceremonyRequestId} type="button" className={item.ceremonyRequestId === selectedId ? 'active' : ''} onClick={() => setSelectedId(item.ceremonyRequestId)}><strong>{item.displayName || 'Insinuado sin nombre'}</strong><span>{item.workshopName}{item.workshopNumber ? ` · Nº ${item.workshopNumber}` : ''}</span><small>{statusLabel(item.reviewStatus)} · {item.profileAvailable ? 'Ficha registrada' : 'Ficha pendiente'}</small></button>)}</div>}
@@ -254,7 +253,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             <div><small>Insinuado base</small><strong>{selected.displayName}</strong></div>
             <div><small>Logia/Taller presentante</small><strong>{selected.workshopName}{selected.workshopNumber ? ` · Nº ${selected.workshopNumber}` : ''}</strong></div>
             <div><small>Estado de revisión</small><strong className={`workshop-status ${selected.reviewStatus}`}>{statusLabel(selected.reviewStatus)}</strong></div>
-            <div><small>Fecha propuesta de ceremonia</small><strong>{selected.proposedDate ? formatDateOnly(selected.proposedDate) : 'Por definir'}</strong></div>
+            <div><small>Fecha tentativa para solicitud de Plancha</small><strong>{selected.proposedDate ? formatDateOnly(selected.proposedDate) : 'Se definirá al solicitar la Plancha'}</strong></div>
           </section>
 
           {locked && <div className="candidate-protected-notice">Esta ficha está {selected.reviewStatus === 'approved' ? 'aprobada/publicada' : 'rechazada'} y se muestra en modo de sólo lectura. Cualquier reapertura deberá quedar trazada mediante un flujo institucional específico.</div>}
