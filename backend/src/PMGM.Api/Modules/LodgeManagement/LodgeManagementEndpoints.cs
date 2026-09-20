@@ -214,8 +214,10 @@ public static class LodgeManagementEndpoints
         Guid meetingId,
         HttpContext httpContext,
         PmgmDbContext institutionalDb,
+        GrandSecretariatDbContext grandSecretariatDb,
         LodgeManagementDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var meeting = await db.LodgeMeetings.SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
