@@ -129,3 +129,10 @@ La implementación se alinea con el **Protocolo para la tramitación de insinuac
 - para cerrar la Tenida ceremonial y materializar el expediente son obligatorios el Extracto de Acta y la Plancha adjunta, vinculados a la misma solicitud. En Tenidas regulares sigue siendo obligatorio sólo el Extracto de Acta.
 
 La API real y el adaptador mock aplican el mismo bloqueo; el backend es la autoridad final.
+
+
+## 11. Fecha de ceremonia
+
+La carga inicial de un nuevo insinuado no solicita ni almacena fecha de ceremonia. La fecha de insinuación y la presentación en 1.er grado son antecedentes del expediente, no una programación ceremonial.
+
+La fecha tentativa sólo puede indicarse en la etapa posterior de solicitud de ceremonia/Plancha, después de completar entrevistas, revisiones y balotaje. Hasta que Gran Secretaría emita la Plancha de Autorización, esa fecha sigue siendo referencial y no habilita reserva ni programación.
