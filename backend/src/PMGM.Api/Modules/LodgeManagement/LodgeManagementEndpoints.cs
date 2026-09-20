@@ -3,8 +3,11 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.SecretariatOperations;
 using PMGM.Api.Modules.GrandSecretariat;
 
@@ -178,8 +181,10 @@ public static class LodgeManagementEndpoints
         Guid meetingId,
         HttpContext httpContext,
         PmgmDbContext institutionalDb,
+        GrandSecretariatDbContext grandSecretariatDb,
         LodgeManagementDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         var meeting = await db.LodgeMeetings.SingleOrDefaultAsync(x => x.Id == meetingId, cancellationToken);
@@ -230,29 +235,133 @@ public static class LodgeManagementEndpoints
             meeting.CeremonyType,
             record?.ExtractDocumentVersionId,
             record?.CeremonyAuthorizationDocumentId);
-        if (validation is not null)
+        var isAdvancement = meeting.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation;
+        if (validation is not null && !(isAdvancement && meeting.Status == LodgeManagementCodes.MeetingStatus.Closed))
             return Results.Conflict(new { message = validation });
 
-        meeting.Status = LodgeManagementCodes.MeetingStatus.Closed;
-        meeting.ClosedAtUtc = DateTimeOffset.UtcNow;
-        db.AuditEvents.Add(AuditEventFactory.Create(
-            httpContext,
-            "lodge.meeting.closed",
-            nameof(LodgeMeeting),
-            meeting.Id.ToString(),
-            meeting.OrganizationId,
-            AuditResults.Success,
-            new
-            {
-                meeting.MeetingDate,
-                meeting.CeremonyType,
-                meeting.Status,
-                meeting.ClosedAtUtc,
-                record!.ExtractDocumentVersionId,
-                record.CeremonyAuthorizationDocumentId
-            }));
-        await db.SaveChangesAsync(cancellationToken);
+        AdvancementClosureContext? advancement = null;
+        if (isAdvancement)
+        {
+            var authorization = await grandSecretariatDb.SecretariatDocuments.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == record!.CeremonyAuthorizationDocumentId &&
+                    x.OrganizationId == meeting.OrganizationId &&
+                    x.Status == GrandSecretariatCodes.DocumentStatus.Issued &&
+                    x.RelatedCeremonyRequestId != null &&
+                    ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
+                      x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                     x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                     x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy), cancellationToken);
+            if (authorization is null)
+                return Results.Conflict(new { message = "La Plancha adjunta no es una autorización vigente de Gran Secretaría para esta ceremonia." });
+
+            var ceremony = await institutionalDb.CeremonyRequests.AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == authorization.RelatedCeremonyRequestId, cancellationToken);
+            if (ceremony?.MemberId is null || ceremony.OrganizationId != meeting.OrganizationId ||
+                ceremony.CeremonyType != meeting.CeremonyType || ceremony.ProposedDate != meeting.MeetingDate)
+                return Results.Conflict(new { message = "La Plancha no corresponde al hermano, Taller, tipo o fecha de la Tenida ceremonial." });
+            if (ceremony.Status is not (CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Completed))
+                return Results.Conflict(new { message = "La solicitud de avance debe estar autorizada antes de cerrar la Tenida ceremonial." });
+
+            var sourceDegree = meeting.CeremonyType == CeremonyCodes.Type.WageIncrease ? "apprentice" : "fellowcraft";
+            var targetDegree = meeting.CeremonyType == CeremonyCodes.Type.WageIncrease ? "fellowcraft" : "master";
+            var eventType = meeting.CeremonyType == CeremonyCodes.Type.WageIncrease
+                ? MembershipCodes.DegreeEvent.WageIncrease
+                : MembershipCodes.DegreeEvent.Exaltation;
+            var member = await institutionalDb.Members.AsNoTracking().SingleAsync(x => x.Id == ceremony.MemberId.Value, cancellationToken);
+            var existingEvents = await institutionalDb.DegreeEvents.AsNoTracking()
+                .Where(x => x.MemberId == ceremony.MemberId.Value && x.EventType == eventType)
+                .ToListAsync(cancellationToken);
+            if (existingEvents.Any(x => x.OrganizationId != meeting.OrganizationId || x.EffectiveDate != meeting.MeetingDate))
+                return Results.Conflict(new { message = "Existe un hito de grado incompatible que debe ser revisado por Régimen Interior." });
+            if (!string.Equals(member.CurrentDegree, sourceDegree, StringComparison.OrdinalIgnoreCase) &&
+                !(existingEvents.Count == 1 && string.Equals(member.CurrentDegree, targetDegree, StringComparison.OrdinalIgnoreCase)))
+                return Results.Conflict(new { message = "El grado vigente del hermano no permite materializar esta ceremonia." });
+
+            advancement = new AdvancementClosureContext(
+                ceremony.Id, ceremony.MemberId.Value, eventType, targetDegree,
+                authorization.Id, authorization.DocumentCode, record!.ExtractDocumentVersionId!.Value);
+        }
+
+        if (meeting.Status != LodgeManagementCodes.MeetingStatus.Closed)
+        {
+            meeting.Status = LodgeManagementCodes.MeetingStatus.Closed;
+            meeting.ClosedAtUtc = DateTimeOffset.UtcNow;
+            db.AuditEvents.Add(AuditEventFactory.Create(
+                httpContext,
+                "lodge.meeting.closed",
+                nameof(LodgeMeeting),
+                meeting.Id.ToString(),
+                meeting.OrganizationId,
+                AuditResults.Success,
+                new
+                {
+                    meeting.MeetingDate,
+                    meeting.CeremonyType,
+                    meeting.Status,
+                    meeting.ClosedAtUtc,
+                    record!.ExtractDocumentVersionId,
+                    record.CeremonyAuthorizationDocumentId
+                }));
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        if (advancement is not null)
+            await CompleteAdvancementAsync(meeting, advancement, httpContext, institutionalDb, audit, cancellationToken);
+
         return Results.Ok(ToMeetingDto(meeting));
+    }
+
+    private static async Task CompleteAdvancementAsync(
+        LodgeMeeting meeting,
+        AdvancementClosureContext context,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
+        var ceremony = await db.CeremonyRequests.SingleAsync(x => x.Id == context.CeremonyRequestId, cancellationToken);
+        var member = await db.Members.SingleAsync(x => x.Id == context.MemberId, cancellationToken);
+        var degreeEvent = await db.DegreeEvents.SingleOrDefaultAsync(x =>
+            x.MemberId == context.MemberId && x.EventType == context.EventType, cancellationToken);
+        var evidence = $"plancha:{context.AuthorizationCode}; authorization:{context.AuthorizationDocumentId}; extract:{context.ExtractDocumentVersionId}; meeting:{meeting.Id}";
+
+        if (degreeEvent is not null && ceremony.Status == CeremonyCodes.RequestStatus.Completed &&
+            string.Equals(member.CurrentDegree, context.TargetDegree, StringComparison.OrdinalIgnoreCase))
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return;
+        }
+
+        if (degreeEvent is null)
+        {
+            db.DegreeEvents.Add(new DegreeEvent
+            {
+                MemberId = context.MemberId,
+                OrganizationId = meeting.OrganizationId,
+                Degree = context.TargetDegree,
+                EventType = context.EventType,
+                EffectiveDate = meeting.MeetingDate,
+                EvidenceReference = evidence
+            });
+        }
+
+        member.CurrentDegree = context.TargetDegree;
+        ceremony.Status = CeremonyCodes.RequestStatus.Completed;
+        audit.Add(httpContext, "ceremony.advancement.completed", nameof(CeremonyRequest), ceremony.Id.ToString(),
+            meeting.OrganizationId, AuditResults.Success, new
+            {
+                context.MemberId,
+                ceremony.CeremonyType,
+                degree = context.TargetDegree,
+                effectiveDate = meeting.MeetingDate,
+                meetingId = meeting.Id,
+                context.AuthorizationDocumentId,
+                context.ExtractDocumentVersionId,
+                reconciled = degreeEvent is not null
+            });
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     private static async Task<IResult> RecordAttendanceAsync(
@@ -622,6 +731,15 @@ public static class LodgeManagementEndpoints
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed record AdvancementClosureContext(
+        Guid CeremonyRequestId,
+        Guid MemberId,
+        string EventType,
+        string TargetDegree,
+        Guid AuthorizationDocumentId,
+        string AuthorizationCode,
+        Guid ExtractDocumentVersionId);
 }
 
 public sealed record CreateLodgeMeetingRequest(

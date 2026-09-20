@@ -14,7 +14,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.GrandSecretariat.Entities;
 using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
@@ -28,6 +32,159 @@ namespace PMGM.Api.Tests.Integration;
 [Collection(PostgresIntegrationCollection.Name)]
 public sealed class LodgeManagementHttpWorkflowTests
 {
+    [Fact]
+    public async Task Closing_authorized_advancement_materializes_degree_once()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var factory = new LodgeManagementWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+        var ceremonyDate = new DateOnly(2026, 10, 24);
+
+        Guid organizationId;
+        Guid memberId;
+        Guid ceremonyId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(cancellationToken);
+
+            var organization = new Organization
+            {
+                Name = $"Taller Avance CI {Guid.NewGuid():N}",
+                Number = $"AV-{Guid.NewGuid():N}"[..10],
+                Type = "workshop"
+            };
+            var person = new Person { FirstNames = "Hermano", LastNames = "Avance" };
+            var member = new Member
+            {
+                Person = person,
+                PersonId = person.Id,
+                InstitutionalNumber = $"AVA-{Guid.NewGuid():N}",
+                CurrentDegree = LodgeManagementCodes.Grade.Apprentice
+            };
+            var membership = new Membership
+            {
+                Member = member,
+                MemberId = member.Id,
+                Organization = organization,
+                OrganizationId = organization.Id,
+                MembershipType = "regular",
+                StartDate = new DateOnly(2024, 1, 1),
+                Status = MembershipCodes.MembershipStatus.Active
+            };
+            var ceremony = new CeremonyRequest
+            {
+                Organization = organization,
+                OrganizationId = organization.Id,
+                CeremonyType = CeremonyCodes.Type.WageIncrease,
+                Member = member,
+                MemberId = member.Id,
+                ProposedDate = ceremonyDate,
+                Status = CeremonyCodes.RequestStatus.Authorized
+            };
+
+            db.AddRange(organization, person, member, membership, ceremony);
+            await db.SaveChangesAsync(cancellationToken);
+            organizationId = organization.Id;
+            memberId = member.Id;
+            ceremonyId = ceremony.Id;
+        }
+
+        Guid authorizationId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
+            var authorization = new SecretariatDocument
+            {
+                DocumentType = GrandSecretariatCodes.DocumentType.Plancha,
+                PlanchaKind = GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization,
+                DocumentCode = $"PLA-AV-{Guid.NewGuid():N}"[..24],
+                Title = "Plancha de autorización de aumento de salario",
+                Content = "Gran Secretaría autoriza la ceremonia indicada.",
+                OrganizationId = organizationId,
+                RelatedCeremonyRequestId = ceremonyId,
+                Status = GrandSecretariatCodes.DocumentStatus.Issued,
+                IssuedAtUtc = new DateTimeOffset(2026, 10, 20, 12, 0, 0, TimeSpan.Zero),
+                IssuedBySubject = "ci-gran-secretaria"
+            };
+            db.SecretariatDocuments.Add(authorization);
+            await db.SaveChangesAsync(cancellationToken);
+            authorizationId = authorization.Id;
+        }
+
+        Guid meetingId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
+            var meeting = new LodgeMeeting
+            {
+                OrganizationId = organizationId,
+                MeetingDate = ceremonyDate,
+                MeetingType = LodgeManagementCodes.MeetingType.Solemn,
+                Grade = LodgeManagementCodes.Grade.Fellowcraft,
+                CeremonyType = CeremonyCodes.Type.WageIncrease,
+                Modality = LodgeManagementCodes.MeetingModality.InPerson,
+                LocationReference = "Templo CI",
+                Title = "Tenida de aumento de salario",
+                Status = LodgeManagementCodes.MeetingStatus.Held,
+                HeldAtUtc = new DateTimeOffset(2026, 10, 24, 22, 0, 0, TimeSpan.Zero)
+            };
+            db.LodgeMeetings.Add(meeting);
+            await db.SaveChangesAsync(cancellationToken);
+            meetingId = meeting.Id;
+        }
+
+        var extractVersionId = Guid.NewGuid();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            db.LodgeSecretariatRecords.Add(new LodgeSecretariatRecord
+            {
+                OrganizationId = organizationId,
+                RecordType = SecretariatOperationsCodes.RecordType.LodgeMeeting,
+                SourceRecordId = meetingId,
+                EventDate = ceremonyDate,
+                Title = "Tenida de aumento de salario",
+                ExtractDocumentVersionId = extractVersionId,
+                CeremonyAuthorizationDocumentId = authorizationId,
+                Status = SecretariatOperationsCodes.SubmissionStatus.Submitted,
+                CreatedBySubject = "ci-secretaria"
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var closeResponse = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, closeResponse.StatusCode);
+        var repeatedCloseResponse = await client.PostAsync($"/api/gestion-logial/tenidas/{meetingId}/cerrar", null, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, repeatedCloseResponse.StatusCode);
+
+        await using var verificationScope = factory.Services.CreateAsyncScope();
+        var institutionalDb = verificationScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        var lodgeDb = verificationScope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
+        var memberAfterClose = await institutionalDb.Members.AsNoTracking().SingleAsync(x => x.Id == memberId, cancellationToken);
+        var ceremonyAfterClose = await institutionalDb.CeremonyRequests.AsNoTracking().SingleAsync(x => x.Id == ceremonyId, cancellationToken);
+        var degreeEvents = await institutionalDb.DegreeEvents.AsNoTracking()
+            .Where(x => x.MemberId == memberId && x.EventType == MembershipCodes.DegreeEvent.WageIncrease)
+            .ToListAsync(cancellationToken);
+
+        Assert.Equal(LodgeManagementCodes.Grade.Fellowcraft, memberAfterClose.CurrentDegree);
+        Assert.Equal(CeremonyCodes.RequestStatus.Completed, ceremonyAfterClose.Status);
+        var degreeEvent = Assert.Single(degreeEvents);
+        Assert.Equal(organizationId, degreeEvent.OrganizationId);
+        Assert.Equal(LodgeManagementCodes.Grade.Fellowcraft, degreeEvent.Degree);
+        Assert.Equal(ceremonyDate, degreeEvent.EffectiveDate);
+        Assert.Contains(authorizationId.ToString(), degreeEvent.EvidenceReference);
+        Assert.Contains(extractVersionId.ToString(), degreeEvent.EvidenceReference);
+        Assert.Contains(meetingId.ToString(), degreeEvent.EvidenceReference);
+        Assert.Equal(1, await institutionalDb.AuditEvents.AsNoTracking()
+            .CountAsync(x => x.Action == "ceremony.advancement.completed" && x.EntityId == ceremonyId.ToString(), cancellationToken));
+        Assert.Equal(1, await lodgeDb.AuditEvents.AsNoTracking()
+            .CountAsync(x => x.Action == "lodge.meeting.closed" && x.EntityId == meetingId.ToString(), cancellationToken));
+    }
+
     [Fact]
     public async Task Meeting_attendance_correction_and_minute_versions_preserve_history()
     {
@@ -245,8 +402,11 @@ internal sealed class LodgeManagementWebApplicationFactory(string connectionStri
             services.RemoveAll<DbContextOptions<PmgmDbContext>>();
             services.RemoveAll<LodgeManagementDbContext>();
             services.RemoveAll<DbContextOptions<LodgeManagementDbContext>>();
+            services.RemoveAll<GrandSecretariatDbContext>();
+            services.RemoveAll<DbContextOptions<GrandSecretariatDbContext>>();
             services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(connectionString));
             services.AddDbContext<LodgeManagementDbContext>(options => options.UseNpgsql(connectionString));
+            services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(connectionString));
 
             services.AddAuthentication(options =>
                 {
