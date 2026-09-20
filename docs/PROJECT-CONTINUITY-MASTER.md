@@ -12,8 +12,10 @@
 - Una Tenida ceremonial no puede programarse sin Plancha de Autorización emitida por Gran Secretaría y coincidente en Taller, tipo y fecha. Desde la Plancha se crea la Tenida y se vincula automáticamente la autorización.
 - La elegibilidad de Aumento de Salario y Exaltación se calcula con evidencias reales del grado de origen y reglas institucionales versionadas: 24 meses continuados, asistencias a Tenidas, asistencias a instrucciones y dos Planchas de Trabajo. Para Aumento rigen 30 Tenidas y 10 instrucciones de 1.er grado; para Exaltación, 10 Tenidas y 10 instrucciones de 2.º grado.
 - Una dispensa exige acuerdo afirmativo de Cámara del Medio, acta, identificación del requisito y validación de Régimen Interior. Nunca puede reducir un requisito en más de 50%; Gran Secretaría no puede autorizar mientras los controles ordinarios o la dispensa permanezcan incumplidos.
-- Corte funcional validado: PR #116 HEAD `8646bab18154639c36a70ec817a0fcfa4e4989a5`; PMGM CI #1369, Showcase Demo/Pages #595 y QA srv01 Installable #233 en `SUCCESS`.
-- Artefacto instalable exact-head: ID `10612530517`, digest `sha256:8306d627784507a2cf96d6ec706628b23fc25d60815d57ef35f93993318b11b6`.
+- Al cerrar una Tenida de Aumento de Salario o Exaltación ya realizada, Secretaría debe contar con Extracto de Acta y Plancha de Autorización emitida por Gran Secretaría para el mismo hermano, Taller, tipo y fecha. El cierre materializa automáticamente el nuevo grado, registra el hito de grado con sus evidencias y completa la solicitud ceremonial.
+- La materialización es idempotente y reconciliable: repetir el cierre no duplica el hito ni las auditorías. Un grado previo incompatible o un hito contradictorio bloquea el cierre para revisión por Régimen Interior.
+- Corte funcional validado: PR #116 HEAD `41f0d4df66e062a4913f66b59c88efbe1c44745d`; PMGM CI #1372, Showcase Demo/Pages #598 y QA srv01 Installable #236 en `SUCCESS`.
+- Artefacto instalable exact-head: ID `10612825318`, digest `sha256:641940edfd6f204ec23b340bb7336e5b6e0c05179f3a083f96dfd2c824042a91`.
 - PR #116 continúa `draft` y no fusionado. `dev` permanece en `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`; `main`, en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` físico sigue diferido/no validado.
 
 **Última consolidación:** 13 de septiembre de 2026  
