@@ -77,6 +77,15 @@ public sealed class PostgreSqlHttpWorkflowTests
                 Status = MembershipCodes.MembershipStatus.Active
             };
 
+            // Este caso verifica el circuito HTTP y sus vistos buenos. La política con
+            // mínimos 2026 se prueba por separado; aquí se usa una versión institucional
+            // vigente con mínimos cero para aislar la autorización end-to-end.
+            var advancementRule = await db.InstitutionalRuleSettings.SingleAsync(
+                x => x.Code == CeremonyCodes.Rules.WageIncreaseRequirements,
+                cancellationToken);
+            advancementRule.Value = "{\"minimumMonths\":0,\"minimumMeetings\":0,\"minimumInstructions\":0,\"minimumWorkPapers\":0}";
+            advancementRule.SourceReference = "CI-HTTP-ADVANCEMENT-RULE";
+
             db.AddRange(organization, person, member, membership);
             await db.SaveChangesAsync(cancellationToken);
 
