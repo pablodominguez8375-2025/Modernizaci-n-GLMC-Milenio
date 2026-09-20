@@ -63,7 +63,7 @@ public sealed class CandidateDraftHttpWorkflowTests
                 firstNames = "Persona",
                 paternalSurname = "Insinuada",
                 maternalSurname = "CI",
-                insinuationDate = new DateOnly(2026, 9, 20)
+                insinuationDate = new DateOnly(2026, 9, 19)
             },
             cancellationToken);
 
@@ -90,7 +90,7 @@ public sealed class CandidateDraftHttpWorkflowTests
             var profile = await intakeDb.CandidateIntakeProfiles.SingleAsync(
                 x => x.CeremonyRequestId == requestId,
                 cancellationToken);
-            Assert.Equal(new DateOnly(2026, 9, 20), profile.InsinuationDate);
+            Assert.Equal(new DateOnly(2026, 9, 19), profile.InsinuationDate);
             Assert.Equal("Insinuada", profile.PaternalSurname);
         }
 
