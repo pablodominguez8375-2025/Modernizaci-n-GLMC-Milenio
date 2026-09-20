@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest'
 import { CandidateIntakeApiClient } from './candidateIntakeApi'
 
 describe('CandidateIntakeApiClient demo workflow', () => {
+  it('starts a new insinuado without a ceremony date', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const created = await api.createDraftRequest({
+      firstNames: 'Insinuado',
+      paternalSurname: 'SinFecha',
+      maternalSurname: null,
+      insinuationDate: '2026-09-20',
+    })
+
+    expect(created.proposedDate).toBeNull()
+  })
+
   it('loads a fictitious Gran Secretaría queue and private profile', async () => {
     const api = new CandidateIntakeApiClient({ useMocks: true })
     const queue = await api.getGrandSecretariatQueue()
