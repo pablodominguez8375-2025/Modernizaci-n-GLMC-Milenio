@@ -47,7 +47,6 @@ export interface CandidateDraftCreatePayload {
   paternalSurname: string
   maternalSurname?: string | null
   insinuationDate: string
-  proposedDate?: string | null
 }
 
 export interface CandidateIntakeProfile {
@@ -441,7 +440,7 @@ export class CandidateIntakeApiClient {
         displayName: [payload.firstNames.trim(), payload.paternalSurname.trim(), payload.maternalSurname?.trim()].filter(Boolean).join(' '),
         workshopName: 'Taller Demostrativo Nº 23',
         workshopNumber: '23',
-        proposedDate: payload.proposedDate ?? null,
+        proposedDate: null,
         requestStatus: 'draft',
         profileAvailable: false,
         photoAvailable: false,
