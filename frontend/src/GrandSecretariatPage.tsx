@@ -59,6 +59,15 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   }
 
   const pendingAuthorizations = ceremonies.filter(item => !item.formalAuthorizationIssued).length
+  const downloadDocument = (document: SecretariatDocument) => execute(async () => {
+    const blob = await api.downloadSecretariatAccessibleDocument(document.id)
+    const url = URL.createObjectURL(blob)
+    const anchor = window.document.createElement('a')
+    anchor.href = url
+    anchor.download = `${document.documentCode}-version-accesible.html`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, 'Versión accesible descargada; puede abrirla en el navegador o imprimirla.')
 
   return (
     <>
@@ -100,7 +109,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
         <article className="panel secretariat-wide">
           <div className="panel-heading"><div><p className="eyebrow">Registro oficial</p><h2>Documentos recientes</h2></div><span className="count-badge">{documents.length} registros</span></div>
           {documents.length === 0 ? <p className="muted">Aún no hay documentos emitidos.</p> : (
-            <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document)} · {formatChile(document.issuedAtUtc)}</small></div>)}</div>
+            <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document)} · {formatChile(document.issuedAtUtc)}</small><button className="secondary-action" type="button" disabled={working} onClick={() => void downloadDocument(document)}>Descargar versión accesible</button></div>)}</div>
           )}
         </article>
       </section>

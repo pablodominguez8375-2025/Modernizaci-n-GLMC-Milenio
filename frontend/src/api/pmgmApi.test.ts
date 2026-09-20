@@ -219,3 +219,24 @@ it('posts formal initiation submission without re-entering candidate identity', 
   const [url, options] = fetch.mock.calls[0]
   expect(url).toBe('/api/insinuados/solicitudes/c1/solicitud-iniciacion'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ proposedCeremonyDate: '2026-11-07', venerableApproval: true, sourceReference: 'SOL-1' })
 })
+
+it('generates the same accessible institutional document in showcase mode', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const document = await client.issueSecretariatDocument({ documentType: 'plancha', planchaKind: 'formal_communication', title: 'Plancha <QA>', content: 'Primera línea.\nSegunda & línea.' })
+  const blob = await client.downloadSecretariatAccessibleDocument(document.id)
+  const html = await blob.text()
+  expect(blob.type).toBe('text/html;charset=utf-8')
+  expect(html).toContain('<html lang="es">')
+  expect(html).toContain('GRAN LOGIA MIXTA DE CHILE')
+  expect(html).toContain('Plancha &lt;QA&gt;')
+  expect(html).toContain('Segunda &amp; línea.')
+})
+
+it('downloads the protected accessible document from Gran Secretaría', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response('<html lang="es"></html>', { headers: { 'Content-Type': 'text/html;charset=utf-8' } })); vi.stubGlobal('fetch', fetch)
+  const blob = await new PmgmApiClient({ getAccessToken: async () => 'token' }).downloadSecretariatAccessibleDocument('doc 1')
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/gran-secretaria/documentos/doc%201/version-accesible')
+  expect(options.headers.get('Authorization')).toBe('Bearer token')
+  expect(blob.type).toBe('text/html;charset=utf-8')
+})

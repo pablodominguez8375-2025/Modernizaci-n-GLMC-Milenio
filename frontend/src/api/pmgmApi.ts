@@ -621,6 +621,18 @@ export class PmgmApiClient {
 
   async getSecretariatAvailability(fromUtc: string, toUtc: string): Promise<SpaceAvailabilityResponse> { if (this.useMocks) { const items = this.mockSpaces.map(space => ({ ...space, isAvailable: !this.mockBusySpaces.has(space.id) })); return { fromUtc, toUtc, total: items.length, available: items.filter(x => x.isAvailable).length, items } } const query = new URLSearchParams({ fromUtc, toUtc }); return this.request<SpaceAvailabilityResponse>(`/api/gran-secretaria/espacios/disponibilidad?${query}`) }
   async getSecretariatDocuments(): Promise<SecretariatDocumentsResponse> { if (this.useMocks) return { total: this.mockDocuments.length, items: [...this.mockDocuments] }; return this.request<SecretariatDocumentsResponse>('/api/gran-secretaria/documentos') }
+  async downloadSecretariatAccessibleDocument(documentId: string): Promise<Blob> {
+    if (this.useMocks) {
+      const document=this.mockDocuments.find(value=>value.id===documentId); if(!document) throw new Error('El documento institucional no existe.')
+      const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')
+      const paragraphs=document.content.split(/\r?\n/).filter(Boolean).map(value=>`<p>${escape(value)}</p>`).join('')
+      return new Blob([`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escape(document.documentCode)} — ${escape(document.title)}</title><style>body{color:#172033;font:12pt/1.15 Cambria,Georgia,serif}main{max-width:21cm;margin:auto;padding:2.5cm}header,h1{color:#243b67}header{border-bottom:3px solid #8a6b1f}</style></head><body><main><header><strong>GRAN LOGIA MIXTA DE CHILE</strong></header><h1>${escape(document.title)}</h1><dl><dt>Código</dt><dd>${escape(document.documentCode)}</dd></dl><section aria-label="Contenido del documento">${paragraphs}</section><p>Versión digital accesible para lectura en pantalla e impresión.</p></main></body></html>`], { type:'text/html;charset=utf-8' })
+    }
+    const headers=new Headers({ Accept:'text/html' }); const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para descargar el documento.'); headers.set('Authorization',`Bearer ${token}`)
+    const response=await fetch(`${this.baseUrl}/api/gran-secretaria/documentos/${encodeURIComponent(documentId)}/version-accesible`,{credentials:'omit',redirect:'error',cache:'no-store',headers})
+    if(!response.ok){if(response.status===401)await this.onUnauthorized?.();throw new PmgmApiHttpError(response.status,response.status===403?'Su cuenta no tiene permiso para descargar este documento.':`La API respondió ${response.status} ${response.statusText}.`)}
+    return response.blob()
+  }
   async getSubmittedTenidas(): Promise<GrandSecretariatTenidasResponse> {
     if (this.useMocks) return { total: this.mockSubmittedTenidas.length, items: this.mockSubmittedTenidas.map(item => ({ ...item, lodge: { ...item.lodge } })) }
     return this.request<GrandSecretariatTenidasResponse>('/api/gran-secretaria/tenidas')

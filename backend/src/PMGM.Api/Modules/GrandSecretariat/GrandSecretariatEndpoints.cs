@@ -24,6 +24,7 @@ public static class GrandSecretariatEndpoints
         group.MapPost("/reservas/{reservationId:guid}/cancelar", CancelReservationAsync);
         group.MapPost("/documentos", IssueInstitutionalDocumentAsync);
         group.MapGet("/documentos", GetDocumentsAsync);
+        group.MapGet("/documentos/{documentId:guid}/version-accesible", DownloadAccessibleDocumentAsync);
         group.MapPost("/ceremonias/{requestId:guid}/autorizacion", IssueCeremonyAuthorizationAsync);
 
         return endpoints;
@@ -431,6 +432,45 @@ public static class GrandSecretariatEndpoints
             .ToListAsync(cancellationToken);
 
         return Results.Ok(new { total = documents.Count, items = documents.Select(ToDocumentDto) });
+    }
+
+    private static async Task<IResult> DownloadAccessibleDocumentAsync(
+        Guid documentId,
+        HttpContext httpContext,
+        GrandSecretariatDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage(access, httpContext.User))
+        {
+            return Results.Forbid();
+        }
+
+        var document = await db.SecretariatDocuments.SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
+        if (document is null)
+        {
+            return Results.NotFound();
+        }
+
+        if (document.Status != GrandSecretariatCodes.DocumentStatus.Issued)
+        {
+            return Results.Conflict(new { message = "Sólo los documentos emitidos cuentan con versión accesible oficial." });
+        }
+
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext,
+            "grand_secretariat.document.accessible_version_downloaded",
+            nameof(SecretariatDocument),
+            document.Id.ToString(),
+            document.OrganizationId,
+            AuditResults.Success,
+            new { document.DocumentCode, format = "html" }));
+        await db.SaveChangesAsync(cancellationToken);
+
+        return Results.File(
+            SecretariatAccessibleDocumentRenderer.Render(document),
+            "text/html; charset=utf-8",
+            SecretariatAccessibleDocumentRenderer.FileName(document));
     }
 
     private static async Task<IResult> IssueCeremonyAuthorizationAsync(

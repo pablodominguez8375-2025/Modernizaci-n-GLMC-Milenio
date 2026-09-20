@@ -225,6 +225,20 @@ public sealed class GrandSecretariatHttpWorkflowTests
             },
             cancellationToken);
         Assert.Equal(HttpStatusCode.Created, decreeResponse.StatusCode);
+        var decreeJson = await decreeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var decreeId = decreeJson.GetProperty("id").GetGuid();
+
+        var accessibleDocumentResponse = await client.GetAsync(
+            $"/api/gran-secretaria/documentos/{decreeId}/version-accesible",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, accessibleDocumentResponse.StatusCode);
+        Assert.Equal("text/html", accessibleDocumentResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("utf-8", accessibleDocumentResponse.Content.Headers.ContentType?.CharSet);
+        Assert.Equal("attachment", accessibleDocumentResponse.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains("DEC-", accessibleDocumentResponse.Content.Headers.ContentDisposition?.FileNameStar);
+        var accessibleDocumentHtml = await accessibleDocumentResponse.Content.ReadAsStringAsync(cancellationToken);
+        Assert.Contains("<html lang=\"es\">", accessibleDocumentHtml);
+        Assert.Contains("Decreto CI", accessibleDocumentHtml);
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -251,6 +265,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
             Assert.Contains("grand_secretariat.space_reservation.rejected", auditActions);
             Assert.Contains("grand_secretariat.ceremony_authorization.issued", auditActions);
             Assert.Contains("grand_secretariat.document.issued", auditActions);
+            Assert.Contains("grand_secretariat.document.accessible_version_downloaded", auditActions);
         }
     }
 }

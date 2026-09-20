@@ -18,6 +18,7 @@
 - Artefacto instalable exact-head: ID `10612825318`, digest `sha256:641940edfd6f204ec23b340bb7336e5b6e0c05179f3a083f96dfd2c824042a91`.
 - PR #116 continúa `draft` y no fusionado. `dev` permanece en `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`; `main`, en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` físico sigue diferido/no validado.
 - Drive incorporó tres fuentes institucionales nuevas: guía de uso del logotipo GLMCh, formato de papelería y guía SENADIS de documentos accesibles. El corte siguiente alinea paleta y parámetros con los colores oficiales, adopta reglas de accesibilidad y deja expresamente pendiente el archivo gráfico oficial —no se extrae una captura del manual ni se redibuja el isotipo—. Contrato: `docs/PMGM-UI-002-identidad-accesibilidad-institucional.md`.
+- Gran Secretaría incorpora descarga protegida de cada Plancha o Decreto emitido como HTML institucional accesible, imprimible y adaptable. La salida usa estructura semántica, español declarado, tipografía y paleta institucional, escapa el contenido, registra auditoría y mantiene paridad en la Demo; no incorpora un logotipo reconstruido mientras no exista el archivo gráfico oficial autorizado.
 
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
