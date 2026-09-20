@@ -27,6 +27,7 @@ public static class CeremonyEndpoints
             .RequireAuthorization();
 
         group.MapPost("/solicitudes", CreateRequestAsync);
+        group.MapGet("/talleres/{organizationId:guid}/solicitudes-avance", ListAdvancementRequestsAsync);
         group.MapPost("/solicitudes/{requestId:guid}/validaciones/regimen-interior", SetInternalAffairsValidationAsync);
         group.MapPost("/solicitudes/{requestId:guid}/revision-publicacion-insinuado", ReviewCandidatePublicationAsync);
         group.MapPost("/solicitudes/{requestId:guid}/aprobar-publicacion-insinuado", PublishCandidateAsync);
@@ -39,6 +40,24 @@ public static class CeremonyEndpoints
         group.MapGet("/reglas/publicacion-iniciacion", GetInitiationPublicationRuleAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListAdvancementRequestsAsync(
+        Guid organizationId, HttpContext httpContext, PmgmDbContext db,
+        IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanReadLodgeSecretariat(httpContext.User, organizationId)) return Results.Forbid();
+        var items = await db.CeremonyRequests.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId &&
+                (x.CeremonyType == CeremonyCodes.Type.WageIncrease || x.CeremonyType == CeremonyCodes.Type.Exaltation))
+            .OrderByDescending(x => x.CreatedAtUtc).Take(250)
+            .Select(x => new
+            {
+                x.Id, x.OrganizationId, x.CeremonyType, x.MemberId,
+                memberName = x.Member!.Person.FirstNames + " " + x.Member.Person.LastNames,
+                tentativeDate = x.ProposedDate, x.Status, x.Notes, x.CreatedAtUtc
+            }).ToListAsync(cancellationToken);
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> RegisterInitiationAsync(
@@ -157,6 +176,25 @@ public static class CeremonyEndpoints
             {
                 return Results.BadRequest(new { message = "El hermano no registra una pertenencia vigente al Taller solicitante." });
             }
+
+            var currentDegree = await db.Members.AsNoTracking()
+                .Where(x => x.Id == request.MemberId.Value)
+                .Select(x => x.CurrentDegree)
+                .SingleAsync(cancellationToken);
+            var expectedDegree = request.CeremonyType == CeremonyCodes.Type.WageIncrease ? "apprentice" : "fellowcraft";
+            if (!string.Equals(currentDegree, expectedDegree, StringComparison.OrdinalIgnoreCase))
+            {
+                var expectedLabel = expectedDegree == "apprentice" ? "Aprendiz" : "Compañero";
+                return Results.BadRequest(new { message = $"La solicitud sólo corresponde a un hermano con grado vigente de {expectedLabel}." });
+            }
+
+            var duplicate = await db.CeremonyRequests.AsNoTracking().AnyAsync(x =>
+                x.OrganizationId == request.OrganizationId && x.MemberId == request.MemberId &&
+                x.CeremonyType == request.CeremonyType &&
+                x.Status != CeremonyCodes.RequestStatus.Rejected && x.Status != CeremonyCodes.RequestStatus.Completed,
+                cancellationToken);
+            if (duplicate)
+                return Results.Conflict(new { message = "Ya existe una solicitud de avance vigente para este hermano y ceremonia." });
         }
 
         var entity = new CeremonyRequest

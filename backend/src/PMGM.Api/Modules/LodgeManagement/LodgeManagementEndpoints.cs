@@ -6,6 +6,7 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.SecretariatOperations;
+using PMGM.Api.Modules.GrandSecretariat;
 
 namespace PMGM.Api.Modules.LodgeManagement;
 
@@ -67,6 +68,7 @@ public static class LodgeManagementEndpoints
         CreateLodgeMeetingRequest request,
         HttpContext httpContext,
         PmgmDbContext institutionalDb,
+        GrandSecretariatDbContext grandSecretariatDb,
         LodgeManagementDbContext db,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
@@ -92,6 +94,26 @@ public static class LodgeManagementEndpoints
             .AsNoTracking()
             .AnyAsync(x => x.Id == organizationId && x.Type == "workshop", cancellationToken);
         if (!organizationExists) return Results.NotFound(new { message = "El Taller indicado no existe." });
+
+        if (!string.IsNullOrWhiteSpace(request.CeremonyType))
+        {
+            if (request.CeremonyAuthorizationDocumentId is null)
+                return Results.Conflict(new { message = "No puede programarse una Tenida ceremonial antes de recibir la Plancha de Autorización de Gran Secretaría." });
+            var authorization = await grandSecretariatDb.SecretariatDocuments.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.Id == request.CeremonyAuthorizationDocumentId && x.OrganizationId == organizationId &&
+                x.Status == GrandSecretariatCodes.DocumentStatus.Issued &&
+                ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha && x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
+                 x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationLegacy ||
+                 x.DocumentType == GrandSecretariatCodes.DocumentType.CeremonyAuthorizationPlanchaLegacy),
+                cancellationToken);
+            if (authorization is null)
+                return Results.BadRequest(new { message = "La Plancha de Autorización no es válida para este Taller." });
+            var ceremony = await institutionalDb.CeremonyRequests.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.Id == authorization.RelatedCeremonyRequestId && x.OrganizationId == organizationId,
+                cancellationToken);
+            if (ceremony is null || ceremony.CeremonyType != request.CeremonyType || ceremony.ProposedDate != request.MeetingDate)
+                return Results.BadRequest(new { message = "La Plancha no corresponde al tipo o fecha de la ceremonia que intenta programar." });
+        }
 
         var meeting = new LodgeMeeting
         {
@@ -119,7 +141,7 @@ public static class LodgeManagementEndpoints
             meeting.Id.ToString(),
             organizationId,
             AuditResults.Success,
-            new { meeting.MeetingDate, meeting.MeetingType, meeting.Grade, meeting.CeremonyType, meeting.Modality, meeting.Status }));
+            new { meeting.MeetingDate, meeting.MeetingType, meeting.Grade, meeting.CeremonyType, request.CeremonyAuthorizationDocumentId, meeting.Modality, meeting.Status }));
         await db.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/gestion-logial/tenidas/{meeting.Id}", ToMeetingDto(meeting));
@@ -610,7 +632,8 @@ public sealed record CreateLodgeMeetingRequest(
     string Modality,
     string? LocationReference,
     string? VirtualAccessReference,
-    string? Title);
+    string? Title,
+    Guid? CeremonyAuthorizationDocumentId);
 
 public sealed record LodgeAttendanceRequest(
     Guid MemberId,

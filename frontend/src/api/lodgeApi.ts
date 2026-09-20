@@ -34,6 +34,7 @@ export interface CreateLodgeMeetingRequest {
   locationReference?: string | null
   virtualAccessReference?: string | null
   title?: string | null
+  ceremonyAuthorizationDocumentId?: string | null
 }
 export interface LodgeAttendanceCurrent {
   recordId: string
@@ -138,6 +139,11 @@ export interface LodgeCeremonyAuthorizationOption {
   proposedDate: string | null; issuedAtUtc: string
 }
 export interface LodgeCeremonyAuthorizationOptionsResponse { total: number; items: LodgeCeremonyAuthorizationOption[] }
+export interface LodgeAdvancementRequest {
+  id:string; organizationId:string; ceremonyType:'wage_increase'|'exaltation'; memberId:string; memberName:string
+  tentativeDate:string|null; status:string; notes:string|null; createdAtUtc:string
+}
+export interface LodgeAdvancementRequestsResponse { total:number; items:LodgeAdvancementRequest[] }
 export interface LodgeCorrespondence { id:string; organizationId:string; direction:'received'|'sent'; folio:string; correspondenceDate:string; subject:string; counterparty:string; channel:'email'|'letter'|'hand_delivery'|'other'; reference:string|null; status:'registered'|'closed'; createdAtUtc:string; closedAtUtc:string|null }
 export interface LodgeSecretariatTask { id:string; organizationId:string; title:string; detail:string|null; dueDate:string|null; priority:'low'|'normal'|'high'|'urgent'; responsible:string|null; status:'pending'|'in_progress'|'completed'|'cancelled'; createdAtUtc:string; completedAtUtc:string|null }
 export interface LodgeAgendaItem { id:string; organizationId:string; meetingId:string|null; order:number; title:string; detail:string|null; status:'pending'|'covered'|'deferred'; createdAtUtc:string; updatedAtUtc:string|null }
@@ -266,6 +272,7 @@ export class LodgeApiClient {
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
   private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = demoLodgeSeed.secretariatRecords.map(item => ({ ...item }))
   private readonly mockWorkPapers: LodgeWorkPaper[] = []
+  private readonly mockAdvancementRequests: LodgeAdvancementRequest[] = []
   private readonly mockCeremonyAuthorizations: LodgeCeremonyAuthorizationOption[] = demoLodgeSeed.ceremonyAuthorizations.map(item => ({ ...item }))
   private readonly mockCorrespondence: LodgeCorrespondence[] = [{id:'corr-demo-001',organizationId:DEMO_LODGE_23_ID,direction:'received',folio:'REC-2026-001',correspondenceDate:'2026-09-17',subject:'Circular institucional demostrativa',counterparty:'Gran Secretaría',channel:'email',reference:'Correo institucional ficticio',status:'registered',createdAtUtc:'2026-09-17T15:00:00Z',closedAtUtc:null}]
   private readonly mockSecretariatTasks: LodgeSecretariatTask[] = [{id:'task-demo-001',organizationId:DEMO_LODGE_23_ID,title:'Preparar extracto de próxima Tenida',detail:'Pendiente demostrativo sin datos reales.',dueDate:'2026-09-25',priority:'high',responsible:'Secretaría del Taller',status:'pending',createdAtUtc:'2026-09-18T15:00:00Z',completedAtUtc:null}]
@@ -386,6 +393,20 @@ export class LodgeApiClient {
     await this.request(`/api/secretaria/planchas-trabajo/${encodeURIComponent(id)}/solicitar-biblioteca`,{method:'POST'})
   }
 
+  async getAdvancementRequests(organizationId:string):Promise<LodgeAdvancementRequestsResponse>{
+    if(this.useMocks){const items=this.mockAdvancementRequests.filter(x=>x.organizationId===organizationId).map(x=>({...x}));return{total:items.length,items}}
+    return this.request<LodgeAdvancementRequestsResponse>(`/api/ceremonias/talleres/${encodeURIComponent(organizationId)}/solicitudes-avance`)
+  }
+
+  async createAdvancementRequest(organizationId:string,payload:{ceremonyType:'wage_increase'|'exaltation';memberId:string;tentativeDate:string;notes?:string|null}):Promise<LodgeAdvancementRequest>{
+    if(this.useMocks){
+      if(this.mockAdvancementRequests.some(x=>x.memberId===payload.memberId&&x.ceremonyType===payload.ceremonyType&&!['rejected','completed'].includes(x.status)))throw new Error('Ya existe una solicitud de avance vigente para este hermano y ceremonia.')
+      const member=demoMembers.find(x=>x.id===payload.memberId);const item:LodgeAdvancementRequest={id:crypto.randomUUID(),organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,memberName:member?.displayName??'Hermano demostrativo',tentativeDate:payload.tentativeDate,status:'under_review',notes:payload.notes?.trim()||null,createdAtUtc:new Date().toISOString()};this.mockAdvancementRequests.unshift(item);return{...item}
+    }
+    const created=await this.postJson<{id:string;organizationId:string;ceremonyType:'wage_increase'|'exaltation';memberId:string;proposedDate:string|null;status:string}>('/api/ceremonias/solicitudes',{organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,candidatePersonId:null,proposedDate:payload.tentativeDate,notes:payload.notes??null})
+    return{id:created.id,organizationId:created.organizationId,ceremonyType:created.ceremonyType,memberId:created.memberId,memberName:'',tentativeDate:created.proposedDate,status:created.status,notes:payload.notes??null,createdAtUtc:new Date().toISOString()}
+  }
+
   async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {
     if (this.useMocks) {
       const items = this.mockWithdrawals.filter(item => item.originOrganizationId === organizationId).map(item => structuredClone(item))
@@ -446,6 +467,8 @@ export class LodgeApiClient {
 
   async createMeeting(organizationId: string, payload: CreateLodgeMeetingRequest): Promise<LodgeMeeting> {
     if (this.useMocks) {
+      if(payload.ceremonyType&&!payload.ceremonyAuthorizationDocumentId)throw new Error('No puede programarse una Tenida ceremonial antes de recibir la Plancha de Autorización de Gran Secretaría.')
+      if(payload.ceremonyType&&!this.mockCeremonyAuthorizations.some(x=>x.id===payload.ceremonyAuthorizationDocumentId&&x.ceremonyType===payload.ceremonyType&&x.proposedDate===payload.meetingDate))throw new Error('La Plancha no corresponde al tipo o fecha de la ceremonia que intenta programar.')
       const meeting: LodgeMeeting = {
         id: crypto.randomUUID(),
         organizationId,

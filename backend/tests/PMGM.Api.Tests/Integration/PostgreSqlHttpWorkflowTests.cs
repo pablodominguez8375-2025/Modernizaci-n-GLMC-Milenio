@@ -63,7 +63,8 @@ public sealed class PostgreSqlHttpWorkflowTests
             {
                 PersonId = person.Id,
                 Person = person,
-                InstitutionalNumber = $"CI-{Guid.NewGuid():N}"
+                InstitutionalNumber = $"CI-{Guid.NewGuid():N}",
+                CurrentDegree = "apprentice"
             };
             var membership = new Membership
             {

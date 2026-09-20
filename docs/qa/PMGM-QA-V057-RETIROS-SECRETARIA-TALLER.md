@@ -9,6 +9,14 @@
 - La publicación efectiva continúa requiriendo la autorización documental y queda visible sólo desde una versión disponible.
 - Verificación automatizada: mock funcional privado -> solicitado, sin `publishedAtUtc`; frontend completo, lint y build.
 
+## Incremento Secretaría — solicitudes de avance y programación ceremonial
+
+- Aumento de Salario admite sólo hermano con grado vigente Aprendiz; Exaltación, sólo Compañero.
+- Se bloquea una segunda solicitud activa del mismo tipo para el mismo hermano.
+- La fecha de solicitud es tentativa y no crea Tenida ni reserva espacio.
+- La creación de cualquier Tenida ceremonial exige Plancha de Autorización emitida, del mismo Taller, tipo y fecha.
+- La acción de programar desde Secretaría crea la Tenida y vincula la Plancha al expediente documental.
+
 ## Alcance
 
 El Secretario del Taller puede iniciar un retiro voluntario o forzoso para un hermano con pertenencia activa en su propio Taller. La solicitud conserva causal, referencia documental, fecha efectiva, autor y trazabilidad.

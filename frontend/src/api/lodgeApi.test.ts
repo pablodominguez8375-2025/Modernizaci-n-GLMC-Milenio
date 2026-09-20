@@ -183,3 +183,22 @@ it('keeps work papers private until Secretariat explicitly requests Library publ
   expect(stored?.status).toBe('library_requested')
   expect(stored?.publishedAtUtc).toBeNull()
 })
+
+it('creates advancement requests with a tentative date and rejects duplicate active requests', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const organizationId = '23232323-2323-2323-2323-232323232323'
+  const member = (await client.getMemberOptions(organizationId)).items[0]
+  const created = await client.createAdvancementRequest(organizationId, { ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-20' })
+  expect(created.status).toBe('under_review')
+  expect(created.tentativeDate).toBe('2026-10-20')
+  await expect(client.createAdvancementRequest(organizationId, { ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-21' })).rejects.toThrow('Ya existe')
+})
+
+it('does not schedule a ceremonial meeting without a matching authorization plancha', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const organizationId = '23232323-2323-2323-2323-232323232323'
+  await expect(client.createMeeting(organizationId, { meetingDate: '2026-09-18', meetingType: 'solemn', grade: 'apprentice', ceremonyType: 'initiation', modality: 'in_person', locationReference: 'Templo' })).rejects.toThrow('Plancha de Autorización')
+  const authorization = (await client.getCeremonyAuthorizationOptions(organizationId)).items.find(item => item.ceremonyType === 'initiation')!
+  const meeting = await client.createMeeting(organizationId, { meetingDate: authorization.proposedDate!, meetingType: 'solemn', grade: 'apprentice', ceremonyType: 'initiation', modality: 'in_person', locationReference: 'Templo', ceremonyAuthorizationDocumentId: authorization.id })
+  expect(meeting.status).toBe('scheduled')
+})

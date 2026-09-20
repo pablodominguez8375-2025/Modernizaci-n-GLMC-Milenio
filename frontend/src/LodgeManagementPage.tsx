@@ -96,7 +96,6 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   const [meetingDate, setMeetingDate] = useState(todayInChile())
   const [meetingType, setMeetingType] = useState<LodgeMeetingType>('regular')
   const [grade, setGrade] = useState<LodgeGrade>('all')
-  const [ceremonyType, setCeremonyType] = useState<LodgeCeremonyType | ''>('')
   const [modality, setModality] = useState<LodgeMeetingModality>('in_person')
   const [locationReference, setLocationReference] = useState('Templo o sala del Taller')
   const [virtualAccessReference, setVirtualAccessReference] = useState('')
@@ -200,7 +199,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
     event.preventDefault()
     if (!organizationId) return
     setWorking(true); setError(null); setMessage(null)
-    void lodgeApi.createMeeting(organizationId, { meetingDate, meetingType, grade, ceremonyType: ceremonyType || null, modality, locationReference: modality === 'in_person' ? locationReference.trim() || null : null, virtualAccessReference: modality === 'virtual' ? virtualAccessReference.trim() || null : null, title: title.trim() || null })
+    void lodgeApi.createMeeting(organizationId, { meetingDate, meetingType, grade, ceremonyType: null, modality, locationReference: modality === 'in_person' ? locationReference.trim() || null : null, virtualAccessReference: modality === 'virtual' ? virtualAccessReference.trim() || null : null, title: title.trim() || null })
       .then(async meeting => {
         await refreshMeetings(meeting.id)
         setTitle('')
@@ -403,7 +402,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
           <form className="regularity-form" onSubmit={createMeeting}>
             <label className="regularity-field"><span>Fecha · Chile</span><input type="date" required value={meetingDate} onChange={event => setMeetingDate(event.target.value)} /></label>
             <div className="lodge-form-row"><label className="regularity-field"><span>Tipo</span><select value={meetingType} onChange={event => setMeetingType(event.target.value as LodgeMeetingType)}>{meetingTypeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label className="regularity-field"><span>Grado</span><select value={grade} onChange={event => setGrade(event.target.value as LodgeGrade)}>{gradeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>
-            <div className="lodge-form-row"><label className="regularity-field"><span>Ceremonia</span><select value={ceremonyType} onChange={event => setCeremonyType(event.target.value as LodgeCeremonyType | '')}><option value="">No ceremonial</option><option value="initiation">Iniciación</option><option value="wage_increase">Aumento de salario</option><option value="exaltation">Exaltación</option></select></label><label className="regularity-field"><span>Modalidad</span><select value={modality} onChange={event => setModality(event.target.value as LodgeMeetingModality)}><option value="in_person">Presencial</option><option value="virtual">Virtual</option></select></label></div>
+            <div className="lodge-form-row"><label className="regularity-field"><span>Ceremonia</span><select value="" disabled><option value="">No ceremonial · las ceremonias se programan desde Secretaría con Plancha</option></select></label><label className="regularity-field"><span>Modalidad</span><select value={modality} onChange={event => setModality(event.target.value as LodgeMeetingModality)}><option value="in_person">Presencial</option><option value="virtual">Virtual</option></select></label></div>
             {modality === 'in_person' ? <label className="regularity-field"><span>Templo, sala o lugar</span><input required value={locationReference} onChange={event => setLocationReference(event.target.value)} /></label> : <label className="regularity-field"><span>Referencia de acceso virtual</span><input required value={virtualAccessReference} onChange={event => setVirtualAccessReference(event.target.value)} placeholder="Enlace o referencia de conexión restringida" /></label>}
             <label className="regularity-field"><span>Título opcional</span><input maxLength={500} value={title} onChange={event => setTitle(event.target.value)} /></label>
             <button className="regularity-primary" type="submit" disabled={working || !organizationId}>Crear Tenida</button>

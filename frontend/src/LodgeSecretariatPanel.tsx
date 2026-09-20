@@ -4,6 +4,7 @@ import {
   type CreateHistoricalMemberIntakeRequest,
   type HistoricalMemberIntake,
   type LodgeAdministrativeMeeting,
+  type LodgeAdvancementRequest,
   type LodgeApiClient,
   type LodgeCeremonyAuthorizationOption,
   type LodgeMeeting,
@@ -34,6 +35,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const [adminMeetings, setAdminMeetings] = useState<LodgeAdministrativeMeeting[]>([])
   const [records, setRecords] = useState<LodgeSecretariatRecord[]>([])
   const [workPapers, setWorkPapers] = useState<LodgeWorkPaper[]>([])
+  const [advancementRequests, setAdvancementRequests] = useState<LodgeAdvancementRequest[]>([])
   const [ceremonyAuthorizations, setCeremonyAuthorizations] = useState<LodgeCeremonyAuthorizationOption[]>([])
   const [councilSessions, setCouncilSessions] = useState<Array<{ id: string; sessionDate: string; title: string | null; status: string }>>([])
   const [working, setWorking] = useState(false)
@@ -68,6 +70,11 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const [paperDate, setPaperDate] = useState(today())
   const [paperDescription, setPaperDescription] = useState('')
   const [paperMeetingId, setPaperMeetingId] = useState('')
+  const [advancementMemberId, setAdvancementMemberId] = useState('')
+  const [advancementType, setAdvancementType] = useState<'wage_increase'|'exaltation'>('wage_increase')
+  const [advancementDate, setAdvancementDate] = useState(today())
+  const [advancementNotes, setAdvancementNotes] = useState('')
+  const [ceremonyLocation, setCeremonyLocation] = useState('Templo autorizado')
 
   useEffect(() => {
     if (!organizationId) return
@@ -78,14 +85,16 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       lodgeApi.getAdministrativeMeetings(organizationId),
       lodgeApi.getSecretariatRecords(organizationId),
       lodgeApi.getWorkPapers(organizationId),
+      lodgeApi.getAdvancementRequests(organizationId),
       lodgeApi.getCeremonyAuthorizationOptions(organizationId),
       councilApi.getSessions(organizationId),
-    ]).then(([historical, reunions, secretariatRecords, lodgeWorkPapers, authorizations, councils]) => {
+    ]).then(([historical, reunions, secretariatRecords, lodgeWorkPapers, lodgeAdvancements, authorizations, councils]) => {
       if (!active) return
       setIntakes(historical.items)
       setAdminMeetings(reunions.items)
       setRecords(secretariatRecords.items)
       setWorkPapers(lodgeWorkPapers.items)
+      setAdvancementRequests(lodgeAdvancements.items)
       setCeremonyAuthorizations(authorizations.items)
       setCouncilSessions(councils.items)
     }).catch(reason => { if (active) setError(toMessage(reason)) })
@@ -138,6 +147,25 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   }
 
   const requestLibrary = async(id:string) => execute(async()=>{await lodgeApi.requestWorkPaperLibraryPublication(id);await refreshWorkPapers()},'Solicitud enviada. La plancha sólo será visible en Biblioteca después de autorización y publicación documental.')
+
+  const createAdvancement = async(event:FormEvent) => {
+    event.preventDefault()
+    if(!advancementMemberId){setError('Seleccione al hermano para la solicitud.');return}
+    await execute(async()=>{
+      await lodgeApi.createAdvancementRequest(organizationId,{ceremonyType:advancementType,memberId:advancementMemberId,tentativeDate:advancementDate,notes:advancementNotes.trim()||null})
+      setAdvancementRequests((await lodgeApi.getAdvancementRequests(organizationId)).items);setAdvancementNotes('')
+    },'Solicitud enviada a revisión. La fecha es sólo tentativa: no programa ceremonia ni reserva espacio hasta emitirse la Plancha de Autorización.')
+  }
+
+  const scheduleAuthorizedCeremony = async(authorization:LodgeCeremonyAuthorizationOption) => {
+    if(!authorization.proposedDate){setError('La Plancha no contiene una fecha autorizada.');return}
+    const authorizedDate=authorization.proposedDate
+    await execute(async()=>{
+      const meeting=await lodgeApi.createMeeting(organizationId,{meetingDate:authorizedDate,meetingType:'solemn',grade:authorization.ceremonyType==='exaltation'?'fellowcraft':'apprentice',ceremonyType:authorization.ceremonyType,modality:'in_person',locationReference:ceremonyLocation.trim(),title:`${ceremonyTypeLabel(authorization.ceremonyType)} autorizada`,ceremonyAuthorizationDocumentId:authorization.id})
+      await lodgeApi.upsertSecretariatRecord(organizationId,'tenida',meeting.id,{ceremonyAuthorizationDocumentId:authorization.id})
+      await refreshRecords();await onMeetingChanged?.(meeting.id)
+    },'Tenida ceremonial programada desde la Plancha de Autorización y autorización vinculada automáticamente.')
+  }
 
   const createHistorical = async (event: FormEvent) => {
     event.preventDefault()
@@ -391,6 +419,20 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       </div>}
       <div className="lodge-secretariat-list">{workPapers.map(item=><div key={item.id}><div><strong>{item.title}</strong><span>{item.authorName} · {degreeLabel(item.degree)} · {formatDate(item.presentedOn)}</span><small>{item.topic||'Sin tema'} · {item.meetingId?'Vinculada a Tenida':'Sin vínculo a Tenida'} · {item.status==='published'?'Publicada en Biblioteca':item.status==='library_requested'?'Publicación solicitada':'Privada del Taller'}</small></div>{canManage&&item.status==='private'&&<button type="button" className="regularity-secondary" disabled={working} onClick={()=>void requestLibrary(item.id)}>Solicitar Biblioteca</button>}</div>)}{!workPapers.length&&<p className="muted">No hay planchas registradas.</p>}</div>
     </article>
+
+    <article className="panel lodge-secretariat-documents">
+      <div className="panel-heading"><div><p className="eyebrow">Ascensos masónicos</p><h3>Aumento de Salario y Exaltación</h3></div><span className="count-badge">{advancementRequests.length}</span></div>
+      <p className="form-note">Secretaría inicia el expediente. La fecha indicada es tentativa y no crea una Tenida ni reserva templo. La programación sólo se habilita después de la Plancha de Autorización emitida por Gran Secretaría.</p>
+      {canManage&&<form className="regularity-form" onSubmit={event=>void createAdvancement(event)}>
+        <Field label="Trámite"><select value={advancementType} onChange={e=>setAdvancementType(e.target.value as typeof advancementType)}><option value="wage_increase">Aumento de Salario · Aprendiz a Compañero</option><option value="exaltation">Exaltación · Compañero a Maestro</option></select></Field>
+        <Field label="Hermano"><select required value={advancementMemberId} onChange={e=>setAdvancementMemberId(e.target.value)}><option value="">Seleccione…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select></Field>
+        <Field label="Fecha tentativa"><input type="date" required value={advancementDate} onChange={e=>setAdvancementDate(e.target.value)} /></Field>
+        <Field label="Antecedentes / observaciones"><input value={advancementNotes} onChange={e=>setAdvancementNotes(e.target.value)} placeholder="Referencia a Cámara del Medio y antecedentes" /></Field>
+        <button className="regularity-primary" type="submit" disabled={working}>Crear solicitud de avance</button>
+      </form>}
+      <div className="lodge-secretariat-list">{advancementRequests.map(item=><div key={item.id}><div><strong>{item.ceremonyType==='wage_increase'?'Aumento de Salario':'Exaltación'} · {item.memberName||members.find(m=>m.id===item.memberId)?.displayName||'Hermano'}</strong><span>Fecha tentativa {item.tentativeDate?formatDate(item.tentativeDate):'pendiente'} · {advancementStatusLabel(item.status)}</span><small>{item.notes||'Sin observaciones adicionales'}{item.status==='authorized'?' · Autorizada; Gran Secretaría debe emitir la Plancha antes de programar.':''}</small></div></div>)}{!advancementRequests.length&&<p className="muted">No hay solicitudes de avance registradas.</p>}</div>
+      {canManage&&<div className="lodge-secretariat-submit"><div><strong>Programar sólo desde autorización emitida</strong><small>Seleccione una Plancha disponible; el sistema usa su tipo y fecha autorizada.</small></div><input aria-label="Lugar de ceremonia autorizada" value={ceremonyLocation} onChange={e=>setCeremonyLocation(e.target.value)} />{ceremonyAuthorizations.filter(a=>a.proposedDate&&!meetings.some(m=>m.ceremonyType===a.ceremonyType&&m.meetingDate===a.proposedDate)).map(a=><button key={a.id} type="button" className="regularity-secondary" disabled={working||!ceremonyLocation.trim()} onClick={()=>void scheduleAuthorizedCeremony(a)}>Programar {ceremonyTypeLabel(a.ceremonyType)} · {formatDate(a.proposedDate!)}</button>)}</div>}
+    </article>
   </section>
 }
 
@@ -402,6 +444,7 @@ function degreeLabel(value:string){return value==='master'?'Maestro':value==='fe
 function intakeStatusLabel(value:string){return value==='draft'?'Borrador':value==='submitted'?'Enviado a RI':value==='observed'?'Observado por RI':value==='approved'?'Validado por RI':'Rechazado'}
 function meetingTypeLabel(value:string){return value==='regular'?'Tenida Regular':value==='solemn'?'Tenida Solemne':value==='instruction'?'Tenida de Instrucción':value==='anniversary'?'Tenida de Aniversario':value==='funeral'?'Tenida Fúnebre':'Tenida Especial'}
 function ceremonyTypeLabel(value:string){return value==='initiation'?'Iniciación':value==='wage_increase'?'Aumento de Salario':value==='exaltation'?'Exaltación':value}
+function advancementStatusLabel(value:string){return value==='under_review'?'En revisión':value==='eligible'?'Elegible':value==='observed'?'Observada':value==='rejected'?'Rechazada':value==='authorized'?'Autorizada':value==='completed'?'Realizada':value}
 function toMessage(reason:unknown){return reason instanceof Error?reason.message:'No fue posible completar la operación.'}
 function downloadBlob(blob:Blob,fileName:string){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=fileName;a.click();URL.revokeObjectURL(url)}
 function isPdfOrWord(file:File){return file.type==='application/pdf'||file.type==='application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
