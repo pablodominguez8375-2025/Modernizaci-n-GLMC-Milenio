@@ -9,6 +9,7 @@ using PMGM.Api.Modules.CandidateIntake;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Notifications;
