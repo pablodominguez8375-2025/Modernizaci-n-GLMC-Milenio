@@ -120,6 +120,14 @@ export interface LodgeSecretariatRecord {
   createdAtUtc: string; submittedAtUtc: string | null; reviewedAtUtc: string | null; reviewNotes: string | null
 }
 export interface LodgeSecretariatRecordsResponse { total: number; items: LodgeSecretariatRecord[] }
+export interface LodgeWorkPaper {
+  id:string; organizationId:string; authorMemberId:string; authorName:string; documentId:string; documentVersionId:string
+  meetingId:string|null; title:string; topic:string|null; degree:'apprentice'|'fellowcraft'|'master'; presentedOn:string
+  shortDescription:string|null; status:'private'|'library_requested'|'published'; createdAtUtc:string
+  libraryRequestedAtUtc:string|null; publishedAtUtc:string|null
+}
+export interface LodgeWorkPapersResponse { total:number; items:LodgeWorkPaper[] }
+export interface CreateLodgeWorkPaperRequest { authorMemberId:string; documentId:string; documentVersionId:string; meetingId:string|null; title:string; topic:string|null; degree:LodgeWorkPaper['degree']; presentedOn:string; shortDescription:string|null }
 export interface UpsertLodgeSecretariatRecordRequest {
   workPaperDocumentVersionId?: string | null; workPaperAuthorMemberId?: string | null
   extractDocumentVersionId?: string | null; fullMinuteDocumentVersionId?: string | null
@@ -257,6 +265,7 @@ export class LodgeApiClient {
   private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
   private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = demoLodgeSeed.secretariatRecords.map(item => ({ ...item }))
+  private readonly mockWorkPapers: LodgeWorkPaper[] = []
   private readonly mockCeremonyAuthorizations: LodgeCeremonyAuthorizationOption[] = demoLodgeSeed.ceremonyAuthorizations.map(item => ({ ...item }))
   private readonly mockCorrespondence: LodgeCorrespondence[] = [{id:'corr-demo-001',organizationId:DEMO_LODGE_23_ID,direction:'received',folio:'REC-2026-001',correspondenceDate:'2026-09-17',subject:'Circular institucional demostrativa',counterparty:'Gran Secretaría',channel:'email',reference:'Correo institucional ficticio',status:'registered',createdAtUtc:'2026-09-17T15:00:00Z',closedAtUtc:null}]
   private readonly mockSecretariatTasks: LodgeSecretariatTask[] = [{id:'task-demo-001',organizationId:DEMO_LODGE_23_ID,title:'Preparar extracto de próxima Tenida',detail:'Pendiente demostrativo sin datos reales.',dueDate:'2026-09-25',priority:'high',responsible:'Secretaría del Taller',status:'pending',createdAtUtc:'2026-09-18T15:00:00Z',completedAtUtc:null}]
@@ -360,6 +369,21 @@ export class LodgeApiClient {
   async submitTenidaExtract(organizationId:string,meetingId:string):Promise<LodgeSecretariatRecord>{
     if(this.useMocks){ const item=this.mockSecretariatRecords.find(x=>x.recordType==='tenida'&&x.sourceRecordId===meetingId); if(!item?.extractDocumentVersionId) throw new Error('Debe cargar el extracto PDF antes de remitir la Tenida.'); item.status='submitted'; item.submittedAtUtc=new Date().toISOString(); return {...item} }
     return this.request<LodgeSecretariatRecord>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/tenidas/${encodeURIComponent(meetingId)}/remitir-extracto`,{method:'POST'})
+  }
+
+  async getWorkPapers(organizationId:string):Promise<LodgeWorkPapersResponse>{
+    if(this.useMocks){const items=this.mockWorkPapers.filter(x=>x.organizationId===organizationId).map(x=>({...x}));return{total:items.length,items}}
+    return this.request<LodgeWorkPapersResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/planchas-trabajo`)
+  }
+
+  async createWorkPaper(organizationId:string,payload:CreateLodgeWorkPaperRequest):Promise<LodgeWorkPaper>{
+    if(this.useMocks){const author=demoMembers.find(x=>x.id===payload.authorMemberId);const item:LodgeWorkPaper={id:crypto.randomUUID(),organizationId,...payload,authorName:author?.displayName??'Hermano demostrativo',status:'private',createdAtUtc:new Date().toISOString(),libraryRequestedAtUtc:null,publishedAtUtc:null};this.mockWorkPapers.unshift(item);return{...item}}
+    return this.postJson<LodgeWorkPaper>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/planchas-trabajo`,payload)
+  }
+
+  async requestWorkPaperLibraryPublication(id:string):Promise<void>{
+    if(this.useMocks){const item=this.mockWorkPapers.find(x=>x.id===id);if(!item)throw new Error('La plancha no existe.');item.status='library_requested';item.libraryRequestedAtUtc=new Date().toISOString();return}
+    await this.request(`/api/secretaria/planchas-trabajo/${encodeURIComponent(id)}/solicitar-biblioteca`,{method:'POST'})
   }
 
   async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {

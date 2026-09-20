@@ -78,6 +78,26 @@ public sealed class LodgeSecretariatRecord
     public string? ReviewNotes { get; set; }
 }
 
+public sealed class LodgeWorkPaper
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Guid AuthorMemberId { get; set; }
+    public Guid DocumentId { get; set; }
+    public Guid DocumentVersionId { get; set; }
+    public Guid? MeetingId { get; set; }
+    public required string Title { get; set; }
+    public string? Topic { get; set; }
+    public required string Degree { get; set; }
+    public DateOnly PresentedOn { get; set; }
+    public string? ShortDescription { get; set; }
+    public required string Status { get; set; }
+    public required string CreatedBySubject { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public string? LibraryRequestedBySubject { get; set; }
+    public DateTimeOffset? LibraryRequestedAtUtc { get; set; }
+}
+
 public sealed class LodgeCorrespondence
 {
     public Guid Id { get; init; } = Guid.NewGuid();

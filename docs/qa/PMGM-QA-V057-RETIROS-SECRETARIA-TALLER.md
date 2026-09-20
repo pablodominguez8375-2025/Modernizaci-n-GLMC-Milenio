@@ -1,5 +1,14 @@
 # PMGM QA v0.57 — Retiros gestionados por Secretaría del Taller
 
+## Incremento Secretaría — Planchas de Trabajo
+
+- La plancha se registra como expediente independiente y admite múltiples registros por hermano.
+- Conserva autor, grado, título, tema, fecha de presentación, descripción corta y vínculo opcional a una Tenida no ceremonial.
+- El archivo nace privado en Secretaría del Taller; no se remite a Gran Secretaría ni a Gran Archivero.
+- `Solicitar Biblioteca` sólo cambia el expediente a `library_requested` y prepara metadatos de catálogo. No publica automáticamente.
+- La publicación efectiva continúa requiriendo la autorización documental y queda visible sólo desde una versión disponible.
+- Verificación automatizada: mock funcional privado -> solicitado, sin `publishedAtUtc`; frontend completo, lint y build.
+
 ## Alcance
 
 El Secretario del Taller puede iniciar un retiro voluntario o forzoso para un hermano con pertenencia activa en su propio Taller. La solicitud conserva causal, referencia documental, fecha efectiva, autor y trazabilidad.

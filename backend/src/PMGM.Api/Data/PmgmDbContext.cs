@@ -25,6 +25,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<HistoricalMemberIntakeOffice> HistoricalMemberIntakeOffices => Set<HistoricalMemberIntakeOffice>();
     public DbSet<LodgeAdministrativeMeeting> LodgeAdministrativeMeetings => Set<LodgeAdministrativeMeeting>();
     public DbSet<LodgeSecretariatRecord> LodgeSecretariatRecords => Set<LodgeSecretariatRecord>();
+    public DbSet<LodgeWorkPaper> LodgeWorkPapers => Set<LodgeWorkPaper>();
     public DbSet<LodgeCorrespondence> LodgeCorrespondence => Set<LodgeCorrespondence>();
     public DbSet<LodgeSecretariatTask> LodgeSecretariatTasks => Set<LodgeSecretariatTask>();
     public DbSet<LodgeAgendaItem> LodgeAgendaItems => Set<LodgeAgendaItem>();
@@ -252,6 +253,23 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.RecordType, x.SourceRecordId }).IsUnique();
             entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
             entity.HasIndex(x => x.CeremonyAuthorizationDocumentId);
+        });
+
+        modelBuilder.Entity<LodgeWorkPaper>(entity =>
+        {
+            entity.ToTable("lodge_work_papers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Title).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Topic).HasMaxLength(240);
+            entity.Property(x => x.Degree).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ShortDescription).HasMaxLength(1000);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.LibraryRequestedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => new { x.OrganizationId, x.PresentedOn });
+            entity.HasIndex(x => new { x.AuthorMemberId, x.PresentedOn });
+            entity.HasIndex(x => x.DocumentId).IsUnique();
+            entity.HasIndex(x => x.MeetingId);
         });
 
         modelBuilder.Entity<LodgeCorrespondence>(entity =>

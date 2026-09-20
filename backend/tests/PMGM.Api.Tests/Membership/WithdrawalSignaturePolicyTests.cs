@@ -1,4 +1,5 @@
 using PMGM.Api.Modules.Membership;
+using Xunit;
 
 namespace PMGM.Api.Tests.Membership;
 

@@ -1,5 +1,14 @@
 # Proyecto Centenario — Registro maestro de continuidad
 
+## Corte activo Secretaría — 20-09-2026
+
+- PR #116 permanece `draft` y no debe fusionarse todavía.
+- La aceptación funcional del circuito de insinuación se conserva; la fecha tentativa sólo se captura al solicitar Plancha de Autorización.
+- Secretaría quedó organizada por función y el retiro aprobado exige las cuatro firmas de Venerable Maestro, Tesorería, Orador y Secretaría antes de materializarse.
+- Planchas de Trabajo pasan a expediente independiente: múltiples por hermano, historial, grado, fecha, tema y vínculo opcional a Tenida no ceremonial.
+- Una plancha nace privada. Secretaría puede solicitar Biblioteca, pero no autorizar ni publicar por sí sola; Gran Archivero queda fuera de este flujo.
+- `srv01` y QA físico permanecen diferidos por instrucción del Sponsor, no aprobados ni eliminados. Demo Pages e instalable deben salir del mismo SHA candidato.
+
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
 **Fuente de código y decisiones:** rama de desarrollo del proyecto

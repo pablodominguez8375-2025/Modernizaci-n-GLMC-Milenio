@@ -167,3 +167,19 @@ it('registers a single pending lodge withdrawal and preserves the institutional 
   expect((await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total).toBe(initialTotal + 1)
   await expect(client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'forced', requestedEffectiveDate: '2026-10-01', reason: 'Segunda solicitud demostrativa.', evidenceReference: 'CARTA-QA-002' })).rejects.toThrow('pendiente')
 })
+
+it('keeps work papers private until Secretariat explicitly requests Library publication', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const organizationId = '23232323-2323-2323-2323-232323232323'
+  const member = (await client.getMemberOptions(organizationId)).items[0]
+  const paper = await client.createWorkPaper(organizationId, {
+    authorMemberId: member.id, documentId: crypto.randomUUID(), documentVersionId: crypto.randomUUID(),
+    meetingId: null, title: 'Plancha QA', topic: 'Simbolismo', degree: 'apprentice',
+    presentedOn: '2026-09-20', shortDescription: 'Descripción ficticia para Biblioteca.',
+  })
+  expect(paper.status).toBe('private')
+  await client.requestWorkPaperLibraryPublication(paper.id)
+  const stored = (await client.getWorkPapers(organizationId)).items.find(item => item.id === paper.id)
+  expect(stored?.status).toBe('library_requested')
+  expect(stored?.publishedAtUtc).toBeNull()
+})

@@ -10,6 +10,7 @@ import {
   type LodgeMemberOption,
   type LodgeSecretariatRecord,
   type LodgeSecretariatRecordType,
+  type LodgeWorkPaper,
 } from './api/lodgeApi'
 import { useLodgeCouncilApi } from './LodgeCouncilApiContext'
 import './lodgeSecretariat.css'
@@ -32,6 +33,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const [intakes, setIntakes] = useState<HistoricalMemberIntake[]>([])
   const [adminMeetings, setAdminMeetings] = useState<LodgeAdministrativeMeeting[]>([])
   const [records, setRecords] = useState<LodgeSecretariatRecord[]>([])
+  const [workPapers, setWorkPapers] = useState<LodgeWorkPaper[]>([])
   const [ceremonyAuthorizations, setCeremonyAuthorizations] = useState<LodgeCeremonyAuthorizationOption[]>([])
   const [councilSessions, setCouncilSessions] = useState<Array<{ id: string; sessionDate: string; title: string | null; status: string }>>([])
   const [working, setWorking] = useState(false)
@@ -60,6 +62,12 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const [sourceRecordId, setSourceRecordId] = useState('')
   const [workPaperAuthorMemberId, setWorkPaperAuthorMemberId] = useState('')
   const [uploadingKind, setUploadingKind] = useState<DocumentKind | null>(null)
+  const [paperTitle, setPaperTitle] = useState('')
+  const [paperTopic, setPaperTopic] = useState('')
+  const [paperDegree, setPaperDegree] = useState<'apprentice'|'fellowcraft'|'master'>('apprentice')
+  const [paperDate, setPaperDate] = useState(today())
+  const [paperDescription, setPaperDescription] = useState('')
+  const [paperMeetingId, setPaperMeetingId] = useState('')
 
   useEffect(() => {
     if (!organizationId) return
@@ -69,13 +77,15 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       lodgeApi.getHistoricalMemberIntakes(organizationId),
       lodgeApi.getAdministrativeMeetings(organizationId),
       lodgeApi.getSecretariatRecords(organizationId),
+      lodgeApi.getWorkPapers(organizationId),
       lodgeApi.getCeremonyAuthorizationOptions(organizationId),
       councilApi.getSessions(organizationId),
-    ]).then(([historical, reunions, secretariatRecords, authorizations, councils]) => {
+    ]).then(([historical, reunions, secretariatRecords, lodgeWorkPapers, authorizations, councils]) => {
       if (!active) return
       setIntakes(historical.items)
       setAdminMeetings(reunions.items)
       setRecords(secretariatRecords.items)
+      setWorkPapers(lodgeWorkPapers.items)
       setCeremonyAuthorizations(authorizations.items)
       setCouncilSessions(councils.items)
     }).catch(reason => { if (active) setError(toMessage(reason)) })
@@ -111,6 +121,23 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const refreshHistorical = async () => setIntakes((await lodgeApi.getHistoricalMemberIntakes(organizationId)).items)
   const refreshMeetings = async () => setAdminMeetings((await lodgeApi.getAdministrativeMeetings(organizationId)).items)
   const refreshRecords = async () => setRecords((await lodgeApi.getSecretariatRecords(organizationId)).items)
+  const refreshWorkPapers = async () => setWorkPapers((await lodgeApi.getWorkPapers(organizationId)).items)
+
+  const uploadWorkPaper = async (file:File) => {
+    if (!workPaperAuthorMemberId || !paperTitle.trim()) { setError('Indique autor y título de la plancha.'); return }
+    setUploadingKind('work_paper'); setError(null); setMessage(null)
+    try {
+      const normalized=normalizeInstitutionalFile(file)
+      if(!isPdfOrWord(normalized)) throw new Error('La plancha admite PDF o Word (.docx).')
+      const collectionId=await ensureSecretariatCollection()
+      const uploaded=await documentApi.uploadManagedFile(collectionId,{title:paperTitle.trim(),documentType:'work_paper',classification:'confidential',accessPolicy:'management_only'},normalized)
+      await lodgeApi.createWorkPaper(organizationId,{authorMemberId:workPaperAuthorMemberId,documentId:uploaded.document.id,documentVersionId:uploaded.version.id,meetingId:paperMeetingId||null,title:paperTitle.trim(),topic:paperTopic.trim()||null,degree:paperDegree,presentedOn:paperDate,shortDescription:paperDescription.trim()||null})
+      await refreshWorkPapers(); setPaperTitle(''); setPaperTopic(''); setPaperDescription(''); setPaperMeetingId('')
+      setMessage('Plancha registrada en el historial del hermano y en el archivo privado del Taller.')
+    } catch(reason){setError(toMessage(reason))} finally {setUploadingKind(null)}
+  }
+
+  const requestLibrary = async(id:string) => execute(async()=>{await lodgeApi.requestWorkPaperLibraryPublication(id);await refreshWorkPapers()},'Solicitud enviada. La plancha sólo será visible en Biblioteca después de autorización y publicación documental.')
 
   const createHistorical = async (event: FormEvent) => {
     event.preventDefault()
@@ -325,11 +352,6 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
 
       {currentSource && canManage && <div className="lodge-secretariat-document-actions">
         <div className="secretariat-document-card">
-          <strong>Plancha de trabajo</strong><span>{planchaAllowed?'Opcional · PDF o Word · puede cargarse posteriormente':'No corresponde a este registro'}</span>
-          {planchaAllowed && <><select aria-label="Hermano autor de la plancha" value={workPaperAuthorMemberId} onChange={e=>setWorkPaperAuthorMemberId(e.target.value)}><option value="">Hermano autor…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select><FileButton disabled={!!uploadingKind} accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" label={currentRecord?.workPaperDocumentVersionId?'Reemplazar plancha':'Cargar plancha'} onFile={file=>void uploadDocument('work_paper',file)} /></>}
-          {currentRecord?.workPaperDocumentVersionId && <small>Plancha vinculada al registro.</small>}
-        </div>
-        <div className="secretariat-document-card">
           <strong>Extracto</strong><span>PDF · obligatorio para cerrar cualquier Tenida y para remitirla a Gran Secretaría.</span>
           <FileButton disabled={!!uploadingKind} accept=".pdf,application/pdf" label={currentRecord?.extractDocumentVersionId?'Reemplazar extracto PDF':'Cargar extracto PDF'} onFile={file=>void uploadDocument('extract',file)} />
           <small>{currentRecord?.extractDocumentVersionId?'✅ Extracto PDF disponible.':'❌ Extracto pendiente.'}</small>
@@ -352,6 +374,22 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         <button type="button" className="regularity-secondary" disabled={working||!canSubmitToGrandSecretariat||currentRecord?.status==='submitted'||currentRecord?.status==='received'} onClick={()=>void submitExtract()}>{currentRecord?.status==='received'?'Recibido por Gran Secretaría':currentRecord?.status==='submitted'?'Remitido a Gran Secretaría':'Remitir extracto a Gran Secretaría'}</button>
         <small>Gran Secretaría recibe sólo los datos básicos y el Extracto; la Plancha de Autorización queda vinculada al expediente ceremonial del Taller.</small>
       </div>}
+    </article>
+
+    <article className="panel lodge-secretariat-documents">
+      <div className="panel-heading"><div><p className="eyebrow">Gestión Logial e historial del hermano</p><h3>Planchas de Trabajo</h3></div><span className="count-badge">{workPapers.length}</span></div>
+      <p className="form-note">Cada plancha es independiente. Puede vincularse a una Tenida no ceremonial y permanece privada hasta que se solicite y autorice su publicación en Biblioteca.</p>
+      {canManage&&<div className="regularity-form">
+        <Field label="Autor"><select value={workPaperAuthorMemberId} onChange={e=>setWorkPaperAuthorMemberId(e.target.value)}><option value="">Seleccione hermano…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select></Field>
+        <Field label="Título"><input value={paperTitle} onChange={e=>setPaperTitle(e.target.value)} /></Field>
+        <Field label="Grado"><select value={paperDegree} onChange={e=>setPaperDegree(e.target.value as typeof paperDegree)}><option value="apprentice">Aprendiz</option><option value="fellowcraft">Compañero</option><option value="master">Maestro</option></select></Field>
+        <Field label="Fecha de presentación"><input type="date" value={paperDate} onChange={e=>setPaperDate(e.target.value)} /></Field>
+        <Field label="Tema"><input value={paperTopic} onChange={e=>setPaperTopic(e.target.value)} /></Field>
+        <Field label="Tenida (opcional)"><select value={paperMeetingId} onChange={e=>setPaperMeetingId(e.target.value)}><option value="">Sin vínculo</option>{meetings.filter(x=>!x.ceremonyType).map(x=><option key={x.id} value={x.id}>{formatDate(x.meetingDate)} · {x.title||meetingTypeLabel(x.meetingType)}</option>)}</select></Field>
+        <Field label="Descripción corta para Biblioteca"><input value={paperDescription} onChange={e=>setPaperDescription(e.target.value)} /></Field>
+        <FileButton disabled={!!uploadingKind} accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" label="Cargar y registrar plancha" onFile={file=>void uploadWorkPaper(file)} />
+      </div>}
+      <div className="lodge-secretariat-list">{workPapers.map(item=><div key={item.id}><div><strong>{item.title}</strong><span>{item.authorName} · {degreeLabel(item.degree)} · {formatDate(item.presentedOn)}</span><small>{item.topic||'Sin tema'} · {item.meetingId?'Vinculada a Tenida':'Sin vínculo a Tenida'} · {item.status==='published'?'Publicada en Biblioteca':item.status==='library_requested'?'Publicación solicitada':'Privada del Taller'}</small></div>{canManage&&item.status==='private'&&<button type="button" className="regularity-secondary" disabled={working} onClick={()=>void requestLibrary(item.id)}>Solicitar Biblioteca</button>}</div>)}{!workPapers.length&&<p className="muted">No hay planchas registradas.</p>}</div>
     </article>
   </section>
 }
