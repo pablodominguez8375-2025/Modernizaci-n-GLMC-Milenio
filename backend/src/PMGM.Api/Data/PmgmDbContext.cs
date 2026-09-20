@@ -144,7 +144,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Resolution).HasMaxLength(2000);
             entity.Property(x => x.RequestedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.DecidedBySubject).HasMaxLength(320);
+            entity.Property(x => x.VenerableSignatureSubject).HasMaxLength(320);
+            entity.Property(x => x.TreasurerSignatureSubject).HasMaxLength(320);
             entity.Property(x => x.OratorSignatureSubject).HasMaxLength(320);
+            entity.Property(x => x.SecretarySignatureSubject).HasMaxLength(320);
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.OriginOrganization).WithMany().HasForeignKey(x => x.OriginOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MemberId, x.Status });

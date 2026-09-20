@@ -72,7 +72,7 @@ export const instructionResponsibilityByGrade = {
   master: 'Inmediato Ex-Venerable Maestro',
 } as const
 
-export default function LodgeManagementPage({ api, lodgeApi, documentApi, canReadSecretariat = false, canManageSecretariat = false, focus = 'overview', allowedInstructionDegrees = [] }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; canReadSecretariat?: boolean; canManageSecretariat?: boolean; focus?: 'overview' | 'secretariat' | 'docencia'; allowedInstructionDegrees?: Array<1 | 2 | 3> }) {
+export default function LodgeManagementPage({ api, lodgeApi, documentApi, canReadSecretariat = false, canManageSecretariat = false, withdrawalSignatureRole, focus = 'overview', allowedInstructionDegrees = [] }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; canReadSecretariat?: boolean; canManageSecretariat?: boolean; withdrawalSignatureRole?: 'venerable' | 'treasurer' | 'orator' | 'secretary'; focus?: 'overview' | 'secretariat' | 'docencia'; allowedInstructionDegrees?: Array<1 | 2 | 3> }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [meetings, setMeetings] = useState<LodgeMeeting[]>([])
@@ -375,7 +375,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
       {selectedInstructionId && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Después de la ejecución</p><h3>Registrar asistencia de la instrucción</h3></div>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || members.length === 0} onClick={completeInstructionAndRecordAttendance}>Marcar realizada y guardar asistencia</button></section>}
     </section>}
 
-    <LodgeWithdrawalsPanel lodgeApi={lodgeApi} organizationId={organizationId} members={members} />
+    <LodgeWithdrawalsPanel lodgeApi={lodgeApi} organizationId={organizationId} members={members} signatureRole={withdrawalSignatureRole} />
 
     <LodgeTreasuryPanel api={api} organizationId={organizationId} />
 

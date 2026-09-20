@@ -19,6 +19,10 @@ export interface SessionCapabilities {
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
+  canSignWithdrawalAsVenerable?: boolean
+  canSignWithdrawalAsTreasurer?: boolean
+  canSignWithdrawalAsOrator?: boolean
+  canSignWithdrawalAsSecretary?: boolean
   canManageLodgeInstructionFirstDegree?: boolean
   canManageLodgeInstructionSecondDegree?: boolean
   canManageLodgeInstructionThirdDegree?: boolean

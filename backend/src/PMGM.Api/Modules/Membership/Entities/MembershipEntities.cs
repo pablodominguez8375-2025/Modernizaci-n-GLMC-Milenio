@@ -113,6 +113,13 @@ public sealed class MemberWithdrawalRequest
     public string? DecidedBySubject { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? DecidedAtUtc { get; set; }
+    public string? VenerableSignatureSubject { get; set; }
+    public DateTimeOffset? VenerableSignedAtUtc { get; set; }
+    public string? TreasurerSignatureSubject { get; set; }
+    public DateTimeOffset? TreasurerSignedAtUtc { get; set; }
     public string? OratorSignatureSubject { get; set; }
     public DateTimeOffset? OratorSignedAtUtc { get; set; }
+    public string? SecretarySignatureSubject { get; set; }
+    public DateTimeOffset? SecretarySignedAtUtc { get; set; }
+    public DateTimeOffset? ExecutedAtUtc { get; set; }
 }

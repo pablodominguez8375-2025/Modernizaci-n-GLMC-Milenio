@@ -160,9 +160,10 @@ it('demo mode requires Extracto and Gran Secretaría authorization before closin
 
 it('registers a single pending lodge withdrawal and preserves the institutional review boundary', async () => {
   const client = new LodgeApiClient({ useMocks: true })
+  const initialTotal = (await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total
   const member = (await client.getMemberOptions('23232323-2323-2323-2323-232323232323')).items[0]
   const created = await client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'voluntary', requestedEffectiveDate: '2026-09-30', reason: 'Solicitud voluntaria demostrativa.', evidenceReference: 'CARTA-QA-001' })
   expect(created.status).toBe('pending')
-  expect((await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total).toBe(1)
+  expect((await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total).toBe(initialTotal + 1)
   await expect(client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'forced', requestedEffectiveDate: '2026-10-01', reason: 'Segunda solicitud demostrativa.', evidenceReference: 'CARTA-QA-002' })).rejects.toThrow('pendiente')
 })

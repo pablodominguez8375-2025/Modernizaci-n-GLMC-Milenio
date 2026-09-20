@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { type LodgeApiClient, type LodgeMemberOption, type LodgeWithdrawal, type LodgeWithdrawalType } from './api/lodgeApi'
+import { type LodgeApiClient, type LodgeMemberOption, type LodgeWithdrawal, type LodgeWithdrawalSignatureRole, type LodgeWithdrawalType } from './api/lodgeApi'
 
-export default function LodgeWithdrawalsPanel({ lodgeApi, organizationId, members }: { lodgeApi: LodgeApiClient; organizationId: string; members: LodgeMemberOption[] }) {
+export default function LodgeWithdrawalsPanel({ lodgeApi, organizationId, members, signatureRole }: { lodgeApi: LodgeApiClient; organizationId: string; members: LodgeMemberOption[]; signatureRole?: LodgeWithdrawalSignatureRole }) {
   const [items, setItems] = useState<LodgeWithdrawal[]>([])
   const [memberId, setMemberId] = useState('')
   const [type, setType] = useState<LodgeWithdrawalType>('voluntary')
@@ -27,6 +27,21 @@ export default function LodgeWithdrawalsPanel({ lodgeApi, organizationId, member
       .finally(() => setBusy(false))
   }
 
+  const sign = (item: LodgeWithdrawal) => {
+    if (!signatureRole) return
+    setBusy(true); setError(null); setMessage(null)
+    void lodgeApi.signWithdrawal(item.id, signatureRole)
+      .then(async result => {
+        const refreshed = await lodgeApi.getWithdrawals(organizationId)
+        setItems(refreshed.items)
+        setMessage(result.executedAtUtc
+          ? 'Carta completada con las cuatro firmas. El retiro quedó materializado y registrado en el historial.'
+          : `Firma de ${signatureLabel(signatureRole)} registrada. La carta continúa pendiente de los demás cargos.`)
+      })
+      .catch(cause => setError(toMessage(cause)))
+      .finally(() => setBusy(false))
+  }
+
   return <section className="lodge-withdrawals">
     <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Secretaría</p><h2>Cartas de retiro</h2><p>El retiro voluntario deja al hermano en sueño. El retiro forzoso requiere causal documentada e inhabilita transversalmente cuando sea aprobado.</p></div><span className="lodge-live-chip">Historial protegido</span></div>
     {message && <div className="regularity-success" role="status">{message}</div>}{error && <div className="regularity-error" role="alert">{error}</div>}
@@ -39,10 +54,20 @@ export default function LodgeWithdrawalsPanel({ lodgeApi, organizationId, member
         <label className="regularity-field"><span>Causal o fundamento</span><textarea value={reason} onChange={event => setReason(event.target.value)} minLength={10} maxLength={1000} rows={4} required /></label>
         <button className="regularity-primary" type="submit" disabled={busy || !memberId}>{busy ? 'Registrando…' : 'Enviar solicitud'}</button>
       </form>
-      <div className="lodge-withdrawal-list"><h3>Trámites del Taller</h3>{items.length === 0 ? <p className="muted">No hay retiros registrados.</p> : items.map(item => <article key={item.id}><strong>{item.withdrawalType === 'voluntary' ? 'Retiro voluntario' : 'Retiro forzoso'}</strong><span>{item.requestedEffectiveDate}</span><em className={`regularity-status ${item.status === 'approved' ? 'good' : item.status === 'rejected' ? 'blocked' : 'pending'}`}>{item.status === 'pending' ? 'Pendiente de resolución' : item.status === 'approved' ? 'Aprobado' : 'Rechazado'}</em></article>)}</div>
+      <div className="lodge-withdrawal-list"><h3>Trámites del Taller</h3>{items.length === 0 ? <p className="muted">No hay retiros registrados.</p> : items.map(item => <article key={item.id}>
+        <strong>{item.withdrawalType === 'voluntary' ? 'Retiro voluntario' : 'Retiro forzoso'}</strong>
+        <span>Fecha efectiva: {item.requestedEffectiveDate}</span>
+        <small>{item.evidenceReference}</small>
+        <em className={`regularity-status ${item.executedAtUtc ? 'good' : item.status === 'rejected' ? 'blocked' : 'pending'}`}>{item.executedAtUtc ? 'Completado y materializado' : item.status === 'pending' ? 'Pendiente de resolución' : item.status === 'approved' ? 'Aprobado · firmas pendientes' : 'Rechazado'}</em>
+        <div className="withdrawal-signatures" aria-label="Firmas de la carta de retiro">
+          {(Object.keys(item.signatures) as LodgeWithdrawalSignatureRole[]).map(role => <span key={role} className={item.signatures[role].signed ? 'signed' : ''}>{item.signatures[role].signed ? 'Firmado' : 'Pendiente'} · {signatureLabel(role)}</span>)}
+        </div>
+        {signatureRole && item.status === 'approved' && !item.executedAtUtc && !item.signatures[signatureRole].signed && <button type="button" className="regularity-secondary" disabled={busy} onClick={() => sign(item)}>Firmar como {signatureLabel(signatureRole)}</button>}
+      </article>)}</div>
     </div>
   </section>
 }
 
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()) }
 function toMessage(value: unknown) { return value instanceof Error ? value.message : 'No fue posible completar la operación.' }
+function signatureLabel(role: LodgeWithdrawalSignatureRole) { return role === 'venerable' ? 'Venerable Maestro' : role === 'treasurer' ? 'Tesorero/a' : role === 'orator' ? 'Orador/a' : 'Secretario/a' }

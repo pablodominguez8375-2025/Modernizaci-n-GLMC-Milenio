@@ -118,6 +118,31 @@ public sealed class SessionProfileTests
         Assert.Equal(thirdDegree, profile.Capabilities.CanManageLodgeInstructionThirdDegree);
     }
 
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerVenerable, true, false, false, false)]
+    [InlineData(InstitutionalRoles.TallerTesoreria, false, true, false, false)]
+    [InlineData(InstitutionalRoles.TallerOrador, false, false, true, false)]
+    [InlineData(InstitutionalRoles.TallerSecretaria, false, false, false, true)]
+    public void WithdrawalSignatureCapabilities_AreExposedOnlyForTheInstitutionalOffice(
+        string role,
+        bool venerable,
+        bool treasurer,
+        bool orator,
+        bool secretary)
+    {
+        var organizationId = Guid.NewGuid();
+        var principal = Principal(
+            new Claim(InstitutionalClaims.Organization, organizationId.ToString()),
+            new Claim(InstitutionalClaims.Role, role));
+
+        var profile = SessionProfileBuilder.Build(principal, new InstitutionalAccessService());
+
+        Assert.Equal(venerable, profile.Capabilities.CanSignWithdrawalAsVenerable);
+        Assert.Equal(treasurer, profile.Capabilities.CanSignWithdrawalAsTreasurer);
+        Assert.Equal(orator, profile.Capabilities.CanSignWithdrawalAsOrator);
+        Assert.Equal(secretary, profile.Capabilities.CanSignWithdrawalAsSecretary);
+    }
+
     [Fact]
     public void ProfileSurface_DoesNotExposeRawRolesSubjectOrOrganizationIds()
     {

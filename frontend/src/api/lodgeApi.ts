@@ -79,7 +79,14 @@ export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; proc
 export interface LodgeAnonymousBallotsResponse { total: number; items: LodgeAnonymousBallot[] }
 export interface LodgeMinuteExtract { meetingId: string; attendeeCount: number; absentCount: number; excusedCount: number; ballotCount: number; content: string }
 export type LodgeWithdrawalType = 'voluntary' | 'forced'
-export interface LodgeWithdrawal { id: string; memberId: string; originOrganizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; status: 'pending' | 'approved' | 'rejected'; resolution: string | null; createdAtUtc: string; decidedAtUtc: string | null }
+export type LodgeWithdrawalSignatureRole = 'venerable' | 'treasurer' | 'orator' | 'secretary'
+export interface LodgeWithdrawalSignature { signed: boolean; signedAtUtc: string | null }
+export interface LodgeWithdrawal {
+  id: string; memberId: string; originOrganizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string
+  reason: string; evidenceReference: string; status: 'pending' | 'approved' | 'rejected'; resolution: string | null
+  createdAtUtc: string; decidedAtUtc: string | null; executedAtUtc: string | null
+  signatures: Record<LodgeWithdrawalSignatureRole, LodgeWithdrawalSignature>
+}
 export interface LodgeWithdrawalsResponse { total: number; items: LodgeWithdrawal[] }
 export interface CreateLodgeWithdrawalRequest { memberId: string; organizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; reason: string; evidenceReference: string }
 
@@ -237,7 +244,16 @@ export class LodgeApiClient {
   private readonly mockBallots = new Map<string, LodgeAnonymousBallot[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.ballots.map(item => ({ ...item }))]])
   private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
   private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
-  private readonly mockWithdrawals: LodgeWithdrawal[] = []
+  private readonly mockWithdrawals: LodgeWithdrawal[] = [{
+    id: '67676767-2323-2323-2323-232323232323', memberId: demoMembers[0].id, originOrganizationId: DEMO_LODGE_23_ID,
+    withdrawalType: 'voluntary', requestedEffectiveDate: '2026-10-01', reason: 'Solicitud demostrativa aprobada por Cámara del Medio.',
+    evidenceReference: 'CRV-DEMO-2026-001', status: 'approved', resolution: 'Aprobada para completar las cuatro firmas institucionales.',
+    createdAtUtc: '2026-09-18T15:00:00Z', decidedAtUtc: '2026-09-19T15:00:00Z', executedAtUtc: null,
+    signatures: {
+      venerable: { signed: false, signedAtUtc: null }, treasurer: { signed: false, signedAtUtc: null },
+      orator: { signed: false, signedAtUtc: null }, secretary: { signed: false, signedAtUtc: null },
+    },
+  }]
   private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
   private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = demoLodgeSeed.secretariatRecords.map(item => ({ ...item }))
@@ -348,7 +364,7 @@ export class LodgeApiClient {
 
   async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {
     if (this.useMocks) {
-      const items = this.mockWithdrawals.filter(item => item.originOrganizationId === organizationId).map(item => ({ ...item }))
+      const items = this.mockWithdrawals.filter(item => item.originOrganizationId === organizationId).map(item => structuredClone(item))
       return { total: items.length, items }
     }
     return this.request<LodgeWithdrawalsResponse>(`/api/gestion-logial/retiros?organizationId=${encodeURIComponent(organizationId)}`)
@@ -358,11 +374,34 @@ export class LodgeApiClient {
     if (this.useMocks) {
       if (this.mockWithdrawals.some(item => item.memberId === payload.memberId && item.status === 'pending')) throw new Error('El hermano ya tiene un retiro pendiente de resolución.')
       if (payload.reason.trim().length < 10) throw new Error('La causal o fundamento debe contener al menos 10 caracteres.')
-      const item: LodgeWithdrawal = { id: crypto.randomUUID(), memberId: payload.memberId, originOrganizationId: payload.organizationId, withdrawalType: payload.withdrawalType, requestedEffectiveDate: payload.requestedEffectiveDate, status: 'pending', resolution: null, createdAtUtc: new Date().toISOString(), decidedAtUtc: null }
+      const item: LodgeWithdrawal = {
+        id: crypto.randomUUID(), memberId: payload.memberId, originOrganizationId: payload.organizationId,
+        withdrawalType: payload.withdrawalType, requestedEffectiveDate: payload.requestedEffectiveDate,
+        reason: payload.reason, evidenceReference: payload.evidenceReference, status: 'pending', resolution: null,
+        createdAtUtc: new Date().toISOString(), decidedAtUtc: null, executedAtUtc: null,
+        signatures: {
+          venerable: { signed: false, signedAtUtc: null }, treasurer: { signed: false, signedAtUtc: null },
+          orator: { signed: false, signedAtUtc: null }, secretary: { signed: false, signedAtUtc: null },
+        },
+      }
       this.mockWithdrawals.unshift(item)
       return { ...item }
     }
     return this.postJson<LodgeWithdrawal>('/api/gestion-logial/retiros/', payload)
+  }
+
+  async signWithdrawal(requestId: string, role: LodgeWithdrawalSignatureRole): Promise<LodgeWithdrawal> {
+    if (this.useMocks) {
+      const item = this.mockWithdrawals.find(entry => entry.id === requestId)
+      if (!item) throw new Error('La carta de retiro no existe.')
+      if (item.status !== 'approved') throw new Error('El retiro debe estar aprobado antes de firmarse.')
+      if (item.executedAtUtc) throw new Error('La carta ya fue completada y materializada.')
+      if (item.signatures[role].signed) throw new Error('Este cargo ya firmó la carta de retiro.')
+      item.signatures[role] = { signed: true, signedAtUtc: new Date().toISOString() }
+      if (Object.values(item.signatures).every(signature => signature.signed)) item.executedAtUtc = new Date().toISOString()
+      return structuredClone(item)
+    }
+    return this.postJson<LodgeWithdrawal>(`/api/gestion-logial/retiros/${encodeURIComponent(requestId)}/firmas/${encodeURIComponent(role)}`, {})
   }
 
   async getMeetings(organizationId: string, filters: { from?: string; to?: string } = {}): Promise<LodgeMeetingsResponse> {

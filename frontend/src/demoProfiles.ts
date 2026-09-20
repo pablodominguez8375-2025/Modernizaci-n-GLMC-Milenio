@@ -16,6 +16,10 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
+  canSignWithdrawalAsVenerable?: boolean
+  canSignWithdrawalAsTreasurer?: boolean
+  canSignWithdrawalAsOrator?: boolean
+  canSignWithdrawalAsSecretary?: boolean
   canManageLodgeInstructionFirstDegree?: boolean
   canManageLodgeInstructionSecondDegree?: boolean
   canManageLodgeInstructionThirdDegree?: boolean
@@ -66,6 +70,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canAppointAdmissionCommission: true,
       canReadLodgeHospitalaria: true,
       canApproveLodgeExpenses: true,
+      canSignWithdrawalAsVenerable: true,
       canManageDocuments: true,
       canManageGrandArchive: false,
       canBootstrapInstitutional: false,
@@ -73,11 +78,11 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeTreasurer: {
     displayName: 'Tesorero del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageLodgeTreasury: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageLodgeTreasury: true, canSignWithdrawalAsTreasurer: true, canManageDocuments: true },
   },
   lodgeSecretary: {
     displayName: 'Secretaría del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canSignWithdrawalAsSecretary: true, canManageDocuments: true },
   },
   lodgeHospitalaria: {
     displayName: 'Hospitalaria del Taller · Demostración', accessScope: 'organization',
@@ -85,7 +90,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeOrator: {
     displayName: 'Orador del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: false, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: false, canSignWithdrawalAsOrator: true, canManageDocuments: true },
   },
   lodgeFirstWarden: {
     displayName: 'Primer Vigilante · Demostración', accessScope: 'organization',

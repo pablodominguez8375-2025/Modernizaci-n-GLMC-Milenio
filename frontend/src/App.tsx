@@ -108,6 +108,11 @@ export default function App({ api, admissionApi, bootstrapApi, lodgeApi, members
   const canReadLodgeHospitalaria = capabilities?.canReadLodgeHospitalaria ?? false
   const canManageLodgeHospitalaria = capabilities?.canManageLodgeHospitalaria ?? false
   const canApproveLodgeExpenses = capabilities?.canApproveLodgeExpenses ?? false
+  const withdrawalSignatureRole = capabilities?.canSignWithdrawalAsVenerable ? 'venerable'
+    : capabilities?.canSignWithdrawalAsTreasurer ? 'treasurer'
+      : capabilities?.canSignWithdrawalAsOrator ? 'orator'
+        : capabilities?.canSignWithdrawalAsSecretary ? 'secretary'
+          : undefined
   const instructionDegrees = [
     capabilities?.canManageLodgeInstructionFirstDegree ? 1 : null,
     capabilities?.canManageLodgeInstructionSecondDegree ? 2 : null,
@@ -233,7 +238,7 @@ export default function App({ api, admissionApi, bootstrapApi, lodgeApi, members
         {view === 'hospitalaria' && canHospitalariaWorkspace && <><HospitalariaPage api={api} canReadLocal={canReadLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canHospitalaria} />{canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}</>}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
-        {view === 'lodge' && (canLodge || canDocencia) && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat} focus={lodgeFocus} allowedInstructionDegrees={instructionDegrees} />}
+        {view === 'lodge' && (canLodge || canDocencia) && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat} withdrawalSignatureRole={withdrawalSignatureRole} focus={lodgeFocus} allowedInstructionDegrees={instructionDegrees} />}
         {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
       </main>

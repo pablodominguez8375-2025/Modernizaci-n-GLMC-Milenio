@@ -57,6 +57,10 @@ public sealed record SessionCapabilitiesDto(
     bool CanReadLodgeHospitalaria,
     bool CanManageLodgeHospitalaria,
     bool CanApproveLodgeExpenses,
+    bool CanSignWithdrawalAsVenerable,
+    bool CanSignWithdrawalAsTreasurer,
+    bool CanSignWithdrawalAsOrator,
+    bool CanSignWithdrawalAsSecretary,
     bool CanManageLodgeInstructionFirstDegree,
     bool CanManageLodgeInstructionSecondDegree,
     bool CanManageLodgeInstructionThirdDegree,
@@ -118,6 +122,10 @@ public static class SessionProfileBuilder
                 CanReadLodgeHospitalaria: organizationId is not null && access.CanReadLodgeHospitalaria(user, organizationId.Value),
                 CanManageLodgeHospitalaria: organizationId is not null && access.CanManageLodgeHospitalaria(user, organizationId.Value),
                 CanApproveLodgeExpenses: organizationId is not null && access.CanApproveLodgeExpenses(user, organizationId.Value),
+                CanSignWithdrawalAsVenerable: organizationId is not null && HasExactLodgeRole(user, organizationId.Value, InstitutionalRoles.TallerVenerable),
+                CanSignWithdrawalAsTreasurer: organizationId is not null && HasExactLodgeRole(user, organizationId.Value, InstitutionalRoles.TallerTesoreria),
+                CanSignWithdrawalAsOrator: organizationId is not null && HasExactLodgeRole(user, organizationId.Value, InstitutionalRoles.TallerOrador),
+                CanSignWithdrawalAsSecretary: organizationId is not null && HasExactLodgeRole(user, organizationId.Value, InstitutionalRoles.TallerSecretaria),
                 CanManageLodgeInstructionFirstDegree: organizationId is not null && access.CanManageLodgeInstruction(user, organizationId.Value, 1),
                 CanManageLodgeInstructionSecondDegree: organizationId is not null && access.CanManageLodgeInstruction(user, organizationId.Value, 2),
                 CanManageLodgeInstructionThirdDegree: organizationId is not null && access.CanManageLodgeInstruction(user, organizationId.Value, 3),
@@ -126,4 +134,8 @@ public static class SessionProfileBuilder
                 CanManagePrivacy: access.CanManagePrivacy(user),
                 CanConfigureSystem: access.CanConfigureSystem(user)));
     }
+
+    private static bool HasExactLodgeRole(ClaimsPrincipal user, Guid organizationId, string role)
+        => user.Claims.Any(x => x.Type == InstitutionalClaims.Organization && x.Value == organizationId.ToString()) &&
+           user.Claims.Any(x => x.Type == InstitutionalClaims.Role && x.Value == role);
 }
