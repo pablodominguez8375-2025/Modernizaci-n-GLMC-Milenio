@@ -55,3 +55,10 @@ Se contrastó el circuito vigente con el documento oficial PROTOCOLO-PARA-LA-TRA
 La fecha ingresada antes de la autorización se conserva únicamente como fecha referencial solicitada. La reserva o programación de ceremonia está bloqueada hasta la existencia de Plancha de Autorización emitida. La Tenida ceremonial sólo puede cerrarse con Extracto de Acta y Plancha adjuntos; las Tenidas regulares mantienen sólo Extracto de Acta obligatorio.
 
 Implementación de esta regla: HEAD 6a03030a12a67e72e88b986c084502c276b88625, PR #116 draft/no fusionado. Deben regenerarse los tres gates exact-head y publicar el mismo SHA en Pages/QA antes de UAT final.
+
+
+## Addendum — fecha de ceremonia sólo en solicitud de Plancha
+
+Se eliminó la fecha propuesta de ceremonia del formulario **+ Nuevo insinuado** y del contrato de creación del borrador. La carga inicial sólo registra la insinuación y sus antecedentes. La fecha tentativa se captura únicamente al solicitar la ceremonia/Plancha, después de las etapas reglamentarias; no permite reservar ni programar antes de la Plancha.
+
+HEAD funcional de este ajuste: 166bd4f27b97cfd483594f3ed0a3c2ce542deec1. Se agregó prueba frontend que verifica que un nuevo insinuado queda sin fecha ceremonial.
