@@ -229,6 +229,7 @@ public static class CandidateIntakeEndpoints
         foreach (var profile in profiles)
         {
             if (!ceremonies.TryGetValue(profile.CeremonyRequestId, out var ceremony)) continue;
+            if (!published.Contains(profile.CeremonyRequestId) && !latestReview.ContainsKey(profile.CeremonyRequestId)) continue;
             var reviewStatus = published.Contains(profile.CeremonyRequestId)
                 ? CandidateIntakeCodes.ReviewStatus.Approved
                 : latestReview.TryGetValue(profile.CeremonyRequestId, out var review)
