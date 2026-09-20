@@ -15,8 +15,8 @@ if (!browser || !baseUrl || !outputDir) {
 const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
-  { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
-  { slug: 'admisiones', profile: 'lodgeSecretary', label: 'Afiliaciones e incorporaciones' },
+  { slug: 'gestion-logial', profile: 'lodgeSecretary', label: 'Secretaría', sublabel: 'Operación secretarial' },
+  { slug: 'admisiones', profile: 'lodgeSecretary', label: 'Secretaría', sublabel: 'Afiliación e incorporación' },
   { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería' },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },
@@ -155,6 +155,23 @@ async function openModule(label) {
   await delay(650)
 }
 
+async function openFunction(label) {
+  const clicked = await evaluate(`(() => {
+    const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+    const button = [...document.querySelectorAll('nav.function-submenu button')]
+      .find(candidate => !candidate.disabled && normalize(candidate.textContent) === ${JSON.stringify(label)});
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`)
+  if (!clicked) throw new Error(`Functional submenu button not found or disabled: ${label}`)
+  await waitForExpression(`(() => {
+    const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+    return [...document.querySelectorAll('nav.function-submenu button.active')].some(button => normalize(button.textContent) === ${JSON.stringify(label)});
+  })()`, `active function ${label}`)
+  await delay(650)
+}
+
 async function assertNoGlobalHorizontalOverflow(label, viewport) {
   const metrics = await evaluate(`(() => {
     const root = document.documentElement;
@@ -208,6 +225,7 @@ try {
       await resetPage(viewport.width, viewport.height)
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
+      if (scenario.sublabel) await openFunction(scenario.sublabel)
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const filePath = path.join(outputDir, `${scenario.slug}-${viewport.suffix}.png`)
       await capture(filePath)
