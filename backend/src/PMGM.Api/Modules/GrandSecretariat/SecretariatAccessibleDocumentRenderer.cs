@@ -17,13 +17,13 @@ public static class SecretariatAccessibleDocumentRenderer
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(value => $"<p>{WebUtility.HtmlEncode(value)}</p>");
 
-        var html = $$"""
+        var html = """
             <!doctype html>
             <html lang="es">
             <head>
               <meta charset="utf-8">
               <meta name="viewport" content="width=device-width, initial-scale=1">
-              <title>{{code}} — {{title}}</title>
+              <title>__CODE__ — __TITLE__</title>
               <style>
                 :root{color-scheme:light;--azul:#243b67;--dorado:#8a6b1f;--texto:#172033;--papel:#fff}
                 *{box-sizing:border-box}body{margin:0;background:#eef1f5;color:var(--texto);font-family:Cambria,Georgia,serif;font-size:12pt;line-height:1.15}
@@ -36,14 +36,19 @@ public static class SecretariatAccessibleDocumentRenderer
               </style>
             </head>
             <body><main>
-              <header><div class="institution">GRAN LOGIA MIXTA DE CHILE</div><p class="kind">{{kind}}</p></header>
-              <h1>{{title}}</h1>
-              <dl><dt>Código</dt><dd>{{code}}</dd><dt>Fecha de emisión</dt><dd>{{issued}}</dd><dt>Estado</dt><dd>Emitido</dd></dl>
-              <section aria-label="Contenido del documento">{{string.Join(Environment.NewLine, paragraphs)}}</section>
+              <header><div class="institution">GRAN LOGIA MIXTA DE CHILE</div><p class="kind">__KIND__</p></header>
+              <h1>__TITLE__</h1>
+              <dl><dt>Código</dt><dd>__CODE__</dd><dt>Fecha de emisión</dt><dd>__ISSUED__</dd><dt>Estado</dt><dd>Emitido</dd></dl>
+              <section aria-label="Contenido del documento">__CONTENT__</section>
               <p class="format-note">Versión digital accesible para lectura en pantalla e impresión. Documento generado desde el registro oficial de Gran Secretaría.</p>
             </main></body>
             </html>
-            """;
+            """
+            .Replace("__CODE__", code, StringComparison.Ordinal)
+            .Replace("__TITLE__", title, StringComparison.Ordinal)
+            .Replace("__KIND__", kind, StringComparison.Ordinal)
+            .Replace("__ISSUED__", issued, StringComparison.Ordinal)
+            .Replace("__CONTENT__", string.Join(Environment.NewLine, paragraphs), StringComparison.Ordinal);
 
         return Encoding.UTF8.GetBytes(html);
     }
