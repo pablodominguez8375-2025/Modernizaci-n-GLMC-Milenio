@@ -184,13 +184,22 @@ it('keeps work papers private until Secretariat explicitly requests Library publ
   expect(stored?.publishedAtUtc).toBeNull()
 })
 
-it('creates advancement requests with a tentative date and rejects duplicate active requests', async () => {
+it('creates advancement requests, preserves dispensation evidence and exposes calculated eligibility', async () => {
   const client = new LodgeApiClient({ useMocks: true })
   const organizationId = '23232323-2323-2323-2323-232323232323'
   const member = (await client.getMemberOptions(organizationId)).items[0]
-  const created = await client.createAdvancementRequest(organizationId, { ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-20' })
+  const created = await client.createAdvancementRequest(organizationId, {
+    ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-20',
+    dispensationRequested: true, councilApprovedDispensation: true,
+    councilRecordReference: 'ACTA-QA-001', dispensationRequirement: 'Asistencia: reducción dentro del 50%',
+  })
   expect(created.status).toBe('under_review')
   expect(created.tentativeDate).toBe('2026-10-20')
+  expect(created.councilRecordReference).toBe('ACTA-QA-001')
+  const eligibility = await client.getAdvancementEligibility(created.id)
+  expect(eligibility.advancement?.requirements.map(item => item.code)).toEqual([
+    'months_in_degree', 'meeting_attendance', 'instruction_attendance', 'work_papers',
+  ])
   await expect(client.createAdvancementRequest(organizationId, { ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-21' })).rejects.toThrow('Ya existe')
 })
 

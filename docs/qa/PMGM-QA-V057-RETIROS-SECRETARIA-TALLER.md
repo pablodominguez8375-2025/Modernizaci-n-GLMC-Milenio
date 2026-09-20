@@ -17,6 +17,15 @@
 - La creación de cualquier Tenida ceremonial exige Plancha de Autorización emitida, del mismo Taller, tipo y fecha.
 - La acción de programar desde Secretaría crea la Tenida y vincula la Plancha al expediente documental.
 
+### Elegibilidad calculada
+
+- El sistema cuenta desde el último evento efectivo del grado de origen: antigüedad completa en meses, Tenidas no canceladas con asistencia presente, instrucciones realizadas con asistencia presente y Planchas de Trabajo del grado.
+- Aumento de Salario: mínimo 24 meses, 30 Tenidas de 1.er grado, 10 instrucciones de 1.er grado y 2 Planchas de Trabajo.
+- Exaltación: mínimo 24 meses, 10 Tenidas de 2.º grado, 10 instrucciones de 2.º grado y 2 Planchas de Trabajo.
+- Los mínimos se almacenan como reglas institucionales versionadas; la interfaz muestra alcanzado/mínimo y el backend decide.
+- La dispensa exige acta afirmativa de Cámara del Medio, requisito/reducción identificados y validación de Régimen Interior. Una reducción superior al 50% queda bloqueada incluso si las dos instancias aprobaron.
+- Gran Secretaría sólo puede autorizar cuando también están conformes Régimen Interior, Gran Tesorería, Gran Hospitalaria y Gran Maestría según la matriz vigente.
+
 ## Alcance
 
 El Secretario del Taller puede iniciar un retiro voluntario o forzoso para un hermano con pertenencia activa en su propio Taller. La solicitud conserva causal, referencia documental, fecha efectiva, autor y trazabilidad.

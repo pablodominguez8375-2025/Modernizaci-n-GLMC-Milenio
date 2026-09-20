@@ -142,8 +142,10 @@ export interface LodgeCeremonyAuthorizationOptionsResponse { total: number; item
 export interface LodgeAdvancementRequest {
   id:string; organizationId:string; ceremonyType:'wage_increase'|'exaltation'; memberId:string; memberName:string
   tentativeDate:string|null; status:string; notes:string|null; createdAtUtc:string
+  dispensationRequested:boolean; councilApprovedDispensation:boolean|null; councilRecordReference:string|null; dispensationRequirement:string|null
 }
 export interface LodgeAdvancementRequestsResponse { total:number; items:LodgeAdvancementRequest[] }
+export interface LodgeAdvancementEligibility { requestId:string; status:string; canAuthorize:boolean; advancement:null|{mode:string;sourceDegree:number;ruleVersion:string;requirements:Array<{code:string;name:string;minimum:number;achieved:number;complies:boolean}>;dispensation:null|{status:string;reason:string}} }
 export interface LodgeCorrespondence { id:string; organizationId:string; direction:'received'|'sent'; folio:string; correspondenceDate:string; subject:string; counterparty:string; channel:'email'|'letter'|'hand_delivery'|'other'; reference:string|null; status:'registered'|'closed'; createdAtUtc:string; closedAtUtc:string|null }
 export interface LodgeSecretariatTask { id:string; organizationId:string; title:string; detail:string|null; dueDate:string|null; priority:'low'|'normal'|'high'|'urgent'; responsible:string|null; status:'pending'|'in_progress'|'completed'|'cancelled'; createdAtUtc:string; completedAtUtc:string|null }
 export interface LodgeAgendaItem { id:string; organizationId:string; meetingId:string|null; order:number; title:string; detail:string|null; status:'pending'|'covered'|'deferred'; createdAtUtc:string; updatedAtUtc:string|null }
@@ -398,13 +400,18 @@ export class LodgeApiClient {
     return this.request<LodgeAdvancementRequestsResponse>(`/api/ceremonias/talleres/${encodeURIComponent(organizationId)}/solicitudes-avance`)
   }
 
-  async createAdvancementRequest(organizationId:string,payload:{ceremonyType:'wage_increase'|'exaltation';memberId:string;tentativeDate:string;notes?:string|null}):Promise<LodgeAdvancementRequest>{
+  async createAdvancementRequest(organizationId:string,payload:{ceremonyType:'wage_increase'|'exaltation';memberId:string;tentativeDate:string;notes?:string|null;dispensationRequested?:boolean;councilApprovedDispensation?:boolean|null;councilRecordReference?:string|null;dispensationRequirement?:string|null}):Promise<LodgeAdvancementRequest>{
     if(this.useMocks){
       if(this.mockAdvancementRequests.some(x=>x.memberId===payload.memberId&&x.ceremonyType===payload.ceremonyType&&!['rejected','completed'].includes(x.status)))throw new Error('Ya existe una solicitud de avance vigente para este hermano y ceremonia.')
-      const member=demoMembers.find(x=>x.id===payload.memberId);const item:LodgeAdvancementRequest={id:crypto.randomUUID(),organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,memberName:member?.displayName??'Hermano demostrativo',tentativeDate:payload.tentativeDate,status:'under_review',notes:payload.notes?.trim()||null,createdAtUtc:new Date().toISOString()};this.mockAdvancementRequests.unshift(item);return{...item}
+      const member=demoMembers.find(x=>x.id===payload.memberId);const item:LodgeAdvancementRequest={id:crypto.randomUUID(),organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,memberName:member?.displayName??'Hermano demostrativo',tentativeDate:payload.tentativeDate,status:'under_review',notes:payload.notes?.trim()||null,dispensationRequested:payload.dispensationRequested??false,councilApprovedDispensation:payload.councilApprovedDispensation??null,councilRecordReference:payload.councilRecordReference??null,dispensationRequirement:payload.dispensationRequirement??null,createdAtUtc:new Date().toISOString()};this.mockAdvancementRequests.unshift(item);return{...item}
     }
-    const created=await this.postJson<{id:string;organizationId:string;ceremonyType:'wage_increase'|'exaltation';memberId:string;proposedDate:string|null;status:string}>('/api/ceremonias/solicitudes',{organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,candidatePersonId:null,proposedDate:payload.tentativeDate,notes:payload.notes??null})
-    return{id:created.id,organizationId:created.organizationId,ceremonyType:created.ceremonyType,memberId:created.memberId,memberName:'',tentativeDate:created.proposedDate,status:created.status,notes:payload.notes??null,createdAtUtc:new Date().toISOString()}
+    const created=await this.postJson<{id:string;organizationId:string;ceremonyType:'wage_increase'|'exaltation';memberId:string;proposedDate:string|null;status:string;dispensationRequested:boolean;councilApprovedDispensation:boolean|null;councilRecordReference:string|null;dispensationRequirement:string|null}>('/api/ceremonias/solicitudes',{organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,candidatePersonId:null,proposedDate:payload.tentativeDate,notes:payload.notes??null,dispensationRequested:payload.dispensationRequested??false,councilApprovedDispensation:payload.councilApprovedDispensation??null,councilRecordReference:payload.councilRecordReference??null,dispensationRequirement:payload.dispensationRequirement??null})
+    return{id:created.id,organizationId:created.organizationId,ceremonyType:created.ceremonyType,memberId:created.memberId,memberName:'',tentativeDate:created.proposedDate,status:created.status,notes:payload.notes??null,dispensationRequested:created.dispensationRequested,councilApprovedDispensation:created.councilApprovedDispensation,councilRecordReference:created.councilRecordReference,dispensationRequirement:created.dispensationRequirement,createdAtUtc:new Date().toISOString()}
+  }
+
+  async getAdvancementEligibility(requestId:string):Promise<LodgeAdvancementEligibility>{
+    if(this.useMocks)return{requestId,status:'observed',canAuthorize:false,advancement:{mode:'blocked',sourceDegree:1,ruleVersion:'demo-2026',requirements:[{code:'months_in_degree',name:'Antigüedad continuada en el grado (meses)',minimum:24,achieved:18,complies:false},{code:'meeting_attendance',name:'Asistencia a tenidas',minimum:30,achieved:22,complies:false},{code:'instruction_attendance',name:'Asistencia a instrucciones',minimum:10,achieved:8,complies:false},{code:'work_papers',name:'Planchas de trabajo',minimum:2,achieved:1,complies:false}],dispensation:null}}
+    return this.request<LodgeAdvancementEligibility>(`/api/ceremonias/solicitudes/${encodeURIComponent(requestId)}/elegibilidad`)
   }
 
   async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {

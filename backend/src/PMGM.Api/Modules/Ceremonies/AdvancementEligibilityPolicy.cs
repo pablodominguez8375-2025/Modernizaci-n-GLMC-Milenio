@@ -35,6 +35,11 @@ public static class AdvancementEligibilityPolicy
         var requirements = new[]
         {
             EvaluateMinimum(
+                AdvancementRequirementCodes.MonthsInDegree,
+                "Antigüedad continuada en el grado (meses)",
+                thresholds.MinimumMonthsInDegree,
+                evidence.MonthsInDegree),
+            EvaluateMinimum(
                 AdvancementRequirementCodes.MeetingAttendance,
                 "Asistencia a tenidas",
                 thresholds.MinimumMeetingAttendance,
@@ -65,6 +70,17 @@ public static class AdvancementEligibilityPolicy
         }
 
         var dispensationDecision = EvaluateDispensation(dispensation);
+        var exceedsMaximumReduction = requirements.Any(x =>
+            !x.Complies && x.Achieved < (int)Math.Ceiling(x.Minimum * 0.5m));
+        if (dispensationDecision?.Status == AdvancementDispensationStatuses.Approved && exceedsMaximumReduction)
+        {
+            dispensationDecision = dispensationDecision with
+            {
+                Status = AdvancementDispensationStatuses.Rejected,
+                Reason = "La dispensa no puede reducir un requisito en más de 50%."
+            };
+        }
+
         var dispensationApproved = dispensationDecision?.Status == AdvancementDispensationStatuses.Approved;
 
         return new AdvancementEligibilityDecision(
@@ -169,6 +185,7 @@ public static class AdvancementEligibilityModes
 
 public static class AdvancementRequirementCodes
 {
+    public const string MonthsInDegree = "months_in_degree";
     public const string MeetingAttendance = "meeting_attendance";
     public const string InstructionAttendance = "instruction_attendance";
     public const string WorkPapers = "work_papers";
@@ -185,12 +202,14 @@ public sealed record AdvancementThresholds(
     int MinimumMeetingAttendance,
     int MinimumInstructionAttendance,
     int MinimumWorkPapers,
-    string RuleVersion);
+    string RuleVersion,
+    int MinimumMonthsInDegree = 0);
 
 public sealed record AdvancementEvidence(
     int MeetingAttendance,
     int InstructionAttendance,
-    int WorkPapers);
+    int WorkPapers,
+    int MonthsInDegree = 0);
 
 public sealed record DispensationEvidence(
     bool CouncilApproved,

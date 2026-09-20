@@ -5,6 +5,7 @@ import {
   type HistoricalMemberIntake,
   type LodgeAdministrativeMeeting,
   type LodgeAdvancementRequest,
+  type LodgeAdvancementEligibility,
   type LodgeApiClient,
   type LodgeCeremonyAuthorizationOption,
   type LodgeMeeting,
@@ -74,6 +75,10 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const [advancementType, setAdvancementType] = useState<'wage_increase'|'exaltation'>('wage_increase')
   const [advancementDate, setAdvancementDate] = useState(today())
   const [advancementNotes, setAdvancementNotes] = useState('')
+  const [dispensationRequested, setDispensationRequested] = useState(false)
+  const [dispensationAct, setDispensationAct] = useState('')
+  const [dispensationRequirement, setDispensationRequirement] = useState('')
+  const [advancementEligibility, setAdvancementEligibility] = useState<Record<string,LodgeAdvancementEligibility>>({})
   const [ceremonyLocation, setCeremonyLocation] = useState('Templo autorizado')
 
   useEffect(() => {
@@ -152,8 +157,8 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
     event.preventDefault()
     if(!advancementMemberId){setError('Seleccione al hermano para la solicitud.');return}
     await execute(async()=>{
-      await lodgeApi.createAdvancementRequest(organizationId,{ceremonyType:advancementType,memberId:advancementMemberId,tentativeDate:advancementDate,notes:advancementNotes.trim()||null})
-      setAdvancementRequests((await lodgeApi.getAdvancementRequests(organizationId)).items);setAdvancementNotes('')
+      await lodgeApi.createAdvancementRequest(organizationId,{ceremonyType:advancementType,memberId:advancementMemberId,tentativeDate:advancementDate,notes:advancementNotes.trim()||null,dispensationRequested,councilApprovedDispensation:dispensationRequested?true:null,councilRecordReference:dispensationRequested?dispensationAct.trim()||null:null,dispensationRequirement:dispensationRequested?dispensationRequirement.trim()||null:null})
+      setAdvancementRequests((await lodgeApi.getAdvancementRequests(organizationId)).items);setAdvancementNotes('');setDispensationRequested(false);setDispensationAct('');setDispensationRequirement('')
     },'Solicitud enviada a revisión. La fecha es sólo tentativa: no programa ceremonia ni reserva espacio hasta emitirse la Plancha de Autorización.')
   }
 
@@ -428,9 +433,11 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
         <Field label="Hermano"><select required value={advancementMemberId} onChange={e=>setAdvancementMemberId(e.target.value)}><option value="">Seleccione…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select></Field>
         <Field label="Fecha tentativa"><input type="date" required value={advancementDate} onChange={e=>setAdvancementDate(e.target.value)} /></Field>
         <Field label="Antecedentes / observaciones"><input value={advancementNotes} onChange={e=>setAdvancementNotes(e.target.value)} placeholder="Referencia a Cámara del Medio y antecedentes" /></Field>
+        <label className="regularity-field"><span>Dispensa excepcional</span><label><input type="checkbox" checked={dispensationRequested} onChange={e=>setDispensationRequested(e.target.checked)} /> Acordada por Cámara del Medio</label></label>
+        {dispensationRequested&&<><Field label="Acta de Cámara del Medio"><input required value={dispensationAct} onChange={e=>setDispensationAct(e.target.value)} /></Field><Field label="Requisito y reducción solicitada"><input required value={dispensationRequirement} onChange={e=>setDispensationRequirement(e.target.value)} placeholder="Ej.: asistencia, reducción hasta 50%" /></Field></>}
         <button className="regularity-primary" type="submit" disabled={working}>Crear solicitud de avance</button>
       </form>}
-      <div className="lodge-secretariat-list">{advancementRequests.map(item=><div key={item.id}><div><strong>{item.ceremonyType==='wage_increase'?'Aumento de Salario':'Exaltación'} · {item.memberName||members.find(m=>m.id===item.memberId)?.displayName||'Hermano'}</strong><span>Fecha tentativa {item.tentativeDate?formatDate(item.tentativeDate):'pendiente'} · {advancementStatusLabel(item.status)}</span><small>{item.notes||'Sin observaciones adicionales'}{item.status==='authorized'?' · Autorizada; Gran Secretaría debe emitir la Plancha antes de programar.':''}</small></div></div>)}{!advancementRequests.length&&<p className="muted">No hay solicitudes de avance registradas.</p>}</div>
+      <div className="lodge-secretariat-list">{advancementRequests.map(item=>{const eligibility=advancementEligibility[item.id];return <div key={item.id}><div><strong>{item.ceremonyType==='wage_increase'?'Aumento de Salario':'Exaltación'} · {item.memberName||members.find(m=>m.id===item.memberId)?.displayName||'Hermano'}</strong><span>Fecha tentativa {item.tentativeDate?formatDate(item.tentativeDate):'pendiente'} · {advancementStatusLabel(item.status)}</span><small>{item.notes||'Sin observaciones adicionales'}{item.dispensationRequested?` · Dispensa: ${item.councilRecordReference}`:''}{item.status==='authorized'?' · Autorizada; Gran Secretaría debe emitir la Plancha antes de programar.':''}</small>{eligibility?.advancement&&<small>{eligibility.advancement.requirements.map(r=>`${r.complies?'✅':'❌'} ${r.name}: ${r.achieved}/${r.minimum}`).join(' · ')}{eligibility.advancement.dispensation?` · Dispensa ${eligibility.advancement.dispensation.status}`:''}</small>}</div><button type="button" className="regularity-secondary" disabled={working} onClick={()=>void execute(async()=>{const result=await lodgeApi.getAdvancementEligibility(item.id);setAdvancementEligibility(current=>({...current,[item.id]:result}))},'Elegibilidad recalculada con asistencias, instrucciones, antigüedad y planchas registradas.')}>Evaluar requisitos</button></div>})}{!advancementRequests.length&&<p className="muted">No hay solicitudes de avance registradas.</p>}</div>
       {canManage&&<div className="lodge-secretariat-submit"><div><strong>Programar sólo desde autorización emitida</strong><small>Seleccione una Plancha disponible; el sistema usa su tipo y fecha autorizada.</small></div><input aria-label="Lugar de ceremonia autorizada" value={ceremonyLocation} onChange={e=>setCeremonyLocation(e.target.value)} />{ceremonyAuthorizations.filter(a=>a.proposedDate&&!meetings.some(m=>m.ceremonyType===a.ceremonyType&&m.meetingDate===a.proposedDate)).map(a=><button key={a.id} type="button" className="regularity-secondary" disabled={working||!ceremonyLocation.trim()} onClick={()=>void scheduleAuthorizedCeremony(a)}>Programar {ceremonyTypeLabel(a.ceremonyType)} · {formatDate(a.proposedDate!)}</button>)}</div>}
     </article>
   </section>

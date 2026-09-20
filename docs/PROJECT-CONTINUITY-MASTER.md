@@ -10,6 +10,8 @@
 - `srv01` y QA físico permanecen diferidos por instrucción del Sponsor, no aprobados ni eliminados. Demo Pages e instalable deben salir del mismo SHA candidato.
 - Secretaría inicia directamente expedientes de Aumento de Salario y Exaltación con hermano, tipo, antecedentes y fecha sólo tentativa. El backend controla grado vigente y bloquea expedientes activos duplicados.
 - Una Tenida ceremonial no puede programarse sin Plancha de Autorización emitida por Gran Secretaría y coincidente en Taller, tipo y fecha. Desde la Plancha se crea la Tenida y se vincula automáticamente la autorización.
+- La elegibilidad de Aumento de Salario y Exaltación se calcula con evidencias reales del grado de origen y reglas institucionales versionadas: 24 meses continuados, asistencias a Tenidas, asistencias a instrucciones y dos Planchas de Trabajo. Para Aumento rigen 30 Tenidas y 10 instrucciones de 1.er grado; para Exaltación, 10 Tenidas y 10 instrucciones de 2.º grado.
+- Una dispensa exige acuerdo afirmativo de Cámara del Medio, acta, identificación del requisito y validación de Régimen Interior. Nunca puede reducir un requisito en más de 50%; Gran Secretaría no puede autorizar mientras los controles ordinarios o la dispensa permanezcan incumplidos.
 
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  

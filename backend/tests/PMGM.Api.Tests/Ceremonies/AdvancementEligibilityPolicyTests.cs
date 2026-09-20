@@ -40,6 +40,24 @@ public sealed class AdvancementEligibilityPolicyTests
     }
 
     [Fact]
+    public void MinimumTimeInDegree_IsEvaluatedWithTheOtherRequirements()
+    {
+        var thresholds = Thresholds with { MinimumMonthsInDegree = 24 };
+
+        var result = AdvancementEligibilityPolicy.Evaluate(
+            CeremonyCodes.Type.WageIncrease,
+            thresholds,
+            new AdvancementEvidence(8, 4, 2, MonthsInDegree: 23));
+
+        Assert.False(result.CanProceed);
+        Assert.Contains(result.Requirements, x =>
+            x.Code == AdvancementRequirementCodes.MonthsInDegree &&
+            x.Minimum == 24 &&
+            x.Achieved == 23 &&
+            !x.Complies);
+    }
+
+    [Fact]
     public void MissingOrdinaryRequirement_BlocksWithoutDispensation()
     {
         var result = AdvancementEligibilityPolicy.Evaluate(
@@ -88,6 +106,25 @@ public sealed class AdvancementEligibilityPolicyTests
         Assert.True(result.CanProceed);
         Assert.Equal(AdvancementEligibilityModes.Dispensation, result.Mode);
         Assert.Equal(AdvancementDispensationStatuses.Approved, result.Dispensation?.Status);
+    }
+
+    [Fact]
+    public void Dispensation_CannotReduceARequirementByMoreThanHalf()
+    {
+        var result = AdvancementEligibilityPolicy.Evaluate(
+            CeremonyCodes.Type.Exaltation,
+            Thresholds,
+            new AdvancementEvidence(3, 2, 1),
+            new DispensationEvidence(
+                CouncilApproved: true,
+                CouncilRecordReference: "ACTA-DEMO-004",
+                InternalAffairsStatus: CeremonyCodes.ValidationStatus.ExceptionApproved,
+                InternalAffairsResolutionReference: "RI-DEMO-004"));
+
+        Assert.False(result.CanProceed);
+        Assert.Equal(AdvancementEligibilityModes.Blocked, result.Mode);
+        Assert.Equal(AdvancementDispensationStatuses.Rejected, result.Dispensation?.Status);
+        Assert.Contains("50%", result.Dispensation?.Reason);
     }
 
     [Fact]
