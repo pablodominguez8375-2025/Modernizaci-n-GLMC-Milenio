@@ -96,6 +96,28 @@ public sealed class SessionProfileTests
         Assert.False(profile.Capabilities.CanAuthorizeCeremonies);
     }
 
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerSegundoVigilante, true, false, false)]
+    [InlineData(InstitutionalRoles.TallerPrimerVigilante, false, true, false)]
+    [InlineData(InstitutionalRoles.TallerInmediatoExVenerable, false, false, true)]
+    public void DocenciaCapabilities_AreExposedOnlyForTheOfficeDegree(
+        string role,
+        bool firstDegree,
+        bool secondDegree,
+        bool thirdDegree)
+    {
+        var organizationId = Guid.NewGuid();
+        var principal = Principal(
+            new Claim(InstitutionalClaims.Organization, organizationId.ToString()),
+            new Claim(InstitutionalClaims.Role, role));
+
+        var profile = SessionProfileBuilder.Build(principal, new InstitutionalAccessService());
+
+        Assert.Equal(firstDegree, profile.Capabilities.CanManageLodgeInstructionFirstDegree);
+        Assert.Equal(secondDegree, profile.Capabilities.CanManageLodgeInstructionSecondDegree);
+        Assert.Equal(thirdDegree, profile.Capabilities.CanManageLodgeInstructionThirdDegree);
+    }
+
     [Fact]
     public void ProfileSurface_DoesNotExposeRawRolesSubjectOrOrganizationIds()
     {

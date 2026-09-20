@@ -16,6 +16,9 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
+  canManageLodgeInstructionFirstDegree?: boolean
+  canManageLodgeInstructionSecondDegree?: boolean
+  canManageLodgeInstructionThirdDegree?: boolean
 }
 
 export type DemoSessionProfile = Omit<SessionProfile, 'capabilities'> & {
@@ -86,15 +89,15 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeFirstWarden: {
     displayName: 'Primer Vigilante · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeInstructionSecondDegree: true, canManageDocuments: true },
   },
   lodgeSecondWarden: {
     displayName: 'Segundo Vigilante · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeInstructionFirstDegree: true, canManageDocuments: true },
   },
   lodgePastMaster: {
     displayName: 'Ex Venerable Maestro · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeInstructionThirdDegree: true, canManageDocuments: true },
   },
   regimen: {
     displayName: 'Régimen Interior · Demostración', accessScope: 'order',
