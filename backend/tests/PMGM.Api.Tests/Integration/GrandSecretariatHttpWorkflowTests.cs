@@ -280,9 +280,13 @@ internal sealed class GrandSecretariatWebApplicationFactory(string connectionStr
             services.RemoveAll<DbContextOptions<PmgmDbContext>>();
             services.RemoveAll<GrandSecretariatDbContext>();
             services.RemoveAll<DbContextOptions<GrandSecretariatDbContext>>();
+            services.RemoveAll<IDocumentObjectStore>();
+            services.RemoveAll<IDocumentMalwareScanner>();
 
             services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(connectionString));
             services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(connectionString));
+            services.AddSingleton<IDocumentObjectStore, InMemoryDocumentObjectStore>();
+            services.AddSingleton<IDocumentMalwareScanner, CleanDocumentMalwareScanner>();
 
             services.AddAuthentication(options =>
                 {
