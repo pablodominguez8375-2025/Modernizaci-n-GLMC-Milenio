@@ -110,7 +110,7 @@ Funciones consolidadas:
 - uso de Gran Templo y salas de Secretaría sujeto a disponibilidad;
 - muro institucional oficial, separado de canales fraternales;
 - trazabilidad de emisión, versiones, destinatarios y lectura cuando corresponda.
-- versión digital accesible e imprimible de cada Plancha o Decreto emitido, descargable sólo por perfiles de Gran Secretaría con alcance Orden y con auditoría de acceso.
+- registro descriptivo y carga del PDF oficial ya firmado físicamente para cada Plancha o Decreto; el sistema no genera ni sustituye el documento firmado. Su descarga queda restringida a perfiles de Gran Secretaría con alcance Orden y auditada.
 
 Una plancha de autorización sólo puede emitirse después de cumplir la matriz institucional de requisitos y obtener los vistos buenos exigidos.
 

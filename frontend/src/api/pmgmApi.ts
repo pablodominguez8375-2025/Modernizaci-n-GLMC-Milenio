@@ -291,6 +291,7 @@ export class PmgmApiClient {
   private readonly mockSpaces = [...defaultMockSpaces]
   private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
   private readonly mockDocuments: SecretariatDocument[] = []
+  private readonly mockSecretariatPdfs = new Map<string, Blob>()
   private readonly mockSubmittedTenidas: GrandSecretariatTenidaItem[] = [
     {
       recordId: 'gs-tenida-demo-001', lodge: { id: defaultMockOrganizations[1].id, name: defaultMockOrganizations[1].name, number: '23' },
@@ -621,15 +622,13 @@ export class PmgmApiClient {
 
   async getSecretariatAvailability(fromUtc: string, toUtc: string): Promise<SpaceAvailabilityResponse> { if (this.useMocks) { const items = this.mockSpaces.map(space => ({ ...space, isAvailable: !this.mockBusySpaces.has(space.id) })); return { fromUtc, toUtc, total: items.length, available: items.filter(x => x.isAvailable).length, items } } const query = new URLSearchParams({ fromUtc, toUtc }); return this.request<SpaceAvailabilityResponse>(`/api/gran-secretaria/espacios/disponibilidad?${query}`) }
   async getSecretariatDocuments(): Promise<SecretariatDocumentsResponse> { if (this.useMocks) return { total: this.mockDocuments.length, items: [...this.mockDocuments] }; return this.request<SecretariatDocumentsResponse>('/api/gran-secretaria/documentos') }
-  async downloadSecretariatAccessibleDocument(documentId: string): Promise<Blob> {
+  async downloadSecretariatDocumentPdf(documentId: string): Promise<Blob> {
     if (this.useMocks) {
-      const document=this.mockDocuments.find(value=>value.id===documentId); if(!document) throw new Error('El documento institucional no existe.')
-      const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;')
-      const paragraphs=document.content.split(/\r?\n/).filter(Boolean).map(value=>`<p>${escape(value)}</p>`).join('')
-      return new Blob([`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${escape(document.documentCode)} — ${escape(document.title)}</title><style>body{color:#172033;font:12pt/1.15 Cambria,Georgia,serif}main{max-width:21cm;margin:auto;padding:2.5cm}header,h1{color:#243b67}header{border-bottom:3px solid #8a6b1f}</style></head><body><main><header><strong>GRAN LOGIA MIXTA DE CHILE</strong></header><h1>${escape(document.title)}</h1><dl><dt>Código</dt><dd>${escape(document.documentCode)}</dd></dl><section aria-label="Contenido del documento">${paragraphs}</section><p>Versión digital accesible para lectura en pantalla e impresión.</p></main></body></html>`], { type:'text/html;charset=utf-8' })
+      const pdf=this.mockSecretariatPdfs.get(documentId); if(!pdf) throw new Error('El documento oficial firmado no existe.')
+      return pdf
     }
-    const headers=new Headers({ Accept:'text/html' }); const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para descargar el documento.'); headers.set('Authorization',`Bearer ${token}`)
-    const response=await fetch(`${this.baseUrl}/api/gran-secretaria/documentos/${encodeURIComponent(documentId)}/version-accesible`,{credentials:'omit',redirect:'error',cache:'no-store',headers})
+    const headers=new Headers({ Accept:'application/pdf' }); const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para descargar el documento.'); headers.set('Authorization',`Bearer ${token}`)
+    const response=await fetch(`${this.baseUrl}/api/gran-secretaria/documentos/${encodeURIComponent(documentId)}/pdf`,{credentials:'omit',redirect:'error',cache:'no-store',headers})
     if(!response.ok){if(response.status===401)await this.onUnauthorized?.();throw new PmgmApiHttpError(response.status,response.status===403?'Su cuenta no tiene permiso para descargar este documento.':`La API respondió ${response.status} ${response.statusText}.`)}
     return response.blob()
   }
@@ -667,14 +666,17 @@ export class PmgmApiClient {
     }
     return this.postJson<{ id: string; status: string }>('/api/gran-secretaria/reservas', payload)
   }
-  async issueSecretariatDocument(payload: IssueDocumentRequest): Promise<SecretariatDocument> { if (this.useMocks) { const kind=payload.documentType==='plancha'?(payload.planchaKind??'formal_communication'):null; const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, planchaKind: kind, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'PLA-COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document } return this.postJson<SecretariatDocument>('/api/gran-secretaria/documentos', payload) }
-  async issueSecretariatCeremonyAuthorization(ceremonyRequestId: string, spaceReservationId: string | null = null): Promise<SecretariatDocument> {
+  async uploadSecretariatDocumentPdf(payload: IssueDocumentRequest, file: File): Promise<SecretariatDocument> { this.requirePdf(file); if (this.useMocks) { const kind=payload.documentType==='plancha'?(payload.planchaKind??'formal_communication'):null; const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, planchaKind: kind, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'PLA-COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); this.mockSecretariatPdfs.set(document.id,file); return document } return this.putSecretariatPdf('/api/gran-secretaria/documentos/pdf',file,{ 'X-Document-Type':payload.documentType,'X-Document-Title':payload.title,'X-Document-Description':payload.content,'X-Organization-Id':payload.organizationId??'' }) }
+  async uploadSecretariatCeremonyAuthorizationPdf(ceremonyRequestId: string, description: string, file: File): Promise<SecretariatDocument> {
+    this.requirePdf(file)
     if (this.useMocks) {
-      const ceremony = this.mockCeremonies.find(item => item.id === ceremonyRequestId); if (!ceremony) throw new Error('La ceremonia indicada no existe.'); if (ceremony.formalAuthorizationIssued) throw new Error('La ceremonia ya cuenta con autorización formal vigente.'); if (spaceReservationId && ceremony.spaceReservationId !== spaceReservationId) throw new Error('La reserva indicada no corresponde a esta ceremonia.'); ceremony.formalAuthorizationIssued = true
-      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'plancha', planchaKind: 'ceremony_authorization', documentCode: `PLA-AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Plancha de Autorización de Ceremonia — ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: `Plancha formal de autorización demostrativa para ${ceremony.organizationName}. No constituye Decreto.`, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document
+      const ceremony = this.mockCeremonies.find(item => item.id === ceremonyRequestId); if (!ceremony) throw new Error('La ceremonia indicada no existe.'); if (ceremony.formalAuthorizationIssued) throw new Error('La ceremonia ya cuenta con una Plancha firmada vigente.'); ceremony.formalAuthorizationIssued = true
+      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'plancha', planchaKind: 'ceremony_authorization', documentCode: `PLA-AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Plancha de Autorización de Ceremonia — ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: description, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId: ceremony.spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); this.mockSecretariatPdfs.set(document.id,file); return document
     }
-    return this.postJson<SecretariatDocument>(`/api/gran-secretaria/ceremonias/${encodeURIComponent(ceremonyRequestId)}/autorizacion`, { spaceReservationId })
+    return this.putSecretariatPdf(`/api/gran-secretaria/ceremonias/${encodeURIComponent(ceremonyRequestId)}/autorizacion-pdf`,file,{ 'X-Document-Description':description })
   }
+  private requirePdf(file:File){if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf'))throw new Error('Debe adjuntar el documento oficial firmado en PDF.')}
+  private async putSecretariatPdf(path:string,file:File,metadata:Record<string,string>):Promise<SecretariatDocument>{const headers=new Headers({'Content-Type':'application/pdf','X-File-Name':encodeURIComponent(file.name)});for(const[key,value]of Object.entries(metadata))headers.set(key,encodeURIComponent(value));const token=await this.getAccessToken?.();if(!token)throw new Error('Debe ingresar para cargar el documento.');headers.set('Authorization',`Bearer ${token}`);const response=await fetch(`${this.baseUrl}${path}`,{method:'PUT',body:file,credentials:'omit',redirect:'error',cache:'no-store',headers});if(!response.ok){if(response.status===401)await this.onUnauthorized?.();throw new PmgmApiHttpError(response.status,`La API respondió ${response.status} ${response.statusText}.`)}return response.json() as Promise<SecretariatDocument>}
 
   private requireMockReviewCeremony(id: string): CeremonyReviewQueueItem { const item = this.mockReviewCeremonies.find(value => value.id === id); if (!item) throw new Error('La ceremonia indicada no existe en la bandeja.'); return item }
   private requireMockTreasuryStatement(id: string): TreasuryStatement { const item = this.mockTreasuryStatements.get(id); if (!item) throw new Error('El cuadro mensual indicado no existe.'); return item }

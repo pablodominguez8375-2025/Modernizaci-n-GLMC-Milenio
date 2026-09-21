@@ -1,11 +1,14 @@
 using System.Data;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.DocumentManagement.Entities;
 using PMGM.Api.Modules.GrandSecretariat.Entities;
 
 namespace PMGM.Api.Modules.GrandSecretariat;
@@ -22,10 +25,10 @@ public static class GrandSecretariatEndpoints
         group.MapGet("/espacios/disponibilidad", GetAvailabilityAsync);
         group.MapPost("/reservas", CreateReservationAsync);
         group.MapPost("/reservas/{reservationId:guid}/cancelar", CancelReservationAsync);
-        group.MapPost("/documentos", IssueInstitutionalDocumentAsync);
+        group.MapPut("/documentos/pdf", UploadInstitutionalDocumentPdfAsync);
         group.MapGet("/documentos", GetDocumentsAsync);
-        group.MapGet("/documentos/{documentId:guid}/version-accesible", DownloadAccessibleDocumentAsync);
-        group.MapPost("/ceremonias/{requestId:guid}/autorizacion", IssueCeremonyAuthorizationAsync);
+        group.MapGet("/documentos/{documentId:guid}/pdf", DownloadOfficialPdfAsync);
+        group.MapPut("/ceremonias/{requestId:guid}/autorizacion-pdf", UploadCeremonyAuthorizationPdfAsync);
 
         return endpoints;
     }
@@ -434,10 +437,163 @@ public static class GrandSecretariatEndpoints
         return Results.Ok(new { total = documents.Count, items = documents.Select(ToDocumentDto) });
     }
 
-    private static async Task<IResult> DownloadAccessibleDocumentAsync(
+    private static async Task<IResult> UploadInstitutionalDocumentPdfAsync(
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        GrandSecretariatDbContext db,
+        DocumentManagementDbContext documentDb,
+        IInstitutionalAccessService access,
+        IDocumentObjectStore objectStore,
+        IDocumentMalwareScanner scanner,
+        IOptions<DocumentStorageOptions> storageOptions,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage(access, httpContext.User)) return Results.Forbid();
+
+        var type = Header(httpContext, "X-Document-Type").ToLowerInvariant();
+        var title = Header(httpContext, "X-Document-Title");
+        var description = Header(httpContext, "X-Document-Description");
+        var organizationText = Header(httpContext, "X-Organization-Id");
+        Guid? organizationId = null;
+        if (!string.IsNullOrWhiteSpace(organizationText))
+        {
+            if (!Guid.TryParse(organizationText, out var parsed)) return Results.BadRequest(new { message = "El destinatario institucional no es válido." });
+            organizationId = parsed;
+        }
+        if (type is not GrandSecretariatCodes.DocumentType.Decree and not GrandSecretariatCodes.DocumentType.Plancha ||
+            string.IsNullOrWhiteSpace(title) || title.Length > 240 ||
+            string.IsNullOrWhiteSpace(description) || description.Length > 4000)
+            return Results.BadRequest(new { message = "Tipo, título y descripción son obligatorios y deben ser válidos." });
+        if (organizationId is not null && !await institutionalDb.Organizations.AsNoTracking().AnyAsync(x => x.Id == organizationId, cancellationToken))
+            return Results.NotFound(new { message = "La organización indicada no existe." });
+
+        var upload = await ReadSignedPdfAsync(httpContext, scanner, storageOptions.Value.MaxUploadBytes, cancellationToken);
+        if (upload.Error is not null) return upload.Error;
+        var pdf = upload.Pdf!;
+        var document = new SecretariatDocument
+        {
+            DocumentType = type,
+            PlanchaKind = type == GrandSecretariatCodes.DocumentType.Plancha ? GrandSecretariatCodes.PlanchaKind.FormalCommunication : null,
+            DocumentCode = NewDocumentCode(type, type == GrandSecretariatCodes.DocumentType.Plancha ? GrandSecretariatCodes.PlanchaKind.FormalCommunication : null),
+            Title = title,
+            Content = description,
+            OrganizationId = organizationId,
+            Status = GrandSecretariatCodes.DocumentStatus.Issued,
+            IssuedAtUtc = DateTimeOffset.UtcNow,
+            IssuedBySubject = GetSubject(httpContext.User)
+        };
+        await StoreSignedPdfAsync(document, pdf, documentDb, objectStore, cancellationToken);
+        db.SecretariatDocuments.Add(document);
+        db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "grand_secretariat.document.signed_pdf_uploaded", nameof(SecretariatDocument), document.Id.ToString(), organizationId, AuditResults.Success, new { document.DocumentType, document.DocumentCode, pdf.FileName, pdf.SizeBytes, pdf.Sha256 }));
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Created($"/api/gran-secretaria/documentos/{document.Id}", ToDocumentDto(document));
+    }
+
+    private static async Task<IResult> UploadCeremonyAuthorizationPdfAsync(
+        Guid requestId,
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        GrandSecretariatDbContext db,
+        DocumentManagementDbContext documentDb,
+        IInstitutionalAccessService access,
+        IDocumentObjectStore objectStore,
+        IDocumentMalwareScanner scanner,
+        IOptions<DocumentStorageOptions> storageOptions,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManage(access, httpContext.User)) return Results.Forbid();
+        var ceremony = await institutionalDb.CeremonyRequests.AsNoTracking().Include(x => x.Organization).SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+        if (ceremony is null) return Results.NotFound();
+        if (ceremony.Status != CeremonyCodes.RequestStatus.Authorized)
+            return Results.Conflict(new { message = "Sólo puede cargarse la Plancha firmada de una ceremonia ya autorizada por el flujo institucional." });
+        if (await db.SecretariatDocuments.AnyAsync(x => x.RelatedCeremonyRequestId == requestId && x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization && x.Status == GrandSecretariatCodes.DocumentStatus.Issued, cancellationToken))
+            return Results.Conflict(new { message = "La ceremonia ya cuenta con una Plancha de Autorización firmada vigente." });
+
+        var description = Header(httpContext, "X-Document-Description");
+        if (string.IsNullOrWhiteSpace(description) || description.Length > 4000)
+            return Results.BadRequest(new { message = "La descripción de la Plancha firmada es obligatoria." });
+        var upload = await ReadSignedPdfAsync(httpContext, scanner, storageOptions.Value.MaxUploadBytes, cancellationToken);
+        if (upload.Error is not null) return upload.Error;
+        var pdf = upload.Pdf!;
+        var document = new SecretariatDocument
+        {
+            DocumentType = GrandSecretariatCodes.DocumentType.Plancha,
+            PlanchaKind = GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization,
+            DocumentCode = NewDocumentCode(GrandSecretariatCodes.DocumentType.Plancha, GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization),
+            Title = $"Plancha de Autorización de Ceremonia — {ceremony.CeremonyType}",
+            Content = description,
+            OrganizationId = ceremony.OrganizationId,
+            RelatedCeremonyRequestId = ceremony.Id,
+            Status = GrandSecretariatCodes.DocumentStatus.Issued,
+            IssuedAtUtc = DateTimeOffset.UtcNow,
+            IssuedBySubject = GetSubject(httpContext.User)
+        };
+        await StoreSignedPdfAsync(document, pdf, documentDb, objectStore, cancellationToken);
+        db.SecretariatDocuments.Add(document);
+        db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "grand_secretariat.ceremony_authorization.signed_pdf_uploaded", nameof(SecretariatDocument), document.Id.ToString(), document.OrganizationId, AuditResults.Success, new { document.DocumentCode, document.RelatedCeremonyRequestId, pdf.FileName, pdf.SizeBytes, pdf.Sha256 }));
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Created($"/api/gran-secretaria/documentos/{document.Id}", ToDocumentDto(document));
+    }
+
+    private static async Task<(SignedPdf? Pdf, IResult? Error)> ReadSignedPdfAsync(HttpContext context, IDocumentMalwareScanner scanner, long maxBytes, CancellationToken cancellationToken)
+    {
+        var fileName = Header(context, "X-File-Name");
+        var contentType = DocumentContentTypePolicy.Normalize(context.Request.ContentType);
+        if (!DocumentContentTypePolicy.TryValidateMetadata(fileName, contentType, out var expectedType, out var metadataError) || expectedType != "application/pdf")
+            return (null, Results.Json(new { message = metadataError ?? "Debe adjuntar el documento oficial en PDF." }, statusCode: StatusCodes.Status415UnsupportedMediaType));
+        var length = context.Request.ContentLength;
+        if (length is null or <= 0 || length > maxBytes)
+            return (null, Results.Json(new { message = "El PDF está vacío o excede el tamaño permitido." }, statusCode: StatusCodes.Status413PayloadTooLarge));
+        await using var buffer = new MemoryStream((int)length.Value);
+        await context.Request.Body.CopyToAsync(buffer, cancellationToken);
+        if (buffer.Length != length.Value) return (null, Results.BadRequest(new { message = "El tamaño recibido no coincide con el declarado." }));
+        var bytes = buffer.ToArray();
+        if (!await DocumentContentTypePolicy.MatchesContentAsync(new MemoryStream(bytes, writable: false), "application/pdf", cancellationToken))
+            return (null, Results.Json(new { message = "La firma real del archivo no corresponde a PDF." }, statusCode: StatusCodes.Status415UnsupportedMediaType));
+        DocumentMalwareScanResult scan;
+        try { scan = await scanner.ScanAsync(new MemoryStream(bytes, writable: false), cancellationToken); }
+        catch (Exception ex) when (ex is IOException or System.Net.Sockets.SocketException or InvalidDataException)
+        { return (null, Results.Json(new { message = "El análisis antivirus no está disponible; intente nuevamente." }, statusCode: StatusCodes.Status503ServiceUnavailable)); }
+        if (!scan.IsClean) return (null, Results.UnprocessableEntity(new { message = "El PDF fue rechazado por el análisis antivirus." }));
+        var sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)).ToLowerInvariant();
+        return (new SignedPdf(fileName, bytes, sha256, scan.EvidenceReference), null);
+    }
+
+    private static async Task StoreSignedPdfAsync(SecretariatDocument record, SignedPdf pdf, DocumentManagementDbContext db, IDocumentObjectStore objectStore, CancellationToken cancellationToken)
+    {
+        var subject = record.IssuedBySubject;
+        var collection = await db.DocumentCollections.SingleOrDefaultAsync(x => x.Code == "GRAND-SECRETARIAT-OFFICIAL", cancellationToken);
+        if (collection is null)
+        {
+            collection = new DocumentCollection { Code = "GRAND-SECRETARIAT-OFFICIAL", Name = "Documentos oficiales de Gran Secretaría", Description = "Planchas y Decretos firmados físicamente.", Scope = DocumentManagementCodes.Scope.Order, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = subject };
+            db.DocumentCollections.Add(collection);
+        }
+        var managed = new InstitutionalDocument { Id = record.Id, Collection = collection, OrganizationId = record.OrganizationId, Title = record.Title, DocumentType = "grand_secretariat_official", Classification = DocumentManagementCodes.Classification.Confidential, AccessPolicy = DocumentManagementCodes.AccessPolicy.ManagementOnly, ShortDescription = record.Content, OfficialDocumentType = record.PlanchaKind ?? record.DocumentType, Status = DocumentManagementCodes.DocumentStatus.Active, CreatedBySubject = subject };
+        var version = new DocumentVersion { Document = managed, VersionNumber = 1, OriginalFileName = pdf.FileName, ContentType = "application/pdf", SizeBytes = pdf.SizeBytes, Sha256 = pdf.Sha256, ProcessingStatus = DocumentManagementCodes.ProcessingStatus.Available, ScanReference = pdf.ScanReference, CreatedBySubject = subject };
+        version.ObjectKey = DocumentObjectKeyFactory.Create(managed.Id, version.Id);
+        await objectStore.StoreAsync(version.ObjectKey, new MemoryStream(pdf.Bytes, writable: false), "application/pdf", cancellationToken);
+        db.InstitutionalDocuments.Add(managed); db.DocumentVersions.Add(version);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string Header(HttpContext context, string name)
+    {
+        var value = context.Request.Headers[name].ToString();
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        try { return Uri.UnescapeDataString(value).Trim(); } catch (UriFormatException) { return value.Trim(); }
+    }
+
+    private sealed record SignedPdf(string FileName, byte[] Bytes, string Sha256, string? ScanReference)
+    {
+        public long SizeBytes => Bytes.LongLength;
+    }
+
+    private static async Task<IResult> DownloadOfficialPdfAsync(
         Guid documentId,
         HttpContext httpContext,
         GrandSecretariatDbContext db,
+        DocumentManagementDbContext documentDb,
+        IDocumentObjectStore objectStore,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -452,25 +608,29 @@ public static class GrandSecretariatEndpoints
             return Results.NotFound();
         }
 
-        if (document.Status != GrandSecretariatCodes.DocumentStatus.Issued)
+        var version = await documentDb.DocumentVersions.AsNoTracking()
+            .Where(x => x.DocumentId == documentId &&
+                        x.ContentType == "application/pdf" &&
+                        x.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Available)
+            .OrderByDescending(x => x.VersionNumber)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (document.Status != GrandSecretariatCodes.DocumentStatus.Issued || version is null)
         {
-            return Results.Conflict(new { message = "Sólo los documentos emitidos cuentan con versión accesible oficial." });
+            return Results.Conflict(new { message = "El documento no cuenta con un PDF oficial firmado disponible." });
         }
 
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
-            "grand_secretariat.document.accessible_version_downloaded",
+            "grand_secretariat.document.signed_pdf_downloaded",
             nameof(SecretariatDocument),
             document.Id.ToString(),
             document.OrganizationId,
             AuditResults.Success,
-            new { document.DocumentCode, format = "html" }));
+            new { document.DocumentCode, version.Id, version.Sha256, format = "pdf" }));
         await db.SaveChangesAsync(cancellationToken);
 
-        return Results.File(
-            SecretariatAccessibleDocumentRenderer.Render(document),
-            "text/html; charset=utf-8",
-            SecretariatAccessibleDocumentRenderer.FileName(document));
+        var content = await objectStore.OpenReadAsync(version.ObjectKey, cancellationToken);
+        return Results.Stream(content, "application/pdf", version.OriginalFileName, enableRangeProcessing: false);
     }
 
     private static async Task<IResult> IssueCeremonyAuthorizationAsync(

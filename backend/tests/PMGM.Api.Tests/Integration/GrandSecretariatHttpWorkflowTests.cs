@@ -92,9 +92,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, blockedReservationResponse.StatusCode);
 
-        var authorizationBeforeReservationResponse = await client.PostAsJsonAsync(
-            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
-            new { spaceReservationId = (Guid?)null },
+        var authorizationBeforeReservationResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-autorizacion-firmada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Plancha firmada físicamente por las autoridades responsables." }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Created, authorizationBeforeReservationResponse.StatusCode);
 
@@ -175,9 +174,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var targetSpace = availabilityJson.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == spaceId);
         Assert.False(targetSpace.GetProperty("isAvailable").GetBoolean());
 
-        var repeatedAuthorizationResponse = await client.PostAsJsonAsync(
-            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
-            new { spaceReservationId = reservationId },
+        var repeatedAuthorizationResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada." }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, repeatedAuthorizationResponse.StatusCode);
 
@@ -207,38 +205,30 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(CeremonyCodes.Type.WageIncrease, lodgeAuthorizationOption.GetProperty("ceremonyType").GetString());
         Assert.StartsWith("PLA-AUT-CER-", lodgeAuthorizationOption.GetProperty("documentCode").GetString());
 
-        var duplicateAuthorization = await client.PostAsJsonAsync(
-            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
-            new { spaceReservationId = reservationId },
+        var duplicateAuthorization = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada-2.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada nuevamente." }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, duplicateAuthorization.StatusCode);
 
-        var decreeResponse = await client.PostAsJsonAsync(
-            "/api/gran-secretaria/documentos",
-            new
+        var decreeResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, "/api/gran-secretaria/documentos/pdf", "decreto-firmado.pdf", new Dictionary<string, string>
             {
-                documentType = GrandSecretariatCodes.DocumentType.Decree,
-                planchaKind = (string?)null,
-                title = "Decreto CI",
-                content = "Contenido institucional de prueba para validar el circuito documental de Gran Secretaría.",
-                organizationId = (Guid?)null
-            },
-            cancellationToken);
+                ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
+                ["X-Document-Title"] = "Decreto CI",
+                ["X-Document-Description"] = "Decreto firmado físicamente para validar el circuito documental."
+            }), cancellationToken);
         Assert.Equal(HttpStatusCode.Created, decreeResponse.StatusCode);
         var decreeJson = await decreeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var decreeId = decreeJson.GetProperty("id").GetGuid();
 
-        var accessibleDocumentResponse = await client.GetAsync(
-            $"/api/gran-secretaria/documentos/{decreeId}/version-accesible",
+        var officialPdfResponse = await client.GetAsync(
+            $"/api/gran-secretaria/documentos/{decreeId}/pdf",
             cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, accessibleDocumentResponse.StatusCode);
-        Assert.Equal("text/html", accessibleDocumentResponse.Content.Headers.ContentType?.MediaType);
-        Assert.Equal("utf-8", accessibleDocumentResponse.Content.Headers.ContentType?.CharSet);
-        Assert.Equal("attachment", accessibleDocumentResponse.Content.Headers.ContentDisposition?.DispositionType);
-        Assert.Contains("DEC-", accessibleDocumentResponse.Content.Headers.ContentDisposition?.FileNameStar);
-        var accessibleDocumentHtml = await accessibleDocumentResponse.Content.ReadAsStringAsync(cancellationToken);
-        Assert.Contains("<html lang=\"es\">", accessibleDocumentHtml);
-        Assert.Contains("Decreto CI", accessibleDocumentHtml);
+        Assert.Equal(HttpStatusCode.OK, officialPdfResponse.StatusCode);
+        Assert.Equal("application/pdf", officialPdfResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("attachment", officialPdfResponse.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains("decreto-firmado.pdf", officialPdfResponse.Content.Headers.ContentDisposition?.FileNameStar);
+        Assert.StartsWith("%PDF-", await officialPdfResponse.Content.ReadAsStringAsync(cancellationToken));
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -263,10 +253,19 @@ public sealed class GrandSecretariatHttpWorkflowTests
             Assert.Contains("grand_secretariat.space.created", auditActions);
             Assert.Contains("grand_secretariat.space_reservation.created", auditActions);
             Assert.Contains("grand_secretariat.space_reservation.rejected", auditActions);
-            Assert.Contains("grand_secretariat.ceremony_authorization.issued", auditActions);
-            Assert.Contains("grand_secretariat.document.issued", auditActions);
-            Assert.Contains("grand_secretariat.document.accessible_version_downloaded", auditActions);
+            Assert.Contains("grand_secretariat.ceremony_authorization.signed_pdf_uploaded", auditActions);
+            Assert.Contains("grand_secretariat.document.signed_pdf_uploaded", auditActions);
+            Assert.Contains("grand_secretariat.document.signed_pdf_downloaded", auditActions);
         }
+    }
+
+    private static HttpRequestMessage SignedPdfRequest(HttpMethod method, string path, string fileName, IReadOnlyDictionary<string, string> metadata)
+    {
+        var request = new HttpRequestMessage(method, path) { Content = new ByteArrayContent("%PDF-1.7\n%%EOF"u8.ToArray()) };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        request.Headers.Add("X-File-Name", Uri.EscapeDataString(fileName));
+        foreach (var item in metadata) request.Headers.Add(item.Key, Uri.EscapeDataString(item.Value));
+        return request;
     }
 }
 
