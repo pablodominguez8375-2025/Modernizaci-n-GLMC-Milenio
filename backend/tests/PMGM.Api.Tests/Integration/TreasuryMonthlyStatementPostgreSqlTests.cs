@@ -49,14 +49,30 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 OfficeType = "treasurer", Period = "2026", StartDate = new DateOnly(2026, 1, 1)
             };
+            var feePlan = new PMGM.Api.Modules.Treasury.Entities.LodgeFeePlan
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                FeeType = TreasuryCodes.LodgeFeeType.Student,
+                MemberAmount = 8_000m, GrandTreasuryAmount = 8_000m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            };
+            var charge = new PMGM.Api.Modules.Treasury.Entities.LodgeMemberCharge
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                Member = member, MemberId = member.Id,
+                FeePlan = feePlan, FeePlanId = feePlan.Id,
+                PeriodYear = 2026, PeriodMonth = 7,
+                MemberAmount = 8_000m, GrandTreasuryAmount = 8_000m,
+                Status = TreasuryCodes.LodgeChargeStatus.Pending
+            };
             var adjustment = new PMGM.Api.Modules.Treasury.Entities.TreasuryAdjustment
             {
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 AdjustmentType = "student", EffectiveFrom = new DateOnly(2026, 1, 1),
-                EffectiveUntil = new DateOnly(2026, 12, 31), Amount = -13_000m,
+                EffectiveUntil = new DateOnly(2026, 12, 31), Amount = 0m,
                 AuthorizationReference = "PLANCHA-CI-001", Status = TreasuryCodes.AdjustmentStatus.Active
             };
-            db.AddRange(organization, person, member, membership, degree, office, adjustment);
+            db.AddRange(organization, person, member, membership, degree, office, feePlan, charge, adjustment);
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             memberId = member.Id;
