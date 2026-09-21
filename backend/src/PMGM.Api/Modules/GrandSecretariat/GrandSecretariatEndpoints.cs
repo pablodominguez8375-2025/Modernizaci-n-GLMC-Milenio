@@ -453,6 +453,7 @@ public static class GrandSecretariatEndpoints
         var type = Header(httpContext, "X-Document-Type").ToLowerInvariant();
         var title = Header(httpContext, "X-Document-Title");
         var description = Header(httpContext, "X-Document-Description");
+        var signaturesConfirmed = Header(httpContext, "X-Physical-Signatures-Confirmed");
         var organizationText = Header(httpContext, "X-Organization-Id");
         Guid? organizationId = null;
         if (!string.IsNullOrWhiteSpace(organizationText))
@@ -464,6 +465,8 @@ public static class GrandSecretariatEndpoints
             string.IsNullOrWhiteSpace(title) || title.Length > 240 ||
             string.IsNullOrWhiteSpace(description) || description.Length > 4000)
             return Results.BadRequest(new { message = "Tipo, título y descripción son obligatorios y deben ser válidos." });
+        if (!string.Equals(signaturesConfirmed, "true", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { message = "Gran Secretaría debe confirmar que el PDF fue firmado físicamente por los responsables antes de cargarlo." });
         if (organizationId is not null && !await institutionalDb.Organizations.AsNoTracking().AnyAsync(x => x.Id == organizationId, cancellationToken))
             return Results.NotFound(new { message = "La organización indicada no existe." });
 
@@ -484,7 +487,7 @@ public static class GrandSecretariatEndpoints
         };
         await StoreSignedPdfAsync(document, pdf, documentDb, objectStore, cancellationToken);
         db.SecretariatDocuments.Add(document);
-        db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "grand_secretariat.document.signed_pdf_uploaded", nameof(SecretariatDocument), document.Id.ToString(), organizationId, AuditResults.Success, new { document.DocumentType, document.DocumentCode, pdf.FileName, pdf.SizeBytes, pdf.Sha256 }));
+        db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "grand_secretariat.document.signed_pdf_uploaded", nameof(SecretariatDocument), document.Id.ToString(), organizationId, AuditResults.Success, new { document.DocumentType, document.DocumentCode, pdf.FileName, pdf.SizeBytes, pdf.Sha256, physicalSignaturesConfirmed = true }));
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/gran-secretaria/documentos/{document.Id}", ToDocumentDto(document));
     }
@@ -512,6 +515,8 @@ public static class GrandSecretariatEndpoints
         var description = Header(httpContext, "X-Document-Description");
         if (string.IsNullOrWhiteSpace(description) || description.Length > 4000)
             return Results.BadRequest(new { message = "La descripción de la Plancha firmada es obligatoria." });
+        if (!string.Equals(Header(httpContext, "X-Physical-Signatures-Confirmed"), "true", StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest(new { message = "Gran Secretaría debe confirmar que la Plancha fue firmada físicamente por los responsables antes de cargarla." });
         var upload = await ReadSignedPdfAsync(httpContext, scanner, storageOptions.Value.MaxUploadBytes, cancellationToken);
         if (upload.Error is not null) return upload.Error;
         var pdf = upload.Pdf!;
@@ -530,7 +535,7 @@ public static class GrandSecretariatEndpoints
         };
         await StoreSignedPdfAsync(document, pdf, documentDb, objectStore, cancellationToken);
         db.SecretariatDocuments.Add(document);
-        db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "grand_secretariat.ceremony_authorization.signed_pdf_uploaded", nameof(SecretariatDocument), document.Id.ToString(), document.OrganizationId, AuditResults.Success, new { document.DocumentCode, document.RelatedCeremonyRequestId, pdf.FileName, pdf.SizeBytes, pdf.Sha256 }));
+        db.AuditEvents.Add(AuditEventFactory.Create(httpContext, "grand_secretariat.ceremony_authorization.signed_pdf_uploaded", nameof(SecretariatDocument), document.Id.ToString(), document.OrganizationId, AuditResults.Success, new { document.DocumentCode, document.RelatedCeremonyRequestId, pdf.FileName, pdf.SizeBytes, pdf.Sha256, physicalSignaturesConfirmed = true }));
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/gran-secretaria/documentos/{document.Id}", ToDocumentDto(document));
     }

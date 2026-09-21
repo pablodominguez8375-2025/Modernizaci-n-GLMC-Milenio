@@ -95,8 +95,13 @@ public sealed class GrandSecretariatHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, blockedReservationResponse.StatusCode);
 
+        var authorizationWithoutAttestationResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-sin-declaracion.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Plancha sin declaración del operador." }),
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, authorizationWithoutAttestationResponse.StatusCode);
+
         var authorizationBeforeReservationResponse = await client.SendAsync(
-            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-autorizacion-firmada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Plancha firmada físicamente por las autoridades responsables." }),
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-autorizacion-firmada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Plancha firmada físicamente por las autoridades responsables.", ["X-Physical-Signatures-Confirmed"] = "true" }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Created, authorizationBeforeReservationResponse.StatusCode);
 
@@ -178,7 +183,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.False(targetSpace.GetProperty("isAvailable").GetBoolean());
 
         var repeatedAuthorizationResponse = await client.SendAsync(
-            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada." }),
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada.", ["X-Physical-Signatures-Confirmed"] = "true" }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, repeatedAuthorizationResponse.StatusCode);
 
@@ -209,7 +214,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.StartsWith("PLA-AUT-CER-", lodgeAuthorizationOption.GetProperty("documentCode").GetString());
 
         var duplicateAuthorization = await client.SendAsync(
-            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada-2.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada nuevamente." }),
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada-2.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada nuevamente.", ["X-Physical-Signatures-Confirmed"] = "true" }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, duplicateAuthorization.StatusCode);
 
@@ -218,7 +223,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
             {
                 ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
                 ["X-Document-Title"] = "Decreto CI",
-                ["X-Document-Description"] = "Decreto firmado físicamente para validar el circuito documental."
+                ["X-Document-Description"] = "Decreto firmado físicamente para validar el circuito documental.",
+                ["X-Physical-Signatures-Confirmed"] = "true"
             }), cancellationToken);
         Assert.Equal(HttpStatusCode.Created, decreeResponse.StatusCode);
         var decreeJson = await decreeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);

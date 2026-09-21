@@ -125,6 +125,7 @@ function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocum
     if (!file) return
     const description = window.prompt('Descripción o referencia de la Plancha firmada:')?.trim()
     if (!description) return
+    if (!window.confirm('¿Confirma que el PDF contiene la Plancha firmada físicamente por los responsables?')) return
     const success = 'Plancha de Autorización firmada cargada y auditada.'
     void execute(async () => {
       await api.uploadSecretariatCeremonyAuthorizationPdf(item.id, description, file)
@@ -242,19 +243,20 @@ function SpacePanel({ api, working, execute, refreshAvailability }: { api: PmgmA
 }
 
 function DocumentPanel({ api, organizations, working, execute, refreshDocuments }: { api: PmgmApiClient; organizations: OrganizationOption[]; working: boolean; execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshDocuments: () => Promise<void> }) {
-  const [type, setType] = useState<'decree' | 'plancha'>('plancha'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState(''); const [file,setFile]=useState<File|null>(null)
+  const [type, setType] = useState<'decree' | 'plancha'>('plancha'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState(''); const [file,setFile]=useState<File|null>(null); const [signaturesConfirmed,setSignaturesConfirmed]=useState(false)
   const submit = (event: FormEvent) => { event.preventDefault(); void execute(async () => {
     if(!file) throw new Error('Debe adjuntar el PDF firmado físicamente.')
     await api.uploadSecretariatDocumentPdf({ documentType: type, planchaKind: type === 'plancha' ? 'formal_communication' : null, title, content, organizationId: organizationId || null },file)
-    setTitle(''); setContent(''); setFile(null); await refreshDocuments()
+    setTitle(''); setContent(''); setFile(null); setSignaturesConfirmed(false); await refreshDocuments()
   }, type === 'decree' ? 'Decreto firmado cargado y auditado.' : 'Plancha firmada cargada y auditada.') }
   return <article className="panel"><p className="eyebrow">Documentos</p><h2>Registrar documento oficial firmado</h2><form className="stack-form" onSubmit={submit}>
     <div className="form-grid"><Field label="Tipo"><select value={type} onChange={e => setType(e.target.value as typeof type)}><option value="plancha">Plancha · comunicado formal</option><option value="decree">Decreto</option></select></Field><Field label="Destinatario institucional"><select value={organizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Toda la Orden / general</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field></div>
     <Field label="Título"><input required maxLength={240} value={title} onChange={e => setTitle(e.target.value)} /></Field>
     <Field label="Descripción"><textarea required rows={5} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} /></Field>
     <Field label="PDF firmado físicamente"><input required type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]??null)} /></Field>
+    <label className="form-note"><input type="checkbox" checked={signaturesConfirmed} onChange={e=>setSignaturesConfirmed(e.target.checked)} /> Confirmo que el PDF contiene el documento firmado físicamente por los responsables.</label>
     <small className="form-note">El sistema no genera Planchas ni Decretos. Registra y conserva el PDF firmado por los responsables.</small>
-    <button className="primary-action" disabled={working||!file}>Cargar documento firmado</button>
+    <button className="primary-action" disabled={working||!file||!signaturesConfirmed}>Cargar documento firmado</button>
   </form></article>
 }
 

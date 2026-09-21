@@ -113,7 +113,7 @@ it('uses the minimized Gran Secretaria queue and uploads the physically signed P
   const client = new PmgmApiClient({ getAccessToken: async () => 'token' })
   const response = await client.getSecretariatCeremonyQueue(); expect(response.items[0].formalAuthorizationIssued).toBe(false); expect(fetch.mock.calls[0][0]).toBe('/api/institutional/gran-secretaria/ceremonias-autorizadas')
   const file=new File(['%PDF-1.7'], 'plancha-firmada.pdf',{type:'application/pdf'})
-  await client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file); const [url, options] = fetch.mock.calls[1]; expect(url).toBe('/api/gran-secretaria/ceremonias/c1/autorizacion-pdf'); expect(options.method).toBe('PUT'); expect(options.body).toBe(file); expect(decodeURIComponent(options.headers.get('X-Document-Description'))).toBe('Firmada físicamente')
+  await client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file); const [url, options] = fetch.mock.calls[1]; expect(url).toBe('/api/gran-secretaria/ceremonias/c1/autorizacion-pdf'); expect(options.method).toBe('PUT'); expect(options.body).toBe(file); expect(decodeURIComponent(options.headers.get('X-Document-Description'))).toBe('Firmada físicamente'); expect(options.headers.get('X-Physical-Signatures-Confirmed')).toBe('true')
 })
 
 it('never sends an institutional request without a token', async () => {
