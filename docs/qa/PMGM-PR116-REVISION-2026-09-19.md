@@ -55,6 +55,8 @@ La etapa **Plancha y programación** no genera documentos. Gran Secretaría debe
 
 El backend conserva únicamente los contratos de carga PDF firmada (`PUT /documentos/pdf` y `PUT /ceremonias/{id}/autorizacion-pdf`). Se eliminaron las implementaciones heredadas que podían crear documentos oficiales desde JSON sin archivo y la prueba de integración exige que esas rutas históricas respondan `405`/`404`.
 
+La documentación canónica ya no conserva instrucciones contradictorias de generación automática. El gate `tests/official_documents_gate.py`, integrado en PMGM CI, valida que Planchas oficiales y Decretos continúen definidos como PDF firmado físicamente y cargado por Gran Secretaría.
+
 
 ## Addendum — alineación con Protocolo de Trámites 2026
 

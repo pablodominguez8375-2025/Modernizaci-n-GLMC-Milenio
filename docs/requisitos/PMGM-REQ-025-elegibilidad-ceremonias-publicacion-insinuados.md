@@ -82,7 +82,7 @@ Estados normalizados sugeridos:
 - `exception_approved`.
 
 ## 7. Regla de autorización
-Gran Secretaría sólo podrá generar la autorización definitiva cuando todas las validaciones obligatorias aplicables se encuentren en un estado habilitante.
+Gran Secretaría sólo podrá registrar y cargar el PDF firmado de la autorización definitiva cuando todas las validaciones obligatorias aplicables se encuentren en un estado habilitante. El sistema no genera la Plancha.
 
 Para iniciación se requiere adicionalmente:
 - publicación válida;

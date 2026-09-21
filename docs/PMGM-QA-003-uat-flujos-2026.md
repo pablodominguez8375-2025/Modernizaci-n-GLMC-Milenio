@@ -29,7 +29,7 @@ Intentar nueva presentación antes de un año: debe bloquearse. Después de un a
 Con Régimen Interior aprobado, Gran Tesorería pendiente, Gran Hospitalaria aprobada y Gran Maestría pendiente, la solicitud debe mostrar que no es autorizable y no debe emitir plancha.
 
 ### UAT-008 — Autorización completa
-Con todos los vistos buenos requeridos conformes, Gran Secretaría debe poder autorizar y generar la plancha desde los datos del expediente, sin redigitación de identidad.
+Con todos los vistos buenos requeridos conformes, Gran Secretaría debe poder registrar la descripción, adjuntar la Plancha en PDF firmado físicamente y confirmar expresamente sus firmas. Sin cualquiera de esos elementos, la carga debe permanecer bloqueada. El sistema no genera el documento.
 
 ### UAT-009 — Afiliación
 Una afiliación sin Carta de Retiro Voluntario verificada debe quedar observada o bloqueada según el flujo definido.
@@ -67,4 +67,4 @@ El flujo debe distinguir modalidad de afiliación `simple/con activación` de la
 Cada UAT debe guardar identificador, commit desplegado, actor/rol, datos sintéticos, resultado esperado, resultado obtenido, evidencia y eventual incidencia asociada.
 
 ## Gate de promoción
-No se promueve a `main` mientras exista un UAT crítico fallido en insinuaciones, autorización de ceremonias, generación de plancha, permisos o trazabilidad histórica.
+No se promueve a `main` mientras exista un UAT crítico fallido en insinuaciones, autorización de ceremonias, carga y vinculación de Plancha firmada, permisos o trazabilidad histórica.

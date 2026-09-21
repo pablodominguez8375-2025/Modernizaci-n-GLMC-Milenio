@@ -8,7 +8,7 @@
 Traducir a requisitos funcionales del Proyecto Milenio los formularios, protocolos y modelos institucionales 2026 incorporados a la carpeta de referencia del Proyecto Centenario.
 
 ## 2. Principio de diseño
-El sistema será la fuente operativa del dato. Los formularios, extractos, juramentos, planchas y nóminas deberán generarse desde información ya registrada y validada siempre que el proceso lo permita. Debe evitarse solicitar nuevamente información que ya exista en la ficha institucional.
+El sistema será la fuente operativa del dato y debe evitar solicitar nuevamente información que ya exista en la ficha institucional. Puede producir vistas, formularios de trabajo y extractos cuando el proceso lo permita, pero no genera Planchas oficiales ni Decretos: esos documentos se firman físicamente fuera del sistema y se incorporan como PDF oficial.
 
 ## 3. Insinuaciones
 ### PMGM-REQ-001.01 — Apertura de insinuación
@@ -71,7 +71,7 @@ El expediente debe admitir, según corresponda: Cuadro del Taller asociado al ú
 La autorización no puede emitirse mientras exista una validación institucional requerida pendiente o rechazada.
 
 ### PMGM-REQ-001.20 — Plancha de autorización
-Aprobado el expediente y con visto bueno de Gran Maestría, Gran Secretaría podrá generar la plancha de autorización numerada a partir de una plantilla institucional.
+Aprobado el expediente y con visto bueno de Gran Maestría, Gran Secretaría podrá registrar los metadatos de la Plancha de Autorización y cargar su PDF firmado físicamente. El sistema no genera la Plancha, la firma ni el sello institucional.
 
 ### PMGM-REQ-001.21 — Confirmación posterior
 La realización de la ceremonia debe registrarse posteriormente para validación, actualización del historial masónico y posterior publicación institucional cuando corresponda.
