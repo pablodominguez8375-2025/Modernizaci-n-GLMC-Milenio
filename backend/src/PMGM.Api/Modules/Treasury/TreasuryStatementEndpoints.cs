@@ -308,7 +308,7 @@ public static class TreasuryStatementEndpoints
         return Results.Ok(ToResponse(statement));
     }
 
-    private static async Task<IResult> GetAsync(Guid statementId, bool includeMemberDetail, HttpContext context, PmgmDbContext db,
+    private static async Task<IResult> GetAsync(Guid statementId, bool? includeMemberDetail, HttpContext context, PmgmDbContext db,
         IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         var statement = await db.TreasuryMonthlyStatements.AsNoTracking().Include(x => x.Lines).Include(x => x.Payments)
@@ -316,7 +316,7 @@ public static class TreasuryStatementEndpoints
         if (statement is null) return Results.NotFound();
         if (!access.CanManageTreasuryRegularity(context.User) && !access.CanReadOrganization(context.User, statement.OrganizationId))
             return Results.Forbid();
-        return Results.Ok(ToResponse(statement, includeMemberDetail || !access.CanManageTreasuryRegularity(context.User)));
+        return Results.Ok(ToResponse(statement, includeMemberDetail == true || !access.CanManageTreasuryRegularity(context.User)));
     }
 
     private static object ToResponse(TreasuryMonthlyStatement statement, bool includeMemberDetail = true)
