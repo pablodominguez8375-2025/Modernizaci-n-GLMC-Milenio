@@ -154,7 +154,7 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranSecretaria);
 
     public bool CanManageLodgeTreasury(ClaimsPrincipal user, Guid organizationId)
-        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.GranTesoreria)) ||
+        => (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin)) ||
            (HasOrganizationClaim(user, organizationId) && HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerTesoreria));
 
     public bool CanPrepareTreasuryStatement(ClaimsPrincipal user, Guid organizationId)
