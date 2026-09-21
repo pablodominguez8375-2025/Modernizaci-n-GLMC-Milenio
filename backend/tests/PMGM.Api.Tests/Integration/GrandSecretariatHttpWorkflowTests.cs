@@ -75,6 +75,18 @@ public sealed class GrandSecretariatHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.Created, createSpace.StatusCode);
 
+        var legacyDocumentResponse = await client.PostAsJsonAsync(
+            "/api/gran-secretaria/documentos",
+            new { documentType = GrandSecretariatCodes.DocumentType.Decree, title = "Documento sin PDF" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, legacyDocumentResponse.StatusCode);
+
+        var legacyAuthorizationResponse = await client.PostAsJsonAsync(
+            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
+            new { notes = "Autorización sin PDF" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, legacyAuthorizationResponse.StatusCode);
+
         var spaceJson = await createSpace.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var spaceId = spaceJson.GetProperty("id").GetGuid();
         var startsAtUtc = new DateTimeOffset(2026, 10, 15, 22, 0, 0, TimeSpan.Zero);

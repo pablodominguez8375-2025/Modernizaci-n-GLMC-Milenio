@@ -53,6 +53,8 @@ La Demo no puede mostrar el estado **Ceremonia autorizada** durante los vistos b
 
 La etapa **Plancha y programación** no genera documentos. Gran Secretaría debe ingresar una descripción, adjuntar el PDF firmado físicamente y confirmar expresamente las firmas antes de continuar; el botón permanece bloqueado mientras falte cualquiera de esos elementos.
 
+El backend conserva únicamente los contratos de carga PDF firmada (`PUT /documentos/pdf` y `PUT /ceremonias/{id}/autorizacion-pdf`). Se eliminaron las implementaciones heredadas que podían crear documentos oficiales desde JSON sin archivo y la prueba de integración exige que esas rutas históricas respondan `405`/`404`.
+
 
 ## Addendum — alineación con Protocolo de Trámites 2026
 
