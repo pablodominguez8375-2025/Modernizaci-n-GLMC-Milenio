@@ -65,7 +65,7 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
   const canDecideCurrent = !demoProfileKey || demoProfileKey === 'grandLodge' || demoProfileKey === current.profile
   const finished = completed === stages.length
   const progress = Math.round((completed / stages.length) * 100)
-  const status = useMemo(() => finished ? 'Hermano activo · Aprendiz' : completed >= 10 ? 'Ceremonia autorizada' : completed >= 6 ? 'Candidato aprobado' : 'Insinuado en tramitación', [completed, finished])
+  const status = useMemo(() => initiationStatus(completed, stages.length), [completed])
 
   const advance = async () => {
     if (finished) return
@@ -195,6 +195,13 @@ function readDemoProgress(useMocks: boolean) {
   if (!useMocks || typeof window === 'undefined') return 0
   const stored = Number(window.localStorage.getItem('centenario.demo.initiation.completed') ?? '0')
   return Number.isInteger(stored) ? Math.max(0, Math.min(stored, stages.length)) : 0
+}
+
+export function initiationStatus(completed: number, total = stages.length) {
+  if (completed >= total) return 'Hermano activo · Aprendiz'
+  if (completed >= 13) return 'Ceremonia autorizada'
+  if (completed >= 6) return 'Candidato aprobado'
+  return 'Insinuado en tramitación'
 }
 
 function initialInterviews(): InterviewDraft[] { return [

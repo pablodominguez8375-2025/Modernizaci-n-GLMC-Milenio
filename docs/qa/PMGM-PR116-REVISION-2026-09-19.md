@@ -49,6 +49,8 @@ Antes de promover: exigir PMGM CI + PMGM Showcase Demo + Proyecto Centenario QA 
 
 Para Planchas oficiales y Decretos, la QA automatizada debe comprobar además que la interfaz mantiene deshabilitada la carga mientras Gran Secretaría no marque expresamente la declaración de firmas físicas; el cliente API no puede completar esa declaración de manera implícita y el backend conserva su validación independiente.
 
+La Demo no puede mostrar el estado **Ceremonia autorizada** durante los vistos buenos o el control administrativo. Ese estado nace únicamente después de completar **Plancha y programación**; la activación como Aprendiz continúa separada y sólo ocurre tras registrar la ceremonia efectivamente realizada.
+
 
 ## Addendum — alineación con Protocolo de Trámites 2026
 
