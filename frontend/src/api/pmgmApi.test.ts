@@ -232,6 +232,14 @@ it('stores and downloads the same signed PDF in showcase mode', async () => {
   expect(document.content).toBe('Descripción del documento firmado.')
 })
 
+it('loads the physically signed initiation Plancha in the complete showcase circuit', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const file = new File(['%PDF-1.7 plancha iniciación'], 'plancha-iniciacion-firmada.pdf', { type: 'application/pdf' })
+  const document = await client.uploadSecretariatCeremonyAuthorizationPdf('eeeeeeee-2222-2222-2222-222222222222', 'Plancha firmada después de los vistos buenos.', file, true)
+  expect(document).toMatchObject({ documentType: 'plancha', planchaKind: 'ceremony_authorization', relatedCeremonyRequestId: 'eeeeeeee-2222-2222-2222-222222222222' })
+  expect(await client.downloadSecretariatDocumentPdf(document.id)).toBe(file)
+})
+
 it('downloads the protected signed PDF from Gran Secretaría', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('%PDF-1.7', { headers: { 'Content-Type': 'application/pdf' } })); vi.stubGlobal('fetch', fetch)
   const blob = await new PmgmApiClient({ getAccessToken: async () => 'token' }).downloadSecretariatDocumentPdf('doc 1')

@@ -51,6 +51,8 @@ Para Planchas oficiales y Decretos, la QA automatizada debe comprobar además qu
 
 La Demo no puede mostrar el estado **Ceremonia autorizada** durante los vistos buenos o el control administrativo. Ese estado nace únicamente después de completar **Plancha y programación**; la activación como Aprendiz continúa separada y sólo ocurre tras registrar la ceremonia efectivamente realizada.
 
+La etapa **Plancha y programación** no genera documentos. Gran Secretaría debe ingresar una descripción, adjuntar el PDF firmado físicamente y confirmar expresamente las firmas antes de continuar; el botón permanece bloqueado mientras falte cualquiera de esos elementos.
+
 
 ## Addendum — alineación con Protocolo de Trámites 2026
 

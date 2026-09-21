@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import InitiationCircuitPage, { initiationStatus } from './InitiationCircuitPage'
+import InitiationCircuitPage, { initiationPrimaryActionLabel, initiationStatus } from './InitiationCircuitPage'
 import { PmgmApiClient } from './api/pmgmApi'
 
 describe('InitiationCircuitPage', () => {
@@ -9,6 +9,7 @@ describe('InitiationCircuitPage', () => {
     expect(html).toContain('Circuito completo de Iniciación')
     expect(html).toContain('Ingreso del insinuado')
     expect(html).toContain('Plancha y programación')
+    expect(html).not.toContain('Aprobar y emitir Plancha')
     expect(html).toContain('Ceremonia y activación')
     expect(html).toContain('candidato aprobado ≠ ceremonia autorizada ≠ hermano iniciado')
     expect(html).toContain('Registrar etapa y continuar')
@@ -20,5 +21,10 @@ describe('InitiationCircuitPage', () => {
     expect(initiationStatus(12)).toBe('Candidato aprobado')
     expect(initiationStatus(13)).toBe('Ceremonia autorizada')
     expect(initiationStatus(14)).toBe('Hermano activo · Aprendiz')
+  })
+
+  it('reemplaza la emisión automática por la carga de la Plancha firmada', () => {
+    expect(initiationPrimaryActionLabel(12)).toBe('Cargar Plancha firmada y continuar')
+    expect(initiationPrimaryActionLabel(12)).not.toContain('emitir')
   })
 })
