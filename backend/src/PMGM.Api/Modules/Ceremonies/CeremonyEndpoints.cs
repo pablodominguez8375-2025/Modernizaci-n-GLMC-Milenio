@@ -1,5 +1,6 @@
 using System.Data;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
@@ -8,6 +9,7 @@ using PMGM.Api.Modules.CandidateIntake;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Notifications;
@@ -27,6 +29,7 @@ public static class CeremonyEndpoints
             .RequireAuthorization();
 
         group.MapPost("/solicitudes", CreateRequestAsync);
+        group.MapGet("/talleres/{organizationId:guid}/solicitudes-avance", ListAdvancementRequestsAsync);
         group.MapPost("/solicitudes/{requestId:guid}/validaciones/regimen-interior", SetInternalAffairsValidationAsync);
         group.MapPost("/solicitudes/{requestId:guid}/revision-publicacion-insinuado", ReviewCandidatePublicationAsync);
         group.MapPost("/solicitudes/{requestId:guid}/aprobar-publicacion-insinuado", PublishCandidateAsync);
@@ -39,6 +42,25 @@ public static class CeremonyEndpoints
         group.MapGet("/reglas/publicacion-iniciacion", GetInitiationPublicationRuleAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListAdvancementRequestsAsync(
+        Guid organizationId, HttpContext httpContext, PmgmDbContext db,
+        IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanReadLodgeSecretariat(httpContext.User, organizationId)) return Results.Forbid();
+        var items = await db.CeremonyRequests.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId &&
+                (x.CeremonyType == CeremonyCodes.Type.WageIncrease || x.CeremonyType == CeremonyCodes.Type.Exaltation))
+            .OrderByDescending(x => x.CreatedAtUtc).Take(250)
+            .Select(x => new
+            {
+                x.Id, x.OrganizationId, x.CeremonyType, x.MemberId,
+                memberName = x.Member!.Person.FirstNames + " " + x.Member.Person.LastNames,
+                tentativeDate = x.ProposedDate, x.Status, x.Notes, x.DispensationRequested,
+                x.CouncilApprovedDispensation, x.CouncilRecordReference, x.DispensationRequirement, x.CreatedAtUtc
+            }).ToListAsync(cancellationToken);
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> RegisterInitiationAsync(
@@ -110,6 +132,11 @@ public static class CeremonyEndpoints
             return Results.BadRequest(new { message = "El tipo de ceremonia indicado no es válido." });
         }
 
+        if (request.CeremonyType is CeremonyCodes.Type.Affiliation or CeremonyCodes.Type.Incorporation)
+        {
+            return Results.BadRequest(new { message = "Afiliación e Incorporación deben crearse exclusivamente desde un expediente habilitado de Admisiones." });
+        }
+
         if (!access.CanManageOrganization(httpContext.User, request.OrganizationId) &&
             !access.CanEvaluateCeremonies(httpContext.User))
         {
@@ -152,6 +179,25 @@ public static class CeremonyEndpoints
             {
                 return Results.BadRequest(new { message = "El hermano no registra una pertenencia vigente al Taller solicitante." });
             }
+
+            var currentDegree = await db.Members.AsNoTracking()
+                .Where(x => x.Id == request.MemberId.Value)
+                .Select(x => x.CurrentDegree)
+                .SingleAsync(cancellationToken);
+            var expectedDegree = request.CeremonyType == CeremonyCodes.Type.WageIncrease ? "apprentice" : "fellowcraft";
+            if (!string.Equals(currentDegree, expectedDegree, StringComparison.OrdinalIgnoreCase))
+            {
+                var expectedLabel = expectedDegree == "apprentice" ? "Aprendiz" : "Compañero";
+                return Results.BadRequest(new { message = $"La solicitud sólo corresponde a un hermano con grado vigente de {expectedLabel}." });
+            }
+
+            var duplicate = await db.CeremonyRequests.AsNoTracking().AnyAsync(x =>
+                x.OrganizationId == request.OrganizationId && x.MemberId == request.MemberId &&
+                x.CeremonyType == request.CeremonyType &&
+                x.Status != CeremonyCodes.RequestStatus.Rejected && x.Status != CeremonyCodes.RequestStatus.Completed,
+                cancellationToken);
+            if (duplicate)
+                return Results.Conflict(new { message = "Ya existe una solicitud de avance vigente para este hermano y ceremonia." });
         }
 
         var entity = new CeremonyRequest
@@ -162,8 +208,16 @@ public static class CeremonyEndpoints
             CandidatePersonId = request.CandidatePersonId,
             ProposedDate = request.ProposedDate,
             Status = CeremonyCodes.RequestStatus.UnderReview,
-            Notes = request.Notes
+            Notes = request.Notes,
+            DispensationRequested = request.DispensationRequested,
+            CouncilApprovedDispensation = request.DispensationRequested ? request.CouncilApprovedDispensation : null,
+            CouncilRecordReference = request.DispensationRequested ? request.CouncilRecordReference?.Trim() : null,
+            DispensationRequirement = request.DispensationRequested ? request.DispensationRequirement?.Trim() : null
         };
+
+        if (request.DispensationRequested &&
+            (request.CouncilApprovedDispensation != true || string.IsNullOrWhiteSpace(request.CouncilRecordReference) || string.IsNullOrWhiteSpace(request.DispensationRequirement)))
+            return Results.BadRequest(new { message = "La dispensa requiere acuerdo afirmativo de Cámara del Medio, referencia de acta y requisito cuya reducción se solicita." });
 
         db.CeremonyRequests.Add(entity);
         audit.Add(
@@ -177,6 +231,8 @@ public static class CeremonyEndpoints
             {
                 entity.CeremonyType,
                 entity.ProposedDate,
+                entity.DispensationRequested,
+                entity.CouncilRecordReference,
                 entity.Status
             });
 
@@ -190,6 +246,10 @@ public static class CeremonyEndpoints
             entity.MemberId,
             entity.CandidatePersonId,
             entity.ProposedDate,
+            entity.DispensationRequested,
+            entity.CouncilApprovedDispensation,
+            entity.CouncilRecordReference,
+            entity.DispensationRequirement,
             entity.Status
         });
     }
@@ -616,10 +676,11 @@ public static class CeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        var context = await BuildEligibilityContextAsync(requestId, db, cancellationToken);
+        var context = await BuildEligibilityContextAsync(requestId, db, lodgeDb, cancellationToken);
         if (context is null)
         {
             return Results.NotFound();
@@ -638,6 +699,7 @@ public static class CeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -661,15 +723,15 @@ public static class CeremonyEndpoints
             return Results.Conflict(new { message = "La ceremonia ya se encuentra autorizada." });
         }
 
-        var context = await BuildEligibilityContextAsync(requestId, db, cancellationToken);
+        var context = await BuildEligibilityContextAsync(requestId, db, lodgeDb, cancellationToken);
         if (context is null)
         {
             return Results.NotFound();
         }
 
-        if (!context.Decision.CanAuthorize)
+        if (!context.CanAuthorize)
         {
-            ceremony.Status = context.Decision.Status == "observed"
+            ceremony.Status = context.Advancement is { CanProceed: false } || context.Decision.Status == "observed"
                 ? CeremonyCodes.RequestStatus.Observed
                 : CeremonyCodes.RequestStatus.Rejected;
 
@@ -688,6 +750,7 @@ public static class CeremonyEndpoints
                     blockingRequirements = context.Decision.Requirements
                         .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
                         .Select(x => x.Code)
+                        .Concat(context.Advancement?.Requirements.Where(x => !x.Complies).Select(x => $"advancement.{x.Code}") ?? [])
                         .ToArray()
                 });
 
@@ -901,6 +964,7 @@ public static class CeremonyEndpoints
     private static async Task<EligibilityContext?> BuildEligibilityContextAsync(
         Guid requestId,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
         CancellationToken cancellationToken)
     {
         var ceremony = await db.CeremonyRequests
@@ -993,7 +1057,69 @@ public static class CeremonyEndpoints
             grandMaster?.Status,
             evidence);
 
-        return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot, decision, today);
+        AdvancementEligibilityDecision? advancement = null;
+        if (ceremony.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation && ceremony.MemberId is not null)
+        {
+            var sourceDegree = ceremony.CeremonyType == CeremonyCodes.Type.WageIncrease ? "apprentice" : "fellowcraft";
+            var sourceEvent = ceremony.CeremonyType == CeremonyCodes.Type.WageIncrease ? MembershipCodes.DegreeEvent.Initiation : MembershipCodes.DegreeEvent.WageIncrease;
+            var degreeDate = await db.DegreeEvents.AsNoTracking()
+                .Where(x => x.MemberId == ceremony.MemberId && x.OrganizationId == ceremony.OrganizationId && x.EventType == sourceEvent && x.EffectiveDate <= today)
+                .OrderByDescending(x => x.EffectiveDate).Select(x => (DateOnly?)x.EffectiveDate).FirstOrDefaultAsync(cancellationToken);
+            var monthsInDegree = degreeDate is null ? 0 : CompleteMonths(degreeDate.Value, today);
+
+            var meetingRows = await lodgeDb.LodgeAttendanceRecords.AsNoTracking()
+                .Where(x => x.MemberId == ceremony.MemberId && x.Meeting.OrganizationId == ceremony.OrganizationId &&
+                    x.Meeting.Grade == sourceDegree && x.Meeting.Status != LodgeManagementCodes.MeetingStatus.Cancelled &&
+                    (degreeDate == null || x.Meeting.MeetingDate >= degreeDate.Value) && x.Meeting.MeetingDate <= today)
+                .Select(x => new { x.MeetingId, x.Status, x.RecordedAtUtc }).ToListAsync(cancellationToken);
+            var meetingAttendance = meetingRows.GroupBy(x => x.MeetingId)
+                .Count(x => x.OrderByDescending(row => row.RecordedAtUtc).First().Status == LodgeManagementCodes.AttendanceStatus.Present);
+
+            var instructionRows = await lodgeDb.LodgeInstructionAttendanceRecords.AsNoTracking()
+                .Where(x => x.MemberId == ceremony.MemberId && x.InstructionSession.OrganizationId == ceremony.OrganizationId &&
+                    x.InstructionSession.Grade == sourceDegree && x.InstructionSession.Status == LodgeManagementCodes.InstructionStatus.Held &&
+                    (degreeDate == null || x.InstructionSession.InstructionDate >= degreeDate.Value) && x.InstructionSession.InstructionDate <= today)
+                .Select(x => new { x.InstructionSessionId, x.Status, x.RecordedAtUtc }).ToListAsync(cancellationToken);
+            var instructionAttendance = instructionRows.GroupBy(x => x.InstructionSessionId)
+                .Count(x => x.OrderByDescending(row => row.RecordedAtUtc).First().Status == LodgeManagementCodes.InstructionAttendanceStatus.Present);
+            var workPapers = await db.LodgeWorkPapers.AsNoTracking().CountAsync(x =>
+                x.AuthorMemberId == ceremony.MemberId && x.OrganizationId == ceremony.OrganizationId && x.Degree == sourceDegree &&
+                (degreeDate == null || x.PresentedOn >= degreeDate.Value) && x.PresentedOn <= today, cancellationToken);
+
+            var thresholds = await GetAdvancementThresholdsAsync(db, ceremony.CeremonyType, today, cancellationToken);
+            var dispensation = ceremony.DispensationRequested
+                ? new DispensationEvidence(ceremony.CouncilApprovedDispensation == true, ceremony.CouncilRecordReference,
+                    internalAffairs?.Status ?? CeremonyCodes.ValidationStatus.Pending, internalAffairs?.SourceReference)
+                : null;
+            advancement = AdvancementEligibilityPolicy.Evaluate(ceremony.CeremonyType, thresholds,
+                new AdvancementEvidence(meetingAttendance, instructionAttendance, workPapers, monthsInDegree), dispensation);
+        }
+
+        var canAuthorize = decision.CanAuthorize && (advancement?.CanProceed ?? true);
+        return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot, decision, advancement, canAuthorize, today);
+    }
+
+    private static async Task<AdvancementThresholds> GetAdvancementThresholdsAsync(PmgmDbContext db, string ceremonyType, DateOnly asOf, CancellationToken cancellationToken)
+    {
+        var code = ceremonyType == CeremonyCodes.Type.WageIncrease ? CeremonyCodes.Rules.WageIncreaseRequirements : CeremonyCodes.Rules.ExaltationRequirements;
+        var rule = await db.InstitutionalRuleSettings.AsNoTracking().Where(x => x.Code == code && x.Status == "active" && x.EffectiveFrom <= asOf && (x.EffectiveTo == null || x.EffectiveTo >= asOf))
+            .OrderByDescending(x => x.EffectiveFrom).FirstOrDefaultAsync(cancellationToken);
+        var defaults = ceremonyType == CeremonyCodes.Type.WageIncrease
+            ? new AdvancementThresholds(30, 10, 2, $"{code}:default-2026", 24)
+            : new AdvancementThresholds(10, 10, 2, $"{code}:default-2026", 24);
+        if (rule is null) return defaults;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<AdvancementRuleDocument>(rule.Value, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return parsed is null ? defaults : new AdvancementThresholds(parsed.MinimumMeetings, parsed.MinimumInstructions, parsed.MinimumWorkPapers, $"{code}:{rule.EffectiveFrom:yyyy-MM-dd}", parsed.MinimumMonths);
+        }
+        catch (JsonException) { return defaults; }
+    }
+
+    private static int CompleteMonths(DateOnly from, DateOnly to)
+    {
+        var months = (to.Year - from.Year) * 12 + to.Month - from.Month;
+        return Math.Max(0, to.Day < from.Day ? months - 1 : months);
     }
 
     private static object ToEligibilityResponse(EligibilityContext context) => new
@@ -1002,9 +1128,10 @@ public static class CeremonyEndpoints
         context.Request.CeremonyType,
         context.Request.OrganizationId,
         evaluatedAsOf = context.AsOfDate,
-        status = context.Decision.Status,
-        canAuthorize = context.Decision.CanAuthorize,
+        status = context.CanAuthorize ? CeremonyCodes.RequestStatus.Eligible : CeremonyCodes.RequestStatus.Observed,
+        canAuthorize = context.CanAuthorize,
         requirements = context.Decision.Requirements,
+        advancement = context.Advancement,
         evidence = new
         {
             regimenInteriorValidationId = context.InternalAffairs?.Id,
@@ -1078,7 +1205,11 @@ public static class CeremonyEndpoints
         CeremonyValidation? GrandMaster,
         CandidatePublicationSnapshot? Publication,
         CeremonyEligibilityDecision Decision,
+        AdvancementEligibilityDecision? Advancement,
+        bool CanAuthorize,
         DateOnly AsOfDate);
+
+    private sealed record AdvancementRuleDocument(int MinimumMonths, int MinimumMeetings, int MinimumInstructions, int MinimumWorkPapers);
 
     private sealed record CandidatePublicationSnapshot(
         Guid Id,
@@ -1098,7 +1229,11 @@ public sealed record CreateCeremonyRequest(
     Guid? MemberId,
     Guid? CandidatePersonId,
     DateOnly? ProposedDate,
-    string? Notes);
+    string? Notes,
+    bool DispensationRequested = false,
+    bool? CouncilApprovedDispensation = null,
+    string? CouncilRecordReference = null,
+    string? DispensationRequirement = null);
 
 public sealed record CeremonyValidationRequest(
     string Status,

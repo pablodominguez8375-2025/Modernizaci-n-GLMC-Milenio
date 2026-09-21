@@ -62,5 +62,7 @@ public static class CeremonyCodes
     public static class Rules
     {
         public const string InitiationPublicationMinimumDays = "initiation.publication.minimum_days";
+        public const string WageIncreaseRequirements = "advancement.wage_increase.requirements";
+        public const string ExaltationRequirements = "advancement.exaltation.requirements";
     }
 }

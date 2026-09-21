@@ -33,6 +33,11 @@ Si la evidencia incluye capturas con nombres, referencias internas u otra inform
 
 ## Casos obligatorios
 
+Los identificadores de esta tabla pertenecen al catálogo `UAT-RC1`. Por tanto, el
+caso de Biblioteca se referencia de forma canónica como `UAT-RC1-017`. No debe
+confundirse con `UAT-FLUJOS-017`, correspondiente a Afiliación, reintegro,
+traslado e incorporación en `PMGM-QA-003`.
+
 | ID | Área | Verificación |
 | --- | --- | --- |
 | UAT-001 | Identidad | Ingreso OIDC/PKCE y cierre de sesión. |
@@ -51,7 +56,7 @@ Si la evidencia incluye capturas con nombres, referencias internas u otra inform
 | UAT-014 | Gestión Logial | Tenida, acta y docencia limitadas al Taller. |
 | UAT-015 | Documentos | Carga/versionado seguro. |
 | UAT-016 | Documentos | Rechazo de archivo riesgoso o inválido. |
-| UAT-017 | Biblioteca | Acceso por grado/permisos y planchas sólo en Biblioteca. |
+| UAT-RC1-017 | Biblioteca | Acceso por grado/permisos y planchas sólo en Biblioteca. La plantilla JSON conserva temporalmente `UAT-017` por compatibilidad del gate. |
 | UAT-018 | Gran Archivero | Acceso restringido y exclusión de planchas. |
 | UAT-019 | Notificaciones | Recepción, lectura y obligatoriedad. |
 | UAT-020 | Recuperación | Backup, restore y smoke posterior. |

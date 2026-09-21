@@ -22,12 +22,24 @@ describe('showcase role profiles', () => {
     expect(profile.capabilities.canManageTreasuryRegularity).toBe(false)
   })
 
-  it('exposes each administrative and teaching Taller role in the QA switcher model', () => {
-    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
+  it('exposes each administrative Taller role in the QA switcher model', () => {
+    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeOrator'] as const) {
       const profile = getDemoProfile(key)
       expect(profile.accessScope).toBe('organization')
       expect(profile.capabilities.canManageLodgeOperations).toBe(true)
     }
+  })
+
+  it('separates Docencia by the degree assigned to each office', () => {
+    const first = getDemoProfile('lodgeFirstWarden').capabilities
+    const second = getDemoProfile('lodgeSecondWarden').capabilities
+    const past = getDemoProfile('lodgePastMaster').capabilities
+    expect(first.canManageLodgeInstructionSecondDegree).toBe(true)
+    expect(second.canManageLodgeInstructionFirstDegree).toBe(true)
+    expect(past.canManageLodgeInstructionThirdDegree).toBe(true)
+    expect(first.canManageLodgeOperations).not.toBe(true)
+    expect(second.canManageLodgeOperations).not.toBe(true)
+    expect(past.canManageLodgeOperations).not.toBe(true)
   })
 
   it('separates Hospitalaria management from Venerable inspection and approval', () => {
@@ -46,6 +58,15 @@ describe('showcase role profiles', () => {
     const granHospitalaria = getDemoProfile('hospitalaria')
     expect(granHospitalaria.capabilities.canManageHospitalariaRegularity).toBe(true)
     expect(granHospitalaria.capabilities.canReadLodgeHospitalaria).not.toBe(true)
+  })
+
+  it('separates Venerable commission appointment from Secretariat case management', () => {
+    const venerable = getDemoProfile('lodge')
+    const secretaria = getDemoProfile('lodgeSecretary')
+    expect(venerable.capabilities.canAppointAdmissionCommission).toBe(true)
+    expect(venerable.capabilities.canManageLodgeSecretariat).toBe(false)
+    expect(secretaria.capabilities.canManageLodgeSecretariat).toBe(true)
+    expect(secretaria.capabilities.canAppointAdmissionCommission).not.toBe(true)
   })
 
   it('gives the lodge treasurer the monthly-statement capability without Grand Treasury authority', () => {

@@ -29,7 +29,7 @@ Intentar nueva presentación antes de un año: debe bloquearse. Después de un a
 Con Régimen Interior aprobado, Gran Tesorería pendiente, Gran Hospitalaria aprobada y Gran Maestría pendiente, la solicitud debe mostrar que no es autorizable y no debe emitir plancha.
 
 ### UAT-008 — Autorización completa
-Con todos los vistos buenos requeridos conformes, Gran Secretaría debe poder autorizar y generar la plancha desde los datos del expediente, sin redigitación de identidad.
+Con todos los vistos buenos requeridos conformes, Gran Secretaría debe poder registrar la descripción, adjuntar la Plancha en PDF firmado físicamente y confirmar expresamente sus firmas. Sin cualquiera de esos elementos, la carga debe permanecer bloqueada. El sistema no genera el documento.
 
 ### UAT-009 — Afiliación
 Una afiliación sin Carta de Retiro Voluntario verificada debe quedar observada o bloqueada según el flujo definido.
@@ -55,8 +55,16 @@ El cálculo mensual debe admitir cuota normal, excepciones con referencia de pla
 ### UAT-016 — Fondo de Defunción
 Cuando el trámite requiere incorporación o reposiciones, la falta del antecedente correspondiente debe dejar la validación no conforme.
 
+### UAT-FLUJOS-017 — Afiliación, reintegro, traslado e incorporación
+
+**Referencia histórica/corta:** `UAT-017`. El identificador canónico de este catálogo es
+`UAT-FLUJOS-017` para evitar colisión con `UAT-RC1-017` (Biblioteca) del catálogo
+base de aceptación de la release v1.0.0-rc1.
+
+El flujo debe distinguir modalidad de afiliación `simple/con activación` de la clasificación procedimental `estándar/reintegro/traslado`. Reintegro e incorporación requieren comisión de tres Maestros; un traslado sólo puede obviarla mediante dispensa expresa de Cámara del Medio. La decisión de 3.er grado no debe admitir una conclusión de comisión antigua o posterior. La materialización sólo puede ocurrir cuando la Tenida ceremonial correspondiente esté cerrada con Plancha de Gran Secretaría y Extracto de Acta adjuntos, y un reintento no debe crear una segunda pertenencia ni alterar el actor real auditado.
+
 ## Evidencia por ejecución
 Cada UAT debe guardar identificador, commit desplegado, actor/rol, datos sintéticos, resultado esperado, resultado obtenido, evidencia y eventual incidencia asociada.
 
 ## Gate de promoción
-No se promueve a `main` mientras exista un UAT crítico fallido en insinuaciones, autorización de ceremonias, generación de plancha, permisos o trazabilidad histórica.
+No se promueve a `main` mientras exista un UAT crítico fallido en insinuaciones, autorización de ceremonias, carga y vinculación de Plancha firmada, permisos o trazabilidad histórica.

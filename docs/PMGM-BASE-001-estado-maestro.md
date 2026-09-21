@@ -110,6 +110,7 @@ Funciones consolidadas:
 - uso de Gran Templo y salas de Secretaría sujeto a disponibilidad;
 - muro institucional oficial, separado de canales fraternales;
 - trazabilidad de emisión, versiones, destinatarios y lectura cuando corresponda.
+- registro descriptivo y carga del PDF oficial ya firmado físicamente para cada Plancha o Decreto; Gran Secretaría debe declarar expresamente que el archivo contiene las firmas físicas requeridas y esa declaración queda auditada. El sistema no genera ni sustituye el documento firmado, ni valida criptográficamente las firmas. Su descarga queda restringida a perfiles de Gran Secretaría con alcance Orden y auditada.
 
 Una plancha de autorización sólo puede emitirse después de cumplir la matriz institucional de requisitos y obtener los vistos buenos exigidos.
 

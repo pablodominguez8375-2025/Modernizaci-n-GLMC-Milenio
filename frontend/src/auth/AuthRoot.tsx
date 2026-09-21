@@ -1,5 +1,6 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import App from '../App'
+import { createDefaultAdmissionApiClient } from '../api/admissionApi'
 import { LodgeCouncilApiProvider } from '../LodgeCouncilApiContext'
 import { createDefaultBootstrapApiClient } from '../api/bootstrapApi'
 import { createDefaultCalendarApiClient } from '../api/calendarApi'
@@ -23,6 +24,7 @@ function createRuntime() {
     const config = readAuthConfig(import.meta.env, window.location.origin)
     const session = config ? new OidcSession(createUserManager(config)) : null
     const api = createDefaultPmgmApiClient(session?.getAccessToken, session?.invalidate)
+    const admissionApi = createDefaultAdmissionApiClient(session?.getAccessToken, session?.invalidate)
     const bootstrapApi = createDefaultBootstrapApiClient(session?.getAccessToken, session?.invalidate)
     const lodgeApi = createDefaultLodgeApiClient(session?.getAccessToken, session?.invalidate)
     const lodgeCouncilApi = createDefaultLodgeCouncilApiClient(session?.getAccessToken, session?.invalidate)
@@ -36,20 +38,20 @@ function createRuntime() {
     const calendarApi = createDefaultCalendarApiClient(session?.getAccessToken, session?.invalidate)
     const notificationApi = createDefaultNotificationApiClient(session?.getAccessToken, session?.invalidate)
     const candidateIntakeApi = createDefaultCandidateIntakeApiClient(session?.getAccessToken, session?.invalidate)
-    return { session, api, bootstrapApi, lodgeApi, lodgeCouncilApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, candidateIntakeApi, error: '' }
+    return { session, api, admissionApi, bootstrapApi, lodgeApi, lodgeCouncilApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, candidateIntakeApi, error: '' }
   } catch {
-    return { session: null, api: null, bootstrapApi: null, lodgeApi: null, lodgeCouncilApi: null, membershipApi: null, organizationProfileApi: null, reportingApi: null, internalAffairsApi: null, dataQualityCaseApi: null, documentApi: null, grandArchiveApi: null, calendarApi: null, notificationApi: null, candidateIntakeApi: null, error: 'El acceso institucional no está configurado. Contacte a la administración.' }
+    return { session: null, api: null, admissionApi: null, bootstrapApi: null, lodgeApi: null, lodgeCouncilApi: null, membershipApi: null, organizationProfileApi: null, reportingApi: null, internalAffairsApi: null, dataQualityCaseApi: null, documentApi: null, grandArchiveApi: null, calendarApi: null, notificationApi: null, candidateIntakeApi: null, error: 'El acceso institucional no está configurado. Contacte a la administración.' }
   }
 }
 const runtime = createRuntime()
 
 function runtimeReady() {
-  return runtime.api && runtime.bootstrapApi && runtime.lodgeApi && runtime.lodgeCouncilApi && runtime.membershipApi && runtime.organizationProfileApi && runtime.reportingApi && runtime.internalAffairsApi && runtime.dataQualityCaseApi && runtime.documentApi && runtime.grandArchiveApi && runtime.calendarApi && runtime.notificationApi && runtime.candidateIntakeApi
+  return runtime.api && runtime.admissionApi && runtime.bootstrapApi && runtime.lodgeApi && runtime.lodgeCouncilApi && runtime.membershipApi && runtime.organizationProfileApi && runtime.reportingApi && runtime.internalAffairsApi && runtime.dataQualityCaseApi && runtime.documentApi && runtime.grandArchiveApi && runtime.calendarApi && runtime.notificationApi && runtime.candidateIntakeApi
 }
 
 function RuntimeApp({ onLogout }: { onLogout?: () => void }) {
   return <LodgeCouncilApiProvider api={runtime.lodgeCouncilApi!}>
-    <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} candidateIntakeApi={runtime.candidateIntakeApi!} onLogout={onLogout} />
+    <App api={runtime.api!} admissionApi={runtime.admissionApi!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} candidateIntakeApi={runtime.candidateIntakeApi!} onLogout={onLogout} />
   </LodgeCouncilApiProvider>
 }
 

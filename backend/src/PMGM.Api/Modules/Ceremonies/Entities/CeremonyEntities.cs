@@ -17,6 +17,10 @@ public sealed class CeremonyRequest
     public DateOnly? ProposedDate { get; set; }
     public required string Status { get; set; }
     public string? Notes { get; set; }
+    public bool DispensationRequested { get; set; }
+    public bool? CouncilApprovedDispensation { get; set; }
+    public string? CouncilRecordReference { get; set; }
+    public string? DispensationRequirement { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 

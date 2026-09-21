@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { CandidateInterviewResult, CandidatePublicationWorkflowResponse, FinalBallotRound, PmgmApiClient } from './api/pmgmApi'
+import type { CandidateInterviewResult, CandidatePublicationWorkflowResponse, FinalBallotRound, PmgmApiClient, SecretariatDocument } from './api/pmgmApi'
 import type { DemoProfileKey } from './demoProfiles'
 import './initiationCircuit.css'
 import './initiationDeliberation.css'
@@ -61,11 +61,15 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
   const [initiationRequestSource, setInitiationRequestSource] = useState('SOL-INI-DEMO-2026-001')
   const [regimenSource, setRegimenSource] = useState('ACTA-RI-DEMO-2026-023')
   const [regimenNotes, setRegimenNotes] = useState('Procedimiento, documentos, tenidas, asistencia y balotaje revisados conforme.')
+  const [authorizationFile, setAuthorizationFile] = useState<File | null>(null)
+  const [authorizationDescription, setAuthorizationDescription] = useState('Plancha de Autorización firmada físicamente por las autoridades responsables.')
+  const [authorizationSignaturesConfirmed, setAuthorizationSignaturesConfirmed] = useState(false)
+  const [authorizationDocument, setAuthorizationDocument] = useState<SecretariatDocument | null>(null)
   const current = stages[selected]
   const canDecideCurrent = !demoProfileKey || demoProfileKey === 'grandLodge' || demoProfileKey === current.profile
   const finished = completed === stages.length
   const progress = Math.round((completed / stages.length) * 100)
-  const status = useMemo(() => finished ? 'Hermano activo · Aprendiz' : completed >= 10 ? 'Ceremonia autorizada' : completed >= 6 ? 'Candidato aprobado' : 'Insinuado en tramitación', [completed, finished])
+  const status = useMemo(() => initiationStatus(completed, stages.length), [completed])
 
   const advance = async () => {
     if (finished) return
@@ -111,6 +115,12 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
       }
       if (completed === 7) {
         await api.setCeremonyInternalAffairsValidation(demoRequestId, { status: 'approved', sourceReference: regimenSource, notes: regimenNotes })
+      }
+      if (completed === 12) {
+        if (!authorizationFile) throw new Error('Debe adjuntar la Plancha de Autorización firmada en PDF.')
+        if (!authorizationDescription.trim()) throw new Error('Debe describir la Plancha firmada.')
+        const document = await api.uploadSecretariatCeremonyAuthorizationPdf(demoRequestId, authorizationDescription.trim(), authorizationFile, authorizationSignaturesConfirmed)
+        setAuthorizationDocument(document)
       }
       if (completed === stages.length - 1) await api.registerInitiation(demoRequestId, '2026-09-12', 'ACTA-INI-DEMO-2026-001')
     const stage = stages[completed]
@@ -180,9 +190,9 @@ export default function InitiationCircuitPage({ api, demoProfileKey }: { api: Pm
         {selected === 5 && <div className="interview-package"><div className="initiation-rule-check"><strong>Balotaje anónimo con escrutinio agregado</strong><span>El extracto 2026 admite primer, segundo y tercer trámite. El sistema nunca vincula una balota con una persona.</span></div><div className="initiation-fields"><label>Fecha del balotaje<input type="date" value={ballotDate} onChange={event => setBallotDate(event.target.value)} /></label><label>Resultado consignado<select value={ballotApproved ? 'favorable' : 'desfavorable'} onChange={event => setBallotApproved(event.target.value === 'favorable')}><option value="favorable">Favorable</option><option value="desfavorable">Desfavorable</option></select></label><label className="interview-summary">Referencia del extracto de acta<input required maxLength={240} value={ballotSource} onChange={event => setBallotSource(event.target.value)} /></label></div><div className="interview-list">{ballotRounds.map(round => <article className="interview-card" key={round.procedureNumber}><header><strong>{procedureLabel(round.procedureNumber)} trámite</strong><button type="button" disabled={ballotRounds.length === 1} onClick={() => setBallotRounds(items => items.filter(item => item.procedureNumber !== round.procedureNumber))}>Quitar</button></header><div className="initiation-fields"><label>Personas habilitadas<input type="number" min="1" value={round.eligibleVoters} onChange={event => updateBallotRound(round.procedureNumber, { eligibleVoters: Number(event.target.value) })} /></label><label>Balotas blancas<input type="number" min="0" value={round.whiteBallots} onChange={event => updateBallotRound(round.procedureNumber, { whiteBallots: Number(event.target.value) })} /></label><label>Balotas negras<input type="number" min="0" value={round.blackBallots} onChange={event => updateBallotRound(round.procedureNumber, { blackBallots: Number(event.target.value) })} /></label></div><p className="initiation-vote-summary"><strong>{round.whiteBallots + round.blackBallots === round.eligibleVoters && round.eligibleVoters > 0 ? 'Escrutinio consistente' : 'Revise el escrutinio'}</strong><span>{round.whiteBallots} blancas · {round.blackBallots} negras · {round.eligibleVoters} habilitadas</span></p></article>)}</div><button type="button" className="regularity-secondary" disabled={ballotRounds.length >= 3} onClick={addBallotRound}>Agregar trámite</button></div>}
         {selected === 6 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Mismo expediente, sin redigitación</strong><span>La identidad del candidato, Taller, entrevistas, publicación y votaciones se reutilizan desde INI-DEMO-2026-001.</span></div><div className="initiation-fields"><label>Candidato<input value="Persona Demostrativa Centenario" readOnly /></label><label>Taller solicitante<input value="Taller Demostrativo Nº 23" readOnly /></label><label>Fecha de solicitud<input type="date" value={requestSubmissionDate} onChange={event => setRequestSubmissionDate(event.target.value)} /></label><label>Fecha propuesta de ceremonia<input type="date" min={requestSubmissionDate} value={proposedCeremonyDate} onChange={event => setProposedCeremonyDate(event.target.value)} /></label><label>Secretaría responsable<input required maxLength={240} value={secretaryDisplayName} onChange={event => setSecretaryDisplayName(event.target.value)} /></label><label>Referencia documental<input required maxLength={240} value={initiationRequestSource} onChange={event => setInitiationRequestSource(event.target.value)} /></label></div><label className="interview-summary"><input type="checkbox" checked={venerableApproval} onChange={event => setVenerableApproval(event.target.checked)} /> Confirmación del Venerable Maestro para enviar la solicitud formal</label><p className="initiation-vote-summary"><strong>{venerableApproval && secretaryDisplayName.trim() && initiationRequestSource.trim() ? 'Solicitud completa para envío' : 'Faltan confirmaciones obligatorias'}</strong><span>El envío no crea otra ficha ni otro candidato.</span></p></div>}
         {selected === 7 && <div className="initiation-deliberation"><div className="initiation-rule-check"><strong>Control de Régimen Interior</strong><span>El Taller declara conformes el procedimiento, documentos, tenidas, asistencia y balotaje antes de continuar con Tesorería.</span></div><div className="initiation-fields"><label>Referencia del acuerdo<input required maxLength={240} value={regimenSource} onChange={event => setRegimenSource(event.target.value)} /></label><label className="interview-summary">Observaciones de revisión<textarea maxLength={1000} rows={3} value={regimenNotes} onChange={event => setRegimenNotes(event.target.value)} /></label></div><p className="initiation-vote-summary"><strong>{regimenSource.trim() ? 'Antecedentes listos para aprobar' : 'Falta referencia documental'}</strong><span>Resultado: aprobación habilitante de Régimen Interior.</span></p></div>}
-        {selected === 12 && <div className="initiation-document"><span>PLANCHA</span><strong>{completed > 12 ? 'AUT-CER-DEMO-2026-001' : 'Se genera únicamente tras el visto bueno'}</strong><small>Permanece vinculada al expediente y a las validaciones congeladas.</small></div>}
+        {selected === 12 && <div className="initiation-document"><span>PLANCHA DE AUTORIZACIÓN</span><strong>{authorizationDocument?.documentCode ?? 'PDF firmado pendiente de carga'}</strong><small>El sistema no genera la Plancha. Gran Secretaría registra el PDF firmado físicamente después de todos los vistos buenos.</small>{!authorizationDocument && <div className="interview-attachments"><label>Descripción o referencia<input required maxLength={4000} value={authorizationDescription} onChange={event => setAuthorizationDescription(event.target.value)} /></label><label>Plancha firmada en PDF<input type="file" accept=".pdf,application/pdf" onChange={event => setAuthorizationFile(event.target.files?.[0] ?? null)} /></label><label><input type="checkbox" checked={authorizationSignaturesConfirmed} onChange={event => setAuthorizationSignaturesConfirmed(event.target.checked)} /> Confirmo que el PDF contiene las firmas físicas requeridas.</label></div>}</div>}
         {selected === 13 && <div className="initiation-member"><strong>{finished ? 'Aprendiz activado' : 'Activación todavía bloqueada'}</strong><span>{finished ? 'Persona Demostrativa Centenario · Miembro activo · 1.er grado' : 'La autorización no convierte por sí sola al candidato en hermano.'}</span></div>}
-        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent} onClick={advance}>{working ? 'Registrando…' : completed === 1 ? 'Registrar deliberación inicial' : completed === 2 ? (publication ? 'Verificar plazo y continuar' : 'Aprobar y publicar insinuado') : completed === 3 ? 'Validar entrevistas y antecedentes' : completed === 4 ? 'Registrar revisión de tercer grado' : completed === 5 ? 'Registrar balotaje definitivo' : completed === 6 ? 'Enviar solicitud formal de Iniciación' : completed === 7 ? 'Aprobar Régimen Interior' : completed === 12 ? 'Aprobar y emitir Plancha' : completed === 13 ? 'Registrar ceremonia y activar Aprendiz' : 'Registrar etapa y continuar'}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
+        <div className="initiation-actions"><button type="button" className="regularity-primary" disabled={working || finished || selected !== completed || decision === 'rejected' || !canDecideCurrent || (completed === 12 && (!authorizationFile || !authorizationDescription.trim() || !authorizationSignaturesConfirmed))} onClick={advance}>{working ? 'Registrando…' : initiationPrimaryActionLabel(completed, Boolean(publication))}</button>{selected === completed && !finished && completed < 13 && <><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={observe}>Observar</button><button type="button" className="regularity-secondary" disabled={working || !canDecideCurrent} onClick={reject}>Rechazar</button></>}<button type="button" className="regularity-secondary" disabled={working} onClick={restart}>Reiniciar caso de prueba</button></div>
       </section>
     </div>
 
@@ -195,6 +205,26 @@ function readDemoProgress(useMocks: boolean) {
   if (!useMocks || typeof window === 'undefined') return 0
   const stored = Number(window.localStorage.getItem('centenario.demo.initiation.completed') ?? '0')
   return Number.isInteger(stored) ? Math.max(0, Math.min(stored, stages.length)) : 0
+}
+
+export function initiationStatus(completed: number, total = stages.length) {
+  if (completed >= total) return 'Hermano activo · Aprendiz'
+  if (completed >= 13) return 'Ceremonia autorizada'
+  if (completed >= 6) return 'Candidato aprobado'
+  return 'Insinuado en tramitación'
+}
+
+export function initiationPrimaryActionLabel(completed: number, publicationAvailable = false) {
+  if (completed === 1) return 'Registrar deliberación inicial'
+  if (completed === 2) return publicationAvailable ? 'Verificar plazo y continuar' : 'Aprobar y publicar insinuado'
+  if (completed === 3) return 'Validar entrevistas y antecedentes'
+  if (completed === 4) return 'Registrar revisión de tercer grado'
+  if (completed === 5) return 'Registrar balotaje definitivo'
+  if (completed === 6) return 'Enviar solicitud formal de Iniciación'
+  if (completed === 7) return 'Aprobar Régimen Interior'
+  if (completed === 12) return 'Cargar Plancha firmada y continuar'
+  if (completed === 13) return 'Registrar ceremonia y activar Aprendiz'
+  return 'Registrar etapa y continuar'
 }
 
 function initialInterviews(): InterviewDraft[] { return [

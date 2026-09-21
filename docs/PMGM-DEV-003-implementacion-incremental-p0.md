@@ -21,7 +21,7 @@
 - reglas por vigencia.
 
 ## Incremento 4 — Documentos
-- generación de plancha;
+- carga y vinculación de Plancha firmada físicamente;
 - numeración;
 - vínculo al expediente;
 - cierre posterior de ceremonia.

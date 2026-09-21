@@ -141,7 +141,9 @@ it('demo mode requires Extracto and Gran Secretaría authorization before closin
   expect(ceremonial).toBeDefined()
 
   const authorizations = await client.getCeremonyAuthorizationOptions('23232323-2323-2323-2323-232323232323')
-  expect(authorizations.items).toHaveLength(1)
+  const initiationAuthorization = authorizations.items.find(item => item.ceremonyType === 'initiation')
+  expect(initiationAuthorization).toBeDefined()
+  expect(authorizations.items.some(item => item.ceremonyType === 'affiliation')).toBe(true)
 
   await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', ceremonial!.id, {
     extractDocumentVersionId: 'extracto-demo-ceremonial',
@@ -150,7 +152,7 @@ it('demo mode requires Extracto and Gran Secretaría authorization before closin
 
   await client.upsertSecretariatRecord('23232323-2323-2323-2323-232323232323', 'tenida', ceremonial!.id, {
     extractDocumentVersionId: 'extracto-demo-ceremonial',
-    ceremonyAuthorizationDocumentId: authorizations.items[0].id,
+    ceremonyAuthorizationDocumentId: initiationAuthorization!.id,
   })
   const closed = await client.closeMeeting(ceremonial!.id)
   expect(closed.status).toBe('closed')
@@ -158,9 +160,54 @@ it('demo mode requires Extracto and Gran Secretaría authorization before closin
 
 it('registers a single pending lodge withdrawal and preserves the institutional review boundary', async () => {
   const client = new LodgeApiClient({ useMocks: true })
+  const initialTotal = (await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total
   const member = (await client.getMemberOptions('23232323-2323-2323-2323-232323232323')).items[0]
   const created = await client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'voluntary', requestedEffectiveDate: '2026-09-30', reason: 'Solicitud voluntaria demostrativa.', evidenceReference: 'CARTA-QA-001' })
   expect(created.status).toBe('pending')
-  expect((await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total).toBe(1)
+  expect((await client.getWithdrawals('23232323-2323-2323-2323-232323232323')).total).toBe(initialTotal + 1)
   await expect(client.createWithdrawal({ memberId: member.id, organizationId: '23232323-2323-2323-2323-232323232323', withdrawalType: 'forced', requestedEffectiveDate: '2026-10-01', reason: 'Segunda solicitud demostrativa.', evidenceReference: 'CARTA-QA-002' })).rejects.toThrow('pendiente')
+})
+
+it('keeps work papers private until Secretariat explicitly requests Library publication', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const organizationId = '23232323-2323-2323-2323-232323232323'
+  const member = (await client.getMemberOptions(organizationId)).items[0]
+  const paper = await client.createWorkPaper(organizationId, {
+    authorMemberId: member.id, documentId: crypto.randomUUID(), documentVersionId: crypto.randomUUID(),
+    meetingId: null, title: 'Plancha QA', topic: 'Simbolismo', degree: 'apprentice',
+    presentedOn: '2026-09-20', shortDescription: 'Descripción ficticia para Biblioteca.',
+  })
+  expect(paper.status).toBe('private')
+  await client.requestWorkPaperLibraryPublication(paper.id)
+  const stored = (await client.getWorkPapers(organizationId)).items.find(item => item.id === paper.id)
+  expect(stored?.status).toBe('library_requested')
+  expect(stored?.publishedAtUtc).toBeNull()
+})
+
+it('creates advancement requests, preserves dispensation evidence and exposes calculated eligibility', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const organizationId = '23232323-2323-2323-2323-232323232323'
+  const member = (await client.getMemberOptions(organizationId)).items[0]
+  const created = await client.createAdvancementRequest(organizationId, {
+    ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-20',
+    dispensationRequested: true, councilApprovedDispensation: true,
+    councilRecordReference: 'ACTA-QA-001', dispensationRequirement: 'Asistencia: reducción dentro del 50%',
+  })
+  expect(created.status).toBe('under_review')
+  expect(created.tentativeDate).toBe('2026-10-20')
+  expect(created.councilRecordReference).toBe('ACTA-QA-001')
+  const eligibility = await client.getAdvancementEligibility(created.id)
+  expect(eligibility.advancement?.requirements.map(item => item.code)).toEqual([
+    'months_in_degree', 'meeting_attendance', 'instruction_attendance', 'work_papers',
+  ])
+  await expect(client.createAdvancementRequest(organizationId, { ceremonyType: 'wage_increase', memberId: member.id, tentativeDate: '2026-10-21' })).rejects.toThrow('Ya existe')
+})
+
+it('does not schedule a ceremonial meeting without a matching authorization plancha', async () => {
+  const client = new LodgeApiClient({ useMocks: true })
+  const organizationId = '23232323-2323-2323-2323-232323232323'
+  await expect(client.createMeeting(organizationId, { meetingDate: '2026-09-18', meetingType: 'solemn', grade: 'apprentice', ceremonyType: 'initiation', modality: 'in_person', locationReference: 'Templo' })).rejects.toThrow('Plancha de Autorización')
+  const authorization = (await client.getCeremonyAuthorizationOptions(organizationId)).items.find(item => item.ceremonyType === 'initiation')!
+  const meeting = await client.createMeeting(organizationId, { meetingDate: authorization.proposedDate!, meetingType: 'solemn', grade: 'apprentice', ceremonyType: 'initiation', modality: 'in_person', locationReference: 'Templo', ceremonyAuthorizationDocumentId: authorization.id })
+  expect(meeting.status).toBe('scheduled')
 })

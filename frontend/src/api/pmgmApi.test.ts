@@ -106,13 +106,15 @@ it('posts Gran Secretaria reservations with an optional ceremony link', async ()
   expect(url).toBe('/api/gran-secretaria/reservas'); expect(options.method).toBe('POST'); expect(options.headers.get('Content-Type')).toBe('application/json'); expect(JSON.parse(options.body as string)).toMatchObject({ organizationId: 'o1', ceremonyRequestId: 'c1', spaceId: 's1' })
 })
 
-it('uses the minimized Gran Secretaria ceremony queue and formal authorization endpoints', async () => {
+it('uses the minimized Gran Secretaria queue and uploads the physically signed PDF', async () => {
   const queue = { total: 1, items: [{ id: 'c1', organizationId: 'o1', organizationName: 'Taller 1', organizationNumber: '1', ceremonyType: 'wage_increase', proposedDate: '2026-09-18', status: 'authorized', formalAuthorizationIssued: false, spaceReservationId: 'r1', spaceName: 'Templo', reservationStartsAtUtc: '2026-09-18T22:00:00Z', reservationEndsAtUtc: '2026-09-19T01:00:00Z', createdAtUtc: '2026-09-08T12:00:00Z' }] }
   const document = { id: 'd1', documentType: 'ceremony_authorization', documentCode: 'AUT-CER-1', title: 'Autorización', content: 'Contenido', organizationId: 'o1', relatedCeremonyRequestId: 'c1', spaceReservationId: 'r1', status: 'issued', issuedAtUtc: '2026-09-08T12:00:00Z', issuedBySubject: 'subject' }
   const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(queue))).mockResolvedValueOnce(new Response(JSON.stringify(document))); vi.stubGlobal('fetch', fetch)
   const client = new PmgmApiClient({ getAccessToken: async () => 'token' })
   const response = await client.getSecretariatCeremonyQueue(); expect(response.items[0].formalAuthorizationIssued).toBe(false); expect(fetch.mock.calls[0][0]).toBe('/api/institutional/gran-secretaria/ceremonias-autorizadas')
-  await client.issueSecretariatCeremonyAuthorization('c1', 'r1'); const [url, options] = fetch.mock.calls[1]; expect(url).toBe('/api/gran-secretaria/ceremonias/c1/autorizacion'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toEqual({ spaceReservationId: 'r1' })
+  const file=new File(['%PDF-1.7'], 'plancha-firmada.pdf',{type:'application/pdf'})
+  await expect(client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file,false)).rejects.toThrow('confirmar')
+  await client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file,true); const [url, options] = fetch.mock.calls[1]; expect(url).toBe('/api/gran-secretaria/ceremonias/c1/autorizacion-pdf'); expect(options.method).toBe('PUT'); expect(options.body).toBe(file); expect(decodeURIComponent(options.headers.get('X-Document-Description'))).toBe('Firmada físicamente'); expect(options.headers.get('X-Physical-Signatures-Confirmed')).toBe('true')
 })
 
 it('never sends an institutional request without a token', async () => {
@@ -218,4 +220,31 @@ it('posts formal initiation submission without re-entering candidate identity', 
   await new PmgmApiClient({ getAccessToken: async () => 'token' }).submitInitiationRequest('c1', { submissionDate: '2026-10-13', proposedCeremonyDate: '2026-11-07', venerableApproval: true, secretaryDisplayName: 'Secretaría', sourceReference: 'SOL-1' })
   const [url, options] = fetch.mock.calls[0]
   expect(url).toBe('/api/insinuados/solicitudes/c1/solicitud-iniciacion'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ proposedCeremonyDate: '2026-11-07', venerableApproval: true, sourceReference: 'SOL-1' })
+})
+
+it('stores and downloads the same signed PDF in showcase mode', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const file=new File(['%PDF-1.7 demo'],'plancha-firmada.pdf',{type:'application/pdf'})
+  await expect(client.uploadSecretariatDocumentPdf({ documentType: 'plancha', planchaKind: 'formal_communication', title: 'Plancha QA', content: 'Descripción del documento firmado.' },file,false)).rejects.toThrow('confirmar')
+  const document = await client.uploadSecretariatDocumentPdf({ documentType: 'plancha', planchaKind: 'formal_communication', title: 'Plancha QA', content: 'Descripción del documento firmado.' },file,true)
+  const blob = await client.downloadSecretariatDocumentPdf(document.id)
+  expect(blob).toBe(file)
+  expect(document.content).toBe('Descripción del documento firmado.')
+})
+
+it('loads the physically signed initiation Plancha in the complete showcase circuit', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const file = new File(['%PDF-1.7 plancha iniciación'], 'plancha-iniciacion-firmada.pdf', { type: 'application/pdf' })
+  const document = await client.uploadSecretariatCeremonyAuthorizationPdf('eeeeeeee-2222-2222-2222-222222222222', 'Plancha firmada después de los vistos buenos.', file, true)
+  expect(document).toMatchObject({ documentType: 'plancha', planchaKind: 'ceremony_authorization', relatedCeremonyRequestId: 'eeeeeeee-2222-2222-2222-222222222222' })
+  expect(await client.downloadSecretariatDocumentPdf(document.id)).toBe(file)
+})
+
+it('downloads the protected signed PDF from Gran Secretaría', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response('%PDF-1.7', { headers: { 'Content-Type': 'application/pdf' } })); vi.stubGlobal('fetch', fetch)
+  const blob = await new PmgmApiClient({ getAccessToken: async () => 'token' }).downloadSecretariatDocumentPdf('doc 1')
+  const [url, options] = fetch.mock.calls[0]
+  expect(url).toBe('/api/gran-secretaria/documentos/doc%201/pdf')
+  expect(options.headers.get('Authorization')).toBe('Bearer token')
+  expect(blob.type).toBe('application/pdf')
 })

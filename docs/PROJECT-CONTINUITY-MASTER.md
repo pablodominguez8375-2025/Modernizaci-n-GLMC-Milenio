@@ -1,5 +1,29 @@
 # Proyecto Centenario — Registro maestro de continuidad
 
+## Corte activo Secretaría — 20-09-2026
+
+- PR #116 permanece `draft` y no debe fusionarse todavía.
+- La aceptación funcional del circuito de insinuación se conserva; la fecha tentativa sólo se captura al solicitar Plancha de Autorización.
+- Secretaría quedó organizada por función y el retiro aprobado exige las cuatro firmas de Venerable Maestro, Tesorería, Orador y Secretaría antes de materializarse.
+- Planchas de Trabajo pasan a expediente independiente: múltiples por hermano, historial, grado, fecha, tema y vínculo opcional a Tenida no ceremonial.
+- Una plancha nace privada. Secretaría puede solicitar Biblioteca, pero no autorizar ni publicar por sí sola; Gran Archivero queda fuera de este flujo.
+- `srv01` y QA físico permanecen diferidos por instrucción del Sponsor, no aprobados ni eliminados. Demo Pages e instalable deben salir del mismo SHA candidato.
+- Secretaría inicia directamente expedientes de Aumento de Salario y Exaltación con hermano, tipo, antecedentes y fecha sólo tentativa. El backend controla grado vigente y bloquea expedientes activos duplicados.
+- Una Tenida ceremonial no puede programarse sin Plancha de Autorización emitida por Gran Secretaría y coincidente en Taller, tipo y fecha. Desde la Plancha se crea la Tenida y se vincula automáticamente la autorización.
+- La elegibilidad de Aumento de Salario y Exaltación se calcula con evidencias reales del grado de origen y reglas institucionales versionadas: 24 meses continuados, asistencias a Tenidas, asistencias a instrucciones y dos Planchas de Trabajo. Para Aumento rigen 30 Tenidas y 10 instrucciones de 1.er grado; para Exaltación, 10 Tenidas y 10 instrucciones de 2.º grado.
+- Una dispensa exige acuerdo afirmativo de Cámara del Medio, acta, identificación del requisito y validación de Régimen Interior. Nunca puede reducir un requisito en más de 50%; Gran Secretaría no puede autorizar mientras los controles ordinarios o la dispensa permanezcan incumplidos.
+- Al cerrar una Tenida de Aumento de Salario o Exaltación ya realizada, Secretaría debe contar con Extracto de Acta y Plancha de Autorización emitida por Gran Secretaría para el mismo hermano, Taller, tipo y fecha. El cierre materializa automáticamente el nuevo grado, registra el hito de grado con sus evidencias y completa la solicitud ceremonial.
+- La materialización es idempotente y reconciliable: repetir el cierre no duplica el hito ni las auditorías. Un grado previo incompatible o un hito contradictorio bloquea el cierre para revisión por Régimen Interior.
+- Corte funcional validado: PR #116 HEAD `41f0d4df66e062a4913f66b59c88efbe1c44745d`; PMGM CI #1372, Showcase Demo/Pages #598 y QA srv01 Installable #236 en `SUCCESS`.
+- Artefacto instalable exact-head: ID `10612825318`, digest `sha256:641940edfd6f204ec23b340bb7336e5b6e0c05179f3a083f96dfd2c824042a91`.
+- PR #116 continúa `draft` y no fusionado. `dev` permanece en `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`; `main`, en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` físico sigue diferido/no validado.
+- Drive incorporó tres fuentes institucionales nuevas: guía de uso del logotipo GLMCh, formato de papelería y guía SENADIS de documentos accesibles. El corte siguiente alinea paleta y parámetros con los colores oficiales, adopta reglas de accesibilidad y deja expresamente pendiente el archivo gráfico oficial —no se extrae una captura del manual ni se redibuja el isotipo—. Contrato: `docs/PMGM-UI-002-identidad-accesibilidad-institucional.md`.
+- Aclaración funcional del Product Owner: las Planchas oficiales y Decretos no se generan en el sistema. Gran Secretaría registra tipo, título y descripción, confirma bajo su responsabilidad operativa que el PDF contiene las firmas físicas requeridas y carga ese archivo. El sistema conserva, protege, permite descargar y audita el PDF y la declaración del operador; no realiza validación criptográfica ni sustituye la revisión material de las firmas. La Demo reproduce el mismo circuito con archivos ficticios.
+- Resguardo de arquitectura: se eliminaron los métodos heredados no publicados que construían documentos o autorizaciones desde JSON sin PDF. Sólo permanecen las rutas de carga del PDF firmado; una prueba HTTP bloquea la reaparición de los contratos históricos sin archivo.
+- Resguardo documental: los requisitos canónicos, plan P0, brechas y UAT quedaron alineados con la misma regla. CI ejecuta `tests/official_documents_gate.py` para impedir que vuelva a documentarse generación interna de Planchas oficiales o Decretos.
+- Resguardo de permisos HTTP: carga, consulta y descarga de documentos oficiales exigen simultáneamente el rol Gran Secretaría (o administración de Gran Logia) y alcance Orden. Secretaría del Taller, Régimen Interior y Gran Secretaría sin alcance Orden reciben `403`; la prueba de integración verifica esas fronteras.
+- Corte funcional validado en `e4b30d1a9a1507275ca45a6ae4fc7cbffaf9b456`: PMGM CI #1380, Showcase Demo/Pages #606 y QA srv01 Installable #244 en `SUCCESS`. Artefacto exact-head ID `10619081026`, digest `sha256:6da4df2fa1a37a93cf01129aead9caec777146e1be811f656a4346312f7f82ac`. PR #116 sigue `draft`, sin fusión; `srv01` físico continúa diferido.
+
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
 **Fuente de código y decisiones:** rama de desarrollo del proyecto

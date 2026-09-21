@@ -63,7 +63,8 @@ public sealed class PostgreSqlHttpWorkflowTests
             {
                 PersonId = person.Id,
                 Person = person,
-                InstitutionalNumber = $"CI-{Guid.NewGuid():N}"
+                InstitutionalNumber = $"CI-{Guid.NewGuid():N}",
+                CurrentDegree = "apprentice"
             };
             var membership = new Membership
             {
@@ -75,6 +76,15 @@ public sealed class PostgreSqlHttpWorkflowTests
                 StartDate = new DateOnly(2026, 1, 1),
                 Status = MembershipCodes.MembershipStatus.Active
             };
+
+            // Este caso verifica el circuito HTTP y sus vistos buenos. La política con
+            // mínimos 2026 se prueba por separado; aquí se usa una versión institucional
+            // vigente con mínimos cero para aislar la autorización end-to-end.
+            var advancementRule = await db.InstitutionalRuleSettings.SingleAsync(
+                x => x.Code == CeremonyCodes.Rules.WageIncreaseRequirements,
+                cancellationToken);
+            advancementRule.Value = "{\"minimumMonths\":0,\"minimumMeetings\":0,\"minimumInstructions\":0,\"minimumWorkPapers\":0}";
+            advancementRule.SourceReference = "CI-HTTP-ADVANCEMENT-RULE";
 
             db.AddRange(organization, person, member, membership);
             await db.SaveChangesAsync(cancellationToken);
@@ -285,13 +295,15 @@ internal sealed class TestAuthenticationHandler(
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        var requestedRole = Context.Request.Headers["X-Test-Role"].FirstOrDefault();
+        var requestedScope = Context.Request.Headers["X-Test-Scope"].FirstOrDefault();
         var claims = new[]
         {
             new Claim("sub", "ci-http-admin"),
             new Claim(ClaimTypes.NameIdentifier, "ci-http-admin"),
             new Claim(ClaimTypes.Name, "CI HTTP Admin"),
-            new Claim(InstitutionalClaims.Scope, "order"),
-            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin)
+            new Claim(InstitutionalClaims.Scope, string.IsNullOrWhiteSpace(requestedScope) ? "order" : requestedScope),
+            new Claim(InstitutionalClaims.Role, string.IsNullOrWhiteSpace(requestedRole) ? InstitutionalRoles.GranLogiaAdmin : requestedRole)
         };
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);

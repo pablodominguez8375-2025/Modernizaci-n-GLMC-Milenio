@@ -47,12 +47,14 @@ public static class SecretariatOperationsCodes
     public static class CeremonyType
     {
         public const string Initiation = "initiation";
+        public const string Affiliation = "affiliation";
         public const string WageIncrease = "wage_increase";
         public const string Exaltation = "exaltation";
+        public const string Incorporation = "incorporation";
         public static bool IsValid(string? value)
-            => value is null or Initiation or WageIncrease or Exaltation;
+            => value is null or Initiation or Affiliation or WageIncrease or Exaltation or Incorporation;
         public static bool IsCeremonial(string? value)
-            => value is Initiation or WageIncrease or Exaltation;
+            => value is Initiation or Affiliation or WageIncrease or Exaltation or Incorporation;
     }
 
     public static class Correspondence

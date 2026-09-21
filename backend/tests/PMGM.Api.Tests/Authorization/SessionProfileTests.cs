@@ -66,6 +66,22 @@ public sealed class SessionProfileTests
     }
 
     [Fact]
+    public void Venerable_ReceivesCommissionCapabilityWithoutSecretariatManagement()
+    {
+        var organizationId = Guid.NewGuid();
+        var principal = Principal(
+            new Claim(ClaimTypes.Name, "Venerable Maestro"),
+            new Claim(InstitutionalClaims.Organization, organizationId.ToString()),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable));
+
+        var profile = SessionProfileBuilder.Build(principal, new InstitutionalAccessService());
+
+        Assert.True(profile.Capabilities.CanReadLodgeSecretariat);
+        Assert.False(profile.Capabilities.CanManageLodgeSecretariat);
+        Assert.True(profile.Capabilities.CanAppointAdmissionCommission);
+    }
+
+    [Fact]
     public void GranTesoreria_DoesNotGainCeremonyReviewCapabilityFromOrderScope()
     {
         var principal = Principal(
@@ -78,6 +94,53 @@ public sealed class SessionProfileTests
         Assert.False(profile.Capabilities.CanReviewCeremonies);
         Assert.False(profile.Capabilities.CanEvaluateCeremonies);
         Assert.False(profile.Capabilities.CanAuthorizeCeremonies);
+    }
+
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerSegundoVigilante, true, false, false)]
+    [InlineData(InstitutionalRoles.TallerPrimerVigilante, false, true, false)]
+    [InlineData(InstitutionalRoles.TallerInmediatoExVenerable, false, false, true)]
+    public void DocenciaCapabilities_AreExposedOnlyForTheOfficeDegree(
+        string role,
+        bool firstDegree,
+        bool secondDegree,
+        bool thirdDegree)
+    {
+        var organizationId = Guid.NewGuid();
+        var principal = Principal(
+            new Claim(InstitutionalClaims.Organization, organizationId.ToString()),
+            new Claim(InstitutionalClaims.Role, role));
+
+        var profile = SessionProfileBuilder.Build(principal, new InstitutionalAccessService());
+
+        Assert.Equal(firstDegree, profile.Capabilities.CanManageLodgeInstructionFirstDegree);
+        Assert.Equal(secondDegree, profile.Capabilities.CanManageLodgeInstructionSecondDegree);
+        Assert.Equal(thirdDegree, profile.Capabilities.CanManageLodgeInstructionThirdDegree);
+    }
+
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerVenerable, true, false, false, false)]
+    [InlineData(InstitutionalRoles.TallerTesoreria, false, true, false, false)]
+    [InlineData(InstitutionalRoles.TallerOrador, false, false, true, false)]
+    [InlineData(InstitutionalRoles.TallerSecretaria, false, false, false, true)]
+    public void WithdrawalSignatureCapabilities_AreExposedOnlyForTheInstitutionalOffice(
+        string role,
+        bool venerable,
+        bool treasurer,
+        bool orator,
+        bool secretary)
+    {
+        var organizationId = Guid.NewGuid();
+        var principal = Principal(
+            new Claim(InstitutionalClaims.Organization, organizationId.ToString()),
+            new Claim(InstitutionalClaims.Role, role));
+
+        var profile = SessionProfileBuilder.Build(principal, new InstitutionalAccessService());
+
+        Assert.Equal(venerable, profile.Capabilities.CanSignWithdrawalAsVenerable);
+        Assert.Equal(treasurer, profile.Capabilities.CanSignWithdrawalAsTreasurer);
+        Assert.Equal(orator, profile.Capabilities.CanSignWithdrawalAsOrator);
+        Assert.Equal(secretary, profile.Capabilities.CanSignWithdrawalAsSecretary);
     }
 
     [Fact]

@@ -1,4 +1,9 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.CandidateIntake.Entities;
+using PMGM.Api.Modules.Ceremonies.Entities;
+using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
@@ -12,12 +17,121 @@ public static class CandidateWorkshopIntakeEndpoints
         endpoints.MapGet("/api/insinuados/taller/solicitudes", GetWorkshopQueueAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
+        endpoints.MapPost("/api/insinuados/taller/solicitudes", CreateDraftAsync)
+            .WithTags("Ficha privada de insinuados")
+            .RequireAuthorization();
         endpoints.MapGet("/api/insinuados/regimen-interior/alertas-rechazo", GetOrderRejectionAlertsAsync)
             .WithTags("Régimen Interior")
             .RequireAuthorization();
 
         return endpoints;
     }
+
+    private static async Task<IResult> CreateDraftAsync(
+        CandidateDraftCreateRequest request,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        CandidateIntakeDbContext intakeDb,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var organizationIds = httpContext.User.Claims
+            .Where(x => x.Type == InstitutionalClaims.Organization)
+            .Select(x => Guid.TryParse(x.Value, out var id) ? id : Guid.Empty)
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .ToArray();
+
+        if (organizationIds.Length != 1)
+            return Results.BadRequest(new { message = "La sesión debe identificar un único Taller para iniciar el expediente." });
+
+        var organizationId = organizationIds[0];
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId))
+            return Results.Forbid();
+
+        var firstNames = request.FirstNames?.Trim() ?? "";
+        var paternalSurname = request.PaternalSurname?.Trim() ?? "";
+        var maternalSurname = request.MaternalSurname?.Trim();
+        if (firstNames.Length is < 1 or > 160 || paternalSurname.Length is < 1 or > 160 || maternalSurname?.Length > 160)
+            return Results.BadRequest(new { message = "Nombres y apellidos no cumplen los largos permitidos." });
+        if (request.InsinuationDate > ChileToday())
+            return Results.BadRequest(new { message = "La fecha de insinuación no puede estar en el futuro." });
+
+        var organization = await coreDb.Organizations
+            .SingleOrDefaultAsync(x => x.Id == organizationId && x.Type == "workshop", cancellationToken);
+        if (organization is null)
+            return Results.NotFound(new { message = "El Taller indicado por la sesión no existe." });
+
+        var subject = httpContext.User.FindFirstValue("sub")
+            ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? "unknown";
+        var now = DateTimeOffset.UtcNow;
+        var person = new Person
+        {
+            FirstNames = firstNames,
+            LastNames = string.Join(' ', new[] { paternalSurname, maternalSurname }
+                .Where(x => !string.IsNullOrWhiteSpace(x)))
+        };
+        var ceremony = new CeremonyRequest
+        {
+            OrganizationId = organizationId,
+            Organization = organization,
+            CandidatePersonId = person.Id,
+            CandidatePerson = person,
+            CeremonyType = CeremonyCodes.Type.Initiation,
+            ProposedDate = null,
+            Status = CeremonyCodes.RequestStatus.Draft
+        };
+        var profile = new CandidateIntakeProfile
+        {
+            CeremonyRequestId = ceremony.Id,
+            OrganizationId = organizationId,
+            PersonId = person.Id,
+            PaternalSurname = paternalSurname,
+            MaternalSurname = string.IsNullOrWhiteSpace(maternalSurname) ? null : maternalSurname,
+            InsinuationDate = request.InsinuationDate,
+            SubmittedBySubject = subject,
+            SubmittedAtUtc = now,
+            UpdatedBySubject = subject,
+            UpdatedAtUtc = now
+        };
+
+        coreDb.AddRange(person, ceremony);
+        audit.Add(
+            httpContext,
+            "candidate.intake.draft_created",
+            nameof(CeremonyRequest),
+            ceremony.Id.ToString(),
+            organizationId,
+            AuditResults.Success,
+            new { ceremony.CeremonyType, ceremony.Status, proposedDate = (DateOnly?)null });
+        await coreDb.SaveChangesAsync(cancellationToken);
+
+        intakeDb.CandidateIntakeProfiles.Add(profile);
+        await intakeDb.SaveChangesAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Created($"/api/insinuados/solicitudes/{ceremony.Id}/ficha", new CandidateWorkshopQueueItemDto(
+            ceremony.Id,
+            person.FirstNames,
+            person.LastNames,
+            $"{person.FirstNames} {person.LastNames}".Trim(),
+            organization.Name,
+            organization.Number,
+            null,
+            ceremony.Status,
+            true,
+            false,
+            CandidateIntakeCodes.ReviewStatus.Pending,
+            ceremony.CreatedAtUtc,
+            null));
+    }
+
+    private static DateOnly ChileToday()
+        => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+            DateTimeOffset.UtcNow,
+            "America/Santiago").DateTime);
 
     private static async Task<IResult> GetOrderRejectionAlertsAsync(
         HttpContext httpContext,
@@ -225,3 +339,10 @@ public sealed record CandidateOrderRejectionAlertDto(
     string? SourceReference,
     string? Notes,
     string Reason);
+
+
+public sealed record CandidateDraftCreateRequest(
+    string FirstNames,
+    string PaternalSurname,
+    string? MaternalSurname,
+    DateOnly InsinuationDate);

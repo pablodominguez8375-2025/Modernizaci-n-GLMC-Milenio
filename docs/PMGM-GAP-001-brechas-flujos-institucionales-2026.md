@@ -74,10 +74,10 @@ El formulario de uso del Gran Templo exige ingreso con **al menos siete días h�
 
 **Acción requerida:** validación de plazo hábil, disponibilidad y recursos; impedir doble reserva.
 
-### GAP-010 — Generación de plancha debe ser resultado del workflow
-Las planchas 2026 son documentos de autorización emitidos por Gran Secretaría con visto bueno previo. La realización debe informarse posteriormente a Gran Secretaría y Régimen Interior para validación y boletín.
+### GAP-010 — Carga de Plancha debe ser resultado del workflow
+Las Planchas 2026 son documentos de autorización firmados físicamente, que Gran Secretaría sólo puede registrar y cargar con los vistos buenos previos. La realización debe informarse posteriormente a Gran Secretaría y Régimen Interior para validación y boletín.
 
-**Acción requerida:** plancha generada desde datos del expediente aprobado, numeración auditable, y cierre posterior de ceremonia.
+**Acción requerida:** PDF firmado físicamente vinculado al expediente aprobado, numeración auditable y cierre posterior de ceremonia. El sistema no genera la Plancha.
 
 ### GAP-011 — Protección de información confidencial
 Autobiografía, Cuestionario Confidencial, informes de entrevistas y antecedentes personales forman parte del expediente y no deben quedar disponibles por simple pertenencia al Taller.

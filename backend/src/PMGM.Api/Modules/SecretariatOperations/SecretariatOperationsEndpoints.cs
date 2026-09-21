@@ -49,6 +49,9 @@ public static class SecretariatOperationsEndpoints
         group.MapGet("/talleres/{organizationId:guid}/registros", ListLodgeRecordsAsync);
         group.MapPut("/talleres/{organizationId:guid}/registros/{recordType}/{sourceRecordId:guid}", UpsertLodgeRecordAsync);
         group.MapPost("/talleres/{organizationId:guid}/tenidas/{meetingId:guid}/remitir-extracto", SubmitTenidaExtractAsync);
+        group.MapGet("/talleres/{organizationId:guid}/planchas-trabajo", ListWorkPapersAsync);
+        group.MapPost("/talleres/{organizationId:guid}/planchas-trabajo", CreateWorkPaperAsync);
+        group.MapPost("/planchas-trabajo/{id:guid}/solicitar-biblioteca", RequestWorkPaperLibraryPublicationAsync);
 
         group.MapGet("/talleres/{organizationId:guid}/correspondencia", ListCorrespondenceAsync);
         group.MapPost("/talleres/{organizationId:guid}/correspondencia", CreateCorrespondenceAsync);
@@ -68,6 +71,86 @@ public static class SecretariatOperationsEndpoints
         ri.MapPost("/{intakeId:guid}/resolver", ReviewHistoricalIntakeAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListWorkPapersAsync(Guid organizationId, HttpContext httpContext,
+        PmgmDbContext db, DocumentManagementDbContext documentDb, IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanReadLodgeSecretariat(httpContext.User, organizationId)) return Results.Forbid();
+        var papers = await db.LodgeWorkPapers.AsNoTracking().Where(x => x.OrganizationId == organizationId)
+            .OrderByDescending(x => x.PresentedOn).ThenByDescending(x => x.CreatedAtUtc).Take(500).ToListAsync(cancellationToken);
+        var memberIds = papers.Select(x => x.AuthorMemberId).Distinct().ToList();
+        var authors = await db.Members.AsNoTracking().Where(x => memberIds.Contains(x.Id))
+            .Select(x => new { x.Id, Name = x.Person.FirstNames + " " + x.Person.LastNames })
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var documentIds = papers.Select(x => x.DocumentId).ToList();
+        var documents = await documentDb.InstitutionalDocuments.AsNoTracking().Where(x => documentIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.Status, x.PublishedAtUtc }).ToDictionaryAsync(x => x.Id, cancellationToken);
+        var items = papers.Select(x => new
+        {
+            x.Id, x.OrganizationId, x.AuthorMemberId, authorName = authors.GetValueOrDefault(x.AuthorMemberId) ?? "Hermano no disponible",
+            x.DocumentId, x.DocumentVersionId, x.MeetingId, x.Title, x.Topic, x.Degree, x.PresentedOn, x.ShortDescription,
+            status = documents.TryGetValue(x.DocumentId, out var document) && document.Status == DocumentManagementCodes.DocumentStatus.Published ? "published" : x.Status,
+            publishedAtUtc = documents.GetValueOrDefault(x.DocumentId)?.PublishedAtUtc, x.CreatedAtUtc, x.LibraryRequestedAtUtc
+        });
+        return Results.Ok(new { total = papers.Count, items });
+    }
+
+    private static async Task<IResult> CreateWorkPaperAsync(Guid organizationId, CreateLodgeWorkPaperRequest request,
+        HttpContext httpContext, PmgmDbContext db, LodgeManagementDbContext lodgeDb, DocumentManagementDbContext documentDb,
+        IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId)) return Results.Forbid();
+        if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Trim().Length > 500)
+            return Results.BadRequest(new { message = "Indique un título válido para la plancha." });
+        if (request.Degree is not ("apprentice" or "fellowcraft" or "master"))
+            return Results.BadRequest(new { message = "El grado de la plancha no es válido." });
+        var activeAuthor = await db.Memberships.AsNoTracking().AnyAsync(x => x.MemberId == request.AuthorMemberId &&
+            x.OrganizationId == organizationId && x.Status == MembershipCodes.MembershipStatus.Active && x.EndDate == null, cancellationToken);
+        if (!activeAuthor) return Results.BadRequest(new { message = "El autor debe pertenecer activamente al Cuadro del Taller." });
+        if (request.MeetingId is not null)
+        {
+            var meeting = await lodgeDb.LodgeMeetings.AsNoTracking().SingleOrDefaultAsync(x => x.Id == request.MeetingId && x.OrganizationId == organizationId, cancellationToken);
+            if (meeting is null) return Results.BadRequest(new { message = "La Tenida vinculada no existe en el Taller." });
+            if (meeting.CeremonyType is not null) return Results.BadRequest(new { message = "Una plancha de trabajo no se vincula a una Tenida ceremonial." });
+        }
+        var version = await documentDb.DocumentVersions.AsNoTracking().Include(x => x.Document)
+            .SingleOrDefaultAsync(x => x.Id == request.DocumentVersionId && x.DocumentId == request.DocumentId, cancellationToken);
+        if (version is null || version.ProcessingStatus != DocumentManagementCodes.ProcessingStatus.Available ||
+            version.Document.OrganizationId != organizationId || version.Document.DocumentType != "work_paper")
+            return Results.BadRequest(new { message = "Seleccione una versión disponible de una plancha perteneciente al Taller." });
+        var entity = new LodgeWorkPaper
+        {
+            OrganizationId = organizationId, AuthorMemberId = request.AuthorMemberId, DocumentId = request.DocumentId,
+            DocumentVersionId = request.DocumentVersionId, MeetingId = request.MeetingId, Title = request.Title.Trim(),
+            Topic = NormalizeOptional(request.Topic), Degree = request.Degree, PresentedOn = request.PresentedOn,
+            ShortDescription = NormalizeOptional(request.ShortDescription), Status = "private", CreatedBySubject = GetSubject(httpContext.User)
+        };
+        db.LodgeWorkPapers.Add(entity); await db.SaveChangesAsync(cancellationToken);
+        return Results.Created($"/api/secretaria/planchas-trabajo/{entity.Id}", entity);
+    }
+
+    private static async Task<IResult> RequestWorkPaperLibraryPublicationAsync(Guid id, HttpContext httpContext,
+        PmgmDbContext db, DocumentManagementDbContext documentDb, IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        var paper = await db.LodgeWorkPapers.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (paper is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(httpContext.User, paper.OrganizationId)) return Results.Forbid();
+        if (paper.Status != "private") return Results.Conflict(new { message = "La publicación de esta plancha ya fue solicitada." });
+        var document = await documentDb.InstitutionalDocuments.SingleOrDefaultAsync(x => x.Id == paper.DocumentId, cancellationToken);
+        if (document is null) return Results.NotFound(new { message = "El documento vinculado no está disponible." });
+        var author = await db.Members.AsNoTracking().Where(x => x.Id == paper.AuthorMemberId)
+            .Select(x => x.Person.FirstNames + " " + x.Person.LastNames).SingleAsync(cancellationToken);
+        var lodge = await db.Organizations.AsNoTracking().Where(x => x.Id == paper.OrganizationId).Select(x => x.Name).SingleAsync(cancellationToken);
+        document.AccessPolicy = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated;
+        document.MinimumDegreeRequired = paper.Degree == "master" ? 3 : paper.Degree == "fellowcraft" ? 2 : 1;
+        document.AuthorName = author; document.AuthorLodgeName = lodge; document.DocumentDate = paper.PresentedOn;
+        document.Topic = paper.Topic; document.ShortDescription = paper.ShortDescription;
+        paper.Status = "library_requested"; paper.LibraryRequestedBySubject = GetSubject(httpContext.User); paper.LibraryRequestedAtUtc = DateTimeOffset.UtcNow;
+        await documentDb.SaveChangesAsync(cancellationToken); await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { paper.Id, paper.Status, paper.LibraryRequestedAtUtc });
     }
 
     private static async Task<IResult> ListHistoricalIntakesAsync(
@@ -1120,6 +1203,9 @@ public sealed record UpsertLodgeSecretariatRecordRequest(
     Guid? ExtractDocumentVersionId,
     Guid? FullMinuteDocumentVersionId,
     Guid? CeremonyAuthorizationDocumentId);
+
+public sealed record CreateLodgeWorkPaperRequest(Guid AuthorMemberId, Guid DocumentId, Guid DocumentVersionId,
+    Guid? MeetingId, string Title, string? Topic, string Degree, DateOnly PresentedOn, string? ShortDescription);
 
 public sealed record CeremonyAuthorizationCeremonyRef(
     Guid Id,

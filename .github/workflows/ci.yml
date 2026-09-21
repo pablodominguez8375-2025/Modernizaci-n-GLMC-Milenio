@@ -48,6 +48,9 @@ jobs:
       - name: Data classification gate
         run: python3 tests/data_classification_gate.py
 
+      - name: Official documents gate
+        run: python3 tests/official_documents_gate.py
+
       - name: Migration safety gate
         run: python3 tests/migration_gate.py
 

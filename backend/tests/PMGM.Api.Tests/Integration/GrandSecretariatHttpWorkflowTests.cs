@@ -9,9 +9,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.GrandSecretariat;
 using Xunit;
 
@@ -20,8 +22,61 @@ namespace PMGM.Api.Tests.Integration;
 [Collection(PostgresIntegrationCollection.Name)]
 public sealed class GrandSecretariatHttpWorkflowTests
 {
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerSecretaria, "organization")]
+    [InlineData(InstitutionalRoles.RegimenInterior, "order")]
+    [InlineData(InstitutionalRoles.GranSecretaria, "organization")]
+    public async Task Official_documents_reject_roles_without_grand_secretariat_order_scope(string role, string scope)
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        using var factory = new GrandSecretariatWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", role);
+        client.DefaultRequestHeaders.Add("X-Test-Scope", scope);
+
+        using var uploadRequest = SignedPdfRequest(HttpMethod.Put, "/api/gran-secretaria/documentos/pdf", "documento.pdf", new Dictionary<string, string>
+        {
+            ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
+            ["X-Document-Title"] = "Documento restringido",
+            ["X-Document-Description"] = "No debe cargarse sin Gran Secretaría y alcance Orden.",
+            ["X-Physical-Signatures-Confirmed"] = "true"
+        });
+        var uploadResponse = await client.SendAsync(uploadRequest, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, uploadResponse.StatusCode);
+
+        var listResponse = await client.GetAsync("/api/gran-secretaria/documentos", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, listResponse.StatusCode);
+
+        var downloadResponse = await client.GetAsync($"/api/gran-secretaria/documentos/{Guid.NewGuid()}/pdf", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, downloadResponse.StatusCode);
+    }
+
     [Fact]
-    public async Task Authorized_ceremony_can_reserve_space_and_issue_formal_authorization()
+    public async Task Grand_secretariat_with_order_scope_reaches_official_document_validation()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        using var factory = new GrandSecretariatWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", InstitutionalRoles.GranSecretaria);
+        client.DefaultRequestHeaders.Add("X-Test-Scope", "order");
+
+        using var request = SignedPdfRequest(HttpMethod.Put, "/api/gran-secretaria/documentos/pdf", "documento.pdf", new Dictionary<string, string>
+        {
+            ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
+            ["X-Document-Title"] = "Documento sin descripción",
+            ["X-Physical-Signatures-Confirmed"] = "true"
+        });
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Ceremony_requires_plancha_before_reservation_and_preserves_audit()
     {
         var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connectionString)) return;
@@ -37,6 +92,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
+            var documentDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            await documentDb.Database.MigrateAsync(cancellationToken);
 
             var organization = new Organization
             {
@@ -72,10 +129,51 @@ public sealed class GrandSecretariatHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.Created, createSpace.StatusCode);
 
+        var legacyDocumentResponse = await client.PostAsJsonAsync(
+            "/api/gran-secretaria/documentos",
+            new { documentType = GrandSecretariatCodes.DocumentType.Decree, title = "Documento sin PDF" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, legacyDocumentResponse.StatusCode);
+
+        var legacyAuthorizationResponse = await client.PostAsJsonAsync(
+            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
+            new { notes = "Autorización sin PDF" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.NotFound, legacyAuthorizationResponse.StatusCode);
+
         var spaceJson = await createSpace.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var spaceId = spaceJson.GetProperty("id").GetGuid();
         var startsAtUtc = new DateTimeOffset(2026, 10, 15, 22, 0, 0, TimeSpan.Zero);
         var endsAtUtc = startsAtUtc.AddHours(3);
+
+        var blockedReservationResponse = await client.PostAsJsonAsync(
+            "/api/gran-secretaria/reservas",
+            new
+            {
+                spaceId,
+                organizationId,
+                ceremonyRequestId = ceremonyId,
+                purpose = "Intento previo a Plancha",
+                startsAtUtc,
+                endsAtUtc,
+                notes = (string?)null
+            },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, blockedReservationResponse.StatusCode);
+
+        var authorizationWithoutAttestationResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-sin-declaracion.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Plancha sin declaración del operador." }),
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, authorizationWithoutAttestationResponse.StatusCode);
+
+        var authorizationBeforeReservationResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-autorizacion-firmada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Plancha firmada físicamente por las autoridades responsables.", ["X-Physical-Signatures-Confirmed"] = "true" }),
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Created, authorizationBeforeReservationResponse.StatusCode);
+
+        var authorizationBeforeReservationJson = await authorizationBeforeReservationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(GrandSecretariatCodes.DocumentType.Plancha, authorizationBeforeReservationJson.GetProperty("documentType").GetString());
+        Assert.Null(authorizationBeforeReservationJson.GetProperty("spaceReservationId").GetString());
 
         var reservationResponse = await client.PostAsJsonAsync(
             "/api/gran-secretaria/reservas",
@@ -108,7 +206,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var queueBeforeItem = queueBeforeJson.GetProperty("items")
             .EnumerateArray()
             .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
-        Assert.False(queueBeforeItem.GetProperty("formalAuthorizationIssued").GetBoolean());
+        Assert.True(queueBeforeItem.GetProperty("formalAuthorizationIssued").GetBoolean());
         Assert.Equal(reservationId, queueBeforeItem.GetProperty("spaceReservationId").GetGuid());
         Assert.Equal("Templo CI", queueBeforeItem.GetProperty("spaceName").GetString());
         Assert.Equal(startsAtUtc, queueBeforeItem.GetProperty("reservationStartsAtUtc").GetDateTimeOffset());
@@ -150,18 +248,16 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var targetSpace = availabilityJson.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == spaceId);
         Assert.False(targetSpace.GetProperty("isAvailable").GetBoolean());
 
-        var authorizationResponse = await client.PostAsJsonAsync(
-            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
-            new { spaceReservationId = reservationId },
+        var repeatedAuthorizationResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada.", ["X-Physical-Signatures-Confirmed"] = "true" }),
             cancellationToken);
-        Assert.Equal(HttpStatusCode.Created, authorizationResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, repeatedAuthorizationResponse.StatusCode);
 
-        var authorizationJson = await authorizationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.Equal(GrandSecretariatCodes.DocumentType.Plancha, authorizationJson.GetProperty("documentType").GetString());
+        var authorizationJson = authorizationBeforeReservationJson;
         Assert.Equal(GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization, authorizationJson.GetProperty("planchaKind").GetString());
         Assert.StartsWith("PLA-AUT-CER-", authorizationJson.GetProperty("documentCode").GetString());
         Assert.Equal(ceremonyId, authorizationJson.GetProperty("relatedCeremonyRequestId").GetGuid());
-        Assert.Equal(reservationId, authorizationJson.GetProperty("spaceReservationId").GetGuid());
+        Assert.Null(authorizationJson.GetProperty("spaceReservationId").GetString());
 
         var queueAfterResponse = await client.GetAsync(
             "/api/institutional/gran-secretaria/ceremonias-autorizadas",
@@ -183,24 +279,31 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(CeremonyCodes.Type.WageIncrease, lodgeAuthorizationOption.GetProperty("ceremonyType").GetString());
         Assert.StartsWith("PLA-AUT-CER-", lodgeAuthorizationOption.GetProperty("documentCode").GetString());
 
-        var duplicateAuthorization = await client.PostAsJsonAsync(
-            $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion",
-            new { spaceReservationId = reservationId },
+        var duplicateAuthorization = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, $"/api/gran-secretaria/ceremonias/{ceremonyId}/autorizacion-pdf", "plancha-duplicada-2.pdf", new Dictionary<string, string> { ["X-Document-Description"] = "Duplicada nuevamente.", ["X-Physical-Signatures-Confirmed"] = "true" }),
             cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, duplicateAuthorization.StatusCode);
 
-        var decreeResponse = await client.PostAsJsonAsync(
-            "/api/gran-secretaria/documentos",
-            new
+        var decreeResponse = await client.SendAsync(
+            SignedPdfRequest(HttpMethod.Put, "/api/gran-secretaria/documentos/pdf", "decreto-firmado.pdf", new Dictionary<string, string>
             {
-                documentType = GrandSecretariatCodes.DocumentType.Decree,
-                planchaKind = (string?)null,
-                title = "Decreto CI",
-                content = "Contenido institucional de prueba para validar el circuito documental de Gran Secretaría.",
-                organizationId = (Guid?)null
-            },
-            cancellationToken);
+                ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
+                ["X-Document-Title"] = "Decreto CI",
+                ["X-Document-Description"] = "Decreto firmado físicamente para validar el circuito documental.",
+                ["X-Physical-Signatures-Confirmed"] = "true"
+            }), cancellationToken);
         Assert.Equal(HttpStatusCode.Created, decreeResponse.StatusCode);
+        var decreeJson = await decreeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var decreeId = decreeJson.GetProperty("id").GetGuid();
+
+        var officialPdfResponse = await client.GetAsync(
+            $"/api/gran-secretaria/documentos/{decreeId}/pdf",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, officialPdfResponse.StatusCode);
+        Assert.Equal("application/pdf", officialPdfResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("attachment", officialPdfResponse.Content.Headers.ContentDisposition?.DispositionType);
+        Assert.Contains("decreto-firmado.pdf", officialPdfResponse.Content.Headers.ContentDisposition?.FileNameStar);
+        Assert.StartsWith("%PDF-", await officialPdfResponse.Content.ReadAsStringAsync(cancellationToken));
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -214,7 +317,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                     cancellationToken);
 
             Assert.Equal(GrandSecretariatCodes.DocumentStatus.Issued, authorization.Status);
-            Assert.Equal(reservationId, authorization.SpaceReservationId);
+            Assert.Null(authorization.SpaceReservationId);
 
             var auditActions = await db.AuditEvents
                 .AsNoTracking()
@@ -225,9 +328,19 @@ public sealed class GrandSecretariatHttpWorkflowTests
             Assert.Contains("grand_secretariat.space.created", auditActions);
             Assert.Contains("grand_secretariat.space_reservation.created", auditActions);
             Assert.Contains("grand_secretariat.space_reservation.rejected", auditActions);
-            Assert.Contains("grand_secretariat.ceremony_authorization.issued", auditActions);
-            Assert.Contains("grand_secretariat.document.issued", auditActions);
+            Assert.Contains("grand_secretariat.ceremony_authorization.signed_pdf_uploaded", auditActions);
+            Assert.Contains("grand_secretariat.document.signed_pdf_uploaded", auditActions);
+            Assert.Contains("grand_secretariat.document.signed_pdf_downloaded", auditActions);
         }
+    }
+
+    private static HttpRequestMessage SignedPdfRequest(HttpMethod method, string path, string fileName, IReadOnlyDictionary<string, string> metadata)
+    {
+        var request = new HttpRequestMessage(method, path) { Content = new ByteArrayContent("%PDF-1.7\n%%EOF"u8.ToArray()) };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/pdf");
+        request.Headers.Add("X-File-Name", Uri.EscapeDataString(fileName));
+        foreach (var item in metadata) request.Headers.Add(item.Key, Uri.EscapeDataString(item.Value));
+        return request;
     }
 }
 
@@ -242,9 +355,16 @@ internal sealed class GrandSecretariatWebApplicationFactory(string connectionStr
             services.RemoveAll<DbContextOptions<PmgmDbContext>>();
             services.RemoveAll<GrandSecretariatDbContext>();
             services.RemoveAll<DbContextOptions<GrandSecretariatDbContext>>();
+            services.RemoveAll<DocumentManagementDbContext>();
+            services.RemoveAll<DbContextOptions<DocumentManagementDbContext>>();
+            services.RemoveAll<IDocumentObjectStore>();
+            services.RemoveAll<IDocumentMalwareScanner>();
 
             services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(connectionString));
             services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(connectionString));
+            services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(connectionString));
+            services.AddSingleton<IDocumentObjectStore, InMemoryDocumentObjectStore>();
+            services.AddSingleton<IDocumentMalwareScanner, CleanDocumentMalwareScanner>();
 
             services.AddAuthentication(options =>
                 {

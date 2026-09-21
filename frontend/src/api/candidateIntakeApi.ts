@@ -42,6 +42,13 @@ export interface CandidateWorkshopQueueResponse {
   items: CandidateWorkshopQueueItem[]
 }
 
+export interface CandidateDraftCreatePayload {
+  firstNames: string
+  paternalSurname: string
+  maternalSurname?: string | null
+  insinuationDate: string
+}
+
 export interface CandidateIntakeProfile {
   ceremonyRequestId: string
   firstNames: string
@@ -421,6 +428,34 @@ export class CandidateIntakeApiClient {
   async getWorkshopQueue(): Promise<CandidateWorkshopQueueResponse> {
     if (this.useMocks) return { total: this.mockWorkshopQueue.length, items: this.mockWorkshopQueue.map(item => ({ ...item })) }
     return this.request<CandidateWorkshopQueueResponse>('/api/insinuados/taller/solicitudes')
+  }
+
+  async createDraftRequest(payload: CandidateDraftCreatePayload): Promise<CandidateWorkshopQueueItem> {
+    if (this.useMocks) {
+      const id = crypto.randomUUID()
+      const item: CandidateWorkshopQueueItem = {
+        ceremonyRequestId: id,
+        firstNames: payload.firstNames.trim(),
+        lastNames: [payload.paternalSurname.trim(), payload.maternalSurname?.trim()].filter(Boolean).join(' '),
+        displayName: [payload.firstNames.trim(), payload.paternalSurname.trim(), payload.maternalSurname?.trim()].filter(Boolean).join(' '),
+        workshopName: 'Taller Demostrativo Nº 23',
+        workshopNumber: '23',
+        proposedDate: null,
+        requestStatus: 'draft',
+        profileAvailable: false,
+        photoAvailable: false,
+        reviewStatus: 'pending_grand_secretariat',
+        createdAtUtc: new Date().toISOString(),
+        orderLevelAlert: null,
+      }
+      this.mockWorkshopQueue.unshift(item)
+      return { ...item }
+    }
+    return this.request<CandidateWorkshopQueueItem>('/api/insinuados/taller/solicitudes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
   }
 
   async getOrderRejectionAlerts(): Promise<CandidateOrderRejectionAlertResponse> {

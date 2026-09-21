@@ -40,7 +40,7 @@
 
 5. **Autorización y plancha**
    - impedir autorización si falta un requisito obligatorio;
-   - generar plancha desde datos ya validados;
+   - registrar metadatos y cargar la Plancha firmada físicamente después de validar el expediente;
    - numeración auditable;
    - cierre posterior de ceremonia e historial.
 

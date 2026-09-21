@@ -6,6 +6,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.Admissions;
 
@@ -18,6 +19,8 @@ public static class AdmissionEndpoints
             .RequireAuthorization();
 
         group.MapPost("/expedientes", CreateCaseAsync);
+        group.MapGet("/personas/opciones", SearchPersonOptionsAsync);
+        group.MapGet("/expedientes", ListCasesAsync);
         group.MapGet("/expedientes/{caseId:guid}", GetCaseAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias", AddEvidenceAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias/{evidenceId:guid}/revision", ReviewEvidenceAsync);
@@ -40,8 +43,7 @@ public static class AdmissionEndpoints
         if (request.AdmissionType is not CeremonyCodes.Type.Affiliation and not CeremonyCodes.Type.Incorporation)
             return Results.BadRequest(new { message = "El tipo de expediente debe ser afiliación o incorporación." });
 
-        if (!access.CanManageOrganization(httpContext.User, request.OrganizationId) &&
-            !access.CanEvaluateCeremonies(httpContext.User))
+        if (!access.CanManageLodgeSecretariat(httpContext.User, request.OrganizationId))
             return Results.Forbid();
 
         var organizationExists = await coreDb.Organizations.AsNoTracking()
@@ -61,6 +63,8 @@ public static class AdmissionEndpoints
         {
             if (!AdmissionCodes.AffiliationMode.IsValid(request.AffiliationMode))
                 return Results.BadRequest(new { message = "La afiliación debe indicar modalidad simple o con activación." });
+            if (!AdmissionCodes.AffiliationProcedure.IsValid(request.AffiliationProcedure))
+                return Results.BadRequest(new { message = "La afiliación debe clasificar expresamente el procedimiento como estándar, reintegro o traslado." });
             if (request.MemberId is null)
                 return Results.BadRequest(new { message = "Una afiliación requiere un hermano ya registrado en la base maestra." });
 
@@ -70,6 +74,23 @@ public static class AdmissionEndpoints
                 return Results.NotFound(new { message = "El hermano indicado no existe." });
             if (member.PersonId != request.PersonId)
                 return Results.BadRequest(new { message = "El hermano y la persona indicados no corresponden al mismo registro maestro." });
+
+            if (request.AffiliationProcedure == AdmissionCodes.AffiliationProcedure.Transfer)
+            {
+                if (request.OriginOrganizationId is null)
+                    return Results.BadRequest(new { message = "La afiliación con traslado debe identificar el Taller de origen." });
+                if (request.OriginOrganizationId.Value == request.OrganizationId)
+                    return Results.BadRequest(new { message = "El Taller de origen y el Taller de destino deben ser distintos." });
+
+                var activeSourceMembership = await coreDb.Memberships.AsNoTracking().AnyAsync(
+                    x => x.MemberId == request.MemberId.Value &&
+                         x.OrganizationId == request.OriginOrganizationId.Value &&
+                         x.Status == MembershipCodes.MembershipStatus.Active &&
+                         x.EndDate == null,
+                    cancellationToken);
+                if (!activeSourceMembership)
+                    return Results.Conflict(new { message = "El traslado requiere una pertenencia activa del hermano en el Taller de origen indicado." });
+            }
         }
         else
         {
@@ -77,6 +98,8 @@ public static class AdmissionEndpoints
                 return Results.BadRequest(new { message = "Una incorporación desde otra Obediencia no debe crear ni exigir membresía GLMCh antes de su resolución." });
             if (!string.IsNullOrWhiteSpace(request.AffiliationMode))
                 return Results.BadRequest(new { message = "La modalidad simple/con activación sólo aplica a afiliaciones." });
+            if (!string.IsNullOrWhiteSpace(request.AffiliationProcedure))
+                return Results.BadRequest(new { message = "La clasificación estándar/reintegro/traslado sólo aplica a afiliaciones; la incorporación se identifica por su tipo de expediente." });
             if (string.IsNullOrWhiteSpace(request.OriginObedience))
                 return Results.BadRequest(new { message = "La incorporación debe registrar la Obediencia de origen." });
             if (string.IsNullOrWhiteSpace(request.Degree))
@@ -88,6 +111,7 @@ public static class AdmissionEndpoints
             OrganizationId = request.OrganizationId,
             AdmissionType = request.AdmissionType,
             AffiliationMode = Normalize(request.AffiliationMode),
+            AffiliationProcedure = Normalize(request.AffiliationProcedure),
             MemberId = request.MemberId,
             PersonId = request.PersonId,
             OriginOrganizationId = request.OriginOrganizationId,
@@ -98,6 +122,7 @@ public static class AdmissionEndpoints
             WageIncreaseEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && request.WageIncreaseEvidenceApplies,
             ExaltationEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && request.ExaltationEvidenceApplies,
             HasPeaceAndFriendshipPact = request.AdmissionType == CeremonyCodes.Type.Incorporation ? request.HasPeaceAndFriendshipPact : null,
+            OriginObedienceRecognizedAsRegular = request.AdmissionType == CeremonyCodes.Type.Incorporation ? request.OriginObedienceRecognizedAsRegular : null,
             PreviousRejectionDate = request.PreviousRejectionDate,
             RejectionCausesRemedied = request.RejectionCausesRemedied,
             Status = AdmissionWorkflowCodes.CaseStatus.UnderReview,
@@ -112,12 +137,112 @@ public static class AdmissionEndpoints
             {
                 entity.AdmissionType,
                 entity.AffiliationMode,
+                entity.AffiliationProcedure,
                 entity.HasPeaceAndFriendshipPact,
+                entity.OriginObedienceRecognizedAsRegular,
                 entity.Status
             });
         await coreDb.SaveChangesAsync(cancellationToken);
 
         return Results.Created($"/api/admisiones/expedientes/{entity.Id}", ToCaseDto(entity));
+    }
+
+    private static async Task<IResult> SearchPersonOptionsAsync(
+        Guid organizationId,
+        string? query,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId) &&
+            !access.CanEvaluateCeremonies(httpContext.User))
+            return Results.Forbid();
+
+        var normalized = query?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized) || normalized.Length < 2)
+            return Results.BadRequest(new { message = "Ingrese al menos dos caracteres para buscar una persona." });
+
+        var peopleQuery = coreDb.People.AsNoTracking()
+            .Where(x => (x.FirstNames + " " + x.LastNames).Contains(normalized));
+
+        var people = await peopleQuery
+            .OrderBy(x => x.LastNames)
+            .ThenBy(x => x.FirstNames)
+            .Take(50)
+            .Select(x => new
+            {
+                x.Id,
+                displayName = (x.FirstNames + " " + x.LastNames).Trim()
+            })
+            .ToListAsync(cancellationToken);
+
+        var personIds = people.Select(x => x.Id).ToArray();
+        var memberByPerson = await coreDb.Members.AsNoTracking()
+            .Where(x => personIds.Contains(x.PersonId))
+            .ToDictionaryAsync(x => x.PersonId, x => x.Id, cancellationToken);
+
+        var items = people.Select(x => new
+        {
+            personId = x.Id,
+            x.displayName,
+            memberId = memberByPerson.TryGetValue(x.Id, out var memberId) ? memberId : (Guid?)null
+        }).ToList();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> ListCasesAsync(
+        Guid? organizationId,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        AdmissionsDbContext admissionsDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (organizationId is null)
+        {
+            if (!access.CanEvaluateCeremonies(httpContext.User))
+                return Results.Forbid();
+        }
+        else if (!access.CanReadLodgeSecretariat(httpContext.User, organizationId.Value) &&
+                 !access.CanEvaluateCeremonies(httpContext.User))
+        {
+            return Results.Forbid();
+        }
+
+        var query = admissionsDb.AdmissionCases.AsNoTracking();
+        if (organizationId is not null)
+            query = query.Where(x => x.OrganizationId == organizationId.Value);
+
+        var cases = await query
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Take(250)
+            .ToListAsync(cancellationToken);
+
+        var organizationIds = cases.Select(x => x.OrganizationId).Distinct().ToArray();
+        var personIds = cases.Select(x => x.PersonId).Distinct().ToArray();
+
+        var organizationNames = await coreDb.Organizations.AsNoTracking()
+            .Where(x => organizationIds.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+        var people = await coreDb.People.AsNoTracking()
+            .Where(x => personIds.Contains(x.Id))
+            .ToDictionaryAsync(
+                x => x.Id,
+                x => (x.FirstNames + " " + x.LastNames).Trim(),
+                cancellationToken);
+
+        var items = cases.Select(x => new
+        {
+            admissionCase = ToCaseDto(x),
+            organizationName = organizationNames.GetValueOrDefault(x.OrganizationId, "Taller"),
+            personDisplayName = people.GetValueOrDefault(x.PersonId, "Persona")
+        }).ToList();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> GetCaseAsync(
@@ -130,10 +255,11 @@ public static class AdmissionEndpoints
         var entity = await admissionsDb.AdmissionCases.AsNoTracking()
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (entity is null) return Results.NotFound();
 
-        if (!access.CanReadOrganization(httpContext.User, entity.OrganizationId) &&
+        if (!access.CanReadLodgeSecretariat(httpContext.User, entity.OrganizationId) &&
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
@@ -141,7 +267,18 @@ public static class AdmissionEndpoints
         {
             admissionCase = ToCaseDto(entity),
             evidence = entity.Evidence.OrderByDescending(x => x.CreatedAtUtc).Select(ToEvidenceDto),
-            decisions = entity.Decisions.OrderByDescending(x => x.RecordedAtUtc).Select(ToDecisionDto)
+            decisions = entity.Decisions.OrderByDescending(x => x.RecordedAtUtc).Select(ToDecisionDto),
+            commission = entity.CommissionAppointments
+                .GroupBy(x => x.AppointmentGroupId)
+                .OrderByDescending(x => x.Max(y => y.RecordedAtUtc))
+                .Select(group => new
+                {
+                    appointmentGroupId = group.Key,
+                    appointmentDate = group.Max(x => x.AppointmentDate),
+                    sourceReference = group.OrderByDescending(x => x.RecordedAtUtc).First().SourceReference,
+                    memberIds = group.Select(x => x.MemberId).Distinct().ToArray(),
+                    recordedAtUtc = group.Max(x => x.RecordedAtUtc)
+                })
         });
     }
 
@@ -161,7 +298,7 @@ public static class AdmissionEndpoints
 
         var admissionCase = await admissionsDb.AdmissionCases.SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
-        if (!access.CanManageOrganization(httpContext.User, admissionCase.OrganizationId) &&
+        if (!access.CanManageLodgeSecretariat(httpContext.User, admissionCase.OrganizationId) &&
             !access.CanManageGrandSecretariat(httpContext.User))
             return Results.Forbid();
         if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
@@ -337,56 +474,33 @@ public static class AdmissionEndpoints
         var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking()
             .Include(x => x.Evidence)
             .Include(x => x.Decisions)
+            .Include(x => x.CommissionAppointments)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
 
-        if (!access.CanReadOrganization(httpContext.User, admissionCase.OrganizationId) &&
+        if (!access.CanReadLodgeSecretariat(httpContext.User, admissionCase.OrganizationId) &&
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var withdrawalLetter = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.WithdrawalLetter);
-        var initiationEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedInitiation);
-        var wageEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedWageIncrease);
-        var exaltationEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedExaltation);
-        var degreeEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.Degree);
-
-        var signatureDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.WithdrawalLetterHandwrittenSignature);
-        var gmSpecialDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
-
-        var input = new AdmissionEligibilityInput(
-            AdmissionType: admissionCase.AdmissionType,
-            AffiliationMode: admissionCase.AffiliationMode,
-            WithdrawalLetterAttached: withdrawalLetter is not null,
-            WithdrawalLetterHandwrittenSignatureVerified: signatureDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
-            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
-            LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
-            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
-            LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
-            DegreeEvidenceAttached: degreeEvidence is not null,
-            HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
-            GrandMasterSpecialAcceptanceApproved: gmSpecialDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            PreviousRejectionDate: admissionCase.PreviousRejectionDate,
-            NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
-            RejectionCausesRemedied: admissionCase.RejectionCausesRemedied);
-
-        var decision = AdmissionEligibilityPolicy.Evaluate(input);
-
+        var projection = AdmissionCaseEligibilityProjector.Evaluate(admissionCase);
         return Results.Ok(new
         {
             caseId,
             admissionCase.AdmissionType,
             admissionCase.Status,
-            eligibility = decision,
+            eligibility = projection.Decision,
             evidence = new
             {
-                withdrawalLetterId = withdrawalLetter?.Id,
-                legalizedInitiationEvidenceId = initiationEvidence?.Id,
-                legalizedWageIncreaseEvidenceId = wageEvidence?.Id,
-                legalizedExaltationEvidenceId = exaltationEvidence?.Id,
-                degreeEvidenceId = degreeEvidence?.Id,
-                handwrittenSignatureDecisionId = signatureDecision?.Id,
-                grandMasterSpecialAcceptanceDecisionId = gmSpecialDecision?.Id
+                projection.WithdrawalLetterId,
+                projection.Article23ReviewDecisionId,
+                projection.FirstDegreePresentationDecisionId,
+                projection.CommissionAppointmentGroupId,
+                projection.CommissionCompletionDecisionId,
+                projection.ThirdDegreeDecisionId,
+                projection.FirstDegreeBallotDecisionId,
+                projection.GrandMasterPardonDecisionId,
+                projection.GrandMasterRegularityRecognitionDecisionId,
+                projection.GrandMasterSpecialAcceptanceDecisionId
             }
         });
     }
@@ -454,6 +568,7 @@ public static class AdmissionEndpoints
         entity.OrganizationId,
         entity.AdmissionType,
         entity.AffiliationMode,
+        entity.AffiliationProcedure,
         entity.MemberId,
         entity.PersonId,
         entity.OriginOrganizationId,
@@ -464,6 +579,7 @@ public static class AdmissionEndpoints
         entity.WageIncreaseEvidenceApplies,
         entity.ExaltationEvidenceApplies,
         entity.HasPeaceAndFriendshipPact,
+        entity.OriginObedienceRecognizedAsRegular,
         entity.PreviousRejectionDate,
         entity.RejectionCausesRemedied,
         entity.Status,
@@ -493,6 +609,7 @@ public static class AdmissionEndpoints
         entity.AsOfDate,
         entity.SourceReference,
         entity.Notes,
+        entity.StructuredDataJson,
         entity.RecordedAtUtc
     };
 }
@@ -501,6 +618,7 @@ public sealed record CreateAdmissionCaseRequest(
     Guid OrganizationId,
     string AdmissionType,
     string? AffiliationMode,
+    string? AffiliationProcedure,
     Guid? MemberId,
     Guid PersonId,
     Guid? OriginOrganizationId,
@@ -511,6 +629,7 @@ public sealed record CreateAdmissionCaseRequest(
     bool WageIncreaseEvidenceApplies,
     bool ExaltationEvidenceApplies,
     bool? HasPeaceAndFriendshipPact,
+    bool? OriginObedienceRecognizedAsRegular,
     DateOnly? PreviousRejectionDate,
     bool? RejectionCausesRemedied);
 

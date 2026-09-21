@@ -14,10 +14,18 @@ export interface SessionCapabilities {
   canManagePrivacy: boolean
   canReadLodgeSecretariat?: boolean
   canManageLodgeSecretariat?: boolean
+  canAppointAdmissionCommission?: boolean
   canManageLodgeTreasury?: boolean
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
+  canSignWithdrawalAsVenerable?: boolean
+  canSignWithdrawalAsTreasurer?: boolean
+  canSignWithdrawalAsOrator?: boolean
+  canSignWithdrawalAsSecretary?: boolean
+  canManageLodgeInstructionFirstDegree?: boolean
+  canManageLodgeInstructionSecondDegree?: boolean
+  canManageLodgeInstructionThirdDegree?: boolean
   canConfigureSystem?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
@@ -60,7 +68,7 @@ export interface GrandSecretariatTenidasResponse { total: number; items: GrandSe
 export interface CreateSpaceRequest { code: string; name: string; spaceType: 'temple' | 'secretariat_room'; location?: string | null; capacity?: number | null }
 export interface CreateReservationRequest { spaceId: string; organizationId: string; ceremonyRequestId?: string | null; purpose: string; startsAtUtc: string; endsAtUtc: string; notes?: string | null }
 export interface IssueDocumentRequest { documentType: 'decree' | 'plancha'; planchaKind?: 'formal_communication' | null; title: string; content: string; organizationId?: string | null }
-export type CeremonyType = 'initiation' | 'wage_increase' | 'exaltation'
+export type CeremonyType = 'initiation' | 'affiliation' | 'wage_increase' | 'exaltation' | 'incorporation'
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -229,9 +237,9 @@ const defaultMockSystemSettings: SystemSetting[] = [
   { code:'system.mail.sender_name',category:'Correo electrónico',label:'Nombre del remitente',valueType:'text',value:'Gran Logia Mixta de Chile',effectiveFrom:'2026-01-01',sourceReference:'Configuración demostrativa',status:'default' },
   { code:'system.mail.security',category:'Correo electrónico',label:'Seguridad de transporte',valueType:'list',value:'STARTTLS',effectiveFrom:'2026-01-01',sourceReference:'Configuración demostrativa',status:'default' },
   { code:'system.brand.organization_name',category:'Identidad visual',label:'Nombre institucional',valueType:'text',value:'Gran Logia Mixta de Chile',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
-  { code:'system.brand.primary_color',category:'Identidad visual',label:'Color institucional principal',valueType:'text',value:'#243b67',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
-  { code:'system.brand.secondary_color',category:'Identidad visual',label:'Color institucional secundario',valueType:'text',value:'#d8bd73',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
-  { code:'system.brand.logo_reference',category:'Identidad visual',label:'Referencia del logotipo',valueType:'text',value:'logo-institucional.svg',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
+  { code:'system.brand.primary_color',category:'Identidad visual',label:'Color institucional principal',valueType:'text',value:'#06148E',effectiveFrom:'2026-09-20',sourceReference:'Guía de uso del logotipo de la GLMCh',status:'default' },
+  { code:'system.brand.secondary_color',category:'Identidad visual',label:'Color institucional secundario',valueType:'text',value:'#F3C609',effectiveFrom:'2026-09-20',sourceReference:'Guía de uso del logotipo de la GLMCh',status:'default' },
+  { code:'system.brand.logo_reference',category:'Identidad visual',label:'Referencia del logotipo oficial',valueType:'text',value:'logo-glmch-oficial.svg',effectiveFrom:'2026-09-20',sourceReference:'Guía de uso del logotipo de la GLMCh',status:'default' },
   { code:'system.identity.provider',category:'Usuarios',label:'Proveedor de identidad',valueType:'text',value:'Keycloak',effectiveFrom:'2026-01-01',sourceReference:'Arquitectura de identidad',status:'default' },
   { code:'system.identity.require_mfa_admins',category:'Usuarios',label:'MFA obligatorio para administradores',valueType:'text',value:'Sí',effectiveFrom:'2026-01-01',sourceReference:'Política de seguridad',status:'default' },
   { code:'system.access.profile_definitions',category:'Usuarios',label:'Definiciones independientes de perfiles',valueType:'text',value:'[]',effectiveFrom:'2026-01-01',sourceReference:'Modelo de acceso Proyecto Centenario',status:'default' },
@@ -283,6 +291,7 @@ export class PmgmApiClient {
   private readonly mockSpaces = [...defaultMockSpaces]
   private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
   private readonly mockDocuments: SecretariatDocument[] = []
+  private readonly mockSecretariatPdfs = new Map<string, Blob>()
   private readonly mockSubmittedTenidas: GrandSecretariatTenidaItem[] = [
     {
       recordId: 'gs-tenida-demo-001', lodge: { id: defaultMockOrganizations[1].id, name: defaultMockOrganizations[1].name, number: '23' },
@@ -613,6 +622,16 @@ export class PmgmApiClient {
 
   async getSecretariatAvailability(fromUtc: string, toUtc: string): Promise<SpaceAvailabilityResponse> { if (this.useMocks) { const items = this.mockSpaces.map(space => ({ ...space, isAvailable: !this.mockBusySpaces.has(space.id) })); return { fromUtc, toUtc, total: items.length, available: items.filter(x => x.isAvailable).length, items } } const query = new URLSearchParams({ fromUtc, toUtc }); return this.request<SpaceAvailabilityResponse>(`/api/gran-secretaria/espacios/disponibilidad?${query}`) }
   async getSecretariatDocuments(): Promise<SecretariatDocumentsResponse> { if (this.useMocks) return { total: this.mockDocuments.length, items: [...this.mockDocuments] }; return this.request<SecretariatDocumentsResponse>('/api/gran-secretaria/documentos') }
+  async downloadSecretariatDocumentPdf(documentId: string): Promise<Blob> {
+    if (this.useMocks) {
+      const pdf=this.mockSecretariatPdfs.get(documentId); if(!pdf) throw new Error('El documento oficial firmado no existe.')
+      return pdf
+    }
+    const headers=new Headers({ Accept:'application/pdf' }); const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para descargar el documento.'); headers.set('Authorization',`Bearer ${token}`)
+    const response=await fetch(`${this.baseUrl}/api/gran-secretaria/documentos/${encodeURIComponent(documentId)}/pdf`,{credentials:'omit',redirect:'error',cache:'no-store',headers})
+    if(!response.ok){if(response.status===401)await this.onUnauthorized?.();throw new PmgmApiHttpError(response.status,response.status===403?'Su cuenta no tiene permiso para descargar este documento.':`La API respondió ${response.status} ${response.statusText}.`)}
+    return response.blob()
+  }
   async getSubmittedTenidas(): Promise<GrandSecretariatTenidasResponse> {
     if (this.useMocks) return { total: this.mockSubmittedTenidas.length, items: this.mockSubmittedTenidas.map(item => ({ ...item, lodge: { ...item.lodge } })) }
     return this.request<GrandSecretariatTenidasResponse>('/api/gran-secretaria/tenidas')
@@ -640,20 +659,28 @@ export class PmgmApiClient {
       const ceremony = payload.ceremonyRequestId ? this.mockCeremonies.find(item => item.id === payload.ceremonyRequestId) : undefined
       if (payload.ceremonyRequestId && !ceremony) throw new Error('La ceremonia indicada no existe en la bandeja autorizada.')
       if (ceremony && ceremony.organizationId !== payload.organizationId) throw new Error('La ceremonia no corresponde al Taller indicado.')
+      if (ceremony && !ceremony.formalAuthorizationIssued) throw new Error('No se puede programar la ceremonia antes de emitir la Plancha de Autorización de Gran Secretaría.')
       const id = crypto.randomUUID(); this.mockBusySpaces.add(payload.spaceId)
       if (ceremony) { const space = this.mockSpaces.find(item => item.id === payload.spaceId); ceremony.spaceReservationId = id; ceremony.spaceName = space?.name ?? 'Espacio institucional'; ceremony.reservationStartsAtUtc = payload.startsAtUtc; ceremony.reservationEndsAtUtc = payload.endsAtUtc }
       return { id, status: 'reserved' }
     }
     return this.postJson<{ id: string; status: string }>('/api/gran-secretaria/reservas', payload)
   }
-  async issueSecretariatDocument(payload: IssueDocumentRequest): Promise<SecretariatDocument> { if (this.useMocks) { const kind=payload.documentType==='plancha'?(payload.planchaKind??'formal_communication'):null; const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, planchaKind: kind, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'PLA-COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document } return this.postJson<SecretariatDocument>('/api/gran-secretaria/documentos', payload) }
-  async issueSecretariatCeremonyAuthorization(ceremonyRequestId: string, spaceReservationId: string | null = null): Promise<SecretariatDocument> {
+  async uploadSecretariatDocumentPdf(payload: IssueDocumentRequest, file: File, physicalSignaturesConfirmed: boolean): Promise<SecretariatDocument> { this.requirePhysicalSignatures(physicalSignaturesConfirmed); this.requirePdf(file); if (this.useMocks) { const kind=payload.documentType==='plancha'?(payload.planchaKind??'formal_communication'):null; const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, planchaKind: kind, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'PLA-COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); this.mockSecretariatPdfs.set(document.id,file); return document } return this.putSecretariatPdf('/api/gran-secretaria/documentos/pdf',file,{ 'X-Document-Type':payload.documentType,'X-Document-Title':payload.title,'X-Document-Description':payload.content,'X-Organization-Id':payload.organizationId??'','X-Physical-Signatures-Confirmed':String(physicalSignaturesConfirmed) }) }
+  async uploadSecretariatCeremonyAuthorizationPdf(ceremonyRequestId: string, description: string, file: File, physicalSignaturesConfirmed: boolean): Promise<SecretariatDocument> {
+    this.requirePhysicalSignatures(physicalSignaturesConfirmed)
+    this.requirePdf(file)
     if (this.useMocks) {
-      const ceremony = this.mockCeremonies.find(item => item.id === ceremonyRequestId); if (!ceremony) throw new Error('La ceremonia indicada no existe.'); if (ceremony.formalAuthorizationIssued) throw new Error('La ceremonia ya cuenta con autorización formal vigente.'); if (spaceReservationId && ceremony.spaceReservationId !== spaceReservationId) throw new Error('La reserva indicada no corresponde a esta ceremonia.'); ceremony.formalAuthorizationIssued = true
-      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'plancha', planchaKind: 'ceremony_authorization', documentCode: `PLA-AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Plancha de Autorización de Ceremonia — ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: `Plancha formal de autorización demostrativa para ${ceremony.organizationName}. No constituye Decreto.`, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document
+      let ceremony = this.mockCeremonies.find(item => item.id === ceremonyRequestId)
+      if (!ceremony && ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') { ceremony = { id: ceremonyRequestId, organizationId: defaultMockOrganizations[1].id, organizationName: defaultMockOrganizations[1].name, organizationNumber: '23', ceremonyType: 'initiation', proposedDate: '2026-11-07', status: 'authorized', formalAuthorizationIssued: false, spaceReservationId: null, spaceName: null, reservationStartsAtUtc: null, reservationEndsAtUtc: null, createdAtUtc: new Date().toISOString() }; this.mockCeremonies.push(ceremony) }
+      if (!ceremony) throw new Error('La ceremonia indicada no existe.'); if (ceremony.status !== 'authorized') throw new Error('La ceremonia aún no cuenta con todos los vistos buenos institucionales.'); if (ceremony.formalAuthorizationIssued) throw new Error('La ceremonia ya cuenta con una Plancha firmada vigente.'); ceremony.formalAuthorizationIssued = true
+      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'plancha', planchaKind: 'ceremony_authorization', documentCode: `PLA-AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Plancha de Autorización de Ceremonia — ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: description, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId: ceremony.spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); this.mockSecretariatPdfs.set(document.id,file); return document
     }
-    return this.postJson<SecretariatDocument>(`/api/gran-secretaria/ceremonias/${encodeURIComponent(ceremonyRequestId)}/autorizacion`, { spaceReservationId })
+    return this.putSecretariatPdf(`/api/gran-secretaria/ceremonias/${encodeURIComponent(ceremonyRequestId)}/autorizacion-pdf`,file,{ 'X-Document-Description':description,'X-Physical-Signatures-Confirmed':String(physicalSignaturesConfirmed) })
   }
+  private requirePhysicalSignatures(confirmed:boolean){if(!confirmed)throw new Error('Debe confirmar que el PDF contiene las firmas físicas requeridas.')}
+  private requirePdf(file:File){if(file.type!=='application/pdf'&&!file.name.toLowerCase().endsWith('.pdf'))throw new Error('Debe adjuntar el documento oficial firmado en PDF.')}
+  private async putSecretariatPdf(path:string,file:File,metadata:Record<string,string>):Promise<SecretariatDocument>{const headers=new Headers({'Content-Type':'application/pdf','X-File-Name':encodeURIComponent(file.name)});for(const[key,value]of Object.entries(metadata))headers.set(key,encodeURIComponent(value));const token=await this.getAccessToken?.();if(!token)throw new Error('Debe ingresar para cargar el documento.');headers.set('Authorization',`Bearer ${token}`);const response=await fetch(`${this.baseUrl}${path}`,{method:'PUT',body:file,credentials:'omit',redirect:'error',cache:'no-store',headers});if(!response.ok){if(response.status===401)await this.onUnauthorized?.();throw new PmgmApiHttpError(response.status,`La API respondió ${response.status} ${response.statusText}.`)}return response.json() as Promise<SecretariatDocument>}
 
   private requireMockReviewCeremony(id: string): CeremonyReviewQueueItem { const item = this.mockReviewCeremonies.find(value => value.id === id); if (!item) throw new Error('La ceremonia indicada no existe en la bandeja.'); return item }
   private requireMockTreasuryStatement(id: string): TreasuryStatement { const item = this.mockTreasuryStatements.get(id); if (!item) throw new Error('El cuadro mensual indicado no existe.'); return item }
@@ -694,7 +721,7 @@ function mockInitialDeliberation(ceremonyRequestId: string, payload: InitialDeli
   return { id: ceremonyRequestId, validationStatus: 'approved', code: 'initial_deliberation.approved', reason: 'Se cumple el plazo mínimo y la votación inicial fue unánime.', ceremonyStatus: 'under_review' }
 }
 function dateOnlyDayNumber(value: string) { const [year, month, day] = value.split('-').map(Number); if (!year || !month || !day) throw new Error('La fecha de deliberación no es válida.'); return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000) }
-function ceremonyTypeLabel(type: CeremonyType) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
+function ceremonyTypeLabel(type: CeremonyType) { return type === 'initiation' ? 'Iniciación' : type === 'affiliation' ? 'Afiliación' : type === 'wage_increase' ? 'Aumento de salario' : type === 'incorporation' ? 'Incorporación' : 'Exaltación' }
 function defaultHospitalariaMovements(organizationId:string):LodgeHospitalariaMovement[]{
   return [
     {id:`hosp-income-${organizationId}`,organizationId,movementType:'income',category:'charity_bag',amount:185000,movementDate:'2026-09-05',memberReference:null,destination:null,evidenceReference:'TENIDA-DEMO-2026-09-05',observation:'Tronco de Beneficencia · dato ficticio',approvalStatus:'not_required',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-05T23:00:00Z'},

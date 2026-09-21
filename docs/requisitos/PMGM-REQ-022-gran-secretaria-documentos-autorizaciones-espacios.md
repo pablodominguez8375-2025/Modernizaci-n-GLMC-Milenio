@@ -6,7 +6,7 @@
 **Fuente:** Definición del Product Owner
 
 ## 1. Objetivo
-Gran Secretaría debe funcionar como el módulo institucional responsable de redactar, emitir, registrar, distribuir y archivar documentos oficiales de la Gran Logia, además de gestionar las autorizaciones formales que dependan de validaciones previas de Régimen Interior y Gran Tesorería.
+Gran Secretaría debe funcionar como el módulo institucional responsable de registrar, distribuir y archivar los documentos oficiales firmados físicamente por las autoridades responsables, además de gestionar las autorizaciones formales que dependan de validaciones previas de Régimen Interior y Gran Tesorería.
 
 También debe administrar la disponibilidad y autorización de uso de templos, salas de Secretaría y otros espacios institucionales para reuniones y ceremonias especiales.
 
@@ -20,7 +20,7 @@ Gran Secretaría deberá poder gestionar, al menos:
 - planchas/documentos de autorización para ceremonias;
 - autorizaciones de uso de templos y salas;
 - registro y numeración correlativa de documentos oficiales;
-- plantillas institucionales;
+- metadatos y referencias institucionales del documento físico;
 - distribución y notificación a destinatarios autorizados;
 - archivo histórico y consulta de documentos emitidos;
 - control de versiones y anulaciones/reemplazos;
@@ -29,7 +29,7 @@ Gran Secretaría deberá poder gestionar, al menos:
 La nomenclatura documental debe ser parametrizable para adaptarse a las denominaciones oficiales de la Gran Logia.
 
 ## 3. Decretos y comunicados
-Gran Secretaría podrá crear documentos desde cero o a partir de plantillas institucionales.
+Gran Secretaría registra documentos confeccionados y firmados físicamente fuera del sistema. La plataforma no redacta, crea ni firma Planchas oficiales o Decretos; exige la carga del PDF firmado y una declaración expresa del operador sobre las firmas físicas requeridas.
 
 Cada documento deberá registrar como mínimo:
 - tipo de documento;
@@ -37,7 +37,7 @@ Cada documento deberá registrar como mínimo:
 - período/año;
 - fecha de emisión;
 - asunto/título;
-- cuerpo del documento;
+- descripción o referencia del documento;
 - autoridad emisora;
 - responsable de redacción;
 - destinatarios;
@@ -75,8 +75,8 @@ Gran Secretaría deberá visualizar, sin duplicar las fuentes maestras:
 - documentos exigidos;
 - historial del trámite.
 
-### 4.3 Generación de plancha/documento de autorización
-Una vez cumplidas las condiciones, el sistema debe permitir generar automáticamente la plancha o documento oficial de autorización usando una plantilla institucional.
+### 4.3 Carga de Plancha de Autorización firmada
+Una vez cumplidas las condiciones, el sistema debe permitir registrar los metadatos y cargar el PDF oficial firmado físicamente. El sistema no genera el documento ni sustituye la firma material de las autoridades.
 
 El documento deberá incorporar, según corresponda:
 - correlativo oficial;
@@ -89,7 +89,7 @@ El documento deberá incorporar, según corresponda:
 - referencias a aprobaciones previas;
 - condiciones u observaciones;
 - autoridad que autoriza;
-- firma/sello institucional cuando exista soporte para ello;
+- confirmación expresa de que el PDF contiene las firmas físicas requeridas;
 - código o referencia verificable del trámite.
 
 La emisión debe congelar una copia de los antecedentes y aprobaciones que sustentaron la autorización para conservar evidencia histórica.
@@ -107,7 +107,7 @@ Régimen Interior es responsable de entregar la evaluación institucional y ante
 - requisitos de ceremonia;
 - observaciones o impedimentos.
 
-Gran Secretaría consume esa resolución/validación para confeccionar y emitir el documento formal.
+Gran Secretaría consume esa resolución/validación antes de registrar y cargar el documento formal firmado físicamente.
 
 ## 6. Integración con Gran Tesorería
 Gran Secretaría no mantiene saldos financieros paralelos.
@@ -194,9 +194,9 @@ Flujo base esperado:
 4. Otras áreas requeridas emiten su validación.
 5. Gran Secretaría verifica que todas las aprobaciones obligatorias estén completas.
 6. Se valida o reserva templo/sala si corresponde.
-7. Gran Secretaría genera la plancha/documento oficial de autorización.
-8. Autoridad competente firma/aprueba la emisión.
-9. Documento queda numerado, emitido, notificado y archivado.
+7. La autoridad competente confecciona y firma físicamente la Plancha fuera del sistema.
+8. Gran Secretaría registra su descripción, confirma las firmas físicas y carga el PDF oficial.
+9. Documento queda vinculado, notificado y archivado.
 10. La ceremonia realizada actualiza el expediente y los hitos históricos correspondientes.
 
 ## 10. Numeración y registro oficial
@@ -212,22 +212,13 @@ El sistema debe soportar reglas como:
 
 La regla exacta debe ser parametrizable.
 
-## 11. Plantillas institucionales
-Gran Secretaría debe poder administrar plantillas para:
-- decretos;
-- comunicados;
-- autorizaciones de iniciación;
-- autorizaciones de aumento de salario;
-- autorizaciones de exaltación;
-- autorizaciones de uso de espacios;
-- otros documentos oficiales.
-
-Las plantillas deberán admitir campos automáticos provenientes de la base maestra, evitando volver a escribir datos que ya existen.
+## 11. Documentos físicos y metadatos
+El sistema podrá conservar catálogos de tipo, correlativo, título, descripción, destinatario, confidencialidad y relación con el expediente. No administra plantillas generadoras de Planchas oficiales o Decretos ni incrusta firmas o sellos. El archivo obligatorio es el PDF resultante del proceso físico institucional.
 
 ## 12. Seguridad y permisos
 Como mínimo deberán distinguirse permisos para:
-- crear borradores;
-- editar borradores propios/ajenos;
+- registrar metadatos;
+- corregir metadatos antes de la carga definitiva;
 - revisar;
 - aprobar contenido;
 - asignar numeración;
@@ -237,13 +228,13 @@ Como mínimo deberán distinguirse permisos para:
 - aprobar reservas;
 - consultar documentos confidenciales;
 - descargar/exportar;
-- administrar plantillas y correlativos.
+- administrar tipos documentales y correlativos.
 
 Las funciones de emisión y anulación deben estar restringidas a roles autorizados.
 
 ## 13. Auditoría
 Se deberá auditar como mínimo:
-- creación y edición de documentos;
+- registro y corrección de metadatos;
 - cambios de estado;
 - aprobaciones/rechazos;
 - asignación de correlativos;
@@ -251,7 +242,7 @@ Se deberá auditar como mínimo:
 - firma/validación;
 - anulación y reemplazo;
 - distribución;
-- generación de autorizaciones de ceremonia;
+- carga de autorizaciones de ceremonia firmadas;
 - validaciones consideradas;
 - reservas, reprogramaciones y cancelaciones de espacios;
 - cambios de plantillas y reglas de numeración.
@@ -272,12 +263,12 @@ El módulo deberá permitir reportar al menos:
 
 ## 15. Criterios de aceptación
 El requisito se considera implementado cuando un usuario autorizado de Gran Secretaría puede:
-1. redactar y versionar decretos y comunicados;
+1. registrar los metadatos y cargar el PDF firmado de decretos, Planchas y comunicados oficiales;
 2. asignar correlativos oficiales bajo reglas institucionales;
 3. emitir documentos y conservar su historial;
 4. visualizar las aprobaciones de Régimen Interior y Gran Tesorería para una ceremonia;
 5. impedir la emisión definitiva cuando falte una aprobación obligatoria;
-6. generar automáticamente una plancha/documento de autorización desde plantilla;
+6. bloquear la carga de una Plancha mientras falten descripción, PDF, confirmación de firmas físicas o vistos buenos obligatorios;
 7. vincular la autorización al miembro, Taller, ceremonia y aprobaciones que la sustentan;
 8. consultar disponibilidad de templos y salas;
 9. impedir doble reserva confirmada;

@@ -68,6 +68,23 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
+    public void AdmissionCommission_IsAppointedByVenerable_NotSecretariat()
+    {
+        var organization = Guid.NewGuid();
+        var venerable = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+        var secretaria = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerSecretaria),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.True(_service.CanAppointAdmissionCommission(venerable, organization));
+        Assert.False(_service.CanManageLodgeSecretariat(venerable, organization));
+        Assert.False(_service.CanAppointAdmissionCommission(secretaria, organization));
+        Assert.True(_service.CanManageLodgeSecretariat(secretaria, organization));
+    }
+
+    [Fact]
     public void LodgeTreasurer_CanPrepareMonthlyStatementOnlyForOwnWorkshop()
     {
         var ownOrganization = Guid.NewGuid();

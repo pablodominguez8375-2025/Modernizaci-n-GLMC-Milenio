@@ -18,7 +18,7 @@ public static class WithdrawalEndpoints
         group.MapPost("/", CreateAsync);
         group.MapGet("/", ListAsync);
         group.MapPost("/{requestId:guid}/decision", DecideAsync);
-        group.MapPost("/{requestId:guid}/firmar-orador", SignByOratorAsync);
+        group.MapPost("/{requestId:guid}/firmas/{role}", SignAsync);
         return endpoints;
     }
 
@@ -85,12 +85,8 @@ public static class WithdrawalEndpoints
         var query = db.MemberWithdrawalRequests.AsNoTracking().AsQueryable();
         if (organizationId is not null) query = query.Where(x => x.OriginOrganizationId == organizationId.Value);
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
-        var items = await query.OrderByDescending(x => x.CreatedAtUtc).Take(250).Select(x => new
-        {
-            x.Id, x.MemberId, x.OriginOrganizationId, x.WithdrawalType, x.RequestedEffectiveDate,
-            x.Reason, x.EvidenceReference, x.Status, x.Resolution, x.CreatedAtUtc, x.DecidedAtUtc
-        }).ToListAsync(cancellationToken);
-        return Results.Ok(new { total = items.Count, items });
+        var rows = await query.OrderByDescending(x => x.CreatedAtUtc).Take(250).ToListAsync(cancellationToken);
+        return Results.Ok(new { total = rows.Count, items = rows.Select(ToDto) });
     }
 
     private static async Task<IResult> DecideAsync(
@@ -119,33 +115,6 @@ public static class WithdrawalEndpoints
         withdrawal.DecidedAtUtc = DateTimeOffset.UtcNow;
         withdrawal.DecidedBySubject = Subject(httpContext.User);
 
-        if (request.Decision == MembershipCodes.WithdrawalRequestStatus.Approved)
-        {
-            var memberships = await db.Memberships.Where(x => x.MemberId == withdrawal.MemberId && x.Status == MembershipCodes.MembershipStatus.Active && x.EndDate == null).ToListAsync(cancellationToken);
-            if (memberships.Any(x => x.StartDate > withdrawal.RequestedEffectiveDate))
-                return Results.Conflict(new { message = "Existe una pertenencia activa iniciada después de la fecha efectiva solicitada." });
-            foreach (var membership in memberships)
-            {
-                membership.EndDate = withdrawal.RequestedEffectiveDate;
-                membership.Status = MembershipCodes.MembershipStatus.Closed;
-                membership.EndReason = withdrawal.WithdrawalType == MembershipCodes.WithdrawalType.Voluntary ? "Retiro voluntario — sueño" : "Retiro forzoso — inhabilitación en la Orden";
-                membership.EvidenceReference = withdrawal.EvidenceReference;
-            }
-
-            db.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
-            {
-                MemberId = withdrawal.MemberId,
-                OrganizationId = withdrawal.OriginOrganizationId,
-                EventType = withdrawal.WithdrawalType == MembershipCodes.WithdrawalType.Voluntary
-                    ? MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal
-                    : MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
-                EffectiveDate = withdrawal.RequestedEffectiveDate,
-                Reason = withdrawal.Reason,
-                EvidenceReference = withdrawal.EvidenceReference,
-                Notes = withdrawal.Resolution
-            });
-        }
-
         audit.Add(httpContext, $"membership.withdrawal.{request.Decision}", nameof(MemberWithdrawalRequest), withdrawal.Id.ToString(), withdrawal.OriginOrganizationId,
             AuditResults.Success, new { withdrawal.MemberId, withdrawal.WithdrawalType, withdrawal.Status, withdrawal.RequestedEffectiveDate });
         await db.SaveChangesAsync(cancellationToken);
@@ -156,23 +125,127 @@ public static class WithdrawalEndpoints
     private static object ToDto(MemberWithdrawalRequest value) => new
     {
         value.Id, value.MemberId, value.OriginOrganizationId, value.WithdrawalType,
-        value.RequestedEffectiveDate, value.Status, value.Resolution, value.CreatedAtUtc, value.DecidedAtUtc,
-        value.OratorSignatureSubject, value.OratorSignedAtUtc
+        value.RequestedEffectiveDate, value.Reason, value.EvidenceReference, value.Status, value.Resolution,
+        value.CreatedAtUtc, value.DecidedAtUtc, value.ExecutedAtUtc,
+        signatures = new
+        {
+            venerable = new { signed = value.VenerableSignatureSubject is not null, value.VenerableSignedAtUtc },
+            treasurer = new { signed = value.TreasurerSignatureSubject is not null, value.TreasurerSignedAtUtc },
+            orator = new { signed = value.OratorSignatureSubject is not null, value.OratorSignedAtUtc },
+            secretary = new { signed = value.SecretarySignatureSubject is not null, value.SecretarySignedAtUtc }
+        }
     };
 
-    private static async Task<IResult> SignByOratorAsync(Guid requestId, HttpContext httpContext, PmgmDbContext db,
+    private static async Task<IResult> SignAsync(Guid requestId, string role, HttpContext httpContext, PmgmDbContext db,
         IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
     {
+        if (!WithdrawalSignaturePolicy.IsValidRole(role))
+            return Results.BadRequest(new { message = "El firmante debe ser Venerable Maestro, Tesorero/a, Orador/a o Secretario/a." });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var withdrawal = await db.MemberWithdrawalRequests.SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
         if (withdrawal is null) return Results.NotFound();
-        if (!access.CanSignLodgeDocuments(httpContext.User, withdrawal.OriginOrganizationId)) return Results.Forbid();
+        if (!CanSignAs(httpContext.User, access, withdrawal.OriginOrganizationId, role)) return Results.Forbid();
         if (withdrawal.Status != MembershipCodes.WithdrawalRequestStatus.Approved) return Results.Conflict(new { message = "El retiro debe estar aprobado antes de firmarse." });
-        if (withdrawal.OratorSignatureSubject is not null) return Results.Conflict(new { message = "La carta ya cuenta con firma del Orador." });
-        withdrawal.OratorSignatureSubject = Subject(httpContext.User);
-        withdrawal.OratorSignedAtUtc = DateTimeOffset.UtcNow;
-        audit.Add(httpContext, "membership.withdrawal.orator_signed", nameof(MemberWithdrawalRequest), withdrawal.Id.ToString(), withdrawal.OriginOrganizationId, AuditResults.Success, new { withdrawal.WithdrawalType });
+        if (withdrawal.ExecutedAtUtc is not null) return Results.Conflict(new { message = "La carta ya fue completada y materializada." });
+
+        var subject = Subject(httpContext.User);
+        var signedAt = DateTimeOffset.UtcNow;
+        if (!ApplySignature(withdrawal, role, subject, signedAt))
+            return Results.Conflict(new { message = "Este cargo ya firmó la carta de retiro." });
+
+        audit.Add(httpContext, $"membership.withdrawal.{role}_signed", nameof(MemberWithdrawalRequest), withdrawal.Id.ToString(), withdrawal.OriginOrganizationId, AuditResults.Success, new { withdrawal.WithdrawalType });
+
+        if (WithdrawalSignaturePolicy.IsComplete(
+                withdrawal.VenerableSignatureSubject,
+                withdrawal.TreasurerSignatureSubject,
+                withdrawal.OratorSignatureSubject,
+                withdrawal.SecretarySignatureSubject))
+        {
+            var executionError = await ExecuteApprovedWithdrawalAsync(withdrawal, db, cancellationToken);
+            if (executionError is not null) return Results.Conflict(new { message = executionError });
+            audit.Add(httpContext, "membership.withdrawal.executed", nameof(MemberWithdrawalRequest), withdrawal.Id.ToString(), withdrawal.OriginOrganizationId,
+                AuditResults.Success, new { withdrawal.MemberId, withdrawal.WithdrawalType, withdrawal.RequestedEffectiveDate });
+        }
+
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return Results.Ok(ToDto(withdrawal));
+    }
+
+    private static bool CanSignAs(ClaimsPrincipal user, IInstitutionalAccessService access, Guid organizationId, string role)
+    {
+        if (!access.CanReadOrganization(user, organizationId)) return false;
+        var requiredRole = role switch
+        {
+            WithdrawalSignaturePolicy.Venerable => InstitutionalRoles.TallerVenerable,
+            WithdrawalSignaturePolicy.Treasurer => InstitutionalRoles.TallerTesoreria,
+            WithdrawalSignaturePolicy.Orator => InstitutionalRoles.TallerOrador,
+            WithdrawalSignaturePolicy.Secretary => InstitutionalRoles.TallerSecretaria,
+            _ => string.Empty
+        };
+        return user.Claims.Any(x => x.Type == InstitutionalClaims.Organization && x.Value == organizationId.ToString()) &&
+               user.Claims.Any(x => x.Type == InstitutionalClaims.Role && x.Value == requiredRole);
+    }
+
+    private static bool ApplySignature(MemberWithdrawalRequest withdrawal, string role, string subject, DateTimeOffset signedAt)
+    {
+        switch (role)
+        {
+            case WithdrawalSignaturePolicy.Venerable when withdrawal.VenerableSignatureSubject is null:
+                withdrawal.VenerableSignatureSubject = subject;
+                withdrawal.VenerableSignedAtUtc = signedAt;
+                return true;
+            case WithdrawalSignaturePolicy.Treasurer when withdrawal.TreasurerSignatureSubject is null:
+                withdrawal.TreasurerSignatureSubject = subject;
+                withdrawal.TreasurerSignedAtUtc = signedAt;
+                return true;
+            case WithdrawalSignaturePolicy.Orator when withdrawal.OratorSignatureSubject is null:
+                withdrawal.OratorSignatureSubject = subject;
+                withdrawal.OratorSignedAtUtc = signedAt;
+                return true;
+            case WithdrawalSignaturePolicy.Secretary when withdrawal.SecretarySignatureSubject is null:
+                withdrawal.SecretarySignatureSubject = subject;
+                withdrawal.SecretarySignedAtUtc = signedAt;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private static async Task<string?> ExecuteApprovedWithdrawalAsync(MemberWithdrawalRequest withdrawal, PmgmDbContext db, CancellationToken cancellationToken)
+    {
+        var memberships = await db.Memberships
+            .Where(x => x.MemberId == withdrawal.MemberId && x.Status == MembershipCodes.MembershipStatus.Active && x.EndDate == null)
+            .ToListAsync(cancellationToken);
+        if (memberships.Count == 0) return "El hermano ya no posee una pertenencia activa que pueda cerrarse.";
+        if (memberships.Any(x => x.StartDate > withdrawal.RequestedEffectiveDate))
+            return "Existe una pertenencia activa iniciada después de la fecha efectiva solicitada.";
+
+        foreach (var membership in memberships)
+        {
+            membership.EndDate = withdrawal.RequestedEffectiveDate;
+            membership.Status = MembershipCodes.MembershipStatus.Closed;
+            membership.EndReason = withdrawal.WithdrawalType == MembershipCodes.WithdrawalType.Voluntary
+                ? "Retiro voluntario — sueño"
+                : "Retiro forzoso — inhabilitación en la Orden";
+            membership.EvidenceReference = withdrawal.EvidenceReference;
+        }
+
+        db.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
+        {
+            MemberId = withdrawal.MemberId,
+            OrganizationId = withdrawal.OriginOrganizationId,
+            EventType = withdrawal.WithdrawalType == MembershipCodes.WithdrawalType.Voluntary
+                ? MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal
+                : MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
+            EffectiveDate = withdrawal.RequestedEffectiveDate,
+            Reason = withdrawal.Reason,
+            EvidenceReference = withdrawal.EvidenceReference,
+            Notes = withdrawal.Resolution
+        });
+        withdrawal.ExecutedAtUtc = DateTimeOffset.UtcNow;
+        return null;
     }
 
     private static string Subject(ClaimsPrincipal user) => user.FindFirst("sub")?.Value ?? "unknown";

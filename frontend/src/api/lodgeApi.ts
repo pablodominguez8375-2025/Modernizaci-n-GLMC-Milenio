@@ -2,7 +2,7 @@ export type LodgeMeetingType = 'regular' | 'solemn' | 'instruction' | 'anniversa
 export type LodgeGrade = 'apprentice' | 'fellowcraft' | 'master' | 'all'
 export type LodgeMeetingStatus = 'scheduled' | 'open' | 'held' | 'closed' | 'cancelled'
 export type LodgeMeetingModality = 'in_person' | 'virtual'
-export type LodgeCeremonyType = 'initiation' | 'wage_increase' | 'exaltation'
+export type LodgeCeremonyType = 'initiation' | 'affiliation' | 'wage_increase' | 'exaltation' | 'incorporation'
 export type LodgeAttendanceStatus = 'present' | 'excused' | 'absent'
 export type LodgeMinuteStatus = 'draft' | 'approved' | 'superseded'
 
@@ -34,6 +34,7 @@ export interface CreateLodgeMeetingRequest {
   locationReference?: string | null
   virtualAccessReference?: string | null
   title?: string | null
+  ceremonyAuthorizationDocumentId?: string | null
 }
 export interface LodgeAttendanceCurrent {
   recordId: string
@@ -79,7 +80,14 @@ export interface LodgeAnonymousBallotRequest { ballotType: LodgeBallotType; proc
 export interface LodgeAnonymousBallotsResponse { total: number; items: LodgeAnonymousBallot[] }
 export interface LodgeMinuteExtract { meetingId: string; attendeeCount: number; absentCount: number; excusedCount: number; ballotCount: number; content: string }
 export type LodgeWithdrawalType = 'voluntary' | 'forced'
-export interface LodgeWithdrawal { id: string; memberId: string; originOrganizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; status: 'pending' | 'approved' | 'rejected'; resolution: string | null; createdAtUtc: string; decidedAtUtc: string | null }
+export type LodgeWithdrawalSignatureRole = 'venerable' | 'treasurer' | 'orator' | 'secretary'
+export interface LodgeWithdrawalSignature { signed: boolean; signedAtUtc: string | null }
+export interface LodgeWithdrawal {
+  id: string; memberId: string; originOrganizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string
+  reason: string; evidenceReference: string; status: 'pending' | 'approved' | 'rejected'; resolution: string | null
+  createdAtUtc: string; decidedAtUtc: string | null; executedAtUtc: string | null
+  signatures: Record<LodgeWithdrawalSignatureRole, LodgeWithdrawalSignature>
+}
 export interface LodgeWithdrawalsResponse { total: number; items: LodgeWithdrawal[] }
 export interface CreateLodgeWithdrawalRequest { memberId: string; organizationId: string; withdrawalType: LodgeWithdrawalType; requestedEffectiveDate: string; reason: string; evidenceReference: string }
 
@@ -113,6 +121,14 @@ export interface LodgeSecretariatRecord {
   createdAtUtc: string; submittedAtUtc: string | null; reviewedAtUtc: string | null; reviewNotes: string | null
 }
 export interface LodgeSecretariatRecordsResponse { total: number; items: LodgeSecretariatRecord[] }
+export interface LodgeWorkPaper {
+  id:string; organizationId:string; authorMemberId:string; authorName:string; documentId:string; documentVersionId:string
+  meetingId:string|null; title:string; topic:string|null; degree:'apprentice'|'fellowcraft'|'master'; presentedOn:string
+  shortDescription:string|null; status:'private'|'library_requested'|'published'; createdAtUtc:string
+  libraryRequestedAtUtc:string|null; publishedAtUtc:string|null
+}
+export interface LodgeWorkPapersResponse { total:number; items:LodgeWorkPaper[] }
+export interface CreateLodgeWorkPaperRequest { authorMemberId:string; documentId:string; documentVersionId:string; meetingId:string|null; title:string; topic:string|null; degree:LodgeWorkPaper['degree']; presentedOn:string; shortDescription:string|null }
 export interface UpsertLodgeSecretariatRecordRequest {
   workPaperDocumentVersionId?: string | null; workPaperAuthorMemberId?: string | null
   extractDocumentVersionId?: string | null; fullMinuteDocumentVersionId?: string | null
@@ -123,6 +139,13 @@ export interface LodgeCeremonyAuthorizationOption {
   proposedDate: string | null; issuedAtUtc: string
 }
 export interface LodgeCeremonyAuthorizationOptionsResponse { total: number; items: LodgeCeremonyAuthorizationOption[] }
+export interface LodgeAdvancementRequest {
+  id:string; organizationId:string; ceremonyType:'wage_increase'|'exaltation'; memberId:string; memberName:string
+  tentativeDate:string|null; status:string; notes:string|null; createdAtUtc:string
+  dispensationRequested:boolean; councilApprovedDispensation:boolean|null; councilRecordReference:string|null; dispensationRequirement:string|null
+}
+export interface LodgeAdvancementRequestsResponse { total:number; items:LodgeAdvancementRequest[] }
+export interface LodgeAdvancementEligibility { requestId:string; status:string; canAuthorize:boolean; advancement:null|{mode:string;sourceDegree:number;ruleVersion:string;requirements:Array<{code:string;name:string;minimum:number;achieved:number;complies:boolean}>;dispensation:null|{status:string;reason:string}} }
 export interface LodgeCorrespondence { id:string; organizationId:string; direction:'received'|'sent'; folio:string; correspondenceDate:string; subject:string; counterparty:string; channel:'email'|'letter'|'hand_delivery'|'other'; reference:string|null; status:'registered'|'closed'; createdAtUtc:string; closedAtUtc:string|null }
 export interface LodgeSecretariatTask { id:string; organizationId:string; title:string; detail:string|null; dueDate:string|null; priority:'low'|'normal'|'high'|'urgent'; responsible:string|null; status:'pending'|'in_progress'|'completed'|'cancelled'; createdAtUtc:string; completedAtUtc:string|null }
 export interface LodgeAgendaItem { id:string; organizationId:string; meetingId:string|null; order:number; title:string; detail:string|null; status:'pending'|'covered'|'deferred'; createdAtUtc:string; updatedAtUtc:string|null }
@@ -171,6 +194,11 @@ export const demoLodgeSeed = {
       grade: 'apprentice' as const, ceremonyType: 'initiation' as const, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida de Iniciación · demo', status: 'held' as const, createdAtUtc: '2026-09-10T15:00:00Z', heldAtUtc: '2026-09-19T00:30:00Z', closedAtUtc: null,
     },
     {
+      id: 'bbbbbbbb-2309-0018-0000-000000000006', organizationId: DEMO_LODGE_23_ID, meetingDate: '2026-09-18', meetingType: 'solemn' as const,
+      grade: 'master' as const, ceremonyType: 'affiliation' as const, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null,
+      title: 'Tenida de Afiliación · demo', status: 'closed' as const, createdAtUtc: '2026-09-12T15:00:00Z', heldAtUtc: '2026-09-19T00:10:00Z', closedAtUtc: '2026-09-19T02:20:00Z',
+    },
+    {
       id: 'bbbbbbbb-0109-0019-0000-000000000004', organizationId: DEMO_LODGE_1_ID, meetingDate: '2026-09-19', meetingType: 'solemn' as const,
       grade: 'all' as const, ceremonyType: null, modality: 'in_person' as const, locationReference: 'Templo Demostrativo', virtualAccessReference: null, title: 'Tenida Solemne · demo', status: 'scheduled' as const, createdAtUtc: '2026-09-03T15:00:00Z', heldAtUtc: null, closedAtUtc: null,
     },
@@ -188,6 +216,15 @@ export const demoLodgeSeed = {
   ballots: [{ id: 'ffffffff-0001-0001-0001-000000000001', meetingId: 'bbbbbbbb-2309-0005-0000-000000000003', version: 1, ballotType: 'white_black' as const, procedureNumber: 1 as const, subject: 'Admisión de Persona Demostrativa', attendeeCount: 2, eligibleCount: 2, positiveCount: 2, negativeCount: 0, recountObservation: null, status: 'closed' as const, recordedAtUtc: '2026-09-06T01:15:00Z' }] satisfies LodgeAnonymousBallot[],
   ceremonyAuthorizations: [
     {
+      id: 'abababab-5555-2222-3333-444444444444',
+      documentCode: 'PLA-AUT-CER-2026-AFI0001',
+      title: 'Plancha de Autorización de Ceremonia — affiliation',
+      ceremonyRequestId: 'ac000000-0000-0000-0000-000000000003',
+      ceremonyType: 'affiliation' as const,
+      proposedDate: '2026-09-18',
+      issuedAtUtc: '2026-09-17T18:00:00Z',
+    },
+    {
       id: 'abababab-1111-2222-3333-444444444444',
       documentCode: 'PLA-AUT-CER-2026-DEMO0001',
       title: 'Plancha de Autorización de Ceremonia — initiation',
@@ -197,6 +234,15 @@ export const demoLodgeSeed = {
       issuedAtUtc: '2026-09-16T18:00:00Z',
     },
   ] satisfies LodgeCeremonyAuthorizationOption[],
+  secretariatRecords: [
+    {
+      id: 'edededed-2309-0018-0000-000000000006', organizationId: DEMO_LODGE_23_ID, recordType: 'tenida' as const,
+      sourceRecordId: 'bbbbbbbb-2309-0018-0000-000000000006', eventDate: '2026-09-18', title: 'Tenida de Afiliación · demo',
+      workPaperDocumentVersionId: null, workPaperAuthorMemberId: null, extractDocumentVersionId: 'edededed-extract-0018-000000000006',
+      fullMinuteDocumentVersionId: null, ceremonyAuthorizationDocumentId: 'abababab-5555-2222-3333-444444444444',
+      status: 'submitted' as const, createdAtUtc: '2026-09-19T01:40:00Z', submittedAtUtc: '2026-09-19T02:25:00Z', reviewedAtUtc: null, reviewNotes: null,
+    },
+  ] satisfies LodgeSecretariatRecord[],
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
@@ -214,10 +260,21 @@ export class LodgeApiClient {
   private readonly mockBallots = new Map<string, LodgeAnonymousBallot[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.ballots.map(item => ({ ...item }))]])
   private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
   private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
-  private readonly mockWithdrawals: LodgeWithdrawal[] = []
+  private readonly mockWithdrawals: LodgeWithdrawal[] = [{
+    id: '67676767-2323-2323-2323-232323232323', memberId: demoMembers[0].id, originOrganizationId: DEMO_LODGE_23_ID,
+    withdrawalType: 'voluntary', requestedEffectiveDate: '2026-10-01', reason: 'Solicitud demostrativa aprobada por Cámara del Medio.',
+    evidenceReference: 'CRV-DEMO-2026-001', status: 'approved', resolution: 'Aprobada para completar las cuatro firmas institucionales.',
+    createdAtUtc: '2026-09-18T15:00:00Z', decidedAtUtc: '2026-09-19T15:00:00Z', executedAtUtc: null,
+    signatures: {
+      venerable: { signed: false, signedAtUtc: null }, treasurer: { signed: false, signedAtUtc: null },
+      orator: { signed: false, signedAtUtc: null }, secretary: { signed: false, signedAtUtc: null },
+    },
+  }]
   private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
-  private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = []
+  private readonly mockSecretariatRecords: LodgeSecretariatRecord[] = demoLodgeSeed.secretariatRecords.map(item => ({ ...item }))
+  private readonly mockWorkPapers: LodgeWorkPaper[] = []
+  private readonly mockAdvancementRequests: LodgeAdvancementRequest[] = []
   private readonly mockCeremonyAuthorizations: LodgeCeremonyAuthorizationOption[] = demoLodgeSeed.ceremonyAuthorizations.map(item => ({ ...item }))
   private readonly mockCorrespondence: LodgeCorrespondence[] = [{id:'corr-demo-001',organizationId:DEMO_LODGE_23_ID,direction:'received',folio:'REC-2026-001',correspondenceDate:'2026-09-17',subject:'Circular institucional demostrativa',counterparty:'Gran Secretaría',channel:'email',reference:'Correo institucional ficticio',status:'registered',createdAtUtc:'2026-09-17T15:00:00Z',closedAtUtc:null}]
   private readonly mockSecretariatTasks: LodgeSecretariatTask[] = [{id:'task-demo-001',organizationId:DEMO_LODGE_23_ID,title:'Preparar extracto de próxima Tenida',detail:'Pendiente demostrativo sin datos reales.',dueDate:'2026-09-25',priority:'high',responsible:'Secretaría del Taller',status:'pending',createdAtUtc:'2026-09-18T15:00:00Z',completedAtUtc:null}]
@@ -323,9 +380,43 @@ export class LodgeApiClient {
     return this.request<LodgeSecretariatRecord>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/tenidas/${encodeURIComponent(meetingId)}/remitir-extracto`,{method:'POST'})
   }
 
+  async getWorkPapers(organizationId:string):Promise<LodgeWorkPapersResponse>{
+    if(this.useMocks){const items=this.mockWorkPapers.filter(x=>x.organizationId===organizationId).map(x=>({...x}));return{total:items.length,items}}
+    return this.request<LodgeWorkPapersResponse>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/planchas-trabajo`)
+  }
+
+  async createWorkPaper(organizationId:string,payload:CreateLodgeWorkPaperRequest):Promise<LodgeWorkPaper>{
+    if(this.useMocks){const author=demoMembers.find(x=>x.id===payload.authorMemberId);const item:LodgeWorkPaper={id:crypto.randomUUID(),organizationId,...payload,authorName:author?.displayName??'Hermano demostrativo',status:'private',createdAtUtc:new Date().toISOString(),libraryRequestedAtUtc:null,publishedAtUtc:null};this.mockWorkPapers.unshift(item);return{...item}}
+    return this.postJson<LodgeWorkPaper>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/planchas-trabajo`,payload)
+  }
+
+  async requestWorkPaperLibraryPublication(id:string):Promise<void>{
+    if(this.useMocks){const item=this.mockWorkPapers.find(x=>x.id===id);if(!item)throw new Error('La plancha no existe.');item.status='library_requested';item.libraryRequestedAtUtc=new Date().toISOString();return}
+    await this.request(`/api/secretaria/planchas-trabajo/${encodeURIComponent(id)}/solicitar-biblioteca`,{method:'POST'})
+  }
+
+  async getAdvancementRequests(organizationId:string):Promise<LodgeAdvancementRequestsResponse>{
+    if(this.useMocks){const items=this.mockAdvancementRequests.filter(x=>x.organizationId===organizationId).map(x=>({...x}));return{total:items.length,items}}
+    return this.request<LodgeAdvancementRequestsResponse>(`/api/ceremonias/talleres/${encodeURIComponent(organizationId)}/solicitudes-avance`)
+  }
+
+  async createAdvancementRequest(organizationId:string,payload:{ceremonyType:'wage_increase'|'exaltation';memberId:string;tentativeDate:string;notes?:string|null;dispensationRequested?:boolean;councilApprovedDispensation?:boolean|null;councilRecordReference?:string|null;dispensationRequirement?:string|null}):Promise<LodgeAdvancementRequest>{
+    if(this.useMocks){
+      if(this.mockAdvancementRequests.some(x=>x.memberId===payload.memberId&&x.ceremonyType===payload.ceremonyType&&!['rejected','completed'].includes(x.status)))throw new Error('Ya existe una solicitud de avance vigente para este hermano y ceremonia.')
+      const member=demoMembers.find(x=>x.id===payload.memberId);const item:LodgeAdvancementRequest={id:crypto.randomUUID(),organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,memberName:member?.displayName??'Hermano demostrativo',tentativeDate:payload.tentativeDate,status:'under_review',notes:payload.notes?.trim()||null,dispensationRequested:payload.dispensationRequested??false,councilApprovedDispensation:payload.councilApprovedDispensation??null,councilRecordReference:payload.councilRecordReference??null,dispensationRequirement:payload.dispensationRequirement??null,createdAtUtc:new Date().toISOString()};this.mockAdvancementRequests.unshift(item);return{...item}
+    }
+    const created=await this.postJson<{id:string;organizationId:string;ceremonyType:'wage_increase'|'exaltation';memberId:string;proposedDate:string|null;status:string;dispensationRequested:boolean;councilApprovedDispensation:boolean|null;councilRecordReference:string|null;dispensationRequirement:string|null}>('/api/ceremonias/solicitudes',{organizationId,ceremonyType:payload.ceremonyType,memberId:payload.memberId,candidatePersonId:null,proposedDate:payload.tentativeDate,notes:payload.notes??null,dispensationRequested:payload.dispensationRequested??false,councilApprovedDispensation:payload.councilApprovedDispensation??null,councilRecordReference:payload.councilRecordReference??null,dispensationRequirement:payload.dispensationRequirement??null})
+    return{id:created.id,organizationId:created.organizationId,ceremonyType:created.ceremonyType,memberId:created.memberId,memberName:'',tentativeDate:created.proposedDate,status:created.status,notes:payload.notes??null,dispensationRequested:created.dispensationRequested,councilApprovedDispensation:created.councilApprovedDispensation,councilRecordReference:created.councilRecordReference,dispensationRequirement:created.dispensationRequirement,createdAtUtc:new Date().toISOString()}
+  }
+
+  async getAdvancementEligibility(requestId:string):Promise<LodgeAdvancementEligibility>{
+    if(this.useMocks)return{requestId,status:'observed',canAuthorize:false,advancement:{mode:'blocked',sourceDegree:1,ruleVersion:'demo-2026',requirements:[{code:'months_in_degree',name:'Antigüedad continuada en el grado (meses)',minimum:24,achieved:18,complies:false},{code:'meeting_attendance',name:'Asistencia a tenidas',minimum:30,achieved:22,complies:false},{code:'instruction_attendance',name:'Asistencia a instrucciones',minimum:10,achieved:8,complies:false},{code:'work_papers',name:'Planchas de trabajo',minimum:2,achieved:1,complies:false}],dispensation:null}}
+    return this.request<LodgeAdvancementEligibility>(`/api/ceremonias/solicitudes/${encodeURIComponent(requestId)}/elegibilidad`)
+  }
+
   async getWithdrawals(organizationId: string): Promise<LodgeWithdrawalsResponse> {
     if (this.useMocks) {
-      const items = this.mockWithdrawals.filter(item => item.originOrganizationId === organizationId).map(item => ({ ...item }))
+      const items = this.mockWithdrawals.filter(item => item.originOrganizationId === organizationId).map(item => structuredClone(item))
       return { total: items.length, items }
     }
     return this.request<LodgeWithdrawalsResponse>(`/api/gestion-logial/retiros?organizationId=${encodeURIComponent(organizationId)}`)
@@ -335,11 +426,34 @@ export class LodgeApiClient {
     if (this.useMocks) {
       if (this.mockWithdrawals.some(item => item.memberId === payload.memberId && item.status === 'pending')) throw new Error('El hermano ya tiene un retiro pendiente de resolución.')
       if (payload.reason.trim().length < 10) throw new Error('La causal o fundamento debe contener al menos 10 caracteres.')
-      const item: LodgeWithdrawal = { id: crypto.randomUUID(), memberId: payload.memberId, originOrganizationId: payload.organizationId, withdrawalType: payload.withdrawalType, requestedEffectiveDate: payload.requestedEffectiveDate, status: 'pending', resolution: null, createdAtUtc: new Date().toISOString(), decidedAtUtc: null }
+      const item: LodgeWithdrawal = {
+        id: crypto.randomUUID(), memberId: payload.memberId, originOrganizationId: payload.organizationId,
+        withdrawalType: payload.withdrawalType, requestedEffectiveDate: payload.requestedEffectiveDate,
+        reason: payload.reason, evidenceReference: payload.evidenceReference, status: 'pending', resolution: null,
+        createdAtUtc: new Date().toISOString(), decidedAtUtc: null, executedAtUtc: null,
+        signatures: {
+          venerable: { signed: false, signedAtUtc: null }, treasurer: { signed: false, signedAtUtc: null },
+          orator: { signed: false, signedAtUtc: null }, secretary: { signed: false, signedAtUtc: null },
+        },
+      }
       this.mockWithdrawals.unshift(item)
       return { ...item }
     }
     return this.postJson<LodgeWithdrawal>('/api/gestion-logial/retiros/', payload)
+  }
+
+  async signWithdrawal(requestId: string, role: LodgeWithdrawalSignatureRole): Promise<LodgeWithdrawal> {
+    if (this.useMocks) {
+      const item = this.mockWithdrawals.find(entry => entry.id === requestId)
+      if (!item) throw new Error('La carta de retiro no existe.')
+      if (item.status !== 'approved') throw new Error('El retiro debe estar aprobado antes de firmarse.')
+      if (item.executedAtUtc) throw new Error('La carta ya fue completada y materializada.')
+      if (item.signatures[role].signed) throw new Error('Este cargo ya firmó la carta de retiro.')
+      item.signatures[role] = { signed: true, signedAtUtc: new Date().toISOString() }
+      if (Object.values(item.signatures).every(signature => signature.signed)) item.executedAtUtc = new Date().toISOString()
+      return structuredClone(item)
+    }
+    return this.postJson<LodgeWithdrawal>(`/api/gestion-logial/retiros/${encodeURIComponent(requestId)}/firmas/${encodeURIComponent(role)}`, {})
   }
 
   async getMeetings(organizationId: string, filters: { from?: string; to?: string } = {}): Promise<LodgeMeetingsResponse> {
@@ -360,6 +474,8 @@ export class LodgeApiClient {
 
   async createMeeting(organizationId: string, payload: CreateLodgeMeetingRequest): Promise<LodgeMeeting> {
     if (this.useMocks) {
+      if(payload.ceremonyType&&!payload.ceremonyAuthorizationDocumentId)throw new Error('No puede programarse una Tenida ceremonial antes de recibir la Plancha de Autorización de Gran Secretaría.')
+      if(payload.ceremonyType&&!this.mockCeremonyAuthorizations.some(x=>x.id===payload.ceremonyAuthorizationDocumentId&&x.ceremonyType===payload.ceremonyType&&x.proposedDate===payload.meetingDate))throw new Error('La Plancha no corresponde al tipo o fecha de la ceremonia que intenta programar.')
       const meeting: LodgeMeeting = {
         id: crypto.randomUUID(),
         organizationId,

@@ -36,8 +36,10 @@ public sealed class SecretariatOperationsPolicyTests
     [InlineData(null, true)]
     [InlineData("", true)]
     [InlineData(SecretariatOperationsCodes.CeremonyType.Initiation, false)]
+    [InlineData(SecretariatOperationsCodes.CeremonyType.Affiliation, false)]
     [InlineData(SecretariatOperationsCodes.CeremonyType.WageIncrease, false)]
     [InlineData(SecretariatOperationsCodes.CeremonyType.Exaltation, false)]
+    [InlineData(SecretariatOperationsCodes.CeremonyType.Incorporation, false)]
     public void WorkPaper_IsOptionalButOnlyAllowedForNonCeremonialTenidas(string? ceremonyType, bool expected)
         => Assert.Equal(
             expected,

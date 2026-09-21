@@ -59,6 +59,15 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   }
 
   const pendingAuthorizations = ceremonies.filter(item => !item.formalAuthorizationIssued).length
+  const downloadDocument = (document: SecretariatDocument) => execute(async () => {
+    const blob = await api.downloadSecretariatDocumentPdf(document.id)
+    const url = URL.createObjectURL(blob)
+    const anchor = window.document.createElement('a')
+    anchor.href = url
+    anchor.download = `${document.documentCode}.pdf`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, 'PDF oficial firmado descargado.')
 
   return (
     <>
@@ -66,7 +75,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
         <div>
           <p className="eyebrow">Operación institucional</p>
           <h1>Gran Secretaría</h1>
-          <p>Planchas formales, Decretos, espacios institucionales y recepción de extractos de Tenidas, con acceso mínimo y trazable.</p>
+          <p>Registro y custodia de Planchas y Decretos firmados físicamente, espacios institucionales y recepción de extractos de Tenidas, con acceso mínimo y trazable.</p>
         </div>
         <span className="count-badge">{loading ? 'cargando…' : `${pendingAuthorizations} autorizaciones pendientes`}</span>
       </section>
@@ -100,7 +109,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
         <article className="panel secretariat-wide">
           <div className="panel-heading"><div><p className="eyebrow">Registro oficial</p><h2>Documentos recientes</h2></div><span className="count-badge">{documents.length} registros</span></div>
           {documents.length === 0 ? <p className="muted">Aún no hay documentos emitidos.</p> : (
-            <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document)} · {formatChile(document.issuedAtUtc)}</small></div>)}</div>
+            <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document)} · {formatChile(document.issuedAtUtc)}</small><button className="secondary-action" type="button" disabled={working} onClick={() => void downloadDocument(document)}>Descargar PDF firmado</button></div>)}</div>
           )}
         </article>
       </section>
@@ -112,19 +121,23 @@ function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocum
   api: PmgmApiClient; items: GrandSecretariatCeremonyQueueItem[]; working: boolean
   execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshDocuments: () => Promise<void>; refreshCeremonies: () => Promise<void>
 }) {
-  const issue = (item: GrandSecretariatCeremonyQueueItem) => {
-    const success = item.spaceReservationId ? 'Plancha de Autorización emitida con la reserva institucional asociada.' : 'Plancha de Autorización emitida dejando constancia de que no existe sala asignada.'
+  const issue = (item: GrandSecretariatCeremonyQueueItem, file?: File) => {
+    if (!file) return
+    const description = window.prompt('Descripción o referencia de la Plancha firmada:')?.trim()
+    if (!description) return
+    if (!window.confirm('¿Confirma que el PDF contiene la Plancha firmada físicamente por los responsables?')) return
+    const success = 'Plancha de Autorización firmada cargada y auditada.'
     void execute(async () => {
-      await api.issueSecretariatCeremonyAuthorization(item.id, item.spaceReservationId)
+      await api.uploadSecretariatCeremonyAuthorizationPdf(item.id, description, file, true)
       await Promise.all([refreshDocuments(), refreshCeremonies()])
     }, success)
   }
 
-  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Plancha de Autorización de Ceremonia</h2></div><span className="count-badge">{items.filter(item => !item.formalAuthorizationIssued).length} pendientes</span></div>
-    <p className="form-note">Esta bandeja no expone nombres de hermanos o insinuados. La autorización formal sólo utiliza el Taller, tipo de ceremonia, fecha y reserva institucional cuando existe.</p>
+  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Plancha de Autorización firmada</h2></div><span className="count-badge">{items.filter(item => !item.formalAuthorizationIssued).length} pendientes</span></div>
+    <p className="form-note">El sistema no genera la Plancha. Gran Secretaría carga aquí el PDF después de su firma física. Esta bandeja no expone nombres de hermanos o insinuados.</p>
     {items.length === 0 ? <p className="muted">No hay ceremonias autorizadas pendientes de gestión documental.</p> : <div className="ceremony-queue">{items.map(item => <div className="ceremony-row" key={item.id}>
       <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Plancha emitida' : 'Pendiente de Plancha'}</span></div><span>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
-      {!item.formalAuthorizationIssued && <button className={item.spaceReservationId ? 'primary-action' : 'secondary-action'} type="button" disabled={working} onClick={() => issue(item)}>{item.spaceReservationId ? 'Emitir Plancha' : 'Emitir Plancha sin sala asignada'}</button>}
+      {!item.formalAuthorizationIssued && <label className="secondary-action">Cargar Plancha firmada PDF<input hidden type="file" accept=".pdf,application/pdf" disabled={working} onChange={event => issue(item, event.target.files?.[0])} /></label>}
     </div>)}</div>}
   </article>
 }
@@ -182,7 +195,7 @@ function ReservationPanel({ api, organizations, ceremonies, availability, workin
   execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshAvailability: () => Promise<void>; refreshCeremonies: () => Promise<void>; fromLocal: string; toLocal: string
 }) {
   const availableSpaces = availability?.items.filter(x => x.isAvailable) ?? []
-  const reservableCeremonies = ceremonies.filter(item => !item.formalAuthorizationIssued && !item.spaceReservationId)
+  const reservableCeremonies = ceremonies.filter(item => item.formalAuthorizationIssued && !item.spaceReservationId)
   const [organizationId, setOrganizationId] = useState('')
   const [ceremonyId, setCeremonyId] = useState('')
   const [spaceId, setSpaceId] = useState('')
@@ -206,11 +219,11 @@ function ReservationPanel({ api, organizations, ceremonies, availability, workin
   }
 
   return <article className="panel"><p className="eyebrow">Reserva</p><h2>Asignar espacio</h2><form className="stack-form" onSubmit={submit}>
-    <Field label="Ceremonia autorizada · opcional"><select value={ceremonyId} onChange={e => setCeremonyId(e.target.value)}><option value="">Reserva general, sin ceremonia</option>{reservableCeremonies.map(item => <option key={item.id} value={item.id}>{ceremonyTypeLabel(item.ceremonyType)} · {item.organizationName}{item.proposedDate ? ` · ${formatDateOnly(item.proposedDate)}` : ''}</option>)}</select></Field>
+    <Field label="Ceremonia con Plancha de Autorización · opcional"><select value={ceremonyId} onChange={e => setCeremonyId(e.target.value)}><option value="">Reserva general, sin ceremonia</option>{reservableCeremonies.map(item => <option key={item.id} value={item.id}>{ceremonyTypeLabel(item.ceremonyType)} · {item.organizationName}{item.proposedDate ? ` · ${formatDateOnly(item.proposedDate)}` : ''}</option>)}</select></Field>
     <Field label="Taller / organización"><select required disabled={!!selectedCeremony} value={effectiveOrganizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field>
     <Field label="Templo o sala disponible"><select required value={spaceId} onChange={e => setSpaceId(e.target.value)}><option value="">Seleccione…</option>{availableSpaces.map(s => <option key={s.id} value={s.id}>{s.name} · {spaceTypeLabel(s.spaceType)}</option>)}</select></Field>
     <Field label="Propósito"><input required maxLength={300} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder={selectedCeremony ? `Ej.: ${ceremonyTypeLabel(selectedCeremony.ceremonyType)}` : 'Ej.: Tenida especial'} /></Field>
-    <small className="form-note">Usa el período consultado arriba. Si selecciona una ceremonia, el Taller queda fijado por la solicitud autorizada y la reserva se vincula automáticamente.</small>
+    <small className="form-note">Usa el período consultado arriba. La programación de una ceremonia sólo está habilitada después de emitir la Plancha de Autorización de Gran Secretaría. Si selecciona una ceremonia, el Taller queda fijado y la reserva se vincula automáticamente.</small>
     <button className="primary-action" disabled={working || !spaceId || !effectiveOrganizationId}>Reservar</button>
   </form></article>
 }
@@ -230,16 +243,20 @@ function SpacePanel({ api, working, execute, refreshAvailability }: { api: PmgmA
 }
 
 function DocumentPanel({ api, organizations, working, execute, refreshDocuments }: { api: PmgmApiClient; organizations: OrganizationOption[]; working: boolean; execute: (action: () => Promise<void>, success: string) => Promise<void>; refreshDocuments: () => Promise<void> }) {
-  const [type, setType] = useState<'decree' | 'plancha'>('plancha'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState('')
+  const [type, setType] = useState<'decree' | 'plancha'>('plancha'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState(''); const [file,setFile]=useState<File|null>(null); const [signaturesConfirmed,setSignaturesConfirmed]=useState(false)
   const submit = (event: FormEvent) => { event.preventDefault(); void execute(async () => {
-    await api.issueSecretariatDocument({ documentType: type, planchaKind: type === 'plancha' ? 'formal_communication' : null, title, content, organizationId: organizationId || null })
-    setTitle(''); setContent(''); await refreshDocuments()
-  }, type === 'decree' ? 'Decreto emitido y auditado.' : 'Plancha de comunicado formal emitida y auditada.') }
-  return <article className="panel"><p className="eyebrow">Documentos</p><h2>Emitir documento oficial</h2><form className="stack-form" onSubmit={submit}>
+    if(!file) throw new Error('Debe adjuntar el PDF firmado físicamente.')
+    await api.uploadSecretariatDocumentPdf({ documentType: type, planchaKind: type === 'plancha' ? 'formal_communication' : null, title, content, organizationId: organizationId || null },file,signaturesConfirmed)
+    setTitle(''); setContent(''); setFile(null); setSignaturesConfirmed(false); await refreshDocuments()
+  }, type === 'decree' ? 'Decreto firmado cargado y auditado.' : 'Plancha firmada cargada y auditada.') }
+  return <article className="panel"><p className="eyebrow">Documentos</p><h2>Registrar documento oficial firmado</h2><form className="stack-form" onSubmit={submit}>
     <div className="form-grid"><Field label="Tipo"><select value={type} onChange={e => setType(e.target.value as typeof type)}><option value="plancha">Plancha · comunicado formal</option><option value="decree">Decreto</option></select></Field><Field label="Destinatario institucional"><select value={organizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Toda la Orden / general</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field></div>
     <Field label="Título"><input required maxLength={240} value={title} onChange={e => setTitle(e.target.value)} /></Field>
-    <Field label="Contenido"><textarea required rows={5} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} /></Field>
-    <button className="primary-action" disabled={working}>Emitir</button>
+    <Field label="Descripción"><textarea required rows={5} maxLength={4000} value={content} onChange={e => setContent(e.target.value)} /></Field>
+    <Field label="PDF firmado físicamente"><input required type="file" accept=".pdf,application/pdf" onChange={e=>setFile(e.target.files?.[0]??null)} /></Field>
+    <label className="form-note"><input type="checkbox" checked={signaturesConfirmed} onChange={e=>setSignaturesConfirmed(e.target.checked)} /> Confirmo que el PDF contiene el documento firmado físicamente por los responsables.</label>
+    <small className="form-note">El sistema no genera Planchas ni Decretos. Registra y conserva el PDF firmado por los responsables.</small>
+    <button className="primary-action" disabled={working||!file||!signaturesConfirmed}>Cargar documento firmado</button>
   </form></article>
 }
 

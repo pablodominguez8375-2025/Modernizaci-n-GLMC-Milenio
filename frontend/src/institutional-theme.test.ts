@@ -7,11 +7,16 @@ const css = readFileSync(new URL('./institutional-theme.css', import.meta.url), 
 
 describe('PMGM-UI-001 institutional responsive contract', () => {
   it('keeps the approved institutional palette tokens', () => {
-    expect(css).toContain('--brand-navy: #102c54')
-    expect(css).toContain('--brand-blue: #173b6e')
-    expect(css).toContain('--brand-gold: #b48a37')
-    expect(css).toContain('--brand-gold-strong: #c79d45')
+    expect(css).toContain('--brand-navy: #06148e')
+    expect(css).toContain('--brand-blue: #004ad4')
+    expect(css).toContain('--brand-gold: #f3c609')
+    expect(css).toContain('--brand-gold-strong: #fbae17')
     expect(css).toContain('--brand-canvas: #f3f6f9')
+  })
+
+  it('does not use institutional gold as low-contrast body text or an active-button fill', () => {
+    expect(css).toMatch(/\.eyebrow,[\s\S]*?color:\s*#765d00/)
+    expect(css).toMatch(/\.sidebar \.nav-item\.active\s*\{[\s\S]*?background:[^;]*var\(--brand-navy\)/)
   })
 
   it('prevents global horizontal scrolling and constrains media', () => {
