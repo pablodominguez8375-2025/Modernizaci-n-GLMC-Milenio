@@ -295,13 +295,15 @@ internal sealed class TestAuthenticationHandler(
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        var requestedRole = Context.Request.Headers["X-Test-Role"].FirstOrDefault();
+        var requestedScope = Context.Request.Headers["X-Test-Scope"].FirstOrDefault();
         var claims = new[]
         {
             new Claim("sub", "ci-http-admin"),
             new Claim(ClaimTypes.NameIdentifier, "ci-http-admin"),
             new Claim(ClaimTypes.Name, "CI HTTP Admin"),
-            new Claim(InstitutionalClaims.Scope, "order"),
-            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin)
+            new Claim(InstitutionalClaims.Scope, string.IsNullOrWhiteSpace(requestedScope) ? "order" : requestedScope),
+            new Claim(InstitutionalClaims.Role, string.IsNullOrWhiteSpace(requestedRole) ? InstitutionalRoles.GranLogiaAdmin : requestedRole)
         };
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);

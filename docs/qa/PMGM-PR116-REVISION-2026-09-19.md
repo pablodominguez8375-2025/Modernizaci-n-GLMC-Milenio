@@ -57,6 +57,8 @@ El backend conserva únicamente los contratos de carga PDF firmada (`PUT /docume
 
 La documentación canónica ya no conserva instrucciones contradictorias de generación automática. El gate `tests/official_documents_gate.py`, integrado en PMGM CI, valida que Planchas oficiales y Decretos continúen definidos como PDF firmado físicamente y cargado por Gran Secretaría.
 
+La regresión HTTP de permisos prueba que Secretaría del Taller y Régimen Interior no pueden cargar, listar ni descargar documentos oficiales de Gran Secretaría. También rechaza el rol Gran Secretaría cuando carece de alcance Orden; sólo la combinación funcional correcta alcanza las validaciones documentales.
+
 
 ## Addendum — alineación con Protocolo de Trámites 2026
 

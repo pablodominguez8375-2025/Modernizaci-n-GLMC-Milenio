@@ -21,6 +21,59 @@ namespace PMGM.Api.Tests.Integration;
 [Collection(PostgresIntegrationCollection.Name)]
 public sealed class GrandSecretariatHttpWorkflowTests
 {
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerSecretaria, "organization")]
+    [InlineData(InstitutionalRoles.RegimenInterior, "order")]
+    [InlineData(InstitutionalRoles.GranSecretaria, "organization")]
+    public async Task Official_documents_reject_roles_without_grand_secretariat_order_scope(string role, string scope)
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        using var factory = new GrandSecretariatWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", role);
+        client.DefaultRequestHeaders.Add("X-Test-Scope", scope);
+
+        using var uploadRequest = SignedPdfRequest(HttpMethod.Put, "/api/gran-secretaria/documentos/pdf", "documento.pdf", new Dictionary<string, string>
+        {
+            ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
+            ["X-Document-Title"] = "Documento restringido",
+            ["X-Document-Description"] = "No debe cargarse sin Gran Secretaría y alcance Orden.",
+            ["X-Physical-Signatures-Confirmed"] = "true"
+        });
+        var uploadResponse = await client.SendAsync(uploadRequest, TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, uploadResponse.StatusCode);
+
+        var listResponse = await client.GetAsync("/api/gran-secretaria/documentos", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, listResponse.StatusCode);
+
+        var downloadResponse = await client.GetAsync($"/api/gran-secretaria/documentos/{Guid.NewGuid()}/pdf", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, downloadResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Grand_secretariat_with_order_scope_reaches_official_document_validation()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        using var factory = new GrandSecretariatWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Role", InstitutionalRoles.GranSecretaria);
+        client.DefaultRequestHeaders.Add("X-Test-Scope", "order");
+
+        using var request = SignedPdfRequest(HttpMethod.Put, "/api/gran-secretaria/documentos/pdf", "documento.pdf", new Dictionary<string, string>
+        {
+            ["X-Document-Type"] = GrandSecretariatCodes.DocumentType.Decree,
+            ["X-Document-Title"] = "Documento sin descripción",
+            ["X-Physical-Signatures-Confirmed"] = "true"
+        });
+        var response = await client.SendAsync(request, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task Ceremony_requires_plancha_before_reservation_and_preserves_audit()
     {
