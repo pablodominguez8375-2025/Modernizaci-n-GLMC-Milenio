@@ -19,6 +19,7 @@
 - PR #116 continúa `draft` y no fusionado. `dev` permanece en `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`; `main`, en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` físico sigue diferido/no validado.
 - Drive incorporó tres fuentes institucionales nuevas: guía de uso del logotipo GLMCh, formato de papelería y guía SENADIS de documentos accesibles. El corte siguiente alinea paleta y parámetros con los colores oficiales, adopta reglas de accesibilidad y deja expresamente pendiente el archivo gráfico oficial —no se extrae una captura del manual ni se redibuja el isotipo—. Contrato: `docs/PMGM-UI-002-identidad-accesibilidad-institucional.md`.
 - Aclaración funcional del Product Owner: las Planchas oficiales y Decretos no se generan en el sistema. Gran Secretaría registra tipo, título y descripción, y carga el PDF ya firmado físicamente por los responsables. El sistema conserva, protege, permite descargar y audita ese PDF; la Demo reproduce el mismo circuito con archivos ficticios.
+- Corte funcional validado en `e4b30d1a9a1507275ca45a6ae4fc7cbffaf9b456`: PMGM CI #1380, Showcase Demo/Pages #606 y QA srv01 Installable #244 en `SUCCESS`. Artefacto exact-head ID `10619081026`, digest `sha256:6da4df2fa1a37a93cf01129aead9caec777146e1be811f656a4346312f7f82ac`. PR #116 sigue `draft`, sin fusión; `srv01` físico continúa diferido.
 
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
