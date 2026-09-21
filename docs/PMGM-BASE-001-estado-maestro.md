@@ -686,6 +686,23 @@ El despliegue físico en `srv01`, smoke real, regresión 25/25 y UAT continúan 
 
 El siguiente incremento funcional debe seleccionarse sólo después de reconsultar backlog vigente, documentos oficiales de Drive y HEAD vivo de `dev`; no se fija por conversaciones antiguas.
 
+## 19. Incremento activo — Tesorería operacional del Taller
+
+El 21-09-2026 se inició `feature/treasury-completion-20260921` desde el HEAD vivo de `dev` `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`, manteniendo sin cambios el candidato aceptado de Secretaría/Gran Secretaría y la QA física de `srv01` diferida.
+
+Alcance del primer corte:
+
+- menú operativo único **Tesorería**, separado de Gestión Logial y de **Gran Tesorería**;
+- consulta de cargos individuales del período, saldo y cartola resumida;
+- registro de pagos parciales o totales con medio, referencia y comprobante correlativo;
+- registro de egresos con descripción y referencia del PDF de respaldo;
+- egreso siempre pendiente hasta autorización del Venerable Maestro;
+- Venerable puede consultar y autorizar, pero no editar la operación de Tesorería;
+- Gran Tesorería deja de tener permiso para administrar la Tesorería local y conserva revisión/conciliación del Cuadro mensual;
+- demo Pages con datos exclusivamente ficticios y contratos equivalentes al backend.
+
+Validación local: 149 pruebas frontend aprobadas y build de producción exitoso. El backend deberá compilarse y probarse en PMGM CI porque el entorno local de esta intervención no dispone del SDK .NET. Este corte todavía no está integrado en `dev`, publicado en Pages ni empaquetado para QA: requiere commit, PR draft, CI exact-head y gates de publicación.
+
 ---
 
 **Este documento es la referencia canónica de continuidad funcional/técnica del Proyecto Centenario.**

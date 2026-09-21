@@ -16,6 +16,8 @@ const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
   { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
+  { slug: 'tesoreria-taller', profile: 'lodgeTreasurer', label: 'Tesorería' },
+  { slug: 'tesoreria-autorizacion-venerable', profile: 'lodge', label: 'Tesorería' },
   { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería' },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },
@@ -167,7 +169,16 @@ async function assertNoGlobalHorizontalOverflow(label, viewport) {
 }
 
 async function capture(filePath) {
-  await evaluate("window.scrollTo(0, 0); document.documentElement.scrollLeft = 0; document.body.scrollLeft = 0;")
+  await evaluate(`(() => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollLeft = 0;
+    const content = document.querySelector('main.content');
+    if (content) { content.scrollTop = 0; content.scrollLeft = 0; }
+    const sidebar = document.querySelector('nav.sidebar');
+    if (sidebar) { sidebar.scrollTop = 0; sidebar.scrollLeft = 0; }
+  })()`)
+  await delay(120)
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false })
   await writeFile(filePath, Buffer.from(screenshot.data, 'base64'))
 }
