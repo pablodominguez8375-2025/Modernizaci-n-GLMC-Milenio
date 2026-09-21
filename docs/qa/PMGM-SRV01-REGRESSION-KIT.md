@@ -16,6 +16,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 25 contro
 - QA-023: cierre documental de Tenidas regulares y ceremoniales, distinguiendo Realizada de Cerrada.
 - QA-024: Cuadro Mensual de Tesorería con segregación Taller / Gran Tesorería, cuadre previo y conciliación institucional.
 - QA-027: cartola personal en Mi ficha y control de duplicidad de pagos del Taller.
+- QA-028: Cuadro Logial Mensual agregado por tipo de cuota y detalle individual minimizado para Gran Tesorería.
 - QA-025: Hospitalaria integral: Tronco independiente, socorros autorizados, revisión mensual del Consejo y rendición agregada a Gran Hospitalaria.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
@@ -112,6 +113,19 @@ El control QA-025 debe comprobar, con datos ficticios: independencia del Tronco 
 7. Repetir un abono legítimo con referencia distinta: debe registrarse respetando el saldo pendiente.
 
 Resultado esperado: el Hermano consulta únicamente su cartola; Tesorería conserva la fecha real de caja y el período de la obligación; un reintento idéntico con referencia no duplica el ingreso.
+
+### QA-028 — Gran Tesorería / Cuadro Logial Mensual
+
+1. Preparar un Taller ficticio con cuotas normal, tercera edad, estudiante, cónyuge y Past Activo.
+2. Generar el Cuadro Logial Mensual desde los miembros activos y las cuotas vigentes del período.
+3. Ingresar como Gran Tesorero y verificar que la vista inicial muestre sólo tipo de cuota, cantidad de miembros, monto por línea y total mensual.
+4. Confirmar que identificadores, nombres, cargos, grados y referencias individuales no aparezcan inicialmente.
+5. Usar `Consultar datos mínimos` sólo para revisar una diferencia y comprobar que se presenta el detalle restringido.
+6. Registrar un pago inferior al total: la conciliación debe quedar bloqueada y el Taller no puede marcarse al día.
+7. Completar el pago íntegro: la diferencia debe quedar en cero y Gran Tesorería puede conciliar.
+8. Confirmar que la conciliación genera la regularidad institucional del Taller consumida por los demás circuitos.
+
+Resultado esperado: Gran Tesorería valida el pago íntegro contra el total calculado del mes sin recibir innecesariamente la nómina individual completa.
 
 Ejemplo de fallo:
 

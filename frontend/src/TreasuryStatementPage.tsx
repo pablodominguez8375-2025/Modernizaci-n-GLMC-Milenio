@@ -5,6 +5,7 @@ import './treasuryStatement.css'
 const money = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
 const degreeLabel: Record<string, string> = { master: 'Maestro/a', fellowcraft: 'Compañero/a', apprentice: 'Aprendiz' }
 const statusLabel: Record<string, string> = { draft: 'Borrador', submitted: 'Enviado', observed: 'Observado', reconciled: 'Conciliado', closed: 'Cerrado' }
+const feeTypeLabel: Record<string,string> = { normal:'Cuota normal', senior:'Tercera edad', student:'Estudiante', spouse:'Cónyuge', past_active:'Past Activo' }
 
 interface Props {
   api: PmgmApiClient
@@ -27,6 +28,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
   const [loadingStatement, setLoadingStatement] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  const [showMemberDetail,setShowMemberDetail]=useState(false)
 
   useEffect(() => {
     let active = true
@@ -56,7 +58,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
           setStatement(null)
           return
         }
-        const full = await api.getTreasuryStatement(existing.id)
+        const full = await api.getTreasuryStatement(existing.id, !canReview)
         if (active) setStatement(full)
       })
       .catch(reason => { if (active) setError(toMessage(reason)) })
@@ -121,6 +123,8 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
     'Gran Tesorería concilió el Cuadro. La regularidad financiera institucional quedó actualizada.',
   )
 
+  const consultMemberDetail=async()=>{if(!statement)return;setBusy(true);setError(null);try{setStatement(await api.getTreasuryStatement(statement.id,true));setShowMemberDetail(true)}catch(reason){setError(toMessage(reason))}finally{setBusy(false)}}
+
   const canSubmit = !!statement &&
     statement.status === 'draft' &&
     statement.lines.length > 0 &&
@@ -170,6 +174,12 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
           <article className={statement.differenceAmount === 0 ? 'balanced' : 'difference'}><span>Diferencia</span><strong>{money.format(statement.differenceAmount)}</strong></article>
         </section>
 
+        <section className="panel treasury-table-panel">
+          <div className="section-title"><div><p className="eyebrow">Cuadro Logial Mensual</p><h2>Resumen por línea de cuota</h2></div><span>{statement.feeBreakdown.reduce((total,item)=>total+item.members,0)} miembros activos</span></div>
+          <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Tipo de cuota</th><th>Miembros</th><th>Monto a Gran Tesorería</th></tr></thead><tbody>{statement.feeBreakdown.map(item=><tr key={item.feeType}><td><strong>{feeTypeLabel[item.feeType]??item.feeType}</strong></td><td>{item.members}</td><td><strong>{money.format(item.amount)}</strong></td></tr>)}</tbody><tfoot><tr><th>Total mes</th><th>{statement.feeBreakdown.reduce((total,item)=>total+item.members,0)}</th><th>{money.format(statement.expectedAmount)}</th></tr></tfoot></table></div>
+          {canReview&&<p>Gran Tesorería recibe inicialmente sólo cantidades y montos por tipo de cuota. El detalle mínimo individual se consulta únicamente para resolver diferencias.</p>}
+        </section>
+
         <section className="panel treasury-payments">
           <div><p className="eyebrow">Control previo al envío</p><h2>Cuadre obligatorio</h2></div>
           <div className="payment-row"><span>Total pagado vs. Cuadro</span><strong>{statement.differenceAmount === 0 ? '✅ Cuadrado' : '❌ Diferencia pendiente'}</strong><small>{money.format(statement.differenceAmount)}</small></div>
@@ -178,12 +188,13 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
           {statement.status === 'submitted' && <p>Cuadro enviado por Tesorería del Taller. La conciliación institucional corresponde a Gran Tesorería.</p>}
         </section>
 
-        <section className="panel treasury-table-panel">
+        {canReview&&!showMemberDetail&&<section className="panel treasury-empty"><strong>Detalle individual protegido</strong><p>Consúltelo sólo si debe verificar una diferencia del Cuadro.</p><button className="regularity-secondary" type="button" disabled={busy} onClick={()=>void consultMemberDetail()}>Consultar datos mínimos</button></section>}
+        {(!canReview||showMemberDetail)&&<section className="panel treasury-table-panel">
           <div className="section-title"><div><p className="eyebrow">Cuadro del Taller al día 10</p><h2>{statement.periodMonth.toString().padStart(2, '0')}/{statement.periodYear}</h2></div><span>{statement.lines.length} integrantes</span></div>
           {statement.lines.length === 0
             ? <div className="empty-state">La nómina aún no ha sido generada.</div>
             : <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Nº</th><th>Grado</th><th>Cargo</th><th>Integrante</th><th>Cuota</th><th>Ajuste</th><th>Total</th><th>Respaldo</th></tr></thead><tbody>{statement.lines.map((line, index) => <tr key={line.id}><td>{index + 1}</td><td>{degreeLabel[line.degreeCodeAtCutoff] ?? line.degreeCodeAtCutoff}</td><td>{line.officeCodeAtCutoff ?? '—'}</td><td>{line.observation ?? `Integrante ${index + 1}`}</td><td>{money.format(line.baseAmount)}</td><td>{money.format(line.adjustmentAmount)}</td><td><strong>{money.format(line.payableAmount)}</strong></td><td>{line.authorizationReference ?? '—'}</td></tr>)}</tbody></table></div>}
-        </section>
+        </section>}
 
         <section className="panel treasury-payments">
           <div><p className="eyebrow">Forma de pago</p><h2>Transferencias y depósitos</h2></div>

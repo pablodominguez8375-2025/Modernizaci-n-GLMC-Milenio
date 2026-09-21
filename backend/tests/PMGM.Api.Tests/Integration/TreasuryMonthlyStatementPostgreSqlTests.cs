@@ -82,6 +82,20 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         Assert.Equal(membershipId, generatedLine.GetProperty("membershipId").GetGuid());
         Assert.Equal("treasurer", generatedLine.GetProperty("officeCodeAtCutoff").GetString());
         Assert.Equal("PLANCHA-CI-001", generatedLine.GetProperty("authorizationReference").GetString());
+        var breakdown = Assert.Single(generated.GetProperty("feeBreakdown").EnumerateArray());
+        Assert.Equal(TreasuryCodes.LodgeFeeType.Student, breakdown.GetProperty("feeType").GetString());
+        Assert.Equal(1, breakdown.GetProperty("members").GetInt32());
+        Assert.Equal(8_000m, breakdown.GetProperty("amount").GetDecimal());
+
+        var minimizedResponse = await client.GetAsync($"/api/tesoreria/cuadros/{statementId}", cancellationToken);
+        var minimized = await minimizedResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var minimizedLine = Assert.Single(minimized.GetProperty("lines").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("memberId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("observation").ValueKind);
+
+        var detailedResponse = await client.GetAsync($"/api/tesoreria/cuadros/{statementId}?includeMemberDetail=true", cancellationToken);
+        var detailed = await detailedResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(memberId, Assert.Single(detailed.GetProperty("lines").EnumerateArray()).GetProperty("memberId").GetGuid());
 
         var blockedSubmit = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, blockedSubmit.StatusCode);

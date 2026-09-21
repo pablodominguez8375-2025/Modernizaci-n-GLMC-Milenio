@@ -31,6 +31,6 @@ export default function LodgeTreasuryPanel({ api, organizationId, canManage = tr
     <p className="lodge-treasury-note">Los documentos oficiales no se generan en el sistema: se registra su descripción y referencia, y el PDF firmado se conserva como respaldo documental.</p>
   </section>
 }
-function feeLabel(value:LodgeFeePlan['feeType']){return value==='student'?'Cuota estudiante':value==='senior'?'Cuota tercera edad':'Cuota normal'}
+function feeLabel(value:LodgeFeePlan['feeType']){return value==='student'?'Cuota estudiante':value==='senior'?'Cuota tercera edad':value==='spouse'?'Cuota cónyuge':value==='past_active'?'Cuota Past Activo':'Cuota normal'}
 function statusLabel(value:string){return value==='paid'?'Pagado':value==='partial'?'Pago parcial':'Pendiente'}
 function toMessage(reason:unknown){return reason instanceof Error?reason.message:'No fue posible completar la operación de Tesorería.'}

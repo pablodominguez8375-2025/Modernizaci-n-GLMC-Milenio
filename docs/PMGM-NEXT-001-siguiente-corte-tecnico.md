@@ -113,3 +113,5 @@ El 21-09-2026 el Product Owner autorizó aplicar las mejoras compatibles identif
 - datos ficticios equivalentes en GitHub Pages y prueba QA-027.
 
 No se incorporan cambios de atribuciones en Secretaría: el circuito de insinuaciones, ceremonias, documentos PDF firmados y cierre documental aprobado permanece vigente. Las mejoras posteriores de cierre/apertura anual, proyección y recordatorios se mantienen como trabajo incremental, no como autorización para cambiar la normativa ni generar documentos oficiales dentro del sistema.
+
+El mismo bloque incorpora QA-028 para el **Cuadro Logial Mensual**: Gran Tesorería ve inicialmente el consolidado por cuota normal, tercera edad, estudiante, cónyuge y Past Activo, con cantidad y monto por línea y total del mes. Los datos individuales permanecen minimizados y sólo se consultan expresamente para resolver diferencias. El Taller queda al día únicamente después de conciliar el pago íntegro del total exigible.
