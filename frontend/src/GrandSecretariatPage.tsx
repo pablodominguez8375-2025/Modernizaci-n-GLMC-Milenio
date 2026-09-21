@@ -128,7 +128,7 @@ function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocum
     if (!window.confirm('¿Confirma que el PDF contiene la Plancha firmada físicamente por los responsables?')) return
     const success = 'Plancha de Autorización firmada cargada y auditada.'
     void execute(async () => {
-      await api.uploadSecretariatCeremonyAuthorizationPdf(item.id, description, file)
+      await api.uploadSecretariatCeremonyAuthorizationPdf(item.id, description, file, true)
       await Promise.all([refreshDocuments(), refreshCeremonies()])
     }, success)
   }
@@ -246,7 +246,7 @@ function DocumentPanel({ api, organizations, working, execute, refreshDocuments 
   const [type, setType] = useState<'decree' | 'plancha'>('plancha'); const [title, setTitle] = useState(''); const [content, setContent] = useState(''); const [organizationId, setOrganizationId] = useState(''); const [file,setFile]=useState<File|null>(null); const [signaturesConfirmed,setSignaturesConfirmed]=useState(false)
   const submit = (event: FormEvent) => { event.preventDefault(); void execute(async () => {
     if(!file) throw new Error('Debe adjuntar el PDF firmado físicamente.')
-    await api.uploadSecretariatDocumentPdf({ documentType: type, planchaKind: type === 'plancha' ? 'formal_communication' : null, title, content, organizationId: organizationId || null },file)
+    await api.uploadSecretariatDocumentPdf({ documentType: type, planchaKind: type === 'plancha' ? 'formal_communication' : null, title, content, organizationId: organizationId || null },file,signaturesConfirmed)
     setTitle(''); setContent(''); setFile(null); setSignaturesConfirmed(false); await refreshDocuments()
   }, type === 'decree' ? 'Decreto firmado cargado y auditado.' : 'Plancha firmada cargada y auditada.') }
   return <article className="panel"><p className="eyebrow">Documentos</p><h2>Registrar documento oficial firmado</h2><form className="stack-form" onSubmit={submit}>

@@ -113,7 +113,8 @@ it('uses the minimized Gran Secretaria queue and uploads the physically signed P
   const client = new PmgmApiClient({ getAccessToken: async () => 'token' })
   const response = await client.getSecretariatCeremonyQueue(); expect(response.items[0].formalAuthorizationIssued).toBe(false); expect(fetch.mock.calls[0][0]).toBe('/api/institutional/gran-secretaria/ceremonias-autorizadas')
   const file=new File(['%PDF-1.7'], 'plancha-firmada.pdf',{type:'application/pdf'})
-  await client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file); const [url, options] = fetch.mock.calls[1]; expect(url).toBe('/api/gran-secretaria/ceremonias/c1/autorizacion-pdf'); expect(options.method).toBe('PUT'); expect(options.body).toBe(file); expect(decodeURIComponent(options.headers.get('X-Document-Description'))).toBe('Firmada físicamente'); expect(options.headers.get('X-Physical-Signatures-Confirmed')).toBe('true')
+  await expect(client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file,false)).rejects.toThrow('confirmar')
+  await client.uploadSecretariatCeremonyAuthorizationPdf('c1','Firmada físicamente',file,true); const [url, options] = fetch.mock.calls[1]; expect(url).toBe('/api/gran-secretaria/ceremonias/c1/autorizacion-pdf'); expect(options.method).toBe('PUT'); expect(options.body).toBe(file); expect(decodeURIComponent(options.headers.get('X-Document-Description'))).toBe('Firmada físicamente'); expect(options.headers.get('X-Physical-Signatures-Confirmed')).toBe('true')
 })
 
 it('never sends an institutional request without a token', async () => {
@@ -224,7 +225,8 @@ it('posts formal initiation submission without re-entering candidate identity', 
 it('stores and downloads the same signed PDF in showcase mode', async () => {
   const client = new PmgmApiClient({ useMocks: true })
   const file=new File(['%PDF-1.7 demo'],'plancha-firmada.pdf',{type:'application/pdf'})
-  const document = await client.uploadSecretariatDocumentPdf({ documentType: 'plancha', planchaKind: 'formal_communication', title: 'Plancha QA', content: 'Descripción del documento firmado.' },file)
+  await expect(client.uploadSecretariatDocumentPdf({ documentType: 'plancha', planchaKind: 'formal_communication', title: 'Plancha QA', content: 'Descripción del documento firmado.' },file,false)).rejects.toThrow('confirmar')
+  const document = await client.uploadSecretariatDocumentPdf({ documentType: 'plancha', planchaKind: 'formal_communication', title: 'Plancha QA', content: 'Descripción del documento firmado.' },file,true)
   const blob = await client.downloadSecretariatDocumentPdf(document.id)
   expect(blob).toBe(file)
   expect(document.content).toBe('Descripción del documento firmado.')
