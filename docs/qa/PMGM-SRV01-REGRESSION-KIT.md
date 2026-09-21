@@ -15,6 +15,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 25 contro
 - QA-022: flujo reglamentario de insinuaciones desde presentación en 1.er grado hasta solicitud de Iniciación.
 - QA-023: cierre documental de Tenidas regulares y ceremoniales, distinguiendo Realizada de Cerrada.
 - QA-024: Cuadro Mensual de Tesorería con segregación Taller / Gran Tesorería, cuadre previo y conciliación institucional.
+- QA-027: cartola personal en Mi ficha y control de duplicidad de pagos del Taller.
 - QA-025: Hospitalaria integral: Tronco independiente, socorros autorizados, revisión mensual del Consejo y rendición agregada a Gran Hospitalaria.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
@@ -99,6 +100,18 @@ python3 scripts/record-srv01-regression-result.py \
 ```
 
 El control QA-025 debe comprobar, con datos ficticios: independencia del Tronco de Beneficencia respecto de Tesorería; aportes por Hospitalaria; socorros con respaldo; autorización válida por Venerable Maestro o acuerdo auditable del Consejo; estado mensual revisado por Consejo; rendición agregada hacia Gran Hospitalaria sin beneficiarios, destinos ni observaciones privadas; reposición/comprobante; conciliación institucional; y actualización de la regularidad que consume Ceremonias.
+
+### QA-027 — Mi ficha / cartola personal de Tesorería
+
+1. Ingresar con un Hermano vinculado a una ficha institucional.
+2. Abrir `Mi ficha` y desplegar `Ver cartola` en el estado de Tesorería.
+3. Verificar totales cargado, pagado y saldo, sin mostrar información de otros hermanos.
+4. Confirmar que cada fila distingue el período de la cuota de la fecha efectiva del pago.
+5. Confirmar que cada pago presenta su comprobante correlativo y monto.
+6. Desde Tesorería del Taller, intentar repetir un pago con igual cargo, fecha, monto, medio y referencia: la API debe rechazarlo sin alterar el saldo.
+7. Repetir un abono legítimo con referencia distinta: debe registrarse respetando el saldo pendiente.
+
+Resultado esperado: el Hermano consulta únicamente su cartola; Tesorería conserva la fecha real de caja y el período de la obligación; un reintento idéntico con referencia no duplica el ingreso.
 
 Ejemplo de fallo:
 

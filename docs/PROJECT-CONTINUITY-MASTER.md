@@ -36,6 +36,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 14-09-2026 | Se continúa el diseñador de accesos. | Se agrega simulación de acceso efectivo, prevención de escalamiento Taller→Orden y protección contra bloqueo del administrador principal. |
 | 14-09-2026 | Se continúa la aplicación de perfiles. | Se agregan asignaciones múltiples por usuario, alcance, vigencia, acceso acumulado y revocación histórica. |
 | 14-09-2026 | Se continúa la gobernanza de accesos. | Se agrega auditoría, clasificación de riesgo, certificación/revocación y exportación de revisión de accesos. |
+| 21-09-2026 | El Product Owner autoriza aplicar mejoras compatibles identificadas en el sistema logial de referencia, incluyendo Tesorería, Secretaría y Mi ficha. | Sobre el candidato PR #121 se incorpora cartola personal de Tesorería en Mi ficha, separación visible entre período de obligación y fecha efectiva de pago, consulta de comprobantes y protección contra pagos duplicados por referencia. Secretaría conserva sin cambios regresivos el circuito aprobado; sus mejoras referenciales de calendario y documentos ya están cubiertas por la implementación vigente. |
 
 ## Última conversación recuperada
 

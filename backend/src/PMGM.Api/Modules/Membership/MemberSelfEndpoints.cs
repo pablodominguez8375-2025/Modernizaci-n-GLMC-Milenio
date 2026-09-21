@@ -120,6 +120,46 @@ public static class MemberSelfEndpoints
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        var treasuryCharges = await db.LodgeMemberCharges
+            .AsNoTracking()
+            .Include(x => x.Organization)
+            .Include(x => x.Payments)
+            .Where(x => x.MemberId == context.MemberId)
+            .OrderByDescending(x => x.PeriodYear)
+            .ThenByDescending(x => x.PeriodMonth)
+            .ToListAsync(cancellationToken);
+
+        var treasuryAccount = new
+        {
+            totalCharged = treasuryCharges.Sum(x => x.MemberAmount),
+            totalPaid = treasuryCharges.Sum(x => x.Payments.Sum(payment => payment.Amount)),
+            balance = treasuryCharges.Sum(x => x.MemberAmount - x.Payments.Sum(payment => payment.Amount)),
+            items = treasuryCharges.Take(24).Select(x => new
+            {
+                chargeId = x.Id,
+                x.OrganizationId,
+                organization = x.Organization.Name,
+                x.PeriodYear,
+                x.PeriodMonth,
+                chargedAmount = x.MemberAmount,
+                paidAmount = x.Payments.Sum(payment => payment.Amount),
+                balance = x.MemberAmount - x.Payments.Sum(payment => payment.Amount),
+                x.Status,
+                payments = x.Payments
+                    .OrderByDescending(payment => payment.PaymentDate)
+                    .ThenByDescending(payment => payment.RecordedAtUtc)
+                    .Select(payment => new
+                    {
+                        payment.Id,
+                        payment.ReceiptNumber,
+                        payment.Amount,
+                        payment.PaymentMethod,
+                        payment.PaymentDate,
+                        payment.Reference
+                    })
+            })
+        };
+
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var attendanceFrom = today.AddMonths(-12);
         var attendanceRows = await lodgeDb.LodgeAttendanceRecords
@@ -251,6 +291,7 @@ public static class MemberSelfEndpoints
                 financial,
                 hospitalaria
             },
+            treasuryAccount,
             activity = new
             {
                 attendance = new

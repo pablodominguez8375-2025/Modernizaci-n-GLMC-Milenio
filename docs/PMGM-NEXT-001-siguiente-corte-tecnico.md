@@ -101,3 +101,15 @@ QA-025 valida:
 - regularidad institucional.
 
 Issue #97 y Línea Base Maestra registran el corte funcional. Cualquier commit documental posterior cambia el HEAD vivo y obliga a regenerar/verificar Pages y el instalable del mismo SHA antes del despliegue físico.
+
+## 7. Incremento referencial autorizado — Tesorería y Mi ficha
+
+El 21-09-2026 el Product Owner autorizó aplicar las mejoras compatibles identificadas en el sistema logial de referencia. El primer incremento extiende el candidato de Tesorería PR #121 con:
+
+- cartola personal de cuotas y comprobantes en Mi ficha;
+- separación explícita entre período de la obligación y fecha efectiva de pago;
+- totales cargado, pagado y saldo propios;
+- control de reintento duplicado cuando coinciden cargo, fecha, monto, medio y referencia;
+- datos ficticios equivalentes en GitHub Pages y prueba QA-027.
+
+No se incorporan cambios de atribuciones en Secretaría: el circuito de insinuaciones, ceremonias, documentos PDF firmados y cierre documental aprobado permanece vigente. Las mejoras posteriores de cierre/apertura anual, proyección y recordatorios se mantienen como trabajo incremental, no como autorización para cambiar la normativa ni generar documentos oficiales dentro del sistema.

@@ -120,9 +120,17 @@ public static class LodgeTreasuryEndpoints
         if (paid + request.Amount > charge.MemberAmount)
             return Results.Conflict(new { message = "El abono supera el saldo pendiente del hermano." });
 
+        var reference = Normalize(request.Reference);
+        if (reference is not null && charge.Payments.Any(x =>
+                x.Amount == request.Amount &&
+                x.PaymentDate == request.PaymentDate &&
+                x.PaymentMethod == request.PaymentMethod &&
+                string.Equals(x.Reference, reference, StringComparison.OrdinalIgnoreCase)))
+            return Results.Conflict(new { message = "Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia." });
+
         var payment = new LodgeMemberPayment { ChargeId = charge.Id, Amount = request.Amount, PaymentMethod = request.PaymentMethod,
             PaymentDate = request.PaymentDate, ReceiptNumber = $"REC-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Random.Shared.Next(1000, 9999)}",
-            Reference = Normalize(request.Reference), RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
+            Reference = reference, RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
         db.LodgeMemberPayments.Add(payment);
         charge.Status = paid + request.Amount == charge.MemberAmount ? TreasuryCodes.LodgeChargeStatus.Paid : TreasuryCodes.LodgeChargeStatus.Partial;
         audit.Add(context, "lodge.treasury.member_payment.recorded", nameof(LodgeMemberPayment), payment.Id.ToString(),

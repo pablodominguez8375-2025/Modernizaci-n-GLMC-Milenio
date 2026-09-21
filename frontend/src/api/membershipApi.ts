@@ -59,7 +59,12 @@ export interface MemberSelfProfile {
     financial: { status: string; asOfDate: string; scope: string } | null
     hospitalaria: { status: string; asOfDate: string } | null
   }
+  treasuryAccount: MemberTreasuryAccount
 }
+
+export interface MemberTreasuryPayment { id: string; receiptNumber: string; amount: number; paymentMethod: string; paymentDate: string; reference: string | null }
+export interface MemberTreasuryCharge { chargeId: string; organizationId: string; organization: string; periodYear: number; periodMonth: number; chargedAmount: number; paidAmount: number; balance: number; status: string; payments: MemberTreasuryPayment[] }
+export interface MemberTreasuryAccount { totalCharged: number; totalPaid: number; balance: number; items: MemberTreasuryCharge[] }
 
 export interface UpdateMemberSelfContactRequest { email?: string | null; phone?: string | null; address?: string | null }
 export interface UpdateMemberSelfContactResponse { status: 'updated' | 'unchanged'; changedFields: string[] }
@@ -94,6 +99,16 @@ const demoSelfProfile: MemberSelfProfile = {
   regularity: {
     financial: { status: 'up_to_date', asOfDate: '2026-09-08', scope: 'member' },
     hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08' },
+  },
+  treasuryAccount: {
+    totalCharged: 75000,
+    totalPaid: 75000,
+    balance: 0,
+    items: [
+      { chargeId: 'charge-demo-2026-09', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 9, chargedAmount: 25000, paidAmount: 25000, balance: 0, status: 'paid', payments: [{ id: 'payment-demo-2026-09', receiptNumber: 'REC-DEMO-003', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-09-10', reference: 'TRX-DEMO-003' }] },
+      { chargeId: 'charge-demo-2026-08', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 8, chargedAmount: 25000, paidAmount: 25000, balance: 0, status: 'paid', payments: [{ id: 'payment-demo-2026-08', receiptNumber: 'REC-DEMO-002', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-08-08', reference: 'TRX-DEMO-002' }] },
+      { chargeId: 'charge-demo-2026-07', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 7, chargedAmount: 25000, paidAmount: 25000, balance: 0, status: 'paid', payments: [{ id: 'payment-demo-2026-07', receiptNumber: 'REC-DEMO-001', amount: 25000, paymentMethod: 'cash', paymentDate: '2026-07-06', reference: null }] },
+    ],
   },
 }
 

@@ -5,6 +5,8 @@ import type { SessionProfile } from './api/pmgmApi'
 import './memberPortalInstruction.css'
 import './memberLibraryShortcut.css'
 
+const money = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
+
 interface MemberPortalPageProps {
   profile: SessionProfile | null
   useMocks: boolean
@@ -122,6 +124,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
   const [selfError, setSelfError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [showTreasuryDetail, setShowTreasuryDetail] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -188,6 +191,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
   const exaltation = useMocks ? memberPortalDemoData.institutional.exaltation : formatDateOnly(selfProfile?.milestones.exaltation)
   const treasury = useMocks ? memberPortalDemoData.treasury : formatRegularity(selfProfile?.regularity.financial?.status, 'tesorería')
   const hospitalaria = useMocks ? memberPortalDemoData.hospitalaria : formatRegularity(selfProfile?.regularity.hospitalaria?.status, 'hospitalaria')
+  const treasuryAccount = selfProfile?.treasuryAccount
   const canEdit = useMocks || Boolean(selfProfile)
 
   return <div className="member-portal">
@@ -273,9 +277,15 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
       </article>
 
       <div className="member-status-stack">
-        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={treasury.status === 'Al día' ? 'member-success-text' : undefined}>{treasury.status}</strong><p>{treasury.detail}</p></div><button type="button">Ver detalle</button></article>
+        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? money.format(treasuryAccount.balance) + ' pendiente' : treasury.status}</strong><p>{treasuryAccount ? `${money.format(treasuryAccount.totalPaid)} pagado de ${money.format(treasuryAccount.totalCharged)}` : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
         <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
       </div>
+
+      {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
+        <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
+        <div className="member-institutional-summary"><MemberDatum label="Cargado" value={money.format(treasuryAccount.totalCharged)} /><MemberDatum label="Pagado" value={money.format(treasuryAccount.totalPaid)} /><MemberDatum label="Saldo" value={money.format(treasuryAccount.balance)} success={treasuryAccount.balance === 0} /></div>
+        <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{item.organization}</td><td>{money.format(item.chargedAmount)}</td><td>{money.format(item.paidAmount)}</td><td>{money.format(item.balance)}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {money.format(payment.amount)}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
+      </article>}
 
       <article className="member-card member-calendar-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda</p><h2>{useMocks ? 'Septiembre 2026' : 'Calendario institucional'}</h2></div><button className="member-inline-button" type="button" onClick={onOpenCalendar}>Ver calendario</button></div>
