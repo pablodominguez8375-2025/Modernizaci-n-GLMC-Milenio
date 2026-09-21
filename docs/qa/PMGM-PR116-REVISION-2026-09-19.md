@@ -47,6 +47,8 @@ PR #116 permanece **draft** y fuera de `dev`. Los workflows deben evaluarse siem
 
 Antes de promover: exigir PMGM CI + PMGM Showcase Demo + Proyecto Centenario QA srv01 Installable en verde para el HEAD final y registrar ese SHA en este documento/Drive. Por decisión del Product Owner de 19-09-2026, la validación física en `srv01` queda temporalmente diferida y no bloquea el avance inmediato; debe permanecer pendiente y trazable en Issue #97, sin declarar el ambiente operacional. La revisión funcional, de permisos y `UAT-FLUJOS-017` continúan vigentes y esta excepción no constituye por sí sola autorización de merge.
 
+Para Planchas oficiales y Decretos, la QA automatizada debe comprobar además que la interfaz mantiene deshabilitada la carga mientras Gran Secretaría no marque expresamente la declaración de firmas físicas; el cliente API no puede completar esa declaración de manera implícita y el backend conserva su validación independiente.
+
 
 ## Addendum — alineación con Protocolo de Trámites 2026
 
