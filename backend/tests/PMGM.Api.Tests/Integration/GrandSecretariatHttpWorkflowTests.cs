@@ -12,6 +12,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.GrandSecretariat;
 using Xunit;
 
