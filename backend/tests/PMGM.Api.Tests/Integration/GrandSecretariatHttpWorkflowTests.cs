@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
