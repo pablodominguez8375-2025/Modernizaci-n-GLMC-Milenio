@@ -90,8 +90,11 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canConfigureSystem = capabilities?.canConfigureSystem ?? canBootstrap
   const canCalendar = effectiveProfile !== null
   const canNotifications = effectiveProfile !== null
-  const canMembers = hasInstitutionalScope
-  const canLodgeProfile = hasInstitutionalScope
+  const canLodgeOperations = capabilities?.canManageLodgeOperations ?? false
+  const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
+  const isLodgeTreasurerWorkspace = canLodgeTreasury && !canLodgeOperations
+  const canMembers = hasInstitutionalScope && !isLodgeTreasurerWorkspace
+  const canLodgeProfile = hasInstitutionalScope && !isLodgeTreasurerWorkspace
   const canCeremonies = capabilities?.canReviewCeremonies ?? false
   const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
   const canReporting = canRegimen
@@ -99,14 +102,13 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canDataQuality = canRegimen
   const canCaseQueue = canRegimen
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
-  const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canReadLodgeHospitalaria = capabilities?.canReadLodgeHospitalaria ?? false
   const canManageLodgeHospitalaria = capabilities?.canManageLodgeHospitalaria ?? false
   const canApproveLodgeExpenses = capabilities?.canApproveLodgeExpenses ?? false
   const canHospitalariaWorkspace = canHospitalaria || canReadLodgeHospitalaria
   const canSecretariat = capabilities?.canManageGrandSecretariat ?? false
-  const canLodge = (capabilities?.canManageLodgeOperations ?? false) || (capabilities?.canManageLodgeTreasury ?? false)
+  const canLodge = canLodgeOperations
   const canReadLodgeSecretariat = capabilities?.canReadLodgeSecretariat ?? false
   const canManageLodgeSecretariat = capabilities?.canManageLodgeSecretariat ?? false
   const canCandidateProfile = canSecretariat || canLodge
@@ -154,7 +156,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Ir a Mi ficha"><span className="brand-mark" aria-hidden="true">C</span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
       <span className="product-motto">100 años de historia · Un legado hacia el futuro</span>
-      <div className="topbar-meta">{api.useMocks && <><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /></>}{effectiveProfile && <span className="environment-badge">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.58' : `API v${systemInfo?.version ?? '—'}`}</span></div>
+      <div className="topbar-meta">{api.useMocks && <><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /></>}{effectiveProfile && <span className="environment-badge">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.59' : `API v${systemInfo?.version ?? '—'}`}</span></div>
     </header>
     <div className="workspace">
       <nav className="sidebar" aria-label="Navegación principal">
