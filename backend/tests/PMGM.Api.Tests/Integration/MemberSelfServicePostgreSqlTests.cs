@@ -123,7 +123,42 @@ public sealed class MemberSelfServicePostgreSqlTests
                 AsOfDate = today
             };
 
-            db.AddRange(organization, person, member, membership, initiation, exaltation, status, financial, hospitalaria);
+            var feePlan = new LodgeFeePlan
+            {
+                Organization = organization,
+                OrganizationId = organization.Id,
+                FeeType = "normal",
+                MemberAmount = 25_000m,
+                GrandTreasuryAmount = 20_000m,
+                EffectiveFrom = new DateOnly(today.Year, today.Month, 1)
+            };
+            var charge = new LodgeMemberCharge
+            {
+                Organization = organization,
+                OrganizationId = organization.Id,
+                Member = member,
+                MemberId = member.Id,
+                FeePlan = feePlan,
+                FeePlanId = feePlan.Id,
+                PeriodYear = today.Year,
+                PeriodMonth = today.Month,
+                MemberAmount = 25_000m,
+                GrandTreasuryAmount = 20_000m,
+                Status = "partial"
+            };
+            var payment = new LodgeMemberPayment
+            {
+                Charge = charge,
+                ChargeId = charge.Id,
+                Amount = 10_000m,
+                PaymentMethod = "transfer",
+                PaymentDate = today,
+                ReceiptNumber = "REC-SELF-001",
+                Reference = "TRX-SELF-001",
+                RecordedBySubject = "treasury-test"
+            };
+
+            db.AddRange(organization, person, member, membership, initiation, exaltation, status, financial, hospitalaria, feePlan, charge, payment);
             await db.SaveChangesAsync(cancellationToken);
 
             memberId = member.Id;
@@ -216,6 +251,15 @@ public sealed class MemberSelfServicePostgreSqlTests
         Assert.Equal(organizationId, profileJson.GetProperty("current").GetProperty("membership").GetProperty("organizationId").GetGuid());
         Assert.Equal(3, profileJson.GetProperty("current").GetProperty("effectiveDegree").GetInt32());
         Assert.Equal("up_to_date", profileJson.GetProperty("regularity").GetProperty("financial").GetProperty("status").GetString());
+
+        var treasuryAccount = profileJson.GetProperty("treasuryAccount");
+        Assert.Equal(25_000m, treasuryAccount.GetProperty("totalCharged").GetDecimal());
+        Assert.Equal(10_000m, treasuryAccount.GetProperty("totalPaid").GetDecimal());
+        Assert.Equal(15_000m, treasuryAccount.GetProperty("balance").GetDecimal());
+        var treasuryCharge = treasuryAccount.GetProperty("items").EnumerateArray().Single();
+        Assert.Equal(today.Year, treasuryCharge.GetProperty("periodYear").GetInt32());
+        Assert.Equal(today.Month, treasuryCharge.GetProperty("periodMonth").GetInt32());
+        Assert.Equal("REC-SELF-001", treasuryCharge.GetProperty("payments").EnumerateArray().Single().GetProperty("receiptNumber").GetString());
 
         var activity = profileJson.GetProperty("activity");
         var attendance = activity.GetProperty("attendance");

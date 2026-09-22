@@ -15,6 +15,8 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 25 contro
 - QA-022: flujo reglamentario de insinuaciones desde presentación en 1.er grado hasta solicitud de Iniciación.
 - QA-023: cierre documental de Tenidas regulares y ceremoniales, distinguiendo Realizada de Cerrada.
 - QA-024: Cuadro Mensual de Tesorería con segregación Taller / Gran Tesorería, cuadre previo y conciliación institucional.
+- QA-027: cartola personal en Mi ficha y control de duplicidad de pagos del Taller.
+- QA-028: Cuadro Logial Mensual agregado por tipo de cuota y detalle individual minimizado para Gran Tesorería.
 - QA-025: Hospitalaria integral: Tronco independiente, socorros autorizados, revisión mensual del Consejo y rendición agregada a Gran Hospitalaria.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
@@ -99,6 +101,44 @@ python3 scripts/record-srv01-regression-result.py \
 ```
 
 El control QA-025 debe comprobar, con datos ficticios: independencia del Tronco de Beneficencia respecto de Tesorería; aportes por Hospitalaria; socorros con respaldo; autorización válida por Venerable Maestro o acuerdo auditable del Consejo; estado mensual revisado por Consejo; rendición agregada hacia Gran Hospitalaria sin beneficiarios, destinos ni observaciones privadas; reposición/comprobante; conciliación institucional; y actualización de la regularidad que consume Ceremonias.
+
+### QA-027 — Mi ficha / cartola personal de Tesorería
+
+1. Ingresar con un Hermano vinculado a una ficha institucional.
+2. Abrir `Mi ficha` y desplegar `Ver cartola` en el estado de Tesorería.
+3. Verificar totales cargado, pagado y saldo, sin mostrar información de otros hermanos.
+4. Confirmar que cada fila distingue el período de la cuota de la fecha efectiva del pago.
+5. Confirmar que cada pago presenta su comprobante correlativo y monto.
+6. Desde Tesorería del Taller, intentar repetir un pago con igual cargo, fecha, monto, medio y referencia: la API debe rechazarlo sin alterar el saldo.
+7. Repetir un abono legítimo con referencia distinta: debe registrarse respetando el saldo pendiente.
+
+Resultado esperado: el Hermano consulta únicamente su cartola; Tesorería conserva la fecha real de caja y el período de la obligación; un reintento idéntico con referencia no duplica el ingreso.
+
+### QA-028 — Gran Tesorería / Cuadro Logial Mensual
+
+1. Preparar un Taller ficticio con cuotas normal, tercera edad, estudiante, cónyuge y Past Activo.
+2. Generar el Cuadro Logial Mensual desde los miembros activos y las cuotas vigentes del período.
+3. Ingresar como Gran Tesorero y verificar que la vista inicial muestre sólo tipo de cuota, cantidad de miembros, monto por línea y total mensual.
+4. Confirmar que identificadores, nombres, cargos, grados y referencias individuales no aparezcan inicialmente.
+5. Usar `Consultar datos mínimos` sólo para revisar una diferencia y comprobar que se presenta el detalle restringido.
+6. Registrar un pago inferior al total: la conciliación debe quedar bloqueada y el Taller no puede marcarse al día.
+7. Completar el pago íntegro: la diferencia debe quedar en cero y Gran Tesorería puede conciliar.
+8. Confirmar que la conciliación genera la regularidad institucional del Taller consumida por los demás circuitos.
+
+Resultado esperado: Gran Tesorería valida el pago íntegro contra el total calculado del mes sin recibir innecesariamente la nómina individual completa.
+
+### QA-029 — Navegación de Tesorería por cargo
+
+1. Ingresar como Tesorero del Taller y confirmar que existe un único acceso lateral `Tesorería`.
+2. Abrirlo y comprobar las opciones internas `Resumen`, `Cuotas y cobranza`, `Egresos` y `Cuadro mensual`.
+3. Verificar que las operaciones anteriores siguen disponibles dentro de la opción correspondiente.
+4. Ingresar como Venerable Maestro y confirmar que sólo ve `Egresos por autorizar`, sin formularios para cuotas, cobranza o Cuadro mensual.
+5. Ingresar como Gran Tesorero y confirmar que existe un único acceso lateral `Gran Tesorería`.
+6. Abrirlo y comprobar las opciones `Cuadros mensuales` y `Estado de Talleres`.
+7. Confirmar que Gran Tesorería no recibe acciones para administrar caja, cobranza o egresos locales.
+8. Repetir la navegación en ancho móvil y confirmar que todas las opciones autorizadas siguen siendo legibles y operables.
+
+Resultado esperado: cada cargo encuentra intuitivamente todas sus tareas financieras en un único menú propio, sin duplicidad ni ampliación de permisos.
 
 Ejemplo de fallo:
 

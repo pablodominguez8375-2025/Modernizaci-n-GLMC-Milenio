@@ -49,14 +49,30 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 OfficeType = "treasurer", Period = "2026", StartDate = new DateOnly(2026, 1, 1)
             };
+            var feePlan = new PMGM.Api.Modules.Treasury.Entities.LodgeFeePlan
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                FeeType = TreasuryCodes.LodgeFeeType.Student,
+                MemberAmount = 8_000m, GrandTreasuryAmount = 8_000m,
+                EffectiveFrom = new DateOnly(2026, 1, 1)
+            };
+            var charge = new PMGM.Api.Modules.Treasury.Entities.LodgeMemberCharge
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                Member = member, MemberId = member.Id,
+                FeePlan = feePlan, FeePlanId = feePlan.Id,
+                PeriodYear = 2026, PeriodMonth = 7,
+                MemberAmount = 8_000m, GrandTreasuryAmount = 8_000m,
+                Status = TreasuryCodes.LodgeChargeStatus.Pending
+            };
             var adjustment = new PMGM.Api.Modules.Treasury.Entities.TreasuryAdjustment
             {
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 AdjustmentType = "student", EffectiveFrom = new DateOnly(2026, 1, 1),
-                EffectiveUntil = new DateOnly(2026, 12, 31), Amount = -13_000m,
+                EffectiveUntil = new DateOnly(2026, 12, 31), Amount = 0m,
                 AuthorizationReference = "PLANCHA-CI-001", Status = TreasuryCodes.AdjustmentStatus.Active
             };
-            db.AddRange(organization, person, member, membership, degree, office, adjustment);
+            db.AddRange(organization, person, member, membership, degree, office, feePlan, charge, adjustment);
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             memberId = member.Id;
@@ -82,6 +98,20 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         Assert.Equal(membershipId, generatedLine.GetProperty("membershipId").GetGuid());
         Assert.Equal("treasurer", generatedLine.GetProperty("officeCodeAtCutoff").GetString());
         Assert.Equal("PLANCHA-CI-001", generatedLine.GetProperty("authorizationReference").GetString());
+        var breakdown = Assert.Single(generated.GetProperty("feeBreakdown").EnumerateArray());
+        Assert.Equal(TreasuryCodes.LodgeFeeType.Student, breakdown.GetProperty("feeType").GetString());
+        Assert.Equal(1, breakdown.GetProperty("members").GetInt32());
+        Assert.Equal(8_000m, breakdown.GetProperty("amount").GetDecimal());
+
+        var minimizedResponse = await client.GetAsync($"/api/tesoreria/cuadros/{statementId}", cancellationToken);
+        var minimized = await minimizedResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var minimizedLine = Assert.Single(minimized.GetProperty("lines").EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("memberId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("observation").ValueKind);
+
+        var detailedResponse = await client.GetAsync($"/api/tesoreria/cuadros/{statementId}?includeMemberDetail=true", cancellationToken);
+        var detailed = await detailedResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(memberId, Assert.Single(detailed.GetProperty("lines").EnumerateArray()).GetProperty("memberId").GetGuid());
 
         var blockedSubmit = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, blockedSubmit.StatusCode);

@@ -7,7 +7,9 @@ public static class TreasuryCodes
         public const string Normal = "normal";
         public const string Student = "student";
         public const string Senior = "senior";
-        public static bool IsValid(string value) => value is Normal or Student or Senior;
+        public const string Spouse = "spouse";
+        public const string PastActive = "past_active";
+        public static bool IsValid(string value) => value is Normal or Student or Senior or Spouse or PastActive;
     }
 
     public static class LodgeChargeStatus

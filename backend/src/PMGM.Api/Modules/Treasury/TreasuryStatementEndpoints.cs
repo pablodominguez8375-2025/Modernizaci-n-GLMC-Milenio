@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Modules.Treasury;
@@ -36,8 +37,14 @@ public static class TreasuryStatementEndpoints
             return Results.Conflict(new { message = "La generación automática requiere un cuadro vacío en borrador." });
 
         var cutoff = statement.CutoffDate;
+        var monthlyCharges = await db.LodgeMemberCharges.AsNoTracking()
+            .Include(x => x.FeePlan)
+            .Where(x => x.OrganizationId == statement.OrganizationId &&
+                        x.PeriodYear == statement.PeriodYear && x.PeriodMonth == statement.PeriodMonth)
+            .ToListAsync(cancellationToken);
         var memberships = await db.Memberships.AsNoTracking()
             .Where(x => x.OrganizationId == statement.OrganizationId && x.StartDate <= cutoff &&
+                        x.Status == MembershipCodes.MembershipStatus.Active &&
                         (x.EndDate == null || x.EndDate >= cutoff))
             .OrderBy(x => x.StartDate)
             .ToListAsync(cancellationToken);
@@ -77,7 +84,9 @@ public static class TreasuryStatementEndpoints
         foreach (var membership in memberships)
         {
             var degree = degreeEvents.First(x => x.MemberId == membership.MemberId).Degree;
-            var baseAmount = request.AmountFor(degree);
+            var charge = monthlyCharges.FirstOrDefault(x => x.MemberId == membership.MemberId);
+            var contributionType = charge?.FeePlan.FeeType ?? TreasuryCodes.LodgeFeeType.Normal;
+            var baseAmount = charge?.GrandTreasuryAmount ?? request.AmountFor(degree);
             if (baseAmount is null)
                 return Results.BadRequest(new { message = $"El grado '{degree}' no tiene una cuota base configurada." });
             var office = offices.FirstOrDefault(x => x.MemberId == membership.MemberId);
@@ -95,7 +104,7 @@ public static class TreasuryStatementEndpoints
                 OfficeCodeAtCutoff = office?.OfficeType,
                 BaseAmount = baseAmount.Value,
                 AdjustmentAmount = adjustmentAmount,
-                AdjustmentType = adjustment?.AdjustmentType,
+                AdjustmentType = contributionType,
                 AuthorizationReference = adjustment?.AuthorizationReference,
                 IdentityMatchStatus = TreasuryCodes.IdentityMatchStatus.Matched
             };
@@ -299,7 +308,7 @@ public static class TreasuryStatementEndpoints
         return Results.Ok(ToResponse(statement));
     }
 
-    private static async Task<IResult> GetAsync(Guid statementId, HttpContext context, PmgmDbContext db,
+    private static async Task<IResult> GetAsync(Guid statementId, bool? includeMemberDetail, HttpContext context, PmgmDbContext db,
         IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         var statement = await db.TreasuryMonthlyStatements.AsNoTracking().Include(x => x.Lines).Include(x => x.Payments)
@@ -307,21 +316,42 @@ public static class TreasuryStatementEndpoints
         if (statement is null) return Results.NotFound();
         if (!access.CanManageTreasuryRegularity(context.User) && !access.CanReadOrganization(context.User, statement.OrganizationId))
             return Results.Forbid();
-        return Results.Ok(ToResponse(statement));
+        return Results.Ok(ToResponse(statement, includeMemberDetail == true || !access.CanManageTreasuryRegularity(context.User)));
     }
 
-    private static object ToResponse(TreasuryMonthlyStatement statement)
+    private static object ToResponse(TreasuryMonthlyStatement statement, bool includeMemberDetail = true)
     {
         var totals = TreasuryStatementTotals.Calculate(statement.Lines, statement.Payments);
+        var feeBreakdown = statement.Lines
+            .GroupBy(x => TreasuryCodes.LodgeFeeType.IsValid(x.AdjustmentType ?? string.Empty)
+                ? x.AdjustmentType!
+                : TreasuryCodes.LodgeFeeType.Normal)
+            .Select(group => new
+            {
+                feeType = group.Key,
+                members = group.Count(),
+                amount = group.Sum(x => x.PayableAmount)
+            })
+            .OrderBy(x => x.feeType)
+            .ToList();
         return new
         {
             statement.Id, statement.OrganizationId, statement.PeriodYear, statement.PeriodMonth, statement.CutoffDate,
             statement.Status, statement.SourceReference, totals.ExpectedAmount, totals.TransferAmount,
             totals.DepositAmount, totals.PaidAmount, totals.DifferenceAmount,
+            feeBreakdown,
             unresolvedIdentities = statement.Lines.Count(x => x.IdentityMatchStatus != TreasuryCodes.IdentityMatchStatus.Matched),
-            lines = statement.Lines.Select(x => new { x.Id, x.MemberId, x.MembershipId, x.DegreeCodeAtCutoff,
-                x.OfficeCodeAtCutoff, x.BaseAmount, x.AdjustmentAmount, x.PayableAmount, x.AdjustmentType,
-                x.AuthorizationReference, x.Observation, x.IdentityMatchStatus }),
+            lines = statement.Lines.Select(x => new { x.Id,
+                MemberId = includeMemberDetail ? x.MemberId : null,
+                MembershipId = includeMemberDetail ? x.MembershipId : null,
+                DegreeCodeAtCutoff = includeMemberDetail ? x.DegreeCodeAtCutoff : string.Empty,
+                OfficeCodeAtCutoff = includeMemberDetail ? x.OfficeCodeAtCutoff : null,
+                x.BaseAmount, x.AdjustmentAmount, x.PayableAmount,
+                contributionType = TreasuryCodes.LodgeFeeType.IsValid(x.AdjustmentType ?? string.Empty) ? x.AdjustmentType : TreasuryCodes.LodgeFeeType.Normal,
+                AdjustmentType = includeMemberDetail ? x.AdjustmentType : null,
+                AuthorizationReference = includeMemberDetail ? x.AuthorizationReference : null,
+                Observation = includeMemberDetail ? x.Observation : null,
+                x.IdentityMatchStatus }),
             payments = statement.Payments.Select(x => new { x.Id, x.PaymentMethod, x.PaymentDate, x.Amount,
                 x.PayerDisplayName, x.Reference, x.RecordedAtUtc }),
             statement.SubmittedAtUtc, statement.ReconciledAtUtc, statement.ClosedAtUtc

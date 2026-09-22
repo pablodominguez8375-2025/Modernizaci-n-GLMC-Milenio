@@ -19,9 +19,11 @@ public static class LodgeTreasuryEndpoints
         group.MapPost("/talleres/{organizationId:guid}/planes-cuota", CreateFeePlanAsync);
         group.MapGet("/talleres/{organizationId:guid}/planes-cuota", GetFeePlansAsync);
         group.MapPost("/talleres/{organizationId:guid}/cargos/generar", GenerateChargesAsync);
+        group.MapGet("/talleres/{organizationId:guid}/cargos", GetChargesAsync);
         group.MapGet("/talleres/{organizationId:guid}/resumen", GetSummaryAsync);
         group.MapPost("/cargos/{chargeId:guid}/pagos", AddPaymentAsync);
         group.MapPost("/talleres/{organizationId:guid}/egresos", CreateExpenseAsync);
+        group.MapGet("/talleres/{organizationId:guid}/egresos", GetExpensesAsync);
         group.MapPost("/egresos/{expenseId:guid}/aprobar", ApproveExpenseAsync);
         group.MapGet("/hermanos/{memberId:guid}/cartola", GetMemberStatementAsync);
         return endpoints;
@@ -118,9 +120,17 @@ public static class LodgeTreasuryEndpoints
         if (paid + request.Amount > charge.MemberAmount)
             return Results.Conflict(new { message = "El abono supera el saldo pendiente del hermano." });
 
+        var reference = Normalize(request.Reference);
+        if (reference is not null && charge.Payments.Any(x =>
+                x.Amount == request.Amount &&
+                x.PaymentDate == request.PaymentDate &&
+                x.PaymentMethod == request.PaymentMethod &&
+                string.Equals(x.Reference, reference, StringComparison.OrdinalIgnoreCase)))
+            return Results.Conflict(new { message = "Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia." });
+
         var payment = new LodgeMemberPayment { ChargeId = charge.Id, Amount = request.Amount, PaymentMethod = request.PaymentMethod,
             PaymentDate = request.PaymentDate, ReceiptNumber = $"REC-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Random.Shared.Next(1000, 9999)}",
-            Reference = Normalize(request.Reference), RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
+            Reference = reference, RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
         db.LodgeMemberPayments.Add(payment);
         charge.Status = paid + request.Amount == charge.MemberAmount ? TreasuryCodes.LodgeChargeStatus.Paid : TreasuryCodes.LodgeChargeStatus.Partial;
         audit.Add(context, "lodge.treasury.member_payment.recorded", nameof(LodgeMemberPayment), payment.Id.ToString(),
@@ -137,6 +147,27 @@ public static class LodgeTreasuryEndpoints
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         return Results.Ok(await BuildSummaryAsync(db, organizationId, year, month, cancellationToken));
+    }
+
+    private static async Task<IResult> GetChargesAsync(Guid organizationId, int year, int month, HttpContext context,
+        PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (month is < 1 or > 12 || year is < 2000 or > 2200)
+            return Results.BadRequest(new { message = "El período indicado no es válido." });
+        var rows = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments)
+            .Where(x => x.OrganizationId == organizationId && x.PeriodYear == year && x.PeriodMonth == month)
+            .Join(db.Members.AsNoTracking().Include(x => x.Person), charge => charge.MemberId, member => member.Id,
+                (charge, member) => new { charge, member })
+            .OrderBy(x => x.member.Person.LastNames).ThenBy(x => x.member.Person.FirstNames)
+            .ToListAsync(cancellationToken);
+        var items = rows.Select(x => new { x.charge.Id, x.charge.MemberId,
+            memberDisplayName = x.member.Person.FirstNames + " " + x.member.Person.LastNames,
+            x.charge.MemberAmount, paidAmount = x.charge.Payments.Sum(p => p.Amount),
+            balance = x.charge.MemberAmount - x.charge.Payments.Sum(p => p.Amount), x.charge.Status,
+            payments = x.charge.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new
+                { p.Id, p.ReceiptNumber, p.Amount, p.PaymentMethod, p.PaymentDate, p.Reference }) }).ToList();
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> GetMemberStatementAsync(Guid memberId, Guid organizationId, HttpContext context,
@@ -181,6 +212,20 @@ public static class LodgeTreasuryEndpoints
         var expense = new LodgeTreasuryExpense { OrganizationId = organizationId, Category = request.Category.Trim(), Amount = request.Amount, ExpenseDate = request.ExpenseDate, Description = request.Description.Trim(), EvidenceReference = Normalize(request.EvidenceReference), ApprovalStatus = "pending_approval", RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
         db.LodgeTreasuryExpenses.Add(expense); audit.Add(context, "lodge.treasury.expense.recorded", nameof(LodgeTreasuryExpense), expense.Id.ToString(), organizationId, AuditResults.Success, new { expense.Category, expense.Amount }); await db.SaveChangesAsync(ct);
         return Results.Created($"/api/gestion-logial/tesoreria/egresos/{expense.Id}", expense);
+    }
+
+    private static async Task<IResult> GetExpensesAsync(Guid organizationId, DateOnly? from, DateOnly? to,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId) &&
+            !access.CanApproveLodgeExpenses(context.User, organizationId)) return Results.Forbid();
+        var start = from ?? new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
+        var end = to ?? start.AddMonths(1).AddDays(-1);
+        if (end < start) return Results.BadRequest(new { message = "El rango de fechas no es válido." });
+        var items = await db.LodgeTreasuryExpenses.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.ExpenseDate >= start && x.ExpenseDate <= end)
+            .OrderByDescending(x => x.ExpenseDate).ThenByDescending(x => x.RecordedAtUtc).ToListAsync(ct);
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> ApproveExpenseAsync(Guid expenseId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)

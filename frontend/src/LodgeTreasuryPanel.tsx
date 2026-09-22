@@ -1,51 +1,37 @@
-import { useEffect, useState } from 'react'
-import { type LodgeFeePlan, type LodgeTreasurySummary, type PmgmApiClient } from './api/pmgmApi'
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { type LodgeFeePlan, type LodgeTreasuryCharge, type LodgeTreasuryExpense, type LodgeTreasurySummary, type PmgmApiClient } from './api/pmgmApi'
 import './lodgeTreasury.css'
 
 const money = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
 
-export default function LodgeTreasuryPanel({ api, organizationId }: { api: PmgmApiClient; organizationId: string }) {
-  const now = new Date()
-  const [plans, setPlans] = useState<LodgeFeePlan[]>([])
-  const [summary, setSummary] = useState<LodgeTreasurySummary | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [period, setPeriod] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
-
-  useEffect(() => {
-    if (!organizationId) return
-    let active = true
-    Promise.all([api.getLodgeFeePlans(organizationId), api.getLodgeTreasurySummary(organizationId, Number(period.slice(0, 4)), Number(period.slice(5, 7)))])
-      .then(([feeResponse, report]) => { if (active) { setPlans(feeResponse.items); setSummary(report) } })
-      .catch(reason => { if (active) setError(toMessage(reason)) })
-    return () => { active = false }
-  }, [api, organizationId, period])
-
-  const generate = async () => {
-    setBusy(true); setMessage(null); setError(null)
-    try {
-      const report = await api.generateLodgeCharges(organizationId, Number(period.slice(0, 4)), Number(period.slice(5, 7)))
-      setSummary(report); setMessage('Cargos mensuales generados. La cartola y la obligación con Gran Tesorería quedaron calculadas.')
-    } catch (reason) { setError(toMessage(reason)) } finally { setBusy(false) }
-  }
-
-  return <section className="lodge-treasury-panel">
-    <div className="lodge-management-heading"><div><p className="lodge-kicker">Gestión Logial › Tesorería</p><h2>Cuotas y estado financiero del Taller</h2></div><label><span>Período</span><input type="month" value={period} onChange={event => setPeriod(event.target.value)} /></label></div>
-    {message && <div className="regularity-success" role="status">{message}</div>}
-    {error && <div className="regularity-error" role="alert">{error}</div>}
-    <div className="lodge-fee-grid">{plans.map(plan => <article key={plan.id}><span>{feeLabel(plan.feeType)}</span><strong>{money.format(plan.memberAmount)}</strong><small>Gran Tesorería: {money.format(plan.grandTreasuryAmount)}</small><em>Disponible para el Taller: {money.format(plan.workshopAmount)}</em></article>)}</div>
-    <div className="lodge-treasury-summary">
-      <article><small>Por cobrar a hermanos</small><strong>{money.format(summary?.memberExpected ?? 0)}</strong></article>
-      <article><small>Recaudado</small><strong>{money.format(summary?.collected ?? 0)}</strong></article>
-      <article><small>Cuenta por cobrar</small><strong>{money.format(summary?.receivable ?? 0)}</strong></article>
-      <article><small>Por pagar a Gran Tesorería</small><strong>{money.format(summary?.grandTreasuryExpected ?? 0)}</strong></article>
-      <article><small>Margen proyectado del Taller</small><strong>{money.format(summary?.workshopMarginProjected ?? 0)}</strong></article>
-    </div>
-    <div className="lodge-treasury-action"><div><span className={`treasury-light ${summary?.trafficLight ?? 'no_data'}`} /><p><strong>{summary?.members ?? 0} hermanos cargados</strong><small>{summary?.paid ?? 0} pagados · {summary?.partial ?? 0} parciales · {summary?.overdue ?? 0} pendientes</small></p></div><button className="lodge-blue-button" type="button" disabled={busy || !organizationId} onClick={() => void generate()}>{busy ? 'Generando…' : 'Generar cierre mensual'}</button></div>
-    <p className="lodge-treasury-note">Los montos son parametrizables por vigencia. Cada cargo conserva por separado lo cobrado al hermano y lo que corresponde pagar a Gran Tesorería.</p>
+export default function LodgeTreasuryPanel({ api, organizationId, canManage = true, canApproveExpenses = false, section = 'summary' }: { api: PmgmApiClient; organizationId: string; canManage?: boolean; canApproveExpenses?: boolean; section?: 'summary'|'collection'|'expenses' }) {
+  const now = new Date(); const today = now.toISOString().slice(0,10)
+  const [plans,setPlans]=useState<LodgeFeePlan[]>([]); const [summary,setSummary]=useState<LodgeTreasurySummary|null>(null)
+  const [charges,setCharges]=useState<LodgeTreasuryCharge[]>([]); const [expenses,setExpenses]=useState<LodgeTreasuryExpense[]>([])
+  const [busy,setBusy]=useState(false); const [message,setMessage]=useState<string|null>(null); const [error,setError]=useState<string|null>(null)
+  const [period,setPeriod]=useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`)
+  const [chargeId,setChargeId]=useState(''); const [paymentAmount,setPaymentAmount]=useState(0); const [paymentMethod,setPaymentMethod]=useState<'cash'|'transfer'|'deposit'|'other'>('transfer'); const [paymentDate,setPaymentDate]=useState(today); const [paymentReference,setPaymentReference]=useState('')
+  const [expenseCategory,setExpenseCategory]=useState('Servicios'); const [expenseAmount,setExpenseAmount]=useState(0); const [expenseDate,setExpenseDate]=useState(today); const [expenseDescription,setExpenseDescription]=useState(''); const [expenseEvidence,setExpenseEvidence]=useState('')
+  const year=Number(period.slice(0,4)); const month=Number(period.slice(5,7)); const from=`${period}-01`; const to=useMemo(()=>`${period}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,'0')}`,[period,year,month])
+  const refresh=useCallback(async()=>{if(!organizationId)return;const requests:Promise<unknown>[]=[api.getLodgeTreasuryExpenses(organizationId,from,to)];if(canManage)requests.push(api.getLodgeFeePlans(organizationId),api.getLodgeTreasurySummary(organizationId,year,month),api.getLodgeTreasuryCharges(organizationId,year,month));const result=await Promise.all(requests);setExpenses((result[0] as {items:LodgeTreasuryExpense[]}).items);if(canManage){setPlans((result[1] as {items:LodgeFeePlan[]}).items);setSummary(result[2] as LodgeTreasurySummary);setCharges((result[3] as {items:LodgeTreasuryCharge[]}).items)}},[api,organizationId,from,to,year,month,canManage])
+  useEffect(()=>{void refresh().catch(reason=>setError(toMessage(reason)))},[refresh])
+  const execute=async(action:()=>Promise<unknown>,success:string)=>{setBusy(true);setMessage(null);setError(null);try{await action();await refresh();setMessage(success)}catch(reason){setError(toMessage(reason))}finally{setBusy(false)}}
+  const addPayment=(event:FormEvent)=>{event.preventDefault();void execute(()=>api.addLodgeTreasuryPayment(chargeId,{amount:paymentAmount,paymentMethod,paymentDate,reference:paymentReference||null}),'Pago registrado; se emitió el comprobante correlativo.').then(()=>{setPaymentAmount(0);setPaymentReference('')})}
+  const addExpense=(event:FormEvent)=>{event.preventDefault();void execute(()=>api.createLodgeTreasuryExpense(organizationId,{category:expenseCategory,amount:expenseAmount,expenseDate,description:expenseDescription,evidenceReference:expenseEvidence||null}),'Egreso registrado y enviado al Venerable Maestro para autorización.').then(()=>{setExpenseAmount(0);setExpenseDescription('');setExpenseEvidence('')})}
+  return <section className="lodge-treasury-panel" id="lodge-treasury">
+    <div className="lodge-management-heading"><div><p className="lodge-kicker">Tesorería</p><h2>Operación financiera del Taller</h2><p>Tesorería registra; el Venerable Maestro autoriza los egresos. Gran Tesorería sólo recibe y concilia el Cuadro mensual.</p></div><label><span>Período</span><input type="month" value={period} onChange={event=>setPeriod(event.target.value)}/></label></div>
+    {message&&<div className="regularity-success" role="status">{message}</div>}{error&&<div className="regularity-error" role="alert">{error}</div>}
+    {canManage&&section==='summary'&&<><div className="lodge-fee-grid">{plans.map(plan=><article key={plan.id}><span>{feeLabel(plan.feeType)}</span><strong>{money.format(plan.memberAmount)}</strong><small>Gran Tesorería: {money.format(plan.grandTreasuryAmount)}</small><em>Disponible para el Taller: {money.format(plan.workshopAmount)}</em></article>)}</div>
+    <div className="lodge-treasury-summary"><article><small>Por cobrar</small><strong>{money.format(summary?.memberExpected??0)}</strong></article><article><small>Recaudado</small><strong>{money.format(summary?.collected??0)}</strong></article><article><small>Saldo por cobrar</small><strong>{money.format(summary?.receivable??0)}</strong></article><article><small>Por pagar a Gran Tesorería</small><strong>{money.format(summary?.grandTreasuryExpected??0)}</strong></article><article><small>Margen proyectado</small><strong>{money.format(summary?.workshopMarginProjected??0)}</strong></article></div>
+    <div className="lodge-treasury-action"><div><span className={`treasury-light ${summary?.trafficLight??'no_data'}`}/><p><strong>{summary?.members??0} hermanos cargados</strong><small>{summary?.paid??0} pagados · {summary?.partial??0} parciales · {summary?.overdue??0} pendientes</small></p></div><button className="lodge-blue-button" disabled={busy||!organizationId} onClick={()=>void execute(()=>api.generateLodgeCharges(organizationId,year,month),'Cargos mensuales generados y cartolas actualizadas.')}>{busy?'Procesando…':'Generar cargos del período'}</button></div>
+    </>}
+    {canManage&&section==='collection'&&<><div className="treasury-operations-grid single"><form className="regularity-form" onSubmit={addPayment}><p className="lodge-kicker">Cobranza</p><h3>Registrar pago de cuota</h3><label>Hermano y saldo<select required value={chargeId} onChange={e=>{setChargeId(e.target.value);setPaymentAmount(charges.find(x=>x.id===e.target.value)?.balance??0)}}><option value="">Seleccione…</option>{charges.filter(x=>x.balance>0).map(x=><option key={x.id} value={x.id}>{x.memberDisplayName} · {money.format(x.balance)}</option>)}</select></label><div className="lodge-form-row"><label>Monto<input required min="1" type="number" value={paymentAmount||''} onChange={e=>setPaymentAmount(Number(e.target.value))}/></label><label>Medio<select value={paymentMethod} onChange={e=>setPaymentMethod(e.target.value as typeof paymentMethod)}><option value="transfer">Transferencia</option><option value="deposit">Depósito</option><option value="cash">Efectivo</option><option value="other">Otro</option></select></label></div><label>Fecha<input required type="date" value={paymentDate} onChange={e=>setPaymentDate(e.target.value)}/></label><label>Referencia<input value={paymentReference} onChange={e=>setPaymentReference(e.target.value)} placeholder="Transferencia, depósito u observación"/></label><button className="regularity-primary" disabled={busy||!chargeId}>Registrar y emitir comprobante</button></form></div>
+    <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Hermano</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Estado</th></tr></thead><tbody>{charges.map(x=><tr key={x.id}><td>{x.memberDisplayName}</td><td>{money.format(x.memberAmount)}</td><td>{money.format(x.paidAmount)}</td><td>{money.format(x.balance)}</td><td>{statusLabel(x.status)}</td></tr>)}</tbody></table></div></>}
+    {section==='expenses'&&<><div className="treasury-operations-grid single">{canManage&&<form className="regularity-form" onSubmit={addExpense}><p className="lodge-kicker">Libro de egresos</p><h3>Registrar egreso</h3><div className="lodge-form-row"><label>Categoría<input required value={expenseCategory} onChange={e=>setExpenseCategory(e.target.value)}/></label><label>Monto<input required min="1" type="number" value={expenseAmount||''} onChange={e=>setExpenseAmount(Number(e.target.value))}/></label></div><label>Fecha<input required type="date" value={expenseDate} onChange={e=>setExpenseDate(e.target.value)}/></label><label>Descripción<textarea required value={expenseDescription} onChange={e=>setExpenseDescription(e.target.value)}/></label><label>Referencia del PDF de respaldo<input value={expenseEvidence} onChange={e=>setExpenseEvidence(e.target.value)} placeholder="Documento firmado o comprobante cargado"/></label><button className="regularity-primary" disabled={busy}>Enviar a autorización</button></form>}</div>
+    <article className="panel treasury-expenses"><div className="panel-heading"><div><p className="lodge-kicker">Segregación funcional</p><h3>Egresos y autorizaciones</h3></div><span className="count-badge">{expenses.filter(x=>x.approvalStatus==='pending_approval').length} pendientes</span></div><div className="table-scroll"><table className="treasury-table"><thead><tr><th>Fecha</th><th>Categoría / descripción</th><th>Monto</th><th>Respaldo</th><th>Estado</th><th>Acción</th></tr></thead><tbody>{expenses.map(x=><tr key={x.id}><td>{x.expenseDate}</td><td><strong>{x.category}</strong><small>{x.description}</small></td><td>{money.format(x.amount)}</td><td>{x.evidenceReference??'Sin referencia'}</td><td>{x.approvalStatus==='approved'?'Autorizado':'Pendiente del Venerable'}</td><td>{canApproveExpenses&&x.approvalStatus==='pending_approval'?<button className="regularity-primary" disabled={busy} onClick={()=>void execute(()=>api.approveLodgeTreasuryExpense(x.id),'Egreso autorizado por el Venerable Maestro.')}>Autorizar</button>:'—'}</td></tr>)}</tbody></table></div></article></>}
+    <p className="lodge-treasury-note">Los documentos oficiales no se generan en el sistema: se registra su descripción y referencia, y el PDF firmado se conserva como respaldo documental.</p>
   </section>
 }
-
-function feeLabel(value: LodgeFeePlan['feeType']) { return value === 'student' ? 'Cuota estudiante' : value === 'senior' ? 'Cuota tercera edad' : 'Cuota normal' }
-function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'No fue posible completar la operación de Tesorería.' }
+function feeLabel(value:LodgeFeePlan['feeType']){return value==='student'?'Cuota estudiante':value==='senior'?'Cuota tercera edad':value==='spouse'?'Cuota cónyuge':value==='past_active'?'Cuota Past Activo':'Cuota normal'}
+function statusLabel(value:string){return value==='paid'?'Pagado':value==='partial'?'Pago parcial':'Pendiente'}
+function toMessage(reason:unknown){return reason instanceof Error?reason.message:'No fue posible completar la operación de Tesorería.'}

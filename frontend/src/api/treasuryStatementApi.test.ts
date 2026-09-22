@@ -8,6 +8,8 @@ describe('Gran Tesorería monthly statement demo', () => {
     let statement = await api.createTreasuryStatement(organizationId, { periodYear: 2026, periodMonth: 9, cutoffDate: '2026-09-12' })
     statement = await api.generateTreasuryStatementLines(statement.id, { apprenticeAmount: 21000, fellowcraftAmount: 21000, masterAmount: 21000 })
     expect(statement.lines).toHaveLength(7)
+    expect(statement.feeBreakdown.map(item => item.feeType)).toEqual(expect.arrayContaining(['normal','senior','student','spouse','past_active']))
+    expect(statement.feeBreakdown.reduce((total,item)=>total+item.amount,0)).toBe(statement.expectedAmount)
     expect(statement.lines.some(line => line.authorizationReference?.includes('Plancha'))).toBe(true)
     expect(statement.differenceAmount).toBe(statement.expectedAmount)
     await expect(api.submitTreasuryStatement(statement.id)).rejects.toThrow('diferencia')
@@ -15,6 +17,11 @@ describe('Gran Tesorería monthly statement demo', () => {
     const listed = await api.listTreasuryStatements(organizationId, 2026, 9)
     expect(listed.items).toHaveLength(1)
     expect(listed.items[0].id).toBe(statement.id)
+
+    const minimized = await api.getTreasuryStatement(statement.id)
+    expect(minimized.lines.every(line => line.memberId === null && line.observation === null)).toBe(true)
+    const detailed = await api.getTreasuryStatement(statement.id, true)
+    expect(detailed.lines.some(line => line.memberId !== null)).toBe(true)
 
     await expect(api.addTreasuryStatementPayment(statement.id, { paymentMethod: 'transfer', paymentDate: '2026-09-12', amount: statement.differenceAmount })).rejects.toThrow('Pagador')
     statement = await api.addTreasuryStatementPayment(statement.id, { paymentMethod: 'transfer', paymentDate: '2026-09-12', amount: statement.differenceAmount, payerDisplayName: 'Tesorería del Taller', reference: 'TRX-DEMO-001' })

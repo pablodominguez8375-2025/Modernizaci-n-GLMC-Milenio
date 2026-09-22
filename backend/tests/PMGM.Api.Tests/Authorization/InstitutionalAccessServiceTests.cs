@@ -91,6 +91,7 @@ public sealed class InstitutionalAccessServiceTests
 
         Assert.True(_service.CanManageTreasuryRegularity(user));
         Assert.False(_service.CanPrepareTreasuryStatement(user, organization));
+        Assert.False(_service.CanManageLodgeTreasury(user, organization));
     }
 
     [Fact]
