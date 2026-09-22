@@ -20,6 +20,37 @@ public sealed class CandidatePublicationProjectionTests
     }
 
     [Fact]
+    public void PublicProjection_DoesNotExposePrivateCandidateFileFields()
+    {
+        var propertyNames = typeof(CandidatePublicationPublicDto)
+            .GetProperties()
+            .Select(x => x.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var forbidden = new[]
+        {
+            "RutOrInstitutionalId",
+            "Rut",
+            "BirthDate",
+            "Phone",
+            "Email",
+            "Address",
+            "Occupation",
+            "CivilStatus",
+            "Presenters",
+            "InterviewSummary",
+            "InternalObservations",
+            "DocumentVersionId",
+            "PhotoVersionId"
+        };
+
+        foreach (var property in forbidden)
+        {
+            Assert.DoesNotContain(property, propertyNames);
+        }
+    }
+
+    [Fact]
     public void PublicProjection_ContainsOnlyPurposeBoundFields()
     {
         var expected = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
