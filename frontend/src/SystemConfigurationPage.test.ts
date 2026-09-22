@@ -13,6 +13,16 @@ describe('system configuration demo contract', () => {
     expect(saved.status).toBe('active')
   })
 
+  it('uses the four institutional colors approved in the master baseline', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    const settings = await api.getSystemSettings()
+    const values = new Map(settings.items.filter(item => item.code.startsWith('system.brand.') && item.code.endsWith('_color')).map(item => [item.code, item.value]))
+    expect(values.get('system.brand.primary_color')).toBe('#06148E')
+    expect(values.get('system.brand.secondary_color')).toBe('#004AD4')
+    expect(values.get('system.brand.gold_color')).toBe('#F3C609')
+    expect(values.get('system.brand.accent_color')).toBe('#FBAE17')
+  })
+
   it('versions the Venerable Maestro permission profile', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const saved = await api.createSystemSettingVersion('system.permissions.lodge_venerable', { value: 'Gestión del Taller|Aprobar egresos|Firmar documentos', effectiveFrom: '2026-11-01', sourceReference: 'Validación institucional QA' })

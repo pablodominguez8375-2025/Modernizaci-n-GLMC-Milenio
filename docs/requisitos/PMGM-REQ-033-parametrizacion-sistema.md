@@ -1,7 +1,7 @@
 # PMGM-REQ-033 — Parametrización administrable del sistema
 
-**Prioridad:** P0  
-**Estado:** Implementado en demo y API; pendiente CI/merge  
+**Prioridad:** P0
+**Estado:** Implementado en dev; incremento de identidad institucional v0.61 en rama feature, pendiente PR/CI
 
 ## Objetivo
 
@@ -54,6 +54,10 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 27. Sistema incluye una auditoría periódica de accesos con clasificación de riesgo.
 28. Los administradores pueden certificar o revocar cada asignación y exportar la revisión en CSV.
 29. Los perfiles privilegiados se recertifican según una frecuencia parametrizable; no tienen aprobación permanente.
+
+### Identidad institucional — paleta oficial
+
+La configuración de identidad visual usa la paleta de la Línea Base Maestra LB-PC-2026-09-17: azul institucional `#06148E`, azul complementario `#004AD4`, dorado `#F3C609` y dorado fuerte `#FBAE17`. El archivo oficial del logotipo se referencia sin deformarlo, recolorearlo ni recortarlo, según la Guía de uso del logotipo de la GLMCh. El incremento de estos parámetros y su vista previa se encuentra en `feature/system-brand-official-colors-20260922`; no se declara integrado ni publicado hasta completar sus gates.
 
 ## Experiencia QA
 

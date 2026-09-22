@@ -150,3 +150,14 @@ Desde `dev` `fc019fb70e2f2df610ae3c27e6d8194ddf801864` se inicia QA-032 para la 
 - evitar exponer rutas internas, versión documental o datos privados del expediente.
 
 El incremento no modifica atribuciones de Secretaría, Gran Secretaría ni Tesorería, y no cambia la regla de que el expediente completo queda restringido por rol.
+
+## 11. Incremento activo — identidad institucional del Sistema
+
+Se alinea la configuración de identidad visual de Sistema con la Línea Base Maestra LB-PC-2026-09-17:
+
+- azul institucional `#06148E`;
+- azul complementario `#004AD4`;
+- dorado `#F3C609`;
+- dorado fuerte `#FBAE17`.
+
+El trabajo se desarrolla en `feature/system-brand-official-colors-20260922`, rebasada sobre el `dev` vivo `3ae5ecb514b5d9a525d0a271512c94dbe0f65f1b`. Incluye parámetros reales/API, mock Pages, controles y vista previa de los cuatro colores, pruebas y QA-033. La guía oficial del logotipo exige no deformar, recolorear ni recortar el archivo; se conserva su referencia configurable. Pendiente PR, CI exact-head, publicación Pages e instalable QA del mismo SHA. Issue #97 y despliegue físico en `srv01` continúan pendientes.
