@@ -28,18 +28,11 @@ describe('ceremonies page', () => {
     }
   })
 
-  it('documents a known gap (PMGM-GAP-001): only 3 ceremony types are labeled', () => {
-    // ceremonyTypeLabel() in CeremoniesPage.tsx only maps 'initiation',
-    // 'wage_increase' and a fallback rendered as 'Exaltación'. The
-    // institutional 2026 forms also require Afiliación, Incorporación and
-    // Otra (see docs/PMGM-GAP-001-brechas-flujos-institucionales-2026.md,
-    // GAP-001). This test intentionally documents the current, incomplete
-    // behavior so it fails loudly once someone adds real Afiliación /
-    // Incorporación handling and the fallback branch is removed or fixed.
+  it('delegates ceremony labels to the shared ceremonyTypes module (PMGM-GAP-001 · GAP-001 corregido)', () => {
+    // Antes este test documentaba el gap: la página tenía su propia copia de
+    // ceremonyTypeLabel() que rotulaba Afiliación/Incorporación como "Exaltación".
     const source = readFileSync(new URL('./CeremoniesPage.tsx', import.meta.url), 'utf-8')
-    expect(source).toContain("type === 'initiation'")
-    expect(source).toContain("type === 'wage_increase'")
-    expect(source).not.toContain('affiliation')
-    expect(source).not.toContain('incorporation')
+    expect(source).toContain("from './ceremonyTypes'")
+    expect(source).not.toMatch(/function ceremonyTypeLabel/)
   })
 })

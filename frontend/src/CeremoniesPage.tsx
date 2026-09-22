@@ -5,6 +5,7 @@ import {
   type PmgmApiClient,
 } from './api/pmgmApi'
 import './ceremonies.css'
+import { ceremonyTypeLabel } from './ceremonyTypes'
 
 export default function CeremoniesPage({ api }: { api: PmgmApiClient }) {
   const [items, setItems] = useState<CeremonyReviewQueueItem[]>([])
@@ -159,7 +160,6 @@ function PublicationProgress({ item }: { item: CeremonyReviewQueueItem }) {
   </div>
 }
 
-function ceremonyTypeLabel(type: CeremonyReviewQueueItem['ceremonyType']) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function requestStatusLabel(status: string) { return status === 'authorized' ? 'Autorizada' : status === 'rejected' ? 'Rechazada' : status === 'observed' ? 'Observada' : status === 'eligible' ? 'Elegible' : status === 'draft' ? 'Borrador' : 'En revisión' }
 function requestStatusClass(status: string) { return status === 'authorized' ? 'status-pill complete' : status === 'rejected' ? 'status-pill blocked' : 'status-pill active' }
 function requirementStatusLabel(status: string) { return status === 'approved' ? 'Cumplido' : status === 'observed' ? 'Observado' : 'Pendiente' }

@@ -9,6 +9,7 @@ import {
   type SpaceAvailabilityResponse,
 } from './api/pmgmApi'
 import './secretariat.css'
+import { ceremonyTypeLabel } from './ceremonyTypes'
 
 const SANTIAGO = 'America/Santiago'
 
@@ -247,7 +248,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function SpaceRow({ space }: { space: InstitutionalSpace }) { return <div className="space-row"><div><strong>{space.name}</strong><small>{space.code} · {spaceTypeLabel(space.spaceType)}{space.capacity ? ` · ${space.capacity} personas` : ''}</small></div><span className={space.isAvailable ? 'status-pill complete' : 'status-pill active'}>{space.isAvailable ? 'Disponible' : 'Ocupado'}</span></div> }
 function organizationLabel(o: OrganizationOption) { return `${o.name}${o.number ? ` · Nº ${o.number}` : ''}` }
 function spaceTypeLabel(type: InstitutionalSpace['spaceType']) { return type === 'temple' ? 'Templo' : 'Sala de Secretaría' }
-function ceremonyTypeLabel(type: GrandSecretariatCeremonyQueueItem['ceremonyType']) { return type === 'initiation' ? 'Iniciación' : type === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function documentTypeLabel(document: SecretariatDocument) { if (document.documentType === 'decree') return 'Decreto'; if (document.planchaKind === 'ceremony_authorization' || document.documentType === 'ceremony_authorization' || document.documentType === 'ceremony_authorization_plancha') return 'Plancha · autorización formal'; return 'Plancha · comunicado formal' }
 function submissionLabel(value: GrandSecretariatTenidaItem['submissionStatus']) { return value === 'received' ? 'Recibido' : value === 'observed' ? 'Observado' : 'Pendiente de recepción' }
 function meetingTypeLabel(value: string) { return value === 'regular' ? 'Regular' : value === 'solemn' ? 'Solemne' : value === 'instruction' ? 'Instrucción' : value === 'anniversary' ? 'Aniversario' : value === 'funeral' ? 'Fúnebre' : value }
