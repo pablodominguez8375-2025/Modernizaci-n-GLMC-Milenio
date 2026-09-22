@@ -1,7 +1,7 @@
 # PMGM-REQ-033 — Parametrización administrable del sistema
 
 **Prioridad:** P0
-**Estado:** Implementado en dev; incremento de identidad institucional v0.61 en rama feature, pendiente PR/CI
+**Estado:** Implementado en dev; identidad institucional v0.61 integrada mediante PR #132 (`e1eff39fa380144ef69e200010ced86c787e23a4`)
 
 ## Objetivo
 
@@ -57,7 +57,7 @@ Permitir que el Administrador del Sistema y los administradores de Gran Logia au
 
 ### Identidad institucional — paleta oficial
 
-La configuración de identidad visual usa la paleta de la Línea Base Maestra LB-PC-2026-09-17: azul institucional `#06148E`, azul complementario `#004AD4`, dorado `#F3C609` y dorado fuerte `#FBAE17`. El archivo oficial del logotipo se referencia sin deformarlo, recolorearlo ni recortarlo, según la Guía de uso del logotipo de la GLMCh. El incremento de estos parámetros y su vista previa se encuentra en `feature/system-brand-official-colors-20260922`; no se declara integrado ni publicado hasta completar sus gates.
+La configuración de identidad visual usa la paleta de la Línea Base Maestra LB-PC-2026-09-17: azul institucional `#06148E`, azul complementario `#004AD4`, dorado `#F3C609` y dorado fuerte `#FBAE17`. El archivo oficial del logotipo se referencia sin deformarlo, recolorearlo ni recortarlo, según la Guía de uso del logotipo de la GLMCh. El incremento se integró mediante PR #132 y se publicó en Pages y en el instalable QA desde el SHA `e1eff39fa380144ef69e200010ced86c787e23a4`. Issue #97 mantiene pendiente el despliegue físico y la validación en `srv01`.
 
 ## Experiencia QA
 
