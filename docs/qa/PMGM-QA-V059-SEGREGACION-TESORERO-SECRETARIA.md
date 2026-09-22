@@ -34,3 +34,14 @@ La corrección elimina la exposición incorrecta del frontend y alinea la Demo c
 - frontend: 35 archivos / 153 pruebas aprobadas;
 - build productivo TypeScript/Vite aprobado;
 - `git diff --check` aprobado.
+
+## Control automatizado de Demo
+
+El flujo Showcase de GitHub Actions valida QA-031 en las capturas de escritorio y móvil:
+
+- el Tesorero conserva Mi ficha, Mi calendario, Notificaciones, Insinuados publicados, Biblioteca Virtual y Tesorería;
+- el menú del Tesorero contiene Resumen, Cuotas y cobranza, Egresos y Cuadro mensual;
+- no aparecen los accesos de Secretaría, Gestión Logial, Circuito de Iniciación, fichas, Cuadro del Taller ni Gestor Documental;
+- el Venerable recibe únicamente la pestaña Egresos por autorizar dentro del menú Tesorería; no recibe Resumen, cobranza ni Cuadro mensual.
+
+La comprobación falla el workflow Showcase si falta un acceso permitido o aparece uno restringido. Las capturas se generan después de esta validación.
