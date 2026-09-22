@@ -22,6 +22,7 @@ import MinuteExtractEditor from './MinuteExtractEditor'
 import LodgeWithdrawalsPanel from './LodgeWithdrawalsPanel'
 import LodgeCouncilPanel from './LodgeCouncilPanel'
 import LodgeSecretariatPanel from './LodgeSecretariatPanel'
+import { ceremonyTypeLabel } from './ceremonyTypes'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -423,7 +424,6 @@ const attendanceOptions = [['present', 'Presente'], ['excused', 'Justificado'], 
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function meetingTypeLabel(value: LodgeMeetingType) { return meetingTypeOptions.find(([key]) => key === value)?.[1] ?? value }
 function gradeLabel(value: LodgeGrade) { return gradeOptions.find(([key]) => key === value)?.[1] ?? value }
-function ceremonyTypeLabel(value: LodgeCeremonyType) { return value === 'initiation' ? 'Iniciación' : value === 'wage_increase' ? 'Aumento de salario' : 'Exaltación' }
 function instructionOfficeLabel(value: LodgeInstruction['responsibleOffice']) { return value === 'second_warden' ? 'Segundo Vigilante' : value === 'first_warden' ? 'Primer Vigilante' : 'Inmediato Ex-Venerable Maestro' }
 function attendanceLabel(value: LodgeAttendanceStatus) { return attendanceOptions.find(([key]) => key === value)?.[1] ?? value }
 function meetingStatusLabel(value: string) { return value === 'closed' ? 'Cerrada' : value === 'held' ? 'Realizada' : value === 'open' ? 'Abierta' : value === 'cancelled' ? 'Cancelada' : 'Programada' }
