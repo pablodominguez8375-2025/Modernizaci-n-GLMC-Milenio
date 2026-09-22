@@ -131,3 +131,36 @@ Una brecha se considera cerrada sólo cuando existe:
 5. prueba automatizada;
 6. caso UAT asociado;
 7. documentación actualizada.
+
+## 5. Auditoría de estado — 22-09-2026
+
+**Rama evaluada:** `dev@225db8d3b2243ac7b746583410289076082c8eb8` (HEAD vivo al momento de la auditoría).
+**Método:** inspección directa del código real (backend `PMGM.Api/Modules/*`, frontend `frontend/src/*`), no solo de este documento ni de conversaciones previas. Cada veredicto cita el archivo/símbolo revisado. Los gaps marcados "requiere revisión más profunda" no fueron confirmados como cerrados ni como abiertos con certeza suficiente; no dar por resueltos sin verificación adicional.
+
+Ninguno de los hallazgos de esta auditoría se cerró en este corte: es diagnóstico, no remediación. Los gaps confirmados como **abiertos** deben tratarse como pendientes reales del backlog, no como histórico.
+
+| Gap | Veredicto | Evidencia |
+|---|---|---|
+| GAP-001 Tipos de ceremonia | **Parcial** — backend ya soporta más tipos de lo que el documento original asumía; el hueco real está solo en frontend | `backend/.../Ceremonies/CeremonyCodes.cs` ya define `Type.Affiliation` y `Type.Incorporation`. `frontend/src/CeremoniesPage.tsx` → `ceremonyTypeLabel()` solo reconoce `initiation` y `wage_increase`; cualquier otro valor (incluidos Affiliation/Incorporation reales) cae en `'Exaltación'` por defecto. Falta también el tipo "Otra". Documentado con test explícito en PR #126 (`CeremoniesPage.test.tsx`). |
+| GAP-002 Visto bueno de Gran Maestría | **Abierto** | `CeremonyEligibilityService.MapRequirementCodeToValidationType` solo mapea `regimen_interior`, `gran_tesoreria`, `gran_hospitalaria`. No existe código de requisito para Gran Maestría en el motor de elegibilidad. |
+| GAP-003 Máquina de estados de insinuación | **Parcial** | Existen `CandidateIntakeCodes.ReviewStatus`, `CeremonyCodes.RequestStatus` (`UnderReview`/`Authorized`/`Rejected`), `PublicationStatus` y validación de balotaje (`CeremonyValidations`/`ValidationStatus`). No se confirmó automatización de la espera mínima de 7 días antes de revisión inicial ni de la permanencia mínima de 20 días como bloqueo automático — requiere revisión adicional del flujo de publicación. |
+| GAP-004 Reingreso tras rechazo (1 año) | **Abierto** | Sin resultados para lógica de espera de un año/365 días en `Modules/CandidateIntake` ni `Modules/Admissions`. |
+| GAP-005 Terminología de dispensas | **Abierto** | `AdvancementEligibilityPolicy.cs` sigue usando `CouncilApproved` y el mensaje literal "El Consejo de Maestros del Taller no aprobó la dispensa", no "Cámara del Medio" como exige el protocolo 2026. |
+| GAP-006 Matriz financiera agregada | **Abierto** | `Modules/Treasury/Entities/FinancialRegularitySnapshot.cs` es un único registro con un campo `Status` (string) agregado — sin ítems desglosados (cuota mensual vigente, derecho de ceremonia, Fondo de Defunción, cuota de Hospitalidad, etc.). |
+| GAP-007 Firma manuscrita en afiliación | **Sin evidencia de control automatizado** | Existe `Modules/Admissions` (`AdmissionEligibilityPolicy`, `AdmissionWorkflowCodes`), pero no se encontró ningún campo o verificación relacionado con "firma manuscrita" del original de la Carta de Retiro Voluntario. Podría estar cubierto por control manual vía clasificación en Gestor Documental — requiere confirmación explícita del Sponsor sobre si eso satisface el requisito. |
+| GAP-008 Incorporación desde otra Obediencia | **Requiere revisión más profunda** | El módulo `Admissions` existe; no se confirmaron campos específicos de Pacto de Paz y Amistad ni la ruta de aprobación condicionada a Gran Maestría cuando no existe pacto vigente. |
+| GAP-009 Anticipación mínima Gran Templo | **Abierto** | No se encontró validación de anticipación mínima (7 días hábiles) en los endpoints de reserva de espacios de Gran Secretaría ni en `GrandSecretariatPage.tsx`. |
+| GAP-010 Plancha como resultado del workflow | **Resuelto** | `GrandSecretariatPage.tsx` → `CeremonyAuthorizationPanel` emite la Plancha (`issueSecretariatCeremonyAuthorization`) directamente desde los datos del expediente de la cola de ceremonias ya autorizadas, con `SecretariatDocument` para numeración/trazabilidad. Coincide con el requisito de que la plancha se genere desde el workflow, no como entrada manual libre. |
+| GAP-011 Protección de información confidencial | **Resuelto** | `DocumentManagementPage.tsx` implementa clasificación (`internal`/`confidential`/`sensitive`/`restricted`) y política de acceso (`library_authenticated`/`organization_authenticated`/`management_only`) por documento. Cubierto además por tests nuevos en PR #128 (`DocumentManagementPage.test.tsx`). |
+| GAP-012 CRV/CRF como eventos históricos | **Abierto** | No se encontró un modelo de eventos CRV/CRF append-only en `Modules/Membership`. Los formularios NUEVO-FORMULARIO-CRV/CRF-2026 existen como documentos en Drive, pero no se evidenció su modelado como eventos históricos en el backend. |
+| GAP-013 Voluntad testamentaria (Fondo de Defunción) | **Abierto** | Hospitalaria tiene la categoría de movimiento `death_replenishment` (reposición por fallecimiento), pero no existe módulo de voluntad testamentaria ni registro de beneficiario principal/subsidiario. |
+| GAP-014 Composición individual Gran Tesorería | **Resuelto** | `Modules/Treasury/TreasuryCodes.cs` → `LodgeFeeType` define `Normal`/`Student`/`Senior`/`Spouse`/`PastActive`, reflejado en `frontend/src/LodgeTreasuryPanel.tsx` (`feeLabel`). La composición individual con excepciones ya está implementada. |
+
+### Resumen
+- **Resueltos (3):** GAP-010, GAP-011, GAP-014
+- **Abiertos, confirmados (7):** GAP-002, GAP-004, GAP-005, GAP-006, GAP-009, GAP-012, GAP-013
+- **Parciales (2):** GAP-001 (backend listo, frontend pendiente), GAP-003 (estructura base presente, faltan validaciones temporales)
+- **Requieren revisión adicional antes de veredicto (2):** GAP-007, GAP-008
+
+### Siguiente paso recomendado
+No cerrar ningún gap en este documento sin las 7 condiciones de la sección 4 (Criterio de cierre). Priorizar P0 según la sección 3 ya existente: de los P0, **GAP-002, GAP-004 y GAP-006 siguen completamente abiertos** y **GAP-001/GAP-003 son parciales** — ninguno de los P0 está resuelto todavía. De los P1, únicamente GAP-011 está resuelto. Del P2, únicamente GAP-014 está resuelto.
