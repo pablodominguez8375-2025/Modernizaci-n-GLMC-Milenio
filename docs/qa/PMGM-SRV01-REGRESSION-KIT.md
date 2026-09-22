@@ -127,6 +127,19 @@ Resultado esperado: el Hermano consulta únicamente su cartola; Tesorería conse
 
 Resultado esperado: Gran Tesorería valida el pago íntegro contra el total calculado del mes sin recibir innecesariamente la nómina individual completa.
 
+### QA-029 — Navegación de Tesorería por cargo
+
+1. Ingresar como Tesorero del Taller y confirmar que existe un único acceso lateral `Tesorería`.
+2. Abrirlo y comprobar las opciones internas `Resumen`, `Cuotas y cobranza`, `Egresos` y `Cuadro mensual`.
+3. Verificar que las operaciones anteriores siguen disponibles dentro de la opción correspondiente.
+4. Ingresar como Venerable Maestro y confirmar que sólo ve `Egresos por autorizar`, sin formularios para cuotas, cobranza o Cuadro mensual.
+5. Ingresar como Gran Tesorero y confirmar que existe un único acceso lateral `Gran Tesorería`.
+6. Abrirlo y comprobar las opciones `Cuadros mensuales` y `Estado de Talleres`.
+7. Confirmar que Gran Tesorería no recibe acciones para administrar caja, cobranza o egresos locales.
+8. Repetir la navegación en ancho móvil y confirmar que todas las opciones autorizadas siguen siendo legibles y operables.
+
+Resultado esperado: cada cargo encuentra intuitivamente todas sus tareas financieras en un único menú propio, sin duplicidad ni ampliación de permisos.
+
 Ejemplo de fallo:
 
 ```bash

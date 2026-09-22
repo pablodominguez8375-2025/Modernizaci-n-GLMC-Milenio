@@ -11,6 +11,7 @@ import DocumentManagementPage from './DocumentManagementPage'
 import ExecutiveReportingPage from './ExecutiveReportingPage'
 import GrandArchivePage from './GrandArchivePage'
 import GrandSecretariatPage from './GrandSecretariatPage'
+import GrandTreasuryPage from './GrandTreasuryPage'
 import HospitalariaPage from './HospitalariaPage'
 import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 import InternalAffairsDataQualityPage from './InternalAffairsDataQualityPage'
@@ -26,7 +27,6 @@ import NotificationsPage from './NotificationsPage'
 import PublishedCandidatePhoto from './PublishedCandidatePhoto'
 import RegimenInteriorPage from './RegimenInteriorPage'
 import RegularityPage from './RegularityPage'
-import TreasuryStatementPage from './TreasuryStatementPage'
 import SystemConfigurationPage from './SystemConfigurationPage'
 import { type BootstrapApiClient } from './api/bootstrapApi'
 import { type CalendarApiClient } from './api/calendarApi'
@@ -43,7 +43,7 @@ import { type CandidatePublication, type CandidatePortalResponse, type PmgmApiCl
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
-type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'treasuryStatement' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
+type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean }
 
 interface AppProps {
@@ -99,7 +99,6 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canCaseQueue = canRegimen
   const canTreasury = capabilities?.canManageTreasuryRegularity ?? false
   const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
-  const canTreasuryStatement = canTreasury || canLodgeTreasury
   const canHospitalaria = capabilities?.canManageHospitalariaRegularity ?? false
   const canReadLodgeHospitalaria = capabilities?.canReadLodgeHospitalaria ?? false
   const canManageLodgeHospitalaria = capabilities?.canManageLodgeHospitalaria ?? false
@@ -158,7 +157,6 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="ceremony" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />
           <ModuleAccess icon="shield" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
           <ModuleAccess icon="treasury" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
-          {canTreasury && <ModuleAccess icon="treasury" label="Cuadros mensuales" allowed active={view === 'treasuryStatement'} onOpen={() => setView('treasuryStatement')} />}
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
           <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
           <ModuleAccess icon="archive" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
@@ -168,7 +166,6 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="lodge" label="Ficha de Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
           <ModuleAccess icon="lodge" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />
           <ModuleAccess icon="treasury" label="Tesorería" allowed={canLodgeTreasury || canApproveLodgeExpenses} active={view === 'lodgeTreasury'} onOpen={canLodgeTreasury || canApproveLodgeExpenses ? () => setView('lodgeTreasury') : undefined} />
-          {canLodgeTreasury && !canTreasury && <ModuleAccess icon="treasury" label="Cuadro mensual Tesorería" allowed active={view === 'treasuryStatement'} onOpen={() => setView('treasuryStatement')} />}
           {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
         </>}
         {(canLibrary || canDocuments) && <>
@@ -196,9 +193,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'calendar' && canCalendar && <CalendarPage api={api} calendarApi={calendarApi} canManage={canSecretariat} />}
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
-        {view === 'treasury' && canTreasury && <RegularityPage api={api} kind="treasury" />}
+        {view === 'treasury' && canTreasury && <GrandTreasuryPage api={api} />}
         {view === 'lodgeTreasury' && (canLodgeTreasury || canApproveLodgeExpenses) && <LodgeTreasuryPage api={api} canManage={canLodgeTreasury} canApproveExpenses={canApproveLodgeExpenses} />}
-        {view === 'treasuryStatement' && canTreasuryStatement && <TreasuryStatementPage api={api} canPrepare={canLodgeTreasury && !canTreasury} canReview={canTreasury} />}
         {view === 'hospitalaria' && canHospitalariaWorkspace && <><HospitalariaPage api={api} canReadLocal={canReadLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canHospitalaria} />{canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}</>}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}

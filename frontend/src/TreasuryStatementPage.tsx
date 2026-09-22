@@ -11,9 +11,10 @@ interface Props {
   api: PmgmApiClient
   canPrepare: boolean
   canReview: boolean
+  organizationId?: string
 }
 
-export default function TreasuryStatementPage({ api, canPrepare, canReview }: Props) {
+export default function TreasuryStatementPage({ api, canPrepare, canReview, organizationId: fixedOrganizationId }: Props) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [period, setPeriod] = useState(currentPeriodInChile())
@@ -37,11 +38,11 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
         if (!active) return
         const items = result.items.filter(item => item.type !== 'order')
         setOrganizations(items)
-        setOrganizationId(current => current || items[0]?.id || '')
+        setOrganizationId(current => fixedOrganizationId || current || items[0]?.id || '')
       })
       .catch(reason => { if (active) setError(toMessage(reason)) })
     return () => { active = false }
-  }, [api])
+  }, [api, fixedOrganizationId])
 
   useEffect(() => {
     if (!organizationId || !period) return
@@ -151,7 +152,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview }: Pr
     {error && <div className="error-banner" role="alert">{error}</div>}
 
     <section className="panel treasury-toolbar">
-      <label className="regularity-field"><span>Taller</span><select value={organizationId} disabled={busy || loadingStatement} onChange={event => setOrganizationId(event.target.value)}>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+      <label className="regularity-field"><span>Taller</span><select value={organizationId} disabled={!!fixedOrganizationId || busy || loadingStatement} onChange={event => setOrganizationId(event.target.value)}>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="regularity-field"><span>Período</span><input type="month" value={period} disabled={busy || loadingStatement} onChange={event => setPeriod(event.target.value)} /></label>
       {canPrepare && !statement && <button className="regularity-primary" type="button" disabled={!organizationId || !period || busy || loadingStatement} onClick={create}>Crear Cuadro</button>}
       {canPrepare && statement?.status === 'draft' && statement.lines.length === 0 && <>
