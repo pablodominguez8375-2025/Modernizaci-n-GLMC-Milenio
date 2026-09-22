@@ -21,11 +21,9 @@ Orden operacional:
 9. ejecutar UAT institucional;
 10. promover a `main` sólo con aprobación expresa.
 
-## 2. Avance funcional en paralelo
+## 2. Gate vigente — cierre de QA antes de un nuevo incremento funcional
 
-El Sponsor / Product Owner autorizó continuar desarrollo, pruebas y documentación aunque Issue #97 continúe abierto.
-
-Esto no reemplaza QA/UAT ni permite declarar operacional un SHA no desplegado físicamente.
+La Línea Base Maestra LB-PC-2026-09-17 establece que no se inicia un nuevo incremento funcional mientras Issue #97 mantenga bloqueada la QA física, salvo decisión expresa del Sponsor / Product Owner para un alcance concreto. La decisión vigente mantiene diferido el despliegue físico en `srv01`; por tanto, este corte se limita a continuidad, documentación, preparación/verificación de QA y correcciones necesarias para el gate. Un workflow o artefacto generado no cierra Issue #97 ni sustituye pruebas en el servidor.
 
 ## 3. Funciones integradas que no son trabajo futuro
 
@@ -70,20 +68,20 @@ Reglas vigentes:
 
 Fuente: `docs/PMGM-ARCH-011-hospitalaria-flujo-integral.md`.
 
-## 5. Selección del siguiente incremento funcional
+## 5. Siguiente incremento después del cierre de Issue #97
 
-No fijar el próximo bloque usando conversaciones antiguas o memoria.
+La Línea Base Maestra señala como siguiente foco funcional el expediente de insinuación y sus transiciones reglamentarias. Este bloque sólo se inicia después de cerrar QA/UAT de Issue #97 o recibir una decisión expresa del Sponsor / Product Owner que autorice un alcance concreto antes de ese cierre.
 
-Antes de programar:
+Antes de programarlo:
 
-1. reconsultar HEAD vivo de `dev`;
-2. leer Estado Maestro, START-HERE, AGENTS, ADRs y PRs recientes;
-3. revisar Issue #97;
-4. revisar Línea Base Maestra y documentación oficial vigente en Drive;
-5. revisar backlog/issues vigentes de GitHub;
-6. elegir un bloque no integrado y con fundamento documental actual.
+1. consultar el HEAD vivo de `dev` y `main`;
+2. leer Estado Maestro, START-HERE, AGENTS, ADRs, pruebas y PRs recientes;
+3. revisar la normativa vigente y la Línea Base Maestra en Drive;
+4. auditar el código integrado de Insinuaciones y el estado de PR #116 para separar funciones implementadas, pendientes y candidatas a sincronización;
+5. no duplicar flujos existentes ni fusionar PR #116 por sus gates automáticos únicamente;
+6. documentar el alcance residual y sus criterios QA/UAT antes de crear la rama.
 
-Hasta completar esa reconsulta, el siguiente incremento funcional permanece **por seleccionar**.
+La revisión actual confirma Issue #97 abierto y PR #116 en draft, con base histórica anterior a `dev`. No se inicia aquí trabajo funcional de esa rama.
 
 ## 6. QA vigente
 
@@ -161,3 +159,7 @@ Se alinea la configuración de identidad visual de Sistema con la Línea Base Ma
 - dorado fuerte `#FBAE17`.
 
 Integrado en `dev` mediante PR #132, merge SHA `e1eff39fa380144ef69e200010ced86c787e23a4`. CI #1423 y CI post-merge #1424 SUCCESS; Showcase #658 y publicación Pages #659 SUCCESS; QA Installable #296 (PR) y #297 (dev) SUCCESS; Pre-UAT #320 SUCCESS. Artefacto QA del SHA integrado: `proyecto-centenario-qa-srv01-e1eff39fa380144ef69e200010ced86c787e23a4`, SHA-256 `b8101f28c16af42da24d68d4d20f6a4575b3d0d921742fe5f041c3c8c3c771ae`, expira el 22-10-2026 21:30 UTC. Pages fue desplegado desde el mismo SHA. La guía oficial del logotipo exige no deformar, recolorear ni recortar el archivo; se conserva su referencia configurable. Issue #97 y despliegue físico en `srv01` continúan pendientes.
+
+## 12. Resolución de continuidad — prioridad del Issue #97
+
+El 22-09-2026 se reconcilia este documento con la Línea Base Maestra: queda sin efecto la autorización genérica anterior para abrir incrementos funcionales mientras Issue #97 siga bloqueando QA. Sólo una decisión expresa del Sponsor / Product Owner que identifique el alcance habilita una excepción. La prioridad vigente es completar QA/UAT física cuando se reactive `srv01`; después se revisa el flujo de insinuaciones contra el código actual antes de proponer trabajo residual.
