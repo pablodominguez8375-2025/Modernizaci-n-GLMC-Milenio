@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.CandidateIntake;
 
 namespace PMGM.Api.Modules.Ceremonies;
 
@@ -17,6 +18,7 @@ public static class CandidatePublicationEndpoints
 
     private static async Task<IResult> GetActivePublicationsAsync(
         PmgmDbContext db,
+        CandidateIntakeDbContext intakeDb,
         CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
@@ -31,6 +33,7 @@ public static class CandidatePublicationEndpoints
             .Select(x => new
             {
                 x.Id,
+                x.CeremonyRequestId,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 WorkshopName = x.Organization.Name,
@@ -43,6 +46,14 @@ public static class CandidatePublicationEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        var requestIds = rows.Select(x => x.CeremonyRequestId).ToArray();
+        var requestIdsWithPhoto = await intakeDb.CandidateIntakeProfiles
+            .AsNoTracking()
+            .Where(x => requestIds.Contains(x.CeremonyRequestId) && x.PhotoVersionId != null)
+            .Select(x => x.CeremonyRequestId)
+            .ToListAsync(cancellationToken);
+        var hasPhotoByRequestId = requestIdsWithPhoto.ToHashSet();
+
         var items = rows.Select(x => new CandidatePublicationPublicDto(
                 DisplayName: $"{x.FirstNames} {x.LastNames}".Trim(),
                 WorkshopName: x.WorkshopName,
@@ -54,7 +65,9 @@ public static class CandidatePublicationEndpoints
                 ComplianceDateUtc: x.PublishedFromUtc.AddDays(x.RequiredDays),
                 RuleCode: x.RuleCode,
                 Status: x.Status,
-                PhotoUrl: $"/api/candidate-publications/{x.Id:D}/photo"))
+                PhotoUrl: hasPhotoByRequestId.Contains(x.CeremonyRequestId)
+                    ? $"/api/candidate-publications/{x.Id:D}/photo"
+                    : null))
             .ToList();
 
         return Results.Ok(new

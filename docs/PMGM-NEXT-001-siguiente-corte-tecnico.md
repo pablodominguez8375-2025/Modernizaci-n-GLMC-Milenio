@@ -138,3 +138,15 @@ Estado inicial de rama: 153/153 pruebas frontend y build productivo aprobados. F
 QA-031 fija que administrar Tesorería no habilita Gestión Logial ni funciones de Secretaría. El Tesorero del Taller mantiene exclusivamente su espacio financiero y las vistas transversales comunes; no ve ni abre Tenidas, actas, correspondencia, pendientes, expedientes de insinuación, Circuito de Iniciación, Cuadro del Taller, Ficha del Taller o Gestor Documental general.
 
 El backend ya aplicaba esta separación; la corrección alinea el perfil demostrativo y la navegación del frontend con la autoridad real de la API. Debe validarse en Pages con el perfil **Tesorero del Taller** y conservarse mediante QA-031.
+
+## 10. Incremento activo — Insinuados publicados con foto protegida
+
+Desde `dev` `fc019fb70e2f2df610ae3c27e6d8194ddf801864` se inicia QA-032 para la vista general de insinuados publicados:
+
+- conservar la lista transversal de publicaciones vigentes para hermanos autenticados;
+- mantener la proyección minimizada: nombre, Taller, fechas y regla de publicación;
+- entregar `photoUrl` sólo si existe fotografía vinculada a la ficha privada;
+- mantener la fotografía detrás de la ruta protegida `/api/candidate-publications/{publicationId}/photo`;
+- evitar exponer rutas internas, versión documental o datos privados del expediente.
+
+El incremento no modifica atribuciones de Secretaría, Gran Secretaría ni Tesorería, y no cambia la regla de que el expediente completo queda restringido por rol.
