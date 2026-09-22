@@ -59,9 +59,7 @@ textarea {
 }
 
 .brand-mark {
-  border-color: rgba(199, 157, 69, .75);
-  color: #ead394;
-  background: rgba(255, 255, 255, .04);
+  background: #fff;
 }
 
 .brand strong {
@@ -327,13 +325,17 @@ textarea:focus-visible {
 
 @media (max-width: 480px) {
   .brand-mark {
-    width: 34px;
-    height: 34px;
+    flex-basis: 64px;
+    width: 64px;
+    height: 64px;
+    padding: 10px;
   }
 
   .brand strong {
-    max-width: 150px;
+    max-width: 120px;
   }
+
+  .demo-profile-switcher .demo-public-label { display: none; }
 
   .topbar-meta {
     gap: 5px;
@@ -373,6 +375,10 @@ textarea:focus-visible {
   h1 {
     font-size: clamp(28px, 9vw, 34px);
   }
+}
+
+@media (max-width: 380px) {
+  .brand strong { max-width: 100px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
