@@ -1,7 +1,9 @@
 # PMGM QA v0.62 — Logotipo oficial en plataforma
 
 **Alcance:** incorporar el logotipo de la Gran Logia Mixta de Chile a la cabecera compartida de la aplicación y de la Demo Pages.
-**Rama:** `dev` mediante PR; el SHA integrado se registra al cerrar los gates.
+**Estado:** integrado y desplegado desde `dev`.
+**PR:** #137, merge squash.
+**SHA integrado:** `e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`.
 **Estado previo:** cabecera mostraba una “C” provisional; paleta y configuración de identidad institucional ya estaban integradas en v0.61.
 
 ## Fuente aprobada
@@ -25,4 +27,20 @@
 
 El capturador del Showcase espera en cada viewport que el recurso de imagen termine de cargar, tenga dimensiones naturales, esté contenido sin deformación, use soporte blanco, no se superponga con los controles y no provoque desbordamiento horizontal en móvil. El recorrido existente conserva capturas de 360×800, 390×844 y 1440×900 para perfiles de QA.
 
-Los resultados exactos de pruebas, Showcase/Pages, instalable QA y Pre-UAT se agregan aquí al integrar el PR. El despliegue físico, smoke y regresión de `srv01` continúan pendientes de acuerdo con Issue #97; una publicación de Pages o un ZIP no equivale a QA operacional.
+## Resultado exact-head y salidas
+
+| Gate / salida | Ejecución | Resultado |
+|---|---:|---|
+| PMGM CI | #1436 | SUCCESS |
+| Showcase / GitHub Pages | #676 | SUCCESS; deploy del mismo SHA |
+| QA Installable | #314 | SUCCESS |
+| Pre-UAT Installable | #329 | SUCCESS |
+| Suite frontend local | — | 183/183; lint y build SUCCESS |
+
+- URL Demo: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
+- Verificación live: badge `E0DD6E6`; logo carga (155×150 intrínseco), soporte blanco, `object-fit: contain`; cabecera sin solapamiento.
+- Pages artifact #10723212264; digest `sha256:1be0343b760f6f65d5acfcf066582d56a6e4c76638955bf0eefb73cf44df375c`; vence 23-09-2026 22:56:18 UTC.
+- Evidencia responsive #10723177636; digest `sha256:52b25c5f29c4948a19551148cd2cefb94f00a6cf29802344bb6e4d44114c5b03`; vence 06-10-2026 22:56:15 UTC.
+- Instalador QA #10723132819, `proyecto-centenario-qa-srv01-e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`; digest `sha256:a42964269eb9af176feacfd3f0f546b51072647fb828b8af062b2bded180497b`; vence 22-10-2026 22:55:08 UTC.
+
+El repositorio público conserva el logo oficial sin transformación, SHA-256 `d8e4660f95ffbdccb8c62fdc39eb8acd8f1aa5f27e8c17845c4bda64853d24bb`. El despliegue físico, smoke y regresión en `srv01` continúan pendientes en Issue #97; Pages o un ZIP no equivalen a QA operacional. `main` sigue intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
