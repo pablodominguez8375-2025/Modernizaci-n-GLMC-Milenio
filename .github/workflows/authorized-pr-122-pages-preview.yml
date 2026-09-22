@@ -1,0 +1,83 @@
+name: PMGM Authorized PR 122 Pages Preview
+
+on:
+  push:
+    branches:
+      - preview/pr-122-pages-155d524
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pmgm-authorized-pr-122-pages-preview
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build exact authorized candidate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact authorized SHA
+        uses: actions/checkout@v4
+        with:
+          ref: 155d524546ee136ea7b9ef6f0a6b1b1ba8a1d8d4
+          fetch-depth: 0
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend --no-audit --no-fund
+
+      - name: Test frontend
+        run: npm test --prefix frontend
+
+      - name: Lint frontend
+        run: npm run lint --prefix frontend
+
+      - name: Build authorized public showcase
+        env:
+          VITE_USE_MOCKS: 'true'
+          VITE_BASE_PATH: '/Modernizaci-n-GLMC-Milenio/'
+          VITE_API_BASE_URL: ''
+          VITE_OIDC_AUTHORITY: ''
+          VITE_OIDC_CLIENT_ID: ''
+          VITE_SHOWCASE_SHA: '155d524546ee136ea7b9ef6f0a6b1b1ba8a1d8d4'
+          VITE_SHOWCASE_CHANNEL: 'authorized-pr-122-public-preview'
+        run: npm run build --prefix frontend
+
+      - name: Validate exact generated showcase
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s frontend/dist/index.html
+          grep -q '/Modernizaci-n-GLMC-Milenio/assets/' frontend/dist/index.html
+          grep -R -q '155d524' frontend/dist
+          if grep -R -E '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|ghp_[A-Za-z0-9]+|sk-proj-[A-Za-z0-9_-]+|Authorization: Bearer)' frontend/dist; then
+            echo 'Se detectó un patrón sensible en el showcase generado.' >&2
+            exit 1
+          fi
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+  deploy:
+    name: Deploy authorized candidate
+    needs: build
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Deploy showcase
+        id: deployment
+        uses: actions/deploy-pages@v5
