@@ -119,3 +119,16 @@ El mismo bloque incorpora QA-028 para el **Cuadro Logial Mensual**: Gran Tesorer
 El 22-09-2026 se añade QA-029 y PMGM-ARCH-012 para la navegación por cargo. Tesorería del Taller y Gran Tesorería conservan un solo acceso principal cada una y agrupan internamente sus tareas. El Venerable sólo recibe la vista de egresos por autorizar. Este cambio reorganiza la experiencia sin ampliar permisos ni alterar las reglas financieras.
 
 La inspección de la evidencia visual de QA-029 detectó y corrigió un recorte horizontal en la vista móvil de autorización del Venerable. El cierre del candidato exige volver a generar CI, Showcase e instalable desde el mismo SHA y comprobar la captura `tesoreria-autorizacion-venerable-390x844.png` antes de solicitar publicación temporal en Pages.
+
+## 8. Incremento activo — navegación de Secretaría por cargo
+
+Desde `dev` `822fd25b88caafdf5a01d89c27c53b6cd000f183` se inicia el incremento PMGM-ARCH-013 / QA-030:
+
+- una entrada lateral **Secretaría** para Secretaría del Taller;
+- una entrada lateral **Gran Secretaría** para Gran Secretaría;
+- navegación interna hacia todas las funciones vigentes del cargo;
+- eliminación visual de accesos duplicados, sin eliminar pantallas ni contratos;
+- preservación de permisos, privacidad y terminología institucional;
+- documentos oficiales registrados mediante descripción y PDF firmado físicamente, nunca generados o firmados por el sistema.
+
+Estado inicial de rama: 153/153 pruebas frontend y build productivo aprobados. Falta commit, PR a `dev`, CI exact-head, Showcase, instalable QA y revisión funcional en Pages. La QA física de `srv01` continúa diferida.
