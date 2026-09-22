@@ -169,3 +169,11 @@ El 22-09-2026 se reconcilia este documento con la Línea Base Maestra: queda sin
 Se amplía el script `.github/scripts/capture-showcase-views.mjs` para comprobar en navegador que el perfil Tesorero conserva sus accesos transversales y las cuatro funciones propias de Tesorería, y no recibe accesos de Secretaría/Gestión Logial. En el recorrido del Venerable se comprueba que sólo figure **Egresos por autorizar**. La validación corre antes de guardar las capturas de escritorio y móvil y falla Showcase ante cualquier divergencia.
 
 Este ajuste automatiza un control del alcance QA-031/v0.59; no añade ni modifica capacidades funcionales. El despliegue físico en `srv01` y la aceptación QA/UAT siguen pendientes según Issue #97.
+
+## 14. Incremento autorizado — logotipo oficial en la plataforma
+
+El Product Owner solicita integrar el logotipo oficial de la Gran Logia Mixta de Chile junto a la identidad corporativa de Proyecto Centenario. El recurso fuente es `Logo Gran Logia Mixta de Chile.svg` en Drive, ID `1_BLXseShbQX-ioGMNLd5xKPYGtLMEvFm`; la guía institucional exige fondo blanco, proporciones originales, área de protección y no recortar ni recolorear la marca.
+
+El incremento v0.62 sustituye la “C” provisional de la cabecera por el SVG oficial y refuerza Showcase para comprobar carga y presentación sin deformación en móvil/escritorio. La paleta v0.61 se conserva. Evidencia y reglas: `docs/qa/PMGM-QA-V062-LOGOTIPO-OFICIAL.md`. Este alcance concreto es una excepción autorizada a la prioridad general del Issue #97; no modifica la decisión de mantener pendiente la QA física ni autoriza promoción a `main`.
+
+Al cerrar el PR se deben registrar SHA integrado, gates exact-head y artefacto QA en este documento, `docs/PROJECT-CONTINUITY-MASTER.md` e Issue #97. Verificar que Demo Pages, instalable QA y código apunten al mismo SHA; `main` permanece sin cambios.

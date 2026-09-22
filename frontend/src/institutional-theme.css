@@ -59,9 +59,7 @@ textarea {
 }
 
 .brand-mark {
-  border-color: rgba(199, 157, 69, .75);
-  color: #ead394;
-  background: rgba(255, 255, 255, .04);
+  background: #fff;
 }
 
 .brand strong {
@@ -327,8 +325,10 @@ textarea:focus-visible {
 
 @media (max-width: 480px) {
   .brand-mark {
-    width: 34px;
-    height: 34px;
+    flex-basis: 56px;
+    width: 56px;
+    height: 56px;
+    padding: 10px;
   }
 
   .brand strong {

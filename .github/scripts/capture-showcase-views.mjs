@@ -135,6 +135,7 @@ async function resetPage(width, height) {
   })
   await cdp('Page.navigate', { url: baseUrl })
   await waitForExpression("document.readyState === 'complete' && !!document.querySelector('nav.sidebar')", 'showcase shell')
+  await waitForExpression("(() => { const logo = document.querySelector('.brand-logo'); const frame = logo?.closest('.brand-mark'); return logo?.complete && logo.naturalWidth > 0 && frame && getComputedStyle(frame).backgroundColor === 'rgb(255, 255, 255)' && getComputedStyle(logo).objectFit === 'contain'; })()", 'official institutional logo')
   await delay(500)
 }
 

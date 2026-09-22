@@ -28,7 +28,8 @@ button { cursor: pointer; }
 .app-shell { min-height: 100vh; }
 .topbar { height: 72px; background: var(--navy); color: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; position: sticky; top: 0; z-index: 10; box-shadow: 0 4px 18px rgba(8, 16, 35, 0.18); }
 .brand { display: flex; align-items: center; gap: 12px; color: inherit; background: none; border: 0; text-align: left; padding: 0; }
-.brand-mark { display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; font-family: Georgia, serif; font-size: 23px; color: #e4c77d; }
+.brand-mark { display: grid; place-items: center; flex: 0 0 64px; width: 64px; height: 64px; padding: 12px; border: 0; border-radius: 0; background: #fff; }
+.brand-logo { display: block; width: 100%; height: 100%; object-fit: contain; }
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: 15px; letter-spacing: .02em; }
 .brand small { margin-top: 2px; color: #bfc7d8; font-size: 11px; }
