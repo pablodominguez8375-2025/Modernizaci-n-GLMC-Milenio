@@ -174,6 +174,12 @@ Este ajuste automatiza un control del alcance QA-031/v0.59; no añade ni modific
 
 El Product Owner solicita integrar el logotipo oficial de la Gran Logia Mixta de Chile junto a la identidad corporativa de Proyecto Centenario. El recurso fuente es `Logo Gran Logia Mixta de Chile.svg` en Drive, ID `1_BLXseShbQX-ioGMNLd5xKPYGtLMEvFm`; la guía institucional exige fondo blanco, proporciones originales, área de protección y no recortar ni recolorear la marca.
 
-El incremento v0.62 sustituye la “C” provisional de la cabecera por el SVG oficial y refuerza Showcase para comprobar carga y presentación sin deformación en móvil/escritorio. La paleta v0.61 se conserva. Evidencia y reglas: `docs/qa/PMGM-QA-V062-LOGOTIPO-OFICIAL.md`. Este alcance concreto es una excepción autorizada a la prioridad general del Issue #97; no modifica la decisión de mantener pendiente la QA física ni autoriza promoción a `main`.
+El incremento v0.62 sustituye la “C” provisional de la cabecera por el SVG oficial y refuerza Showcase para comprobar carga, proporción, fondo y encuadre no superpuesto en móvil/escritorio. La paleta v0.61 se conserva. El PR #137 quedó integrado por squash en `e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`.
 
-Al cerrar el PR se deben registrar SHA integrado, gates exact-head y artefacto QA en este documento, `docs/PROJECT-CONTINUITY-MASTER.md` e Issue #97. Verificar que Demo Pages, instalable QA y código apunten al mismo SHA; `main` permanece sin cambios.
+Gates exact-head sobre el merge SHA: CI #1436, Showcase/Pages #676, QA Installable #314 y Pre-UAT #329 SUCCESS. Demo y ZIP se generaron desde el mismo SHA. QA-062 registra la verificación live y digests. `main` sigue intacta (`6dfb9546a4873baff15955cf86abfd7d47e3d111`). La excepción autorizada cubre sólo la incorporación del logo; no cambia la decisión de mantener pendiente la QA física ni autoriza promoción a `main`.
+
+Artefacto QA #10723132819: `proyecto-centenario-qa-srv01-e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`, digest `sha256:a42964269eb9af176feacfd3f0f546b51072647fb828b8af062b2bded180497b`, vence el 22-10-2026 22:55:08 UTC. Pages artifact #10723212264, digest `sha256:1be0343b760f6f65d5acfcf066582d56a6e4c76638955bf0eefb73cf44df375c`, vence el 23-09-2026 22:56:18 UTC.
+
+## 15. Próximo punto de continuidad
+
+Issue #97 sigue abierto: despliegue físico diferido en `srv01`, verificación `SOURCE_SHA`/`MANIFEST`, smoke autenticado, QA-001..QA-026, UAT y evidencia. No iniciar otro incremento funcional mientras siga el bloqueo, salvo decisión expresa del Product Owner con alcance concreto. Al retomar, consultar HEAD de `dev` y `main`, START-HERE, Drive y esta sección; no reutilizar artefactos expirados.

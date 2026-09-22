@@ -42,7 +42,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 22-09-2026 | La revisión de la evidencia visual del candidato detecta recorte horizontal en la autorización móvil del Venerable. | Se limita el ancho intrínseco del módulo de Tesorería, se mantiene la tabla dentro de su desplazamiento interno y se compactan márgenes en móvil. QA-029 debe conservar capturas de 390×844 sin recorte global ni pérdida de acciones. |
 | 22-09-2026 | El Product Owner ordena continuar en `dev` y completar la separación de menús por cargo. | Desde `dev` `822fd25b88caafdf5a01d89c27c53b6cd000f183` se inicia la consolidación de Secretaría del Taller y Gran Secretaría: una sola entrada lateral por cargo y funciones internas sin ampliar permisos. Se añade PMGM-ARCH-013, QA-030 y UI QA v0.58. `main` permanece intacto y la QA física de `srv01` sigue diferida. |
 | 22-09-2026 | El Product Owner aclara que el Tesorero no posee atribuciones de Secretaría y no puede ver sus mismos menús o vistas. | Se corrige la herencia visual: `canManageLodgeTreasury` deja de habilitar Gestión Logial; el perfil Tesorero pierde acceso a Tenidas, actas, correspondencia, insinuados privados, Circuito, fichas y documentos generales. Conserva su menú Tesorería y vistas transversales mínimas. Se añade QA-031 y UI QA v0.59. |
-| 22-09-2026 | El Product Owner solicita integrar el logo oficial de la Gran Logia Mixta de Chile en la plataforma junto a la identidad corporativa. | Se integra en la cabecera el SVG original de Drive bajo fondo blanco, proporción conservada y área de protección; Showcase verifica la carga en escritorio y móvil. QA v0.62 documenta fuente, digest y controles. `main` no se modifica; QA física de `srv01` continúa pendiente. |
+| 22-09-2026 | El Product Owner solicita integrar el logo oficial de la Gran Logia Mixta de Chile en la plataforma junto a la identidad corporativa. | PR #137 integrada por squash en `dev@e0dd6e6`. SVG original, soporte blanco, proporciones y protección visual; Showcase prueba viewports y cabecera móvil. CI #1436, Showcase/Pages #676, QA #314 y Pre-UAT #329 SUCCESS. Demo e instalable corresponden al mismo SHA. QA-062 guarda digests y verificación live. `main` intacta; srv01 físico sigue pendiente en Issue #97. |
 
 ## Última conversación recuperada
 
@@ -109,3 +109,17 @@ Estos cargos no deben reemplazarse entre sí en los permisos, formularios, firma
 ## Próximo trabajo prioritario
 
 Cerrar la auditoría documental de Google Drive: extraer cargos, firmantes, orden de aprobación y requisitos de cada documento, compararlos con los endpoints y pantallas, y registrar las brechas como requisitos o pruebas UAT antes de declarar v1.0.
+
+## Checkpoint vigente para continuidad — 22-09-2026
+
+- Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
+- `dev`: `e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0` (PR #137, v0.62).
+- `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta.
+- Gates del mismo SHA: CI #1436, Showcase/Pages #676, QA Installable #314, Pre-UAT #329; todos SUCCESS. Suite frontend local 183/183.
+- Demo verificada: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/; muestra `E0DD6E6`, SVG oficial cargado con soporte blanco y sin solapamiento de cabecera.
+- Google Drive, carpeta Proyecto Centenario: `Logo Gran Logia Mixta de Chile.svg`, ID `1_BLXseShbQX-ioGMNLd5xKPYGtLMEvFm`. SHA-256 versionado: `d8e4660f95ffbdccb8c62fdc39eb8acd8f1aa5f27e8c17845c4bda64853d24bb`.
+- Pages artifact #10723212264, `sha256:1be0343b760f6f65d5acfcf066582d56a6e4c76638955bf0eefb73cf44df375c`, vence 23-09-2026 22:56 UTC.
+- QA artifact #10723132819, `proyecto-centenario-qa-srv01-e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`, `sha256:a42964269eb9af176feacfd3f0f546b51072647fb828b8af062b2bded180497b`, vence 22-10-2026 22:55 UTC.
+- Issue #97 abierto: srv01 físico sigue diferido; instalar el corte vigente, validar `SOURCE_SHA`/`MANIFEST`, smoke, QA-001..QA-026, UAT y registrar evidencia. No promover a `main` sin aprobación expresa. No abrir otro alcance funcional mientras este gate siga bloqueando, salvo autorización concreta del Product Owner.
+
+La sección **15** de `PMGM-NEXT-001-siguiente-corte-tecnico.md` es el próximo punto de trabajo detallado. Consultar HEAD vivo y fuentes Drive/GitHub antes de retomarlo; los artifacts temporales no sustituyen al paquete recién generado desde el HEAD vigente.
