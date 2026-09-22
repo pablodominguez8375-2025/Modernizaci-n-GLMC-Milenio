@@ -325,9 +325,9 @@ textarea:focus-visible {
 
 @media (max-width: 480px) {
   .brand-mark {
-    flex-basis: 56px;
-    width: 56px;
-    height: 56px;
+    flex-basis: 64px;
+    width: 64px;
+    height: 64px;
     padding: 10px;
   }
 

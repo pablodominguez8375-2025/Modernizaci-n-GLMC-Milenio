@@ -23,6 +23,6 @@
 
 ## Verificación automatizada
 
-El capturador del Showcase espera en cada viewport que el recurso de imagen termine de cargar, tenga dimensiones naturales, esté contenido sin deformación y use soporte blanco. El recorrido existente conserva capturas de 390×844 y 1440×900 para perfiles de QA.
+El capturador del Showcase espera en cada viewport que el recurso de imagen termine de cargar, tenga dimensiones naturales, esté contenido sin deformación, use soporte blanco y que la marca no se superponga con los controles de cabecera. El recorrido existente conserva capturas de 390×844 y 1440×900 para perfiles de QA.
 
 Los resultados exactos de pruebas, Showcase/Pages, instalable QA y Pre-UAT se agregan aquí al integrar el PR. El despliegue físico, smoke y regresión de `srv01` continúan pendientes de acuerdo con Issue #97; una publicación de Pages o un ZIP no equivale a QA operacional.
