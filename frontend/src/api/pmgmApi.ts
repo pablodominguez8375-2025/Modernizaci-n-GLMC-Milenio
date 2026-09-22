@@ -202,582 +202,578 @@ const mockSession: SessionProfile = {
 const defaultMockSystemSettings: SystemSetting[] = [
   { code:'system.workflow.initiation.approval_steps',category:'Flujos',label:'Aprobaciones de iniciaciÃ³n',valueType:'list',value:'RÃ©gimen Interior|Gran TesorerÃ­a|Gran Hospitalaria|Gran SecretarÃ­a|Gran MaestrÃ­a',effectiveFrom:'2026-01-01',sourceReference:'Protocolo 2026',status:'default' },
   { code:'system.publication.candidate.minimum_days',category:'Publicaciones',label:'DÃ­as mÃ­nimos de publicaciÃ³n',valueType:'integer',value:'20',effectiveFrom:'2026-01-01',sourceReference:'Protocolo 2026',status:'default' },
-  { code:'system.interviews.minimum_count',category:'Procesos-uç®m¢G§²ÚîÆ­yÙˆ
-Z][K˜Xİ[ÛœË˜Ø[]]Üš^™JH›İÈ™]È\œ›ÜŠ	ÔİHİY[H›ÈYYH]]Üš^˜\ˆ\İHÙ\™[[ÛšXK‰ÊBˆYˆ
-Z][K™[YÚXš[]K˜Ø[]]Üš^™JH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXHpî›ˆY[™H™\]Z\Ú]ÜÈØ›YØ]Üš[ÜÈ[™Y[\Ë‰ÊBˆ][Kœİ]\ÈH	Ø]]Üš^™Y	ÎÈ][K˜Xİ[ÛœÈHÈØ[•˜[Y]R[\›˜[Y™˜Z\œÎˆ˜[ÙKØ[”X›\ÚØ[™Y]Nˆ˜[ÙKØ[]]Üš^™Nˆ˜[ÙHBˆ™]\›ˆÈYˆ][KšYİ]\Îˆ][Kœİ]\ÈBˆBˆ™]\›ˆ\Ëœ™\]Y\İÈYÎˆİš[™ÎÈİ]\Îˆİš[™ÈOŠØ\KØÙ\™[[ÛšX\ËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KØ]]Üš^˜\˜ÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜È™YÚ\İ\’[š]X][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™ËÙ\™[[ÛQ]Nˆİš[™ËZ[]T™Y™\™[˜ÙNˆİš[™ÊNˆ›ÛZ\ÙO[š]X][ÛÛÛ\][Û”™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İYİ]\Îˆ	ØÛÛ\]Y	ËY[X™\’Yˆ	ÛY[X™\‹Y[[ËLŒ‹LIËY[X™\œÚ\İ]\Îˆ	ØXİ]™IËYÜ™YNˆ	Ø\™[XÙIËY™™Xİ]™Q]NˆÙ\™[[ÛQ]KØİ[Y[ÛÙNˆ	ĞUUPÑT‹QSSËLŒ‹LIÈBˆ™]\›ˆ\ËœÜİœÛÛ[š]X][ÛÛÛ\][Û”™\ÜÛœÙOŠØ\KØÙ\™[[ÛšX\ËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KÜ™YÚ\İ˜\‹Z[šXÚXXÚ[Û˜ÈÙ\™[[ÛQ]KZ[]T™Y™\™[˜ÙHJBˆBˆ\Ş[˜È™XÛÜ™[š]X[[X™\˜][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[š]X[[X™\˜][Û”™\]Y\İ
-Nˆ›ÛZ\ÙO[š]X[[X™\˜][Û”™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÒ[š]X[[X™\˜][ÛŠÙ\™[[ÛT™\]Y\İY^[ØY
-Bˆ™]\›ˆ\ËœÜİœÛÛ[š]X[[X™\˜][Û”™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KÙ[X™\˜XÚ[Û‹Z[šXÚX[^[ØY
-BˆBˆ\Ş[˜È\ØY[\šY]ÑØİ[Y[
-Ù\™[[ÛT™\]Y\İYˆİš[™Ë[\šY]ÒYˆİš[™Ëš[Nˆš[KY]Y]NˆÛZ]Ø[™Y]R[\šY]Ñ]šY[˜ÙK	ÙØİ[Y[™\œÚ[Û’Y	ÏŠNˆ›ÛZ\ÙO[\šY]ÑØİ[Y[™\ÜÛœÙOˆÂˆÛÛœİ^[œÚ[ÛˆHš[K›˜[YKÓİÙ\Ø\ÙJ
-KœÜ]
-	Ë‰ÊKœÜ
+  { code:'system.interviews.minimum_count',category:'Procesos',label:'Entrevistas mÃ­nimas',valueType:'integer',value:'3',effectiveFrom:'2026-01-01',sourceReference:'Protocolo 2026',status:'default' },
+  { code:'system.rejection.block_months',category:'Procesos',label:'Meses de bloqueo tras rechazo',valueType:'integer',value:'12',effectiveFrom:'2026-01-01',sourceReference:'Reglamento General art. 1.5',status:'default' },
+  { code:'system.library.document_types',category:'Biblioteca',label:'Tipos de publicaciÃ³n',valueType:'list',value:'Plancha|Libro|Revista|Ritual|Historia|Circular',effectiveFrom:'2026-01-01',sourceReference:'CatÃ¡logo institucional QA',status:'default' },
+  { code:'system.library.catalog_fields',category:'Biblioteca',label:'Campos de catalogaciÃ³n',valueType:'list',value:'Autor|TÃ­tulo|Grado|Tema|Fecha|Palabras clave',effectiveFrom:'2026-01-01',sourceReference:'CatÃ¡logo institucional QA',status:'default' },
+  { code:'system.archive.document_series',category:'Gran Archivo',label:'Series documentales',valueType:'list',value:'Decretos|Actas Gran Asamblea|Correspondencia|Patrimonio histÃ³rico',effectiveFrom:'2026-01-01',sourceReference:'ClasificaciÃ³n institucional QA',status:'default' },
+  { code:'system.archive.retention_policy',category:'Gran Archivo',label:'PolÃ­tica de conservaciÃ³n',valueType:'text',value:'SegÃºn tabla de retenciÃ³n institucional vigente',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica institucional',status:'default' },
+  { code:'system.documents.allowed_extensions',category:'Gestor documental',label:'Extensiones permitidas',valueType:'list',value:'pdf|docx|xlsx|jpg|png',effectiveFrom:'2026-01-01',sourceReference:'Seguridad documental',status:'default' },
+  { code:'system.documents.maximum_size_mb',category:'Gestor documental',label:'TamaÃ±o mÃ¡ximo por archivo (MB)',valueType:'integer',value:'50',effectiveFrom:'2026-01-01',sourceReference:'Seguridad documental',status:'default' },
+  { code:'system.treasury.cutoff_day',category:'TesorerÃ­a',label:'DÃ­a de corte mensual',valueType:'integer',value:'5',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n financiera QA',status:'default' },
+  { code:'system.hospitalaria.replacement_days',category:'Hospitalaria',label:'Plazo de reposiciÃ³n (dÃ­as)',valueType:'integer',value:'30',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n hospitalaria QA',status:'default' },
+  { code:'system.notifications.reminder_days',category:'Notificaciones',label:'AnticipaciÃ³n de recordatorios (dÃ­as)',valueType:'integer',value:'3',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n operativa QA',status:'default' },
+  { code:'system.security.session_minutes',category:'Seguridad',label:'DuraciÃ³n de sesiÃ³n (minutos)',valueType:'integer',value:'30',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica de seguridad',status:'default' },
+  { code:'system.permissions.system_administrators',category:'Perfiles y permisos',label:'Administradores habilitados',valueType:'list',value:'Superadministrador|Administrador Gran Logia',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_venerable',category:'Perfiles y permisos',label:'Venerable Maestro',valueType:'list',value:'GestiÃ³n del Taller|Insinuados|Circuito de iniciaciÃ³n|Aprobar egresos|Firmar documentos|Ceremonias',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_secretariat',category:'Perfiles y permisos',label:'SecretarÃ­a del Taller',valueType:'list',value:'Datos administrativos|Tenidas y asistencia|Actas|Insinuados|Documentos',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_treasury',category:'Perfiles y permisos',label:'TesorerÃ­a del Taller',valueType:'list',value:'Planes de cuota|Ingresos|Egresos|Estado de pagos|Reportes de TesorerÃ­a',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_hospitalaria',category:'Perfiles y permisos',label:'Hospitalaria del Taller',valueType:'list',value:'Aportes|Egresos|Reposiciones|Estado de obligaciones|Reportes de Hospitalaria',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_orator',category:'Perfiles y permisos',label:'Orador del Taller',valueType:'list',value:'RevisiÃ³n normativa|Firmar retiros|Firmar documentos definidos|Consulta de actas',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_first_warden',category:'Perfiles y permisos',label:'Primer Vigilante',valueType:'list',value:'Docencia de CompaÃ±eros|Seguimiento formativo|Evaluaciones docentes',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_second_warden',category:'Perfiles y permisos',label:'Segundo Vigilante',valueType:'list',value:'Docencia de Aprendices|Seguimiento formativo|Evaluaciones docentes',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.lodge_past_master',category:'Perfiles y permisos',label:'Ex Venerable Maestro',valueType:'list',value:'Apoyo docente|Consulta histÃ³rica|AcompaÃ±amiento al Taller',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.permissions.grand_dignitaries',category:'Perfiles y permisos',label:'Grandes dignatarios',valueType:'list',value:'RÃ©gimen Interior|Gran TesorerÃ­a|Gran Hospitalaria|Gran SecretarÃ­a|Gran Archivo|Gran MaestrÃ­a',effectiveFrom:'2026-01-01',sourceReference:'Matriz de perfiles Proyecto Centenario',status:'default' },
+  { code:'system.backup.schedule',category:'Respaldo y restauraciÃ³n',label:'ProgramaciÃ³n de respaldo',valueType:'text',value:'Diario 02:00 America/Santiago',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica de continuidad QA',status:'default' },
+  { code:'system.backup.retention_days',category:'Respaldo y restauraciÃ³n',label:'RetenciÃ³n de respaldos (dÃ­as)',valueType:'integer',value:'30',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica de continuidad QA',status:'default' },
+  { code:'system.backup.offsite_required',category:'Respaldo y restauraciÃ³n',label:'Copia externa obligatoria',valueType:'text',value:'SÃ­',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica de continuidad QA',status:'default' },
+  { code:'system.mail.smtp_host',category:'Correo electrÃ³nico',label:'Servidor SMTP',valueType:'text',value:'smtp.ejemplo.cl',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n demostrativa',status:'default' },
+  { code:'system.mail.smtp_port',category:'Correo electrÃ³nico',label:'Puerto SMTP',valueType:'integer',value:'587',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n demostrativa',status:'default' },
+  { code:'system.mail.sender_address',category:'Correo electrÃ³nico',label:'Cuenta remitente',valueType:'text',value:'notificaciones@ejemplo.cl',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n demostrativa',status:'default' },
+  { code:'system.mail.sender_name',category:'Correo electrÃ³nico',label:'Nombre del remitente',valueType:'text',value:'Gran Logia Mixta de Chile',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n demostrativa',status:'default' },
+  { code:'system.mail.security',category:'Correo electrÃ³nico',label:'Seguridad de transporte',valueType:'list',value:'STARTTLS',effectiveFrom:'2026-01-01',sourceReference:'ConfiguraciÃ³n demostrativa',status:'default' },
+  { code:'system.brand.organization_name',category:'Identidad visual',label:'Nombre institucional',valueType:'text',value:'Gran Logia Mixta de Chile',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
+  { code:'system.brand.primary_color',category:'Identidad visual',label:'Color institucional principal',valueType:'text',value:'#06148E',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
+  { code:'system.brand.secondary_color',category:'Identidad visual',label:'Azul institucional complementario',valueType:'text',value:'#004AD4',effectiveFrom:'2026-01-01',sourceReference:'LÃ­nea Base Maestra LB-PC-2026-09-17',status:'default' },
+  { code:'system.brand.gold_color',category:'Identidad visual',label:'Dorado institucional',valueType:'text',value:'#F3C609',effectiveFrom:'2026-01-01',sourceReference:'LÃ­nea Base Maestra LB-PC-2026-09-17',status:'default' },
+  { code:'system.brand.accent_color',category:'Identidad visual',label:'Dorado institucional fuerte',valueType:'text',value:'#FBAE17',effectiveFrom:'2026-01-01',sourceReference:'LÃ­nea Base Maestra LB-PC-2026-09-17',status:'default' },
+  { code:'system.brand.logo_reference',category:'Identidad visual',label:'Referencia del logotipo',valueType:'text',value:'logo-institucional.svg',effectiveFrom:'2026-01-01',sourceReference:'Identidad institucional QA',status:'default' },
+  { code:'system.identity.provider',category:'Usuarios',label:'Proveedor de identidad',valueType:'text',value:'Keycloak',effectiveFrom:'2026-01-01',sourceReference:'Arquitectura de identidad',status:'default' },
+  { code:'system.identity.require_mfa_admins',category:'Usuarios',label:'MFA obligatorio para administradores',valueType:'text',value:'SÃ­',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica de seguridad',status:'default' },
+  { code:'system.access.profile_definitions',category:'Usuarios',label:'Definiciones independientes de perfiles',valueType:'text',value:'[]',effectiveFrom:'2026-01-01',sourceReference:'Modelo de acceso Proyecto Centenario',status:'default' },
+  { code:'system.access.user_assignments',category:'Usuarios',label:'Asignaciones de perfiles a usuarios',valueType:'text',value:'[]',effectiveFrom:'2026-01-01',sourceReference:'Modelo de acceso Proyecto Centenario',status:'default' },
+  { code:'system.access.review_frequency_days',category:'AuditorÃ­a de accesos',label:'Frecuencia de certificaciÃ³n (dÃ­as)',valueType:'integer',value:'90',effectiveFrom:'2026-01-01',sourceReference:'PolÃ­tica de revisiÃ³n de accesos',status:'default' },
+]
+const defaultMockOrganizations: OrganizationOption[] = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23].map(number => ({
+  id: number === 1 ? '11111111-1111-1111-1111-111111111111' : number === 23 ? '23232323-2323-2323-2323-232323232323' : `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`,
+  name: `Taller Demostrativo NÂº ${number}`,
+  number: String(number),
+  type: 'workshop',
+}))
+const defaultMockSpaces: InstitutionalSpace[] = [
+  { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', code: 'TEMP-01', name: 'Templo Principal', spaceType: 'temple', location: 'Sede institucional', capacity: 80, status: 'active' },
+  { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', code: 'SEC-01', name: 'Sala de SecretarÃ­a', spaceType: 'secretariat_room', location: 'Sede institucional', capacity: 16, status: 'active' },
+]
+const defaultMockCeremonies: GrandSecretariatCeremonyQueueItem[] = [
+  { id: 'cccccccc-1111-1111-1111-111111111111', organizationId: defaultMockOrganizations[1].id, organizationName: defaultMockOrganizations[1].name, organizationNumber: '23', ceremonyType: 'wage_increase', proposedDate: '2026-09-18', status: 'authorized', formalAuthorizationIssued: false, spaceReservationId: null, spaceName: null, reservationStartsAtUtc: null, reservationEndsAtUtc: null, createdAtUtc: '2026-09-07T16:00:00Z' },
+  { id: 'cccccccc-2222-2222-2222-222222222222', organizationId: defaultMockOrganizations[0].id, organizationName: defaultMockOrganizations[0].name, organizationNumber: '1', ceremonyType: 'exaltation', proposedDate: '2026-09-20', status: 'authorized', formalAuthorizationIssued: false, spaceReservationId: 'dddddddd-dddd-dddd-dddd-dddddddddddd', spaceName: defaultMockSpaces[0].name, reservationStartsAtUtc: '2026-09-20T22:00:00Z', reservationEndsAtUtc: '2026-09-21T01:00:00Z', createdAtUtc: '2026-09-07T17:00:00Z' },
+  { id: 'cccccccc-3333-3333-3333-333333333333', organizationId: defaultMockOrganizations[1].id, organizationName: defaultMockOrganizations[1].name, organizationNumber: '23', ceremonyType: 'affiliation', proposedDate: '2026-10-10', status: 'authorized', formalAuthorizationIssued: false, spaceReservationId: null, spaceName: null, reservationStartsAtUtc: null, reservationEndsAtUtc: null, createdAtUtc: '2026-09-08T12:00:00Z' },
+]
+const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
+  {
+    id: 'eeeeeeee-1111-1111-1111-111111111111', organizationId: defaultMockOrganizations[0].id, organizationName: defaultMockOrganizations[0].name, organizationNumber: '1', ceremonyType: 'wage_increase', subjectDisplayName: 'Hermano Demostrativo', proposedDate: '2026-09-25', status: 'under_review', createdAtUtc: '2026-09-08T13:00:00Z',
+    eligibility: { status: 'complies', canAuthorize: true, publication: null, requirements: [
+      { code: 'regimen_interior', name: 'RÃ©gimen Interior', status: 'approved', reason: 'AprobaciÃ³n vigente registrada.' },
+      { code: 'gran_tesoreria', name: 'Gran TesorerÃ­a', status: 'approved', reason: 'El Taller se encuentra al dÃ­a para la fecha evaluada.' },
+      { code: 'gran_hospitalaria', name: 'Gran Hospitalaria', status: 'approved', reason: 'El Taller se encuentra al dÃ­a en reposiciones u obligaciones hospitalarias.' },
+    ] },
+    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true },
+  },
+  {
+    id: 'eeeeeeee-2222-2222-2222-222222222222', organizationId: defaultMockOrganizations[1].id, organizationName: defaultMockOrganizations[1].name, organizationNumber: '23', ceremonyType: 'initiation', subjectDisplayName: 'Persona Demostrativa Uno', proposedDate: '2026-10-03', status: 'under_review', createdAtUtc: '2026-09-08T13:15:00Z',
+    eligibility: { status: 'does_not_comply', canAuthorize: false, publication: { status: 'published', requiredDays: 20, completedDays: 13, publishedFromUtc: '2026-08-26T15:00:00Z', publishedUntilUtc: null }, requirements: [
+      { code: 'regimen_interior', name: 'RÃ©gimen Interior', status: 'rejected', reason: 'No existe una aprobaciÃ³n habilitante de RÃ©gimen Interior.' },
+      { code: 'gran_tesoreria', name: 'Gran TesorerÃ­a', status: 'approved', reason: 'El Taller se encuentra al dÃ­a para la fecha evaluada.' },
+      { code: 'gran_hospitalaria', name: 'Gran Hospitalaria', status: 'approved', reason: 'El Taller se encuentra al dÃ­a en reposiciones u obligaciones hospitalarias.' },
+      { code: 'publicacion_insinuado', name: 'PublicaciÃ³n del insinuado', status: 'rejected', reason: 'Se requieren 20 dÃ­as de publicaciÃ³n y se han cumplido 13 dÃ­as vÃ¡lidos.' },
+    ] },
+    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true },
+  },
+]
 
-BˆÛÛœİÛÛ[\HHš[K\H
-^[œÚ[ÛˆOOH	Ü‰ÈÈ	Ø\XØ][Û‹Ü‰Èˆ^[œÚ[ÛˆOOH	ÙØŞ	ÈÈ	Ø\XØ][Û‹İ›™›Ü[[›Ü›X]Ë[Ù™šXÙYØİ[Y[ÛÜ™›ØÙ\ÜÚ[™Û[™Øİ[Y[	Èˆ	ÉÊBˆYˆ
-VÉØ\XØ][Û‹Ü‰Ë	Ø\XØ][Û‹İ›™›Ü[[›Ü›X]Ë[Ù™šXÙYØİ[Y[ÛÜ™›ØÙ\ÜÚ[™Û[™Øİ[Y[	×Kš[˜ÛY\ÊÛÛ[\JJH›İÈ™]È\œ›ÜŠ	ÓH[™]š\İHX™HY[\œÙH[ˆÛÜ™
-™ØŞ
-HÈ‹‰ÊBˆYˆ
-š[KœÚ^™HHš[KœÚ^™HˆL—ÍÎ
-H›İÈ™]È\œ›ÜŠ	Ñ[\˜Ú]›ÈX™HÛÛ[™\ˆ[™›Ü›XXÚpìÛˆH\Ø\ˆÛÛ[Èpè^[[ÈLP‹‰ÊBˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİØİ[Y[™\œÚ[Û’YHÜ\Ëœ˜[™ÛUURQ
+export class PmgmApiClient {
+  private readonly baseUrl: string
+  private readonly getAccessToken?: AccessTokenProvider
+  readonly useMocks: boolean
+  private readonly onUnauthorized?: () => Promise<void>
+  private readonly mockOrganizations = [...defaultMockOrganizations]
+  private readonly mockSpaces = [...defaultMockSpaces]
+  private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
+  private readonly mockDocuments: SecretariatDocument[] = []
+  private readonly mockSubmittedTenidas: GrandSecretariatTenidaItem[] = [
+    {
+      recordId: 'gs-tenida-demo-001', lodge: { id: defaultMockOrganizations[1].id, name: defaultMockOrganizations[1].name, number: '23' },
+      meetingId: 'dddddddd-dddd-dddd-dddd-dddddddddddd', meetingDate: '2026-09-12', meetingType: 'regular', grade: 'all', ceremonyType: null,
+      modality: 'in_person', title: 'Tenida Regular â€” Primera implementaciÃ³n', meetingStatus: 'held',
+      extractDocumentVersionId: 'extract-demo-001', submissionStatus: 'submitted', submittedAtUtc: '2026-09-13T13:00:00Z', reviewedAtUtc: null, reviewNotes: null,
+    },
+  ]
+  // QA only: uploaded interview files live in browser memory for this session.
+  private readonly mockInterviewDocuments = new Map<string, { file: Blob; fileName: string; metadata: CandidateInterviewEvidence }>()
+  private readonly mockCeremonies = defaultMockCeremonies.map(item => ({ ...item }))
+  private readonly mockReviewCeremonies = defaultMockReviewCeremonies.map(cloneCeremonyQueueItem)
+  private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
+  private readonly mockTreasuryStatements = new Map<string, TreasuryStatement>()
+  private readonly mockHospitalaria = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'hospitalaria-demo-1', organizationId: defaultMockOrganizations[0].id, status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:05:00Z' }]])
+  private readonly mockLodgeHospitalariaMovements = new Map<string, LodgeHospitalariaMovement[]>()
+  private readonly mockHospitalariaSubmissions = new Map<string, HospitalariaMonthlySubmission>()
+  private readonly mockLodgeFeePlans = new Map<string, LodgeFeePlan[]>()
+  private readonly mockLodgeTreasurySummaries = new Map<string, LodgeTreasurySummary>()
+  private readonly mockLodgeTreasuryCharges = new Map<string, LodgeTreasuryCharge[]>()
+  private readonly mockLodgeTreasuryExpenses = new Map<string, LodgeTreasuryExpense[]>()
+  private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
+  private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
-Bˆ\Ë›[ØÚÒ[\šY]ÑØİ[Y[ËœÙ]
-Øİ[Y[™\œÚ[Û’YÈš[Kš[S˜[YNˆš[K›˜[YKY]Y]NˆÈ‹‹›Y]Y]KØİ[Y[™\œÚ[Û’YHJBˆ™]\›ˆÈ[\šY]ÒYØİ[Y[™\œÚ[Û’Yš[S˜[YNˆš[K›˜[YK™\İ[ˆY]Y]Kœ™\İ[İ[[X\NˆY]Y]Kœİ[[X\KÚ^™P]\Îˆš[KœÚ^™HBˆBˆ™]\›ˆ\Ëœ™\]Y\İ[\šY]ÑØİ[Y[™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KÙ[™]š\İ\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-[\šY]ÒY
-_KØÛÛ[šYØÈY]Ùˆ	ÔU	ËXY\œÎˆÈ	ĞÛÛ[U\IÎˆÛÛ[\K	ÖQš[KS˜[YIÎˆ[˜ÛÙUT’PÛÛ\Û™[
-š[K›˜[YJK	ÖR[\šY]Ù\‰Îˆ[˜ÛÙUT’PÛÛ\Û™[
-Y]Y]Kš[\šY]Ù\‘\Ü^S˜[YJK	ÖR[\šY]ËTİ[[X\IÎˆ[˜ÛÙUT’PÛÛ\Û™[
-Y]Y]Kœİ[[X\JK	ÖR[\šY]ËT™\İ[	ÎˆY]Y]Kœ™\İ[	ÖR[\šY]ËQ]IÎˆY]Y]Kš[\šY]Ñ]HK›ÙNˆš[HJBˆBˆ\Ş[˜È™XÛÜ™[\šY]ÔXÚØYÙJÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[\šY]ÔXÚØYÙT™\]Y\İ
-Nˆ›ÛZ\ÙO[\šY]ÔXÚØYÙT™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆYˆ
-^[ØYš[\šY]ÜË›[™İÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]Ëš[\šY]ÜÉË™X\ÛÛˆ[^YY[H™\]ZY\™H[Y[›ÜÈ™\È[™]š\İ\ÈÛÛ\]\ÎÈXİX[Y[H™YÚ\İ˜H	Ü^[ØYš[\šY]ÜË›[™İK˜ÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
-^[ØYš[\šY]ÜËœÛÛYJ][HOˆZ][Kœİ[[X\Kš[J
-HZ][K™Øİ[Y[™\œÚ[Û’YVÉÙ˜]›Ü˜X›IË	Ù\Ù˜]›Ü˜X›I×Kš[˜ÛY\Ê][Kœ™\İ[
-JJH›İÈ™]È\œ›ÜŠ	ĞØYH[™]š\İH™\]ZY\™H™\İ[Y[‹™\İ[YÈH\˜Ú]›ÈÛÜ™È‹‰ÊBˆYˆ
-\^[ØY˜ÛÛ™šY[X[]Y\İ[Û›˜Z\™P]˜Z[X›JH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]Ë˜ÛÛ™šY[X[Ü]Y\İ[Û›˜Z\™IË™X\ÛÛˆ	Ñ˜[H[İY\İ[Û˜\š[ÈÛÛ™šY[˜ÚX[™\]Y\šYÈ\˜HH™]š\ÚpìÛˆH\˜Ù\ˆÜ˜YË‰ËÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
-\^[ØY˜]]Øš[ÙÜ˜\P]˜Z[X›JH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]Ë˜]]Øš[ÙÜ˜\IË™X\ÛÛˆ	Ñ˜[HH]]Øš[ÙÜ˜Y°ëXH™\]Y\šYH\˜HH™]š\ÚpìÛˆH\˜Ù\ˆÜ˜YË‰ËÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ø\›İ™Y	ËÛÙNˆ	İ\™ÙYÜ™YWÜ™]šY]ËœXÚØYÙWØÛÛ\]IË™X\ÛÛˆ[^YY[HÛÛY[™H	Ü^[ØYš[\šY]ÜË›[™İH[™]š\İ\ÈHÜÈ[XÙY[\È™\]Y\šYÜË˜ÛÛ\]Y[\šY]ÜÎˆ^[ØYš[\šY]ÜË›[™İÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆBˆ™]\›ˆ\ËœÜİœÛÛ[\šY]ÔXÚØYÙT™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KØ[XÙY[\Ø^[ØY
-BˆBˆ\Ş[˜È™XÛÜ™\™YÜ™YT™]šY]ÊÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ\™YÜ™YT™]šY]Ô™\]Y\İ
-Nˆ›ÛZ\ÙO\™YÜ™YT™]šY]Ô™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆYˆ
-\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
-JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆH™Y™\™[˜ÚXH[^˜XİÈHXİK‰ÊBˆYˆ
-^[ØYœ™\Ù[›İ\œÈH^[ØY›İ\Ò[‘˜]›Üˆ^[ØY›İ\ĞYØZ[œİ^[ØY˜Xœİ[[ÛœÈ^[ØY›İ\Ò[‘˜]›Üˆ
-È^[ØY›İ\ĞYØZ[œİ
-È^[ØY˜Xœİ[[ÛœÈOOH^[ØYœ™\Ù[›İ\œÊH›İÈ™]È\œ›ÜŠ	ÓHİ[XHH›İÜÈX™HÛÚ[˜ÚY\ˆÛÛˆH\Ú\İ[˜ÚXH™YÚ\İ˜YK‰ÊBˆÛÛœİİ]\ÈH^[ØY›Ü[•›İP\›İ™YÈ	Ø\›İ™Y	Èˆ	Ü™Z™XİY	Âˆ™]\›ˆÈ\™YÜ™YNˆÈYˆÙ\™[[ÛT™\]Y\İYİ]\ËÛÙNˆ\™ÙYÜ™YWÜ™]šY]Ë‰Üİ]\ßX™X\ÛÛˆ^[ØY›Ü[•›İP\›İ™YÈ	ÓH›İXÚpìÛˆXšY\HH\˜Ù\ˆÜ˜YÈYH˜]›Ü˜X›K‰Èˆ	ÓH›İXÚpìÛˆXšY\HH\˜Ù\ˆÜ˜YÈ›ÈYH˜]›Ü˜X›K‰ÈKİ]\Îˆ^[ØY›Ü[•›İP\›İ™YÈ	İ[™\—Ü™]šY]ÉÈˆ	Ü™Z™XİY	ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛ\™YÜ™YT™]šY]Ô™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KÜ™]š\Ú[Û‹]\˜Ù\‹YÜ˜YØ^[ØY
-BˆBˆ\Ş[˜È™XÛÜ™š[˜[˜[İ
-Ù\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆš[˜[˜[İ™\]Y\İ
-Nˆ›ÛZ\ÙOš[˜[˜[İ™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆYˆ
-\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
-JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆH™Y™\™[˜ÚXH[^˜XİÈHXİK‰ÊBˆYˆ
-^[ØY˜˜[İË›[™İH^[ØY˜˜[İË›[™İˆÈ™]ÈÙ]
-^[ØY˜˜[İË›X\
-][HOˆ][Kœ›ØÙY\™S[X™\ŠJKœÚ^™HOOH^[ØY˜˜[İË›[™İ
-H›İÈ™]È\œ›ÜŠ	ÑX™H™YÚ\İ˜\ˆ[™H[›ÈH™\È°è[Z]\È\İ[ÜË‰ÊBˆYˆ
-^[ØY˜˜[İËœÛÛYJ][HOˆ][K™[YÚX›U›İ\œÈH][KÚ]P˜[İÈ][K˜›XÚĞ˜[İÈ][KÚ]P˜[İÈ
-È][K˜›XÚĞ˜[İÈOOH][K™[YÚX›U›İ\œÊJH›İÈ™]È\œ›ÜŠ	Ó\È˜[İ\È›[˜Ø\ÈH™YÜ˜\ÈX™[ˆÛÚ[˜ÚY\ˆÛÛˆ\È\œÛÛ˜\ÈXš[]Y\Ë‰ÊBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ^[ØY˜˜[İ\›İ™YÈ	Ø\›İ™Y	Èˆ	Ü™Z™XİY	Ë\ÓÙ‘]Nˆ^[ØY˜˜[İ]KÛÙNˆ^[ØY˜˜[İ\›İ™YÈ	Ùš\œİÙYÜ™YWØ˜[İ˜\›İ™Y	Èˆ	Ùš\œİÙYÜ™YWØ˜[İœ™Z™XİY	Ë™X\ÛÛˆ^[ØY˜˜[İ\›İ™YÈ	Ñ[˜[İZ™HYš[š]]›ÈYH˜]›Ü˜X›K‰Èˆ	Ñ[˜[İZ™HYš[š]]›ÈYH\Ù˜]›Ü˜X›K‰ËÙ\™[[ÛTİ]\Îˆ^[ØY˜˜[İ\›İ™YÈ	İ[™\—Ü™]šY]ÉÈˆ	Ü™Z™XİY	ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛš[˜[˜[İ™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KØ˜[İZ™X^[ØY
-BˆBˆ\Ş[˜ÈİX›Z][š]X][Û”™\]Y\İ
-Ù\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[š]X][Û”™\]Y\İİX›Z\ÜÚ[ÛŠNˆ›ÛZ\ÙO[š]X][Û”™\]Y\İİX›Z\ÜÚ[Û”™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆYˆ
-^[ØYœ›ÜÜÙYÙ\™[[ÛQ]H^[ØYœİX›Z\ÜÚ[Û‘]JH›İÈ™]È\œ›ÜŠ	ÓH™XÚH›ÜY\İH›ÈYYHÙ\ˆ[\š[ÜˆHHÛÛXÚ]Y‰ÊBˆYˆ
-\^[ØY™[™\˜X›P\›İ˜[
-H›İÈ™]È\œ›ÜŠ	ÓHÛÛXÚ]Y™\]ZY\™HÛÛ™š\›XXÚpìÛˆ[™[™\˜X›HXY\İ›Ë‰ÊBˆYˆ
-\^[ØYœÙXÜ™]\Q\Ü^S˜[YKš[J
-H\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
-JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆÙXÜ™]\°ëXH™\ÜÛœØX›HH™Y™\™[˜ÚXHØİ[Y[[‰ÊBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ø\›İ™Y	Ë›ÜÜÙY]Nˆ^[ØYœ›ÜÜÙYÙ\™[[ÛQ]KÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉË[™XYTİX›Z]Yˆ˜[ÙHBˆBˆ™]\›ˆ\ËœÜİœÛÛ[š]X][Û”™\]Y\İİX›Z\ÜÚ[Û”™\ÜÛœÙOŠØ\KÚ[œÚ[XYÜËÜÛÛXÚ]Y\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KÜÛÛXÚ]YZ[šXÚXXÚ[Û˜^[ØY
-BˆB‚ˆ\Ş[˜ÈÙ]™X\İ\UÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë\ÓÙÎˆİš[™ÊNˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÔÛ˜\Úİ\ÓÙŠ\Ë›[ØÚÕ™X\İ\K™Ù]
-Ü™Ø[š^˜][Û’Y
-K\ÓÙŠBˆÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\Ê
-NÈYˆ
-\ÓÙŠH]Y\KœÙ]
-	Ø\ÓÙ‰Ë\ÓÙŠBˆ™]\›ˆ\Ë›Ü[Û˜[Ù]ÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™Yİ[\šYY	Ü]Y\KœÚ^™HÈÉÜ]Y\_Xˆ	ÉßX
-BˆBˆ\Ş[˜ÈÙ]™X\İ\UÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÛÜšÜÚÜ™Yİ[\š]T™\]Y\İ
-Nˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİÛ˜\ÚİH[ØÚÔ™Yİ[\š]TÛ˜\Úİ
-Ü™Ø[š^˜][Û’Y^[ØY	İ™X\İ\IÊNÈ\Ë›[ØÚÕ™X\İ\KœÙ]
-Ü™Ø[š^˜][Û’YÛ˜\Úİ
-NÈ™]\›ˆÛ˜\ÚİBˆ™]\›ˆ\ËœÜİœÛÛÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™Yİ[\šYY^[ØY
-BˆBˆ\Ş[˜È\İ™X\İ\Tİ][Y[ÊÜ™Ø[š^˜][Û’Yˆİš[™ËYX\Îˆ[X™\‹[ÛÎˆ[X™\ŠNˆ›ÛZ\ÙO™X\İ\Tİ][Y[\İ™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİ][\ÈHË‹‹\Ë›[ØÚÕ™X\İ\Tİ][Y[Ë˜[Y\Ê
-WBˆ™š[\Š][HOˆ][K›Ü™Ø[š^˜][Û’YOOHÜ™Ø[š^˜][Û’Y	‰ˆ
-YX\ˆOH[][Kœ\š[ÙYX\ˆOOHYX\ŠH	‰ˆ
-[ÛOH[][Kœ\š[Ù[ÛOOH[Û
-JBˆœÛÜ
+  constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized; for (const item of this.mockSystemSettings) this.mockSystemSettingVersions.set(item.code,[{id:`base-${item.code}`,value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status:item.status,createdAtUtc:'2026-01-01T00:00:00Z'}]) }
 
-KŠHOˆ‹œ\š[ÙYX\ˆHKœ\š[ÙYX\ˆ‹œ\š[Ù[ÛHKœ\š[Ù[Û
-Bˆ›X\
-][HOˆ
-ÈYš][KšYÜ™Ø[š^˜][Û’Yš][K›Ü™Ø[š^˜][Û’Y\š[ÙYX\š][Kœ\š[ÙYX\‹\š[Ù[Ûš][Kœ\š[Ù[Ûİ]Ù™‘]Nš][K˜İ]Ù™‘]Kİ]\Îš][Kœİ]\ËÛİ\˜ÙT™Y™\™[˜ÙNš][KœÛİ\˜ÙT™Y™\™[˜ÙKİX›Z]Y]]Îš][KœİX›Z]Y]]Ë™XÛÛ˜Ú[Y]]Îš][Kœ™XÛÛ˜Ú[Y]]ËÛÜÙY]]Îš][K˜ÛÜÙY]]ÈJJBˆ™]\›ˆÈİ[š][\Ë›[™İ][\ÈBˆBˆÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\Ê
-BˆYˆ
-YX\ˆOH[
-H]Y\KœÙ]
-	ŞYX\‰Ëİš[™ÊYX\ŠJBˆYˆ
-[ÛOH[
-H]Y\KœÙ]
-	Û[Û	Ëİš[™Ê[Û
-JBˆ™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[\İ™\ÜÛœÙOŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KØİXY›ÜÉÜ]Y\KœÚ^™HÈÉÜ]Y\_Xˆ	ÉßX
-BˆB‚ˆ\Ş[˜ÈÜ™X]U™X\İ\Tİ][Y[
-Ü™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÜ™X]U™X\İ\Tİ][Y[™\]Y\İ
-Nˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H[ØÚÕ™X\İ\Tİ][Y[
-Ü™Ø[š^˜][Û’Y^[ØY
-Bˆ\Ë›[ØÚÕ™X\İ\Tİ][Y[ËœÙ]
-İ][Y[šYİ][Y[
-Bˆ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
-İ][Y[
-BˆBˆ™]\›ˆ\ËœÜİœÛÛ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KØİXY›ÜØ^[ØY
-BˆBˆ\Ş[˜ÈÙ[™\˜]U™X\İ\Tİ][Y[[™\Êİ][Y[Yˆİš[™Ë^[ØYˆÙ[™\˜]U™X\İ\S[™\Ô™\]Y\İ
-Nˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
-İ][Y[Y
-BˆÛÛœİ[[İ[ÈHÜ^[ØY›X\İ\[[İ[^[ØY›X\İ\[[İ[^[ØY›X\İ\[[İ[^[ØY™™[İØÜ˜Y[[İ[^[ØY™™[İØÜ˜Y[[İ[^[ØY˜\™[XÙP[[İ[^[ØY˜\™[XÙP[[İ[BˆÛÛœİYÜ™Y\ÈHÉÛX\İ\‰Ë	ÛX\İ\‰Ë	ÛX\İ\‰Ë	Ù™[İØÜ˜Y	Ë	Ù™[İØÜ˜Y	Ë	Ø\™[XÙIË	Ø\™[XÙI×BˆÛÛœİ˜[Y\ÈHÉÕ™[™\˜X›HXY\İ˜IË	Ôš[Y\ˆšYÚ[[IË	ÔÙYİ[™ÈšYÚ[[IË	ĞÛÛ\pìY\›È[›ÉË	ĞÛÛ\pìY\˜HÜÉË	Ğ\™[™^ˆ[›ÉË	Ğ\™[™^˜HÜÉ×BˆÛÛœİÛÛšX][Û•\\Î“ÙÙQ™YU\V×OVÉÛ›Ü›X[	Ë	Û›Ü›X[	Ë	ÜÙ[š[Ü‰Ë	ÜÜİ\ÙIË	ÜİY[	Ë	Ü\İØXİ]™IË	Û›Ü›X[	×Bˆİ][Y[›[™\ÈH[[İ[Ë›X\
+  async getCandidatePortal(): Promise<CandidatePortalResponse> { if (this.useMocks) { await sleep(120); return { culture: 'es-CL', portal: 'Insinuados en perÃ­odo de publicaciÃ³n', total: mockCandidates.length, items: mockCandidates } } return this.request<CandidatePortalResponse>('/api/ceremonias/portal-insinuados') }
+  async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio â€” ModernizaciÃ³n Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
+  async getSessionProfile(): Promise<SessionProfile> { if (this.useMocks) return mockSession; return this.request<SessionProfile>('/api/session/me') }
+  async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: [...this.mockOrganizations] }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
+  async getSystemSettings(): Promise<SystemSettingsResponse> { if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => ({ ...item })) }; return this.request<SystemSettingsResponse>('/api/system/settings/') }
+  async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> { if (this.useMocks) { const item=this.mockSystemSettings.find(value=>value.code===code); if(!item) throw new Error('El parÃ¡metro no pertenece al catÃ¡logo administrable.'); if(!payload.value.trim()||!payload.sourceReference.trim()) throw new Error('Valor y fundamento son obligatorios.'); const status=payload.effectiveFrom>new Date().toISOString().slice(0,10)?'scheduled':'active'; Object.assign(item,{value:payload.value.trim(),effectiveFrom:payload.effectiveFrom,sourceReference:payload.sourceReference.trim(),status}); const versions=this.mockSystemSettingVersions.get(code)??[]; versions.unshift({id:crypto.randomUUID(),value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status,createdAtUtc:new Date().toISOString()}); this.mockSystemSettingVersions.set(code,versions); return {...item}; } return this.postJson<SystemSetting>(`/api/system/settings/${encodeURIComponent(code)}`,payload) }
+  async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
+  async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'AsignÃ³ perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'ProbÃ³ configuraciÃ³n SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesiÃ³n',summary:'Intento de autenticaciÃ³n rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
 
-[[İ[[™^
-HOˆ
-ÈYˆÜ\Ëœ˜[™ÛUURQ
+  async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
+    if (this.useMocks) {
+      const plans = this.mockLodgeFeePlans.get(organizationId) ?? []
+      if (plans.some(item => item.feeType === payload.feeType && item.isActive)) throw new Error('Ya existe una cuota activa del mismo tipo para esa vigencia.')
+      const plan = { id: crypto.randomUUID(), organizationId, ...payload, effectiveUntil: payload.effectiveUntil ?? null, workshopAmount: payload.memberAmount - payload.grandTreasuryAmount, isActive: true }
+      plans.push(plan); this.mockLodgeFeePlans.set(organizationId, plans); return { ...plan }
+    }
+    return this.postJson<LodgeFeePlan>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`, payload)
+  }
+  async getLodgeFeePlans(organizationId: string): Promise<{ total: number; items: LodgeFeePlan[] }> {
+    if (this.useMocks) {
+      let plans = this.mockLodgeFeePlans.get(organizationId)
+      if (!plans) { plans = defaultLodgeFeePlans(organizationId); this.mockLodgeFeePlans.set(organizationId, plans) }
+      return { total: plans.length, items: plans.map(item => ({ ...item })) }
+    }
+    return this.request<{ total: number; items: LodgeFeePlan[] }>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`)
+  }
+  async generateLodgeCharges(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
+    if (this.useMocks) {
+      const plans = (await this.getLodgeFeePlans(organizationId)).items
+      const normal = plans.find(item => item.feeType === 'normal')!; const student = plans.find(item => item.feeType === 'student')!; const senior = plans.find(item => item.feeType === 'senior')!
+      const memberExpected = normal.memberAmount * 17 + student.memberAmount * 3 + senior.memberAmount * 2
+      const grandTreasuryExpected = normal.grandTreasuryAmount * 17 + student.grandTreasuryAmount * 3 + senior.grandTreasuryAmount * 2
+      const summary: LodgeTreasurySummary = { organizationId, periodYear, periodMonth, members: 22, memberExpected, collected: 438000, receivable: memberExpected - 438000, grandTreasuryExpected, workshopMarginProjected: memberExpected - grandTreasuryExpected, paid: 17, partial: 2, overdue: 3, trafficLight: 'amber' }
+      this.mockLodgeTreasurySummaries.set(`${organizationId}:${periodYear}-${periodMonth}`, summary); return { ...summary }
+    }
+    return this.postJson<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos/generar`, { periodYear, periodMonth, assignments: [] })
+  }
+  async getLodgeTreasurySummary(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
+    if (this.useMocks) return this.mockLodgeTreasurySummaries.get(`${organizationId}:${periodYear}-${periodMonth}`) ?? { organizationId, periodYear, periodMonth, members: 0, memberExpected: 0, collected: 0, receivable: 0, grandTreasuryExpected: 0, workshopMarginProjected: 0, paid: 0, partial: 0, overdue: 0, trafficLight: 'no_data' }
+    return this.request<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/resumen?year=${periodYear}&month=${periodMonth}`)
+  }
+  async getLodgeTreasuryCharges(organizationId:string,periodYear:number,periodMonth:number):Promise<{total:number;items:LodgeTreasuryCharge[]}>{
+    if(this.useMocks){const key=`${organizationId}:${periodYear}-${periodMonth}`;let items=this.mockLodgeTreasuryCharges.get(key);if(!items){items=mockTreasuryCharges(organizationId);this.mockLodgeTreasuryCharges.set(key,items)}return{total:items.length,items:items.map(cloneTreasuryCharge)}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos?year=${periodYear}&month=${periodMonth}`)
+  }
+  async addLodgeTreasuryPayment(chargeId:string,payload:{amount:number;paymentMethod:LodgeTreasuryPayment['paymentMethod'];paymentDate:string;reference?:string|null}):Promise<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>{
+    if(this.useMocks){const charge=[...this.mockLodgeTreasuryCharges.values()].flat().find(x=>x.id===chargeId);if(!charge)throw new Error('El cargo indicado no existe.');if(payload.amount<=0||payload.amount>charge.balance)throw new Error('El abono debe ser positivo y no superar el saldo.');const reference=payload.reference?.trim()||null;if(reference&&charge.payments.some(x=>x.amount===payload.amount&&x.paymentDate===payload.paymentDate&&x.paymentMethod===payload.paymentMethod&&x.reference?.toLocaleLowerCase('es-CL')===reference.toLocaleLowerCase('es-CL')))throw new Error('Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia.');const payment:LodgeTreasuryPayment={id:crypto.randomUUID(),receiptNumber:`REC-DEMO-${String(charge.payments.length+1).padStart(3,'0')}`,amount:payload.amount,paymentMethod:payload.paymentMethod,paymentDate:payload.paymentDate,reference};charge.payments.unshift(payment);charge.paidAmount+=payment.amount;charge.balance-=payment.amount;charge.status=charge.balance===0?'paid':'partial';return{...payment,paidAmount:charge.paidAmount,balance:charge.balance,status:charge.status}}
+    return this.postJson<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>(`/api/gestion-logial/tesoreria/cargos/${encodeURIComponent(chargeId)}/pagos`,payload)
+  }
+  async getLodgeTreasuryExpenses(organizationId:string,from:string,to:string):Promise<{total:number;items:LodgeTreasuryExpense[]}>{
+    if(this.useMocks){let items=this.mockLodgeTreasuryExpenses.get(organizationId);if(!items){items=mockTreasuryExpenses(organizationId);this.mockLodgeTreasuryExpenses.set(organizationId,items)}const selected=items.filter(x=>x.expenseDate>=from&&x.expenseDate<=to);return{total:selected.length,items:selected.map(x=>({...x}))}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos?from=${from}&to=${to}`)
+  }
+  async createLodgeTreasuryExpense(organizationId:string,payload:{category:string;amount:number;expenseDate:string;description:string;evidenceReference?:string|null}):Promise<LodgeTreasuryExpense>{
+    if(this.useMocks){const item:LodgeTreasuryExpense={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()};const items=this.mockLodgeTreasuryExpenses.get(organizationId)??[];items.unshift(item);this.mockLodgeTreasuryExpenses.set(organizationId,items);return{...item}}
+    return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos`,payload)
+  }
+  async approveLodgeTreasuryExpense(expenseId:string):Promise<LodgeTreasuryExpense>{
+    if(this.useMocks){const item=[...this.mockLodgeTreasuryExpenses.values()].flat().find(x=>x.id===expenseId);if(!item)throw new Error('El egreso no existe.');if(item.approvalStatus!=='pending_approval')throw new Error('El egreso ya fue resuelto.');item.approvalStatus='approved';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return{...item}}
+    return this.postJson(`/api/gestion-logial/tesoreria/egresos/${encodeURIComponent(expenseId)}/aprobar`,{})
+  }
 
-KY[X™\’Yˆ[[Ë[Y[X™\‹IÚ[™^
-È_XY[X™\œÚ\Yˆ[[Ë[Y[X™\œÚ\IÚ[™^
-È_XYÜ™YPÛÙP]İ]Ù™ˆYÜ™Y\ÖÚ[™^KÙ™šXÙPÛÙP]İ]Ù™ˆ[™^ÈÈÉÕ“IË	Ô‰Ë	ÔÕ‰×VÚ[™^Hˆ[˜\ÙP[[İ[ˆ[[İ[Y\İY[[[İ[ˆ[™^OOHˆÈNˆ^XX›P[[İ[ˆ[™^OOHˆÈ[[İ[Hˆ[[İ[Y\İY[\NˆÛÛšX][Û•\\ÖÚ[™^KÛÛšX][Û•\N˜ÛÛšX][Û•\\ÖÚ[™^K]]Üš^˜][Û”™Y™\™[˜ÙNˆ[™^OOHˆÈ	Ô[˜ÚHSSËLŒËÌŒ‰Èˆ[ØœÙ\˜][Ûˆ˜[Y\ÖÚ[™^KY[]SX]Úİ]\Îˆ	ÛX]ÚY	ÈJJBˆ™XØ[İ[]S[ØÚÕ™X\İ\Jİ][Y[
-NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
-İ][Y[
-BˆBˆ™]\›ˆ\ËœÜİœÛÛ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İ][Y[Y
-_KÙÙ[™\˜\‹[[™X\Ø^[ØY
-BˆBˆ\Ş[˜ÈY™X\İ\Tİ][Y[^[Y[
-İ][Y[Yˆİš[™Ë^[ØYˆY™X\İ\T^[Y[™\]Y\İ
-Nˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
-İ][Y[Y
-BˆYˆ
-İ][Y[œİ]\ÈOOH	Ù˜Y	ÊH›İÈ™]È\œ›ÜŠ	ÓÜÈYÛÜÈğìÛÈYY[ˆ™YÚ\İ˜\œÙHZY[˜\È[İXY›È\İ0èH[ˆ›Üœ˜YÜ‹‰ÊBˆYˆ
-^[ØY˜[[İ[H\^[ØYœ^Y\‘\Ü^S˜[YOËš[J
-H\^[ØYœ™Y™\™[˜ÙOËš[J
-JH›İÈ™]È\œ›ÜŠ	ÔYØYÜˆH™Y™\™[˜ÚXKØÛÛ\›Ø˜[HÛÛˆØ›YØ]Üš[ÜÈ\˜H™YÚ\İ˜\ˆ[YÛË‰ÊBˆİ][Y[œ^[Y[Ëœ\Ú
-ÈYˆÜ\Ëœ˜[™ÛUURQ
+  async getRegimenInteriorSummary(filters: { organizationId?: string; asOf?: string; from?: string } = {}): Promise<RegimenInteriorSummary> {
+    if (this.useMocks) return mockRegimenSummary(filters)
+    const query = new URLSearchParams(); if (filters.organizationId) query.set('organizationId', filters.organizationId); if (filters.asOf) query.set('asOf', filters.asOf); if (filters.from) query.set('from', filters.from)
+    return this.request<RegimenInteriorSummary>(`/api/regimen-interior/summary${query.size ? `?${query}` : ''}`)
+  }
+  async getOrderRejectionAlerts(): Promise<OrderRejectionAlertResponse> {
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo NÂº 7', workshopNumber: '7', rejectionDate: '2026-09-30', reason: 'Rechazo en CÃ¡mara del Medio / tercer grado', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de RÃ©gimen Interior.' }] }
+    return this.request<OrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
+  }
 
-K^[Y[Y]Ùˆ^[ØYœ^[Y[Y]Ù^[Y[]Nˆ^[ØYœ^[Y[]K[[İ[ˆ^[ØY˜[[İ[^Y\‘\Ü^S˜[YNˆ^[ØYœ^Y\‘\Ü^S˜[YKš[J
-K™Y™\™[˜ÙNˆ^[ØYœ™Y™\™[˜ÙKš[J
-K™XÛÜ™Y]]Îˆ™]È]J
-KÒTÓÔİš[™Ê
-HJBˆ™XØ[İ[]S[ØÚÕ™X\İ\Jİ][Y[
-NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
-İ][Y[
-BˆBˆ]ØZ]\ËœÜİœÛÛ[šÛ›İÛŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İ][Y[Y
-_KÜYÛÜØ^[ØY
-Bˆ™]\›ˆ\Ë™Ù]™X\İ\Tİ][Y[
-İ][Y[Y
-BˆBˆ\Ş[˜ÈİX›Z]™X\İ\Tİ][Y[
-İ][Y[Yˆİš[™ÊNˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
-İ][Y[Y
-BˆYˆ
-İ][Y[›[™\Ë›[™İOOH
-H›İÈ™]È\œ›ÜŠ	Ñ[İXY›ÈX™HÛÛ[™\ˆ0ë[™X\È[\ÈH[šX\œÙK‰ÊBˆYˆ
-İ][Y[™Y™™\™[˜ÙP[[İ[OOHİ][Y[[œ™\ÛÛ™YY[]Y\ÈOOH
-H›İÈ™]È\œ›ÜŠ	Ñ[İXY›È›ÈYYH[šX\œÙHZY[˜\È^\İHY™\™[˜ÚXHÈY[YY\ÈÚ[ˆÛÛ˜Ú[X\‹‰ÊBˆİ][Y[œİ]\ÈH	ÜİX›Z]Y	ÎÈİ][Y[œİX›Z]Y]]ÈH™]È]J
-KÒTÓÔİš[™Ê
-NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
-İ][Y[
-BˆBˆ™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İ][Y[Y
-_KÙ[šX\˜ÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜È™XÛÛ˜Ú[U™X\İ\Tİ][Y[
-İ][Y[Yˆİš[™ÊNˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİİ][Y[H\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
-İ][Y[Y
-NÈYˆ
-İ][Y[™Y™™\™[˜ÙP[[İ[OOH
-H›İÈ™]È\œ›ÜŠ	Ñ[İXY›ÈX[Y[™H[˜HY™\™[˜ÚXH[™Y[K‰ÊNÈİ][Y[œİ]\ÈH	Ü™XÛÛ˜Ú[Y	ÎÈİ][Y[œ™XÛÛ˜Ú[Y]]ÈH™]È]J
-KÒTÓÔİš[™Ê
-NÈ™]\›ˆÛÛ™U™X\İ\Tİ][Y[
-İ][Y[
-HBˆ™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İ][Y[Y
-_KØÛÛ˜Ú[X\˜ÈY]Ùˆ	ÔÔÕ	ÈJBˆBˆ\Ş[˜ÈÙ]™X\İ\Tİ][Y[
-İ][Y[Yˆİš[™Ë[˜ÛYSY[X™\‘]Z[H˜[ÙJNˆ›ÛZ\ÙO™X\İ\Tİ][Y[ˆÈYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİ][OXÛÛ™U™X\İ\Tİ][Y[
-\Ëœ™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
-İ][Y[Y
-JNÈYŠZ[˜ÛYSY[X™\‘]Z[
-Z][K›[™\ÏZ][K›[™\Ë›X\
-OŠË‹‹Y[X™\’Y›[Y[X™\œÚ\Y›[YÜ™YPÛÙP]İ]Ù™‰ÉËÙ™šXÙPÛÙP]İ]Ù™›[ØœÙ\˜][Û›[]]Üš^˜][Û”™Y™\™[˜ÙN›[Y\İY[\N›[JJNÈ™]\›ˆ][HH™]\›ˆ\Ëœ™\]Y\İ™X\İ\Tİ][Y[ŠØ\Kİ\ÛÜ™\šXKØİXY›ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İ][Y[Y
-_OÚ[˜ÛYSY[X™\‘]Z[IÚ[˜ÛYSY[X™\‘]Z[X
-HBˆ\Ş[˜ÈÙ]ÙÙRÜÜ][\šXTİ[[X\JÜ™Ø[š^˜][Û’Yœİš[™Ëœ›ÛOÎœİš[™ËÏÎœİš[™ÊN”›ÛZ\ÙOÙÙRÜÜ][\šXTİ[[X\OÂˆYŠ\Ë\ÙS[ØÚÜÊ^ÂˆÛÛœİ][\Ï]\Ë™[œİ\™S[ØÚÒÜÜ][\šXS[İ™[Y[ÊÜ™Ø[š^˜][Û’Y
-K™š[\Š][OOŠYœ›Û_][K›[İ™[Y[]OYœ›ÛJI‰Š]ß][K›[İ™[Y[]O]ÊJBˆ™]\›ˆİ[[X\š^™S[ØÚÒÜÜ][\šXJÜ™Ø[š^˜][Û’Yœ›ÛOÏØİ\œ™[[Ûİ\
+  async getCeremonyReviewQueue(): Promise<CeremonyReviewQueueResponse> {
+    if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
+    return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
+  }
+  async setCeremonyInternalAffairsValidation(ceremonyRequestId: string, payload: CeremonyInternalAffairsValidationRequest): Promise<unknown> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { status: payload.status }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canValidateInternalAffairs) throw new Error('La solicitud ya no admite validaciÃ³n de RÃ©gimen Interior.')
+      const requirement = item.eligibility.requirements.find(value => value.code === 'regimen_interior')
+      if (requirement) {
+        const approved = payload.status === 'approved' || payload.status === 'exception_approved'
+        requirement.status = approved ? 'approved' : payload.status
+        requirement.reason = approved ? 'AprobaciÃ³n vigente registrada.' : payload.status === 'observed' ? 'La solicitud tiene observaciones pendientes de RÃ©gimen Interior.' : 'No existe una aprobaciÃ³n habilitante de RÃ©gimen Interior.'
+      }
+      recomputeMockEligibility(item)
+      return { status: payload.status }
+    }
+    return this.postJson<unknown>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/validaciones/regimen-interior`, payload)
+  }
+  async publishCeremonyCandidate(ceremonyRequestId: string): Promise<CandidatePublicationWorkflowResponse> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { id: 'publication-demo-2026-001', ceremonyRequestId, publishedFromUtc: '2026-09-21T15:00:00Z', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canPublishCandidate || item.ceremonyType !== 'initiation') throw new Error('La solicitud no admite iniciar una nueva publicaciÃ³n del insinuado.')
+      item.eligibility.publication = { status: 'published', requiredDays: 20, completedDays: 0, publishedFromUtc: new Date().toISOString(), publishedUntilUtc: null }
+      const existing = item.eligibility.requirements.find(value => value.code === 'publicacion_insinuado')
+      const requirement = { code: 'publicacion_insinuado', name: 'PublicaciÃ³n del insinuado', status: 'rejected', reason: 'Se requieren 20 dÃ­as de publicaciÃ³n y se han cumplido 0 dÃ­as vÃ¡lidos.' }
+      if (existing) Object.assign(existing, requirement); else item.eligibility.requirements.push(requirement)
+      item.actions.canPublishCandidate = false; recomputeMockEligibility(item)
+      return { id: `publication-${item.id}`, ceremonyRequestId, publishedFromUtc: item.eligibility.publication.publishedFromUtc, requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+    }
+    return this.request<CandidatePublicationWorkflowResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/publicacion-insinuado`, { method: 'POST' })
+  }
+  async authorizeCeremony(ceremonyRequestId: string): Promise<{ id?: string; status: string }> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canAuthorize) throw new Error('Su cuenta no puede autorizar esta ceremonia.')
+      if (!item.eligibility.canAuthorize) throw new Error('La ceremonia aÃºn tiene requisitos obligatorios pendientes.')
+      item.status = 'authorized'; item.actions = { canValidateInternalAffairs: false, canPublishCandidate: false, canAuthorize: false }
+      return { id: item.id, status: item.status }
+    }
+    return this.request<{ id?: string; status: string }>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/autorizar`, { method: 'POST' })
+  }
+  async registerInitiation(ceremonyRequestId: string, ceremonyDate: string, minuteReference: string): Promise<InitiationCompletionResponse> {
+    if (this.useMocks) return { id: ceremonyRequestId, status: 'completed', memberId: 'member-demo-2026-001', membershipStatus: 'active', degree: 'apprentice', effectiveDate: ceremonyDate, documentCode: 'AUT-CER-DEMO-2026-001' }
+    return this.postJson<InitiationCompletionResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/registrar-iniciacion`, { ceremonyDate, minuteReference })
+  }
+  async recordInitialDeliberation(ceremonyRequestId: string, payload: InitialDeliberationRequest): Promise<InitialDeliberationResponse> {
+    if (this.useMocks) return mockInitialDeliberation(ceremonyRequestId, payload)
+    return this.postJson<InitialDeliberationResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/deliberacion-inicial`, payload)
+  }
+  async uploadInterviewDocument(ceremonyRequestId: string, interviewId: string, file: File, metadata: Omit<CandidateInterviewEvidence, 'documentVersionId'>): Promise<InterviewDocumentResponse> {
+    const extension = file.name.toLowerCase().split('.').pop()
+    const contentType = file.type || (extension === 'pdf' ? 'application/pdf' : extension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : '')
+    if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(contentType)) throw new Error('La entrevista debe adjuntarse en Word (.docx) o PDF.')
+    if (file.size <= 0 || file.size > 52_428_800) throw new Error('El archivo debe contener informaciÃ³n y pesar como mÃ¡ximo 50 MB.')
+    if (this.useMocks) {
+      const documentVersionId = crypto.randomUUID()
+      this.mockInterviewDocuments.set(documentVersionId, { file, fileName: file.name, metadata: { ...metadata, documentVersionId } })
+      return { interviewId, documentVersionId, fileName: file.name, result: metadata.result, summary: metadata.summary, sizeBytes: file.size }
+    }
+    return this.request<InterviewDocumentResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/entrevistas/${encodeURIComponent(interviewId)}/contenido`, { method: 'PUT', headers: { 'Content-Type': contentType, 'X-File-Name': encodeURIComponent(file.name), 'X-Interviewer': encodeURIComponent(metadata.interviewerDisplayName), 'X-Interview-Summary': encodeURIComponent(metadata.summary), 'X-Interview-Result': metadata.result, 'X-Interview-Date': metadata.interviewDate }, body: file })
+  }
+  async recordInterviewPackage(ceremonyRequestId: string, payload: InterviewPackageRequest): Promise<InterviewPackageResponse> {
+    if (this.useMocks) {
+      if (payload.interviews.length < 3) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.interviews', reason: `El expediente requiere al menos tres entrevistas completas; actualmente registra ${payload.interviews.length}.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      if (payload.interviews.some(item => !item.summary.trim() || !item.documentVersionId || !['favorable', 'desfavorable'].includes(item.result))) throw new Error('Cada entrevista requiere resumen, resultado y archivo Word o PDF.')
+      if (!payload.confidentialQuestionnaireAvailable) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.confidential_questionnaire', reason: 'Falta el Cuestionario Confidencial requerido para la revisiÃ³n de tercer grado.', completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      if (!payload.autobiographyAvailable) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.autobiography', reason: 'Falta la autobiografÃ­a requerida para la revisiÃ³n de tercer grado.', completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      return { id: ceremonyRequestId, validationStatus: 'approved', code: 'third_degree_review.package_complete', reason: `El expediente contiene ${payload.interviews.length} entrevistas y los antecedentes requeridos.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+    }
+    return this.postJson<InterviewPackageResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/antecedentes`, payload)
+  }
+  async recordThirdDegreeReview(ceremonyRequestId: string, payload: ThirdDegreeReviewRequest): Promise<ThirdDegreeReviewResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.presentVoters <= 0 || payload.votesInFavor < 0 || payload.votesAgainst < 0 || payload.abstentions < 0 || payload.votesInFavor + payload.votesAgainst + payload.abstentions !== payload.presentVoters) throw new Error('La suma de votos debe coincidir con la asistencia registrada.')
+      const status = payload.openVoteApproved ? 'approved' : 'rejected'
+      return { thirdDegree: { id: ceremonyRequestId, status, code: `third_degree_review.${status}`, reason: payload.openVoteApproved ? 'La votaciÃ³n abierta de tercer grado fue favorable.' : 'La votaciÃ³n abierta de tercer grado no fue favorable.' }, status: payload.openVoteApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<ThirdDegreeReviewResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/revision-tercer-grado`, payload)
+  }
+  async recordFinalBallot(ceremonyRequestId: string, payload: FinalBallotRequest): Promise<FinalBallotResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.ballots.length < 1 || payload.ballots.length > 3 || new Set(payload.ballots.map(item => item.procedureNumber)).size !== payload.ballots.length) throw new Error('Debe registrar entre uno y tres trÃ¡mites distintos.')
+      if (payload.ballots.some(item => item.eligibleVoters <= 0 || item.whiteBallots < 0 || item.blackBallots < 0 || item.whiteBallots + item.blackBallots !== item.eligibleVoters)) throw new Error('Las balotas blancas y negras deben coincidir con las personas habilitadas.')
+      return { id: ceremonyRequestId, validationStatus: payload.ballotApproved ? 'approved' : 'rejected', asOfDate: payload.ballotDate, code: payload.ballotApproved ? 'first_degree_ballot.approved' : 'first_degree_ballot.rejected', reason: payload.ballotApproved ? 'El balotaje definitivo fue favorable.' : 'El balotaje definitivo fue desfavorable.', ceremonyStatus: payload.ballotApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<FinalBallotResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/balotaje`, payload)
+  }
+  async submitInitiationRequest(ceremonyRequestId: string, payload: InitiationRequestSubmission): Promise<InitiationRequestSubmissionResponse> {
+    if (this.useMocks) {
+      if (payload.proposedCeremonyDate < payload.submissionDate) throw new Error('La fecha propuesta no puede ser anterior a la solicitud.')
+      if (!payload.venerableApproval) throw new Error('La solicitud requiere confirmaciÃ³n del Venerable Maestro.')
+      if (!payload.secretaryDisplayName.trim() || !payload.sourceReference.trim()) throw new Error('Debe indicar SecretarÃ­a responsable y referencia documental.')
+      return { id: ceremonyRequestId, validationStatus: 'approved', proposedDate: payload.proposedCeremonyDate, ceremonyStatus: 'under_review', alreadySubmitted: false }
+    }
+    return this.postJson<InitiationRequestSubmissionResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/solicitud-iniciacion`, payload)
+  }
 
-KÏÏØİ\œ™[[Û[™
+  async getTreasuryWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
+    if (this.useMocks) return mockSnapshotAsOf(this.mockTreasury.get(organizationId), asOf)
+    const query = new URLSearchParams(); if (asOf) query.set('asOf', asOf)
+    return this.optionalGet<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad${query.size ? `?${query}` : ''}`)
+  }
+  async setTreasuryWorkshopRegularity(organizationId: string, payload: WorkshopRegularityRequest): Promise<WorkshopRegularitySnapshot> {
+    if (this.useMocks) { const snapshot = mockRegularitySnapshot(organizationId, payload, 'treasury'); this.mockTreasury.set(organizationId, snapshot); return snapshot }
+    return this.postJson<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad`, payload)
+  }
+  async listTreasuryStatements(organizationId: string, year?: number, month?: number): Promise<TreasuryStatementListResponse> {
+    if (this.useMocks) {
+      const items = [...this.mockTreasuryStatements.values()]
+        .filter(item => item.organizationId === organizationId && (year == null || item.periodYear === year) && (month == null || item.periodMonth === month))
+        .sort((a,b) => b.periodYear - a.periodYear || b.periodMonth - a.periodMonth)
+        .map(item => ({ id:item.id, organizationId:item.organizationId, periodYear:item.periodYear, periodMonth:item.periodMonth, cutoffDate:item.cutoffDate, status:item.status, sourceReference:item.sourceReference, submittedAtUtc:item.submittedAtUtc, reconciledAtUtc:item.reconciledAtUtc, closedAtUtc:item.closedAtUtc }))
+      return { total:items.length, items }
+    }
+    const query = new URLSearchParams()
+    if (year != null) query.set('year', String(year))
+    if (month != null) query.set('month', String(month))
+    return this.request<TreasuryStatementListResponse>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/cuadros${query.size ? `?${query}` : ''}`)
+  }
 
-K][\ÊBˆBˆÛÛœİ]Y\O[™]ÈT“ÙX\˜Ú\˜[\Ê
-NÈYŠœ›ÛJ\]Y\KœÙ]
-	Ùœ›ÛIËœ›ÛJNÈYŠÊ\]Y\KœÙ]
-	İÉËÊBˆ™]\›ˆ\Ëœ™\]Y\İÙÙRÜÜ][\šXTİ[[X\OŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™\İ[Y[‰Ü]Y\KœÚ^™OØÉÜ]Y\_X‰ÉßX
-BˆB‚ˆ\Ş[˜ÈÜ™X]SÙÙRÜÜ][\šXS[İ™[Y[
-Ü™Ø[š^˜][Û’Yœİš[™Ë^[ØYÜ™X]SÙÙRÜÜ][\šXS[İ™[Y[™\]Y\İ
-N”›ÛZ\ÙOÙÙRÜÜ][\šXS[İ™[Y[ÂˆYŠ\Ë\ÙS[ØÚÜÊ^ÂˆYŠ^[ØY˜[[İ[L
-]›İÈ™]È\œ›ÜŠ	Ñ[[ÛÈX™HÙ\ˆX^[Üˆ]YHÙ\›Ë‰ÊBˆYŠ^[ØY›[İ™[Y[\OOOIÙ^[œÙIÉ‰ˆ\^[ØY™]šY[˜ÙT™Y™\™[˜ÙOËš[J
-J]›İÈ™]È\œ›ÜŠ	ÕÙÈYÜ™\ÛÈHÜÜ][\šXHX™HÛÛœÙ\˜\ˆ[˜H™Y™\™[˜ÚXHH™\Ü[Ë‰ÊBˆÛÛœİ][N“ÙÙRÜÜ][\šXS[İ™[Y[^ÚY˜Ü\Ëœ˜[™ÛUURQ
+  async createTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = mockTreasuryStatement(organizationId, payload)
+      this.mockTreasuryStatements.set(statement.id, statement)
+      return cloneTreasuryStatement(statement)
+    }
+    return this.postJson<TreasuryStatement>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/cuadros`, payload)
+  }
+  async generateTreasuryStatementLines(statementId: string, payload: GenerateTreasuryLinesRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      const amounts = [payload.masterAmount, payload.masterAmount, payload.masterAmount, payload.fellowcraftAmount, payload.fellowcraftAmount, payload.apprenticeAmount, payload.apprenticeAmount]
+      const degrees = ['master', 'master', 'master', 'fellowcraft', 'fellowcraft', 'apprentice', 'apprentice']
+      const names = ['Venerable Maestra', 'Primer Vigilante', 'Segundo Vigilante', 'CompaÃ±ero Uno', 'CompaÃ±era Dos', 'Aprendiz Uno', 'Aprendiza Dos']
+      const contributionTypes:LodgeFeeType[]=['normal','normal','senior','spouse','student','past_active','normal']
+      statement.lines = amounts.map((amount, index) => ({ id: crypto.randomUUID(), memberId: `demo-member-${index + 1}`, membershipId: `demo-membership-${index + 1}`, degreeCodeAtCutoff: degrees[index], officeCodeAtCutoff: index < 3 ? ['VM', 'PV', 'SV'][index] : null, baseAmount: amount, adjustmentAmount: index === 2 ? -8000 : 0, payableAmount: index === 2 ? amount - 8000 : amount, adjustmentType: contributionTypes[index], contributionType:contributionTypes[index], authorizationReference: index === 2 ? 'Plancha DEMO-023/2026' : null, observation: names[index], identityMatchStatus: 'matched' }))
+      recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
+    }
+    return this.postJson<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/generar-lineas`, payload)
+  }
+  async addTreasuryStatementPayment(statementId: string, payload: AddTreasuryPaymentRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      if (statement.status !== 'draft') throw new Error('Los pagos sÃ³lo pueden registrarse mientras el Cuadro estÃ¡ en borrador.')
+      if (payload.amount <= 0 || !payload.payerDisplayName?.trim() || !payload.reference?.trim()) throw new Error('Pagador y referencia/comprobante son obligatorios para registrar el pago.')
+      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName.trim(), reference: payload.reference.trim(), recordedAtUtc: new Date().toISOString() })
+      recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
+    }
+    await this.postJson<unknown>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/pagos`, payload)
+    return this.getTreasuryStatement(statementId)
+  }
+  async submitTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      if (statement.lines.length === 0) throw new Error('El cuadro debe contener lÃ­neas antes de enviarse.')
+      if (statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0) throw new Error('El cuadro no puede enviarse mientras exista diferencia o identidades sin conciliar.')
+      statement.status = 'submitted'; statement.submittedAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement)
+    }
+    return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/enviar`, { method: 'POST' })
+  }
+  async reconcileTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
+    if (this.useMocks) { const statement = this.requireMockTreasuryStatement(statementId); if (statement.differenceAmount !== 0) throw new Error('El cuadro mantiene una diferencia pendiente.'); statement.status = 'reconciled'; statement.reconciledAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
+    return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/conciliar`, { method: 'POST' })
+  }
+  async getTreasuryStatement(statementId: string, includeMemberDetail = false): Promise<TreasuryStatement> { if (this.useMocks) { const item=cloneTreasuryStatement(this.requireMockTreasuryStatement(statementId)); if(!includeMemberDetail)item.lines=item.lines.map(x=>({...x,memberId:null,membershipId:null,degreeCodeAtCutoff:'',officeCodeAtCutoff:null,observation:null,authorizationReference:null,adjustmentType:null})); return item } return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}?includeMemberDetail=${includeMemberDetail}`) }
+  async getLodgeHospitalariaSummary(organizationId:string, from?:string, to?:string):Promise<LodgeHospitalariaSummary>{
+    if(this.useMocks){
+      const items=this.ensureMockHospitalariaMovements(organizationId).filter(item=>(!from||item.movementDate>=from)&&(!to||item.movementDate<=to))
+      return summarizeMockHospitalaria(organizationId,from??currentMonthStart(),to??currentMonthEnd(),items)
+    }
+    const query=new URLSearchParams(); if(from)query.set('from',from); if(to)query.set('to',to)
+    return this.request<LodgeHospitalariaSummary>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/resumen${query.size?`?${query}`:''}`)
+  }
 
-KÜ™Ø[š^˜][Û’Y‹‹œ^[ØYY[X™\”™Y™\™[˜ÙNœ^[ØY›Y[X™\”™Y™\™[˜ÙOËš[J
-_[\İ[˜][Ûœ^[ØY™\İ[˜][ÛËš[J
-_[]šY[˜ÙT™Y™\™[˜ÙNœ^[ØY™]šY[˜ÙT™Y™\™[˜ÙOËš[J
-_[ØœÙ\˜][Ûœ^[ØY›ØœÙ\˜][ÛËš[J
-_[\›İ˜[İ]\Îœ^[ØY›[İ™[Y[\OOOIÙ^[œÙIÏÉÜ[™[™×Ø\›İ˜[	Î‰Û›İÜ™\]Z\™Y	Ë\›İ˜[Ûİ\˜ÙN›[Ûİ[˜Ú[XÚ\Ú[Û’Y›[\›İ™YTİXš™Xİ›[\›İ™Y]]Î›[™XÛÜ™Y]]Î›™]È]J
-KÒTÓÔİš[™Ê
-_Bˆ\Ë™[œİ\™S[ØÚÒÜÜ][\šXS[İ™[Y[ÊÜ™Ø[š^˜][Û’Y
-Kœ\Ú
-][JNÈ™]\›ˆË‹‹š][_BˆBˆ™]\›ˆ\ËœÜİœÛÛÙÙRÜÜ][\šXS[İ™[Y[ŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÛ[İš[ZY[ÜØ^[ØY
-BˆB‚ˆ\Ş[˜È\›İ™SÙÙRÜÜ][\šXQ^[œÙJ[İ™[Y[Yœİš[™ÊN”›ÛZ\ÙOÙÙRÜÜ][\šXS[İ™[Y[ÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][O]\Ëœ™\]Z\™S[ØÚÒÜÜ][\šXS[İ™[Y[
-[İ™[Y[Y
-NÚYŠ][K˜\›İ˜[İ]\ÈOOIÜ[™[™×Ø\›İ˜[	Ê]›İÈ™]È\œ›ÜŠ	Ñ[YÜ™\ÛÈ›È\İ0èH[™Y[K‰ÊNÚ][K˜\›İ˜[İ]\ÏIØ\›İ™Y	ÎÚ][K˜\›İ˜[Ûİ\˜ÙOIİ™[™\˜X›WÛX\İ\‰ÎÚ][K˜\›İ™YTİXš™XİIİ™[™\˜X›KY[[ÉÎÚ][K˜\›İ™Y]]Ï[™]È]J
-KÒTÓÔİš[™Ê
-NÜ™]\›ˆË‹‹š][__Bˆ™]\›ˆ\Ëœ™\]Y\İÙÙRÜÜ][\šXS[İ™[Y[ŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKÛ[İš[ZY[ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-[İ™[Y[Y
-_KØ\›Ø˜\˜ÛY]Ù‰ÔÔÕ	ßJBˆB‚ˆ\Ş[˜È\›İ™SÙÙRÜÜ][\šXQ^[œÙPPÛİ[˜Ú[
-[İ™[Y[Yœİš[™ËÛİ[˜Ú[XÚ\Ú[Û’Yœİš[™ÊN”›ÛZ\ÙOÙÙRÜÜ][\šXS[İ™[Y[ÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][O]\Ëœ™\]Z\™S[ØÚÒÜÜ][\šXS[İ™[Y[
-[İ™[Y[Y
-NØÛÛœİXÚ\Ú[Û[[ØÚÒÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[ÛœÊ][K›Ü™Ø[š^˜][Û’Y
-K™š[™
-OšYOOXÛİ[˜Ú[XÚ\Ú[Û’Y
-NÚYŠYXÚ\Ú[ÛŸXÚ\Ú[Û‹˜[[İ[OOZ][K˜[[İ[][K˜Ø]YÛÜHOOIØÚ\š]WØZY	Ê]›İÈ™]È\œ›ÜŠ	Ñ[XİY\™È[ÛÛœÙZ›È›ÈÛÜœ™\ÜÛ™H[ÛØÛÜœ›Ë‰ÊNÚ][K˜\›İ˜[İ]\ÏIØ\›İ™Y	ÎÚ][K˜\›İ˜[Ûİ\˜ÙOIÛÙÙWØÛİ[˜Ú[	ÎÚ][K˜Ûİ[˜Ú[XÚ\Ú[Û’YYXÚ\Ú[Û‹šYÚ][K˜\›İ™YTİXš™XİXÛİ[˜Ú[‰ÙXÚ\Ú[Û‹šYXÚ][K˜\›İ™Y]]Ï[™]È]J
-KÒTÓÔİš[™Ê
-NÜ™]\›ˆË‹‹š][__Bˆ™]\›ˆ\ËœÜİœÛÛÙÙRÜÜ][\šXS[İ™[Y[ŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKÛ[İš[ZY[ÜËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-[İ™[Y[Y
-_KØ\›Ø˜\‹XÛÛœÙZ›ØØÛİ[˜Ú[XÚ\Ú[Û’YJBˆB‚ˆ\Ş[˜ÈÙ]ÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[ÛœÊÜ™Ø[š^˜][Û’Yœİš[™ÊN”›ÛZ\ÙOİİ[›[X™\Ú][\Î’ÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[Û–×_OÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][\Ï[[ØÚÒÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[ÛœÊÜ™Ø[š^˜][Û’Y
-NÜ™]\›İİ[š][\Ë›[™İ][\ß_Bˆ™]\›ˆ\Ëœ™\]Y\İİİ[›[X™\Ú][\Î’ÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[Û–×_OŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KØXİY\™ÜË\ÛØÛÜœ›Ø
-BˆB‚ˆ\Ş[˜ÈÙ]ÜÜ][\šXPÛİ[˜Ú[š[˜[˜ÚX[™]šY]ÜÊÜ™Ø[š^˜][Û’Yœİš[™ÊN”›ÛZ\ÙOİİ[›[X™\Ú][\Î’ÜÜ][\šXPÛİ[˜Ú[š[˜[˜ÚX[™]šY]Ö×_OÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][\Ï[[ØÚÒÜÜ][\šXPÛİ[˜Ú[š[˜[˜ÚX[™]šY]ÜÊÜ™Ø[š^˜][Û’Y
-NÜ™]\›İİ[š][\Ë›[™İ][\ß_Bˆ™]\›ˆ\Ëœ™\]Y\İİİ[›[X™\Ú][\Î’ÜÜ][\šXPÛİ[˜Ú[š[˜[˜ÚX[™]šY]Ö×_OŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™]š\Ú[Û™\ËXÛÛœÙZ›Ø
-BˆB‚ˆ\Ş[˜È\Ù\ÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛŠÜ™Ø[š^˜][Û’Yœİš[™ËYX\›[X™\‹[Û›[X™\‹^[ØY•\Ù\ÜÜ][\šXS[ÛTİX›Z\ÜÚ[Û”™\]Y\İ
-N”›ÛZ\ÙOÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛÂˆYŠ\Ë\ÙS[ØÚÜÊ^ÂˆÛÛœİÙ^OX	ÛÜ™Ø[š^˜][Û’YN‰ŞYX\ŸKIÔİš[™Ê[Û
-KœYİ\
-‹	Ì	Ê_XØÛÛœİ^\İ[™Ï]\Ë›[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛœË™Ù]
-Ù^JBˆYŠ^\İ[™É‰–ÉÜİX›Z]Y	Ë	Ü™XÛÛ˜Ú[Y	×Kš[˜ÛY\Ê^\İ[™Ëœİ]\ÊJ]›İÈ™]È\œ›ÜŠ	ÓH™[™XÚpìÛˆ[šXYHÈÛÛ˜Ú[XYH›ÈYYH[ÙYšXØ\œÙK‰ÊBˆÛÛœİİ\X	ŞYX\ŸKIÔİš[™Ê[Û
-KœYİ\
-‹	Ì	Ê_KLXØÛÛœİ[™[[Û[™
-YX\‹[Û
-NØÛÛœİİ[[X\OX]ØZ]\Ë™Ù]ÙÙRÜÜ][\šXTİ[[X\JÜ™Ø[š^˜][Û’Yİ\[™
-BˆYŠ^[ØYœ™\[š\ÚY[ZY[[İ[Œ	‰ˆ\^[ØYœ^[Y[™Y™\™[˜ÙOËš[J
-J]›İÈ™]È\œ›ÜŠ	ÑX™H™YÚ\İ˜\ˆH™Y™\™[˜ÚXKØÛÛ\›Ø˜[HHH™\ÜÚXÚpìÛˆYØYK‰ÊBˆÛÛœİ][N’ÜÜ][\šXS[ÛTİX›Z\ÜÚ[Û^ÚY™^\İ[™ÏËšYÏØÜ\Ëœ˜[™ÛUURQ
+  async createLodgeHospitalariaMovement(organizationId:string,payload:CreateLodgeHospitalariaMovementRequest):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){
+      if(payload.amount<=0)throw new Error('El monto debe ser mayor que cero.')
+      if(payload.movementType==='expense'&&!payload.evidenceReference?.trim())throw new Error('Todo egreso de Hospitalaria debe conservar una referencia de respaldo.')
+      const item:LodgeHospitalariaMovement={id:crypto.randomUUID(),organizationId,...payload,memberReference:payload.memberReference?.trim()||null,destination:payload.destination?.trim()||null,evidenceReference:payload.evidenceReference?.trim()||null,observation:payload.observation?.trim()||null,approvalStatus:payload.movementType==='expense'?'pending_approval':'not_required',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()}
+      this.ensureMockHospitalariaMovements(organizationId).push(item); return {...item}
+    }
+    return this.postJson<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/movimientos`,payload)
+  }
 
-KÜ™Ø[š^˜][Û’Y\š[ÙYX\YX\‹\š[Ù[Û›[Ûİ]Ù™‘]N™[™[˜ÛÛYP[[İ[œİ[[X\Kš[˜ÛÛYK\›İ™Y^[œÙP[[İ[œİ[[X\K˜\›İ™Y^[œÙ\Ë\š[Ù™][[İ[œİ[[X\Kœ\š[Ù™][İ™[Y[Ûİ[œİ[[X\K›[İ™[Y[Ë[™[™Ñ^[œÙPÛİ[œİ[[X\Kœ[™[™Ñ^[œÙ\Ë™\[š\ÚY[YP[[İ[œ^[ØYœ™\[š\ÚY[YP[[İ[™\[š\ÚY[ZY[[İ[œ^[ØYœ™\[š\ÚY[ZY[[İ[Y™™\™[˜ÙP[[İ[œ^[ØYœ™\[š\ÚY[YP[[İ[\^[ØYœ™\[š\ÚY[ZY[[İ[^[Y[™Y™\™[˜ÙNœ^[ØYœ^[Y[™Y™\™[˜ÙOËš[J
-_[Ûİ[˜Ú[š[˜[˜ÚX[™]šY]ÒYœ^[ØY˜Ûİ[˜Ú[š[˜[˜ÚX[™]šY]ÒYÏÛ[İ]\Î‰Ù˜Y	ËÛİ\˜ÙT™Y™\™[˜ÙNœ^[ØYœÛİ\˜ÙT™Y™\™[˜ÙOËš[J
-_[Ü™X]Y]]Î™^\İ[™ÏË˜Ü™X]Y]]ÏÏÛ™]È]J
-KÒTÓÔİš[™Ê
-KİX›Z]Y]]Î›[™]šY]ÙY]]Î›[™]šY]Ó›İ\Î›[Bˆ\Ë›[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛœËœÙ]
-Ù^K][JNÜ™]\›ˆÛÛ™RÜÜ][\šXTİX›Z\ÜÚ[ÛŠ][JBˆBˆ™]\›ˆ\Ëœ™\]Y\İÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™[™XÚ[Û™\ËÉŞYX\ŸKÉÛ[ÛXÛY]Ù‰ÔU	ËXY\œÎÉĞÛÛ[U\IÎ‰Ø\XØ][Û‹ÚœÛÛ‰ßK›ÙN’”ÓÓ‹œİš[™ÚYJ^[ØY
-_JBˆB‚ˆ\Ş[˜ÈÙ]ÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛœÊÜ™Ø[š^˜][Û’Yœİš[™ËYX\Î›[X™\‹[ÛÎ›[X™\ŠN”›ÛZ\ÙOÜÜ][\šXTİX›Z\ÜÚ[Û“\İ™\ÜÛœÙOÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][\ÏVË‹‹\Ë›[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛœË˜[Y\Ê
-WK™š[\ŠO›Ü™Ø[š^˜][Û’YOO[Ü™Ø[š^˜][Û’Y	‰ŠYX\O[[œ\š[ÙYX\OO^YX\ŠI‰Š[ÛO[[œ\š[Ù[ÛOO[[Û
-JK›X\
-ÛÛ™RÜÜ][\šXTİX›Z\ÜÚ[ÛŠNÜ™]\›İİ[š][\Ë›[™İ][\ß_BˆÛÛœİ]Y\O[™]ÈT“ÙX\˜Ú\˜[\Ê
-NÚYŠYX\ˆO[[
-\]Y\KœÙ]
-	ŞYX\‰Ëİš[™ÊYX\ŠJNÚYŠ[ÛO[[
-\]Y\KœÙ]
-	Û[Û	Ëİš[™Ê[Û
-JBˆ™]\›ˆ\Ëœ™\]Y\İÜÜ][\šXTİX›Z\ÜÚ[Û“\İ™\ÜÛœÙOŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™[™XÚ[Û™\ÉÜ]Y\KœÚ^™OØÉÜ]Y\_X‰ÉßX
-BˆB‚ˆ\Ş[˜ÈİX›Z]ÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛŠİX›Z\ÜÚ[Û’Yœİš[™ÊN”›ÛZ\ÙOÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][O]\Ëœ™\]Z\™S[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛŠİX›Z\ÜÚ[Û’Y
-NÚYŠ][Kœ[™[™Ñ^[œÙPÛİ[OOL
-]›İÈ™]È\œ›ÜŠ	Ó›ÈYYH[šX\œÙHH™[™XÚpìÛˆZY[˜\È^\İ[ˆYÜ™\ÛÜÈ[™Y[\ÈH]]Üš^˜XÚpìÛ‹‰ÊNÚYŠZ][K˜Ûİ[˜Ú[š[˜[˜ÚX[™]šY]ÒY
-]›İÈ™]È\œ›ÜŠ	ÑX™Hš[˜İ[\ˆH™]š\ÚpìÛˆY[œİX[HÜÜ][\šXH[ÛÛœÙZ›ÈHYZ[š\İ˜XÚpìÛ‹‰ÊNÚ][Kœİ]\ÏIÜİX›Z]Y	ÎÚ][KœİX›Z]Y]]Ï[™]È]J
-KÒTÓÔİš[™Ê
-NÜ™]\›ˆÛÛ™RÜÜ][\šXTİX›Z\ÜÚ[ÛŠ][J_Bˆ™]\›ˆ\Ëœ™\]Y\İÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛŠØ\KÙÙ\İ[Û‹[ÙÚX[ÚÜÜ][\šXKÜ™[™XÚ[Û™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İX›Z\ÜÚ[Û’Y
-_KÙ[šX\˜ÛY]Ù‰ÔÔÕ	ßJBˆB‚ˆ\Ş[˜ÈÙ]Ü˜[™ÜÜ][\šXTİX›Z\ÜÚ[ÛœÊš[\œÎÛÜ™Ø[š^˜][Û’YÎœİš[™ÎŞYX\Î›[X™\Û[ÛÎ›[X™\Üİ]\ÏÎœİš[™ßO^ßJN”›ÛZ\ÙOÜÜ][\šXTİX›Z\ÜÚ[Û“\İ™\ÜÛœÙOÜ˜[™ÜÜ][\šXTİX›Z\ÜÚ[ÛÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][\ÏVË‹‹\Ë›[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛœË˜[Y\Ê
-WK™š[\ŠOœİ]\ÈOOIÙ˜Y	É‰ŠYš[\œË›Ü™Ø[š^˜][Û’Y›Ü™Ø[š^˜][Û’YOOYš[\œË›Ü™Ø[š^˜][Û’Y
-I‰Šš[\œËYX\O[[œ\š[ÙYX\OOYš[\œËYX\ŠI‰Šš[\œË›[ÛO[[œ\š[Ù[ÛOOYš[\œË›[Û
-I‰ŠYš[\œËœİ]\ßœİ]\ÏOOYš[\œËœİ]\ÊJK›X\
-OØÛÛœİÜ™Ï]\Ë›[ØÚÓÜ™Ø[š^˜][ÛœË™š[™
-ÏO›ËšYOO^›Ü™Ø[š^˜][Û’Y
-NÜ™]\›Ë‹‹˜ÛÛ™RÜÜ][\šXTİX›Z\ÜÚ[ÛŠ
-KÜ™Ø[š^˜][Û“˜[YN›Ü™ÏË›˜[YOÏÉÕ[\‰ËÜ™Ø[š^˜][Û“[X™\›Ü™ÏË›[X™\ÏÛ[_JNÜ™]\›İİ[š][\Ë›[™İ][\ß_BˆÛÛœİ]Y\O[™]ÈT“ÙX\˜Ú\˜[\Ê
-NÚYŠš[\œË›Ü™Ø[š^˜][Û’Y
-\]Y\KœÙ]
-	ÛÜ™Ø[š^˜][Û’Y	Ëš[\œË›Ü™Ø[š^˜][Û’Y
-NÚYŠš[\œËYX\ˆO[[
-\]Y\KœÙ]
-	ŞYX\‰Ëİš[™Êš[\œËYX\ŠJNÚYŠš[\œË›[ÛO[[
-\]Y\KœÙ]
-	Û[Û	Ëİš[™Êš[\œË›[Û
-JNÚYŠš[\œËœİ]\Ê\]Y\KœÙ]
-	Üİ]\ÉËš[\œËœİ]\ÊBˆ™]\›ˆ\Ëœ™\]Y\İÜÜ][\šXTİX›Z\ÜÚ[Û“\İ™\ÜÛœÙOÜ˜[™ÜÜ][\šXTİX›Z\ÜÚ[ÛŠØ\KÚÜÜ][\šXKÜ™[™XÚ[Û™\ÉÜ]Y\KœÚ^™OØÉÜ]Y\_X‰ÉßX
-BˆB‚ˆ\Ş[˜È™]šY]ÑÜ˜[™ÜÜ][\šXTİX›Z\ÜÚ[ÛŠİX›Z\ÜÚ[Û’Yœİš[™ËXÚ\Ú[Û‰ÛØœÙ\™Y	ß	Ü™XÛÛ˜Ú[Y	Ë›İ\ÏÎœİš[™ß[
-N”›ÛZ\ÙOÚYœİš[™ÎÛÜ™Ø[š^˜][Û’Yœİš[™ÎÜİ]\Îœİš[™ÎÜ™]šY]ÙY]]Îœİš[™ÎÜ™]šY]Ó›İ\Îœİš[™ß[OÂˆYŠ\Ë\ÙS[ØÚÜÊ^ØÛÛœİ][O]\Ëœ™\]Z\™S[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛŠİX›Z\ÜÚ[Û’Y
-NÚYŠ][Kœİ]\ÈOOIÜİX›Z]Y	Ê]›İÈ™]È\œ›ÜŠ	ÔğìÛÈ[˜H™[™XÚpìÛˆ[šXYHYYHÙ\ˆ™]š\ØYK‰ÊNÚYŠXÚ\Ú[ÛOOIÜ™XÛÛ˜Ú[Y	É‰š][K™Y™™\™[˜ÙP[[İ[Œ
-]›İÈ™]È\œ›ÜŠ	Ó›ÈYYHÛÛ˜Ú[X\œÙH[˜H™[™XÚpìÛˆÛÛˆ™\ÜÚXÚ[Û™\È[™Y[\Ë‰ÊNÚYŠXÚ\Ú[ÛOOIÛØœÙ\™Y	É‰ˆ[›İ\ÏËš[J
-J]›İÈ™]È\œ›ÜŠ	Õ[˜HØœÙ\˜XÚpìÛˆX™H[™XØ\ˆ[İ]›Ë‰ÊNÚ][Kœİ]\ÏYXÚ\Ú[ÛÚ][Kœ™]šY]ÙY]]Ï[™]È]J
-KÒTÓÔİš[™Ê
-NÚ][Kœ™]šY]Ó›İ\Ï[›İ\ÏËš[J
-_[ÚYŠXÚ\Ú[ÛOOIÜ™XÛÛ˜Ú[Y	Ê]\Ë›[ØÚÒÜÜ][\šXKœÙ]
-][K›Ü™Ø[š^˜][Û’YÚY˜ÜÜ][\šXKIØÜ\Ëœ˜[™ÛUURQ
+  async approveLodgeHospitalariaExpense(movementId:string):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){const item=this.requireMockHospitalariaMovement(movementId);if(item.approvalStatus!=='pending_approval')throw new Error('El egreso no estÃ¡ pendiente.');item.approvalStatus='approved';item.approvalSource='venerable_master';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return {...item}}
+    return this.request<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/movimientos/${encodeURIComponent(movementId)}/aprobar`,{method:'POST'})
+  }
 
-_XÜ™Ø[š^˜][Û’Yš][K›Ü™Ø[š^˜][Û’Yİ]\Î‰İ\İ×Ù]IË\ÓÙ‘]Nš][K˜İ]Ù™‘]KÛİ\˜ÙT™Y™\™[˜ÙN˜ÜÜ][\šXK\™[™XÚ[Û‰Ú][KšYX›İ\Î‰Ô™Yİ[\šYY\š]˜YHH™[™XÚpìÛˆÛÛ˜Ú[XYK‰Ë™XÛÜ™Y]]Î›™]È]J
-KÒTÓÔİš[™Ê
-_JNÜ™]\›ÚYš][KšYÜ™Ø[š^˜][Û’Yš][K›Ü™Ø[š^˜][Û’Yİ]\Îš][Kœİ]\Ë™]šY]ÙY]]Îš][Kœ™]šY]ÙY]]Ë™]šY]Ó›İ\Îš][Kœ™]šY]Ó›İ\ß_Bˆ™]\›ˆ\ËœÜİœÛÛŠØ\KÚÜÜ][\šXKÜ™[™XÚ[Û™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-İX›Z\ÜÚ[Û’Y
-_KÜ™]š\Ú[Û˜ÙXÚ\Ú[Û‹›İ\Î››İ\ÏÏÛ[JBˆB‚ˆ\Ş[˜ÈÙ]ÜÜ][\šXUÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë\ÓÙÎˆİš[™ÊNˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆ[ØÚÔÛ˜\Úİ\ÓÙŠ\Ë›[ØÚÒÜÜ][\šXK™Ù]
-Ü™Ø[š^˜][Û’Y
-K\ÓÙŠBˆÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\Ê
-NÈYˆ
-\ÓÙŠH]Y\KœÙ]
-	Ø\ÓÙ‰Ë\ÓÙŠBˆ™]\›ˆ\Ë›Ü[Û˜[Ù]ÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\KÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™Yİ[\šYY	Ü]Y\KœÚ^™HÈÉÜ]Y\_Xˆ	ÉßX
-BˆBˆ\Ş[˜ÈÙ]ÜÜ][\šXUÛÜšÜÚÜ™Yİ[\š]JÜ™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÛÜšÜÚÜ™Yİ[\š]T™\]Y\İ
-Nˆ›ÛZ\ÙOÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİÛ˜\ÚİH[ØÚÔ™Yİ[\š]TÛ˜\Úİ
-Ü™Ø[š^˜][Û’Y^[ØY	ÚÜÜ][\šXIÊNÈ\Ë›[ØÚÒÜÜ][\šXKœÙ]
-Ü™Ø[š^˜][Û’YÛ˜\Úİ
-NÈ™]\›ˆÛ˜\ÚİBˆ™]\›ˆ\ËœÜİœÛÛÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİŠØ\KÚÜÜ][\šXKİ[\™\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ü™Ø[š^˜][Û’Y
-_KÜ™Yİ[\šYY^[ØY
-BˆB‚ˆ\Ş[˜ÈÙ]ÙXÜ™]\šX]]˜Z[Xš[]Jœ›ÛU]Îˆİš[™ËÕ]Îˆİš[™ÊNˆ›ÛZ\ÙOÜXÙP]˜Z[Xš[]T™\ÜÛœÙOˆÈYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİ][\ÈH\Ë›[ØÚÔÜXÙ\Ë›X\
-ÜXÙHOˆ
-È‹‹œÜXÙK\Ğ]˜Z[X›Nˆ]\Ë›[ØÚĞ\ŞTÜXÙ\Ëš\ÊÜXÙKšY
-HJJNÈ™]\›ˆÈœ›ÛU]ËÕ]Ëİ[ˆ][\Ë›[™İ]˜Z[X›Nˆ][\Ë™š[\ŠOˆš\Ğ]˜Z[X›JK›[™İ][\ÈHHÛÛœİ]Y\HH™]ÈT“ÙX\˜Ú\˜[\ÊÈœ›ÛU]ËÕ]ÈJNÈ™]\›ˆ\Ëœ™\]Y\İÜXÙP]˜Z[Xš[]T™\ÜÛœÙOŠØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙ\ÜXÚ[ÜËÙ\ÜÛšXš[YYÉÜ]Y\_X
-HBˆ\Ş[˜ÈÙ]ÙXÜ™]\šX]Øİ[Y[Ê
-Nˆ›ÛZ\ÙOÙXÜ™]\šX]Øİ[Y[Ô™\ÜÛœÙOˆÈYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚÑØİ[Y[Ë›[™İ][\ÎˆË‹‹\Ë›[ØÚÑØİ[Y[×HNÈ™]\›ˆ\Ëœ™\]Y\İÙXÜ™]\šX]Øİ[Y[Ô™\ÜÛœÙOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙØİ[Y[ÜÉÊHBˆ\Ş[˜ÈÙ]İX›Z]Y[šY\Ê
-Nˆ›ÛZ\ÙOÜ˜[™ÙXÜ™]\šX][šY\Ô™\ÜÛœÙOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚÔİX›Z]Y[šY\Ë›[™İ][\Îˆ\Ë›[ØÚÔİX›Z]Y[šY\Ë›X\
-][HOˆ
-È‹‹š][KÙÙNˆÈ‹‹š][K›ÙÙHHJJHBˆ™]\›ˆ\Ëœ™\]Y\İÜ˜[™ÙXÜ™]\šX][šY\Ô™\ÜÛœÙOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKİ[šY\ÉÊBˆBˆ\Ş[˜È™]šY]ÔİX›Z]Y[šYJ™XÛÜ™Yˆİš[™ËXÚ\Ú[Ûˆ	Ü™XÙZ]™Y	È	ÛØœÙ\™Y	Ë›İ\ÏÎˆİš[™È[
-Nˆ›ÛZ\ÙOÈYœİš[™ÎÈİ]\Îœİš[™ÈOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİ][O]\Ë›[ØÚÔİX›Z]Y[šY\Ë™š[™
-˜[YOO˜[YKœ™XÛÜ™YOO\™XÛÜ™Y
-NÈYŠZ][JH›İÈ™]È\œ›ÜŠ	ÓH[šYH™[Z]YH›È^\İK‰ÊBˆ][KœİX›Z\ÜÚ[Û”İ]\ÏYXÚ\Ú[ÛÈ][Kœ™]šY]ÙY]]Ï[™]È]J
-KÒTÓÔİš[™Ê
-NÈ][Kœ™]šY]Ó›İ\Ï[›İ\ÏËš[J
-_[ˆ™]\›ˆÈYˆ™XÛÜ™Yİ]\Îˆ][KœİX›Z\ÜÚ[Û”İ]\ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛÈYœİš[™ÎÈİ]\Îœİš[™ÈOŠØ\KÙÜ˜[‹\ÙXÜ™]\šXKİ[šY\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-™XÛÜ™Y
-_KÜ™]š\Ú[Û˜ÈXÚ\Ú[Û‹›İ\Îˆ›İ\ÈÏÈ[JBˆBˆ\Ş[˜ÈİÛ›ØYİX›Z]Y[šYQ^˜Xİ
-™XÛÜ™Yˆİš[™ÊNˆ›ÛZ\ÙO›ØˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆ™]È›ØŠÉÑ^˜XİÈˆ[[Üİ˜]]›É×KÈ\Nˆ	Ø\XØ][Û‹Ü‰ÈJBˆÛÛœİXY\œÏ[™]ÈXY\œÊÈXØÙ\‰Ø\XØ][Û‹Ü‰ÈJNÈÛÛœİÚÙ[X]ØZ]\Ë™Ù]XØÙ\ÜÕÚÙ[ËŠ
-NÈYŠ]ÚÙ[ŠH›İÈ™]È\œ›ÜŠ	ÑX™H[™Ü™\Ø\ˆ\˜H\ØØ\™Ø\ˆ[^˜XİË‰ÊNÈXY\œËœÙ]
-	Ğ]]Üš^˜][Û‰Ë™X\™\ˆ	İÚÙ[ŸX
-BˆÛÛœİ™\ÜÛœÙOX]ØZ]™]Ú
-	İ\Ë˜˜\ÙU\›KØ\KÙÜ˜[‹\ÙXÜ™]\šXKİ[šY\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-™XÛÜ™Y
-_KÙ^˜XİØÈÜ™Y[X[Î‰ÛÛZ]	Ë™Y\™Xİ‰Ù\œ›Ü‰ËØXÚN‰Û›Ë\İÜ™IËXY\œÈJBˆYŠ\™\ÜÛœÙK›ÚÊ^ÈYŠ™\ÜÛœÙKœİ]\ÏOOMJH]ØZ]\Ë›Û•[˜]]Üš^™YËŠ
-NÈ›İÈ™]ÈYÛP\R\œ›ÜŠ™\ÜÛœÙKœİ]\Ë™\ÜÛœÙKœİ]\ÏOOMÏÉÔİHİY[H›ÈY[™H\›Z\ÛÈ\˜H\ØØ\™Ø\ˆ\İH^˜XİË‰Î˜HTH™\ÜÛ™pìÈ	Ü™\ÜÛœÙKœİ]\ßH	Ü™\ÜÛœÙKœİ]\Õ^K˜
-HBˆ™]\›ˆ™\ÜÛœÙK˜›ØŠ
-BˆBˆ\Ş[˜ÈÙ]ÙXÜ™]\šX]Ù\™[[ÛT]Y]YJ
-Nˆ›ÛZ\ÙOÜ˜[™ÙXÜ™]\šX]Ù\™[[ÛT]Y]YT™\ÜÛœÙOˆÈYˆ
-\Ë\ÙS[ØÚÜÊH™]\›ˆÈİ[ˆ\Ë›[ØÚĞÙ\™[[ÛšY\Ë›[™İ][\Îˆ\Ë›[ØÚĞÙ\™[[ÛšY\Ë›X\
-][HOˆ
-È‹‹š][HJJHNÈ™]\›ˆ\Ëœ™\]Y\İÜ˜[™ÙXÜ™]\šX]Ù\™[[ÛT]Y]YT™\ÜÛœÙOŠ	ËØ\KÚ[œİ]][Û˜[ÙÜ˜[‹\ÙXÜ™]\šXKØÙ\™[[ÛšX\ËX]]Üš^˜Y\ÉÊHBˆ\Ş[˜ÈÜ™X]TÙXÜ™]\šX]ÜXÙJ^[ØYˆÜ™X]TÜXÙT™\]Y\İ
-Nˆ›ÛZ\ÙO[œİ]][Û˜[ÜXÙOˆÈYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİÜXÙNˆ[œİ]][Û˜[ÜXÙHHÈYˆÜ\Ëœ˜[™ÛUURQ
+  async approveLodgeHospitalariaExpenseByCouncil(movementId:string,councilDecisionId:string):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){const item=this.requireMockHospitalariaMovement(movementId);const decision=mockHospitalariaCouncilAidDecisions(item.organizationId).find(x=>x.id===councilDecisionId);if(!decision||decision.amount!==item.amount||item.category!=='charity_aid')throw new Error('El acuerdo del Consejo no corresponde al socorro.');item.approvalStatus='approved';item.approvalSource='lodge_council';item.councilDecisionId=decision.id;item.approvedBySubject=`council:${decision.id}`;item.approvedAtUtc=new Date().toISOString();return {...item}}
+    return this.postJson<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/movimientos/${encodeURIComponent(movementId)}/aprobar-consejo`,{councilDecisionId})
+  }
 
-K‹‹œ^[ØYØØ][Ûˆ^[ØY›ØØ][ÛˆÏÈ[Ø\XÚ]Nˆ^[ØY˜Ø\XÚ]HÏÈ[İ]\Îˆ	ØXİ]™IÈNÈ\Ë›[ØÚÔÜXÙ\Ëœ\Ú
-ÜXÙJNÈ™]\›ˆÜXÙHH™]\›ˆ\ËœÜİœÛÛ[œİ]][Û˜[ÜXÙOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙ\ÜXÚ[ÜÉË^[ØY
-HBˆ\Ş[˜ÈÜ™X]TÙXÜ™]\šX]™\Ù\˜][ÛŠ^[ØYˆÜ™X]T™\Ù\˜][Û”™\]Y\İ
-Nˆ›ÛZ\ÙOÈYˆİš[™ÎÈİ]\Îˆİš[™ÈOˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆYˆ
-\Ë›[ØÚĞ\ŞTÜXÙ\Ëš\Ê^[ØYœÜXÙRY
-JH›İÈ™]È\œ›ÜŠ	Ñ[[\ÈÈØ[HXH\İ0èH™\Ù\˜YÈ[ˆ\ÙHÜ˜\š[Ë‰ÊBˆÛÛœİÙ\™[[ÛHH^[ØY˜Ù\™[[ÛT™\]Y\İYÈ\Ë›[ØÚĞÙ\™[[ÛšY\Ë™š[™
-][HOˆ][KšYOOH^[ØY˜Ù\™[[ÛT™\]Y\İY
-Hˆ[™Yš[™YˆYˆ
-^[ØY˜Ù\™[[ÛT™\]Y\İY	‰ˆXÙ\™[[ÛJH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH[™XØYH›È^\İH[ˆH˜[™Z˜H]]Üš^˜YK‰ÊBˆYˆ
-Ù\™[[ÛH	‰ˆÙ\™[[ÛK›Ü™Ø[š^˜][Û’YOOH^[ØY›Ü™Ø[š^˜][Û’Y
-H›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH›ÈÛÜœ™\ÜÛ™H[[\ˆ[™XØYË‰ÊBˆÛÛœİYHÜ\Ëœ˜[™ÛUURQ
+  async getHospitalariaCouncilAidDecisions(organizationId:string):Promise<{total:number;items:HospitalariaCouncilAidDecision[]}>{
+    if(this.useMocks){const items=mockHospitalariaCouncilAidDecisions(organizationId);return{total:items.length,items}}
+    return this.request<{total:number;items:HospitalariaCouncilAidDecision[]}>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/acuerdos-socorro`)
+  }
 
-NÈ\Ë›[ØÚĞ\ŞTÜXÙ\Ë˜Y
-^[ØYœÜXÙRY
-BˆYˆ
-Ù\™[[ÛJHÈÛÛœİÜXÙHH\Ë›[ØÚÔÜXÙ\Ë™š[™
-][HOˆ][KšYOOH^[ØYœÜXÙRY
-NÈÙ\™[[ÛKœÜXÙT™\Ù\˜][Û’YHYÈÙ\™[[ÛKœÜXÙS˜[YHHÜXÙOË›˜[YHÏÈ	Ñ\ÜXÚ[È[œİ]XÚ[Û˜[	ÎÈÙ\™[[ÛKœ™\Ù\˜][Û”İ\Ğ]]ÈH^[ØYœİ\Ğ]]ÎÈÙ\™[[ÛKœ™\Ù\˜][Û‘[™Ğ]]ÈH^[ØY™[™Ğ]]ÈBˆ™]\›ˆÈYİ]\Îˆ	Ü™\Ù\™Y	ÈBˆBˆ™]\›ˆ\ËœÜİœÛÛÈYˆİš[™ÎÈİ]\Îˆİš[™ÈOŠ	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÜ™\Ù\˜\ÉË^[ØY
-BˆBˆ\Ş[˜È\ÜİYTÙXÜ™]\šX]Øİ[Y[
-^[ØYˆ\ÜİYQØİ[Y[™\]Y\İ
-Nˆ›ÛZ\ÙOÙXÜ™]\šX]Øİ[Y[ˆÈYˆ
-\Ë\ÙS[ØÚÜÊHÈÛÛœİÚ[™\^[ØY™Øİ[Y[\OOOIÜ[˜ÚIÏÊ^[ØYœ[˜ÚRÚ[™ÏÉÙ›Ü›X[ØÛÛ[][šXØ][Û‰ÊN›[ÈÛÛœİØİ[Y[ˆÙXÜ™]\šX]Øİ[Y[HÈYˆÜ\Ëœ˜[™ÛUURQ
+  async getHospitalariaCouncilFinancialReviews(organizationId:string):Promise<{total:number;items:HospitalariaCouncilFinancialReview[]}>{
+    if(this.useMocks){const items=mockHospitalariaCouncilFinancialReviews(organizationId);return{total:items.length,items}}
+    return this.request<{total:number;items:HospitalariaCouncilFinancialReview[]}>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/revisiones-consejo`)
+  }
 
-KØİ[Y[\Nˆ^[ØY™Øİ[Y[\K[˜ÚRÚ[™ˆÚ[™Øİ[Y[ÛÙNˆ	Ü^[ØY™Øİ[Y[\HOOH	ÙXÜ™YIÈÈ	ÑPÉÈˆ	ÔKPÓÓIßKQSSËIÔİš[™Ê\Ë›[ØÚÑØİ[Y[Ë›[™İ
-ÈJKœYİ\
-Ë	Ì	Ê_X]Nˆ^[ØY]KÛÛ[ˆ^[ØY˜ÛÛ[Ü™Ø[š^˜][Û’Yˆ^[ØY›Ü™Ø[š^˜][Û’YÏÈ[™[]YÙ\™[[ÛT™\]Y\İYˆ[ÜXÙT™\Ù\˜][Û’Yˆ[İ]\Îˆ	Ú\ÜİYY	Ë\ÜİYY]]Îˆ™]È]J
-KÒTÓÔİš[™Ê
-K\ÜİYYTİXš™Xİˆ	Ù[[ÉÈNÈ\Ë›[ØÚÑØİ[Y[Ë[œÚY
-Øİ[Y[
-NÈ™]\›ˆØİ[Y[H™]\›ˆ\ËœÜİœÛÛÙXÜ™]\šX]Øİ[Y[Š	ËØ\KÙÜ˜[‹\ÙXÜ™]\šXKÙØİ[Y[ÜÉË^[ØY
-HBˆ\Ş[˜È\ÜİYTÙXÜ™]\šX]Ù\™[[ÛP]]Üš^˜][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™ËÜXÙT™\Ù\˜][Û’Yˆİš[™È[H[
-Nˆ›ÛZ\ÙOÙXÜ™]\šX]Øİ[Y[ˆÂˆYˆ
-\Ë\ÙS[ØÚÜÊHÂˆÛÛœİÙ\™[[ÛHH\Ë›[ØÚĞÙ\™[[ÛšY\Ë™š[™
-][HOˆ][KšYOOHÙ\™[[ÛT™\]Y\İY
-NÈYˆ
-XÙ\™[[ÛJH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH[™XØYH›È^\İK‰ÊNÈYˆ
-Ù\™[[ÛK™›Ü›X[]]Üš^˜][Û’\ÜİYY
-H›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXHXHİY[HÛÛˆ]]Üš^˜XÚpìÛˆ›Ü›X[šYÙ[K‰ÊNÈYˆ
-ÜXÙT™\Ù\˜][Û’Y	‰ˆÙ\™[[ÛKœÜXÙT™\Ù\˜][Û’YOOHÜXÙT™\Ù\˜][Û’Y
-H›İÈ™]È\œ›ÜŠ	ÓH™\Ù\˜H[™XØYH›ÈÛÜœ™\ÜÛ™HH\İHÙ\™[[ÛšXK‰ÊNÈÙ\™[[ÛK™›Ü›X[]]Üš^˜][Û’\ÜİYYHYBˆÛÛœİØİ[Y[ˆÙXÜ™]\šX]Øİ[Y[HÈYˆÜ\Ëœ˜[™ÛUURQ
+  async upsertHospitalariaMonthlySubmission(organizationId:string,year:number,month:number,payload:UpsertHospitalariaMonthlySubmissionRequest):Promise<HospitalariaMonthlySubmission>{
+    if(this.useMocks){
+      const key=`${organizationId}:${year}-${String(month).padStart(2,'0')}`;const existing=this.mockHospitalariaSubmissions.get(key)
+      if(existing&&['submitted','reconciled'].includes(existing.status))throw new Error('La rendiciÃ³n enviada o conciliada no puede modificarse.')
+      const start=`${year}-${String(month).padStart(2,'0')}-01`;const end=monthEnd(year,month);const summary=await this.getLodgeHospitalariaSummary(organizationId,start,end)
+      if(payload.replenishmentPaidAmount>0&&!payload.paymentReference?.trim())throw new Error('Debe registrar la referencia/comprobante de la reposiciÃ³n pagada.')
+      const item:HospitalariaMonthlySubmission={id:existing?.id??crypto.randomUUID(),organizationId,periodYear:year,periodMonth:month,cutoffDate:end,incomeAmount:summary.income,approvedExpenseAmount:summary.approvedExpenses,periodNetAmount:summary.periodNet,movementCount:summary.movements,pendingExpenseCount:summary.pendingExpenses,replenishmentDueAmount:payload.replenishmentDueAmount,replenishmentPaidAmount:payload.replenishmentPaidAmount,differenceAmount:payload.replenishmentDueAmount-payload.replenishmentPaidAmount,paymentReference:payload.paymentReference?.trim()||null,councilFinancialReviewId:payload.councilFinancialReviewId??null,status:'draft',sourceReference:payload.sourceReference?.trim()||null,createdAtUtc:existing?.createdAtUtc??new Date().toISOString(),submittedAtUtc:null,reviewedAtUtc:null,reviewNotes:null}
+      this.mockHospitalariaSubmissions.set(key,item);return cloneHospitalariaSubmission(item)
+    }
+    return this.request<HospitalariaMonthlySubmission>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/rendiciones/${year}/${month}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  }
 
-KØİ[Y[\Nˆ	Ü[˜ÚIË[˜ÚRÚ[™ˆ	ØÙ\™[[ÛWØ]]Üš^˜][Û‰ËØİ[Y[ÛÙNˆKPUUPÑT‹QSSËIÔİš[™Ê\Ë›[ØÚÑØİ[Y[Ë›[™İ
-ÈJKœYİ\
-Ë	Ì	Ê_X]Nˆ[˜ÚHH]]Üš^˜XÚpìÛˆHÙ\™[[ÛšXH8 %	ØÙ\™[[ÛU\SX™[
-Ù\™[[ÛK˜Ù\™[[ÛU\J_XÛÛ[ˆ[˜ÚH›Ü›X[H]]Üš^˜XÚpìÛˆ[[Üİ˜]]˜H\˜H	ØÙ\™[[ÛK›Ü™Ø[š^˜][Û“˜[Y_Kˆ›ÈÛÛœİ]^YHXÜ™]Ë˜Ü™Ø[š^˜][Û’YˆÙ\™[[ÛK›Ü™Ø[š^˜][Û’Y™[]YÙ\™[[ÛT™\]Y\İYˆÙ\™[[ÛKšYÜXÙT™\Ù\˜][Û’Yİ]\Îˆ	Ú\ÜİYY	Ë\ÜİYY]]Îˆ™]È]J
-KÒTÓÔİš[™Ê
-K\ÜİYYTİXš™Xİˆ	Ù[[ÉÈNÈ\Ë›[ØÚÑØİ[Y[Ë[œÚY
-Øİ[Y[
-NÈ™]\›ˆØİ[Y[ˆBˆ™]\›ˆ\ËœÜİœÛÛÙXÜ™]\šX]Øİ[Y[ŠØ\KÙÜ˜[‹\ÙXÜ™]\šXKØÙ\™[[ÛšX\ËÉÙ[˜ÛÙUT’PÛÛ\Û™[
-Ù\™[[ÛT™\]Y\İY
-_KØ]]Üš^˜XÚ[Û˜ÈÜXÙT™\Ù\˜][Û’YJBˆB‚ˆš]˜]H™\]Z\™S[ØÚÔ™]šY]ĞÙ\™[[ÛJYˆİš[™ÊNˆÙ\™[[ÛT™]šY]Ô]Y]YR][HÈÛÛœİ][HH\Ë›[ØÚÔ™]šY]ĞÙ\™[[ÛšY\Ë™š[™
-˜[YHOˆ˜[YKšYOOHY
-NÈYˆ
-Z][JH›İÈ™]È\œ›ÜŠ	ÓHÙ\™[[ÛšXH[™XØYH›È^\İH[ˆH˜[™Z˜K‰ÊNÈ™]\›ˆ][HBˆš]˜]H™\]Z\™S[ØÚÕ™X\İ\Tİ][Y[
-Yˆİš[™ÊNˆ™X\İ\Tİ][Y[ÈÛÛœİ][HH\Ë›[ØÚÕ™X\İ\Tİ][Y[Ë™Ù]
-Y
-NÈYˆ
-Z][JH›İÈ™]È\œ›ÜŠ	Ñ[İXY›ÈY[œİX[[™XØYÈ›È^\İK‰ÊNÈ™]\›ˆ][HBˆš]˜]H[œİ\™S[ØÚÒÜÜ][\šXS[İ™[Y[ÊÜ™Ø[š^˜][Û’Yœİš[™ÊN“ÙÙRÜÜ][\šXS[İ™[Y[×^Âˆ]][\Ï]\Ë›[ØÚÓÙÙRÜÜ][\šXS[İ™[Y[Ë™Ù]
-Ü™Ø[š^˜][Û’Y
-BˆYŠZ][\Ê^Ú][\ÏYY˜][ÜÜ][\šXS[İ™[Y[ÊÜ™Ø[š^˜][Û’Y
-Nİ\Ë›[ØÚÓÙÙRÜÜ][\šXS[İ™[Y[ËœÙ]
-Ü™Ø[š^˜][Û’Y][\Ê_Bˆ™]\›ˆ][\ÂˆBˆš]˜]H™\]Z\™S[ØÚÒÜÜ][\šXS[İ™[Y[
-Yœİš[™ÊN“ÙÙRÜÜ][\šXS[İ™[Y[Ù›ÜŠÛÛœİ›İÜÈÙˆ\Ë›[ØÚÓÙÙRÜÜ][\šXS[İ™[Y[Ë˜[Y\Ê
-J^ØÛÛœİ][O\›İÜË™š[™
-OšYOOZY
-NÚYŠ][J\™]\›ˆ][_]›İÈ™]È\œ›ÜŠ	Ñ[[İš[ZY[ÈHÜÜ][\šXH›È^\İK‰Ê_Bˆš]˜]H™\]Z\™S[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛŠYœİš[™ÊN’ÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛØÛÛœİ][OVË‹‹\Ë›[ØÚÒÜÜ][\šXTİX›Z\ÜÚ[ÛœË˜[Y\Ê
-WK™š[™
-OšYOOZY
-NÚYŠZ][J]›İÈ™]È\œ›ÜŠ	ÓH™[™XÚpìÛˆHÜÜ][\šXH›È^\İK‰ÊNÜ™]\›ˆ][_Bˆš]˜]HÜİœÛÛŠ]ˆİš[™Ë^[ØYˆ[šÛ›İÛŠNˆ›ÛZ\ÙOˆÈ™]\›ˆ\Ëœ™\]Y\İŠ]ÈY]Ùˆ	ÔÔÕ	ËXY\œÎˆÈ	ĞÛÛ[U\IÎˆ	Ø\XØ][Û‹ÚœÛÛ‰ÈK›ÙNˆ”ÓÓ‹œİš[™ÚYJ^[ØY
-HJHBˆš]˜]H\Ş[˜ÈÜ[Û˜[Ù]Š]ˆİš[™ÊNˆ›ÛZ\ÙO[ˆÈHÈ™]\›ˆ]ØZ]\Ëœ™\]Y\İŠ]
-HHØ]Ú
-\œ›ÜŠHÈYˆ
-\œ›Üˆ[œİ[˜Ù[ÙˆYÛP\R\œ›Üˆ	‰ˆ\œ›Ü‹œİ]\ÈOOH
-H™]\›ˆ[È›İÈ\œ›ÜˆHBˆš]˜]H\Ş[˜È™\]Y\İŠ]ˆİš[™Ë[š]ˆ™\]Y\İ[š]HßJNˆ›ÛZ\ÙOˆÂˆÛÛœİXY\œÈH™]ÈXY\œÊ[š]šXY\œÊNÈXY\œËœÙ]
-	ĞXØÙ\	Ë	Ø\XØ][Û‹ÚœÛÛ‰ÊBˆÛÛœİÚÙ[ˆH]ØZ]\Ë™Ù]XØÙ\ÜÕÚÙ[ËŠ
-NÈYˆ
-]ÚÙ[ŠH›İÈ™]È\œ›ÜŠ	ÑX™H[™Ü™\Ø\ˆ\˜HÛÛœİ[\ˆH[™›Ü›XXÚpìÛˆ[œİ]XÚ[Û˜[‰ÊNÈXY\œËœÙ]
-	Ğ]]Üš^˜][Û‰Ë™X\™\ˆ	İÚÙ[ŸX
-BˆÛÛœİ™\ÜÛœÙHH]ØZ]™]Ú
-	İ\Ë˜˜\ÙU\›IÜ]XÈ‹‹š[š]Ü™Y[X[Îˆ	ÛÛZ]	Ë™Y\™Xİˆ	Ù\œ›Ü‰ËØXÚNˆ	Û›Ë\İÜ™IËXY\œÈJBˆYˆ
-\™\ÜÛœÙK›ÚÊHÂˆYˆ
-™\ÜÛœÙKœİ]\ÈOOHJH]ØZ]\Ë›Û•[˜]]Üš^™YËŠ
-Bˆ]Y\ÜØYÙHH	ÉÂˆHÈÛÛœİ›ÙHH]ØZ]™\ÜÛœÙK˜ÛÛ™J
-KšœÛÛŠ
-H\ÈÈY\ÜØYÙOÎˆİš[™ÈNÈY\ÜØYÙHH\[Ùˆ›ÙK›Y\ÜØYÙHOOH	Üİš[™ÉÈÈ›ÙK›Y\ÜØYÙHˆ	ÉÈHØ]ÚÈÊˆ™\ÜY\İHÚ[ˆ”ÓÓˆ
-‹ÈBˆYˆ
-™\ÜÛœÙKœİ]\ÈOOHÊHY\ÜØYÙHH	ÔİHİY[H›ÈY[™H\›Z\ÛÈ\˜H™X[^˜\ˆ\İHÜ\˜XÚpìÛ‹‰Âˆ›İÈ™]ÈYÛP\R\œ›ÜŠ™\ÜÛœÙKœİ]\ËY\ÜØYÙHHTH™\ÜÛ™pìÈ	Ü™\ÜÛœÙKœİ]\ßH	Ü™\ÜÛœÙKœİ]\Õ^K˜
-BˆBˆ™]\›ˆ™\ÜÛœÙKšœÛÛŠ
-H\È›ÛZ\ÙO‚ˆBŸB‚™^Ü[˜İ[ÛˆÜ™X]QY˜][YÛP\PÛY[
-Ù]XØÙ\ÜÕÚÙ[ÎˆXØÙ\ÜÕÚÙ[”›İšY\‹Û•[˜]]Üš^™YÎˆ
+  async getHospitalariaMonthlySubmissions(organizationId:string,year?:number,month?:number):Promise<HospitalariaSubmissionListResponse>{
+    if(this.useMocks){const items=[...this.mockHospitalariaSubmissions.values()].filter(x=>x.organizationId===organizationId&&(year==null||x.periodYear===year)&&(month==null||x.periodMonth===month)).map(cloneHospitalariaSubmission);return{total:items.length,items}}
+    const query=new URLSearchParams();if(year!=null)query.set('year',String(year));if(month!=null)query.set('month',String(month))
+    return this.request<HospitalariaSubmissionListResponse>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/rendiciones${query.size?`?${query}`:''}`)
+  }
 
-HOˆ›ÛZ\ÙO›ÚYŠNˆYÛP\PÛY[ÈÛÛœİ˜\ÙU\›H[\Ü›Y]K™[‹•’UWĞTWĞTÑWÕT“ÏÈ	ÉÎÈÛÛœİ\ÙS[ØÚÜÈH[\Ü›Y]K™[‹•’UWÕTÑWÓSĞÒÔÈOOH	İYIÎÈÛÛœİ\›H™]ÈT“
-˜\ÙU\›	ËÉËÚ[™İË›ØØ][Û‹›ÜšYÚ[ŠNÈYˆ
-\››ÜšYÚ[ˆOOHÚ[™İË›ØØ][Û‹›ÜšYÚ[ˆ\›\Ù\›˜[YH\›œ\ÜİÛÜ™\›œÙX\˜Ú\›š\Ú
-H›İÈ™]È\œ›ÜŠ	ÓHTHX™H\Ø\ˆ[Z\Û[ÈÜšYÙ[ˆYYX[H[›ŞH[œİ]XÚ[Û˜[‰ÊNÈ™]\›ˆ™]ÈYÛP\PÛY[
-È˜\ÙU\›\ÙS[ØÚÜËÙ]XØÙ\ÜÕÚÙ[‹Û•[˜]]Üš^™YJHB™[˜İ[ÛˆÛY\
-Z[\ÙXÛÛ™Îˆ[X™\ŠNˆ›ÛZ\ÙO›ÚYˆÈ™]\›ˆ™]È›ÛZ\ÙJ™\ÛÛ™HOˆÚ[™İËœÙ][Y[İ]
-™\ÛÛ™KZ[\ÙXÛÛ™ÊJHB™[˜İ[Ûˆ[ØÚÒ[š]X[[X™\˜][ÛŠÙ\™[[ÛT™\]Y\İYˆİš[™Ë^[ØYˆ[š]X[[X™\˜][Û”™\]Y\İ
-Nˆ[š]X[[X™\˜][Û”™\ÜÛœÙHÂˆYˆ
-\^[ØYœÛİ\˜ÙT™Y™\™[˜ÙKš[J
-JH›İÈ™]È\œ›ÜŠ	ÑX™H[™XØ\ˆH™Y™\™[˜ÚXH[XİHÈ^˜XİÈ]YH™\Ü[HH[X™\˜XÚpìÛ‹‰ÊBˆYˆ
-^[ØYœ™\Ù[›İ\œÈH
-H™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹œ][Ü[IË™X\ÛÛˆ	ÑX™H^\İ\ˆ[Y[›ÜÈ[˜H\œÛÛ˜HXš[]YH™\Ù[H\˜H™YÚ\İ˜\ˆH›İXÚpìÛ‹‰ËÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
-^[ØY›İ\Ò[‘˜]›Üˆ^[ØY›İ\Ò[‘˜]›Üˆˆ^[ØYœ™\Ù[›İ\œÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹›İ\ÉË™X\ÛÛˆ	ÓHØ[YYH›İÜÈ˜]›Ü˜X›\È›È\È°è[YK‰ËÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆÛÛœİ[\ÙY^\ÈH]SÛ›Q^S[X™\Š^[ØY™[X™\˜][Û‘]JHH]SÛ›Q^S[X™\Š	ÌŒ‹LKLL‰ÊBˆÛÛœİZ[š[][UØZ][™Ñ^\ÈH^[ØY›Z[š[][UØZ][™Ñ^\ÈÏÈÂˆYˆ
-[\ÙY^\ÈZ[š[][UØZ][™Ñ^\ÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	ÛØœÙ\™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹ØZ][™×Ü\š[Ù	Ë™X\ÛÛˆX™[ˆ˜[œØİ\œš\ˆ[Y[›ÜÈ	ÛZ[š[][UØZ][™Ñ^\ßH0ëX\È\ÙHH™\Ù[XÚpìÛÈ[ˆ˜[œØİ\œšYÈ	Ù[\ÙY^\ßK˜Ù\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBˆYˆ
-^[ØY›İ\Ò[‘˜]›ÜˆOOH^[ØYœ™\Ù[›İ\œÊH™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ü™Z™XİY	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹[˜[š[Z]IË™X\ÛÛˆ	ÓH\›Ø˜XÚpìÛˆ[šXÚX[™\]ZY\™H[˜[š[ZYYH\È\œÛÛ˜\È™\Ù[\Ë‰ËÙ\™[[ÛTİ]\Îˆ	Ü™Z™XİY	ÈBˆ™]\›ˆÈYˆÙ\™[[ÛT™\]Y\İY˜[Y][Û”İ]\Îˆ	Ø\›İ™Y	ËÛÙNˆ	Ú[š]X[Ù[X™\˜][Û‹˜\›İ™Y	Ë™X\ÛÛˆ	ÔÙHİ[\H[^›Èpë[š[[ÈHH›İXÚpìÛˆ[šXÚX[YH[°è[š[YK‰ËÙ\™[[ÛTİ]\Îˆ	İ[™\—Ü™]šY]ÉÈBŸB™[˜İ[Ûˆ]SÛ›Q^S[X™\Š˜[YNˆİš[™ÊHÈÛÛœİŞYX\‹[Û^WHH˜[YKœÜ]
-	ËIÊK›X\
-[X™\ŠNÈYˆ
-^YX\ˆ[[ÛY^JH›İÈ™]È\œ›ÜŠ	ÓH™XÚHH[X™\˜XÚpìÛˆ›È\È°è[YK‰ÊNÈ™]\›ˆX]™›ÛÜŠ]K•UÊYX\‹[ÛHK^JHÈ—ÍÌ
-HB™[˜İ[ÛˆÙ\™[[ÛU\SX™[
-\NˆÙ\™[[ÛU\JHÈ™]\›ˆ\HOOH	Ú[š]X][Û‰ÈÈ	Ò[šXÚXXÚpìÛ‰Èˆ\HOOH	İØYÙWÚ[˜Ü™X\ÙIÈÈ	Ğ][Y[ÈHØ[\š[ÉÈˆ	Ñ^[XÚpìÛ‰ÈB™[˜İ[ÛˆY˜][ÜÜ][\šXS[İ™[Y[ÊÜ™Ø[š^˜][Û’Yœİš[™ÊN“ÙÙRÜÜ][\šXS[İ™[Y[×^Âˆ™]\›ˆÂˆÚY˜ÜÜZ[˜ÛÛYKIÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y[İ™[Y[\N‰Ú[˜ÛÛYIËØ]YÛÜN‰ØÚ\š]WØ˜YÉË[[İ[ŒNL[İ™[Y[]N‰ÌŒ‹LKLIËY[X™\”™Y™\™[˜ÙN›[\İ[˜][Û›[]šY[˜ÙT™Y™\™[˜ÙN‰ÕS’QKQSSËLŒ‹LKLIËØœÙ\˜][Û‰Õ›Û˜ÛÈH™[™YšXÙ[˜ÚXH0­È]ÈšXİXÚ[ÉË\›İ˜[İ]\Î‰Û›İÜ™\]Z\™Y	Ë\›İ˜[Ûİ\˜ÙN›[Ûİ[˜Ú[XÚ\Ú[Û’Y›[\›İ™YTİXš™Xİ›[\›İ™Y]]Î›[™XÛÜ™Y]]Î‰ÌŒ‹LKLUŒÎŒŒ‰ßKˆÚY˜ÜÜXZYIÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y[İ™[Y[\N‰Ù^[œÙIËØ]YÛÜN‰ØÚ\š]WØZY	Ë[[İ[L[İ™[Y[]N‰ÌŒ‹LKLL	ËY[X™\”™Y™\™[˜ÙN‰Ô™Y™\™[˜ÚXH™\Ù\˜YHSSËLIË\İ[˜][Û‰ÔÛØÛÜœ›È™\Ù\˜YÈ0­È[[ÉË]šY[˜ÙT™Y™\™[˜ÙN‰ĞVUQKQSSËLIËØœÙ\˜][Û‰Ğ[XÙY[HÙ[œÚX›HšXİXÚ[ÎÈğìÛÈ[\‹‰Ë\›İ˜[İ]\Î‰Ü[™[™×Ø\›İ˜[	Ë\›İ˜[Ûİ\˜ÙN›[Ûİ[˜Ú[XÚ\Ú[Û’Y›[\›İ™YTİXš™Xİ›[\›İ™Y]]Î›[™XÛÜ™Y]]Î‰ÌŒ‹LKLLNŒŒ‰ßBˆBŸB™[˜İ[Ûˆ[ØÚÒÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[ÛœÊÜ™Ø[š^˜][Û’Yœİš[™ÊN’ÜÜ][\šXPÛİ[˜Ú[ZYXÚ\Ú[Û–×^Ü™]\›–ŞÚY˜Ûİ[˜Ú[XZYIÛÜ™Ø[š^˜][Û’YXÙ\ÜÚ[Û’Y˜Ûİ[˜Ú[\Ù\ÜÚ[Û‹IÛÜ™Ø[š^˜][Û’YXÙ\ÜÚ[Û‘]N‰ÌŒ‹LKLLIËİXš™Xİ‰ÔÛØÛÜœ›È™\Ù\˜YÈ0­È™Y™\™[˜ÚXH[[ÉË[[İ[LW_B™[˜İ[Ûˆ[ØÚÒÜÜ][\šXPÛİ[˜Ú[š[˜[˜ÚX[™]šY]ÜÊÜ™Ø[š^˜][Û’Yœİš[™ÊN’ÜÜ][\šXPÛİ[˜Ú[š[˜[˜ÚX[™]šY]Ö×^Ü™]\›–ŞÚY˜Ûİ[˜Ú[\™]šY]ËIÛÜ™Ø[š^˜][Û’YXÙ\ÜÚ[Û’Y˜Ûİ[˜Ú[\Ù\ÜÚ[Û‹\™]šY]ËIÛÜ™Ø[š^˜][Û’YXÙ\ÜÚ[Û‘]N‰ÌŒ‹LKLMIË\š[ÙX™[‰ÌŒ‹LIËÛÛ˜Û\Ú[Û‰Ñ\İYÈY[œİX[HÜÜ][\šXH™]š\ØYÈÜˆÛÛœÙZ›È0­È[[ÉßW_B™[˜İ[Ûˆİ[[X\š^™S[ØÚÒÜÜ][\šXJÜ™Ø[š^˜][Û’Yœİš[™Ëœ›ÛNœİš[™ËÎœİš[™Ë][\Î“ÙÙRÜÜ][\šXS[İ™[Y[×JN“ÙÙRÜÜ][\šXTİ[[X\^ØÛÛœİ[˜ÛÛYOZ][\Ë™š[\ŠO›[İ™[Y[\OOOIÚ[˜ÛÛYIÊKœ™YXÙJ
-K
-OO˜JŞ˜[[İ[
-NØÛÛœİ\›İ™Y^[œÙ\ÏZ][\Ë™š[\ŠO›[İ™[Y[\OOOIÙ^[œÙIÉ‰˜\›İ˜[İ]\ÏOOIØ\›İ™Y	ÊKœ™YXÙJ
-K
-OO˜JŞ˜[[İ[
-NØÛÛœİ[™[™Ñ^[œÙ\ÏZ][\Ë™š[\ŠO›[İ™[Y[\OOOIÙ^[œÙIÉ‰˜\›İ˜[İ]\ÏOOIÜ[™[™×Ø\›İ˜[	ÊK›[™İØÛÛœİØ]YÛÜšY\ÏVË‹‹›™]ÈÙ]
-][\Ë›X\
-O˜Ø]YÛÜJJWK›X\
-Ø]YÛÜOOŠØØ]YÛÜKİ[š][\Ë™š[\ŠO˜Ø]YÛÜOOOXØ]YÛÜJKœ™YXÙJ
-K
-OO˜JŞ˜[[İ[
-KÛİ[š][\Ë™š[\ŠO˜Ø]YÛÜOOOXØ]YÛÜJK›[™İJJNÜ™]\›ÛÜ™Ø[š^˜][Û’Yœ›ÛKË[˜ÛÛYK\›İ™Y^[œÙ\Ë\š[Ù™]š[˜ÛÛYKX\›İ™Y^[œÙ\Ë[™[™Ñ^[œÙ\Ë[İ™[Y[Îš][\Ë›[™İØ]YÛÜšY\Ë][\Îš][\Ë›X\
-OŠË‹‹JJ__B™[˜İ[Ûˆİ\œ™[[Ûİ\
+  async submitHospitalariaMonthlySubmission(submissionId:string):Promise<HospitalariaMonthlySubmission>{
+    if(this.useMocks){const item=this.requireMockHospitalariaSubmission(submissionId);if(item.pendingExpenseCount!==0)throw new Error('No puede enviarse la rendiciÃ³n mientras existan egresos pendientes de autorizaciÃ³n.');if(!item.councilFinancialReviewId)throw new Error('Debe vincular la revisiÃ³n mensual de Hospitalaria del Consejo de AdministraciÃ³n.');item.status='submitted';item.submittedAtUtc=new Date().toISOString();return cloneHospitalariaSubmission(item)}
+    return this.request<HospitalariaMonthlySubmission>(`/api/gestion-logial/hospitalaria/rendiciones/${encodeURIComponent(submissionId)}/enviar`,{method:'POST'})
+  }
 
-^ØÛÛœİ[™]È]J
-NÜ™]\›ˆ™]È[‘]U[YQ›Ü›X]
-	Ù[‹PĞIËİ[YV›Û™N‰Ğ[Y\šXØKÔØ[XYÛÉËYX\‰Û[Y\šXÉË[Û‰Ì‹YYÚ]	ßJK™›Ü›X]
-
-JÉËLIßB™[˜İ[Ûˆİ\œ™[[Û[™
+  async getGrandHospitalariaSubmissions(filters:{organizationId?:string;year?:number;month?:number;status?:string}={}):Promise<HospitalariaSubmissionListResponse<GrandHospitalariaSubmission>>{
+    if(this.useMocks){const items=[...this.mockHospitalariaSubmissions.values()].filter(x=>x.status!=='draft'&&(!filters.organizationId||x.organizationId===filters.organizationId)&&(filters.year==null||x.periodYear===filters.year)&&(filters.month==null||x.periodMonth===filters.month)&&(!filters.status||x.status===filters.status)).map(x=>{const org=this.mockOrganizations.find(o=>o.id===x.organizationId);return{...cloneHospitalariaSubmission(x),organizationName:org?.name??'Taller',organizationNumber:org?.number??null}});return{total:items.length,items}}
+    const query=new URLSearchParams();if(filters.organizationId)query.set('organizationId',filters.organizationId);if(filters.year!=null)query.set('year',String(filters.year));if(filters.month!=null)query.set('month',String(filters.month));if(filters.status)query.set('status',filters.status)
+    return this.request<HospitalariaSubmissionListResponse<GrandHospitalariaSubmission>>(`/api/hospitalaria/rendiciones${query.size?`?${query}`:''}`)
+  }
 
-^ØÛÛœİXİ\œ™[[Ûİ\
+  async reviewGrandHospitalariaSubmission(submissionId:string,decision:'observed'|'reconciled',notes?:string|null):Promise<{id:string;organizationId:string;status:string;reviewedAtUtc:string;reviewNotes:string|null}>{
+    if(this.useMocks){const item=this.requireMockHospitalariaSubmission(submissionId);if(item.status!=='submitted')throw new Error('SÃ³lo una rendiciÃ³n enviada puede ser revisada.');if(decision==='reconciled'&&item.differenceAmount>0)throw new Error('No puede conciliarse una rendiciÃ³n con reposiciones pendientes.');if(decision==='observed'&&!notes?.trim())throw new Error('Una observaciÃ³n debe indicar motivo.');item.status=decision;item.reviewedAtUtc=new Date().toISOString();item.reviewNotes=notes?.trim()||null;if(decision==='reconciled')this.mockHospitalaria.set(item.organizationId,{id:`hospitalaria-${crypto.randomUUID()}`,organizationId:item.organizationId,status:'up_to_date',asOfDate:item.cutoffDate,sourceReference:`hospitalaria-rendicion:${item.id}`,notes:'Regularidad derivada de rendiciÃ³n conciliada.',recordedAtUtc:new Date().toISOString()});return{id:item.id,organizationId:item.organizationId,status:item.status,reviewedAtUtc:item.reviewedAtUtc,reviewNotes:item.reviewNotes}}
+    return this.postJson(`/api/hospitalaria/rendiciones/${encodeURIComponent(submissionId)}/revision`,{decision,notes:notes??null})
+  }
 
-KœÛXÙJÊKœÜ]
-	ËIÊK›X\
-[X™\ŠNÜ™]\›ˆ[Û[™
-ÌKÌWJ_B™[˜İ[Ûˆ[Û[™
-YX\›[X™\‹[Û›[X™\Š^Ü™]\›ˆ	ŞYX\ŸKIÔİš[™Ê[Û
-KœYİ\
-‹	Ì	Ê_KIÔİš[™Ê™]È]J]K•UÊYX\‹[Û
-JK™Ù]UÑ]J
-JKœYİ\
-‹	Ì	Ê_XB™[˜İ[ÛˆÛÛ™RÜÜ][\šXTİX›Z\ÜÚ[ÛŠ][N’ÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛŠN’ÜÜ][\šXS[ÛTİX›Z\ÜÚ[ÛÜ™]\›Ë‹‹š][__B™[˜İ[Ûˆ[ØÚÔÛ˜\Úİ\ÓÙŠÛ˜\ÚİˆÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[™Yš[™Y\ÓÙÎˆİš[™ÊNˆÛÜšÜÚÜ™Yİ[\š]TÛ˜\Úİ[ÈYˆ
-\Û˜\Úİ
-H™]\›ˆ[ÈYˆ
-\ÓÙˆ	‰ˆÛ˜\Úİ˜\ÓÙ‘]Hˆ\ÓÙŠH™]\›ˆ[È™]\›ˆÈ‹‹œÛ˜\ÚİHB™[˜İ[ÛˆY˜][ÙÙQ™YT[œÊÜ™Ø[š^˜][Û’Yˆİš[™ÊNˆÙÙQ™YT[–×HÈ™]\›ˆÂˆÈYˆ™YK[›Ü›X[IÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y™YU\Nˆ	Û›Ü›X[	ËY[X™\[[İ[ˆŒÜ˜[™™X\İ\P[[İ[ˆŒLÛÜšÜÚÜ[[İ[ˆLY™™Xİ]™Qœ›ÛNˆ	ÌŒ‹LKLIËY™™Xİ]™U[[ˆ[\ĞXİ]™NˆYHKˆÈYˆ™YK\İY[IÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y™YU\Nˆ	ÜİY[	ËY[X™\[[İ[ˆLÌÜ˜[™™X\İ\P[[İ[ˆLLÛÜšÜÚÜ[[İ[ˆŒY™™Xİ]™Qœ›ÛNˆ	ÌŒ‹LKLIËY™™Xİ]™U[[ˆ[\ĞXİ]™NˆYHKˆÈYˆ™YK\Ù[š[Ü‹IÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’Y™YU\Nˆ	ÜÙ[š[Ü‰ËY[X™\[[İ[ˆMŒÜ˜[™™X\İ\P[[İ[ˆLÌÛÜšÜÚÜ[[İ[ˆÌY™™Xİ]™Qœ›ÛNˆ	ÌŒ‹LKLIËY™™Xİ]™U[[ˆ[\ĞXİ]™NˆYHK—HB™[˜İ[Ûˆ[ØÚÕ™X\İ\PÚ\™Ù\ÊÜ™Ø[š^˜][Û’Yœİš[™ÊN“ÙÙU™X\İ\PÚ\™ÙV×^Ü™]\›–ÂˆÚY˜Ú\™ÙKLKIÛÜ™Ø[š^˜][Û’YXY[X™\’Y‰ÛY[X™\‹Y[[ËLIËY[X™\‘\Ü^S˜[YN‰Ğ[™™XH[[Üİ˜]]˜IËY[X™\[[İ[ŒŒZY[[İ[ŒŒ˜[[˜ÙNŒİ]\Î‰ÜZY	Ë^[Y[Î–ŞÚY‰Ü^KY[[ËLIË™XÙZ\[X™\‰Ô‘PËQSSËLIË[[İ[ŒŒ^[Y[Y]Ù‰İ˜[œÙ™\‰Ë^[Y[]N‰ÌŒ‹LKLIË™Y™\™[˜ÙN‰Õ–QSSËLIßW_KˆÚY˜Ú\™ÙKL‹IÛÜ™Ø[š^˜][Û’YXY[X™\’Y‰ÛY[X™\‹Y[[ËL‰ËY[X™\‘\Ü^S˜[YN‰Ğ™X]š^ˆ[[Üİ˜]]˜IËY[X™\[[İ[ŒŒZY[[İ[ŒLÌ˜[[˜ÙNŒLÌİ]\Î‰Ü\X[	Ë^[Y[Î–ŞÚY‰Ü^KY[[ËL‰Ë™XÙZ\[X™\‰Ô‘PËQSSËL‰Ë[[İ[ŒLÌ^[Y[Y]Ù‰ØØ\Ú	Ë^[Y[]N‰ÌŒ‹LKLIË™Y™\™[˜ÙN›[W_KˆÚY˜Ú\™ÙKLËIÛÜ™Ø[š^˜][Û’YXY[X™\’Y‰ÛY[X™\‹Y[[ËLÉËY[X™\‘\Ü^S˜[YN‰ĞØ\›Û[˜H[[Üİ˜]]˜IËY[X™\[[İ[ŒMŒZY[[İ[Œ˜[[˜ÙNŒMŒİ]\Î‰Ü[™[™ÉË^[Y[Î–×_B—_B™[˜İ[Ûˆ[ØÚÕ™X\İ\Q^[œÙ\ÊÜ™Ø[š^˜][Û’Yœİš[™ÊN“ÙÙU™X\İ\Q^[œÙV×^Ü™]\›–ÂˆÚY˜^[œÙKLKIÛÜ™Ø[š^˜][Û’YXÜ™Ø[š^˜][Û’YØ]YÛÜN‰ÔÙ\šXÚ[ÜÉË[[İ[Œ^[œÙQ]N‰ÌŒ‹LKLL‰Ë\ØÜš\[Û‰ÔÙ\šXÚ[ÈÜ\˜]]›È[[\ˆ0­È]ÈšXİXÚ[ÉË]šY[˜ÙT™Y™\™[˜ÙN‰Ô‹T‘TÔSËQSSËLIË\›İ˜[İ]\Î‰Ü[™[™×Ø\›İ˜[	Ë™XÛÜ™YTİXš™Xİ‰İ\ÛÜ™\šXKY[[ÉË\›İ™YTİXš™Xİ›[\›İ™Y]]Î›[™XÛÜ™Y]]Î‰ÌŒ‹LKLL•NŒŒ‰ßB—_B™[˜İ[ÛˆÛÛ™U™X\İ\PÚ\™ÙJ][N“ÙÙU™X\İ\PÚ\™ÙJN“ÙÙU™X\İ\PÚ\™Ù^Ü™]\›Ë‹‹š][K^[Y[Îš][Kœ^[Y[Ë›X\
-OŠË‹‹JJ__B™[˜İ[Ûˆ[ØÚÔ™Yİ[\š]TÛ˜\Úİ
-Ü™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÛÜšÜÚÜ™Yİ[\š]T™\]Y\İ™Yš^ˆİš[™ÊNˆÛÜšÜÚÜ™Yİ[\š]TÛ˜\ÚİÈ™]\›ˆÈYˆ	Ü™Yš^KIØÜ\Ëœ˜[™ÛUURQ
+  async getHospitalariaWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
+    if (this.useMocks) return mockSnapshotAsOf(this.mockHospitalaria.get(organizationId), asOf)
+    const query = new URLSearchParams(); if (asOf) query.set('asOf', asOf)
+    return this.optionalGet<WorkshopRegularitySnapshot>(`/api/hospitalaria/talleres/${encodeURIComponent(organizationId)}/regularidad${query.size ? `?${query}` : ''}`)
+  }
+  async setHospitalariaWorkshopRegularity(organizationId: string, payload: WorkshopRegularityRequest): Promise<WorkshopRegularitySnapshot> {
+    if (this.useMocks) { const snapshot = mockRegularitySnapshot(organizationId, payload, 'hospitalaria'); this.mockHospitalaria.set(organizationId, snapshot); return snapshot }
+    return this.postJson<WorkshopRegularitySnapshot>(`/api/hospitalaria/talleres/${encodeURIComponent(organizationId)}/regularidad`, payload)
+  }
 
-_XÜ™Ø[š^˜][Û’YØÛÜNˆ	ÛÜ™Ø[š^˜][Û‰Ëİ]\Îˆ^[ØYœİ]\Ë\ÓÙ‘]Nˆ^[ØY˜\ÓÙ‘]KÛİ\˜ÙT™Y™\™[˜ÙNˆ^[ØYœÛİ\˜ÙT™Y™\™[˜ÙHÏÈ[›İ\Îˆ^[ØY››İ\ÈÏÈ[™XÛÜ™Y]]Îˆ™]È]J
-KÒTÓÔİš[™Ê
-HHB™[˜İ[Ûˆ[ØÚÕ™X\İ\Tİ][Y[
-Ü™Ø[š^˜][Û’Yˆİš[™Ë^[ØYˆÜ™X]U™X\İ\Tİ][Y[™\]Y\İ
-Nˆ™X\İ\Tİ][Y[È™]\›ˆÈYˆÜ\Ëœ˜[™ÛUURQ
+  async getSecretariatAvailability(fromUtc: string, toUtc: string): Promise<SpaceAvailabilityResponse> { if (this.useMocks) { const items = this.mockSpaces.map(space => ({ ...space, isAvailable: !this.mockBusySpaces.has(space.id) })); return { fromUtc, toUtc, total: items.length, available: items.filter(x => x.isAvailable).length, items } } const query = new URLSearchParams({ fromUtc, toUtc }); return this.request<SpaceAvailabilityResponse>(`/api/gran-secretaria/espacios/disponibilidad?${query}`) }
+  async getSecretariatDocuments(): Promise<SecretariatDocumentsResponse> { if (this.useMocks) return { total: this.mockDocuments.length, items: [...this.mockDocuments] }; return this.request<SecretariatDocumentsResponse>('/api/gran-secretaria/documentos') }
+  async getSubmittedTenidas(): Promise<GrandSecretariatTenidasResponse> {
+    if (this.useMocks) return { total: this.mockSubmittedTenidas.length, items: this.mockSubmittedTenidas.map(item => ({ ...item, lodge: { ...item.lodge } })) }
+    return this.request<GrandSecretariatTenidasResponse>('/api/gran-secretaria/tenidas')
+  }
+  async reviewSubmittedTenida(recordId: string, decision: 'received' | 'observed', notes?: string | null): Promise<{ id:string; status:string }> {
+    if (this.useMocks) {
+      const item=this.mockSubmittedTenidas.find(value=>value.recordId===recordId); if(!item) throw new Error('La Tenida remitida no existe.')
+      item.submissionStatus=decision; item.reviewedAtUtc=new Date().toISOString(); item.reviewNotes=notes?.trim()||null
+      return { id: recordId, status: item.submissionStatus }
+    }
+    return this.postJson<{ id:string; status:string }>(`/api/gran-secretaria/tenidas/${encodeURIComponent(recordId)}/revision`, { decision, notes: notes ?? null })
+  }
+  async downloadSubmittedTenidaExtract(recordId: string): Promise<Blob> {
+    if (this.useMocks) return new Blob(['Extracto PDF demostrativo'], { type: 'application/pdf' })
+    const headers=new Headers({ Accept:'application/pdf' }); const token=await this.getAccessToken?.(); if(!token) throw new Error('Debe ingresar para descargar el extracto.'); headers.set('Authorization', `Bearer ${token}`)
+    const response=await fetch(`${this.baseUrl}/api/gran-secretaria/tenidas/${encodeURIComponent(recordId)}/extracto`, { credentials:'omit', redirect:'error', cache:'no-store', headers })
+    if(!response.ok){ if(response.status===401) await this.onUnauthorized?.(); throw new PmgmApiHttpError(response.status, response.status===403?'Su cuenta no tiene permiso para descargar este extracto.':`La API respondiÃ³ ${response.status} ${response.statusText}.`) }
+    return response.blob()
+  }
+  async getSecretariatCeremonyQueue(): Promise<GrandSecretariatCeremonyQueueResponse> { if (this.useMocks) return { total: this.mockCeremonies.length, items: this.mockCeremonies.map(item => ({ ...item })) }; return this.request<GrandSecretariatCeremonyQueueResponse>('/api/institutional/gran-secretaria/ceremonias-autorizadas') }
+  async createSecretariatSpace(payload: CreateSpaceRequest): Promise<InstitutionalSpace> { if (this.useMocks) { const space: InstitutionalSpace = { id: crypto.randomUUID(), ...payload, location: payload.location ?? null, capacity: payload.capacity ?? null, status: 'active' }; this.mockSpaces.push(space); return space } return this.postJson<InstitutionalSpace>('/api/gran-secretaria/espacios', payload) }
+  async createSecretariatReservation(payload: CreateReservationRequest): Promise<{ id: string; status: string }> {
+    if (this.useMocks) {
+      if (this.mockBusySpaces.has(payload.spaceId)) throw new Error('El templo o sala ya estÃ¡ reservado en ese horario.')
+      const ceremony = payload.ceremonyRequestId ? this.mockCeremonies.find(item => item.id === payload.ceremonyRequestId) : undefined
+      if (payload.ceremonyRequestId && !ceremony) throw new Error('La ceremonia indicada no existe en la bandeja autorizada.')
+      if (ceremony && ceremony.organizationId !== payload.organizationId) throw new Error('La ceremonia no corresponde al Taller indicado.')
+      const id = crypto.randomUUID(); this.mockBusySpaces.add(payload.spaceId)
+      if (ceremony) { const space = this.mockSpaces.find(item => item.id === payload.spaceId); ceremony.spaceReservationId = id; ceremony.spaceName = space?.name ?? 'Espacio institucional'; ceremony.reservationStartsAtUtc = payload.startsAtUtc; ceremony.reservationEndsAtUtc = payload.endsAtUtc }
+      return { id, status: 'reserved' }
+    }
+    return this.postJson<{ id: string; status: string }>('/api/gran-secretaria/reservas', payload)
+  }
+  async issueSecretariatDocument(payload: IssueDocumentRequest): Promise<SecretariatDocument> { if (this.useMocks) { const kind=payload.documentType==='plancha'?(payload.planchaKind??'formal_communication'):null; const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: payload.documentType, planchaKind: kind, documentCode: `${payload.documentType === 'decree' ? 'DEC' : 'PLA-COM'}-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: payload.title, content: payload.content, organizationId: payload.organizationId ?? null, relatedCeremonyRequestId: null, spaceReservationId: null, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document } return this.postJson<SecretariatDocument>('/api/gran-secretaria/documentos', payload) }
+  async issueSecretariatCeremonyAuthorization(ceremonyRequestId: string, spaceReservationId: string | null = null): Promise<SecretariatDocument> {
+    if (this.useMocks) {
+      const ceremony = this.mockCeremonies.find(item => item.id === ceremonyRequestId); if (!ceremony) throw new Error('La ceremonia indicada no existe.'); if (ceremony.formalAuthorizationIssued) throw new Error('La ceremonia ya cuenta con autorizaciÃ³n formal vigente.'); if (spaceReservationId && ceremony.spaceReservationId !== spaceReservationId) throw new Error('La reserva indicada no corresponde a esta ceremonia.'); ceremony.formalAuthorizationIssued = true
+      const document: SecretariatDocument = { id: crypto.randomUUID(), documentType: 'plancha', planchaKind: 'ceremony_authorization', documentCode: `PLA-AUT-CER-DEMO-${String(this.mockDocuments.length + 1).padStart(3, '0')}`, title: `Plancha de AutorizaciÃ³n de Ceremonia â€” ${ceremonyTypeLabel(ceremony.ceremonyType)}`, content: `Plancha formal de autorizaciÃ³n demostrativa para ${ceremony.organizationName}. No constituye Decreto.`, organizationId: ceremony.organizationId, relatedCeremonyRequestId: ceremony.id, spaceReservationId, status: 'issued', issuedAtUtc: new Date().toISOString(), issuedBySubject: 'demo' }; this.mockDocuments.unshift(document); return document
+    }
+    return this.postJson<SecretariatDocument>(`/api/gran-secretaria/ceremonias/${encodeURIComponent(ceremonyRequestId)}/autorizacion`, { spaceReservationId })
+  }
 
-KÜ™Ø[š^˜][Û’Y\š[ÙYX\ˆ^[ØYœ\š[ÙYX\‹\š[Ù[Ûˆ^[ØYœ\š[Ù[Ûİ]Ù™‘]Nˆ^[ØY˜İ]Ù™‘]Kİ]\Îˆ	Ù˜Y	ËÛİ\˜ÙT™Y™\™[˜ÙNˆ^[ØYœÛİ\˜ÙT™Y™\™[˜ÙHÏÈ[^XİY[[İ[ˆ˜[œÙ™\[[İ[ˆ\ÜÚ][[İ[ˆZY[[İ[ˆY™™\™[˜ÙP[[İ[ˆ[œ™\ÛÛ™YY[]Y\Îˆ™YPœ™XZÙİÛ–×K[™\Îˆ×K^[Y[Îˆ×KİX›Z]Y]]Îˆ[™XÛÛ˜Ú[Y]]Îˆ[ÛÜÙY]]Îˆ[HB™[˜İ[Ûˆ™XØ[İ[]S[ØÚÕ™X\İ\Jİ][Y[ˆ™X\İ\Tİ][Y[
-HÈİ][Y[™^XİY[[İ[Hİ][Y[›[™\Ëœ™YXÙJ
-İ[[™JHOˆİ[
-È[™Kœ^XX›P[[İ[
-NÈİ][Y[˜[œÙ™\[[İ[Hİ][Y[œ^[Y[Ë™š[\Š^[Y[Oˆ^[Y[œ^[Y[Y]ÙOOH	İ˜[œÙ™\‰ÊKœ™YXÙJ
-İ[^[Y[
-HOˆİ[
-È^[Y[˜[[İ[
-NÈİ][Y[™\ÜÚ][[İ[Hİ][Y[œ^[Y[Ë™š[\Š^[Y[Oˆ^[Y[œ^[Y[Y]ÙOOH	Ù\ÜÚ]	ÊKœ™YXÙJ
-İ[^[Y[
-HOˆİ[
-È^[Y[˜[[İ[
-NÈİ][Y[œZY[[İ[Hİ][Y[˜[œÙ™\[[İ[
-Èİ][Y[™\ÜÚ][[İ[Èİ][Y[™Y™™\™[˜ÙP[[İ[Hİ][Y[™^XİY[[İ[Hİ][Y[œZY[[İ[Èİ][Y[™™YPœ™XZÙİÛP\œ˜^K™œ›ÛJİ][Y[›[™\Ëœ™YXÙJ
-X\[™JOOØÛÛœİİ\œ™[[X\™Ù]
-[™K˜ÛÛšX][Û•\JOÏŞÙ™YU\N›[™K˜ÛÛšX][Û•\KY[X™\œÎŒ[[İ[ŒNØİ\œ™[›Y[X™\œÊÊÎØİ\œ™[˜[[İ[
-Ï[[™Kœ^XX›P[[İ[ÛX\œÙ]
-[™K˜ÛÛšX][Û•\Kİ\œ™[
-NÜ™]\›ˆX\K™]ÈX\ÙÙQ™YU\K™X\İ\Q™YPœ™XZÙİÛŠ
-JK˜[Y\Ê
-JHB™[˜İ[ÛˆÛÛ™U™X\İ\Tİ][Y[
-İ][Y[ˆ™X\İ\Tİ][Y[
-Nˆ™X\İ\Tİ][Y[È™]\›ˆÈ‹‹œİ][Y[™YPœ™XZÙİÛœİ][Y[™™YPœ™XZÙİÛ‹›X\
-][OOŠË‹‹š][_JJK[™\Îˆİ][Y[›[™\Ë›X\
-[™HOˆ
-È‹‹›[™HJJK^[Y[Îˆİ][Y[œ^[Y[Ë›X\
-^[Y[Oˆ
-È‹‹œ^[Y[JJHHB™[˜İ[ÛˆÛÛ™PÙ\™[[ÛT]Y]YR][J][NˆÙ\™[[ÛT™]šY]Ô]Y]YR][JNˆÙ\™[[ÛT™]šY]Ô]Y]YR][HÈ™]\›ˆÈ‹‹š][K[YÚXš[]NˆÈ‹‹š][K™[YÚXš[]KX›XØ][Ûˆ][K™[YÚXš[]KœX›XØ][ÛˆÈÈ‹‹š][K™[YÚXš[]KœX›XØ][ÛˆHˆ[™\]Z\™[Y[Îˆ][K™[YÚXš[]Kœ™\]Z\™[Y[Ë›X\
-˜[YHOˆ
-È‹‹˜[YHJJHKXİ[ÛœÎˆÈ‹‹š][K˜Xİ[ÛœÈHHB™[˜İ[Ûˆ™XÛÛ\]S[ØÚÑ[YÚXš[]J][NˆÙ\™[[ÛT™]šY]Ô]Y]YR][JHÈÛÛœİ›ØÚÙYH][K™[YÚXš[]Kœ™\]Z\™[Y[ËœÛÛYJ˜[YHOˆ˜[YKœİ]\ÈOOH	Ü™Z™XİY	ÊNÈÛÛœİØœÙ\™YH][K™[YÚXš[]Kœ™\]Z\™[Y[ËœÛÛYJ˜[YHOˆ˜[YKœİ]\ÈOOH	ÛØœÙ\™Y	ÊNÈ][K™[YÚXš[]K˜Ø[]]Üš^™HHX›ØÚÙY	‰ˆ[ØœÙ\™YÈ][K™[YÚXš[]Kœİ]\ÈH][K™[YÚXš[]K˜Ø[]]Üš^™HÈ	ØÛÛ\Y\ÉÈˆØœÙ\™YÈ	ÛØœÙ\™Y	Èˆ	ÙÙ\×Û›İØÛÛ\IÈB™[˜İ[Ûˆ[ØÚÔ™YÚ[Y[”İ[[X\Jš[\œÎˆÈÜ™Ø[š^˜][Û’YÎˆİš[™ÎÈ\ÓÙÎˆİš[™ÎÈœ›ÛOÎˆİš[™ÈJNˆ™YÚ[Y[’[\š[Ü”İ[[X\HÂˆÛÛœİ\ÓÙˆHš[\œË˜\ÓÙˆÏÈ	ÌŒ‹LKL	ÂˆÛÛœİœ›ÛHHš[\œË™œ›ÛHÏÈ	ÌŒ‹LKLIÂˆÛÛœİØÛÜYHHYš[\œË›Ü™Ø[š^˜][Û’YˆÛÛœİ][\Y\ˆHØÛÜYÈHˆŒˆÛÛœİY™š[X]YH
-ˆ][\Y\‚ˆ™]\›ˆÂˆØÛÜNˆØÛÜYÈ	ÛÜ™Ø[š^˜][Û‰Èˆ	ÛÜ™\‰ËˆÜ™Ø[š^˜][Û’Yˆš[\œË›Ü™Ø[š^˜][Û’YÏÈ[ˆ\ÓÙ‹ˆ\š[ÙˆÈœ›ÛKÎˆ\ÓÙˆKˆY[X™\œÎˆÈİ[™[]YˆY™š[X]Yİ\œ™[PY™š[X]YˆY™š[X]YXİ]™NˆY™š[X]Y[˜Xİ]™Nˆİ\œ™[Ú]›ØÚÚ[™Ôİ]\ÎˆKˆ]™[ÎˆÈ›Û[\UÚ]˜]Ø[Îˆ›Ü˜ÙYÚ]˜]Ø[Îˆ™Z[œİ][Y[ÎˆX]Îˆ˜[œÙ™\œÎˆKˆš[˜[˜ÚX[™Yİ[\š]NˆÈÛİ\˜ÙNˆ	ÑÜ˜[ˆ\ÛÜ™\°ëXH0­È\ØÙ[˜\š[ÈPIËİ\œ™[Y™š[X][ÛœÎˆY™š[X]Y\Ñ]NˆY™š[X]Y[[œ]Y[ˆ[™[™Îˆ^[\ˆÚ]İ]İ]\Îˆ[[œ]Y[Y[X™\œÑ\İ[˜İˆKˆYÜ™YQ\İšX][ÛˆÈX\İ\ˆLˆ
-ˆ][\Y\‹™[İØÜ˜YˆH
-ˆ][\Y\‹\™[XÙNˆH
-ˆ][\Y\‹\İØXİ]™Nˆˆ
-ˆ][\Y\ˆKˆ[™[™Õ˜[œÙ™\œÎˆˆBŸB
+  private requireMockReviewCeremony(id: string): CeremonyReviewQueueItem { const item = this.mockReviewCeremonies.find(value => value.id === id); if (!item) throw new Error('La ceremonia indicada no existe en la bandeja.'); return item }
+  private requireMockTreasuryStatement(id: string): TreasuryStatement { const item = this.mockTreasuryStatements.get(id); if (!item) throw new Error('El cuadro mensual indicado no existe.'); return item }
+  private ensureMockHospitalariaMovements(organizationId:string):LodgeHospitalariaMovement[]{
+    let items=this.mockLodgeHospitalariaMovements.get(organizationId)
+    if(!items){items=defaultHospitalariaMovements(organizationId);this.mockLodgeHospitalariaMovements.set(organizationId,items)}
+    return items
+  }
+  private requireMockHospitalariaMovement(id:string):LodgeHospitalariaMovement{for(const rows of this.mockLodgeHospitalariaMovements.values()){const item=rows.find(x=>x.id===id);if(item)return item}throw new Error('El movimiento de Hospitalaria no existe.')}
+  private requireMockHospitalariaSubmission(id:string):HospitalariaMonthlySubmission{const item=[...this.mockHospitalariaSubmissions.values()].find(x=>x.id===id);if(!item)throw new Error('La rendiciÃ³n de Hospitalaria no existe.');return item}
+  private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
+  private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
+  private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const headers = new Headers(init.headers); headers.set('Accept', 'application/json')
+    const token = await this.getAccessToken?.(); if (!token) throw new Error('Debe ingresar para consultar la informaciÃ³n institucional.'); headers.set('Authorization', `Bearer ${token}`)
+    const response = await fetch(`${this.baseUrl}${path}`, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', headers })
+    if (!response.ok) {
+      if (response.status === 401) await this.onUnauthorized?.()
+      let message = ''
+      try { const body = await response.clone().json() as { message?: string }; message = typeof body.message === 'string' ? body.message : '' } catch { /* respuesta sin JSON */ }
+      if (response.status === 403) message = 'Su cuenta no tiene permiso para realizar esta operaciÃ³n.'
+      throw new PmgmApiHttpError(response.status, message || `La API respondiÃ³ ${response.status} ${response.statusText}.`)
+    }
+    return response.json() as Promise<T>
+  }
+}
+
+export function createDefaultPmgmApiClient(getAccessToken?: AccessTokenProvider, onUnauthorized?: () => Promise<void>): PmgmApiClient { const baseUrl = import.meta.env.VITE_API_BASE_URL ?? ''; const useMocks = import.meta.env.VITE_USE_MOCKS === 'true'; const url = new URL(baseUrl || '/', window.location.origin); if (url.origin !== window.location.origin || url.username || url.password || url.search || url.hash) throw new Error('La API debe usar el mismo origen mediante el proxy institucional.'); return new PmgmApiClient({ baseUrl, useMocks, getAccessToken, onUnauthorized }) }
+function sleep(milliseconds: number): Promise<void> { return new Promise(resolve => window.setTimeout(resolve, milliseconds)) }
+function mockInitialDeliberation(ceremonyRequestId: string, payload: InitialDeliberationRequest): InitialDeliberationResponse {
+  if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del acta o extracto que respalda la deliberaciÃ³n.')
+  if (payload.presentVoters <= 0) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'initial_deliberation.quorum', reason: 'Debe existir al menos una persona habilitada presente para registrar la votaciÃ³n.', ceremonyStatus: 'under_review' }
+  if (payload.votesInFavor < 0 || payload.votesInFavor > payload.presentVoters) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'initial_deliberation.votes', reason: 'La cantidad de votos favorables no es vÃ¡lida.', ceremonyStatus: 'under_review' }
+  const elapsedDays = dateOnlyDayNumber(payload.deliberationDate) - dateOnlyDayNumber('2026-09-12')
+  const minimumWaitingDays = payload.minimumWaitingDays ?? 7
+  if (elapsedDays < minimumWaitingDays) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'initial_deliberation.waiting_period', reason: `Deben transcurrir al menos ${minimumWaitingDays} dÃ­as desde la presentaciÃ³n; han transcurrido ${elapsedDays}.`, ceremonyStatus: 'under_review' }
+  if (payload.votesInFavor !== payload.presentVoters) return { id: ceremonyRequestId, validationStatus: 'rejected', code: 'initial_deliberation.unanimity', reason: 'La aprobaciÃ³n inicial requiere unanimidad de las personas presentes.', ceremonyStatus: 'rejected' }
+  return { id: ceremonyRequestId, validationStatus: 'approved', code: 'initial_deliberation.approved', reason: 'Se cumple el plazo mÃ­nimo y la votaciÃ³n inicial fue unÃ¡nime.', ceremonyStatus: 'under_review' }
+}
+function dateOnlyDayNumber(value: string) { const [year, month, day] = value.split('-').map(Number); if (!year || !month || !day) throw new Error('La fecha de deliberaciÃ³n no es vÃ¡lida.'); return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000) }
+function ceremonyTypeLabel(type: CeremonyType) { return type === 'initiation' ? 'IniciaciÃ³n' : type === 'wage_increase' ? 'Aumento de salario' : 'ExaltaciÃ³n' }
+function defaultHospitalariaMovements(organizationId:string):LodgeHospitalariaMovement[]{
+  return [
+    {id:`hosp-income-${organizationId}`,organizationId,movementType:'income',category:'charity_bag',amount:185000,movementDate:'2026-09-05',memberReference:null,destination:null,evidenceReference:'TENIDA-DEMO-2026-09-05',observation:'Tronco de Beneficencia Â· dato ficticio',approvalStatus:'not_required',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-05T23:00:00Z'},
+    {id:`hosp-aid-${organizationId}`,organizationId,movementType:'expense',category:'charity_aid',amount:45000,movementDate:'2026-09-10',memberReference:'Referencia reservada DEMO-001',destination:'Socorro reservado Â· demo',evidenceReference:'AYUDA-DEMO-001',observation:'Antecedente sensible ficticio; sÃ³lo Taller.',approvalStatus:'pending_approval',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-10T18:00:00Z'}
+  ]
+}
+function mockHospitalariaCouncilAidDecisions(organizationId:string):HospitalariaCouncilAidDecision[]{return[{id:`council-aid-${organizationId}`,sessionId:`council-session-${organizationId}`,sessionDate:'2026-09-11',subject:'Socorro reservado Â· referencia demo',amount:45000}]}
+function mockHospitalariaCouncilFinancialReviews(organizationId:string):HospitalariaCouncilFinancialReview[]{return[{id:`council-review-${organizationId}`,sessionId:`council-session-review-${organizationId}`,sessionDate:'2026-09-15',periodLabel:'2026-09',conclusion:'Estado mensual de Hospitalaria revisado por Consejo Â· demo'}]}
+function summarizeMockHospitalaria(organizationId:string,from:string,to:string,items:LodgeHospitalariaMovement[]):LodgeHospitalariaSummary{const income=items.filter(x=>x.movementType==='income').reduce((a,x)=>a+x.amount,0);const approvedExpenses=items.filter(x=>x.movementType==='expense'&&x.approvalStatus==='approved').reduce((a,x)=>a+x.amount,0);const pendingExpenses=items.filter(x=>x.movementType==='expense'&&x.approvalStatus==='pending_approval').length;const categories=[...new Set(items.map(x=>x.category))].map(category=>({category,total:items.filter(x=>x.category===category).reduce((a,x)=>a+x.amount,0),count:items.filter(x=>x.category===category).length}));return{organizationId,from,to,income,approvedExpenses,periodNet:income-approvedExpenses,pendingExpenses,movements:items.length,categories,items:items.map(x=>({...x}))}}
+function currentMonthStart(){const d=new Date();return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit'}).format(d)+'-01'}
+function currentMonthEnd(){const p=currentMonthStart().slice(0,7).split('-').map(Number);return monthEnd(p[0],p[1])}
+function monthEnd(year:number,month:number){return `${year}-${String(month).padStart(2,'0')}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,'0')}`}
+function cloneHospitalariaSubmission(item:HospitalariaMonthlySubmission):HospitalariaMonthlySubmission{return{...item}}
+function mockSnapshotAsOf(snapshot: WorkshopRegularitySnapshot | undefined, asOf?: string): WorkshopRegularitySnapshot | null { if (!snapshot) return null; if (asOf && snapshot.asOfDate > asOf) return null; return { ...snapshot } }
+function defaultLodgeFeePlans(organizationId: string): LodgeFeePlan[] { return [
+  { id: `fee-normal-${organizationId}`, organizationId, feeType: 'normal', memberAmount: 26000, grandTreasuryAmount: 21000, workshopAmount: 5000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-student-${organizationId}`, organizationId, feeType: 'student', memberAmount: 13000, grandTreasuryAmount: 11000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-senior-${organizationId}`, organizationId, feeType: 'senior', memberAmount: 16000, grandTreasuryAmount: 13000, workshopAmount: 3000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+] }
+function mockTreasuryCharges(organizationId:string):LodgeTreasuryCharge[]{return[
+  {id:`charge-1-${organizationId}`,memberId:'member-demo-001',memberDisplayName:'Andrea Demostrativa',memberAmount:26000,paidAmount:26000,balance:0,status:'paid',payments:[{id:'pay-demo-001',receiptNumber:'REC-DEMO-001',amount:26000,paymentMethod:'transfer',paymentDate:'2026-09-05',reference:'TRX-DEMO-001'}]},
+  {id:`charge-2-${organizationId}`,memberId:'member-demo-002',memberDisplayName:'Beatriz Demostrativa',memberAmount:26000,paidAmount:13000,balance:13000,status:'partial',payments:[{id:'pay-demo-002',receiptNumber:'REC-DEMO-002',amount:13000,paymentMethod:'cash',paymentDate:'2026-09-09',reference:null}]},
+  {id:`charge-3-${organizationId}`,memberId:'member-demo-003',memberDisplayName:'Carolina Demostrativa',memberAmount:16000,paidAmount:0,balance:16000,status:'pending',payments:[]}
+]}
+function mockTreasuryExpenses(organizationId:string):LodgeTreasuryExpense[]{return[
+  {id:`expense-1-${organizationId}`,organizationId,category:'Servicios',amount:42000,expenseDate:'2026-09-12',description:'Servicio operativo del Taller Â· dato ficticio',evidenceReference:'PDF-RESPALDO-DEMO-001',approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-12T18:00:00Z'}
+]}
+function cloneTreasuryCharge(item:LodgeTreasuryCharge):LodgeTreasuryCharge{return{...item,payments:item.payments.map(x=>({...x}))}}
+function mockRegularitySnapshot(organizationId: string, payload: WorkshopRegularityRequest, prefix: string): WorkshopRegularitySnapshot { return { id: `${prefix}-${crypto.randomUUID()}`, organizationId, scope: 'organization', status: payload.status, asOfDate: payload.asOfDate, sourceReference: payload.sourceReference ?? null, notes: payload.notes ?? null, recordedAtUtc: new Date().toISOString() } }
+function mockTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): TreasuryStatement { return { id: crypto.randomUUID(), organizationId, periodYear: payload.periodYear, periodMonth: payload.periodMonth, cutoffDate: payload.cutoffDate, status: 'draft', sourceReference: payload.sourceReference ?? null, expectedAmount: 0, transferAmount: 0, depositAmount: 0, paidAmount: 0, differenceAmount: 0, unresolvedIdentities: 0, feeBreakdown:[], lines: [], payments: [], submittedAtUtc: null, reconciledAtUtc: null, closedAtUtc: null } }
+function recalculateMockTreasury(statement: TreasuryStatement) { statement.expectedAmount = statement.lines.reduce((total, line) => total + line.payableAmount, 0); statement.transferAmount = statement.payments.filter(payment => payment.paymentMethod === 'transfer').reduce((total, payment) => total + payment.amount, 0); statement.depositAmount = statement.payments.filter(payment => payment.paymentMethod === 'deposit').reduce((total, payment) => total + payment.amount, 0); statement.paidAmount = statement.transferAmount + statement.depositAmount; statement.differenceAmount = statement.expectedAmount - statement.paidAmount; statement.feeBreakdown=Array.from(statement.lines.reduce((map,line)=>{const current=map.get(line.contributionType)??{feeType:line.contributionType,members:0,amount:0};current.members++;current.amount+=line.payableAmount;map.set(line.contributionType,current);return map},new Map<LodgeFeeType,TreasuryFeeBreakdown>()).values()) }
+function cloneTreasuryStatement(statement: TreasuryStatement): TreasuryStatement { return { ...statement, feeBreakdown:statement.feeBreakdown.map(item=>({...item})), lines: statement.lines.map(line => ({ ...line })), payments: statement.payments.map(payment => ({ ...payment })) } }
+function cloneCeremonyQueueItem(item: CeremonyReviewQueueItem): CeremonyReviewQueueItem { return { ...item, eligibility: { ...item.eligibility, publication: item.eligibility.publication ? { ...item.eligibility.publication } : null, requirements: item.eligibility.requirements.map(value => ({ ...value })) }, actions: { ...item.actions } } }
+function recomputeMockEligibility(item: CeremonyReviewQueueItem) { const blocked = item.eligibility.requirements.some(value => value.status === 'rejected'); const observed = item.eligibility.requirements.some(value => value.status === 'observed'); item.eligibility.canAuthorize = !blocked && !observed; item.eligibility.status = item.eligibility.canAuthorize ? 'complies' : observed ? 'observed' : 'does_not_comply' }
+function mockRegimenSummary(filters: { organizationId?: string; asOf?: string; from?: string }): RegimenInteriorSummary {
+  const asOf = filters.asOf ?? '2026-09-08'
+  const from = filters.from ?? '2026-01-01'
+  const scoped = !!filters.organizationId
+  const multiplier = scoped ? 1 : 20
+  const affiliated = 24 * multiplier
+  return {
+    scope: scoped ? 'organization' : 'order',
+    organizationId: filters.organizationId ?? null,
+    asOf,
+    period: { from, to: asOf },
+    members: { totalRelated: affiliated, currentlyAffiliated: affiliated, active: affiliated, inactive: 0, currentWithBlockingStatus: 0 },
+    events: { voluntaryWithdrawals: 0, forcedWithdrawals: 0, reinstatements: 0, deaths: 0, transfers: 0 },
+    financialRegularity: { source: 'Gran TesorerÃ­a Â· escenario QA', currentAffiliations: affiliated, upToDate: affiliated, delinquent: 0, pending: 0, exempt: 0, withoutStatus: 0, delinquentMembersDistinct: 0 },
+    degreeDistribution: { master: 12 * multiplier, fellowcraft: 5 * multiplier, apprentice: 5 * multiplier, past_active: 2 * multiplier },
+    pendingTransfers: 0,
+  }
+}
