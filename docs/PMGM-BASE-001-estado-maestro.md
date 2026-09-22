@@ -686,6 +686,21 @@ El despliegue físico en `srv01`, smoke real, regresión 25/25 y UAT continúan 
 
 El siguiente incremento funcional debe seleccionarse sólo después de reconsultar backlog vigente, documentos oficiales de Drive y HEAD vivo de `dev`; no se fija por conversaciones antiguas.
 
+## 20. Incremento activo — navegación operativa de Secretaría por cargo
+
+El 22-09-2026 se inicia `feature/secretariat-role-navigation` desde `dev` `822fd25b88caafdf5a01d89c27c53b6cd000f183`.
+
+Alcance:
+
+- menú lateral único **Secretaría** para Secretaría del Taller;
+- menú lateral único **Gran Secretaría** para Gran Secretaría;
+- navegación interna a las tareas existentes de cada cargo;
+- conservación del circuito aprobado de insinuaciones, ceremonias, Tenidas, extractos, correspondencia y pendientes;
+- sin ampliación de permisos ni mezcla con Tesorería, Hospitalaria o Docencia;
+- Planchas, Decretos y demás documentos oficiales se describen y se cargan en PDF después de su firma física; el sistema no los genera ni firma.
+
+Referencia: `docs/PMGM-ARCH-013-secretaria-navegacion-por-cargo.md`. Prueba: QA-030 / UI QA v0.58. Validación local inicial: 153 pruebas frontend y build productivo aprobados. El incremento aún requiere PR, CI exact-head, Demo y paquete instalable del mismo SHA.
+
 ## 19. Incremento activo — Tesorería operacional del Taller
 
 El 21-09-2026 se inició `feature/treasury-completion-20260921` desde el HEAD vivo de `dev` `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`, manteniendo sin cambios el candidato aceptado de Secretaría/Gran Secretaría y la QA física de `srv01` diferida.
