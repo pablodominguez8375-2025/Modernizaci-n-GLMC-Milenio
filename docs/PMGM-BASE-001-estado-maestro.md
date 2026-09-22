@@ -701,6 +701,12 @@ Alcance:
 
 Referencia: `docs/PMGM-ARCH-013-secretaria-navegacion-por-cargo.md`. Prueba: QA-030 / UI QA v0.58. Validación local inicial: 153 pruebas frontend y build productivo aprobados. El incremento aún requiere PR, CI exact-head, Demo y paquete instalable del mismo SHA.
 
+## 21. Corrección de segregación — Tesorero del Taller y Secretaría
+
+La capacidad `canManageLodgeTreasury` habilita únicamente el espacio financiero del Taller. No habilita Gestión Logial, Secretaría, Tenidas, asistencia, actas, correspondencia, pendientes, retiros, expedientes de insinuación, Circuito de Iniciación, Cuadro del Taller, Ficha del Taller ni Gestor Documental general.
+
+El Tesorero conserva las vistas transversales mínimas del usuario autenticado y el menú **Tesorería**, con Resumen, Cuotas y cobranza, Egresos y Cuadro mensual. El backend ya separa `CanManageLodgeTreasury` de `CanManageLodgeOperations`, `CanReadLodgeSecretariat`, `CanManageLodgeSecretariat` y `CanManageDocuments`; QA-031 exige la misma separación en frontend y Demo. UI QA v0.59.
+
 ## 19. Incremento activo — Tesorería operacional del Taller
 
 El 21-09-2026 se inició `feature/treasury-completion-20260921` desde el HEAD vivo de `dev` `5704400c6fdd0b787dcb4ec17e36be9e69f4484a`, manteniendo sin cambios el candidato aceptado de Secretaría/Gran Secretaría y la QA física de `srv01` diferida.

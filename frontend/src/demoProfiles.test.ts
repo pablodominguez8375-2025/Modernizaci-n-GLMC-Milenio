@@ -22,12 +22,20 @@ describe('showcase role profiles', () => {
     expect(profile.capabilities.canManageTreasuryRegularity).toBe(false)
   })
 
-  it('exposes each administrative and teaching Taller role in the QA switcher model', () => {
-    for (const key of ['lodgeTreasurer', 'lodgeSecretary', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
+  it('exposes Secretaría and teaching Taller roles without granting their views to Tesorería', () => {
+    for (const key of ['lodgeSecretary', 'lodgeOrator', 'lodgeFirstWarden', 'lodgeSecondWarden', 'lodgePastMaster'] as const) {
       const profile = getDemoProfile(key)
       expect(profile.accessScope).toBe('organization')
       expect(profile.capabilities.canManageLodgeOperations).toBe(true)
     }
+
+    const treasurer = getDemoProfile('lodgeTreasurer')
+    expect(treasurer.accessScope).toBe('organization')
+    expect(treasurer.capabilities.canManageLodgeTreasury).toBe(true)
+    expect(treasurer.capabilities.canManageLodgeOperations).toBe(false)
+    expect(treasurer.capabilities.canReadLodgeSecretariat).toBe(false)
+    expect(treasurer.capabilities.canManageLodgeSecretariat).toBe(false)
+    expect(treasurer.capabilities.canManageDocuments).toBe(false)
   })
 
   it('separates Hospitalaria management from Venerable inspection and approval', () => {

@@ -132,3 +132,9 @@ Desde `dev` `822fd25b88caafdf5a01d89c27c53b6cd000f183` se inicia el incremento P
 - documentos oficiales registrados mediante descripción y PDF firmado físicamente, nunca generados o firmados por el sistema.
 
 Estado inicial de rama: 153/153 pruebas frontend y build productivo aprobados. Falta commit, PR a `dev`, CI exact-head, Showcase, instalable QA y revisión funcional en Pages. La QA física de `srv01` continúa diferida.
+
+## 9. Corrección P0 de permisos visibles — Tesorero / Secretaría
+
+QA-031 fija que administrar Tesorería no habilita Gestión Logial ni funciones de Secretaría. El Tesorero del Taller mantiene exclusivamente su espacio financiero y las vistas transversales comunes; no ve ni abre Tenidas, actas, correspondencia, pendientes, expedientes de insinuación, Circuito de Iniciación, Cuadro del Taller, Ficha del Taller o Gestor Documental general.
+
+El backend ya aplicaba esta separación; la corrección alinea el perfil demostrativo y la navegación del frontend con la autoridad real de la API. Debe validarse en Pages con el perfil **Tesorero del Taller** y conservarse mediante QA-031.

@@ -67,7 +67,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeTreasurer: {
     displayName: 'Tesorero del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageLodgeTreasury: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: false, canManageLodgeTreasury: true, canManageDocuments: false },
   },
   lodgeSecretary: {
     displayName: 'Secretaría del Taller · Demostración', accessScope: 'organization',
