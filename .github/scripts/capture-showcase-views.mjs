@@ -16,8 +16,21 @@ const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
   { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
-  { slug: 'tesoreria-taller', profile: 'lodgeTreasurer', label: 'Tesorería' },
-  { slug: 'tesoreria-autorizacion-venerable', profile: 'lodge', label: 'Tesorería' },
+  {
+    slug: 'tesoreria-taller',
+    profile: 'lodgeTreasurer',
+    label: 'Tesorería',
+    requiredSidebar: ['Mi ficha', 'Mi calendario', 'Notificaciones', 'Insinuados publicados', 'Tesorería', 'Biblioteca Virtual'],
+    forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Carga de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
+    requiredTabs: ['Resumen', 'Cuotas y cobranza', 'Egresos', 'Cuadro mensual'],
+  },
+  {
+    slug: 'tesoreria-autorizacion-venerable',
+    profile: 'lodge',
+    label: 'Tesorería',
+    requiredTabs: ['Egresos por autorizar'],
+    forbiddenTabs: ['Resumen', 'Cuotas y cobranza', 'Cuadro mensual'],
+  },
   { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería' },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },
@@ -156,6 +169,36 @@ async function openModule(label) {
   await delay(650)
 }
 
+async function assertNavigation(scenario) {
+  const result = await evaluate(`(() => {
+    const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+    const labels = [...document.querySelectorAll('nav.sidebar button')].map(button => normalize(button.textContent));
+    const tabs = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')]
+      .map(button => normalize(button.querySelector('span')?.textContent));
+    const requiredSidebar = ${JSON.stringify(scenario.requiredSidebar ?? [])};
+    const forbiddenSidebar = ${JSON.stringify(scenario.forbiddenSidebar ?? [])};
+    const requiredTabs = ${JSON.stringify(scenario.requiredTabs ?? [])};
+    const forbiddenTabs = ${JSON.stringify(scenario.forbiddenTabs ?? [])};
+    return {
+      missingSidebar: requiredSidebar.filter(label => !labels.includes(label)),
+      forbiddenSidebar: forbiddenSidebar.filter(label => labels.includes(label)),
+      missingTabs: requiredTabs.filter(label => !tabs.includes(label)),
+      forbiddenTabs: forbiddenTabs.filter(label => tabs.includes(label)),
+      labels,
+      tabs,
+    };
+  })()`)
+  if (!result) throw new Error(`Could not inspect role navigation for ${scenario.slug}.`)
+  for (const [key, values] of Object.entries({
+    missingSidebar: result.missingSidebar,
+    forbiddenSidebar: result.forbiddenSidebar,
+    missingTabs: result.missingTabs,
+    forbiddenTabs: result.forbiddenTabs,
+  })) {
+    if (values.length) throw new Error(`${scenario.slug} navigation check failed (${key}: ${values.join(', ')}).`)
+  }
+}
+
 async function assertNoGlobalHorizontalOverflow(label, viewport) {
   const metrics = await evaluate(`(() => {
     const root = document.documentElement;
@@ -218,6 +261,7 @@ try {
       await resetPage(viewport.width, viewport.height)
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
+      await assertNavigation(scenario)
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const filePath = path.join(outputDir, `${scenario.slug}-${viewport.suffix}.png`)
       await capture(filePath)

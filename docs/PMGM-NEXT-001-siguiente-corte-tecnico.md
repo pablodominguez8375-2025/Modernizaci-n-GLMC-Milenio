@@ -163,3 +163,9 @@ Integrado en `dev` mediante PR #132, merge SHA `e1eff39fa380144ef69e200010ced86c
 ## 12. Resolución de continuidad — prioridad del Issue #97
 
 El 22-09-2026 se reconcilia este documento con la Línea Base Maestra: queda sin efecto la autorización genérica anterior para abrir incrementos funcionales mientras Issue #97 siga bloqueando QA. Sólo una decisión expresa del Sponsor / Product Owner que identifique el alcance habilita una excepción. La prioridad vigente es completar QA/UAT física cuando se reactive `srv01`; después se revisa el flujo de insinuaciones contra el código actual antes de proponer trabajo residual.
+
+## 13. Fortalecimiento del gate Demo para QA-031
+
+Se amplía el script `.github/scripts/capture-showcase-views.mjs` para comprobar en navegador que el perfil Tesorero conserva sus accesos transversales y las cuatro funciones propias de Tesorería, y no recibe accesos de Secretaría/Gestión Logial. En el recorrido del Venerable se comprueba que sólo figure **Egresos por autorizar**. La validación corre antes de guardar las capturas de escritorio y móvil y falla Showcase ante cualquier divergencia.
+
+Este ajuste automatiza un control del alcance QA-031/v0.59; no añade ni modifica capacidades funcionales. El despliegue físico en `srv01` y la aceptación QA/UAT siguen pendientes según Issue #97.
