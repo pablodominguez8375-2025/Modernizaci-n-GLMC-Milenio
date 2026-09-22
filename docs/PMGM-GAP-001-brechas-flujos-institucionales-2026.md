@@ -132,35 +132,34 @@ Una brecha se considera cerrada sólo cuando existe:
 6. caso UAT asociado;
 7. documentación actualizada.
 
-## 5. Auditoría de estado — 22-09-2026
+## 5. Auditoría de estado — 22-09-2026 (corregida)
 
-**Rama evaluada:** `dev@225db8d3b2243ac7b746583410289076082c8eb8` (HEAD vivo al momento de la auditoría).
-**Método:** inspección directa del código real (backend `PMGM.Api/Modules/*`, frontend `frontend/src/*`), no solo de este documento ni de conversaciones previas. Cada veredicto cita el archivo/símbolo revisado. Los gaps marcados "requiere revisión más profunda" no fueron confirmados como cerrados ni como abiertos con certeza suficiente; no dar por resueltos sin verificación adicional.
+**Rama evaluada:** `dev@3ae5ecb514b5d9a525d0a271512c94dbe0f65f1b` (incluye PR #130).
+**Método:** inspección del código real de `backend/src/PMGM.Api/Modules/*`, `backend/tests/*` y `frontend/src/*`, citando archivo y símbolo. Ningún gap se considera cerrado sólo por este documento: el criterio formal sigue siendo la sección 4 (incluye caso UAT asociado).
 
-Ninguno de los hallazgos de esta auditoría se cerró en este corte: es diagnóstico, no remediación. Los gaps confirmados como **abiertos** deben tratarse como pendientes reales del backlog, no como histórico.
-
-| Gap | Veredicto | Evidencia |
+| Gap | Estado en código | Evidencia |
 |---|---|---|
-| GAP-001 Tipos de ceremonia | **Parcial** — backend ya soporta más tipos de lo que el documento original asumía; el hueco real está solo en frontend | `backend/.../Ceremonies/CeremonyCodes.cs` ya define `Type.Affiliation` y `Type.Incorporation`. `frontend/src/CeremoniesPage.tsx` → `ceremonyTypeLabel()` solo reconoce `initiation` y `wage_increase`; cualquier otro valor (incluidos Affiliation/Incorporation reales) cae en `'Exaltación'` por defecto. Falta también el tipo "Otra". Documentado con test explícito en PR #126 (`CeremoniesPage.test.tsx`). |
-| GAP-002 Visto bueno de Gran Maestría | **Abierto** | `CeremonyEligibilityService.MapRequirementCodeToValidationType` solo mapea `regimen_interior`, `gran_tesoreria`, `gran_hospitalaria`. No existe código de requisito para Gran Maestría en el motor de elegibilidad. |
-| GAP-003 Máquina de estados de insinuación | **Parcial** | Existen `CandidateIntakeCodes.ReviewStatus`, `CeremonyCodes.RequestStatus` (`UnderReview`/`Authorized`/`Rejected`), `PublicationStatus` y validación de balotaje (`CeremonyValidations`/`ValidationStatus`). No se confirmó automatización de la espera mínima de 7 días antes de revisión inicial ni de la permanencia mínima de 20 días como bloqueo automático — requiere revisión adicional del flujo de publicación. |
-| GAP-004 Reingreso tras rechazo (1 año) | **Abierto** | Sin resultados para lógica de espera de un año/365 días en `Modules/CandidateIntake` ni `Modules/Admissions`. |
-| GAP-005 Terminología de dispensas | **Abierto** | `AdvancementEligibilityPolicy.cs` sigue usando `CouncilApproved` y el mensaje literal "El Consejo de Maestros del Taller no aprobó la dispensa", no "Cámara del Medio" como exige el protocolo 2026. |
-| GAP-006 Matriz financiera agregada | **Abierto** | `Modules/Treasury/Entities/FinancialRegularitySnapshot.cs` es un único registro con un campo `Status` (string) agregado — sin ítems desglosados (cuota mensual vigente, derecho de ceremonia, Fondo de Defunción, cuota de Hospitalidad, etc.). |
-| GAP-007 Firma manuscrita en afiliación | **Sin evidencia de control automatizado** | Existe `Modules/Admissions` (`AdmissionEligibilityPolicy`, `AdmissionWorkflowCodes`), pero no se encontró ningún campo o verificación relacionado con "firma manuscrita" del original de la Carta de Retiro Voluntario. Podría estar cubierto por control manual vía clasificación en Gestor Documental — requiere confirmación explícita del Sponsor sobre si eso satisface el requisito. |
-| GAP-008 Incorporación desde otra Obediencia | **Requiere revisión más profunda** | El módulo `Admissions` existe; no se confirmaron campos específicos de Pacto de Paz y Amistad ni la ruta de aprobación condicionada a Gran Maestría cuando no existe pacto vigente. |
-| GAP-009 Anticipación mínima Gran Templo | **Abierto** | No se encontró validación de anticipación mínima (7 días hábiles) en los endpoints de reserva de espacios de Gran Secretaría ni en `GrandSecretariatPage.tsx`. |
-| GAP-010 Plancha como resultado del workflow | **Resuelto** | `GrandSecretariatPage.tsx` → `CeremonyAuthorizationPanel` emite la Plancha (`issueSecretariatCeremonyAuthorization`) directamente desde los datos del expediente de la cola de ceremonias ya autorizadas, con `SecretariatDocument` para numeración/trazabilidad. Coincide con el requisito de que la plancha se genere desde el workflow, no como entrada manual libre. |
-| GAP-011 Protección de información confidencial | **Resuelto** | `DocumentManagementPage.tsx` implementa clasificación (`internal`/`confidential`/`sensitive`/`restricted`) y política de acceso (`library_authenticated`/`organization_authenticated`/`management_only`) por documento. Cubierto además por tests nuevos en PR #128 (`DocumentManagementPage.test.tsx`). |
-| GAP-012 CRV/CRF como eventos históricos | **Abierto** | No se encontró un modelo de eventos CRV/CRF append-only en `Modules/Membership`. Los formularios NUEVO-FORMULARIO-CRV/CRF-2026 existen como documentos en Drive, pero no se evidenció su modelado como eventos históricos en el backend. |
-| GAP-013 Voluntad testamentaria (Fondo de Defunción) | **Abierto** | Hospitalaria tiene la categoría de movimiento `death_replenishment` (reposición por fallecimiento), pero no existe módulo de voluntad testamentaria ni registro de beneficiario principal/subsidiario. |
-| GAP-014 Composición individual Gran Tesorería | **Resuelto** | `Modules/Treasury/TreasuryCodes.cs` → `LodgeFeeType` define `Normal`/`Student`/`Senior`/`Spouse`/`PastActive`, reflejado en `frontend/src/LodgeTreasuryPanel.tsx` (`feeLabel`). La composición individual con excepciones ya está implementada. |
+| GAP-001 Tipos de ceremonia | **Implementado** | Backend: `CeremonyCodes.Type` (5 tipos). Frontend: `frontend/src/ceremonyTypes.ts` (PR #130) como fuente única, con test de paridad contra `CeremonyCodes.cs`. Pendiente: "Otra" no existe como código backend (requiere decisión normativa); `LodgeSecretariatPanel.tsx` conserva copia local sin el defecto hasta integrar PR #116. |
+| GAP-002 Visto bueno de Gran Maestría | **Implementado** | `Ceremonies/CeremonyEligibilityPolicy.cs` → `EvaluateGrandMaster` (requisito `gran_maestria`, bloqueante); `GrandMasterCeremonyEndpoints.cs` (POST/GET `validaciones/gran-maestria`, `CanProvideGrandMasterApproval`, auditoría). Tests: `GrandMasterCeremonyAuthorizationPolicyTests.cs`, `CeremonyEligibilityServiceTests.cs`. |
+| GAP-003 Máquina de estados de insinuación | **Implementado** | `CandidateIntakeWorkflowPolicy.InitialDeliberationMinimumWaitingDays = 7`; publicación `DefaultInitiationPublicationDays = 20` con `RequiredDays` exigido en la política; mínimo 3 entrevistas (`CandidateWorkflowEndpoints.cs`, `CandidateIntakeWorkflowPolicy.cs`); etapas como `ValidationType` (deliberación inicial, paquete de entrevistas, revisión 3.er grado, balotaje final, envío a ceremonia). Tests: `CandidateIntakeWorkflowPolicyTests.cs`. |
+| GAP-004 Nueva presentación tras rechazo | **Implementado** | `CandidateRejectionPolicy.IsOrderBlocking` (antecedente transversal tras rechazo en 3.er grado o balotaje) y `CandidateIntakeWorkflowPolicy` (`rejectionDate.AddYears(1)` + constancia de subsanación). Tests: `CandidateRejectionPolicyTests.cs`. |
+| GAP-005 Terminología de dispensas | **Abierto** | `Ceremonies/AdvancementEligibilityPolicy.cs` mantiene `CouncilApproved` y mensajes "Consejo de Maestros"; el protocolo 2026 atribuye la dispensa a la Cámara del Medio. |
+| GAP-006 Matriz financiera | **Parcial** | Existe detalle mensual por hermano: `Treasury/Entities/TreasuryMonthlyStatement.cs` + `TreasuryMonthlyStatementLine` (con `MemberId`) y pagos. La elegibilidad de ceremonias sigue leyendo `FinancialRegularitySnapshot` (un `Status` agregado por Taller); no hay ítems de evidencia por trámite (derecho de ceremonia, Fondo de Defunción, cuota de Hospitalidad). |
+| GAP-007 Firma manuscrita (afiliación) | **Implementado** | `Admissions/AdmissionEndpoints.cs` → `POST expedientes/{id}/verificaciones/carta-retiro-firma-manuscrita` con auditoría `admission.withdrawal_letter.handwritten_signature_verified`; requisito `withdrawal_letter_handwritten_signature` en `AdmissionEligibilityPolicy`. |
+| GAP-008 Incorporación desde otra Obediencia | **Implementado** | `AdmissionEligibilityPolicy.AddIncorporationRequirements`: evidencias legalizadas de iniciación, aumento y exaltación; `grand_master_special_acceptance` cuando consta ausencia de Pacto de Paz y Amistad (`AdmissionEndpoints.cs`). PR #116 (draft) extiende este flujo. |
+| GAP-009 Anticipación mínima Gran Templo | **Abierto** | Sin regla de anticipación (7 días hábiles) en reservas de Gran Secretaría ni parámetro en `SystemConfiguration`. |
+| GAP-010 Plancha como resultado del workflow | **Implementado, con decisión posterior pendiente de integrar** | En `dev` la Plancha se emite desde la cola de ceremonias autorizadas. La decisión vigente del Product Owner (el sistema no genera Planchas; se registra y adjunta el PDF firmado físicamente) está implementada en PR #116, aún no integrado. |
+| GAP-011 Protección de información confidencial | **Implementado** | `DocumentManagementPage.tsx`: clasificación (interno/confidencial/sensible/restringido) y política de acceso por documento. Tests: `DocumentManagementPage.test.tsx`. |
+| GAP-012 CRV/CRF como eventos históricos | **Parcial** | Retiros voluntario/forzoso registran `InstitutionalStatusEvent` (`Membership/WithdrawalEndpoints.cs`) sin sobrescribir la historia. No se verificó el cambio CRF→CRV como evento nuevo que conserve la CRF anterior. |
+| GAP-013 Voluntad testamentaria (Fondo de Defunción) | **Abierto** | Sin módulo de beneficiario principal/subsidiario; Hospitalaria sólo maneja agregados (`HospitalariaMonthlySubmission` excluye beneficiarios por diseño). |
+| GAP-014 Composición individual Gran Tesorería | **Implementado** | `Treasury/TreasuryCodes.LodgeFeeType` (normal/estudiante/tercera edad/cónyuge/Past Activo) y líneas por hermano del Cuadro mensual. |
 
 ### Resumen
-- **Resueltos (3):** GAP-010, GAP-011, GAP-014
-- **Abiertos, confirmados (7):** GAP-002, GAP-004, GAP-005, GAP-006, GAP-009, GAP-012, GAP-013
-- **Parciales (2):** GAP-001 (backend listo, frontend pendiente), GAP-003 (estructura base presente, faltan validaciones temporales)
-- **Requieren revisión adicional antes de veredicto (2):** GAP-007, GAP-008
+- **Implementados (9):** GAP-001, 002, 003, 004, 007, 008, 010, 011, 014
+- **Parciales (2):** GAP-006, GAP-012
+- **Abiertos (3):** GAP-005, GAP-009, GAP-013
 
-### Siguiente paso recomendado
-No cerrar ningún gap en este documento sin las 7 condiciones de la sección 4 (Criterio de cierre). Priorizar P0 según la sección 3 ya existente: de los P0, **GAP-002, GAP-004 y GAP-006 siguen completamente abiertos** y **GAP-001/GAP-003 son parciales** — ninguno de los P0 está resuelto todavía. De los P1, únicamente GAP-011 está resuelto. Del P2, únicamente GAP-014 está resuelto.
+"Implementado" significa presente en código con evidencia; el cierre formal (sección 4) exige además caso UAT asociado y validación en QA `srv01` (Issue #97 pendiente).
+
+### Registro de corrección
+La primera versión de esta sección (PR #129, mismo día) contenía errores: declaró **abiertos** GAP-002 y GAP-004, **parcial** GAP-003 y **sin evidencia/por revisar** GAP-007 y GAP-008, que ya estaban implementados. Causa: búsquedas por palabras clave demasiado estrechas (p. ej. sólo en `CeremonyEligibilityService` y no en `CeremonyEligibilityPolicy` ni `GrandMasterCeremonyEndpoints`). Lección para futuras auditorías: verificar políticas, endpoints y **tests del backend** antes de declarar un gap abierto.
