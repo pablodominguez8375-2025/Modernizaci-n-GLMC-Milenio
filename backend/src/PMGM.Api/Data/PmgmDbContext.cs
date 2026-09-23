@@ -40,6 +40,11 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeTreasuryExpense> LodgeTreasuryExpenses => Set<LodgeTreasuryExpense>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<HospitalariaMonthlySubmission> HospitalariaMonthlySubmissions => Set<HospitalariaMonthlySubmission>();
+    public DbSet<HospitalariaReplenishmentRate> HospitalariaReplenishmentRates => Set<HospitalariaReplenishmentRate>();
+    public DbSet<DeathReplenishmentCase> DeathReplenishmentCases => Set<DeathReplenishmentCase>();
+    public DbSet<DeathReplenishmentObligation> DeathReplenishmentObligations => Set<DeathReplenishmentObligation>();
+    public DbSet<DeathReplenishmentPayment> DeathReplenishmentPayments => Set<DeathReplenishmentPayment>();
+    public DbSet<DeathReplenishmentTransfer> DeathReplenishmentTransfers => Set<DeathReplenishmentTransfer>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
@@ -343,6 +348,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.SubmissionNumber).IsRequired();
             entity.Property(x => x.PayerDisplayName).HasMaxLength(320).IsRequired();
             entity.Property(x => x.PayerRut).HasMaxLength(40);
             entity.Property(x => x.Reference).HasMaxLength(500);
@@ -447,6 +453,72 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth }).IsUnique();
             entity.HasIndex(x => new { x.Status, x.SubmittedAtUtc });
+        });
+
+        modelBuilder.Entity<HospitalariaReplenishmentRate>(entity =>
+        {
+            entity.ToTable("hospitalaria_replenishment_rates");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AmountPerActiveMember).HasPrecision(18, 2);
+            entity.Property(x => x.SourceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasIndex(x => x.EffectiveFrom).IsUnique();
+        });
+
+        modelBuilder.Entity<DeathReplenishmentCase>(entity =>
+        {
+            entity.ToTable("hospitalaria_death_replenishment_cases");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AmountPerActiveMember).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.DeceasedMember).WithMany().HasForeignKey(x => x.DeceasedMemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.DeathStatusEventId).IsUnique();
+            entity.HasIndex(x => x.DeathDate);
+        });
+
+        modelBuilder.Entity<DeathReplenishmentObligation>(entity =>
+        {
+            entity.ToTable("hospitalaria_death_replenishment_obligations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.AmountDue).HasPrecision(18, 2);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.HasOne(x => x.Case).WithMany(x => x.Obligations).HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Membership).WithMany().HasForeignKey(x => x.MembershipId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CaseId, x.MembershipId }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+
+        modelBuilder.Entity<DeathReplenishmentPayment>(entity =>
+        {
+            entity.ToTable("hospitalaria_death_replenishment_payments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ReceiptNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Obligation).WithMany(x => x.Payments).HasForeignKey(x => x.ObligationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.ReceiptNumber).IsUnique();
+        });
+
+        modelBuilder.Entity<DeathReplenishmentTransfer>(entity =>
+        {
+            entity.ToTable("hospitalaria_death_replenishment_transfers");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.SubmissionNumber).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Case).WithMany().HasForeignKey(x => x.CaseId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CaseId, x.OrganizationId, x.SubmissionNumber }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
         });
 
         modelBuilder.Entity<HospitalariaRegularitySnapshot>(entity =>

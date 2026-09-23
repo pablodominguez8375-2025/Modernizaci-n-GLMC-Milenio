@@ -182,4 +182,13 @@ Artefacto QA #10723132819: `proyecto-centenario-qa-srv01-e0dd6e66fe5d6ab7f6be6a2
 
 ## 15. Próximo punto de continuidad
 
-Issue #97 sigue abierto: despliegue físico diferido en `srv01`, verificación `SOURCE_SHA`/`MANIFEST`, smoke autenticado, QA-001..QA-026, UAT y evidencia. No iniciar otro incremento funcional mientras siga el bloqueo, salvo decisión expresa del Product Owner con alcance concreto. Al retomar, consultar HEAD de `dev` y `main`, START-HERE, Drive y esta sección; no reutilizar artefactos expirados.
+Issue #97 sigue abierto: despliegue físico diferido en `srv01`, verificación `SOURCE_SHA`/`MANIFEST`, smoke autenticado, QA-001..QA-034, UAT y evidencia. No iniciar otro incremento funcional mientras siga el bloqueo, salvo decisión expresa del Product Owner con alcance concreto. Al retomar, consultar HEAD de `dev` y `main`, START-HERE, Drive y esta sección; no reutilizar artefactos expirados.
+
+
+## 16. Incremento funcional expresamente autorizado — Hospitalaria / reposiciones
+
+Aunque Issue #97 mantiene pendiente QA física, el Product Owner autoriza este alcance concreto: reposición de $1.500 por hermano activo del Cuadro ante defunción; tarifa por vigencia; cobro individual trazable del Hospitalario; transferencia total a Gran Hospitalaria; conciliación/visto bueno y estado de regularidad requerido en Ceremonias; cuota de cónyuge referencial de $15.000 mensuales, configurable en Tesorería. El monto de aporte a Gran Tesorería se ingresa por separado según cuadro oficial vigente.
+
+Rama en trabajo: feature/hospitalaria-death-replenishment-spouse-fee, desde dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017; main sigue en 6dfb9546a4873baff15955cf86abfd7d47e3d111. Cambios iniciados incluyen persistencia/migración, API, demo y UI; las transferencias observadas admiten reenvío numerado con historial íntegro. QA-033 se define en docs/qa/PMGM-QA-V063-HOSPITALARIA-REPOSICION-CONYUGE.md.
+
+Antes de abrir PR: terminar pruebas, revisar migración, registrar resultados y conservar main intacta. El entorno no tiene .NET SDK; el CI exact-head debe compilar backend y ejecutar integración PostgreSQL. Después: PR a dev, CI exact-head, Showcase/Pages, instalable QA y Pre-UAT del mismo SHA. Despliegue físico srv01, smoke, regresión y UAT permanecen sujetos a Issue #97; no promover a main.

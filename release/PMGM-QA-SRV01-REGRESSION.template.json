@@ -239,6 +239,87 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-026",
+      "category": "admissions",
+      "title": "Afiliación/Incorporación 2026: modalidad, comisión, decisiones, materialización e historial",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-027",
+      "category": "treasury",
+      "title": "Mi ficha: cartola personal y duplicidad de pagos",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-028",
+      "category": "treasury",
+      "title": "Gran Tesorería: Cuadro Logial Mensual agregado por tipo de cuota",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-029",
+      "category": "navigation",
+      "title": "Navegación de Tesorería por cargo sin ampliar permisos",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-030",
+      "category": "secretariat",
+      "title": "Navegación de Secretaría por cargo",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-031",
+      "category": "authorization",
+      "title": "Segregación de Tesorero y Secretaría",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-032",
+      "category": "candidate_publications",
+      "title": "Insinuados publicados con fotografía protegida",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-033",
+      "category": "identity",
+      "title": "Logotipo oficial e identidad institucional en móvil y escritorio",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
+    },
+    {
+      "id": "QA-034",
+      "category": "hospitalaria",
+      "title": "Reposición por fallecimiento, transferencia conciliada y cuota de cónyuge",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {

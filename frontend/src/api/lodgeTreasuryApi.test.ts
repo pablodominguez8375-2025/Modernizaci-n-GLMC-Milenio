@@ -30,4 +30,17 @@ describe('Tesorería del Taller en demostración', () => {
     expect(expense.approvalStatus).toBe('pending_approval')
     expect((await api.approveLodgeTreasuryExpense(expense.id)).approvalStatus).toBe('approved')
   })
+
+  it('permite configurar la cuota de cónyuge por vigencia sin mezclar su monto con Gran Tesorería', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    const organizationId = '23232323-2323-2323-2323-232323232323'
+    const plan = await api.createLodgeFeePlan(organizationId, {
+      feeType: 'spouse', memberAmount: 15000, grandTreasuryAmount: 9000,
+      effectiveFrom: '2026-10-01',
+    })
+    expect(plan.memberAmount).toBe(15000)
+    expect(plan.grandTreasuryAmount).toBe(9000)
+    expect(plan.workshopAmount).toBe(6000)
+    expect(plan.effectiveFrom).toBe('2026-10-01')
+  })
 })

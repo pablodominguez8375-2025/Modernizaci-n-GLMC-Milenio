@@ -244,3 +244,11 @@ Pendiente antes de integrar:
 - actualización de Issue #97 y Línea Base Maestra.
 
 El despliegue físico en `srv01` sigue siendo un hito operacional separado y no se declara realizado.
+
+## 11. Addendum autorizado — reposición por fallecimiento y transferencia por Taller
+
+Decisión expresa del Product Owner, 23-09-2026: completar Hospitalaria del Taller y Gran Hospitalaria con reposiciones automáticas por fallecimiento. Por cada defunción registrada se conserva el valor de la tarifa vigente a la fecha efectiva y se crea una obligación de **$1.500 CLP por cada hermano activo en el Cuadro del Taller**, excluyendo al fallecido. La tarifa queda versionada y configurable por vigencia. La generación debe ser idempotente.
+
+Hospitalaria local ve y registra el pago individual, fecha, medio y comprobante/referencia; Gran Hospitalaria sólo recibe agregados por Taller, monto esperado, monto transferido y referencia bancaria institucional. El Taller sólo envía la transferencia al completar todas las obligaciones. Gran Hospitalaria concilia contra total exigible y recaudado; la conciliación genera el visto bueno y la regularidad que consulta Ceremonias. Si observa una transferencia, el Taller puede enviar un nuevo intento numerado, conservándose el historial. La regularidad considera el intento más reciente de cada caso. Los casos de reposición no exponen nombres ni pagos individuales a Gran Hospitalaria.
+
+Se añade configuración de cuota de cónyuge por vigencia con referencia de **$15.000 CLP mensuales**. El aporte a Gran Tesorería sigue siendo un componente independiente y obligatorio del plan, porque no se encontró una cifra institucional vigente para inferirlo.

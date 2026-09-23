@@ -2,6 +2,16 @@ namespace PMGM.Api.Modules.Hospitalaria;
 
 public static class HospitalariaCodes
 {
+    public static class ReplenishmentStatus
+    {
+        public const string Pending = "pending";
+        public const string Partial = "partial";
+        public const string Paid = "paid";
+        public const string Submitted = "submitted";
+        public const string Reconciled = "reconciled";
+        public const string Observed = "observed";
+    }
+
     public static class SubmissionStatus
     {
         public const string Draft = "draft";
