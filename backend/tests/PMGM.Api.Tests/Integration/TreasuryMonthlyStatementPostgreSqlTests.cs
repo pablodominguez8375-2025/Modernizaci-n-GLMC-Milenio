@@ -38,6 +38,13 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 MembershipType = "regular", StartDate = new DateOnly(2026, 1, 1), Status = MembershipCodes.MembershipStatus.Active
             };
+            var pastActivePerson = new Person { FirstNames = "Hermano", LastNames = "Past Activo" };
+            var pastActiveMember = new Member { Person = pastActivePerson, PersonId = pastActivePerson.Id, InstitutionalNumber = $"PAST-{Guid.NewGuid():N}" };
+            var pastActiveMembership = new Membership
+            {
+                Member = pastActiveMember, MemberId = pastActiveMember.Id, Organization = organization, OrganizationId = organization.Id,
+                MembershipType = GrandTreasuryFeeSchedule.PastActiveMembershipType, StartDate = new DateOnly(2026, 1, 1), Status = MembershipCodes.MembershipStatus.Active
+            };
             var degree = new DegreeEvent
             {
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
@@ -72,7 +79,7 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 EffectiveUntil = new DateOnly(2026, 12, 31), Amount = 0m,
                 AuthorizationReference = "PLANCHA-CI-001", Status = TreasuryCodes.AdjustmentStatus.Active
             };
-            db.AddRange(organization, person, member, membership, degree, office, feePlan, charge, adjustment);
+            db.AddRange(organization, person, member, membership, pastActivePerson, pastActiveMember, pastActiveMembership, degree, office, feePlan, charge, adjustment);
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             memberId = member.Id;
@@ -98,6 +105,7 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         Assert.Equal(membershipId, generatedLine.GetProperty("membershipId").GetGuid());
         Assert.Equal("treasurer", generatedLine.GetProperty("officeCodeAtCutoff").GetString());
         Assert.Equal("PLANCHA-CI-001", generatedLine.GetProperty("authorizationReference").GetString());
+        Assert.Equal(1, generated.GetProperty("lines").GetArrayLength()); // Past Activo is not assessed by Gran Tesorería.
         var breakdown = Assert.Single(generated.GetProperty("feeBreakdown").EnumerateArray());
         Assert.Equal(TreasuryCodes.LodgeFeeType.Student, breakdown.GetProperty("feeType").GetString());
         Assert.Equal(1, breakdown.GetProperty("members").GetInt32());

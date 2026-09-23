@@ -7,5 +7,6 @@ public sealed class Organization
     public string? Number { get; set; }
     public required string Type { get; set; }
     public Guid? ParentOrganizationId { get; set; }
+    public string? TreasuryTerritory { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }

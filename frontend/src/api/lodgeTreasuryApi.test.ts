@@ -6,8 +6,10 @@ describe('Tesorería del Taller en demostración', () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
     const plans = await api.getLodgeFeePlans(organizationId)
-    expect(plans.items.map(item => item.feeType)).toEqual(['normal', 'student', 'senior'])
-    expect(plans.items[0].memberAmount).toBeGreaterThan(plans.items[0].grandTreasuryAmount)
+    expect(plans.items.map(item => item.feeType)).toEqual(['normal', 'student', 'senior', 'spouse'])
+    expect(plans.items.find(item=>item.feeType==='student')?.grandTreasuryAmount).toBe(8000)
+    expect(plans.items.find(item=>item.feeType==='spouse')?.grandTreasuryAmount).toBe(13000)
+    expect(plans.items[0].memberAmount).toBeGreaterThan(plans.items[0].grandTreasuryAmount??0)
 
     const summary = await api.generateLodgeCharges(organizationId, 2026, 9)
     expect(summary.members).toBe(22)
@@ -34,13 +36,21 @@ describe('Tesorería del Taller en demostración', () => {
   it('permite configurar la cuota de cónyuge por vigencia sin mezclar su monto con Gran Tesorería', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
-    const plan = await api.createLodgeFeePlan(organizationId, {
-      feeType: 'spouse', memberAmount: 15000, grandTreasuryAmount: 9000,
-      effectiveFrom: '2026-10-01',
-    })
+    const plan = (await api.getLodgeFeePlans(organizationId)).items.find(item=>item.feeType==='spouse')!
     expect(plan.memberAmount).toBe(15000)
-    expect(plan.grandTreasuryAmount).toBe(9000)
-    expect(plan.workshopAmount).toBe(6000)
-    expect(plan.effectiveFrom).toBe('2026-10-01')
+    expect(plan.grandTreasuryAmount).toBe(13000)
+    expect(plan.workshopAmount).toBe(2000)
+    expect(plan.effectiveFrom).toBe('2026-01-01')
+  })
+
+  it('recalcula el aporte institucional por Oriente sin cambiar la cuota local del Taller', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    const organizationId = '23232323-2323-2323-2323-232323232323'
+    await api.setTreasuryTerritory(organizationId,'other_oriente')
+    const plans=(await api.getLodgeFeePlans(organizationId)).items
+    expect(plans.find(item=>item.feeType==='normal')?.grandTreasuryAmount).toBe(15000)
+    expect(plans.find(item=>item.feeType==='spouse')?.grandTreasuryAmount).toBe(10000)
+    expect(plans.find(item=>item.feeType==='spouse')?.memberAmount).toBe(15000)
+    expect(plans.find(item=>item.feeType==='spouse')?.workshopAmount).toBe(5000)
   })
 })

@@ -83,6 +83,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Name).HasMaxLength(200).IsRequired();
             entity.Property(x => x.Number).HasMaxLength(40);
             entity.Property(x => x.Type).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.TreasuryTerritory).HasMaxLength(40);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasOne<Organization>()
                 .WithMany()

@@ -21,7 +21,9 @@ export interface SessionCapabilities {
   canConfigureSystem?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
+export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'
 export interface OrganizationOption { id: string; name: string; number: string | null; type: string }
+export interface TreasuryTerritoryOption extends OrganizationOption { treasuryTerritory: TreasuryTerritory | null }
 export interface OrganizationOptionsResponse { total: number; items: OrganizationOption[] }
 export interface SystemSetting { code: string; category: string; label: string; valueType: 'integer' | 'text' | 'list'; value: string; effectiveFrom: string; sourceReference: string; status: string }
 export interface SystemSettingsResponse { total: number; items: SystemSetting[] }
@@ -31,7 +33,7 @@ export interface SystemSettingVersionsResponse { total: number; items: SystemSet
 export interface AuditLogEvent { id:string; occurredAtUtc:string; user:string; ipAddress:string; menu:string|null; submenu:string|null; summary:string; action:string; result:'success'|'rejected'|'observed'; correlationId:string }
 export interface AuditLogResponse { total:number; page:number; pageSize:number; immutable:boolean; items:AuditLogEvent[] }
 export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_active'
-export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; workshopAmount: number; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
+export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number | null; workshopAmount: number | null; rateAvailable?: boolean; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
 export interface LodgeTreasurySummary { organizationId: string; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
 export interface LodgeTreasuryPayment { id:string; receiptNumber:string; amount:number; paymentMethod:'cash'|'transfer'|'deposit'|'other'; paymentDate:string; reference:string|null }
 export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplayName:string; memberAmount:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; payments:LodgeTreasuryPayment[] }
@@ -252,11 +254,13 @@ const defaultMockSystemSettings: SystemSetting[] = [
   { code:'system.access.user_assignments',category:'Usuarios',label:'Asignaciones de perfiles a usuarios',valueType:'text',value:'[]',effectiveFrom:'2026-01-01',sourceReference:'Modelo de acceso Proyecto Centenario',status:'default' },
   { code:'system.access.review_frequency_days',category:'Auditoría de accesos',label:'Frecuencia de certificación (días)',valueType:'integer',value:'90',effectiveFrom:'2026-01-01',sourceReference:'Política de revisión de accesos',status:'default' },
 ]
-const defaultMockOrganizations: OrganizationOption[] = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23].map(number => ({
+type MockOrganizationOption = OrganizationOption & { treasuryTerritory: TreasuryTerritory | null }
+const defaultMockOrganizations: MockOrganizationOption[] = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23].map(number => ({
   id: number === 1 ? '11111111-1111-1111-1111-111111111111' : number === 23 ? '23232323-2323-2323-2323-232323232323' : `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`,
   name: `Taller Demostrativo Nº ${number}`,
   number: String(number),
   type: 'workshop',
+  treasuryTerritory: 'santiago',
 }))
 const defaultMockSpaces: InstitutionalSpace[] = [
   { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', code: 'TEMP-01', name: 'Templo Principal', spaceType: 'temple', location: 'Sede institucional', capacity: 80, status: 'active' },
@@ -294,7 +298,7 @@ export class PmgmApiClient {
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
-  private readonly mockOrganizations = [...defaultMockOrganizations]
+  private readonly mockOrganizations: MockOrganizationOption[] = [...defaultMockOrganizations]
   private readonly mockSpaces = [...defaultMockSpaces]
   private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
   private readonly mockDocuments: SecretariatDocument[] = []
@@ -330,7 +334,10 @@ export class PmgmApiClient {
   async getCandidatePortal(): Promise<CandidatePortalResponse> { if (this.useMocks) { await sleep(120); return { culture: 'es-CL', portal: 'Insinuados en período de publicación', total: mockCandidates.length, items: mockCandidates } } return this.request<CandidatePortalResponse>('/api/ceremonias/portal-insinuados') }
   async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
   async getSessionProfile(): Promise<SessionProfile> { if (this.useMocks) return mockSession; return this.request<SessionProfile>('/api/session/me') }
-  async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: [...this.mockOrganizations] }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
+  async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: this.mockOrganizations.map(({id,name,number,type})=>({id,name,number,type})) }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
+  async getTreasuryTerritories(): Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks)return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,treasuryTerritory:item.treasuryTerritory??null}))};return this.request('/api/tesoreria/talleres/orientes')}
+  async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:item.treasuryTerritory??null}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
+  async setTreasuryTerritory(organizationId:string,territory:TreasuryTerritory):Promise<{organizationId:string;territory:TreasuryTerritory}>{if(this.useMocks){const organization=this.mockOrganizations.find(item=>item.id===organizationId);if(!organization)throw new Error('El Taller no existe.');organization.treasuryTerritory=territory;return{organizationId,territory}}return this.postJson(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`,{territory})}
   async getSystemSettings(): Promise<SystemSettingsResponse> { if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => ({ ...item })) }; return this.request<SystemSettingsResponse>('/api/system/settings/') }
   async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> { if (this.useMocks) { const item=this.mockSystemSettings.find(value=>value.code===code); if(!item) throw new Error('El parámetro no pertenece al catálogo administrable.'); if(!payload.value.trim()||!payload.sourceReference.trim()) throw new Error('Valor y fundamento son obligatorios.'); const status=payload.effectiveFrom>new Date().toISOString().slice(0,10)?'scheduled':'active'; Object.assign(item,{value:payload.value.trim(),effectiveFrom:payload.effectiveFrom,sourceReference:payload.sourceReference.trim(),status}); const versions=this.mockSystemSettingVersions.get(code)??[]; versions.unshift({id:crypto.randomUUID(),value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status,createdAtUtc:new Date().toISOString()}); this.mockSystemSettingVersions.set(code,versions); return {...item}; } return this.postJson<SystemSetting>(`/api/system/settings/${encodeURIComponent(code)}`,payload) }
   async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
@@ -338,9 +345,13 @@ export class PmgmApiClient {
 
   async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
     if (this.useMocks) {
+      const territory=this.mockOrganizations.find(item=>item.id===organizationId)?.treasuryTerritory
+      const official=mockGrandTreasuryRate(payload.feeType,territory,payload.effectiveFrom)
+      if(official===null)throw new Error('No existe una tarifa institucional CLP aplicable para esta categoría, Oriente y vigencia.')
+      if(payload.memberAmount<official)throw new Error('La cuota local no puede ser inferior al aporte decretado a Gran Tesorería.')
       const plans = this.mockLodgeFeePlans.get(organizationId) ?? []
       if (plans.some(item => item.feeType === payload.feeType && item.isActive)) throw new Error('Ya existe una cuota activa del mismo tipo para esa vigencia.')
-      const plan = { id: crypto.randomUUID(), organizationId, ...payload, effectiveUntil: payload.effectiveUntil ?? null, workshopAmount: payload.memberAmount - payload.grandTreasuryAmount, isActive: true }
+      const plan = { id: crypto.randomUUID(), organizationId, ...payload, grandTreasuryAmount:official, effectiveUntil: payload.effectiveUntil ?? null, workshopAmount: payload.memberAmount - official, isActive: true }
       plans.push(plan); this.mockLodgeFeePlans.set(organizationId, plans); return { ...plan }
     }
     return this.postJson<LodgeFeePlan>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`, payload)
@@ -349,16 +360,17 @@ export class PmgmApiClient {
     if (this.useMocks) {
       let plans = this.mockLodgeFeePlans.get(organizationId)
       if (!plans) { plans = defaultLodgeFeePlans(organizationId); this.mockLodgeFeePlans.set(organizationId, plans) }
-      return { total: plans.length, items: plans.map(item => ({ ...item })) }
+      const territory=this.mockOrganizations.find(item=>item.id===organizationId)?.treasuryTerritory
+      return { total: plans.length, items: plans.map(item => {const official=mockGrandTreasuryRate(item.feeType,territory,item.effectiveFrom);return{...item,grandTreasuryAmount:official,workshopAmount:official===null?null:item.memberAmount-official,rateAvailable:official!==null}}) }
     }
     return this.request<{ total: number; items: LodgeFeePlan[] }>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`)
   }
   async generateLodgeCharges(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
     if (this.useMocks) {
       const plans = (await this.getLodgeFeePlans(organizationId)).items
-      const normal = plans.find(item => item.feeType === 'normal')!; const student = plans.find(item => item.feeType === 'student')!; const senior = plans.find(item => item.feeType === 'senior')!
-      const memberExpected = normal.memberAmount * 17 + student.memberAmount * 3 + senior.memberAmount * 2
-      const grandTreasuryExpected = normal.grandTreasuryAmount * 17 + student.grandTreasuryAmount * 3 + senior.grandTreasuryAmount * 2
+      const normal = plans.find(item => item.feeType === 'normal')!; const student = plans.find(item => item.feeType === 'student')!; const senior = plans.find(item => item.feeType === 'senior')!;const spouse=plans.find(item=>item.feeType==='spouse')!
+      const memberExpected = normal.memberAmount * 14 + student.memberAmount * 3 + senior.memberAmount * 2 + spouse.memberAmount*3
+      const grandTreasuryExpected = (normal.grandTreasuryAmount??0) * 14 + (student.grandTreasuryAmount??0) * 3 + (senior.grandTreasuryAmount??0) * 2 + (spouse.grandTreasuryAmount??0)*3
       const summary: LodgeTreasurySummary = { organizationId, periodYear, periodMonth, members: 22, memberExpected, collected: 438000, receivable: memberExpected - 438000, grandTreasuryExpected, workshopMarginProjected: memberExpected - grandTreasuryExpected, paid: 17, partial: 2, overdue: 3, trafficLight: 'amber' }
       this.mockLodgeTreasurySummaries.set(`${organizationId}:${periodYear}-${periodMonth}`, summary); return { ...summary }
     }
@@ -762,10 +774,12 @@ function currentMonthEnd(){const p=currentMonthStart().slice(0,7).split('-').map
 function monthEnd(year:number,month:number){return `${year}-${String(month).padStart(2,'0')}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,'0')}`}
 function cloneHospitalariaSubmission(item:HospitalariaMonthlySubmission):HospitalariaMonthlySubmission{return{...item}}
 function mockSnapshotAsOf(snapshot: WorkshopRegularitySnapshot | undefined, asOf?: string): WorkshopRegularitySnapshot | null { if (!snapshot) return null; if (asOf && snapshot.asOfDate > asOf) return null; return { ...snapshot } }
+function mockGrandTreasuryRate(feeType:LodgeFeeType,territory:TreasuryTerritory|null|undefined,asOf:string):number|null{if(asOf<'2026-01-01')return null;if(feeType==='past_active')return 0;if(territory==='santiago')return feeType==='normal'?21000:feeType==='spouse'?13000:feeType==='senior'?10000:feeType==='student'?8000:null;if(territory==='other_oriente')return feeType==='normal'?15000:feeType==='spouse'?10000:feeType==='senior'?8000:feeType==='student'?8000:null;return null}
 function defaultLodgeFeePlans(organizationId: string): LodgeFeePlan[] { return [
   { id: `fee-normal-${organizationId}`, organizationId, feeType: 'normal', memberAmount: 26000, grandTreasuryAmount: 21000, workshopAmount: 5000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
-  { id: `fee-student-${organizationId}`, organizationId, feeType: 'student', memberAmount: 13000, grandTreasuryAmount: 11000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
-  { id: `fee-senior-${organizationId}`, organizationId, feeType: 'senior', memberAmount: 16000, grandTreasuryAmount: 13000, workshopAmount: 3000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-student-${organizationId}`, organizationId, feeType: 'student', memberAmount: 10000, grandTreasuryAmount: 8000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-senior-${organizationId}`, organizationId, feeType: 'senior', memberAmount: 12000, grandTreasuryAmount: 10000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
+  { id: `fee-spouse-${organizationId}`, organizationId, feeType: 'spouse', memberAmount: 15000, grandTreasuryAmount: 13000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
 ] }
 function mockTreasuryCharges(organizationId:string):LodgeTreasuryCharge[]{return[
   {id:`charge-1-${organizationId}`,memberId:'member-demo-001',memberDisplayName:'Andrea Demostrativa',memberAmount:26000,paidAmount:26000,balance:0,status:'paid',payments:[{id:'pay-demo-001',receiptNumber:'REC-DEMO-001',amount:26000,paymentMethod:'transfer',paymentDate:'2026-09-05',reference:'TRX-DEMO-001'}]},
