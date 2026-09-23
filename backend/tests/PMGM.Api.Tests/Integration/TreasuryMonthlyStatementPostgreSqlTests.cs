@@ -31,7 +31,7 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
             var organization = new Organization { Name = $"Taller Tesorería {Guid.NewGuid():N}", Number = "TES-CI", Type = "workshop" };
-            var person = new Person { FirstNames = "Hermano", LastNames = "Tesorería" };
+            var person = new Person { FirstNames = "Hermano", LastNames = "Tesorería", Rut = "RUT-DEMO-TEST" };
             var member = new Member { Person = person, PersonId = person.Id, InstitutionalNumber = $"TES-{Guid.NewGuid():N}" };
             var membership = new Membership
             {
@@ -56,6 +56,11 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
                 OfficeType = "treasurer", Period = "2026", StartDate = new DateOnly(2026, 1, 1)
             };
+            var secondOffice = new OfficeAssignment
+            {
+                Member = member, MemberId = member.Id, Organization = organization, OrganizationId = organization.Id,
+                OfficeType = "orator", Period = "2026", StartDate = new DateOnly(2026, 1, 1)
+            };
             var feePlan = new PMGM.Api.Modules.Treasury.Entities.LodgeFeePlan
             {
                 Organization = organization, OrganizationId = organization.Id,
@@ -79,7 +84,7 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 EffectiveUntil = new DateOnly(2026, 12, 31), Amount = 0m,
                 AuthorizationReference = "PLANCHA-CI-001", Status = TreasuryCodes.AdjustmentStatus.Active
             };
-            db.AddRange(organization, person, member, membership, pastActivePerson, pastActiveMember, pastActiveMembership, degree, office, feePlan, charge, adjustment);
+            db.AddRange(organization, person, member, membership, pastActivePerson, pastActiveMember, pastActiveMembership, degree, office, secondOffice, feePlan, charge, adjustment);
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             memberId = member.Id;
@@ -103,9 +108,24 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         var generatedLine = Assert.Single(generated.GetProperty("lines").EnumerateArray());
         Assert.Equal(memberId, generatedLine.GetProperty("memberId").GetGuid());
         Assert.Equal(membershipId, generatedLine.GetProperty("membershipId").GetGuid());
-        Assert.Equal("treasurer", generatedLine.GetProperty("officeCodeAtCutoff").GetString());
+        var officeCodes = generatedLine.GetProperty("officeCodeAtCutoff").GetString()!.Split('|');
+        Assert.Contains("treasurer", officeCodes);
+        Assert.Contains("orator", officeCodes);
+        Assert.Equal("RUT-DEMO-TEST", generatedLine.GetProperty("rut").GetString());
+        Assert.Equal("Hermano", generatedLine.GetProperty("firstNames").GetString());
+        Assert.Equal("Tesorería", generatedLine.GetProperty("lastNames").GetString());
         Assert.Equal("PLANCHA-CI-001", generatedLine.GetProperty("authorizationReference").GetString());
         Assert.Equal(1, generated.GetProperty("lines").GetArrayLength()); // Past Activo is not assessed by Gran Tesorería.
+
+        var missingPlanchaLine = await client.PostAsJsonAsync($"/api/tesoreria/cuadros/{statementId}/lineas", new
+        {
+            memberId, membershipId, degreeCodeAtCutoff = TreasuryCodes.Degree.Master,
+            baseAmount = 8_000m, adjustmentAmount = 0m, adjustmentType = TreasuryCodes.LodgeFeeType.Student,
+            authorizationReference = (string?)null, observation = (string?)null,
+            identityMatchStatus = TreasuryCodes.IdentityMatchStatus.Matched
+        }, cancellationToken);
+        Assert.Equal(HttpStatusCode.BadRequest, missingPlanchaLine.StatusCode);
+
         var breakdown = Assert.Single(generated.GetProperty("feeBreakdown").EnumerateArray());
         Assert.Equal(TreasuryCodes.LodgeFeeType.Student, breakdown.GetProperty("feeType").GetString());
         Assert.Equal(1, breakdown.GetProperty("members").GetInt32());
@@ -115,11 +135,15 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         var minimized = await minimizedResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var minimizedLine = Assert.Single(minimized.GetProperty("lines").EnumerateArray());
         Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("memberId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("rut").ValueKind);
+        Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("firstNames").ValueKind);
         Assert.Equal(JsonValueKind.Null, minimizedLine.GetProperty("observation").ValueKind);
 
         var detailedResponse = await client.GetAsync($"/api/tesoreria/cuadros/{statementId}?includeMemberDetail=true", cancellationToken);
         var detailed = await detailedResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.Equal(memberId, Assert.Single(detailed.GetProperty("lines").EnumerateArray()).GetProperty("memberId").GetGuid());
+        var detailedLine = Assert.Single(detailed.GetProperty("lines").EnumerateArray());
+        Assert.Equal(memberId, detailedLine.GetProperty("memberId").GetGuid());
+        Assert.Equal("RUT-DEMO-TEST", detailedLine.GetProperty("rut").GetString());
 
         var blockedSubmit = await client.PostAsync($"/api/tesoreria/cuadros/{statementId}/enviar", null, cancellationToken);
         Assert.Equal(HttpStatusCode.Conflict, blockedSubmit.StatusCode);

@@ -329,6 +329,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-036",
+      "category": "treasury",
+      "title": "Cuadro de Tesorería alineado a CUADRO PAGO GRAN TESORERÍA.xlsx",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
