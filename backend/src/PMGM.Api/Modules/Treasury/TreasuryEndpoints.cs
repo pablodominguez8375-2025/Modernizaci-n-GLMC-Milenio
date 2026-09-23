@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Modules.Treasury;
@@ -14,6 +15,8 @@ public static class TreasuryEndpoints
             .WithTags("Gran Tesorería")
             .RequireAuthorization();
 
+        group.MapGet("/tarifario-cuotas", GetOfficialFeeScheduleAsync);
+        group.MapPost("/talleres/{organizationId:guid}/oriente", SetTreasuryTerritoryAsync);
         group.MapPost("/talleres/{organizationId:guid}/regularidad", SetWorkshopRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/regularidad", GetWorkshopRegularityAsync);
         group.MapPost("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", SetMemberRegularityAsync);
@@ -21,6 +24,29 @@ public static class TreasuryEndpoints
         group.MapTreasuryStatementEndpoints();
 
         return endpoints;
+    }
+
+    private static IResult GetOfficialFeeScheduleAsync(DateOnly? asOf, IInstitutionalAccessService access, HttpContext context)
+    {
+        if (!access.CanManageTreasuryRegularity(context.User) && !access.CanReadInstitutionalRegularity(context.User)) return Results.Forbid();
+        var date = asOf ?? TodayInChile();
+        return Results.Ok(new { sourceReference = GrandTreasuryFeeSchedule.SourceReference, effectiveFrom = GrandTreasuryFeeSchedule.EffectiveFrom,
+            asOf = date, items = GrandTreasuryFeeSchedule.Rates, ceremonyRights = GrandTreasuryFeeSchedule.CeremonyRights });
+    }
+
+    private static async Task<IResult> SetTreasuryTerritoryAsync(Guid organizationId, SetTreasuryTerritoryRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
+    {
+        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (!GrandTreasuryFeeSchedule.IsValidTerritory(request.Territory))
+            return Results.BadRequest(new { message = "Seleccione Santiago, otro Oriente de Chile o Perú." });
+        var organization = await db.Organizations.FirstOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
+        if (organization is null) return Results.NotFound();
+        organization.TreasuryTerritory = request.Territory;
+        audit.Add(context, "treasury.organization_territory.updated", nameof(Organization), organization.Id.ToString(), organization.Id,
+            AuditResults.Success, new { organization.TreasuryTerritory });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.Ok(new { organizationId, territory = organization.TreasuryTerritory });
     }
 
     private static async Task<IResult> SetWorkshopRegularityAsync(
@@ -230,6 +256,8 @@ public static class TreasuryEndpoints
         return DateOnly.FromDateTime(chileNow.DateTime);
     }
 }
+
+public sealed record SetTreasuryTerritoryRequest(string Territory);
 
 public sealed record FinancialRegularityProjectionDto(
     string Status,

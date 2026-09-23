@@ -31,7 +31,7 @@ public static class OrganizationEndpoints
             .OrderBy(x => x.Type)
             .ThenBy(x => x.Number)
             .ThenBy(x => x.Name)
-            .Select(x => new OrganizationOptionDto(x.Id, x.Name, x.Number, x.Type))
+            .Select(x => new OrganizationOptionDto(x.Id, x.Name, x.Number, x.Type, x.TreasuryTerritory))
             .Take(2000)
             .ToListAsync(cancellationToken);
 
@@ -61,6 +61,7 @@ public static class OrganizationEndpoints
                 x.Number,
                 x.Type,
                 x.ParentOrganizationId,
+                x.TreasuryTerritory,
                 x.CreatedAtUtc
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -222,7 +223,8 @@ public sealed record OrganizationOptionDto(
     Guid Id,
     string Name,
     string? Number,
-    string Type);
+    string Type,
+    string? TreasuryTerritory);
 
 public sealed record OrganizationOptionsResponse(
     int Total,

@@ -51,7 +51,17 @@ public static class TreasuryStatementEndpoints
         if (memberships.Count == 0)
             return Results.Conflict(new { message = "El Taller no tiene miembros vigentes a la fecha de corte." });
 
-        var memberIds = memberships.Select(x => x.MemberId).Distinct().ToArray();
+        var pastActiveChargeIds = monthlyCharges
+            .Where(x => x.FeePlan.FeeType == TreasuryCodes.LodgeFeeType.PastActive)
+            .Select(x => x.MemberId)
+            .ToHashSet();
+        var billableMemberships = memberships
+            .Where(x => x.MembershipType != GrandTreasuryFeeSchedule.PastActiveMembershipType && !pastActiveChargeIds.Contains(x.MemberId))
+            .ToList();
+        if (billableMemberships.Count == 0)
+            return Results.Conflict(new { message = "No hay miembros facturables a Gran Tesorería en el Cuadro." });
+
+        var memberIds = billableMemberships.Select(x => x.MemberId).Distinct().ToArray();
         var degreeEvents = await db.DegreeEvents.AsNoTracking()
             .Where(x => x.OrganizationId == statement.OrganizationId && memberIds.Contains(x.MemberId) && x.EffectiveDate <= cutoff)
             .OrderByDescending(x => x.EffectiveDate).ThenByDescending(x => x.RecordedAtUtc)
@@ -68,7 +78,7 @@ public static class TreasuryStatementEndpoints
             .OrderByDescending(x => x.EffectiveFrom)
             .ToListAsync(cancellationToken);
 
-        var missingDegreeMembers = memberships
+        var missingDegreeMembers = billableMemberships
             .Where(x => degreeEvents.All(d => d.MemberId != x.MemberId))
             .Select(x => x.MemberId).Distinct().ToArray();
         var multipleAdjustmentMembers = adjustments.GroupBy(x => x.MemberId)
@@ -81,10 +91,10 @@ public static class TreasuryStatementEndpoints
                 multipleAdjustmentMembers
             });
 
-        foreach (var membership in memberships)
+        foreach (var membership in billableMemberships)
         {
-            var degree = degreeEvents.First(x => x.MemberId == membership.MemberId).Degree;
             var charge = monthlyCharges.FirstOrDefault(x => x.MemberId == membership.MemberId);
+            var degree = degreeEvents.First(x => x.MemberId == membership.MemberId).Degree;
             var contributionType = charge?.FeePlan.FeeType ?? TreasuryCodes.LodgeFeeType.Normal;
             var baseAmount = charge?.GrandTreasuryAmount ?? request.AmountFor(degree);
             if (baseAmount is null)

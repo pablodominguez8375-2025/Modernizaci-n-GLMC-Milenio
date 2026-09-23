@@ -320,6 +320,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-035",
+      "category": "treasury",
+      "title": "Tarifario Gran Tesorería Decreto 1.759, Oriente y separación de cuota local",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {

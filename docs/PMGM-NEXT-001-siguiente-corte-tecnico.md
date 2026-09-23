@@ -209,3 +209,12 @@ Antes de abrir PR: terminar pruebas, revisar migración, registrar resultados y 
 ### Checkpoint corregido — PR #139 (23-09-2026)
 
 Último SHA observado de la rama: `b1bf40c308b2c2ce24dbcd8669d4aca8344b8a22`. CI #1442, Showcase #684 y QA Installable #322 SUCCESS sobre el SHA exacto. Local: 185/185 frontend, lint, build y migration gate 44 migraciones aprobados. CI encontró y se corrigió la carga inicial de tarifa mediante SQL explícito; CI #1442 confirmó pruebas backend/PostgreSQL, smoke HTTPS/OIDC y recuperación. PR #139 sigue abierta en borrador. Pages no se desplegó desde el evento PR; Pre-UAT se ejecuta al integrar en `dev`. Antes de mergear, registrar este checkpoint y repetir gates exact-head; luego verificar Pages, QA instalable y Pre-UAT del SHA integrado. `main` intacta; `srv01`/QA/UAT pendientes por Issue #97.
+
+
+## 17. Nuevo checkpoint — corrección Tesorería Decreto 1.759 (23-09-2026)
+
+El Product Owner prioriza cerrar Tesorería antes de seguir con los demás módulos. Rama local/remota: `feature/treasury-decree-1759`, basada en `dev@dcb6b169f59da7649012f3d2e8fd20e5313ad3f8`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta. La autoridad institucional clasifica el Oriente del Taller. Gran Tesorería fija el componente institucional según Decreto 1.759 (vigente 01-01-2026); Tesorería del Taller parametriza su total local por tipo/vigencia y conserva la diferencia. No aceptar montos institucionales editados ni cuota local menor al aporte oficial. Past Activos no generan aporte Gran Tesorería; cualquier cuota local para ellos es separada.
+
+Tarifas: ordinario Santiago/otros Orientes $21.000/$15.000; cónyuge $13.000/$10.000; tercera edad $10.000/$8.000; estudiante $8.000/$8.000. Perú ordinario USD 6; el sistema aún es CLP y debe bloquear sin conversión automática. Derechos ceremoniales listados en el catálogo; integración pago/conciliación por solicitud sigue pendiente. Cuotas de cesantía existen en el decreto y no se asignan automáticamente en este incremento.
+
+Implementación local incorpora API, UI/demo, migración de Oriente, reglas de cálculo, exclusión de Past Activos y aceptación QA-035. Completar validaciones y revisión de exact-head, publicar commits en la rama GitHub, abrir PR contra `dev`; ejecutar CI, Showcase/Pages, instalable y Pre-UAT. Falta .NET SDK local; backend y PostgreSQL dependen de CI. Actualizar este checkpoint con SHA/PR/gates exactos. No tocar/promover a `main`; QA física `srv01` y UAT pendientes por Issue #97.
