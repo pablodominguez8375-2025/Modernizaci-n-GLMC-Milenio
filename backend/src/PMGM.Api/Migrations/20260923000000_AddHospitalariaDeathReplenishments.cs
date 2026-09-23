@@ -40,8 +40,8 @@ public partial class AddHospitalariaDeathReplenishments : Migration
             }, constraints: table =>
             {
                 table.PrimaryKey("PK_hospitalaria_death_replenishment_cases", x => x.Id);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_cases_institutional_status_events_DeathStatusEventId", x => x.DeathStatusEventId, "core", "institutional_status_events", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_cases_members_DeceasedMemberId", x => x.DeceasedMemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_cases_institutional_status_events_DeathStatusEventId", column: x => x.DeathStatusEventId, principalSchema: "core", principalTable: "institutional_status_events", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_cases_members_DeceasedMemberId", column: x => x.DeceasedMemberId, principalSchema: "core", principalTable: "members", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -58,10 +58,10 @@ public partial class AddHospitalariaDeathReplenishments : Migration
             }, constraints: table =>
             {
                 table.PrimaryKey("PK_hospitalaria_death_replenishment_obligations", x => x.Id);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_obligations_hospitalaria_death_replenishment_cases_CaseId", x => x.CaseId, "core", "hospitalaria_death_replenishment_cases", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_obligations_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_obligations_memberships_MembershipId", x => x.MembershipId, "core", "memberships", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_obligations_members_MemberId", x => x.MemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_obligations_hospitalaria_death_replenishment_cases_CaseId", column: x => x.CaseId, principalSchema: "core", principalTable: "hospitalaria_death_replenishment_cases", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_obligations_organizations_OrganizationId", column: x => x.OrganizationId, principalSchema: "core", principalTable: "organizations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_obligations_memberships_MembershipId", column: x => x.MembershipId, principalSchema: "core", principalTable: "memberships", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_obligations_members_MemberId", column: x => x.MemberId, principalSchema: "core", principalTable: "members", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -84,8 +84,8 @@ public partial class AddHospitalariaDeathReplenishments : Migration
             }, constraints: table =>
             {
                 table.PrimaryKey("PK_hospitalaria_death_replenishment_transfers", x => x.Id);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_transfers_hospitalaria_death_replenishment_cases_CaseId", x => x.CaseId, "core", "hospitalaria_death_replenishment_cases", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_transfers_organizations_OrganizationId", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_transfers_hospitalaria_death_replenishment_cases_CaseId", column: x => x.CaseId, principalSchema: "core", principalTable: "hospitalaria_death_replenishment_cases", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_transfers_organizations_OrganizationId", column: x => x.OrganizationId, principalSchema: "core", principalTable: "organizations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateTable(
@@ -104,7 +104,7 @@ public partial class AddHospitalariaDeathReplenishments : Migration
             }, constraints: table =>
             {
                 table.PrimaryKey("PK_hospitalaria_death_replenishment_payments", x => x.Id);
-                table.ForeignKey("FK_hospitalaria_death_replenishment_payments_hospitalaria_death_replenishment_obligations_ObligationId", x => x.ObligationId, "core", "hospitalaria_death_replenishment_obligations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_hospitalaria_death_replenishment_payments_hospitalaria_death_replenishment_obligations_ObligationId", column: x => x.ObligationId, principalSchema: "core", principalTable: "hospitalaria_death_replenishment_obligations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(name: "IX_hospitalaria_replenishment_rates_EffectiveFrom", schema: "core", table: "hospitalaria_replenishment_rates", column: "EffectiveFrom", unique: true);

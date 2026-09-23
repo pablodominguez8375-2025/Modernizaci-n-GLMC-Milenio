@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 28515)
-Total output lines: 836
-
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
 export interface SystemInfo { project: string; api: string; version: string; runtime: string; culture: string; institutionalTimeZone: string; defaultCurrency: string }
@@ -157,6 +154,8 @@ export interface GrandHospitalariaSubmission extends HospitalariaMonthlySubmissi
   organizationName:string; organizationNumber:string|null
 }
 export interface HospitalariaSubmissionListResponse<T = HospitalariaMonthlySubmission> { total:number; items:T[] }
+
+
 export interface HospitalariaReplenishmentRate { id:string; amountPerActiveMember:number; effectiveFrom:string; effectiveUntil:string|null; sourceReference:string; createdBySubject?:string }
 export interface DeathReplenishmentPayment { id:string; amount:number; paymentMethod:string; paymentDate:string; receiptNumber:string; reference:string }
 export interface DeathReplenishmentObligation { id:string; caseId:string; deathDate:string; deceasedDisplayName:string; memberId:string; memberDisplayName:string; amountDue:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; payments:DeathReplenishmentPayment[] }
@@ -283,12 +282,310 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
     eligibility: { status: 'does_not_comply', canAuthorize: false, publication: { status: 'published', requiredDays: 20, completedDays: 13, publishedFromUtc: '2026-08-26T15:00:00Z', publishedUntilUtc: null }, requirements: [
       { code: 'regimen_interior', name: 'Régimen Interior', status: 'rejected', reason: 'No existe una aprobación habilitante de Régimen Interior.' },
       { code: 'gran_tesoreria', name: 'Gran Tesorería', status: 'approved', reason: 'El Taller se encuentra al día para la fecha evaluada.' },
-      { code: 'gran_hospitalaria', name: 'Gran…10515 tokens truncated…tal cobrado y tener referencia.');const c=this.mockDeathReplenishmentCases.find(x=>x.id===caseId);const submissionNumber=(c?.transfers.filter(x=>x.organizationId===organizationId).reduce((max,x)=>Math.max(max,x.submissionNumber??1),0)??0)+1;const transfer:DeathReplenishmentTransfer={id:crypto.randomUUID(),organizationId,submissionNumber,amount:payload.amount,expectedAmount:selected.dueAmount,transferDate:payload.transferDate,reference:payload.reference,status:'submitted'};if(c)c.transfers.push(transfer);return{...transfer}}
-    return this.postJson(`/api/hospitalaria/reposiciones/casos/${encodeURIComponent(caseId)}/talleres/${encodeURIComponent(organizationId)}/transferencias`,payload)
+      { code: 'gran_hospitalaria', name: 'Gran Hospitalaria', status: 'approved', reason: 'El Taller se encuentra al día en reposiciones u obligaciones hospitalarias.' },
+      { code: 'publicacion_insinuado', name: 'Publicación del insinuado', status: 'rejected', reason: 'Se requieren 20 días de publicación y se han cumplido 13 días válidos.' },
+    ] },
+    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true },
+  },
+]
+
+export class PmgmApiClient {
+  private readonly baseUrl: string
+  private readonly getAccessToken?: AccessTokenProvider
+  readonly useMocks: boolean
+  private readonly onUnauthorized?: () => Promise<void>
+  private readonly mockOrganizations = [...defaultMockOrganizations]
+  private readonly mockSpaces = [...defaultMockSpaces]
+  private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
+  private readonly mockDocuments: SecretariatDocument[] = []
+  private readonly mockSubmittedTenidas: GrandSecretariatTenidaItem[] = [
+    {
+      recordId: 'gs-tenida-demo-001', lodge: { id: defaultMockOrganizations[1].id, name: defaultMockOrganizations[1].name, number: '23' },
+      meetingId: 'dddddddd-dddd-dddd-dddd-dddddddddddd', meetingDate: '2026-09-12', meetingType: 'regular', grade: 'all', ceremonyType: null,
+      modality: 'in_person', title: 'Tenida Regular — Primera implementación', meetingStatus: 'held',
+      extractDocumentVersionId: 'extract-demo-001', submissionStatus: 'submitted', submittedAtUtc: '2026-09-13T13:00:00Z', reviewedAtUtc: null, reviewNotes: null,
+    },
+  ]
+  // QA only: uploaded interview files live in browser memory for this session.
+  private readonly mockInterviewDocuments = new Map<string, { file: Blob; fileName: string; metadata: CandidateInterviewEvidence }>()
+  private readonly mockCeremonies = defaultMockCeremonies.map(item => ({ ...item }))
+  private readonly mockReviewCeremonies = defaultMockReviewCeremonies.map(cloneCeremonyQueueItem)
+  private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
+  private readonly mockTreasuryStatements = new Map<string, TreasuryStatement>()
+  private readonly mockHospitalaria = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'hospitalaria-demo-1', organizationId: defaultMockOrganizations[0].id, status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:05:00Z' }]])
+  private readonly mockLodgeHospitalariaMovements = new Map<string, LodgeHospitalariaMovement[]>()
+  private readonly mockHospitalariaSubmissions = new Map<string, HospitalariaMonthlySubmission>()
+  private readonly mockDeathReplenishmentCases: DeathReplenishmentCase[] = []
+  private readonly mockDeathReplenishmentObligations = new Map<string, DeathReplenishmentObligation[]>()
+  private mockReplenishmentRate: HospitalariaReplenishmentRate = { id: 'rate-demo', amountPerActiveMember: 1500, effectiveFrom: '2026-01-01', effectiveUntil: null, sourceReference: 'Configuración institucional demo' }
+  private readonly mockLodgeFeePlans = new Map<string, LodgeFeePlan[]>()
+  private readonly mockLodgeTreasurySummaries = new Map<string, LodgeTreasurySummary>()
+  private readonly mockLodgeTreasuryCharges = new Map<string, LodgeTreasuryCharge[]>()
+  private readonly mockLodgeTreasuryExpenses = new Map<string, LodgeTreasuryExpense[]>()
+  private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
+  private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
+
+  constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized; for (const item of this.mockSystemSettings) this.mockSystemSettingVersions.set(item.code,[{id:`base-${item.code}`,value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status:item.status,createdAtUtc:'2026-01-01T00:00:00Z'}]) }
+
+  async getCandidatePortal(): Promise<CandidatePortalResponse> { if (this.useMocks) { await sleep(120); return { culture: 'es-CL', portal: 'Insinuados en período de publicación', total: mockCandidates.length, items: mockCandidates } } return this.request<CandidatePortalResponse>('/api/ceremonias/portal-insinuados') }
+  async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
+  async getSessionProfile(): Promise<SessionProfile> { if (this.useMocks) return mockSession; return this.request<SessionProfile>('/api/session/me') }
+  async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: [...this.mockOrganizations] }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
+  async getSystemSettings(): Promise<SystemSettingsResponse> { if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => ({ ...item })) }; return this.request<SystemSettingsResponse>('/api/system/settings/') }
+  async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> { if (this.useMocks) { const item=this.mockSystemSettings.find(value=>value.code===code); if(!item) throw new Error('El parámetro no pertenece al catálogo administrable.'); if(!payload.value.trim()||!payload.sourceReference.trim()) throw new Error('Valor y fundamento son obligatorios.'); const status=payload.effectiveFrom>new Date().toISOString().slice(0,10)?'scheduled':'active'; Object.assign(item,{value:payload.value.trim(),effectiveFrom:payload.effectiveFrom,sourceReference:payload.sourceReference.trim(),status}); const versions=this.mockSystemSettingVersions.get(code)??[]; versions.unshift({id:crypto.randomUUID(),value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status,createdAtUtc:new Date().toISOString()}); this.mockSystemSettingVersions.set(code,versions); return {...item}; } return this.postJson<SystemSetting>(`/api/system/settings/${encodeURIComponent(code)}`,payload) }
+  async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
+  async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'Asignó perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'Probó configuración SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesión',summary:'Intento de autenticación rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
+
+  async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
+    if (this.useMocks) {
+      const plans = this.mockLodgeFeePlans.get(organizationId) ?? []
+      if (plans.some(item => item.feeType === payload.feeType && item.isActive)) throw new Error('Ya existe una cuota activa del mismo tipo para esa vigencia.')
+      const plan = { id: crypto.randomUUID(), organizationId, ...payload, effectiveUntil: payload.effectiveUntil ?? null, workshopAmount: payload.memberAmount - payload.grandTreasuryAmount, isActive: true }
+      plans.push(plan); this.mockLodgeFeePlans.set(organizationId, plans); return { ...plan }
+    }
+    return this.postJson<LodgeFeePlan>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`, payload)
   }
-  async reviewDeathReplenishmentTransfer(transferId:string,decision:'observed'|'reconciled',notes?:string|null):Promise<{id:string;status:string;organizationId:string}>{
-    if(this.useMocks){const transfer=this.mockDeathReplenishmentCases.flatMap(x=>x.transfers).find(x=>x.id===transferId);if(!transfer)throw new Error('No existe la transferencia.');if(decision==='reconciled'&&transfer.amount!==transfer.expectedAmount)throw new Error('El pago transferido no coincide con el total esperado.');if(decision==='observed'&&!notes?.trim())throw new Error('Indique el motivo de observación.');transfer.status=decision;transfer.reviewNotes=notes??null;const obligations=this.mockDeathReplenishmentObligations.get(transfer.organizationId)??[];const caseIds=[...new Set(obligations.map(x=>x.caseId))];const hasOutstanding=caseIds.some(id=>obligations.filter(x=>x.caseId===id).some(x=>x.status!=='paid')||!this.mockDeathReplenishmentCases.find(x=>x.id===id)?.transfers.some(x=>x.organizationId===transfer.organizationId&&x.status==='reconciled'));this.mockHospitalaria.set(transfer.organizationId,{id:`hospitalaria-${crypto.randomUUID()}`,organizationId:transfer.organizationId,status:decision==='reconciled'&&!hasOutstanding?'up_to_date':'overdue',asOfDate:new Date().toISOString().slice(0,10),sourceReference:`hospitalaria-reposicion:${transfer.id}`,notes:decision==='reconciled'&&!hasOutstanding?'Reposición transferida y conciliada por Gran Hospitalaria.':'Existen reposiciones pendientes u observadas.',recordedAtUtc:new Date().toISOString()});return{id:transfer.id,status:transfer.status,organizationId:transfer.organizationId}}
-    return this.postJson(`/api/hospitalaria/reposiciones/transferencias/${encodeURIComponent(transferId)}/revision`,{decision,notes:notes??null})
+  async getLodgeFeePlans(organizationId: string): Promise<{ total: number; items: LodgeFeePlan[] }> {
+    if (this.useMocks) {
+      let plans = this.mockLodgeFeePlans.get(organizationId)
+      if (!plans) { plans = defaultLodgeFeePlans(organizationId); this.mockLodgeFeePlans.set(organizationId, plans) }
+      return { total: plans.length, items: plans.map(item => ({ ...item })) }
+    }
+    return this.request<{ total: number; items: LodgeFeePlan[] }>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`)
+  }
+  async generateLodgeCharges(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
+    if (this.useMocks) {
+      const plans = (await this.getLodgeFeePlans(organizationId)).items
+      const normal = plans.find(item => item.feeType === 'normal')!; const student = plans.find(item => item.feeType === 'student')!; const senior = plans.find(item => item.feeType === 'senior')!
+      const memberExpected = normal.memberAmount * 17 + student.memberAmount * 3 + senior.memberAmount * 2
+      const grandTreasuryExpected = normal.grandTreasuryAmount * 17 + student.grandTreasuryAmount * 3 + senior.grandTreasuryAmount * 2
+      const summary: LodgeTreasurySummary = { organizationId, periodYear, periodMonth, members: 22, memberExpected, collected: 438000, receivable: memberExpected - 438000, grandTreasuryExpected, workshopMarginProjected: memberExpected - grandTreasuryExpected, paid: 17, partial: 2, overdue: 3, trafficLight: 'amber' }
+      this.mockLodgeTreasurySummaries.set(`${organizationId}:${periodYear}-${periodMonth}`, summary); return { ...summary }
+    }
+    return this.postJson<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos/generar`, { periodYear, periodMonth, assignments: [] })
+  }
+  async getLodgeTreasurySummary(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
+    if (this.useMocks) return this.mockLodgeTreasurySummaries.get(`${organizationId}:${periodYear}-${periodMonth}`) ?? { organizationId, periodYear, periodMonth, members: 0, memberExpected: 0, collected: 0, receivable: 0, grandTreasuryExpected: 0, workshopMarginProjected: 0, paid: 0, partial: 0, overdue: 0, trafficLight: 'no_data' }
+    return this.request<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/resumen?year=${periodYear}&month=${periodMonth}`)
+  }
+  async getLodgeTreasuryCharges(organizationId:string,periodYear:number,periodMonth:number):Promise<{total:number;items:LodgeTreasuryCharge[]}>{
+    if(this.useMocks){const key=`${organizationId}:${periodYear}-${periodMonth}`;let items=this.mockLodgeTreasuryCharges.get(key);if(!items){items=mockTreasuryCharges(organizationId);this.mockLodgeTreasuryCharges.set(key,items)}return{total:items.length,items:items.map(cloneTreasuryCharge)}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos?year=${periodYear}&month=${periodMonth}`)
+  }
+  async addLodgeTreasuryPayment(chargeId:string,payload:{amount:number;paymentMethod:LodgeTreasuryPayment['paymentMethod'];paymentDate:string;reference?:string|null}):Promise<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>{
+    if(this.useMocks){const charge=[...this.mockLodgeTreasuryCharges.values()].flat().find(x=>x.id===chargeId);if(!charge)throw new Error('El cargo indicado no existe.');if(payload.amount<=0||payload.amount>charge.balance)throw new Error('El abono debe ser positivo y no superar el saldo.');const reference=payload.reference?.trim()||null;if(reference&&charge.payments.some(x=>x.amount===payload.amount&&x.paymentDate===payload.paymentDate&&x.paymentMethod===payload.paymentMethod&&x.reference?.toLocaleLowerCase('es-CL')===reference.toLocaleLowerCase('es-CL')))throw new Error('Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia.');const payment:LodgeTreasuryPayment={id:crypto.randomUUID(),receiptNumber:`REC-DEMO-${String(charge.payments.length+1).padStart(3,'0')}`,amount:payload.amount,paymentMethod:payload.paymentMethod,paymentDate:payload.paymentDate,reference};charge.payments.unshift(payment);charge.paidAmount+=payment.amount;charge.balance-=payment.amount;charge.status=charge.balance===0?'paid':'partial';return{...payment,paidAmount:charge.paidAmount,balance:charge.balance,status:charge.status}}
+    return this.postJson<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>(`/api/gestion-logial/tesoreria/cargos/${encodeURIComponent(chargeId)}/pagos`,payload)
+  }
+  async getLodgeTreasuryExpenses(organizationId:string,from:string,to:string):Promise<{total:number;items:LodgeTreasuryExpense[]}>{
+    if(this.useMocks){let items=this.mockLodgeTreasuryExpenses.get(organizationId);if(!items){items=mockTreasuryExpenses(organizationId);this.mockLodgeTreasuryExpenses.set(organizationId,items)}const selected=items.filter(x=>x.expenseDate>=from&&x.expenseDate<=to);return{total:selected.length,items:selected.map(x=>({...x}))}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos?from=${from}&to=${to}`)
+  }
+  async createLodgeTreasuryExpense(organizationId:string,payload:{category:string;amount:number;expenseDate:string;description:string;evidenceReference?:string|null}):Promise<LodgeTreasuryExpense>{
+    if(this.useMocks){const item:LodgeTreasuryExpense={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()};const items=this.mockLodgeTreasuryExpenses.get(organizationId)??[];items.unshift(item);this.mockLodgeTreasuryExpenses.set(organizationId,items);return{...item}}
+    return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos`,payload)
+  }
+  async approveLodgeTreasuryExpense(expenseId:string):Promise<LodgeTreasuryExpense>{
+    if(this.useMocks){const item=[...this.mockLodgeTreasuryExpenses.values()].flat().find(x=>x.id===expenseId);if(!item)throw new Error('El egreso no existe.');if(item.approvalStatus!=='pending_approval')throw new Error('El egreso ya fue resuelto.');item.approvalStatus='approved';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return{...item}}
+    return this.postJson(`/api/gestion-logial/tesoreria/egresos/${encodeURIComponent(expenseId)}/aprobar`,{})
+  }
+
+  async getRegimenInteriorSummary(filters: { organizationId?: string; asOf?: string; from?: string } = {}): Promise<RegimenInteriorSummary> {
+    if (this.useMocks) return mockRegimenSummary(filters)
+    const query = new URLSearchParams(); if (filters.organizationId) query.set('organizationId', filters.organizationId); if (filters.asOf) query.set('asOf', filters.asOf); if (filters.from) query.set('from', filters.from)
+    return this.request<RegimenInteriorSummary>(`/api/regimen-interior/summary${query.size ? `?${query}` : ''}`)
+  }
+  async getOrderRejectionAlerts(): Promise<OrderRejectionAlertResponse> {
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', reason: 'Rechazo en Cámara del Medio / tercer grado', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
+    return this.request<OrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
+  }
+
+  async getCeremonyReviewQueue(): Promise<CeremonyReviewQueueResponse> {
+    if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
+    return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
+  }
+  async setCeremonyInternalAffairsValidation(ceremonyRequestId: string, payload: CeremonyInternalAffairsValidationRequest): Promise<unknown> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { status: payload.status }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canValidateInternalAffairs) throw new Error('La solicitud ya no admite validación de Régimen Interior.')
+      const requirement = item.eligibility.requirements.find(value => value.code === 'regimen_interior')
+      if (requirement) {
+        const approved = payload.status === 'approved' || payload.status === 'exception_approved'
+        requirement.status = approved ? 'approved' : payload.status
+        requirement.reason = approved ? 'Aprobación vigente registrada.' : payload.status === 'observed' ? 'La solicitud tiene observaciones pendientes de Régimen Interior.' : 'No existe una aprobación habilitante de Régimen Interior.'
+      }
+      recomputeMockEligibility(item)
+      return { status: payload.status }
+    }
+    return this.postJson<unknown>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/validaciones/regimen-interior`, payload)
+  }
+  async publishCeremonyCandidate(ceremonyRequestId: string): Promise<CandidatePublicationWorkflowResponse> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { id: 'publication-demo-2026-001', ceremonyRequestId, publishedFromUtc: '2026-09-21T15:00:00Z', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canPublishCandidate || item.ceremonyType !== 'initiation') throw new Error('La solicitud no admite iniciar una nueva publicación del insinuado.')
+      item.eligibility.publication = { status: 'published', requiredDays: 20, completedDays: 0, publishedFromUtc: new Date().toISOString(), publishedUntilUtc: null }
+      const existing = item.eligibility.requirements.find(value => value.code === 'publicacion_insinuado')
+      const requirement = { code: 'publicacion_insinuado', name: 'Publicación del insinuado', status: 'rejected', reason: 'Se requieren 20 días de publicación y se han cumplido 0 días válidos.' }
+      if (existing) Object.assign(existing, requirement); else item.eligibility.requirements.push(requirement)
+      item.actions.canPublishCandidate = false; recomputeMockEligibility(item)
+      return { id: `publication-${item.id}`, ceremonyRequestId, publishedFromUtc: item.eligibility.publication.publishedFromUtc, requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+    }
+    return this.request<CandidatePublicationWorkflowResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/publicacion-insinuado`, { method: 'POST' })
+  }
+  async authorizeCeremony(ceremonyRequestId: string): Promise<{ id?: string; status: string }> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canAuthorize) throw new Error('Su cuenta no puede autorizar esta ceremonia.')
+      if (!item.eligibility.canAuthorize) throw new Error('La ceremonia aún tiene requisitos obligatorios pendientes.')
+      item.status = 'authorized'; item.actions = { canValidateInternalAffairs: false, canPublishCandidate: false, canAuthorize: false }
+      return { id: item.id, status: item.status }
+    }
+    return this.request<{ id?: string; status: string }>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/autorizar`, { method: 'POST' })
+  }
+  async registerInitiation(ceremonyRequestId: string, ceremonyDate: string, minuteReference: string): Promise<InitiationCompletionResponse> {
+    if (this.useMocks) return { id: ceremonyRequestId, status: 'completed', memberId: 'member-demo-2026-001', membershipStatus: 'active', degree: 'apprentice', effectiveDate: ceremonyDate, documentCode: 'AUT-CER-DEMO-2026-001' }
+    return this.postJson<InitiationCompletionResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/registrar-iniciacion`, { ceremonyDate, minuteReference })
+  }
+  async recordInitialDeliberation(ceremonyRequestId: string, payload: InitialDeliberationRequest): Promise<InitialDeliberationResponse> {
+    if (this.useMocks) return mockInitialDeliberation(ceremonyRequestId, payload)
+    return this.postJson<InitialDeliberationResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/deliberacion-inicial`, payload)
+  }
+  async uploadInterviewDocument(ceremonyRequestId: string, interviewId: string, file: File, metadata: Omit<CandidateInterviewEvidence, 'documentVersionId'>): Promise<InterviewDocumentResponse> {
+    const extension = file.name.toLowerCase().split('.').pop()
+    const contentType = file.type || (extension === 'pdf' ? 'application/pdf' : extension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : '')
+    if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(contentType)) throw new Error('La entrevista debe adjuntarse en Word (.docx) o PDF.')
+    if (file.size <= 0 || file.size > 52_428_800) throw new Error('El archivo debe contener información y pesar como máximo 50 MB.')
+    if (this.useMocks) {
+      const documentVersionId = crypto.randomUUID()
+      this.mockInterviewDocuments.set(documentVersionId, { file, fileName: file.name, metadata: { ...metadata, documentVersionId } })
+      return { interviewId, documentVersionId, fileName: file.name, result: metadata.result, summary: metadata.summary, sizeBytes: file.size }
+    }
+    return this.request<InterviewDocumentResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/entrevistas/${encodeURIComponent(interviewId)}/contenido`, { method: 'PUT', headers: { 'Content-Type': contentType, 'X-File-Name': encodeURIComponent(file.name), 'X-Interviewer': encodeURIComponent(metadata.interviewerDisplayName), 'X-Interview-Summary': encodeURIComponent(metadata.summary), 'X-Interview-Result': metadata.result, 'X-Interview-Date': metadata.interviewDate }, body: file })
+  }
+  async recordInterviewPackage(ceremonyRequestId: string, payload: InterviewPackageRequest): Promise<InterviewPackageResponse> {
+    if (this.useMocks) {
+      if (payload.interviews.length < 3) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.interviews', reason: `El expediente requiere al menos tres entrevistas completas; actualmente registra ${payload.interviews.length}.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      if (payload.interviews.some(item => !item.summary.trim() || !item.documentVersionId || !['favorable', 'desfavorable'].includes(item.result))) throw new Error('Cada entrevista requiere resumen, resultado y archivo Word o PDF.')
+      if (!payload.confidentialQuestionnaireAvailable) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.confidential_questionnaire', reason: 'Falta el Cuestionario Confidencial requerido para la revisión de tercer grado.', completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      if (!payload.autobiographyAvailable) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.autobiography', reason: 'Falta la autobiografía requerida para la revisión de tercer grado.', completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      return { id: ceremonyRequestId, validationStatus: 'approved', code: 'third_degree_review.package_complete', reason: `El expediente contiene ${payload.interviews.length} entrevistas y los antecedentes requeridos.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+    }
+    return this.postJson<InterviewPackageResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/antecedentes`, payload)
+  }
+  async recordThirdDegreeReview(ceremonyRequestId: string, payload: ThirdDegreeReviewRequest): Promise<ThirdDegreeReviewResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.presentVoters <= 0 || payload.votesInFavor < 0 || payload.votesAgainst < 0 || payload.abstentions < 0 || payload.votesInFavor + payload.votesAgainst + payload.abstentions !== payload.presentVoters) throw new Error('La suma de votos debe coincidir con la asistencia registrada.')
+      const status = payload.openVoteApproved ? 'approved' : 'rejected'
+      return { thirdDegree: { id: ceremonyRequestId, status, code: `third_degree_review.${status}`, reason: payload.openVoteApproved ? 'La votación abierta de tercer grado fue favorable.' : 'La votación abierta de tercer grado no fue favorable.' }, status: payload.openVoteApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<ThirdDegreeReviewResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/revision-tercer-grado`, payload)
+  }
+  async recordFinalBallot(ceremonyRequestId: string, payload: FinalBallotRequest): Promise<FinalBallotResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.ballots.length < 1 || payload.ballots.length > 3 || new Set(payload.ballots.map(item => item.procedureNumber)).size !== payload.ballots.length) throw new Error('Debe registrar entre uno y tres trámites distintos.')
+      if (payload.ballots.some(item => item.eligibleVoters <= 0 || item.whiteBallots < 0 || item.blackBallots < 0 || item.whiteBallots + item.blackBallots !== item.eligibleVoters)) throw new Error('Las balotas blancas y negras deben coincidir con las personas habilitadas.')
+      return { id: ceremonyRequestId, validationStatus: payload.ballotApproved ? 'approved' : 'rejected', asOfDate: payload.ballotDate, code: payload.ballotApproved ? 'first_degree_ballot.approved' : 'first_degree_ballot.rejected', reason: payload.ballotApproved ? 'El balotaje definitivo fue favorable.' : 'El balotaje definitivo fue desfavorable.', ceremonyStatus: payload.ballotApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<FinalBallotResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/balotaje`, payload)
+  }
+  async submitInitiationRequest(ceremonyRequestId: string, payload: InitiationRequestSubmission): Promise<InitiationRequestSubmissionResponse> {
+    if (this.useMocks) {
+      if (payload.proposedCeremonyDate < payload.submissionDate) throw new Error('La fecha propuesta no puede ser anterior a la solicitud.')
+      if (!payload.venerableApproval) throw new Error('La solicitud requiere confirmación del Venerable Maestro.')
+      if (!payload.secretaryDisplayName.trim() || !payload.sourceReference.trim()) throw new Error('Debe indicar Secretaría responsable y referencia documental.')
+      return { id: ceremonyRequestId, validationStatus: 'approved', proposedDate: payload.proposedCeremonyDate, ceremonyStatus: 'under_review', alreadySubmitted: false }
+    }
+    return this.postJson<InitiationRequestSubmissionResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/solicitud-iniciacion`, payload)
+  }
+
+  async getTreasuryWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
+    if (this.useMocks) return mockSnapshotAsOf(this.mockTreasury.get(organizationId), asOf)
+    const query = new URLSearchParams(); if (asOf) query.set('asOf', asOf)
+    return this.optionalGet<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad${query.size ? `?${query}` : ''}`)
+  }
+  async setTreasuryWorkshopRegularity(organizationId: string, payload: WorkshopRegularityRequest): Promise<WorkshopRegularitySnapshot> {
+    if (this.useMocks) { const snapshot = mockRegularitySnapshot(organizationId, payload, 'treasury'); this.mockTreasury.set(organizationId, snapshot); return snapshot }
+    return this.postJson<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad`, payload)
+  }
+  async listTreasuryStatements(organizationId: string, year?: number, month?: number): Promise<TreasuryStatementListResponse> {
+    if (this.useMocks) {
+      const items = [...this.mockTreasuryStatements.values()]
+        .filter(item => item.organizationId === organizationId && (year == null || item.periodYear === year) && (month == null || item.periodMonth === month))
+        .sort((a,b) => b.periodYear - a.periodYear || b.periodMonth - a.periodMonth)
+        .map(item => ({ id:item.id, organizationId:item.organizationId, periodYear:item.periodYear, periodMonth:item.periodMonth, cutoffDate:item.cutoffDate, status:item.status, sourceReference:item.sourceReference, submittedAtUtc:item.submittedAtUtc, reconciledAtUtc:item.reconciledAtUtc, closedAtUtc:item.closedAtUtc }))
+      return { total:items.length, items }
+    }
+    const query = new URLSearchParams()
+    if (year != null) query.set('year', String(year))
+    if (month != null) query.set('month', String(month))
+    return this.request<TreasuryStatementListResponse>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/cuadros${query.size ? `?${query}` : ''}`)
+  }
+
+  async createTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = mockTreasuryStatement(organizationId, payload)
+      this.mockTreasuryStatements.set(statement.id, statement)
+      return cloneTreasuryStatement(statement)
+    }
+    return this.postJson<TreasuryStatement>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/cuadros`, payload)
+  }
+  async generateTreasuryStatementLines(statementId: string, payload: GenerateTreasuryLinesRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      const amounts = [payload.masterAmount, payload.masterAmount, payload.masterAmount, payload.fellowcraftAmount, payload.fellowcraftAmount, payload.apprenticeAmount, payload.apprenticeAmount]
+      const degrees = ['master', 'master', 'master', 'fellowcraft', 'fellowcraft', 'apprentice', 'apprentice']
+      const names = ['Venerable Maestra', 'Primer Vigilante', 'Segundo Vigilante', 'Compañero Uno', 'Compañera Dos', 'Aprendiz Uno', 'Aprendiza Dos']
+      const contributionTypes:LodgeFeeType[]=['normal','normal','senior','spouse','student','past_active','normal']
+      statement.lines = amounts.map((amount, index) => ({ id: crypto.randomUUID(), memberId: `demo-member-${index + 1}`, membershipId: `demo-membership-${index + 1}`, degreeCodeAtCutoff: degrees[index], officeCodeAtCutoff: index < 3 ? ['VM', 'PV', 'SV'][index] : null, baseAmount: amount, adjustmentAmount: index === 2 ? -8000 : 0, payableAmount: index === 2 ? amount - 8000 : amount, adjustmentType: contributionTypes[index], contributionType:contributionTypes[index], authorizationReference: index === 2 ? 'Plancha DEMO-023/2026' : null, observation: names[index], identityMatchStatus: 'matched' }))
+      recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
+    }
+    return this.postJson<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/generar-lineas`, payload)
+  }
+  async addTreasuryStatementPayment(statementId: string, payload: AddTreasuryPaymentRequest): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      if (statement.status !== 'draft') throw new Error('Los pagos sólo pueden registrarse mientras el Cuadro está en borrador.')
+      if (payload.amount <= 0 || !payload.payerDisplayName?.trim() || !payload.reference?.trim()) throw new Error('Pagador y referencia/comprobante son obligatorios para registrar el pago.')
+      statement.payments.push({ id: crypto.randomUUID(), paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, amount: payload.amount, payerDisplayName: payload.payerDisplayName.trim(), reference: payload.reference.trim(), recordedAtUtc: new Date().toISOString() })
+      recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
+    }
+    await this.postJson<unknown>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/pagos`, payload)
+    return this.getTreasuryStatement(statementId)
+  }
+  async submitTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
+    if (this.useMocks) {
+      const statement = this.requireMockTreasuryStatement(statementId)
+      if (statement.lines.length === 0) throw new Error('El cuadro debe contener líneas antes de enviarse.')
+      if (statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0) throw new Error('El cuadro no puede enviarse mientras exista diferencia o identidades sin conciliar.')
+      statement.status = 'submitted'; statement.submittedAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement)
+    }
+    return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/enviar`, { method: 'POST' })
+  }
+  async reconcileTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
+    if (this.useMocks) { const statement = this.requireMockTreasuryStatement(statementId); if (statement.differenceAmount !== 0) throw new Error('El cuadro mantiene una diferencia pendiente.'); statement.status = 'reconciled'; statement.reconciledAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
+    return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/conciliar`, { method: 'POST' })
+  }
+  async getTreasuryStatement(statementId: string, includeMemberDetail = false): Promise<TreasuryStatement> { if (this.useMocks) { const item=cloneTreasuryStatement(this.requireMockTreasuryStatement(statementId)); if(!includeMemberDetail)item.lines=item.lines.map(x=>({...x,memberId:null,membershipId:null,degreeCodeAtCutoff:'',officeCodeAtCutoff:null,observation:null,authorizationReference:null,adjustmentType:null})); return item } return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}?includeMemberDetail=${includeMemberDetail}`) }
+  async getLodgeHospitalariaSummary(organizationId:string, from?:string, to?:string):Promise<LodgeHospitalariaSummary>{
+    if(this.useMocks){
+      const items=this.ensureMockHospitalariaMovements(organizationId).filter(item=>(!from||item.movementDate>=from)&&(!to||item.movementDate<=to))
+      return summarizeMockHospitalaria(organizationId,from??currentMonthStart(),to??currentMonthEnd(),items)
+    }
+    const query=new URLSearchParams(); if(from)query.set('from',from); if(to)query.set('to',to)
+    return this.request<LodgeHospitalariaSummary>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/resumen${query.size?`?${query}`:''}`)
+  }
+
+  async createLodgeHospitalariaMovement(organizationId:string,payload:CreateLodgeHospitalariaMovementRequest):Promise<LodgeHospitalariaMovement>{
+    if(this.useMocks){
+      if(payload.amount<=0)throw new Error('El monto debe ser mayor que cero.')
+      if(payload.movementType==='expense'&&!payload.evidenceReference?.trim())throw new Error('Todo egreso de Hospitalaria debe conservar una referencia de respaldo.')
+      const item:LodgeHospitalariaMovement={id:crypto.randomUUID(),organizationId,...payload,memberReference:payload.memberReference?.trim()||null,destination:payload.destination?.trim()||null,evidenceReference:payload.evidenceReference?.trim()||null,observation:payload.observation?.trim()||null,approvalStatus:payload.movementType==='expense'?'pending_approval':'not_required',approvalSource:null,councilDecisionId:null,approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()}
+      this.ensureMockHospitalariaMovements(organizationId).push(item); return {...item}
+    }
+    return this.postJson<LodgeHospitalariaMovement>(`/api/gestion-logial/hospitalaria/talleres/${encodeURIComponent(organizationId)}/movimientos`,payload)
   }
 
   async approveLodgeHospitalariaExpense(movementId:string):Promise<LodgeHospitalariaMovement>{
@@ -344,6 +641,18 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
     if(this.useMocks){const item=this.requireMockHospitalariaSubmission(submissionId);if(item.status!=='submitted')throw new Error('Sólo una rendición enviada puede ser revisada.');if(decision==='reconciled'&&item.differenceAmount>0)throw new Error('No puede conciliarse una rendición con reposiciones pendientes.');if(decision==='observed'&&!notes?.trim())throw new Error('Una observación debe indicar motivo.');item.status=decision;item.reviewedAtUtc=new Date().toISOString();item.reviewNotes=notes?.trim()||null;if(decision==='reconciled')this.mockHospitalaria.set(item.organizationId,{id:`hospitalaria-${crypto.randomUUID()}`,organizationId:item.organizationId,status:'up_to_date',asOfDate:item.cutoffDate,sourceReference:`hospitalaria-rendicion:${item.id}`,notes:'Regularidad derivada de rendición conciliada.',recordedAtUtc:new Date().toISOString()});return{id:item.id,organizationId:item.organizationId,status:item.status,reviewedAtUtc:item.reviewedAtUtc,reviewNotes:item.reviewNotes}}
     return this.postJson(`/api/hospitalaria/rendiciones/${encodeURIComponent(submissionId)}/revision`,{decision,notes:notes??null})
   }
+
+
+  async getHospitalariaReplenishmentRate(asOf?:string):Promise<HospitalariaReplenishmentRate>{if(this.useMocks)return {...this.mockReplenishmentRate};return this.request(`/api/hospitalaria/reposiciones/tarifa${asOf?`?asOf=${encodeURIComponent(asOf)}`:''}`)}
+  async setHospitalariaReplenishmentRate(payload:{amountPerActiveMember:number;effectiveFrom:string;sourceReference:string}):Promise<HospitalariaReplenishmentRate>{if(this.useMocks){if(payload.amountPerActiveMember<=0||!payload.sourceReference.trim())throw new Error('La tarifa debe ser positiva e indicar referencia.');this.mockReplenishmentRate={id:crypto.randomUUID(),...payload,effectiveUntil:null};return {...this.mockReplenishmentRate}}return this.postJson('/api/hospitalaria/reposiciones/tarifa',payload)}
+  async syncDeathReplenishmentCases():Promise<{created:number}>{if(this.useMocks){const created=this.mockDeathReplenishmentCases.length===0;this.ensureMockDeathReplenishments();return {created:created?1:0}}return this.request('/api/hospitalaria/reposiciones/sincronizar-defunciones',{method:'POST'})}
+  async getDeathReplenishmentCases():Promise<{total:number;items:DeathReplenishmentCase[]}>{if(this.useMocks){this.ensureMockDeathReplenishments();const items=this.mockDeathReplenishmentCases.map(c=>({...c,transfers:c.transfers.map(t=>({...t,organizationName:this.mockOrganizations.find(o=>o.id===t.organizationId)?.name??'Taller'}))}));return {total:items.length,items}}return this.request('/api/hospitalaria/reposiciones')}
+  async getWorkshopDeathReplenishments(organizationId:string):Promise<WorkshopDeathReplenishments>{if(this.useMocks){this.ensureMockDeathReplenishments();const items=(this.mockDeathReplenishmentObligations.get(organizationId)??[]).map(x=>({...x,payments:x.payments.map(p=>({...p}))}));return {organizationId,items,cases:groupWorkshopDeathCases(organizationId,items,this.mockDeathReplenishmentCases)}}return this.request(`/api/hospitalaria/talleres/${encodeURIComponent(organizationId)}/reposiciones`)}
+  async addDeathReplenishmentPayment(obligationId:string,organizationId:string,payload:{amount:number;paymentMethod:string;paymentDate:string;reference:string}):Promise<DeathReplenishmentPayment>{if(this.useMocks){this.ensureMockDeathReplenishments();const item=this.mockDeathReplenishmentObligations.get(organizationId)?.find(x=>x.id===obligationId);if(!item)throw new Error('No existe la obligación.');if(payload.amount<=0||payload.amount>item.balance)throw new Error('El pago debe ser positivo y no superar el monto pendiente.');if(!payload.reference.trim()||!payload.paymentMethod.trim())throw new Error('Debe registrar medio y referencia del comprobante.');const payment={id:crypto.randomUUID(),...payload,receiptNumber:`HOSP-DEMO-${String(item.payments.length+1).padStart(3,'0')}`};item.payments.unshift(payment);item.paidAmount+=payload.amount;item.balance-=payload.amount;item.status=item.balance===0?'paid':'partial';const c=this.mockDeathReplenishmentCases.find(x=>x.id===item.caseId);if(c){c.paidAmount+=payload.amount;c.pendingMembers=this.countPending(item.caseId)}return payment}return this.postJson(`/api/hospitalaria/reposiciones/obligaciones/${encodeURIComponent(obligationId)}/pagos`,payload)}
+  async submitDeathReplenishmentTransfer(caseId:string,organizationId:string,payload:{amount:number;transferDate:string;reference:string}):Promise<DeathReplenishmentTransfer>{if(this.useMocks){this.ensureMockDeathReplenishments();const items=(this.mockDeathReplenishmentObligations.get(organizationId)??[]).filter(x=>x.caseId===caseId);if(!items.length)throw new Error('No existen obligaciones para el Taller.');if(items.some(x=>x.status!=='paid'))throw new Error('La transferencia se habilita cuando se completa la cobranza.');const c=this.mockDeathReplenishmentCases.find(x=>x.id===caseId)!;const last=c.transfers.filter(x=>x.organizationId===organizationId).sort((a,b)=>(b.submissionNumber??1)-(a.submissionNumber??1))[0];if(last&&last.status!=='observed')throw new Error('La transferencia más reciente sigue en revisión o conciliada.');const expected=items.reduce((n,x)=>n+x.amountDue,0);if(payload.amount!==expected||!payload.reference.trim())throw new Error('El monto transferido debe coincidir con lo recaudado y tener referencia.');const transfer:DeathReplenishmentTransfer={id:crypto.randomUUID(),organizationId,submissionNumber:(last?.submissionNumber??0)+1,amount:payload.amount,expectedAmount:expected,transferDate:payload.transferDate,reference:payload.reference,status:'submitted'};c.transfers.push(transfer);return {...transfer}}return this.postJson(`/api/hospitalaria/reposiciones/casos/${encodeURIComponent(caseId)}/talleres/${encodeURIComponent(organizationId)}/transferencias`,payload)}
+  async reviewDeathReplenishmentTransfer(transferId:string,decision:'observed'|'reconciled',notes?:string|null):Promise<{id:string;status:string;organizationId:string}>{if(this.useMocks){const t=this.mockDeathReplenishmentCases.flatMap(c=>c.transfers).find(x=>x.id===transferId);if(!t)throw new Error('No existe la transferencia.');if(decision==='observed'&&!notes?.trim())throw new Error('Indique el motivo de observación.');if(decision==='reconciled'&&t.amount!==t.expectedAmount)throw new Error('El pago transferido no coincide con el total esperado.');t.status=decision;t.reviewNotes=notes??null;const cases=[...new Set((this.mockDeathReplenishmentObligations.get(t.organizationId)??[]).map(x=>x.caseId))];const outstanding=cases.some(id=>(this.mockDeathReplenishmentObligations.get(t.organizationId)??[]).some(x=>x.caseId===id&&x.status!=='paid')||!this.mockDeathReplenishmentCases.find(c=>c.id===id)?.transfers.some(x=>x.organizationId===t.organizationId&&x.status==='reconciled'));this.mockHospitalaria.set(t.organizationId,{id:`hospitalaria-${crypto.randomUUID()}`,organizationId:t.organizationId,status:decision==='reconciled'&&!outstanding?'up_to_date':'overdue',asOfDate:new Date().toISOString().slice(0,10),sourceReference:`hospitalaria-reposicion:${t.id}`,notes:decision==='reconciled'&&!outstanding?'Reposición transferida y conciliada por Gran Hospitalaria.':'Existen reposiciones pendientes u observadas.',recordedAtUtc:new Date().toISOString()});return{id:t.id,status:t.status,organizationId:t.organizationId}}return this.postJson(`/api/hospitalaria/reposiciones/transferencias/${encodeURIComponent(transferId)}/revision`,{decision,notes:notes??null})}
+  private countPending(caseId:string){return [...this.mockDeathReplenishmentObligations.values()].flat().filter(x=>x.caseId===caseId&&x.status!=='paid').length}
+  private ensureMockDeathReplenishments(){if(this.mockDeathReplenishmentCases.length)return;const caseId='death-case-demo-1';this.mockDeathReplenishmentCases.push({id:caseId,deathDate:'2026-09-10',deceasedDisplayName:'Hermano fallecido demostrativo',amountPerActiveMember:1500,obligatedMembers:440,dueAmount:660000,paidAmount:1500,pendingMembers:439,transfers:[]});for(const org of this.mockOrganizations){const items=Array.from({length:22},(_,i)=>{const paid=org.number==='1'&&i===0?1500:0;return{id:`obligation-demo-${org.number}-${i+1}`,caseId,deathDate:'2026-09-10',deceasedDisplayName:'Hermano fallecido demostrativo',memberId:`member-demo-${org.number}-${i+1}`,memberDisplayName:`Hermano ${String(i+1).padStart(2,'0')} · Taller ${org.number}`,amountDue:1500,paidAmount:paid,balance:1500-paid,status:(paid===1500?'paid':'pending') as 'paid'|'pending',payments:paid?[{id:'hosp-pay-demo-1',amount:paid,paymentMethod:'transfer',paymentDate:'2026-09-12',receiptNumber:'HOSP-DEMO-001',reference:'TRX-HOSP-DEMO-001'}]:[]}});this.mockDeathReplenishmentObligations.set(org.id,items)}}
 
   async getHospitalariaWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
     if (this.useMocks) return mockSnapshotAsOf(this.mockHospitalaria.get(organizationId), asOf)
@@ -406,19 +715,6 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
     if(!items){items=defaultHospitalariaMovements(organizationId);this.mockLodgeHospitalariaMovements.set(organizationId,items)}
     return items
   }
-  private ensureMockDeathReplenishments(){
-    if(this.mockDeathReplenishmentCases.length)return
-    const caseId='death-case-demo-1'
-    this.mockDeathReplenishmentCases.push({id:caseId,deathDate:'2026-09-10',deceasedDisplayName:'Hermano fallecido demostrativo',amountPerActiveMember:1500,obligatedMembers:440,dueAmount:660000,paidAmount:1500,pendingMembers:439,transfers:[]})
-    for(const organization of this.mockOrganizations){
-      const names=organization.number==='1'?['Andrea Demostrativa','Benjamín Demostrativo','Carolina Demostrativa']:[]
-      const items=Array.from({length:22},(_,index)=>{
-        const paid=organization.number==='1'&&index===0?1500:0
-        return{id:`obligation-demo-${organization.number}-${index+1}`,caseId,deathDate:'2026-09-10',deceasedDisplayName:'Hermano fallecido demostrativo',memberId:`member-demo-${organization.number}-${index+1}`,memberDisplayName:names[index]??`Hermano ${String(index+1).padStart(2,'0')} · Taller ${organization.number}`,amountDue:1500,paidAmount:paid,balance:1500-paid,status:(paid===1500?'paid':'pending') as 'paid'|'pending',payments:paid?[{id:'hosp-pay-demo-1',amount:paid,paymentMethod:'transfer',paymentDate:'2026-09-12',receiptNumber:'HOSP-DEMO-001',reference:'TRX-HOSP-DEMO-001'}]:[]}
-      })
-      this.mockDeathReplenishmentObligations.set(organization.id,items)
-    }
-  }
   private requireMockHospitalariaMovement(id:string):LodgeHospitalariaMovement{for(const rows of this.mockLodgeHospitalariaMovements.values()){const item=rows.find(x=>x.id===id);if(item)return item}throw new Error('El movimiento de Hospitalaria no existe.')}
   private requireMockHospitalariaSubmission(id:string):HospitalariaMonthlySubmission{const item=[...this.mockHospitalariaSubmissions.values()].find(x=>x.id===id);if(!item)throw new Error('La rendición de Hospitalaria no existe.');return item}
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
@@ -461,7 +757,6 @@ function defaultHospitalariaMovements(organizationId:string):LodgeHospitalariaMo
 function mockHospitalariaCouncilAidDecisions(organizationId:string):HospitalariaCouncilAidDecision[]{return[{id:`council-aid-${organizationId}`,sessionId:`council-session-${organizationId}`,sessionDate:'2026-09-11',subject:'Socorro reservado · referencia demo',amount:45000}]}
 function mockHospitalariaCouncilFinancialReviews(organizationId:string):HospitalariaCouncilFinancialReview[]{return[{id:`council-review-${organizationId}`,sessionId:`council-session-review-${organizationId}`,sessionDate:'2026-09-15',periodLabel:'2026-09',conclusion:'Estado mensual de Hospitalaria revisado por Consejo · demo'}]}
 function summarizeMockHospitalaria(organizationId:string,from:string,to:string,items:LodgeHospitalariaMovement[]):LodgeHospitalariaSummary{const income=items.filter(x=>x.movementType==='income').reduce((a,x)=>a+x.amount,0);const approvedExpenses=items.filter(x=>x.movementType==='expense'&&x.approvalStatus==='approved').reduce((a,x)=>a+x.amount,0);const pendingExpenses=items.filter(x=>x.movementType==='expense'&&x.approvalStatus==='pending_approval').length;const categories=[...new Set(items.map(x=>x.category))].map(category=>({category,total:items.filter(x=>x.category===category).reduce((a,x)=>a+x.amount,0),count:items.filter(x=>x.category===category).length}));return{organizationId,from,to,income,approvedExpenses,periodNet:income-approvedExpenses,pendingExpenses,movements:items.length,categories,items:items.map(x=>({...x}))}}
-function groupWorkshopDeathCases(organizationId:string,items:DeathReplenishmentObligation[],cases:DeathReplenishmentCase[]){return [...new Set(items.map(x=>x.caseId))].map(caseId=>{const obligations=items.filter(x=>x.caseId===caseId);const transfer=cases.find(x=>x.id===caseId)?.transfers.filter(x=>x.organizationId===organizationId).sort((a,b)=>(b.submissionNumber??1)-(a.submissionNumber??1))[0];return{caseId,deathDate:obligations[0].deathDate,deceasedDisplayName:obligations[0].deceasedDisplayName,dueAmount:obligations.reduce((a,x)=>a+x.amountDue,0),paidAmount:obligations.reduce((a,x)=>a+x.paidAmount,0),allPaid:obligations.every(x=>x.status==='paid'),transfer:transfer?{id:transfer.id,amount:transfer.amount,reference:transfer.reference,status:transfer.status,transferDate:transfer.transferDate}:null}})}
 function currentMonthStart(){const d=new Date();return new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit'}).format(d)+'-01'}
 function currentMonthEnd(){const p=currentMonthStart().slice(0,7).split('-').map(Number);return monthEnd(p[0],p[1])}
 function monthEnd(year:number,month:number){return `${year}-${String(month).padStart(2,'0')}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,'0')}`}
@@ -505,3 +800,5 @@ function mockRegimenSummary(filters: { organizationId?: string; asOf?: string; f
     pendingTransfers: 0,
   }
 }
+
+function groupWorkshopDeathCases(organizationId:string,items:DeathReplenishmentObligation[],cases:DeathReplenishmentCase[]){return [...new Set(items.map(x=>x.caseId))].map(caseId=>{const rows=items.filter(x=>x.caseId===caseId);const transfer=cases.find(x=>x.id===caseId)?.transfers.filter(x=>x.organizationId===organizationId).sort((a,b)=>(b.submissionNumber??1)-(a.submissionNumber??1))[0];return{caseId,deathDate:rows[0].deathDate,deceasedDisplayName:rows[0].deceasedDisplayName,dueAmount:rows.reduce((n,x)=>n+x.amountDue,0),paidAmount:rows.reduce((n,x)=>n+x.paidAmount,0),allPaid:rows.every(x=>x.status==='paid'),transfer:transfer?{id:transfer.id,amount:transfer.amount,reference:transfer.reference,status:transfer.status,transferDate:transfer.transferDate}:null}})}

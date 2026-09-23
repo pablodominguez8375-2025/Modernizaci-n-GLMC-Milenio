@@ -348,7 +348,6 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasKey(x => x.Id);
             entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Amount).HasPrecision(18, 2);
-            entity.Property(x => x.SubmissionNumber).IsRequired();
             entity.Property(x => x.PayerDisplayName).HasMaxLength(320).IsRequired();
             entity.Property(x => x.PayerRut).HasMaxLength(40);
             entity.Property(x => x.Reference).HasMaxLength(500);

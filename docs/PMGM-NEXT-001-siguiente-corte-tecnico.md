@@ -192,3 +192,11 @@ Aunque Issue #97 mantiene pendiente QA física, el Product Owner autoriza este a
 Rama en trabajo: feature/hospitalaria-death-replenishment-spouse-fee, desde dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017; main sigue en 6dfb9546a4873baff15955cf86abfd7d47e3d111. Cambios iniciados incluyen persistencia/migración, API, demo y UI; las transferencias observadas admiten reenvío numerado con historial íntegro. QA-033 se define en docs/qa/PMGM-QA-V063-HOSPITALARIA-REPOSICION-CONYUGE.md.
 
 Antes de abrir PR: terminar pruebas, revisar migración, registrar resultados y conservar main intacta. El entorno no tiene .NET SDK; el CI exact-head debe compilar backend y ejecutar integración PostgreSQL. Después: PR a dev, CI exact-head, Showcase/Pages, instalable QA y Pre-UAT del mismo SHA. Despliegue físico srv01, smoke, regresión y UAT permanecen sujetos a Issue #97; no promover a main.
+
+
+### Seguimiento de reparación PR #139 — 23-09-2026
+
+- Restaurar íntegramente `frontend/src/api/pmgmApi.ts` desde `dev` y reaplicar sólo tipos, métodos, comportamiento sintético y agrupación de reposiciones.
+- Corregir las nueve declaraciones FK posicionales de la migración a argumentos explícitos y eliminar `SubmissionNumber` del mapeo de `TreasuryPayment`; conservarlo en `DeathReplenishmentTransfer`.
+- Resultado local: 185/185 pruebas frontend, lint, build, diff-check y migration gate 44 migraciones aprobados.
+- Pendiente: crear commit reparador sobre PR #139, esperar CI de backend y gates Showcase/Pages, QA Installable y Pre-UAT sobre el mismo SHA; actualizar este checkpoint con los resultados reales. `main` intacta; Issue #97/srv01 y UAT siguen pendientes.
