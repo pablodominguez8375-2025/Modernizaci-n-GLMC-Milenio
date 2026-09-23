@@ -1,5 +1,7 @@
 # Proyecto Centenario — Registro maestro de continuidad
 
+| 23-09-2026 | El Product Owner autoriza ampliar Tesorería del Taller y consulta su publicación en GitHub Pages. | El menú autorizado suma seis vistas: Resumen, Cuotas y Cobranzas, Ingresos y Egresos, Cuadro mensual, Configuraciones y Reportes. QA-037 verifica el alcance; ver `PMGM-ARCH-012` y `PMGM-QA-V066`. Egresos afectan caja sólo después de la aprobación del Venerable; cargos pagados generan ingreso automáticamente. La publicación Pages corresponde al flujo del repositorio al integrar en `dev`. |
+
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
 **Fuente de código y decisiones:** rama de desarrollo del proyecto

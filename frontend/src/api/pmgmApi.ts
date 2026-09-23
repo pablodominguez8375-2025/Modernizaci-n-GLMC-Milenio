@@ -36,8 +36,12 @@ export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_ac
 export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number | null; workshopAmount: number | null; rateAvailable?: boolean; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
 export interface LodgeTreasurySummary { organizationId: string; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
 export interface LodgeTreasuryPayment { id:string; receiptNumber:string; amount:number; paymentMethod:'cash'|'transfer'|'deposit'|'other'; paymentDate:string; reference:string|null }
-export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplayName:string; memberAmount:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; payments:LodgeTreasuryPayment[] }
+export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplayName:string; memberAmount:number; monthlyFeeAmount?:number; maxPaymentAmount?:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; payments:LodgeTreasuryPayment[] }
 export interface LodgeTreasuryExpense { id:string; organizationId:string; category:string; amount:number; expenseDate:string; description:string; evidenceReference:string|null; approvalStatus:'pending_approval'|'approved'; recordedBySubject:string; approvedBySubject:string|null; approvedAtUtc:string|null; recordedAtUtc:string }
+export interface LodgeTreasuryIncome { id:string; organizationId:string; category:string; amount:number; incomeDate:string; description:string; evidenceReference:string|null; recordedBySubject:string; recordedAtUtc:string }
+export interface LodgeCashSummary { organizationId:string; asOf:string; openingBalance:number; cumulativeIncome:number; cumulativeExpense:number; cumulativeBalance:number; monthIncome:number; monthExpense:number; monthBalance:number; pendingExpenses:number }
+export interface LodgeTreasuryReport { organizationId:string; from:string; to:string; openingBalance:number; income:number; authorizedExpenses:number; pendingExpenses:number; closingBalance:number; observedBalance:number|null; difference:number|null; movements:{date:string;type:'ingreso'|'egreso';category:string;description:string;amount:number;status:string;reference:string|null}[] }
+export interface LodgeTreasuryConfiguration { organizationId:string; openingBalance:number; openingBalanceDate:string; incomeCategories:string; expenseCategories:string }
 export interface InstitutionalSpace { id: string; code: string; name: string; spaceType: 'temple' | 'secretariat_room'; location: string | null; capacity: number | null; status?: string; isAvailable?: boolean }
 export interface SpaceAvailabilityResponse { fromUtc: string; toUtc: string; total: number; available: number; items: InstitutionalSpace[] }
 export type SecretariatDocumentType = 'decree' | 'plancha' | 'communication' | 'ceremony_authorization' | 'ceremony_authorization_plancha'
@@ -327,6 +331,8 @@ export class PmgmApiClient {
   private readonly mockLodgeTreasurySummaries = new Map<string, LodgeTreasurySummary>()
   private readonly mockLodgeTreasuryCharges = new Map<string, LodgeTreasuryCharge[]>()
   private readonly mockLodgeTreasuryExpenses = new Map<string, LodgeTreasuryExpense[]>()
+  private readonly mockLodgeTreasuryIncomes = new Map<string, LodgeTreasuryIncome[]>()
+  private readonly mockLodgeTreasuryConfigurations = new Map<string, LodgeTreasuryConfiguration>()
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
@@ -400,6 +406,28 @@ export class PmgmApiClient {
   async approveLodgeTreasuryExpense(expenseId:string):Promise<LodgeTreasuryExpense>{
     if(this.useMocks){const item=[...this.mockLodgeTreasuryExpenses.values()].flat().find(x=>x.id===expenseId);if(!item)throw new Error('El egreso no existe.');if(item.approvalStatus!=='pending_approval')throw new Error('El egreso ya fue resuelto.');item.approvalStatus='approved';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return{...item}}
     return this.postJson(`/api/gestion-logial/tesoreria/egresos/${encodeURIComponent(expenseId)}/aprobar`,{})
+  }
+
+  async createLodgeTreasuryIncome(organizationId:string,payload:{category:string;amount:number;incomeDate:string;description:string;evidenceReference?:string|null}):Promise<LodgeTreasuryIncome>{
+    if(this.useMocks){const item:LodgeTreasuryIncome={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,recordedBySubject:'tesoreria-demo',recordedAtUtc:new Date().toISOString()};const rows=this.mockLodgeTreasuryIncomes.get(organizationId)??[];rows.unshift(item);this.mockLodgeTreasuryIncomes.set(organizationId,rows);return item}
+    return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/ingresos`,payload)
+  }
+  async getLodgeCashSummary(organizationId:string,asOf:string):Promise<LodgeCashSummary>{
+    if(this.useMocks){const month=asOf.slice(0,7);const charges=await this.getLodgeTreasuryCharges(organizationId,Number(month.slice(0,4)),Number(month.slice(5,7)));const expenses=await this.getLodgeTreasuryExpenses(organizationId,'0001-01-01',asOf);const incomes=this.mockLodgeTreasuryIncomes.get(organizationId)??[];const payments=charges.items.flatMap(c=>c.payments);const allIncomes=[...payments.map(x=>({date:x.paymentDate,amount:x.amount})),...incomes.map(x=>({date:x.incomeDate,amount:x.amount}))];const approved=expenses.items.filter(x=>x.approvalStatus==='approved');const cumulativeIncome=allIncomes.filter(x=>x.date<=asOf).reduce((s,x)=>s+x.amount,0);const cumulativeExpense=approved.filter(x=>x.expenseDate<=asOf).reduce((s,x)=>s+x.amount,0);const monthIncome=allIncomes.filter(x=>x.date.startsWith(month)).reduce((s,x)=>s+x.amount,0);const monthExpense=approved.filter(x=>x.expenseDate.startsWith(month)).reduce((s,x)=>s+x.amount,0);return{organizationId,asOf,openingBalance:0,cumulativeIncome,cumulativeExpense,cumulativeBalance:cumulativeIncome-cumulativeExpense,monthIncome,monthExpense,monthBalance:monthIncome-monthExpense,pendingExpenses:expenses.items.filter(x=>x.approvalStatus==='pending_approval').length}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/caja?asOf=${asOf}`)
+  }
+  async getLodgeTreasuryReport(organizationId:string,from:string,to:string,observedBalance?:number|null):Promise<LodgeTreasuryReport>{
+    if(this.useMocks){const charges=await this.getLodgeTreasuryCharges(organizationId,Number(to.slice(0,4)),Number(to.slice(5,7)));const expenses=await this.getLodgeTreasuryExpenses(organizationId,from,to);const incomeRows=this.mockLodgeTreasuryIncomes.get(organizationId)??[];const movements=[...charges.items.flatMap(c=>c.payments.filter(p=>p.paymentDate>=from&&p.paymentDate<=to).map(p=>({date:p.paymentDate,type:'ingreso' as const,category:'Cuotas',description:`Cuota · ${c.memberDisplayName}`,amount:p.amount,status:'registrado',reference:p.receiptNumber}))),...incomeRows.filter(x=>x.incomeDate>=from&&x.incomeDate<=to).map(x=>({date:x.incomeDate,type:'ingreso' as const,category:x.category,description:x.description,amount:x.amount,status:'registrado',reference:x.evidenceReference})),...expenses.items.map(x=>({date:x.expenseDate,type:'egreso' as const,category:x.category,description:x.description,amount:x.amount,status:x.approvalStatus==='approved'?'autorizado':'pendiente de autorización',reference:x.evidenceReference}))].sort((a,b)=>a.date.localeCompare(b.date));const income=movements.filter(x=>x.type==='ingreso').reduce((s,x)=>s+x.amount,0);const authorizedExpenses=movements.filter(x=>x.type==='egreso'&&x.status==='autorizado').reduce((s,x)=>s+x.amount,0);return{organizationId,from,to,openingBalance:0,income,authorizedExpenses,pendingExpenses:movements.filter(x=>x.type==='egreso'&&x.status!=='autorizado').reduce((s,x)=>s+x.amount,0),closingBalance:income-authorizedExpenses,observedBalance:observedBalance??null,difference:observedBalance==null?null:observedBalance-(income-authorizedExpenses),movements}}
+    const query=new URLSearchParams({from,to});if(observedBalance!=null)query.set('observedBalance',String(observedBalance))
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/reportes?${query}`)
+  }
+  async getLodgeTreasuryConfiguration(organizationId:string):Promise<LodgeTreasuryConfiguration>{
+    if(this.useMocks)return this.mockLodgeTreasuryConfigurations.get(organizationId)??{organizationId,openingBalance:0,openingBalanceDate:'2026-01-01',incomeCategories:'Otros ingresos',expenseCategories:'Servicios;Materiales;Arriendo;Traslado'}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/configuracion`)
+  }
+  async saveLodgeTreasuryConfiguration(organizationId:string,payload:Omit<LodgeTreasuryConfiguration,'organizationId'>):Promise<LodgeTreasuryConfiguration>{
+    if(this.useMocks){const configuration={organizationId,...payload};this.mockLodgeTreasuryConfigurations.set(organizationId,configuration);return configuration}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/configuracion`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
   }
 
   async getRegimenInteriorSummary(filters: { organizationId?: string; asOf?: string; from?: string } = {}): Promise<RegimenInteriorSummary> {

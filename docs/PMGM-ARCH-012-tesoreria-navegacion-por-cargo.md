@@ -8,12 +8,14 @@ Tesorería del Taller y Gran Tesorería se presentan como espacios funcionales s
 
 El menú `Tesorería` reúne:
 
-1. **Resumen:** estado mensual, planes de cuota, recaudación, saldo y monto correspondiente a Gran Tesorería.
-2. **Cuotas y cobranza:** cargos, abonos, pagos, comprobantes y saldos individuales del Taller.
-3. **Egresos:** registro de egresos y seguimiento de la autorización del Venerable Maestro.
-4. **Cuadro mensual:** preparación, pago y envío del Cuadro Logial Mensual a Gran Tesorería.
+1. **Resumen:** caja acumulada a la fecha, ingresos y egresos del mes en curso, compromisos con Gran Tesorería y estado de cobranza.
+2. **Cuotas y Cobranzas:** saldos individuales por hermano, pagos acumulados del período, adeudos, semáforo de estado y acción directa para registrar un abono.
+3. **Ingresos y Egresos:** libro de caja para ingresos varios y egresos. Los pagos de cuotas se contabilizan desde el registro de pagos para evitar duplicación; el egreso afecta el saldo sólo una vez autorizado por el Venerable Maestro.
+4. **Cuadro mensual:** preparación, pago y envío del Cuadro Logial Mensual a Gran Tesorería, manteniendo separada la caja local.
+5. **Configuraciones:** parámetros propios del Taller y planes de cuota con vigencia; el tarifario institucional continúa bajo control de Gran Tesorería. Las categorías de ingresos y egresos se especifican y filtran por registro.
+6. **Reportes:** detalle de movimientos por rango, ingresos, egresos autorizados y pendientes, saldo de apertura/cierre, diferencia de cuadratura y exportación CSV.
 
-El Venerable Maestro accede exclusivamente a `Egresos por autorizar`; puede revisar y autorizar, pero no editar cuotas, cargos, pagos ni Cuadros mensuales.
+El Venerable Maestro accede exclusivamente a `Egresos por autorizar` dentro de Ingresos y Egresos; puede revisar y autorizar, pero no editar cuotas, cargos, pagos ni Cuadros mensuales. Los egresos pendientes no reducen el saldo de caja ni el cierre reportado.
 
 ## Gran Tesorería
 
@@ -37,4 +39,3 @@ Gran Tesorería no administra la caja local, los egresos ni la cobranza individu
 ## No regresión
 
 La reorganización no cambia montos, reglas de conciliación, aprobaciones, privacidad, auditoría ni responsabilidades institucionales. Los documentos oficiales continúan cargándose como PDF firmado físicamente; el sistema no los genera.
-

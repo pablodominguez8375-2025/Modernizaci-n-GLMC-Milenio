@@ -23,9 +23,11 @@ Orden operacional:
 
 ## 2. Gate vigente — cierre de QA antes de un nuevo incremento funcional
 
-La Línea Base Maestra LB-PC-2026-09-17 establece que no se inicia un nuevo incremento funcional mientras Issue #97 mantenga bloqueada la QA física, salvo decisión expresa del Sponsor / Product Owner para un alcance concreto. La decisión vigente mantiene diferido el despliegue físico en `srv01`; por tanto, este corte se limita a continuidad, documentación, preparación/verificación de QA y correcciones necesarias para el gate. Un workflow o artefacto generado no cierra Issue #97 ni sustituye pruebas en el servidor.
+La Línea Base Maestra LB-PC-2026-09-17 establece que no se inicia un nuevo incremento funcional mientras Issue #97 mantenga bloqueada la QA física, salvo decisión expresa del Sponsor / Product Owner para un alcance concreto. Para este corte, el Product Owner autorizó expresamente ampliar el menú y los flujos de Tesorería del Taller; el alcance autorizado queda documentado en `PMGM-ARCH-012`. El despliegue físico en `srv01` sigue pendiente: un workflow o artefacto generado no cierra Issue #97 ni sustituye pruebas en el servidor.
 
 ## 3. Funciones integradas que no son trabajo futuro
+
+El alcance autorizado de Tesorería del Taller añade los menús Ingresos y Egresos, Configuraciones y Reportes, expande Resumen y Cuotas/Cobranzas, y conserva Cuadro mensual. Revisa `PMGM-QA-V066` para caja de apertura, recibos de cuota contabilizados una sola vez, autorización obligatoria de egresos y cuadratura. La aceptación física se incorpora como QA-037 y continúa pendiente de Issue #97.
 
 - Secretaría integral: PR #105.
 - Insinuaciones: PR #106.
@@ -166,7 +168,7 @@ El 22-09-2026 se reconcilia este documento con la Línea Base Maestra: queda sin
 
 ## 13. Fortalecimiento del gate Demo para QA-031
 
-Se amplía el script `.github/scripts/capture-showcase-views.mjs` para comprobar en navegador que el perfil Tesorero conserva sus accesos transversales y las cuatro funciones propias de Tesorería, y no recibe accesos de Secretaría/Gestión Logial. En el recorrido del Venerable se comprueba que sólo figure **Egresos por autorizar**. La validación corre antes de guardar las capturas de escritorio y móvil y falla Showcase ante cualquier divergencia.
+Se amplía el script `.github/scripts/capture-showcase-views.mjs` para comprobar en navegador que el perfil Tesorero conserva sus accesos transversales y las seis funciones propias de Tesorería, y no recibe accesos de Secretaría/Gestión Logial. En el recorrido del Venerable se comprueba que sólo figure **Egresos por autorizar**. La validación corre antes de guardar las capturas de escritorio y móvil y falla Showcase ante cualquier divergencia.
 
 Este ajuste automatiza un control del alcance QA-031/v0.59; no añade ni modifica capacidades funcionales. El despliegue físico en `srv01` y la aceptación QA/UAT siguen pendientes según Issue #97.
 

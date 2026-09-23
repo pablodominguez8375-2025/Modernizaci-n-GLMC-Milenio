@@ -8,7 +8,7 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 36 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 37 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
@@ -27,6 +27,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 36 contro
 - QA-034: reposición por fallecimiento, conciliación de transferencia y cuota de cónyuge.
 - QA-035: tarifas del Decreto 1.759, clasificación por Oriente y separación del aporte institucional frente a la cuota del Taller.
 - QA-036: nómina del Cuadro de Tesorería alineada a `CUADRO PAGO GRAN TESORERÍA.xlsx`, planchas para cuotas especiales y detalle personal protegido.
+- QA-037: navegación ampliada del Tesorero del Taller, caja, cobros, autorización de egresos y reportes de cuadratura.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -136,10 +137,10 @@ Resultado esperado: el Hermano consulta únicamente su cartola; Tesorería conse
 
 Resultado esperado: Gran Tesorería valida el pago íntegro contra el total calculado del mes sin recibir innecesariamente la nómina individual completa.
 
-### QA-029 — Navegación de Tesorería por cargo
+### QA-029 — Navegación de Tesorería por cargo (versión inicial)
 
 1. Ingresar como Tesorero del Taller y confirmar que existe un único acceso lateral `Tesorería`.
-2. Abrirlo y comprobar las opciones internas `Resumen`, `Cuotas y cobranza`, `Egresos` y `Cuadro mensual`.
+2. Esta lista inicial quedó ampliada por QA-037; ejecutar los seis accesos vigentes según ese control.
 3. Verificar que las operaciones anteriores siguen disponibles dentro de la opción correspondiente.
 4. Ingresar como Venerable Maestro y confirmar que sólo ve `Egresos por autorizar`, sin formularios para cuotas, cobranza o Cuadro mensual.
 5. Ingresar como Gran Tesorero y confirmar que existe un único acceso lateral `Gran Tesorería`.
@@ -148,6 +149,20 @@ Resultado esperado: Gran Tesorería valida el pago íntegro contra el total calc
 8. Repetir la navegación en ancho móvil y confirmar que todas las opciones autorizadas siguen siendo legibles y operables.
 
 Resultado esperado: cada cargo encuentra intuitivamente todas sus tareas financieras en un único menú propio, sin duplicidad ni ampliación de permisos.
+
+### QA-037 — Tesorería del Taller: caja, cobranza y cuadratura
+
+1. Como Tesorero, verificar las seis vistas y que el Cuadro mensual conserva su flujo actual.
+2. Configurar saldo inicial y fecha, y definir tipos de ingreso y egreso; comprobar que la configuración persiste al recargar.
+3. Registrar un pago total y otro parcial de cuota. Verificar que cada pago genera un solo ingreso en caja y mantiene período de cargo y fecha efectiva de pago.
+4. Registrar un ingreso distinto de cuota y comprobar que aparece en el resumen y el reporte de movimientos del rango seleccionado.
+5. Registrar un egreso, comprobar estado pendiente y confirmar que no disminuye el saldo de caja ni el cierre.
+6. Como Venerable, autorizarlo; comprobar auditoría de la autorización y que el saldo cambia sólo después de esa acción.
+7. Comparar saldo de apertura + ingresos – egresos autorizados con el cierre calculado. Ingresar saldo contado y verificar que la diferencia sea contado menos cierre calculado.
+8. Exportar el detalle CSV y validar que incluye fecha, clase, categoría, descripción, monto, estado y referencia.
+9. Confirmar que el Venerable sólo accede a egresos por autorizar y no puede crear ingresos, cambiar configuración ni registrar pagos.
+
+Resultado esperado: caja local auditable y cuadrada, cuotas no duplicadas como ingreso manual, egresos segregados por aprobación y permisos efectivos en backend.
 
 Ejemplo de fallo:
 
@@ -173,7 +188,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 36/36 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 37/37 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 
@@ -198,7 +213,7 @@ No se guardan en Git:
 
 ## Relación con UAT formal
 
-La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 36/36 pass:
+La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 37/37 pass:
 
 - no promueve automáticamente a `main`;
 - no convierte QA en producción;

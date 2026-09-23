@@ -158,3 +158,29 @@ public sealed class LodgeTreasuryExpense
     public DateTimeOffset? ApprovedAtUtc { get; set; }
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
+
+public sealed class LodgeTreasuryIncome
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public required string Category { get; set; }
+    public decimal Amount { get; set; }
+    public DateOnly IncomeDate { get; set; }
+    public required string Description { get; set; }
+    public string? EvidenceReference { get; set; }
+    public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class LodgeTreasuryConfiguration
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public decimal OpeningBalance { get; set; }
+    public DateOnly OpeningBalanceDate { get; set; }
+    public required string IncomeCategories { get; set; }
+    public required string ExpenseCategories { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}

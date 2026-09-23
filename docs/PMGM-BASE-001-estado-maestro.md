@@ -705,7 +705,7 @@ Referencia: `docs/PMGM-ARCH-013-secretaria-navegacion-por-cargo.md`. Prueba: QA-
 
 La capacidad `canManageLodgeTreasury` habilita únicamente el espacio financiero del Taller. No habilita Gestión Logial, Secretaría, Tenidas, asistencia, actas, correspondencia, pendientes, retiros, expedientes de insinuación, Circuito de Iniciación, Cuadro del Taller, Ficha del Taller ni Gestor Documental general.
 
-El Tesorero conserva las vistas transversales mínimas del usuario autenticado y el menú **Tesorería**, con Resumen, Cuotas y cobranza, Egresos y Cuadro mensual. El backend ya separa `CanManageLodgeTreasury` de `CanManageLodgeOperations`, `CanReadLodgeSecretariat`, `CanManageLodgeSecretariat` y `CanManageDocuments`; QA-031 exige la misma separación en frontend y Demo. UI QA v0.59.
+El Tesorero conserva las vistas transversales mínimas del usuario autenticado y el menú **Tesorería**, con Resumen, Cuotas y Cobranzas, Ingresos y Egresos, Cuadro mensual, Configuraciones y Reportes. Los egresos pendientes no reducen la caja hasta la autorización del Venerable Maestro; los pagos de cuotas se contabilizan desde su comprobante para evitar duplicar ingresos. El backend ya separa `CanManageLodgeTreasury` de `CanManageLodgeOperations`, `CanReadLodgeSecretariat`, `CanManageLodgeSecretariat` y `CanManageDocuments`; QA-031 exige la misma separación en frontend y Demo.
 
 ## 19. Incremento activo — Tesorería operacional del Taller
 

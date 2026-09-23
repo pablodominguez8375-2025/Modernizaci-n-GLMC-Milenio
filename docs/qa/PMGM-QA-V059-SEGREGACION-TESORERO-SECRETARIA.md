@@ -15,7 +15,7 @@ Con el perfil `lodgeTreasurer`:
 - no se muestra Gestor Documental general;
 - no puede abrir Tenidas, asistencia, actas, correspondencia, pendientes, retiros ni expedientes secretariales;
 - conserva Mi ficha, Mi calendario, Notificaciones, Insinuados publicados y Biblioteca Virtual como vistas transversales que no entregan administración secretarial;
-- conserva exclusivamente Resumen, Cuotas y cobranza, Egresos y Cuadro mensual dentro de Tesorería.
+- conserva exclusivamente las seis vistas vigentes de Tesorería descritas en `PMGM-ARCH-012`; QA-037 amplía el menú desde sus cuatro vistas iniciales.
 
 ## Autoridad backend
 
@@ -40,7 +40,7 @@ La corrección elimina la exposición incorrecta del frontend y alinea la Demo c
 El flujo Showcase de GitHub Actions valida QA-031 en las capturas de escritorio y móvil:
 
 - el Tesorero conserva Mi ficha, Mi calendario, Notificaciones, Insinuados publicados, Biblioteca Virtual y Tesorería;
-- el menú del Tesorero contiene Resumen, Cuotas y cobranza, Egresos y Cuadro mensual;
+- el menú del Tesorero contiene seis vistas según `PMGM-ARCH-012` y no muestra acceso a módulos ajenos;
 - no aparecen los accesos de Secretaría, Gestión Logial, Circuito de Iniciación, fichas, Cuadro del Taller ni Gestor Documental;
 - el Venerable recibe únicamente la pestaña Egresos por autorizar dentro del menú Tesorería; no recibe Resumen, cobranza ni Cuadro mensual.
 
