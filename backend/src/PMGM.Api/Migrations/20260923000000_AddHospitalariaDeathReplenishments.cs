@@ -120,15 +120,18 @@ public partial class AddHospitalariaDeathReplenishments : Migration
         migrationBuilder.CreateIndex(name: "IX_hospitalaria_death_replenishment_transfers_CaseId_OrganizationId_SubmissionNumber", schema: "core", table: "hospitalaria_death_replenishment_transfers", columns: new[] { "CaseId", "OrganizationId", "SubmissionNumber" }, unique: true);
         migrationBuilder.CreateIndex(name: "IX_hospitalaria_death_replenishment_transfers_OrganizationId_Status", schema: "core", table: "hospitalaria_death_replenishment_transfers", columns: new[] { "OrganizationId", "Status" });
 
-        migrationBuilder.InsertData(
-            table: "hospitalaria_replenishment_rates", schema: "core",
-            columns: new[] { "Id", "AmountPerActiveMember", "EffectiveFrom", "EffectiveUntil", "SourceReference", "CreatedBySubject", "CreatedAtUtc" },
-            values: new object[] { new Guid("b274fb20-8bba-4c0b-a88d-3b42d042ef01"), 1500m, new DateOnly(2026, 1, 1), null, "Acuerdo de reposición por fallecimiento · tarifa inicial vigente", "system:migration", new DateTimeOffset(2026, 9, 23, 0, 0, 0, TimeSpan.Zero) });
+        migrationBuilder.Sql("""
+            INSERT INTO core.hospitalaria_replenishment_rates
+                ("Id", "AmountPerActiveMember", "EffectiveFrom", "EffectiveUntil", "SourceReference", "CreatedBySubject", "CreatedAtUtc")
+            VALUES
+                ('b274fb20-8bba-4c0b-a88d-3b42d042ef01', 1500.00, '2026-01-01', NULL,
+                 'Acuerdo de reposición por fallecimiento · tarifa inicial vigente', 'system:migration', '2026-09-23T00:00:00+00:00');
+            """);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DeleteData(table: "hospitalaria_replenishment_rates", schema: "core", keyColumn: "Id", keyValue: new Guid("b274fb20-8bba-4c0b-a88d-3b42d042ef01"));
+        migrationBuilder.Sql("DELETE FROM core.hospitalaria_replenishment_rates WHERE \"Id\" = 'b274fb20-8bba-4c0b-a88d-3b42d042ef01';");
         migrationBuilder.DropTable("hospitalaria_death_replenishment_payments", "core");
         migrationBuilder.DropTable("hospitalaria_death_replenishment_transfers", "core");
         migrationBuilder.DropTable("hospitalaria_death_replenishment_obligations", "core");

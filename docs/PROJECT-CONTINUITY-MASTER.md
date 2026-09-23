@@ -143,3 +143,5 @@ Estado al registrar: `dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017`, `main@6dfb9
 
 
 Corrección backend posterior al CI #1440: `DeathReplenishmentObligation.Membership` debe referir el tipo del namespace de entidades y `SubmissionNumber` pertenece a `DeathReplenishmentTransfer`, en coherencia con endpoints, DbContext e índice de migración. La nueva ejecución de CI debe confirmar la compilación y el flujo completo.
+
+CI #1441 confirmó compilación C# satisfactoria y superación de privacy, clasificación y migration gates; las pruebas de integración PostgreSQL expusieron que `InsertData` requiere `TargetModel` generado, inexistente en las migraciones manuales del repositorio. La tarifa inicial pasa a insertarse mediante SQL explícito en la misma migración para evitar ese requisito y mantener los $1.500 vigentes. Se repiten los gates sobre un nuevo SHA; sin promoción/despliegue mientras no terminen.
