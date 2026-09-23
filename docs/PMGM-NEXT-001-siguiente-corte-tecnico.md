@@ -200,3 +200,5 @@ Antes de abrir PR: terminar pruebas, revisar migración, registrar resultados y 
 - Corregir las nueve declaraciones FK posicionales de la migración a argumentos explícitos y eliminar `SubmissionNumber` del mapeo de `TreasuryPayment`; conservarlo en `DeathReplenishmentTransfer`.
 - Resultado local: 185/185 pruebas frontend, lint, build, diff-check y migration gate 44 migraciones aprobados.
 - Pendiente: crear commit reparador sobre PR #139, esperar CI de backend y gates Showcase/Pages, QA Installable y Pre-UAT sobre el mismo SHA; actualizar este checkpoint con los resultados reales. `main` intacta; Issue #97/srv01 y UAT siguen pendientes.
+
+- Hallazgo CI #1440 posterior al primer commit reparador: error de compilación C# CS0118 para `Membership` y `SubmissionNumber` en entidad Obligation en vez de Transfer. Corregir, repetir CI #1440 en nuevo HEAD y revisar gates restantes. El primer intento Showcase y QA Installable están corriendo sobre el SHA `05049a68a015dac2de584aef6b6f8d101fa81d1f`; no usarlo para publicación hasta que backend pase.

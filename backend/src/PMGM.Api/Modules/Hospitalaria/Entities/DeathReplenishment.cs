@@ -35,9 +35,8 @@ public sealed class DeathReplenishmentObligation
     public DeathReplenishmentCase Case { get; set; } = null!;
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
-    public int SubmissionNumber { get; set; } = 1;
     public Guid MembershipId { get; set; }
-    public Membership Membership { get; set; } = null!;
+    public PMGM.Api.Modules.Membership.Entities.Membership Membership { get; set; } = null!;
     public Guid MemberId { get; set; }
     public Member Member { get; set; } = null!;
     public decimal AmountDue { get; set; }
@@ -66,6 +65,7 @@ public sealed class DeathReplenishmentTransfer
     public DeathReplenishmentCase Case { get; set; } = null!;
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
+    public int SubmissionNumber { get; set; } = 1;
     public decimal Amount { get; set; }
     public DateOnly TransferDate { get; set; }
     public required string Reference { get; set; }
