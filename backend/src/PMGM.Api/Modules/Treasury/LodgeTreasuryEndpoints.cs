@@ -301,7 +301,7 @@ public static class LodgeTreasuryEndpoints
             .Where(x => x.Charge.OrganizationId == organizationId && x.PaymentDate >= periodFrom && x.PaymentDate <= to).ToListAsync(ct);
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.IncomeDate >= periodFrom && x.IncomeDate <= to).ToListAsync(ct);
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.ExpenseDate >= periodFrom && x.ExpenseDate <= to).ToListAsync(ct);
-        var movements = payments.Select(x => new { date = x.PaymentDate, type = "ingreso", category = "Cuotas", description = $"Cuota {x.Charge.PeriodMonth:00}/{x.Charge.PeriodYear} · {x.Charge.Member.Person.FirstNames} {x.Charge.Member.Person.LastNames}", amount = x.Amount, status = "registrado", reference = x.ReceiptNumber })
+        var movements = payments.Select(x => new { date = x.PaymentDate, type = "ingreso", category = "Cuotas", description = $"Cuota {x.Charge.PeriodMonth:00}/{x.Charge.PeriodYear} · {x.Charge.Member.Person.FirstNames} {x.Charge.Member.Person.LastNames}", amount = x.Amount, status = "registrado", reference = (string?)x.ReceiptNumber })
             .Concat(incomes.Select(x => new { date = x.IncomeDate, type = "ingreso", category = x.Category, description = x.Description, amount = x.Amount, status = "registrado", reference = x.EvidenceReference }))
             .Concat(expenses.Select(x => new { date = x.ExpenseDate, type = "egreso", category = x.Category, description = x.Description, amount = x.Amount, status = x.ApprovalStatus == "approved" ? "autorizado" : "pendiente de autorización", reference = x.EvidenceReference }))
             .OrderBy(x => x.date).ToList();
