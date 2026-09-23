@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 28967)
-Total output lines: 814
-
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
 export interface SystemInfo { project: string; api: string; version: string; runtime: string; culture: string; institutionalTimeZone: string; defaultCurrency: string }
@@ -384,7 +381,128 @@ export class PmgmApiClient {
     return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos?year=${periodYear}&month=${periodMonth}`)
   }
   async addLodgeTreasuryPayment(chargeId:string,payload:{amount:number;paymentMethod:LodgeTreasuryPayment['paymentMethod'];paymentDate:string;reference?:string|null}):Promise<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>{
-    if(this.useMocks){con…3967 tokens truncated… Error('La solicitud requiere confirmación del Venerable Maestro.')
+    if(this.useMocks){const charge=[...this.mockLodgeTreasuryCharges.values()].flat().find(x=>x.id===chargeId);if(!charge)throw new Error('El cargo indicado no existe.');if(payload.amount<=0||payload.amount>charge.balance)throw new Error('El abono debe ser positivo y no superar el saldo.');const reference=payload.reference?.trim()||null;if(reference&&charge.payments.some(x=>x.amount===payload.amount&&x.paymentDate===payload.paymentDate&&x.paymentMethod===payload.paymentMethod&&x.reference?.toLocaleLowerCase('es-CL')===reference.toLocaleLowerCase('es-CL')))throw new Error('Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia.');const payment:LodgeTreasuryPayment={id:crypto.randomUUID(),receiptNumber:`REC-DEMO-${String(charge.payments.length+1).padStart(3,'0')}`,amount:payload.amount,paymentMethod:payload.paymentMethod,paymentDate:payload.paymentDate,reference};charge.payments.unshift(payment);charge.paidAmount+=payment.amount;charge.balance-=payment.amount;charge.status=charge.balance===0?'paid':'partial';return{...payment,paidAmount:charge.paidAmount,balance:charge.balance,status:charge.status}}
+    return this.postJson<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>(`/api/gestion-logial/tesoreria/cargos/${encodeURIComponent(chargeId)}/pagos`,payload)
+  }
+  async getLodgeTreasuryExpenses(organizationId:string,from:string,to:string):Promise<{total:number;items:LodgeTreasuryExpense[]}>{
+    if(this.useMocks){let items=this.mockLodgeTreasuryExpenses.get(organizationId);if(!items){items=mockTreasuryExpenses(organizationId);this.mockLodgeTreasuryExpenses.set(organizationId,items)}const selected=items.filter(x=>x.expenseDate>=from&&x.expenseDate<=to);return{total:selected.length,items:selected.map(x=>({...x}))}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos?from=${from}&to=${to}`)
+  }
+  async createLodgeTreasuryExpense(organizationId:string,payload:{category:string;amount:number;expenseDate:string;description:string;evidenceReference?:string|null}):Promise<LodgeTreasuryExpense>{
+    if(this.useMocks){const item:LodgeTreasuryExpense={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()};const items=this.mockLodgeTreasuryExpenses.get(organizationId)??[];items.unshift(item);this.mockLodgeTreasuryExpenses.set(organizationId,items);return{...item}}
+    return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos`,payload)
+  }
+  async approveLodgeTreasuryExpense(expenseId:string):Promise<LodgeTreasuryExpense>{
+    if(this.useMocks){const item=[...this.mockLodgeTreasuryExpenses.values()].flat().find(x=>x.id===expenseId);if(!item)throw new Error('El egreso no existe.');if(item.approvalStatus!=='pending_approval')throw new Error('El egreso ya fue resuelto.');item.approvalStatus='approved';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return{...item}}
+    return this.postJson(`/api/gestion-logial/tesoreria/egresos/${encodeURIComponent(expenseId)}/aprobar`,{})
+  }
+
+  async getRegimenInteriorSummary(filters: { organizationId?: string; asOf?: string; from?: string } = {}): Promise<RegimenInteriorSummary> {
+    if (this.useMocks) return mockRegimenSummary(filters)
+    const query = new URLSearchParams(); if (filters.organizationId) query.set('organizationId', filters.organizationId); if (filters.asOf) query.set('asOf', filters.asOf); if (filters.from) query.set('from', filters.from)
+    return this.request<RegimenInteriorSummary>(`/api/regimen-interior/summary${query.size ? `?${query}` : ''}`)
+  }
+  async getOrderRejectionAlerts(): Promise<OrderRejectionAlertResponse> {
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', reason: 'Rechazo en Cámara del Medio / tercer grado', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
+    return this.request<OrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
+  }
+
+  async getCeremonyReviewQueue(): Promise<CeremonyReviewQueueResponse> {
+    if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
+    return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
+  }
+  async setCeremonyInternalAffairsValidation(ceremonyRequestId: string, payload: CeremonyInternalAffairsValidationRequest): Promise<unknown> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { status: payload.status }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canValidateInternalAffairs) throw new Error('La solicitud ya no admite validación de Régimen Interior.')
+      const requirement = item.eligibility.requirements.find(value => value.code === 'regimen_interior')
+      if (requirement) {
+        const approved = payload.status === 'approved' || payload.status === 'exception_approved'
+        requirement.status = approved ? 'approved' : payload.status
+        requirement.reason = approved ? 'Aprobación vigente registrada.' : payload.status === 'observed' ? 'La solicitud tiene observaciones pendientes de Régimen Interior.' : 'No existe una aprobación habilitante de Régimen Interior.'
+      }
+      recomputeMockEligibility(item)
+      return { status: payload.status }
+    }
+    return this.postJson<unknown>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/validaciones/regimen-interior`, payload)
+  }
+  async publishCeremonyCandidate(ceremonyRequestId: string): Promise<CandidatePublicationWorkflowResponse> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { id: 'publication-demo-2026-001', ceremonyRequestId, publishedFromUtc: '2026-09-21T15:00:00Z', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canPublishCandidate || item.ceremonyType !== 'initiation') throw new Error('La solicitud no admite iniciar una nueva publicación del insinuado.')
+      item.eligibility.publication = { status: 'published', requiredDays: 20, completedDays: 0, publishedFromUtc: new Date().toISOString(), publishedUntilUtc: null }
+      const existing = item.eligibility.requirements.find(value => value.code === 'publicacion_insinuado')
+      const requirement = { code: 'publicacion_insinuado', name: 'Publicación del insinuado', status: 'rejected', reason: 'Se requieren 20 días de publicación y se han cumplido 0 días válidos.' }
+      if (existing) Object.assign(existing, requirement); else item.eligibility.requirements.push(requirement)
+      item.actions.canPublishCandidate = false; recomputeMockEligibility(item)
+      return { id: `publication-${item.id}`, ceremonyRequestId, publishedFromUtc: item.eligibility.publication.publishedFromUtc, requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+    }
+    return this.request<CandidatePublicationWorkflowResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/publicacion-insinuado`, { method: 'POST' })
+  }
+  async authorizeCeremony(ceremonyRequestId: string): Promise<{ id?: string; status: string }> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canAuthorize) throw new Error('Su cuenta no puede autorizar esta ceremonia.')
+      if (!item.eligibility.canAuthorize) throw new Error('La ceremonia aún tiene requisitos obligatorios pendientes.')
+      item.status = 'authorized'; item.actions = { canValidateInternalAffairs: false, canPublishCandidate: false, canAuthorize: false }
+      return { id: item.id, status: item.status }
+    }
+    return this.request<{ id?: string; status: string }>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/autorizar`, { method: 'POST' })
+  }
+  async registerInitiation(ceremonyRequestId: string, ceremonyDate: string, minuteReference: string): Promise<InitiationCompletionResponse> {
+    if (this.useMocks) return { id: ceremonyRequestId, status: 'completed', memberId: 'member-demo-2026-001', membershipStatus: 'active', degree: 'apprentice', effectiveDate: ceremonyDate, documentCode: 'AUT-CER-DEMO-2026-001' }
+    return this.postJson<InitiationCompletionResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/registrar-iniciacion`, { ceremonyDate, minuteReference })
+  }
+  async recordInitialDeliberation(ceremonyRequestId: string, payload: InitialDeliberationRequest): Promise<InitialDeliberationResponse> {
+    if (this.useMocks) return mockInitialDeliberation(ceremonyRequestId, payload)
+    return this.postJson<InitialDeliberationResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/deliberacion-inicial`, payload)
+  }
+  async uploadInterviewDocument(ceremonyRequestId: string, interviewId: string, file: File, metadata: Omit<CandidateInterviewEvidence, 'documentVersionId'>): Promise<InterviewDocumentResponse> {
+    const extension = file.name.toLowerCase().split('.').pop()
+    const contentType = file.type || (extension === 'pdf' ? 'application/pdf' : extension === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : '')
+    if (!['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(contentType)) throw new Error('La entrevista debe adjuntarse en Word (.docx) o PDF.')
+    if (file.size <= 0 || file.size > 52_428_800) throw new Error('El archivo debe contener información y pesar como máximo 50 MB.')
+    if (this.useMocks) {
+      const documentVersionId = crypto.randomUUID()
+      this.mockInterviewDocuments.set(documentVersionId, { file, fileName: file.name, metadata: { ...metadata, documentVersionId } })
+      return { interviewId, documentVersionId, fileName: file.name, result: metadata.result, summary: metadata.summary, sizeBytes: file.size }
+    }
+    return this.request<InterviewDocumentResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/entrevistas/${encodeURIComponent(interviewId)}/contenido`, { method: 'PUT', headers: { 'Content-Type': contentType, 'X-File-Name': encodeURIComponent(file.name), 'X-Interviewer': encodeURIComponent(metadata.interviewerDisplayName), 'X-Interview-Summary': encodeURIComponent(metadata.summary), 'X-Interview-Result': metadata.result, 'X-Interview-Date': metadata.interviewDate }, body: file })
+  }
+  async recordInterviewPackage(ceremonyRequestId: string, payload: InterviewPackageRequest): Promise<InterviewPackageResponse> {
+    if (this.useMocks) {
+      if (payload.interviews.length < 3) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.interviews', reason: `El expediente requiere al menos tres entrevistas completas; actualmente registra ${payload.interviews.length}.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      if (payload.interviews.some(item => !item.summary.trim() || !item.documentVersionId || !['favorable', 'desfavorable'].includes(item.result))) throw new Error('Cada entrevista requiere resumen, resultado y archivo Word o PDF.')
+      if (!payload.confidentialQuestionnaireAvailable) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.confidential_questionnaire', reason: 'Falta el Cuestionario Confidencial requerido para la revisión de tercer grado.', completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      if (!payload.autobiographyAvailable) return { id: ceremonyRequestId, validationStatus: 'observed', code: 'third_degree_review.autobiography', reason: 'Falta la autobiografía requerida para la revisión de tercer grado.', completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+      return { id: ceremonyRequestId, validationStatus: 'approved', code: 'third_degree_review.package_complete', reason: `El expediente contiene ${payload.interviews.length} entrevistas y los antecedentes requeridos.`, completedInterviews: payload.interviews.length, ceremonyStatus: 'under_review' }
+    }
+    return this.postJson<InterviewPackageResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/antecedentes`, payload)
+  }
+  async recordThirdDegreeReview(ceremonyRequestId: string, payload: ThirdDegreeReviewRequest): Promise<ThirdDegreeReviewResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.presentVoters <= 0 || payload.votesInFavor < 0 || payload.votesAgainst < 0 || payload.abstentions < 0 || payload.votesInFavor + payload.votesAgainst + payload.abstentions !== payload.presentVoters) throw new Error('La suma de votos debe coincidir con la asistencia registrada.')
+      const status = payload.openVoteApproved ? 'approved' : 'rejected'
+      return { thirdDegree: { id: ceremonyRequestId, status, code: `third_degree_review.${status}`, reason: payload.openVoteApproved ? 'La votación abierta de tercer grado fue favorable.' : 'La votación abierta de tercer grado no fue favorable.' }, status: payload.openVoteApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<ThirdDegreeReviewResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/revision-tercer-grado`, payload)
+  }
+  async recordFinalBallot(ceremonyRequestId: string, payload: FinalBallotRequest): Promise<FinalBallotResponse> {
+    if (this.useMocks) {
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
+      if (payload.ballots.length < 1 || payload.ballots.length > 3 || new Set(payload.ballots.map(item => item.procedureNumber)).size !== payload.ballots.length) throw new Error('Debe registrar entre uno y tres trámites distintos.')
+      if (payload.ballots.some(item => item.eligibleVoters <= 0 || item.whiteBallots < 0 || item.blackBallots < 0 || item.whiteBallots + item.blackBallots !== item.eligibleVoters)) throw new Error('Las balotas blancas y negras deben coincidir con las personas habilitadas.')
+      return { id: ceremonyRequestId, validationStatus: payload.ballotApproved ? 'approved' : 'rejected', asOfDate: payload.ballotDate, code: payload.ballotApproved ? 'first_degree_ballot.approved' : 'first_degree_ballot.rejected', reason: payload.ballotApproved ? 'El balotaje definitivo fue favorable.' : 'El balotaje definitivo fue desfavorable.', ceremonyStatus: payload.ballotApproved ? 'under_review' : 'rejected' }
+    }
+    return this.postJson<FinalBallotResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/balotaje`, payload)
+  }
+  async submitInitiationRequest(ceremonyRequestId: string, payload: InitiationRequestSubmission): Promise<InitiationRequestSubmissionResponse> {
+    if (this.useMocks) {
+      if (payload.proposedCeremonyDate < payload.submissionDate) throw new Error('La fecha propuesta no puede ser anterior a la solicitud.')
+      if (!payload.venerableApproval) throw new Error('La solicitud requiere confirmación del Venerable Maestro.')
       if (!payload.secretaryDisplayName.trim() || !payload.sourceReference.trim()) throw new Error('Debe indicar Secretaría responsable y referencia documental.')
       return { id: ceremonyRequestId, validationStatus: 'approved', proposedDate: payload.proposedCeremonyDate, ceremonyStatus: 'under_review', alreadySubmitted: false }
     }
