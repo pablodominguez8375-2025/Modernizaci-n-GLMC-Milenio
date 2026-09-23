@@ -120,6 +120,39 @@ Cerrar la auditoría documental de Google Drive: extraer cargos, firmantes, orde
 - Google Drive, carpeta Proyecto Centenario: `Logo Gran Logia Mixta de Chile.svg`, ID `1_BLXseShbQX-ioGMNLd5xKPYGtLMEvFm`. SHA-256 versionado: `d8e4660f95ffbdccb8c62fdc39eb8acd8f1aa5f27e8c17845c4bda64853d24bb`.
 - Pages artifact #10723212264, `sha256:1be0343b760f6f65d5acfcf066582d56a6e4c76638955bf0eefb73cf44df375c`, vence 23-09-2026 22:56 UTC.
 - QA artifact #10723132819, `proyecto-centenario-qa-srv01-e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`, `sha256:a42964269eb9af176feacfd3f0f546b51072647fb828b8af062b2bded180497b`, vence 22-10-2026 22:55 UTC.
-- Issue #97 abierto: srv01 físico sigue diferido; instalar el corte vigente, validar `SOURCE_SHA`/`MANIFEST`, smoke, QA-001..QA-026, UAT y registrar evidencia. No promover a `main` sin aprobación expresa. No abrir otro alcance funcional mientras este gate siga bloqueando, salvo autorización concreta del Product Owner.
+- Issue #97 abierto: srv01 físico sigue diferido; instalar el corte vigente, validar `SOURCE_SHA`/`MANIFEST`, smoke, QA-001..QA-034, UAT y registrar evidencia. No promover a `main` sin aprobación expresa. No abrir otro alcance funcional mientras este gate siga bloqueando, salvo autorización concreta del Product Owner.
 
 La sección **15** de `PMGM-NEXT-001-siguiente-corte-tecnico.md` es el próximo punto de trabajo detallado. Consultar HEAD vivo y fuentes Drive/GitHub antes de retomarlo; los artifacts temporales no sustituyen al paquete recién generado desde el HEAD vigente.
+
+## 16. Corte activo — Hospitalaria y Gran Hospitalaria (23-09-2026)
+
+El Product Owner autoriza expresamente continuar este alcance funcional pese al gate general pendiente de Issue #97: (a) reposición automática de $1.500 por cada hermano activo del Cuadro de cada Taller cuando se registra una defunción, según tarifa efectiva; (b) cobranza individual trazable por Hospitalaria; (c) transferencia completa a Gran Hospitalaria, conciliación y visto bueno; (d) regularidad consumida por validaciones ceremoniales; (e) cuota de cónyuge de referencia $15.000 CLP mensuales, configurable por vigencia. El aporte independiente a Gran Tesorería sigue obligatorio y no se inventa un monto.
+
+Base y rama: `dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` intacta. Rama activa `feature/hospitalaria-death-replenishment-spouse-fee`. Cambios locales: entidades/mapeos/migración de casos, obligaciones, pagos y transferencias; endpoints con control de acceso y auditoría; demo funcional con datos ficticios; UI de Hospitalaria y plan de cuota conyugal. Una transferencia observada puede reenviarse como nuevo intento numerado; se preserva historial y regularidad se basa en el último intento.
+
+Al abrir este corte, el entorno local no tenía .NET SDK, por lo que la compilación y las pruebas PostgreSQL quedaron asignadas a CI. QA-034 está en `docs/qa/PMGM-QA-V063-HOSPITALARIA-REPOSICION-CONYUGE.md`. Las fallas detectadas y sus reparaciones quedan registradas a continuación; despliegue en `srv01` y UAT permanecen pendientes por Issue #97. No promover a `main`.
+
+
+### 23-09-2026 — Reparación y validación de PR #139
+
+**Rama:** `feature/hospitalaria-death-replenishment-spouse-fee`, base `dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017`. **`main`:** `6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta.
+
+#### Defectos encontrados y reparados
+
+1. CI #1439 detectó que `frontend/src/api/pmgmApi.ts` estaba truncado y eliminaba métodos existentes. Se restauró el archivo completo desde `dev` y se reaplicaron los tipos, métodos y simulaciones de reposición; diff final respecto de `dev`: +25 líneas sin eliminaciones.
+2. El migration gate rechazaba nueve FK posicionales; se convirtieron a argumentos explícitos. Se retiró el mapeo de `SubmissionNumber` de `TreasuryPayment`.
+3. CI #1440 encontró `Membership` ambiguo como namespace y `SubmissionNumber` declarado en la entidad Obligation. Se calificó el tipo de entidad y se ubicó el número de intento en `DeathReplenishmentTransfer`, coherente con endpoints, tabla e índice.
+4. CI #1441 compiló la API, pero las pruebas PostgreSQL fallaron al procesar `InsertData` porque las migraciones del proyecto son manuales y no generan `TargetModel`. La tarifa inicial se carga ahora con SQL explícito en la migración y se elimina con SQL explícito en `Down`.
+
+#### Validaciones observadas
+
+- Local: frontend **185/185**; lint y build productivo SUCCESS; `git diff --check` limpio; `python3 tests/migration_gate.py` aprobó **44 migraciones**. Aviso de build: bundle JS supera 500 kB.
+- Commit actual de la PR: `b1bf40c308b2c2ce24dbcd8669d4aca8344b8a22`.
+- CI #1442: **SUCCESS**, incluye build backend, pruebas unitarias e integración PostgreSQL/S3/ClamAV, smoke HTTPS/OIDC y recuperación.
+- Showcase #684: **SUCCESS**, captura responsive generada. El paso de despliegue de Pages aparece `skipped` por ser ejecución de PR; todavía no representa una publicación desde `dev`.
+- QA Installable #322: **SUCCESS**, paquete generado desde el mismo SHA.
+- Pre-UAT depende de `push` a `dev`; queda pendiente de la integración. La publicación de Pages desde `dev` también debe verificarse después de integrar.
+
+#### Estado y siguientes pasos
+
+PR #139 continúa abierta como borrador, base `dev`. Antes de cerrar este corte: actualizar la rama con este registro, verificar otra vez gates exact-head, integrar sólo en `dev` según el flujo del proyecto y comprobar Pages, instalable y Pre-UAT sobre el SHA integrado. No reutilizar artefactos anteriores ni promover a `main`. Issue #97 mantiene pendiente despliegue físico en `srv01`, smoke, QA-001..QA-034 y UAT.

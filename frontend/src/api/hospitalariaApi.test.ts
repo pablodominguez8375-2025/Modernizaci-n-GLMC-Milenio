@@ -2,6 +2,48 @@ import { describe, expect, it } from 'vitest'
 import { PmgmApiClient } from './pmgmApi'
 
 describe('Hospitalaria demo workflow', () => {
+  it('calculates death replenishments from active rosters, records each payer and reconciles the workshop transfer', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    const organizationId = '11111111-1111-1111-1111-111111111111'
+
+    await api.syncDeathReplenishmentCases()
+    const rate = await api.getHospitalariaReplenishmentRate('2026-09-10')
+    expect(rate?.amountPerActiveMember).toBe(1500)
+    const cases = await api.getDeathReplenishmentCases()
+    expect(cases.total).toBe(1)
+    expect(cases.items[0].obligatedMembers).toBe(440)
+    expect(cases.items[0].dueAmount).toBe(660000)
+
+    let local = await api.getWorkshopDeathReplenishments(organizationId)
+    expect(local.cases[0].dueAmount).toBe(33000)
+    expect(local.items).toHaveLength(22)
+    expect(local.items.find(item => item.status === 'paid')?.payments[0].reference).toBe('TRX-HOSP-DEMO-001')
+    for (const item of local.items.filter(item => item.balance > 0)) {
+      await api.addDeathReplenishmentPayment(item.id, organizationId, {
+        amount: item.balance, paymentMethod: 'transfer', paymentDate: '2026-09-23', reference: `TRX-${item.id}`,
+      })
+    }
+    local = await api.getWorkshopDeathReplenishments(organizationId)
+    expect(local.cases[0].allPaid).toBe(true)
+    await expect(api.addDeathReplenishmentPayment(local.items[0].id, organizationId, {
+      amount: 1, paymentMethod: 'transfer', paymentDate: '2026-09-23', reference: 'DUPLICATE',
+    })).rejects.toThrow('monto pendiente')
+
+    const transfer = await api.submitDeathReplenishmentTransfer(local.cases[0].caseId, organizationId, {
+      amount: local.cases[0].dueAmount, transferDate: '2026-09-23', reference: 'TRX-TALLER-GRAN-HOSP-001',
+    })
+    expect(transfer.status).toBe('submitted')
+    await api.reviewDeathReplenishmentTransfer(transfer.id, 'observed', 'Referencia bancaria ilegible.')
+    local = await api.getWorkshopDeathReplenishments(organizationId)
+    expect(local.cases[0].transfer?.status).toBe('observed')
+    const correctedTransfer = await api.submitDeathReplenishmentTransfer(local.cases[0].caseId, organizationId, {
+      amount: local.cases[0].dueAmount, transferDate: '2026-09-23', reference: 'TRX-TALLER-GRAN-HOSP-002',
+    })
+    expect(correctedTransfer.status).toBe('submitted')
+    await api.reviewDeathReplenishmentTransfer(correctedTransfer.id, 'reconciled', 'Monto y comprobante verificados.')
+    expect((await api.getHospitalariaWorkshopRegularity(organizationId))?.status).toBe('up_to_date')
+  })
+
   it('keeps private aid details local while Gran Hospitalaria receives only aggregate submission data', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
