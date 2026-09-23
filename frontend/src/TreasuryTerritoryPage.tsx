@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
-import type { OrganizationOption, PmgmApiClient, TreasuryTerritory } from './api/pmgmApi'
+import type { PmgmApiClient, TreasuryTerritory, TreasuryTerritoryOption } from './api/pmgmApi'
 
 const labels:Record<TreasuryTerritory,string>={santiago:'Santiago',other_oriente:'Otro Oriente de Chile',peru:'Perú'}
 
 export default function TreasuryTerritoryPage({api}:{api:PmgmApiClient}){
-  const [items,setItems]=useState<OrganizationOption[]>([])
+  const [items,setItems]=useState<TreasuryTerritoryOption[]>([])
   const [values,setValues]=useState<Record<string,TreasuryTerritory|''>>({})
   const [message,setMessage]=useState('')
   const [error,setError]=useState('')
   const [busy,setBusy]=useState(false)
-  useEffect(()=>{void api.getOrganizationOptions().then(result=>{const workshops=result.items.filter(item=>item.type!=='order');setItems(workshops);setValues(Object.fromEntries(workshops.map(item=>[item.id,item.treasuryTerritory??'']))) }).catch(reason=>setError(messageOf(reason)))},[api])
-  const save=async(item:OrganizationOption)=>{const territory=values[item.id];if(!territory)return;setBusy(true);setError('');setMessage('');try{await api.setTreasuryTerritory(item.id,territory);setMessage(`Oriente registrado para ${item.name}.`);setItems(current=>current.map(value=>value.id===item.id?{...value,treasuryTerritory:territory}:value))}catch(reason){setError(messageOf(reason))}finally{setBusy(false)}}
+  useEffect(()=>{void api.getTreasuryTerritories().then(result=>{const workshops=result.items.filter(item=>item.type!=='order');setItems(workshops);setValues(Object.fromEntries(workshops.map(item=>[item.id,item.treasuryTerritory??'']))) }).catch(reason=>setError(messageOf(reason)))},[api])
+  const save=async(item:TreasuryTerritoryOption)=>{const territory=values[item.id];if(!territory)return;setBusy(true);setError('');setMessage('');try{await api.setTreasuryTerritory(item.id,territory);setMessage(`Oriente registrado para ${item.name}.`);setItems(current=>current.map(value=>value.id===item.id?{...value,treasuryTerritory:territory}:value))}catch(reason){setError(messageOf(reason))}finally{setBusy(false)}}
   return <section className="panel treasury-territory-panel"><div className="section-title"><div><p className="eyebrow">Configuración institucional</p><h2>Oriente y tarifario por Taller</h2></div></div>
     <p>Gran Tesorería clasifica cada Taller. Esta ubicación determina el aporte institucional; la cuota que cobra el Taller se configura aparte por su Tesorero.</p>
     {message&&<div className="regularity-success" role="status">{message}</div>}{error&&<div className="error-banner" role="alert">{error}</div>}

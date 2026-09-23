@@ -7,6 +7,7 @@
 ## Criterios
 
 1. Gran Tesorería clasifica cada Taller por Oriente. Esa clasificación es institucional y no la modifica el Tesorero del Taller.
+   Los datos de Oriente se consultan en rutas autorizadas de Tesorería; el DTO general de opciones/perfil de organización mantiene su minimización y no expone ese dato transversalmente.
 2. El tarifario oficial aplicable en CLP es:
 
 | Tipo de miembro | Santiago | Otros Orientes |

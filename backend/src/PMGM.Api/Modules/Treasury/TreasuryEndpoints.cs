@@ -16,6 +16,8 @@ public static class TreasuryEndpoints
             .RequireAuthorization();
 
         group.MapGet("/tarifario-cuotas", GetOfficialFeeScheduleAsync);
+        group.MapGet("/talleres/orientes", GetTreasuryTerritoriesAsync);
+        group.MapGet("/talleres/{organizationId:guid}/oriente", GetTreasuryTerritoryAsync);
         group.MapPost("/talleres/{organizationId:guid}/oriente", SetTreasuryTerritoryAsync);
         group.MapPost("/talleres/{organizationId:guid}/regularidad", SetWorkshopRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/regularidad", GetWorkshopRegularityAsync);
@@ -32,6 +34,28 @@ public static class TreasuryEndpoints
         var date = asOf ?? TodayInChile();
         return Results.Ok(new { sourceReference = GrandTreasuryFeeSchedule.SourceReference, effectiveFrom = GrandTreasuryFeeSchedule.EffectiveFrom,
             asOf = date, items = GrandTreasuryFeeSchedule.Rates, ceremonyRights = GrandTreasuryFeeSchedule.CeremonyRights });
+    }
+
+    private static async Task<IResult> GetTreasuryTerritoriesAsync(HttpContext context, PmgmDbContext db,
+        IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        var items = await db.Organizations.AsNoTracking().Where(x => x.Type != "order")
+            .OrderBy(x => x.Name).ThenBy(x => x.Number)
+            .Select(x => new { x.Id, x.Name, x.Number, x.Type, x.TreasuryTerritory })
+            .ToListAsync(cancellationToken);
+        return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> GetTreasuryTerritoryAsync(Guid organizationId, HttpContext context,
+        PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanManageTreasuryRegularity(context.User) &&
+            !access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        var item = await db.Organizations.AsNoTracking().Where(x => x.Id == organizationId)
+            .Select(x => new { organizationId = x.Id, territory = x.TreasuryTerritory })
+            .SingleOrDefaultAsync(cancellationToken);
+        return item is null ? Results.NotFound() : Results.Ok(item);
     }
 
     private static async Task<IResult> SetTreasuryTerritoryAsync(Guid organizationId, SetTreasuryTerritoryRequest request,
