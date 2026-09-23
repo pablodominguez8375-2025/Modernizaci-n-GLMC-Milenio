@@ -204,3 +204,8 @@ Antes de abrir PR: terminar pruebas, revisar migración, registrar resultados y 
 - Hallazgo CI #1440 posterior al primer commit reparador: error de compilación C# CS0118 para `Membership` y `SubmissionNumber` en entidad Obligation en vez de Transfer. Corregir, repetir CI #1440 en nuevo HEAD y revisar gates restantes. El primer intento Showcase y QA Installable están corriendo sobre el SHA `05049a68a015dac2de584aef6b6f8d101fa81d1f`; no usarlo para publicación hasta que backend pase.
 
 - CI #1441: compilación API SUCCESS; Privacy/Data classification/Migration safety SUCCESS; PostgreSQL integration falla al generar SQL para `InsertData` de tarifa por no existir `TargetModel` en las migraciones manuales. Se reemplaza por SQL explícito `INSERT/DELETE`; repetir integración completa y gates del nuevo SHA.
+
+
+### Checkpoint corregido — PR #139 (23-09-2026)
+
+Último SHA observado de la rama: `b1bf40c308b2c2ce24dbcd8669d4aca8344b8a22`. CI #1442, Showcase #684 y QA Installable #322 SUCCESS sobre el SHA exacto. Local: 185/185 frontend, lint, build y migration gate 44 migraciones aprobados. CI encontró y se corrigió la carga inicial de tarifa mediante SQL explícito; CI #1442 confirmó pruebas backend/PostgreSQL, smoke HTTPS/OIDC y recuperación. PR #139 sigue abierta en borrador. Pages no se desplegó desde el evento PR; Pre-UAT se ejecuta al integrar en `dev`. Antes de mergear, registrar este checkpoint y repetir gates exact-head; luego verificar Pages, QA instalable y Pre-UAT del SHA integrado. `main` intacta; `srv01`/QA/UAT pendientes por Issue #97.

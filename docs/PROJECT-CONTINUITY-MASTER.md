@@ -130,18 +130,29 @@ El Product Owner autoriza expresamente continuar este alcance funcional pese al 
 
 Base y rama: `dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` intacta. Rama activa `feature/hospitalaria-death-replenishment-spouse-fee`. Cambios locales: entidades/mapeos/migración de casos, obligaciones, pagos y transferencias; endpoints con control de acceso y auditoría; demo funcional con datos ficticios; UI de Hospitalaria y plan de cuota conyugal. Una transferencia observada puede reenviarse como nuevo intento numerado; se preserva historial y regularidad se basa en el último intento.
 
-Pendiente inmediato: cerrar pruebas y revisión del backend. El entorno no dispone de .NET SDK (`dotnet: command not found`), por lo que CI debe compilar y ejecutar integración PostgreSQL. QA-034 queda documentado en `docs/qa/PMGM-QA-V063-HOSPITALARIA-REPOSICION-CONYUGE.md`. Aún no hay commit/PR ni gates de GitHub para esta rama. Demo Pages, instalable QA y despliegue físico no se consideran actualizados hasta generar artefactos sobre un SHA común; srv01 sigue diferido por Issue #97. No promover a `main`.
+Al abrir este corte, el entorno local no tenía .NET SDK, por lo que la compilación y las pruebas PostgreSQL quedaron asignadas a CI. QA-034 está en `docs/qa/PMGM-QA-V063-HOSPITALARIA-REPOSICION-CONYUGE.md`. Las fallas detectadas y sus reparaciones quedan registradas a continuación; despliegue en `srv01` y UAT permanecen pendientes por Issue #97. No promover a `main`.
 
 
-### 23-09-2026 — Reparación técnica PR #139
+### 23-09-2026 — Reparación y validación de PR #139
 
-El chequeo de CI #1439 encontró tres defectos antes de integrar: `frontend/src/api/pmgmApi.ts` contenía una salida truncada que había eliminado métodos preexistentes; la migración `20260923000000_AddHospitalariaDeathReplenishments` declaraba nueve FK con argumentos posicionales ambiguos; y `SubmissionNumber` estaba mapeado por error en `TreasuryPayment`. Se restauró el archivo de API completo desde `dev@f90e6af` y se reaplicaron los contratos y mocks de reposición; se convirtieron las nueve FK a argumentos explícitos y se retiró el mapeo incorrecto, conservando el mapeo correcto de transferencias.
+**Rama:** `feature/hospitalaria-death-replenishment-spouse-fee`, base `dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017`. **`main`:** `6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta.
 
-Verificación local sobre la rama `feature/hospitalaria-death-replenishment-spouse-fee`: frontend 185/185; lint y build productivo correctos; `git diff --check` limpio; `python3 tests/migration_gate.py` aprobó 44 migraciones. `.NET SDK` no está instalado; backend y pruebas de integración PostgreSQL quedan a cargo de CI exact-head. El archivo API ya no contiene reducción masiva: 319 líneas agregadas y 22 retiradas respecto de la base.
+#### Defectos encontrados y reparados
 
-Estado al registrar: `dev@f90e6af186a1fe81f39ac4a77b6f26fd8721a017`, `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`; PR #139 sigue abierta y en borrador; último commit observado antes del ajuste actual: `05049a68a015dac2de584aef6b6f8d101fa81d1f`. Las reparaciones frontend/migración están verificadas localmente. El commit reparador `05049a68a015dac2de584aef6b6f8d101fa81d1f` se publicó en la rama de la PR; el CI #1440 reveló un error adicional de compilación: tipo `Membership` ambiguo y `SubmissionNumber` colocado en entidad incorrecta. Se está corrigiendo antes de considerar válido el corte. Demo Pages, instalable QA y Pre-UAT deben ejecutarse sobre el próximo SHA reparado; no promover a `main`.
+1. CI #1439 detectó que `frontend/src/api/pmgmApi.ts` estaba truncado y eliminaba métodos existentes. Se restauró el archivo completo desde `dev` y se reaplicaron los tipos, métodos y simulaciones de reposición; diff final respecto de `dev`: +25 líneas sin eliminaciones.
+2. El migration gate rechazaba nueve FK posicionales; se convirtieron a argumentos explícitos. Se retiró el mapeo de `SubmissionNumber` de `TreasuryPayment`.
+3. CI #1440 encontró `Membership` ambiguo como namespace y `SubmissionNumber` declarado en la entidad Obligation. Se calificó el tipo de entidad y se ubicó el número de intento en `DeathReplenishmentTransfer`, coherente con endpoints, tabla e índice.
+4. CI #1441 compiló la API, pero las pruebas PostgreSQL fallaron al procesar `InsertData` porque las migraciones del proyecto son manuales y no generan `TargetModel`. La tarifa inicial se carga ahora con SQL explícito en la migración y se elimina con SQL explícito en `Down`.
 
+#### Validaciones observadas
 
-Corrección backend posterior al CI #1440: `DeathReplenishmentObligation.Membership` debe referir el tipo del namespace de entidades y `SubmissionNumber` pertenece a `DeathReplenishmentTransfer`, en coherencia con endpoints, DbContext e índice de migración. La nueva ejecución de CI debe confirmar la compilación y el flujo completo.
+- Local: frontend **185/185**; lint y build productivo SUCCESS; `git diff --check` limpio; `python3 tests/migration_gate.py` aprobó **44 migraciones**. Aviso de build: bundle JS supera 500 kB.
+- Commit actual de la PR: `b1bf40c308b2c2ce24dbcd8669d4aca8344b8a22`.
+- CI #1442: **SUCCESS**, incluye build backend, pruebas unitarias e integración PostgreSQL/S3/ClamAV, smoke HTTPS/OIDC y recuperación.
+- Showcase #684: **SUCCESS**, captura responsive generada. El paso de despliegue de Pages aparece `skipped` por ser ejecución de PR; todavía no representa una publicación desde `dev`.
+- QA Installable #322: **SUCCESS**, paquete generado desde el mismo SHA.
+- Pre-UAT depende de `push` a `dev`; queda pendiente de la integración. La publicación de Pages desde `dev` también debe verificarse después de integrar.
 
-CI #1441 confirmó compilación C# satisfactoria y superación de privacy, clasificación y migration gates; las pruebas de integración PostgreSQL expusieron que `InsertData` requiere `TargetModel` generado, inexistente en las migraciones manuales del repositorio. La tarifa inicial pasa a insertarse mediante SQL explícito en la misma migración para evitar ese requisito y mantener los $1.500 vigentes. Se repiten los gates sobre un nuevo SHA; sin promoción/despliegue mientras no terminen.
+#### Estado y siguientes pasos
+
+PR #139 continúa abierta como borrador, base `dev`. Antes de cerrar este corte: actualizar la rama con este registro, verificar otra vez gates exact-head, integrar sólo en `dev` según el flujo del proyecto y comprobar Pages, instalable y Pre-UAT sobre el SHA integrado. No reutilizar artefactos anteriores ni promover a `main`. Issue #97 mantiene pendiente despliegue físico en `srv01`, smoke, QA-001..QA-034 y UAT.
