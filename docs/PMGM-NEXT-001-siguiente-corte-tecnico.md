@@ -224,3 +224,12 @@ PR #140 ya abierta. El primer SHA `bdfe1e2fba64d5d5529b62abca805ffc2aea337f` tuv
 Luego CI #1448 sobre `5fcd5aec…` falló una prueba de minimización del DTO general de organizaciones (296/297 backend tests pasaron); Showcase #691 e instalable #329 SUCCESS, primer smoke autenticado y piloto SUCCESS. Se corrigió trasladando las lecturas territoriales a endpoints de Tesorería con permisos separados y devolviendo el DTO general a sus cuatro propiedades aprobadas. Local tras este cambio: tests frontend 186/186, lint/build y gates JSON/migration SUCCESS. Publicar el ajuste y esperar gates exact-head frescos antes de integrar.
 
 CI #1449 repitió la misma aserción: el archivo ya corregido no se transfirió porque coincidía con `HEAD` local y quedó fuera del conjunto de archivos modificados, aunque la rama remota conservaba el campo territorial. Forzar la restauración de `OrganizationEndpoints.cs`, verificar el blob local/remoto y ejecutar CI #1450 o el siguiente número, Showcase e instalable nuevamente sobre un solo SHA.
+
+
+## 18. Tesorería cerrada en dev — PR #140 (23-09-2026)
+
+SHA integrado: `7747eab76f339395efa3356e92017c19f5abb0f7`; PR #140 fusionada por squash. Exact-head gates post-merge: CI #1451, Showcase/Demo/Pages #695, QA Installable #333 y Pre-UAT #332, todos SUCCESS. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. QA srv01 física y UAT siguen pendientes por Issue #97.
+
+Quedó corregido: tarifas Decreto 1.759 desde 01-01-2026, clasificación institucional de Oriente con rutas RBAC, minimización intacta del DTO general de organizaciones, aporte Gran Tesorería separado de cuota local, margen del Taller y cónyuge a valor de referencia local Santiago $15.000 (oficial GT $13.000). Past Activos no componen el aporte institucional. QA-035 queda listo para ejecución física (plantilla 35 controles). Perú USD 6 no se convierte ni se factura aún en el flujo CLP; cesantía automática y conciliación del pago ceremonial por expediente no están implementadas.
+
+Continuación funcional sugerida: primero enlazar el pago/verificación del derecho ceremonial con el expediente y su elegibilidad; después diseñar moneda Perú y cuotas por cesantía conforme al decreto. Mantener `main` sin cambios y no afirmar regularidad UAT/srv01 hasta la verificación física.
