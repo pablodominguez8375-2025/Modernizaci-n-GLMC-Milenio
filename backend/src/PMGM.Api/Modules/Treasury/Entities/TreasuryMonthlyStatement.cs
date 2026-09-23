@@ -184,3 +184,18 @@ public sealed class LodgeTreasuryConfiguration
     public required string ExpenseCategories { get; set; }
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
+
+public sealed class LodgeTreasuryYearClosure
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public int AccountingYear { get; set; }
+    public decimal OpeningBalance { get; set; }
+    public decimal Income { get; set; }
+    public decimal AuthorizedExpenses { get; set; }
+    public decimal ClosingBalance { get; set; }
+    public int MovementCount { get; set; }
+    public required string ClosedBySubject { get; set; }
+    public DateTimeOffset ClosedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}

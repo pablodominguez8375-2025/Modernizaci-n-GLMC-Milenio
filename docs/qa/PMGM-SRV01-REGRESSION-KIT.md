@@ -8,7 +8,7 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 37 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 38 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
@@ -28,6 +28,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 37 contro
 - QA-035: tarifas del Decreto 1.759, clasificación por Oriente y separación del aporte institucional frente a la cuota del Taller.
 - QA-036: nómina del Cuadro de Tesorería alineada a `CUADRO PAGO GRAN TESORERÍA.xlsx`, planchas para cuotas especiales y detalle personal protegido.
 - QA-037: navegación ampliada del Tesorero del Taller, caja, cobros, autorización de egresos y reportes de cuadratura.
+- QA-038: cierres anuales inmutables, arrastre del saldo y reporte Debe/Haber/Neto con filtros y exportación.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -164,6 +165,16 @@ Resultado esperado: cada cargo encuentra intuitivamente todas sus tareas financi
 
 Resultado esperado: caja local auditable y cuadrada, cuotas no duplicadas como ingreso manual, egresos segregados por aprobación y permisos efectivos en backend.
 
+### QA-038 — Cierre anual y auditoría contable
+
+1. Con saldo inicial y movimientos ficticios, cerrar un ejercicio finalizado y comprobar la identidad apertura + ingresos − egresos autorizados = cierre.
+2. Confirmar que el cierre queda auditado e inmutable y que el saldo final pasa a apertura del ejercicio siguiente.
+3. Intentar registrar pagos, ingresos o egresos fechados en un ejercicio cerrado; la API debe rechazarlos. Comprobar que un egreso pendiente impide cerrar.
+4. Revisar el informe mensual Debe/Haber/Neto agrupado por período y categoría, incluyendo egresos pendientes por separado.
+5. Filtrar movimientos por clase, categoría, medio de pago y texto; recorrer páginas de 20 filas y exportar el conjunto filtrado a CSV.
+
+Resultado esperado: los cierres no se alteran retroactivamente y el detalle permite rastrear y cuadrar caja por ejercicio y período.
+
 Ejemplo de fallo:
 
 ```bash
@@ -188,7 +199,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 37/37 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 38/38 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 

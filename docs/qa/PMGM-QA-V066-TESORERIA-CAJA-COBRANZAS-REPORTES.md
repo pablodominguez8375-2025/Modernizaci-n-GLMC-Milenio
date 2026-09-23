@@ -17,7 +17,7 @@
 
 - Frontend: 191 pruebas aprobadas; build y lint aprobados.
 - JSON del kit de regresión: validar; el control nuevo es QA-037.
-- Backend / PostgreSQL: requiere CI exact-head; el entorno local no tiene .NET SDK.
+- Backend / PostgreSQL: requiere CI exact-head; el entorno local no tiene .NET SDK. El incremento de cierres anuales y auditoría se registra en `PMGM-QA-V067`.
 - Pages ejecuta el chequeo de seis pestañas en el flujo de Showcase. La publicación efectiva ocurre al integrar en `dev`.
 - QA-037 en `srv01` y UAT permanecen pendientes por Issue #97.
 
