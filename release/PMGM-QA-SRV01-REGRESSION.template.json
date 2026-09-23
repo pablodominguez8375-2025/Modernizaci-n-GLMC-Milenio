@@ -338,6 +338,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-037",
+      "category": "treasury",
+      "title": "Menú de Tesorería del Taller, caja, cobranza, aprobación y cuadratura",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
