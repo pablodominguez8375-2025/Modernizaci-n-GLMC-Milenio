@@ -99,9 +99,12 @@ public static class TreasuryStatementEndpoints
             var baseAmount = charge?.GrandTreasuryAmount ?? request.AmountFor(degree);
             if (baseAmount is null)
                 return Results.BadRequest(new { message = $"El grado '{degree}' no tiene una cuota base configurada." });
-            var office = offices.FirstOrDefault(x => x.MemberId == membership.MemberId);
+            var memberOffices = offices.Where(x => x.MemberId == membership.MemberId)
+                .Select(x => x.OfficeType).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var adjustment = adjustments.FirstOrDefault(x => x.MemberId == membership.MemberId);
             var adjustmentAmount = adjustment?.Amount ?? 0m;
+            if ((RequiresAuthorizationReference(contributionType) || adjustmentAmount != 0m) && string.IsNullOrWhiteSpace(adjustment?.AuthorizationReference))
+                return Results.Conflict(new { message = "Toda cuota distinta de la normal requiere el respaldo de una plancha de autorización antes de generar el Cuadro.", memberId = membership.MemberId });
             if (baseAmount.Value + adjustmentAmount < 0)
                 return Results.Conflict(new { message = "Un ajuste deja una cuota individual negativa.", memberId = membership.MemberId });
 
@@ -111,7 +114,7 @@ public static class TreasuryStatementEndpoints
                 MemberId = membership.MemberId,
                 MembershipId = membership.Id,
                 DegreeCodeAtCutoff = degree,
-                OfficeCodeAtCutoff = office?.OfficeType,
+                OfficeCodeAtCutoff = memberOffices.Length == 0 ? null : string.Join("|", memberOffices),
                 BaseAmount = baseAmount.Value,
                 AdjustmentAmount = adjustmentAmount,
                 AdjustmentType = contributionType,
@@ -124,7 +127,8 @@ public static class TreasuryStatementEndpoints
         audit.Add(context, "treasury.statement.lines_generated", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
             statement.OrganizationId, AuditResults.Success, new { cutoff, lines = statement.Lines.Count });
         await db.SaveChangesAsync(cancellationToken);
-        return Results.Ok(ToResponse(statement));
+        var memberDetails = await GetMemberDetailsAsync(db, statement.Lines, cancellationToken);
+        return Results.Ok(ToResponse(statement, includeMemberDetail: true, memberDetails: memberDetails));
     }
 
     private static async Task<IResult> CreateAsync(Guid organizationId, CreateTreasuryStatementRequest request,
@@ -207,6 +211,8 @@ public static class TreasuryStatementEndpoints
             return Results.BadRequest(new { message = "La cuota resultante no puede ser negativa." });
         if (request.AdjustmentAmount != 0 && string.IsNullOrWhiteSpace(request.AuthorizationReference))
             return Results.BadRequest(new { message = "Toda rebaja o ajuste requiere una referencia de autorización." });
+        if (RequiresAuthorizationReference(request.AdjustmentType) && string.IsNullOrWhiteSpace(request.AuthorizationReference))
+            return Results.BadRequest(new { message = "Toda cuota distinta de la normal requiere una plancha de autorización." });
         if (request.MemberId is not null && !await db.Members.AnyAsync(x => x.Id == request.MemberId, cancellationToken))
             return Results.NotFound(new { message = "El hermano no existe." });
         if (request.MembershipId is not null && !await db.Memberships.AnyAsync(x => x.Id == request.MembershipId &&
@@ -276,14 +282,16 @@ public static class TreasuryStatementEndpoints
             return Results.Conflict(new { message = "El cuadro debe estar en borrador y contener líneas antes de enviarse." });
         var totals = TreasuryStatementTotals.Calculate(statement.Lines, statement.Payments);
         var unresolved = statement.Lines.Count(x => x.IdentityMatchStatus != TreasuryCodes.IdentityMatchStatus.Matched);
-        if (totals.DifferenceAmount != 0 || unresolved != 0)
-            return Results.Conflict(new { message = "El cuadro no puede enviarse mientras exista diferencia o identidades sin conciliar.", totals, unresolvedIdentities = unresolved });
+        var missingAuthorization = statement.Lines.Count(x => (RequiresAuthorizationReference(x.AdjustmentType) || x.AdjustmentAmount != 0m) && string.IsNullOrWhiteSpace(x.AuthorizationReference));
+        if (totals.DifferenceAmount != 0 || unresolved != 0 || missingAuthorization != 0)
+            return Results.Conflict(new { message = "El cuadro no puede enviarse mientras exista diferencia, identidad sin conciliar o cuota especial sin plancha.", totals, unresolvedIdentities = unresolved, missingAuthorization });
         statement.Status = TreasuryCodes.StatementStatus.Submitted;
         statement.SubmittedAtUtc = DateTimeOffset.UtcNow;
         audit.Add(context, "treasury.statement.submitted", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
             statement.OrganizationId, AuditResults.Success, new { lines = statement.Lines.Count });
         await db.SaveChangesAsync(cancellationToken);
-        return Results.Ok(ToResponse(statement));
+        var memberDetails = await GetMemberDetailsAsync(db, statement.Lines, cancellationToken);
+        return Results.Ok(ToResponse(statement, includeMemberDetail: true, memberDetails: memberDetails));
     }
 
     private static async Task<IResult> ReconcileAsync(Guid statementId, HttpContext context, PmgmDbContext db,
@@ -315,7 +323,7 @@ public static class TreasuryStatementEndpoints
         audit.Add(context, "treasury.statement.reconciled", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
             statement.OrganizationId, AuditResults.Success, new { totals.ExpectedAmount, totals.PaidAmount, snapshotId = snapshot.Id });
         await db.SaveChangesAsync(cancellationToken);
-        return Results.Ok(ToResponse(statement));
+        return Results.Ok(ToResponse(statement, includeMemberDetail: false));
     }
 
     private static async Task<IResult> GetAsync(Guid statementId, bool? includeMemberDetail, HttpContext context, PmgmDbContext db,
@@ -324,12 +332,35 @@ public static class TreasuryStatementEndpoints
         var statement = await db.TreasuryMonthlyStatements.AsNoTracking().Include(x => x.Lines).Include(x => x.Payments)
             .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
         if (statement is null) return Results.NotFound();
-        if (!access.CanManageTreasuryRegularity(context.User) && !access.CanReadOrganization(context.User, statement.OrganizationId))
+        var canManageTreasury = access.CanManageTreasuryRegularity(context.User);
+        var canPrepareTreasury = access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId);
+        if (!canManageTreasury && !access.CanReadOrganization(context.User, statement.OrganizationId))
             return Results.Forbid();
-        return Results.Ok(ToResponse(statement, includeMemberDetail == true || !access.CanManageTreasuryRegularity(context.User)));
+        var includeDetails = canManageTreasury ? includeMemberDetail == true : canPrepareTreasury;
+        var memberDetails = includeDetails
+            ? await GetMemberDetailsAsync(db, statement.Lines, cancellationToken)
+            : null;
+        return Results.Ok(ToResponse(statement, includeDetails, memberDetails));
     }
 
-    private static object ToResponse(TreasuryMonthlyStatement statement, bool includeMemberDetail = true)
+    private static bool RequiresAuthorizationReference(string? feeType) =>
+        feeType is TreasuryCodes.LodgeFeeType.Spouse or TreasuryCodes.LodgeFeeType.Student or TreasuryCodes.LodgeFeeType.Senior;
+
+    private static async Task<IReadOnlyDictionary<Guid, TreasuryStatementMemberDetail>> GetMemberDetailsAsync(
+        PmgmDbContext db,
+        IEnumerable<TreasuryMonthlyStatementLine> lines,
+        CancellationToken cancellationToken)
+    {
+        var memberIds = lines.Where(x => x.MemberId.HasValue).Select(x => x.MemberId!.Value).Distinct().ToArray();
+        if (memberIds.Length == 0) return new Dictionary<Guid, TreasuryStatementMemberDetail>();
+        return await db.Members.AsNoTracking()
+            .Where(x => memberIds.Contains(x.Id))
+            .Select(x => new TreasuryStatementMemberDetail(x.Id, x.Person.Rut, x.Person.FirstNames, x.Person.LastNames))
+            .ToDictionaryAsync(x => x.MemberId, cancellationToken);
+    }
+
+    private static object ToResponse(TreasuryMonthlyStatement statement, bool includeMemberDetail = false,
+        IReadOnlyDictionary<Guid, TreasuryStatementMemberDetail>? memberDetails = null)
     {
         var totals = TreasuryStatementTotals.Calculate(statement.Lines, statement.Payments);
         var feeBreakdown = statement.Lines
@@ -351,23 +382,45 @@ public static class TreasuryStatementEndpoints
             totals.DepositAmount, totals.PaidAmount, totals.DifferenceAmount,
             feeBreakdown,
             unresolvedIdentities = statement.Lines.Count(x => x.IdentityMatchStatus != TreasuryCodes.IdentityMatchStatus.Matched),
-            lines = statement.Lines.Select(x => new { x.Id,
-                MemberId = includeMemberDetail ? x.MemberId : null,
-                MembershipId = includeMemberDetail ? x.MembershipId : null,
-                DegreeCodeAtCutoff = includeMemberDetail ? x.DegreeCodeAtCutoff : string.Empty,
-                OfficeCodeAtCutoff = includeMemberDetail ? x.OfficeCodeAtCutoff : null,
-                x.BaseAmount, x.AdjustmentAmount, x.PayableAmount,
-                contributionType = TreasuryCodes.LodgeFeeType.IsValid(x.AdjustmentType ?? string.Empty) ? x.AdjustmentType : TreasuryCodes.LodgeFeeType.Normal,
-                AdjustmentType = includeMemberDetail ? x.AdjustmentType : null,
-                AuthorizationReference = includeMemberDetail ? x.AuthorizationReference : null,
-                Observation = includeMemberDetail ? x.Observation : null,
-                x.IdentityMatchStatus }),
+            lines = statement.Lines.Select(x => ToLineResponse(x, includeMemberDetail, memberDetails)),
             payments = statement.Payments.Select(x => new { x.Id, x.PaymentMethod, x.PaymentDate, x.Amount,
                 x.PayerDisplayName, x.Reference, x.RecordedAtUtc }),
             statement.SubmittedAtUtc, statement.ReconciledAtUtc, statement.ClosedAtUtc
         };
     }
+
+    private static object ToLineResponse(TreasuryMonthlyStatementLine line, bool includeMemberDetail,
+        IReadOnlyDictionary<Guid, TreasuryStatementMemberDetail>? memberDetails)
+    {
+        TreasuryStatementMemberDetail? detail = null;
+        if (includeMemberDetail && line.MemberId.HasValue && memberDetails is not null &&
+            memberDetails.TryGetValue(line.MemberId.Value, out var found))
+            detail = found;
+        return new
+        {
+            line.Id,
+            MemberId = includeMemberDetail ? line.MemberId : null,
+            MembershipId = includeMemberDetail ? line.MembershipId : null,
+            Rut = detail?.Rut,
+            FirstNames = detail?.FirstNames,
+            LastNames = detail?.LastNames,
+            DegreeCodeAtCutoff = includeMemberDetail ? line.DegreeCodeAtCutoff : string.Empty,
+            OfficeCodeAtCutoff = includeMemberDetail ? line.OfficeCodeAtCutoff : null,
+            line.BaseAmount,
+            line.AdjustmentAmount,
+            line.PayableAmount,
+            contributionType = TreasuryCodes.LodgeFeeType.IsValid(line.AdjustmentType ?? string.Empty)
+                ? line.AdjustmentType
+                : TreasuryCodes.LodgeFeeType.Normal,
+            AdjustmentType = includeMemberDetail ? line.AdjustmentType : null,
+            AuthorizationReference = includeMemberDetail ? line.AuthorizationReference : null,
+            Observation = includeMemberDetail ? line.Observation : null,
+            line.IdentityMatchStatus
+        };
+    }
 }
+
+internal sealed record TreasuryStatementMemberDetail(Guid MemberId, string? Rut, string FirstNames, string LastNames);
 
 public static class TreasuryStatementTotals
 {

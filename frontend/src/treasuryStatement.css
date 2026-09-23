@@ -14,6 +14,10 @@
 .treasury-table { width:100%; border-collapse:collapse; min-width:820px; }
 .treasury-table th,.treasury-table td { text-align:left; padding:11px 10px; border-bottom:1px solid #e9edf3; font-size:12px; }
 .treasury-table th { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.04em; }
+.treasury-table .treasury-degree-group th { color:var(--ink); background:#f1f4fa; font-size:11px; }
+.treasury-fee-type { display:block; color:var(--muted); margin-bottom:3px; }
+.treasury-authorization-reference { font-weight:750; color:var(--ink); }
+.treasury-authorization-missing { color:#9a4b13; font-weight:750; }
 .table-scroll { overflow:auto; }
 .treasury-payments { display:grid; gap:12px; }
 .payment-row { display:grid; grid-template-columns:1fr auto; gap:4px 16px; border-top:1px solid #e9edf3; padding-top:12px; }

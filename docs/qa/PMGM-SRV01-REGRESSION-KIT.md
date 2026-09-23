@@ -8,7 +8,7 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 35 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 36 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
@@ -26,6 +26,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 35 contro
 - QA-033: logotipo oficial e identidad institucional.
 - QA-034: reposición por fallecimiento, conciliación de transferencia y cuota de cónyuge.
 - QA-035: tarifas del Decreto 1.759, clasificación por Oriente y separación del aporte institucional frente a la cuota del Taller.
+- QA-036: nómina del Cuadro de Tesorería alineada a `CUADRO PAGO GRAN TESORERÍA.xlsx`, planchas para cuotas especiales y detalle personal protegido.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -172,7 +173,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 35/35 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 36/36 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 
@@ -197,7 +198,7 @@ No se guardan en Git:
 
 ## Relación con UAT formal
 
-La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 35/35 pass:
+La regresión QA sirve para detectar defectos antes de solicitar aceptación institucional. Aun con 36/36 pass:
 
 - no promueve automáticamente a `main`;
 - no convierte QA en producción;

@@ -167,6 +167,7 @@ export interface WorkshopDeathReplenishments { organizationId:string; items:Deat
 
 export interface TreasuryStatementLine {
   id: string; memberId: string | null; membershipId: string | null; degreeCodeAtCutoff: string; officeCodeAtCutoff: string | null
+  rut?: string | null; firstNames?: string | null; lastNames?: string | null
   baseAmount: number; adjustmentAmount: number; payableAmount: number; adjustmentType: string | null; authorizationReference: string | null
   observation: string | null; identityMatchStatus: string; contributionType: LodgeFeeType
 }
@@ -549,9 +550,10 @@ export class PmgmApiClient {
       const statement = this.requireMockTreasuryStatement(statementId)
       const amounts = [payload.masterAmount, payload.masterAmount, payload.masterAmount, payload.fellowcraftAmount, payload.fellowcraftAmount, payload.apprenticeAmount, payload.apprenticeAmount]
       const degrees = ['master', 'master', 'master', 'fellowcraft', 'fellowcraft', 'apprentice', 'apprentice']
-      const names = ['Venerable Maestra', 'Primer Vigilante', 'Segundo Vigilante', 'Compañero Uno', 'Compañera Dos', 'Aprendiz Uno', 'Aprendiza Dos']
+      const names = ['María Elena Rojas Demo', 'Juan Carlos Silva Demo', 'Patricia Muñoz Soto Demo', 'Roberto Paredes Demo', 'Camila Torres Demo', 'Tomás Díaz Demo', 'Elisa Fuentes Demo']
       const contributionTypes:LodgeFeeType[]=['normal','normal','senior','spouse','student','past_active','normal']
-      statement.lines = amounts.map((amount, index) => ({ id: crypto.randomUUID(), memberId: `demo-member-${index + 1}`, membershipId: `demo-membership-${index + 1}`, degreeCodeAtCutoff: degrees[index], officeCodeAtCutoff: index < 3 ? ['VM', 'PV', 'SV'][index] : null, baseAmount: amount, adjustmentAmount: index === 2 ? -8000 : 0, payableAmount: index === 2 ? amount - 8000 : amount, adjustmentType: contributionTypes[index], contributionType:contributionTypes[index], authorizationReference: index === 2 ? 'Plancha DEMO-023/2026' : null, observation: names[index], identityMatchStatus: 'matched' }))
+      const demoPayableAmounts = contributionTypes.map((feeType,index)=>feeType==='past_active'?0:feeType==='senior'?10000:feeType==='student'?8000:feeType==='spouse'?13000:amounts[index])
+      statement.lines = amounts.map((_, index) => ({ id: crypto.randomUUID(), memberId: `demo-member-${index + 1}`, membershipId: `demo-membership-${index + 1}`, rut: `RUT-DEMO-${String(index+1).padStart(3,'0')}`, firstNames: names[index].split(' ').slice(0,-2).join(' '), lastNames: names[index].split(' ').slice(-2).join(' '), degreeCodeAtCutoff: degrees[index], officeCodeAtCutoff: index < 3 ? ['venerable_master', 'first_vigilante', 'second_vigilante'][index] : null, baseAmount: demoPayableAmounts[index], adjustmentAmount: 0, payableAmount: demoPayableAmounts[index], adjustmentType: contributionTypes[index], contributionType:contributionTypes[index], authorizationReference: ['normal','past_active'].includes(contributionTypes[index]) ? null : `Plancha DEMO-02${index+1}/2026`, observation: names[index], identityMatchStatus: 'matched' }))
       recalculateMockTreasury(statement); return cloneTreasuryStatement(statement)
     }
     return this.postJson<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/generar-lineas`, payload)

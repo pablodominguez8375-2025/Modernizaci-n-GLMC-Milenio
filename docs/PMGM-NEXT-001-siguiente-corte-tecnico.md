@@ -233,3 +233,12 @@ SHA integrado: `7747eab76f339395efa3356e92017c19f5abb0f7`; PR #140 fusionada por
 Quedó corregido: tarifas Decreto 1.759 desde 01-01-2026, clasificación institucional de Oriente con rutas RBAC, minimización intacta del DTO general de organizaciones, aporte Gran Tesorería separado de cuota local, margen del Taller y cónyuge a valor de referencia local Santiago $15.000 (oficial GT $13.000). Past Activos no componen el aporte institucional. QA-035 queda listo para ejecución física (plantilla 35 controles). Perú USD 6 no se convierte ni se factura aún en el flujo CLP; cesantía automática y conciliación del pago ceremonial por expediente no están implementadas.
 
 Continuación funcional sugerida: primero enlazar el pago/verificación del derecho ceremonial con el expediente y su elegibilidad; después diseñar moneda Perú y cuotas por cesantía conforme al decreto. Mantener `main` sin cambios y no afirmar regularidad UAT/srv01 hasta la verificación física.
+
+
+## 18. Incremento en curso — alineación del Cuadro de Tesorería con Excel oficial
+
+Base al inicio: `dev@8d06c8e684cd79047202971bd1c20244e7d1eecd`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta. Rama: `feature/treasury-statement-excel-alignment`. Fuente Drive: **CUADRO PAGO GRAN TESORERÍA.xlsx**, ID `1nPEZsVr5QPNS-Z_SBmjEs33wjfqsUNTN`.
+
+La nómina se organiza en Maestros, Compañeros y Aprendices con RUT, nombre y apellidos, grado, cargos abreviados, tipo/valor de cuota y respaldo. Cónyuge, estudiante y tercera edad requieren referencia a Plancha de autorización; generación, ingreso manual y envío del Cuadro no deben aceptar estas categorías sin respaldo. El detalle personal se entrega a Tesorería del Taller o por consulta autorizada; Gran Tesorería mantiene agregación inicial y minimización.
+
+Implementación en rama: API detallada con RUT/nombres, snapshot de cargos activos al corte, columnas alineadas y datos ficticios para Pages. QA-036 registra aceptación física futura. Local: frontend 188/188, lint/build SUCCESS; JSON y gate QA de 36 controles SUCCESS. PR #142 abierta hacia `dev`; primer SHA publicado `808687b9146fcc5628c35b6feeedd6c2c9f0dffe`. CI #1454, Showcase #699 e instalable QA #337 SUCCESS sobre ese SHA. El despliegue de Pages se omite en PR y Pre-UAT no tiene disparador pull_request; confirmar ambos flujos para el SHA integrado. No hay .NET SDK local; backend/PostgreSQL depende de CI. QA física/UAT continúan pendientes por Issue #97. `main` intacta.

@@ -6,6 +6,15 @@ const money = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP
 const degreeLabel: Record<string, string> = { master: 'Maestro/a', fellowcraft: 'Compañero/a', apprentice: 'Aprendiz' }
 const statusLabel: Record<string, string> = { draft: 'Borrador', submitted: 'Enviado', observed: 'Observado', reconciled: 'Conciliado', closed: 'Cerrado' }
 const feeTypeLabel: Record<string,string> = { normal:'Cuota normal', senior:'Tercera edad', student:'Estudiante', spouse:'Cónyuge', past_active:'Past Activo' }
+const degreeOrder = ['master','fellowcraft','apprentice']
+const officeAbbreviations: Record<string,string> = {
+  venerable_master:'V∴M∴', immediate_past_master:'I∴ ex V∴M∴', past_venerable_master:'I∴ ex V∴M∴',
+  first_vigilante:'P∴V∴', first_warden:'P∴V∴', first_watcher:'P∴V∴',
+  second_vigilante:'S∴V∴', second_warden:'S∴V∴', second_watcher:'S∴V∴',
+  orator:'Or∴', lodge_orator:'Or∴', secretary:'Sec∴', lodge_secretariat:'Sec∴', treasurer:'Tes∴',
+  hospitaller:'Hosp∴', lodge_hospitaller:'Hosp∴', master_of_ceremonies:'M∴ de C∴',
+  senior_deacon:'P∴D∴', junior_deacon:'S∴D∴', inner_guard:'G∴T∴I∴', temple_guard:'G∴T∴I∴',
+}
 
 interface Props {
   api: PmgmApiClient
@@ -130,7 +139,8 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
     statement.status === 'draft' &&
     statement.lines.length > 0 &&
     statement.differenceAmount === 0 &&
-    statement.unresolvedIdentities === 0
+    statement.unresolvedIdentities === 0 &&
+    statement.lines.every(line => !requiresPlancha(line.contributionType) && line.adjustmentAmount === 0 || !!line.authorizationReference?.trim())
 
   const roleCaption = canReview
     ? 'Gran Tesorería · revisión institucional'
@@ -185,7 +195,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
           <div><p className="eyebrow">Control previo al envío</p><h2>Cuadre obligatorio</h2></div>
           <div className="payment-row"><span>Total pagado vs. Cuadro</span><strong>{statement.differenceAmount === 0 ? '✅ Cuadrado' : '❌ Diferencia pendiente'}</strong><small>{money.format(statement.differenceAmount)}</small></div>
           <div className="payment-row"><span>Identidades del Cuadro</span><strong>{statement.unresolvedIdentities === 0 ? '✅ Conciliadas' : '❌ Pendientes'}</strong><small>{statement.unresolvedIdentities} sin conciliar</small></div>
-          {statement.status === 'draft' && canPrepare && !canSubmit && <p>El sistema bloqueará el envío hasta que la Diferencia sea 0 y todas las identidades estén conciliadas.</p>}
+          {statement.status === 'draft' && canPrepare && !canSubmit && <p>El sistema bloqueará el envío hasta que la Diferencia sea 0, todas las identidades estén conciliadas y cada cuota especial tenga su plancha de autorización.</p>}
           {statement.status === 'submitted' && <p>Cuadro enviado por Tesorería del Taller. La conciliación institucional corresponde a Gran Tesorería.</p>}
         </section>
 
@@ -194,7 +204,8 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
           <div className="section-title"><div><p className="eyebrow">Cuadro del Taller al día 10</p><h2>{statement.periodMonth.toString().padStart(2, '0')}/{statement.periodYear}</h2></div><span>{statement.lines.length} integrantes</span></div>
           {statement.lines.length === 0
             ? <div className="empty-state">La nómina aún no ha sido generada.</div>
-            : <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Nº</th><th>Grado</th><th>Cargo</th><th>Integrante</th><th>Cuota</th><th>Ajuste</th><th>Total</th><th>Respaldo</th></tr></thead><tbody>{statement.lines.map((line, index) => <tr key={line.id}><td>{index + 1}</td><td>{degreeLabel[line.degreeCodeAtCutoff] ?? line.degreeCodeAtCutoff}</td><td>{line.officeCodeAtCutoff ?? '—'}</td><td>{line.observation ?? `Integrante ${index + 1}`}</td><td>{money.format(line.baseAmount)}</td><td>{money.format(line.adjustmentAmount)}</td><td><strong>{money.format(line.payableAmount)}</strong></td><td>{line.authorizationReference ?? '—'}</td></tr>)}</tbody></table></div>}
+            : <TreasuryStatementLinesTable lines={statement.lines} />}
+          {canPrepare&&<p>Las cuotas distintas de la normal deben llevar el número o referencia de su plancha de autorización. Esta nómina sigue la estructura del archivo institucional de pago.</p>}
         </section>}
 
         <section className="panel treasury-payments">
@@ -214,6 +225,26 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
       </>}
   </>
 }
+
+export function groupStatementLines(lines: TreasuryStatement['lines']) {
+  const groups = new Map<string, TreasuryStatement['lines']>()
+  for (const line of lines) groups.set(line.degreeCodeAtCutoff, [...(groups.get(line.degreeCodeAtCutoff)??[]),line])
+  return [...groups.entries()].sort(([a],[b])=>{
+    const aRank=degreeOrder.indexOf(a),bRank=degreeOrder.indexOf(b)
+    return (aRank<0?degreeOrder.length:aRank)-(bRank<0?degreeOrder.length:bRank)||a.localeCompare(b)
+  }).map(([degree,groupLines])=>({degree,label:degreeLabel[degree]??degree,lines:groupLines}))
+}
+
+export function TreasuryStatementLinesTable({lines}:{lines:TreasuryStatement['lines']}) {
+  return <div className="table-scroll"><table className="treasury-table"><thead><tr><th>RUT</th><th>Nombre y apellidos</th><th>Grado</th><th>Cargo(s)</th><th>Cuota</th><th>Respaldo</th></tr></thead>{groupStatementLines(lines).map(group=><tbody key={group.degree}><tr className="treasury-degree-group"><th colSpan={6}>{group.label}</th></tr>{group.lines.map((line,index)=><tr key={line.id}><td>{line.rut??'—'}</td><td>{line.firstNames||line.lastNames?`${line.firstNames??''} ${line.lastNames??''}`.trim():line.observation??`Integrante ${index+1}`}</td><td>{degreeLabel[line.degreeCodeAtCutoff]??line.degreeCodeAtCutoff}</td><td>{formatOfficeCodes(line.officeCodeAtCutoff)}</td><td><span className="treasury-fee-type">{feeTypeLabel[line.contributionType]??line.contributionType}</span><strong>{money.format(line.payableAmount)}</strong></td><td>{line.authorizationReference?<span className="treasury-authorization-reference">{line.authorizationReference}</span>:requiresPlancha(line.contributionType)||line.adjustmentAmount!==0?<span className="treasury-authorization-missing">Pendiente de plancha</span>:'—'}</td></tr>)}</tbody>)}</table></div>
+}
+
+export function formatOfficeCodes(value: string|null) {
+  if(!value)return '—'
+  return value.split('|').map(code=>officeAbbreviations[code.trim().toLowerCase()]??code.replaceAll('_',' ')).join(' · ')
+}
+
+function requiresPlancha(feeType:string) { return ['senior','student','spouse'].includes(feeType) }
 
 function todayInChile() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
