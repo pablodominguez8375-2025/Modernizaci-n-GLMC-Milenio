@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Treasury;
 using PMGM.Api.Modules.Treasury.Entities;
 using Xunit;
