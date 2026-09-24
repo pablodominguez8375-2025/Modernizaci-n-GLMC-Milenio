@@ -25,6 +25,9 @@ set -a
 . "$ENV_FILE"
 set +a
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+if [ -n "${PMGM_CI_COMPOSE_OVERRIDE:-}" ]; then
+  compose+=(-f "$ROOT/$PMGM_CI_COMPOSE_OVERRIDE")
+fi
 
 if [ -z "$OUTPUT" ]; then
   OUTPUT="$ROOT/backups/pmgm-pilot-$(date -u +%Y%m%dT%H%M%SZ)"
