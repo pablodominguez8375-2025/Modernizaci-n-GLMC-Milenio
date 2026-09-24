@@ -52,6 +52,9 @@ if [ -f "$ENV_FILE" ]; then
   set +a
   compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 fi
+if [ -n "${PMGM_CI_COMPOSE_OVERRIDE:-}" ]; then
+  compose+=(-f "$ROOT/$PMGM_CI_COMPOSE_OVERRIDE")
+fi
 
 : "${PMGM_FIRST_DB_PASSWORD:?PMGM_FIRST_DB_PASSWORD es obligatorio}"
 : "${PMGM_FIRST_MINIO_USER:?PMGM_FIRST_MINIO_USER es obligatorio}"
