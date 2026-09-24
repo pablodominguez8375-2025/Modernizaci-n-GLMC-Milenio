@@ -7,9 +7,10 @@ services:
       COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: pmgm-documents
 
   minio-init:
-    image: alpine:3.22
+    image: minio/mc:RELEASE.2025-04-08T15-39-49Z
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >-
-        until wget -q -O /dev/null http://minio:9000/favicon.ico; do sleep 2; done;
+        mc alias set pmgm http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY >/dev/null;
+        until mc ls pmgm/pmgm-documents >/dev/null 2>&1; do sleep 2; done;
         exit 0
