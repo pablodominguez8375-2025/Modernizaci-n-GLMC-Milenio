@@ -89,12 +89,9 @@ public static class AuditEventFactory
             ?? httpContext.User.FindFirstValue("name")
             ?? httpContext.User.FindFirstValue(ClaimTypes.Name);
 
-        var correlationId = httpContext.TraceIdentifier;
-        if (httpContext.Request.Headers.TryGetValue("X-Correlation-ID", out var suppliedCorrelationId) &&
-            !string.IsNullOrWhiteSpace(suppliedCorrelationId))
-        {
-            correlationId = suppliedCorrelationId.ToString();
-        }
+        var correlationId = ResolveCorrelationId(
+            httpContext.TraceIdentifier,
+            httpContext.Request.Headers["X-Correlation-ID"].ToString());
 
         return new AuditEvent
         {
@@ -112,6 +109,21 @@ public static class AuditEventFactory
             CorrelationId = correlationId,
             MetadataJson = AuditMetadataSanitizer.Serialize(metadata)
         };
+    }
+
+    internal static string ResolveCorrelationId(string? fallback, string? supplied)
+    {
+        if (string.IsNullOrEmpty(supplied) || supplied.Length > 128)
+            return string.IsNullOrWhiteSpace(fallback) ? "server-generated" : fallback;
+
+        foreach (var character in supplied)
+        {
+            var asciiAlphaNumeric = character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9';
+            if (!asciiAlphaNumeric && character is not '-' and not '_' and not '.' and not ':')
+                return string.IsNullOrWhiteSpace(fallback) ? "server-generated" : fallback;
+        }
+
+        return supplied;
     }
 
     private static string ResolveMenu(string action)
