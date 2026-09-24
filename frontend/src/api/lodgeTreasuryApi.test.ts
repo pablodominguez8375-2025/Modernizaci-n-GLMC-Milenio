@@ -31,7 +31,7 @@ describe('Tesorería del Taller en demostración', () => {
     const firstPayment = await api.addLodgeTreasuryPayment(spouse.id, { amount: 15000, paymentMethod: 'transfer', paymentDate: '2026-09-21', reference: 'TRX-SPOUSE-001', idempotencyKey: 'spouse-payment-001' })
     const replay = await api.addLodgeTreasuryPayment(spouse.id, { amount: 15000, paymentMethod: 'transfer', paymentDate: '2026-09-21', reference: 'TRX-SPOUSE-001', idempotencyKey: 'spouse-payment-001' })
     expect(replay.receiptNumber).toBe(firstPayment.receiptNumber)
-    expect(spouse.payments).toHaveLength(1)
+    expect((await api.getLodgeTreasuryCharges(organizationId, 2026, 9)).items.find(item => item.id === spouse.id)?.payments).toHaveLength(1)
     expect(await api.getLodgeTreasurySummary(organizationId, 2026, 9)).toMatchObject({ members: 3, memberExpected: 67000, collected: 54000, receivable: 13000, grandTreasuryExpected: 55000, paid: 2, partial: 1, overdue: 0 })
   })
 
