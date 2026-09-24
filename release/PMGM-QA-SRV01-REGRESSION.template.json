@@ -347,6 +347,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-038",
+      "category": "treasury",
+      "title": "Cierre anual inmutable, arrastre de saldo e informe Debe/Haber/Neto",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {

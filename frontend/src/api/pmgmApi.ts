@@ -40,7 +40,8 @@ export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplay
 export interface LodgeTreasuryExpense { id:string; organizationId:string; category:string; amount:number; expenseDate:string; description:string; evidenceReference:string|null; approvalStatus:'pending_approval'|'approved'; recordedBySubject:string; approvedBySubject:string|null; approvedAtUtc:string|null; recordedAtUtc:string }
 export interface LodgeTreasuryIncome { id:string; organizationId:string; category:string; amount:number; incomeDate:string; description:string; evidenceReference:string|null; recordedBySubject:string; recordedAtUtc:string }
 export interface LodgeCashSummary { organizationId:string; asOf:string; openingBalance:number; cumulativeIncome:number; cumulativeExpense:number; cumulativeBalance:number; monthIncome:number; monthExpense:number; monthBalance:number; pendingExpenses:number }
-export interface LodgeTreasuryReport { organizationId:string; from:string; to:string; openingBalance:number; income:number; authorizedExpenses:number; pendingExpenses:number; closingBalance:number; observedBalance:number|null; difference:number|null; movements:{date:string;type:'ingreso'|'egreso';category:string;description:string;amount:number;status:string;reference:string|null}[] }
+export interface LodgeTreasuryReport { organizationId:string; from:string; to:string; openingBalance:number; income:number; authorizedExpenses:number; pendingExpenses:number; closingBalance:number; observedBalance:number|null; difference:number|null; monthlyTotals?:{period:string;type:'ingreso'|'egreso';category:string;debit:number;credit:number;net:number;pendingAmount:number;count:number}[]; movements:{date:string;type:'ingreso'|'egreso';category:string;description:string;amount:number;status:string;reference:string|null;paymentMethod?:string|null}[] }
+export interface LodgeTreasuryYearClosure { id:string; organizationId:string; accountingYear:number; openingBalance:number; income:number; authorizedExpenses:number; closingBalance:number; movementCount:number; closedBySubject:string; closedAtUtc:string }
 export interface LodgeTreasuryConfiguration { organizationId:string; openingBalance:number; openingBalanceDate:string; incomeCategories:string; expenseCategories:string }
 export interface InstitutionalSpace { id: string; code: string; name: string; spaceType: 'temple' | 'secretariat_room'; location: string | null; capacity: number | null; status?: string; isAvailable?: boolean }
 export interface SpaceAvailabilityResponse { fromUtc: string; toUtc: string; total: number; available: number; items: InstitutionalSpace[] }
@@ -333,6 +334,7 @@ export class PmgmApiClient {
   private readonly mockLodgeTreasuryExpenses = new Map<string, LodgeTreasuryExpense[]>()
   private readonly mockLodgeTreasuryIncomes = new Map<string, LodgeTreasuryIncome[]>()
   private readonly mockLodgeTreasuryConfigurations = new Map<string, LodgeTreasuryConfiguration>()
+  private readonly mockLodgeTreasuryYearClosures = new Map<string, LodgeTreasuryYearClosure[]>()
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
@@ -392,7 +394,7 @@ export class PmgmApiClient {
     return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos?year=${periodYear}&month=${periodMonth}`)
   }
   async addLodgeTreasuryPayment(chargeId:string,payload:{amount:number;paymentMethod:LodgeTreasuryPayment['paymentMethod'];paymentDate:string;reference?:string|null}):Promise<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>{
-    if(this.useMocks){const charge=[...this.mockLodgeTreasuryCharges.values()].flat().find(x=>x.id===chargeId);if(!charge)throw new Error('El cargo indicado no existe.');if(payload.amount<=0||payload.amount>charge.balance)throw new Error('El abono debe ser positivo y no superar el saldo.');const reference=payload.reference?.trim()||null;if(reference&&charge.payments.some(x=>x.amount===payload.amount&&x.paymentDate===payload.paymentDate&&x.paymentMethod===payload.paymentMethod&&x.reference?.toLocaleLowerCase('es-CL')===reference.toLocaleLowerCase('es-CL')))throw new Error('Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia.');const payment:LodgeTreasuryPayment={id:crypto.randomUUID(),receiptNumber:`REC-DEMO-${String(charge.payments.length+1).padStart(3,'0')}`,amount:payload.amount,paymentMethod:payload.paymentMethod,paymentDate:payload.paymentDate,reference};charge.payments.unshift(payment);charge.paidAmount+=payment.amount;charge.balance-=payment.amount;charge.status=charge.balance===0?'paid':'partial';return{...payment,paidAmount:charge.paidAmount,balance:charge.balance,status:charge.status}}
+    if(this.useMocks){const owner=[...this.mockLodgeTreasuryCharges.entries()].flatMap(([organizationId,items])=>items.filter(x=>x.id===chargeId).map(charge=>({organizationId,charge}))).at(0);if(!owner)throw new Error('El cargo indicado no existe.');if(this.mockYearIsClosed(owner.organizationId,Number(payload.paymentDate.slice(0,4))))throw new Error('La fecha de pago pertenece a un ejercicio cerrado.');const charge=owner.charge;if(payload.amount<=0||payload.amount>charge.balance)throw new Error('El abono debe ser positivo y no superar el saldo.');const reference=payload.reference?.trim()||null;if(reference&&charge.payments.some(x=>x.amount===payload.amount&&x.paymentDate===payload.paymentDate&&x.paymentMethod===payload.paymentMethod&&x.reference?.toLocaleLowerCase('es-CL')===reference.toLocaleLowerCase('es-CL')))throw new Error('Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia.');const payment:LodgeTreasuryPayment={id:crypto.randomUUID(),receiptNumber:`REC-DEMO-${String(charge.payments.length+1).padStart(3,'0')}`,amount:payload.amount,paymentMethod:payload.paymentMethod,paymentDate:payload.paymentDate,reference};charge.payments.unshift(payment);charge.paidAmount+=payment.amount;charge.balance-=payment.amount;charge.status=charge.balance===0?'paid':'partial';return{...payment,paidAmount:charge.paidAmount,balance:charge.balance,status:charge.status}}
     return this.postJson<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>(`/api/gestion-logial/tesoreria/cargos/${encodeURIComponent(chargeId)}/pagos`,payload)
   }
   async getLodgeTreasuryExpenses(organizationId:string,from:string,to:string):Promise<{total:number;items:LodgeTreasuryExpense[]}>{
@@ -400,16 +402,16 @@ export class PmgmApiClient {
     return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos?from=${from}&to=${to}`)
   }
   async createLodgeTreasuryExpense(organizationId:string,payload:{category:string;amount:number;expenseDate:string;description:string;evidenceReference?:string|null}):Promise<LodgeTreasuryExpense>{
-    if(this.useMocks){const item:LodgeTreasuryExpense={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()};const items=this.mockLodgeTreasuryExpenses.get(organizationId)??[];items.unshift(item);this.mockLodgeTreasuryExpenses.set(organizationId,items);return{...item}}
+    if(this.useMocks){if(this.mockYearIsClosed(organizationId,Number(payload.expenseDate.slice(0,4))))throw new Error('La fecha de egreso pertenece a un ejercicio cerrado.');const item:LodgeTreasuryExpense={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:new Date().toISOString()};const items=this.mockLodgeTreasuryExpenses.get(organizationId)??[];items.unshift(item);this.mockLodgeTreasuryExpenses.set(organizationId,items);return{...item}}
     return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/egresos`,payload)
   }
   async approveLodgeTreasuryExpense(expenseId:string):Promise<LodgeTreasuryExpense>{
-    if(this.useMocks){const item=[...this.mockLodgeTreasuryExpenses.values()].flat().find(x=>x.id===expenseId);if(!item)throw new Error('El egreso no existe.');if(item.approvalStatus!=='pending_approval')throw new Error('El egreso ya fue resuelto.');item.approvalStatus='approved';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return{...item}}
+    if(this.useMocks){const item=[...this.mockLodgeTreasuryExpenses.values()].flat().find(x=>x.id===expenseId);if(!item)throw new Error('El egreso no existe.');if(this.mockYearIsClosed(item.organizationId,Number(item.expenseDate.slice(0,4))))throw new Error('El ejercicio del egreso está cerrado.');if(item.approvalStatus!=='pending_approval')throw new Error('El egreso ya fue resuelto.');item.approvalStatus='approved';item.approvedBySubject='venerable-demo';item.approvedAtUtc=new Date().toISOString();return{...item}}
     return this.postJson(`/api/gestion-logial/tesoreria/egresos/${encodeURIComponent(expenseId)}/aprobar`,{})
   }
 
   async createLodgeTreasuryIncome(organizationId:string,payload:{category:string;amount:number;incomeDate:string;description:string;evidenceReference?:string|null}):Promise<LodgeTreasuryIncome>{
-    if(this.useMocks){const item:LodgeTreasuryIncome={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,recordedBySubject:'tesoreria-demo',recordedAtUtc:new Date().toISOString()};const rows=this.mockLodgeTreasuryIncomes.get(organizationId)??[];rows.unshift(item);this.mockLodgeTreasuryIncomes.set(organizationId,rows);return item}
+    if(this.useMocks){if(this.mockYearIsClosed(organizationId,Number(payload.incomeDate.slice(0,4))))throw new Error('La fecha de ingreso pertenece a un ejercicio cerrado.');const item:LodgeTreasuryIncome={id:crypto.randomUUID(),organizationId,...payload,evidenceReference:payload.evidenceReference?.trim()||null,recordedBySubject:'tesoreria-demo',recordedAtUtc:new Date().toISOString()};const rows=this.mockLodgeTreasuryIncomes.get(organizationId)??[];rows.unshift(item);this.mockLodgeTreasuryIncomes.set(organizationId,rows);return item}
     return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/ingresos`,payload)
   }
   async getLodgeCashSummary(organizationId:string,asOf:string):Promise<LodgeCashSummary>{
@@ -425,6 +427,24 @@ export class PmgmApiClient {
     if(this.useMocks)return this.mockLodgeTreasuryConfigurations.get(organizationId)??{organizationId,openingBalance:0,openingBalanceDate:'2026-01-01',incomeCategories:'Otros ingresos',expenseCategories:'Servicios;Materiales;Arriendo;Traslado'}
     return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/configuracion`)
   }
+  async getLodgeTreasuryYearClosures(organizationId:string):Promise<{total:number;items:LodgeTreasuryYearClosure[]}>{
+    if(this.useMocks){const items=this.mockLodgeTreasuryYearClosures.get(organizationId)??[];return{total:items.length,items:items.map(x=>({...x}))}}
+    return this.request('/api/gestion-logial/tesoreria/talleres/'+encodeURIComponent(organizationId)+'/cierres-anuales')
+  }
+  async closeLodgeTreasuryYear(organizationId:string,year:number):Promise<LodgeTreasuryYearClosure>{
+    if(this.useMocks){
+      if(year>=new Date().getFullYear())throw new Error('Sólo se puede cerrar un ejercicio anual ya finalizado.')
+      const items=this.mockLodgeTreasuryYearClosures.get(organizationId)??[]
+      if(items.some(x=>x.accountingYear===year))throw new Error('El ejercicio ya está cerrado.')
+      const report=await this.getLodgeTreasuryReport(organizationId,String(year)+'-01-01',String(year)+'-12-31')
+      const expenseRows=(this.mockLodgeTreasuryExpenses.get(organizationId)??[]).filter(x=>x.expenseDate.startsWith(String(year)))
+      if(expenseRows.some(x=>x.approvalStatus==='pending_approval'))throw new Error('No se puede cerrar: hay egresos pendientes de autorización.')
+      const item:LodgeTreasuryYearClosure={id:crypto.randomUUID(),organizationId,accountingYear:year,openingBalance:report.openingBalance,income:report.income,authorizedExpenses:report.authorizedExpenses,closingBalance:report.closingBalance,movementCount:report.movements.length,closedBySubject:'tesorero-demo',closedAtUtc:new Date().toISOString()}
+      items.unshift(item);this.mockLodgeTreasuryYearClosures.set(organizationId,items);return{...item}
+    }
+    return this.postJson('/api/gestion-logial/tesoreria/talleres/'+encodeURIComponent(organizationId)+'/cierres-anuales/'+year+'/cerrar',{})
+  }
+  private mockYearIsClosed(organizationId:string,year:number){return(this.mockLodgeTreasuryYearClosures.get(organizationId)??[]).some(x=>x.accountingYear>=year)}
   async saveLodgeTreasuryConfiguration(organizationId:string,payload:Omit<LodgeTreasuryConfiguration,'organizationId'>):Promise<LodgeTreasuryConfiguration>{
     if(this.useMocks){const configuration={organizationId,...payload};this.mockLodgeTreasuryConfigurations.set(organizationId,configuration);return configuration}
     return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/configuracion`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})

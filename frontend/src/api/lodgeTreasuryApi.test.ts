@@ -53,4 +53,18 @@ describe('Tesorería del Taller en demostración', () => {
     expect(plans.find(item=>item.feeType==='spouse')?.memberAmount).toBe(15000)
     expect(plans.find(item=>item.feeType==='spouse')?.workshopAmount).toBe(5000)
   })
+
+  it('cierra un ejercicio, conserva el arrastre y bloquea movimientos retroactivos', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    const organizationId = '23232323-2323-2323-2323-232323232323'
+    const year = new Date().getFullYear() - 1
+    const closure = await api.closeLodgeTreasuryYear(organizationId, year)
+    expect(closure.accountingYear).toBe(year)
+    expect(closure.closingBalance).toBe(closure.openingBalance + closure.income - closure.authorizedExpenses)
+    expect((await api.getLodgeTreasuryYearClosures(organizationId)).items).toHaveLength(1)
+    await expect(api.createLodgeTreasuryIncome(organizationId, {
+      category: 'Ajuste', amount: 1000, incomeDate: year + '-12-31', description: 'Ajuste de demostración'
+    })).rejects.toThrow('ejercicio cerrado')
+    await expect(api.closeLodgeTreasuryYear(organizationId, year)).rejects.toThrow('ya está cerrado')
+  })
 })

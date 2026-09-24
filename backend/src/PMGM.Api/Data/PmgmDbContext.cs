@@ -40,6 +40,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeTreasuryExpense> LodgeTreasuryExpenses => Set<LodgeTreasuryExpense>();
     public DbSet<LodgeTreasuryIncome> LodgeTreasuryIncomes => Set<LodgeTreasuryIncome>();
     public DbSet<LodgeTreasuryConfiguration> LodgeTreasuryConfigurations => Set<LodgeTreasuryConfiguration>();
+    public DbSet<LodgeTreasuryYearClosure> LodgeTreasuryYearClosures => Set<LodgeTreasuryYearClosure>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<HospitalariaMonthlySubmission> HospitalariaMonthlySubmissions => Set<HospitalariaMonthlySubmission>();
     public DbSet<HospitalariaReplenishmentRate> HospitalariaReplenishmentRates => Set<HospitalariaReplenishmentRate>();
@@ -454,6 +455,19 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.ExpenseCategories).HasMaxLength(2000).IsRequired();
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.OrganizationId).IsUnique();
+        });
+
+        modelBuilder.Entity<LodgeTreasuryYearClosure>(entity =>
+        {
+            entity.ToTable("lodge_treasury_year_closures");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OpeningBalance).HasPrecision(18, 2);
+            entity.Property(x => x.Income).HasPrecision(18, 2);
+            entity.Property(x => x.AuthorizedExpenses).HasPrecision(18, 2);
+            entity.Property(x => x.ClosingBalance).HasPrecision(18, 2);
+            entity.Property(x => x.ClosedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.AccountingYear }).IsUnique();
         });
 
         modelBuilder.Entity<HospitalariaMonthlySubmission>(entity =>
