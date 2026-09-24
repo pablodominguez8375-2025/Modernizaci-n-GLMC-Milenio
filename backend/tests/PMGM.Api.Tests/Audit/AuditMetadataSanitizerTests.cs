@@ -47,7 +47,7 @@ public sealed class AuditMetadataSanitizerTests
     }
 
     [Theory]
-    [InlineData("bad\\r\\nforged-event")]
+    [InlineData("bad\r\nforged-event")]
     [InlineData("")]
     public void Audit_correlation_id_uses_server_value_for_invalid_client_value(string supplied)
     {
