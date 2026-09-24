@@ -54,6 +54,10 @@ La RC es una base técnica candidata; **no equivale por sí sola a una puesta en
 
 Manifest de la RC: `release/PMGM-RELEASE-1.0.0-rc1.json`.
 
+## Requisito permanente de diseño responsivo
+
+Todas las pantallas, módulos y flujos de Proyecto Centenario deben ser responsivos y fáciles de utilizar en computador, tablet y teléfono celular. El diseño debe adaptar navegación, tablas, formularios, tarjetas y acciones principales al ancho disponible; evitar el desplazamiento horizontal global; conservar controles táctiles operables y mantener visibles las acciones necesarias para completar cada tarea. La validación debe cubrir los breakpoints y la evidencia visual definidos en `docs/ui/PMGM-UI-001-identidad-visual-responsive.md` y aplicarse a cada módulo, no sólo a Mi ficha o a la portada.
+
 ## Principios
 
 - Identidad institucional única.
