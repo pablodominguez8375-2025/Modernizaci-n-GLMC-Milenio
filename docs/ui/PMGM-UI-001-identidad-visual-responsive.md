@@ -52,12 +52,15 @@ La interfaz debe validarse al menos en:
 - 360 × 800 px — celular pequeño.
 - 390 × 844 px — celular típico.
 - 768 × 1024 px — tablet vertical.
+- 820 × 1180 px — tablet compacta en vertical.
 - 1024 × 768 px — tablet horizontal / notebook pequeño.
 - 1366 × 768 px — notebook estándar.
 - 1440 × 900 px — escritorio.
 - 1920 × 1080 px — escritorio Full HD.
 
 ## Criterios de aceptación visual
+
+La responsividad es un requisito permanente para todos los módulos y flujos: computador, tablet y teléfono celular. La matriz representativa de capturas debe cubrir cada módulo en móvil, tablet y escritorio; las vistas de alto uso operativo, incluida Tesorería del Taller, deben tener cobertura específica de las acciones principales. Una captura de Mi ficha o de la portada por sí sola no acredita la responsividad del resto de la aplicación.
 
 Una pantalla se considera aprobable sólo si:
 - conserva la paleta, jerarquía y lenguaje visual de los mockups;
