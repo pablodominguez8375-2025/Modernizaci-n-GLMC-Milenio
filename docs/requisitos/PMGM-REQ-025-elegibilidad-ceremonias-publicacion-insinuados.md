@@ -41,24 +41,37 @@ El sistema deberá registrar:
 Una iniciación no podrá quedar como `Cumple` si la publicación válida no alcanza el plazo mínimo exigido, salvo excepción formal autorizada y auditada.
 
 ## 4. Portal institucional de insinuados
-Debe existir un portal específico para visualizar las publicaciones vigentes de insinuados.
+Debe existir una **vista general institucional de insinuados publicados para todos los hermanos autenticados de la Orden**. Esta vista no corresponde a una publicación abierta en Internet y deberá requerir autenticación institucional.
 
-El portal deberá permitir, según permisos y política institucional:
-- consultar insinuados actualmente publicados;
-- identificar el Taller que presenta al insinuado;
-- consultar fecha de inicio y fecha prevista de cumplimiento del plazo;
-- consultar estado de la publicación;
-- registrar observaciones/antecedentes por canales autorizados si la Gran Logia habilita esta función;
-- conservar el histórico de publicación aunque el registro deje de estar visible en el portal vigente.
+La lista general deberá mostrar, para cada insinuado vigente:
+- **fotografía** destinada expresamente a la publicación institucional;
+- **nombres y apellidos completos**;
+- **Taller que presenta al insinuado**.
+
+La interfaz podrá mostrar además metadatos operativos no sensibles del proceso de publicación, tales como estado de publicación, días transcurridos o fecha de cumplimiento, cuando sean necesarios para comprender el período vigente.
+
+La vista general deberá:
+- incluir insinuados publicados por cualquier Taller de la Orden, sin limitar la lista al Taller de pertenencia del hermano que consulta;
+- permitir búsqueda por nombre/apellidos o Taller;
+- mostrar únicamente publicaciones actualmente vigentes;
+- conservar el histórico de publicación aunque el registro deje de estar visible en la lista vigente;
+- registrar observaciones/antecedentes sólo por canales y roles autorizados si la Gran Logia habilita esta función.
+
+La ficha administrativa completa del insinuado seguirá siendo una vista separada y restringida a los cargos con atribuciones para gestionar el proceso.
 
 ## 5. Privacidad y minimización
-El portal no deberá publicar automáticamente todos los datos almacenados de la persona.
+La vista general para los hermanos no deberá publicar automáticamente todos los datos almacenados de la persona.
 
-Los campos visibles deberán ser definidos por configuración y política institucional. Como principio:
-- mostrar sólo información necesaria para la finalidad de la publicación;
-- no mostrar RUT, domicilio, teléfonos, correo privado u otros datos administrativos sensibles salvo decisión formal explícita y jurídicamente habilitada;
-- separar la ficha administrativa completa de la vista de publicación;
-- auditar cambios de contenido visible y fechas de publicación.
+Como decisión funcional vigente, los **datos personales visibles en la lista general** serán exclusivamente:
+- fotografía de publicación;
+- nombres y apellidos completos;
+- Taller que presenta al insinuado.
+
+No se mostrarán en esa lista general RUT, fecha de nacimiento, domicilio, teléfonos, correo privado, profesión u oficio, estado civil, patrocinantes/presentantes, documentos, entrevistas, observaciones internas ni otros antecedentes del expediente.
+
+La fotografía utilizada en la lista deberá formar parte del expediente autorizado para publicación y quedar vinculada de manera trazable a la publicación vigente. El sistema no deberá exponer directamente rutas internas de almacenamiento, credenciales, URLs permanentes de objetos privados ni metadatos técnicos del archivo.
+
+Los cambios de contenido visible y las fechas de publicación deberán quedar auditados. La habilitación institucional de estos campos deberá mantenerse documentada dentro de la política de tratamiento correspondiente conforme al diseño de privacidad de PMGM y a la Ley 21.719.
 
 El insinuado deberá existir como `Person` o entidad de candidato vinculada a `Person`, pero **no como `Member` activo antes de su iniciación**.
 
@@ -98,7 +111,7 @@ Se deberá crear configuración versionada para, al menos:
 - vigencia de la regla;
 - estados que habilitan autorización;
 - necesidad o no de reserva de espacio;
-- campos visibles en el portal;
+- fotografía, nombres y apellidos completos y Taller como campos habilitados para la vista general de hermanos;
 - mecanismo de observaciones/oposiciones, si se habilita;
 - autoridad que puede aprobar excepciones.
 
@@ -113,6 +126,7 @@ La autorización debe conservar un snapshot de:
 - validación de Gran Tesorería;
 - validación de Gran Hospitalaria;
 - publicación y plazo aplicado cuando sea iniciación;
+- referencia de la fotografía autorizada para la publicación;
 - excepciones;
 - fecha de corte de cada antecedente;
 - regla/configuración utilizada;
@@ -126,7 +140,10 @@ La autorización debe conservar un snapshot de:
 4. El plazo de publicación puede modificarse desde configuración sin recompilar el sistema.
 5. El sistema conserva qué plazo y regla se aplicaron a cada solicitud histórica.
 6. El insinuado puede publicarse sin crear prematuramente una membresía activa.
-7. El portal expone sólo los datos autorizados para publicación.
-8. Gran Secretaría visualiza una matriz única de requisitos y bloqueos antes de emitir la plancha.
-9. Toda excepción queda asociada a autoridad, fundamento, fecha y auditoría.
-10. La autorización emitida conserva evidencia de todas las validaciones utilizadas.
+7. Todo hermano autenticado puede consultar la lista general de insinuados vigentes de todos los Talleres de la Orden.
+8. Cada tarjeta de la lista general muestra fotografía, nombres y apellidos completos y Taller presentante.
+9. La lista general no muestra RUT, contacto, domicilio, edad, profesión, patrocinantes, documentos, entrevistas ni observaciones del expediente.
+10. La fotografía se entrega mediante un mecanismo autorizado y protegido, sin exponer directamente el almacenamiento privado.
+11. Gran Secretaría visualiza una matriz única de requisitos y bloqueos antes de emitir la plancha.
+12. Toda excepción queda asociada a autoridad, fundamento, fecha y auditoría.
+13. La autorización emitida conserva evidencia de todas las validaciones utilizadas.
