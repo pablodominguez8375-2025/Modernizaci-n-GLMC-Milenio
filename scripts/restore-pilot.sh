@@ -32,6 +32,9 @@ set -a
 . "$ENV_FILE"
 set +a
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+if [ -n "${PMGM_CI_COMPOSE_OVERRIDE:-}" ]; then
+  compose+=(-f "$ROOT/$PMGM_CI_COMPOSE_OVERRIDE")
+fi
 
 running="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
 resume=()
