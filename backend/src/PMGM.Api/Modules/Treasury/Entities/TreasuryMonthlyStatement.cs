@@ -115,6 +115,7 @@ public sealed class LodgeMemberPayment
     public required string PaymentMethod { get; set; }
     public DateOnly PaymentDate { get; set; }
     public required string ReceiptNumber { get; set; }
+    public string? IdempotencyKey { get; set; }
     public string? Reference { get; set; }
     public required string RecordedBySubject { get; set; }
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
