@@ -29,7 +29,7 @@ public sealed class LodgePaymentIdempotencyPostgreSqlTests
             var db = setupScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
             var organization = new Organization { Name = $"Taller idempotencia {Guid.NewGuid():N}", Number = $"IDEM-{Guid.NewGuid():N}", Type = "workshop" };
-            var person = new Person { FirstNames = "Hermano", LastNames = "Idempotencia", Rut = $"IDEM-{Guid.NewGuid():N}" };
+            var person = new Person { FirstNames = "Hermano", LastNames = "Idempotencia" };
             var member = new Member { Person = person, PersonId = person.Id, InstitutionalNumber = $"IDEM-{Guid.NewGuid():N}" };
             var plan = new LodgeFeePlan { Organization = organization, OrganizationId = organization.Id, FeeType = TreasuryCodes.LodgeFeeType.Normal,
                 MemberAmount = 5000m, GrandTreasuryAmount = 5000m, EffectiveFrom = new DateOnly(2026, 1, 1) };
