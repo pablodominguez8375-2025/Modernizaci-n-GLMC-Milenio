@@ -1,0 +1,2 @@
+FROM public.ecr.aws/aws-cli/aws-cli:2.32.25
+COPY --chmod=755 scripts/ci-mc-compat.sh /usr/local/bin/mc

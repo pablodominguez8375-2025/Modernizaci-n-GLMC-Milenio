@@ -151,30 +151,39 @@ public static class LodgeTreasuryEndpoints
         var charge = await db.LodgeMemberCharges.Include(x => x.Payments).FirstOrDefaultAsync(x => x.Id == chargeId, cancellationToken);
         if (charge is null) return Results.NotFound(new { message = "El cargo indicado no existe." });
         if (!access.CanManageLodgeTreasury(context.User, charge.OrganizationId)) return Results.Forbid();
-        if (await IsAccountingYearClosedAsync(db, charge.OrganizationId, request.PaymentDate.Year, cancellationToken))
-            return Results.Conflict(new { message = "La fecha de pago pertenece a un ejercicio cerrado. Registre el movimiento en un período abierto." });
         if (request.Amount <= 0 || !TreasuryCodes.LodgePaymentMethod.IsValid(request.PaymentMethod))
             return Results.BadRequest(new { message = "El monto y medio de pago deben ser válidos." });
+        var key = request.IdempotencyKey?.Trim();
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 100)
+            return Results.BadRequest(new { message = "La clave de registro del pago no es válida." });
+        var reference = Normalize(request.Reference);
+        var existing = charge.Payments.FirstOrDefault(x => x.IdempotencyKey == key);
+        if (existing is not null)
+        {
+            if (existing.Amount != request.Amount || existing.PaymentMethod != request.PaymentMethod ||
+                existing.PaymentDate != request.PaymentDate || !string.Equals(existing.Reference, reference, StringComparison.Ordinal))
+                return Results.Conflict(new { message = "La clave ya fue utilizada con datos de pago distintos." });
+            var alreadyPaid = charge.Payments.Where(x => x.Id != existing.Id).Sum(x => x.Amount) + existing.Amount;
+            return Results.Ok(new { existing.Id, existing.ReceiptNumber, existing.Amount, existing.PaymentMethod, existing.PaymentDate,
+                paidAmount = alreadyPaid, balance = charge.MemberAmount - alreadyPaid, charge.Status });
+        }
+        if (await IsAccountingYearClosedAsync(db, charge.OrganizationId, request.PaymentDate.Year, cancellationToken))
+            return Results.Conflict(new { message = "La fecha de pago pertenece a un ejercicio cerrado. Registre el movimiento en un período abierto." });
         var paid = charge.Payments.Sum(x => x.Amount);
         if (paid + request.Amount > charge.MemberAmount)
             return Results.Conflict(new { message = "El abono supera el saldo pendiente del hermano." });
-
-        var reference = Normalize(request.Reference);
-        if (reference is not null && charge.Payments.Any(x =>
-                x.Amount == request.Amount &&
-                x.PaymentDate == request.PaymentDate &&
-                x.PaymentMethod == request.PaymentMethod &&
-                string.Equals(x.Reference, reference, StringComparison.OrdinalIgnoreCase)))
+        if (reference is not null && charge.Payments.Any(x => x.Amount == request.Amount && x.PaymentDate == request.PaymentDate &&
+                x.PaymentMethod == request.PaymentMethod && string.Equals(x.Reference, reference, StringComparison.OrdinalIgnoreCase)))
             return Results.Conflict(new { message = "Este pago ya fue registrado para el mismo cargo, fecha, monto, medio y referencia." });
 
         var payment = new LodgeMemberPayment { ChargeId = charge.Id, Amount = request.Amount, PaymentMethod = request.PaymentMethod,
-            PaymentDate = request.PaymentDate, ReceiptNumber = $"REC-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Random.Shared.Next(1000, 9999)}",
+            PaymentDate = request.PaymentDate, IdempotencyKey = key,
+            ReceiptNumber = $"REC-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Random.Shared.Next(1000, 9999)}",
             Reference = reference, RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
         db.LodgeMemberPayments.Add(payment);
         charge.Status = paid + request.Amount == charge.MemberAmount ? TreasuryCodes.LodgeChargeStatus.Paid : TreasuryCodes.LodgeChargeStatus.Partial;
         audit.Add(context, "lodge.treasury.member_payment.recorded", nameof(LodgeMemberPayment), payment.Id.ToString(),
-            charge.OrganizationId, AuditResults.Success,
-            new { charge.Id, payment.Amount, payment.PaymentMethod, payment.ReceiptNumber });
+            charge.OrganizationId, AuditResults.Success, new { charge.Id, payment.Amount, payment.PaymentMethod, payment.ReceiptNumber });
         await db.SaveChangesAsync(cancellationToken);
         return Results.Created($"/api/gestion-logial/tesoreria/cargos/{chargeId}/pagos/{payment.Id}",
             new { payment.Id, payment.ReceiptNumber, payment.Amount, payment.PaymentMethod, payment.PaymentDate,
@@ -495,7 +504,7 @@ public sealed record CreateLodgeFeePlanRequest(string FeeType, decimal MemberAmo
     DateOnly EffectiveFrom, DateOnly? EffectiveUntil);
 public sealed record LodgeFeeAssignmentRequest(Guid MemberId, string FeeType);
 public sealed record GenerateLodgeChargesRequest(int PeriodYear, int PeriodMonth, IReadOnlyList<LodgeFeeAssignmentRequest>? Assignments);
-public sealed record AddLodgeMemberPaymentRequest(decimal Amount, string PaymentMethod, DateOnly PaymentDate, string? Reference);
+public sealed record AddLodgeMemberPaymentRequest(decimal Amount, string PaymentMethod, DateOnly PaymentDate, string? Reference, string? IdempotencyKey);
 public sealed record CreateLodgeTreasuryExpenseRequest(string Category, decimal Amount, DateOnly ExpenseDate, string Description, string? EvidenceReference);
 public sealed record CreateLodgeTreasuryIncomeRequest(string Category, decimal Amount, DateOnly IncomeDate, string Description, string? EvidenceReference);
 public sealed record SaveLodgeTreasuryConfigurationRequest(decimal OpeningBalance, DateOnly OpeningBalanceDate, string IncomeCategories, string ExpenseCategories);

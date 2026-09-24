@@ -32,8 +32,8 @@ jobs:
     env:
       PMGM_TEST_POSTGRES: Host=localhost;Port=5432;Database=pmgm_ci;Username=pmgm;Password=pmgm_ci_only
       PMGM_TEST_S3_URL: http://127.0.0.1:9000
-      PMGM_TEST_S3_ACCESS_KEY: pmgm_minio_ci
-      PMGM_TEST_S3_SECRET_KEY: pmgm_minio_ci_secret_change_me
+      PMGM_TEST_S3_ACCESS_KEY: s3mock-ci
+      PMGM_TEST_S3_SECRET_KEY: s3mock-ci-secret-change-me
       PMGM_TEST_S3_BUCKET: pmgm-documents
       PMGM_TEST_CLAMAV_HOST: 127.0.0.1
       PMGM_TEST_CLAMAV_PORT: 3310
@@ -56,20 +56,19 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Start private MinIO for S3 integration
+      - name: Start S3-compatible mock for object-store integration
         shell: bash
         run: |
           set -euo pipefail
           docker run -d \
-            --name pmgm-minio-ci \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER="$PMGM_TEST_S3_ACCESS_KEY" \
-            -e MINIO_ROOT_PASSWORD="$PMGM_TEST_S3_SECRET_KEY" \
-            quay.io/minio/minio:latest server /data
+            --name pmgm-s3mock-ci \
+            -p 9000:9090 \
+            -e COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS="$PMGM_TEST_S3_BUCKET" \
+            adobe/s3mock:5.1.0
 
           ready=false
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null; then
+            if curl -fsS http://127.0.0.1:9000/favicon.ico >/dev/null; then
               ready=true
               break
             fi
@@ -77,15 +76,9 @@ jobs:
           done
 
           if [ "$ready" != "true" ]; then
-            docker logs pmgm-minio-ci
+            docker logs pmgm-s3mock-ci
             exit 1
           fi
-
-          docker run --rm \
-            --network host \
-            --entrypoint /bin/sh \
-            quay.io/minio/mc:latest \
-            -c "mc alias set pmgm '$PMGM_TEST_S3_URL' '$PMGM_TEST_S3_ACCESS_KEY' '$PMGM_TEST_S3_SECRET_KEY' && mc mb --ignore-existing pmgm/$PMGM_TEST_S3_BUCKET && mc anonymous set none pmgm/$PMGM_TEST_S3_BUCKET"
 
       - name: Start ClamAV for malware integration
         shell: bash
@@ -152,9 +145,9 @@ jobs:
         if: always()
         run: docker rm -f pmgm-clamav-ci >/dev/null 2>&1 || true
 
-      - name: Stop MinIO
+      - name: Stop S3Mock
         if: always()
-        run: docker rm -f pmgm-minio-ci >/dev/null 2>&1 || true
+        run: docker rm -f pmgm-s3mock-ci >/dev/null 2>&1 || true
 
   frontend-build:
     name: Frontend lint and build
@@ -262,6 +255,11 @@ jobs:
 
       - name: Validate first-implementation Docker Compose
         run: docker compose -f infrastructure/docker-compose.first.yml config
+
+      - name: Validate CI S3Mock overlays
+        run: |
+          docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml config
+          docker compose -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml config
 
       - name: Validate pilot Docker Compose
         shell: bash
@@ -376,13 +374,14 @@ jobs:
       PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
       PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
       PMGM_QA_USER_PASSWORD: ci_first_user_only
+      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Build and start first implementation
-        run: docker compose -f infrastructure/docker-compose.first.yml up -d --build
+        run: docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml up -d --build
 
       - name: Run authenticated stack smoke
         run: bash scripts/smoke-first-implementation.sh
@@ -392,11 +391,11 @@ jobs:
 
       - name: Show first-implementation logs on failure
         if: failure()
-        run: docker compose -f infrastructure/docker-compose.first.yml logs --no-color --tail=300
+        run: docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml logs --no-color --tail=300
 
       - name: Stop first implementation
         if: always()
-        run: docker compose -f infrastructure/docker-compose.first.yml down -v --remove-orphans
+        run: docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml down -v --remove-orphans
 
   pilot-operational-smoke:
     name: Pilot operational HTTPS and recovery
@@ -419,6 +418,7 @@ jobs:
       PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
       PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
       PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
+      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
 
     steps:
       - name: Checkout
@@ -452,7 +452,7 @@ jobs:
         run: bash scripts/preflight-pilot.sh
 
       - name: Build and start operational pilot
-        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml up -d --build
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml up -d --build
 
       - name: Run pilot HTTPS/OIDC smoke
         run: bash scripts/smoke-pilot.sh
@@ -462,8 +462,8 @@ jobs:
 
       - name: Show pilot logs on failure
         if: failure()
-        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml logs --no-color --tail=400
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml logs --no-color --tail=400
 
       - name: Stop operational pilot
         if: always()
-        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml down -v --remove-orphans
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml down -v --remove-orphans

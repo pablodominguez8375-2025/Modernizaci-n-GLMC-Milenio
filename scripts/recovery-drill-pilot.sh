@@ -23,6 +23,9 @@ esac
 [ "${PMGM_PILOT_ALLOW_LOCALHOST:-false}" = "true" ] || { echo "Recovery drill requiere PMGM_PILOT_ALLOW_LOCALHOST=true." >&2; exit 1; }
 
 compose=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+if [ -n "${PMGM_CI_COMPOSE_OVERRIDE:-}" ]; then
+  compose+=(-f "$ROOT/$PMGM_CI_COMPOSE_OVERRIDE")
+fi
 probe_table="pmgm_recovery_probe_v032"
 probe_value="before-backup"
 probe_object="__pmgm_recovery_probe_v032__/probe.txt"

@@ -402,10 +402,12 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Amount).HasPrecision(18, 2);
             entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
             entity.Property(x => x.ReceiptNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100);
             entity.Property(x => x.Reference).HasMaxLength(500);
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.HasOne(x => x.Charge).WithMany(x => x.Payments).HasForeignKey(x => x.ChargeId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => x.ReceiptNumber).IsUnique();
+            entity.HasIndex(x => new { x.ChargeId, x.IdempotencyKey }).IsUnique().HasFilter("\"IdempotencyKey\" IS NOT NULL");
         });
 
         modelBuilder.Entity<LodgeHospitalariaMovement>(entity =>

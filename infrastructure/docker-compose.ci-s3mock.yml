@@ -1,0 +1,24 @@
+services:
+  minio:
+    image: adobe/s3mock:5.1.0
+    command: []
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_HTTP_PORT: "9000"
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: pmgm-documents
+
+  minio-init:
+    image: pmgm-ci-s3-tools:1.0
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.ci-s3-tools
+    entrypoint: ["/bin/sh", "-c"]
+    environment:
+      AWS_ACCESS_KEY_ID: ${PMGM_FIRST_MINIO_USER:-${PMGM_PILOT_MINIO_USER:-ci-s3mock}}
+      AWS_SECRET_ACCESS_KEY: ${PMGM_FIRST_MINIO_PASSWORD:-${PMGM_PILOT_MINIO_PASSWORD:-ci-s3mock-secret}}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      PMGM_CI_S3_ENDPOINT: http://minio:9000
+    command:
+      - >-
+        until mc ls pmgm/pmgm-documents >/dev/null 2>&1; do sleep 2; done;
+        exit 0
