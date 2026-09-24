@@ -30,10 +30,10 @@ export default function CeremoniesPage({ api }: { api: PmgmApiClient }) {
     return () => { active = false }
   }, [api])
 
-  const execute = async (action: () => Promise<unknown>, success: string) => {
+  const execute = async (action: () => Promise<unknown>, success: string): Promise<unknown | null> => {
     setWorking(true); setError(null); setMessage(null)
-    try { await action(); await refresh(); setMessage(success) }
-    catch (reason) { setError(toMessage(reason)) }
+    try { const result = await action(); await refresh(); setMessage(success); return result }
+    catch (reason) { setError(toMessage(reason)); return null }
     finally { setWorking(false) }
   }
 
@@ -79,7 +79,7 @@ function CeremonyCard({ item, api, working, execute }: {
   item: CeremonyReviewQueueItem
   api: PmgmApiClient
   working: boolean
-  execute: (action: () => Promise<unknown>, success: string) => Promise<void>
+  execute: (action: () => Promise<unknown>, success: string) => Promise<unknown | null>
 }) {
   const completed = item.eligibility.requirements.filter(requirement => requirement.status === 'approved').length
   const total = item.eligibility.requirements.length
@@ -113,6 +113,11 @@ function CeremonyCard({ item, api, working, execute }: {
 
     {item.eligibility.publication && <PublicationProgress item={item} />}
 
+    {item.eligibility.ceremonyRight && <section className="ceremony-right-summary" aria-label="Derecho de ceremonia">
+      <div><strong>Derecho de ceremonia</strong><span>Fuente: {item.eligibility.ceremonyRight.source}</span></div>
+      <dl><div><dt>Exigido</dt><dd>{formatMoney(item.eligibility.ceremonyRight.amount, item.eligibility.ceremonyRight.currency)}</dd></div><div><dt>Pagado</dt><dd>{formatMoney(item.eligibility.ceremonyRight.paid, item.eligibility.ceremonyRight.currency)}</dd></div><div><dt>Saldo</dt><dd>{formatMoney(item.eligibility.ceremonyRight.balance, item.eligibility.ceremonyRight.currency)}</dd></div></dl>
+    </section>}
+
     {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || item.actions.canAuthorize) && <div className="ceremony-actions">
       {item.actions.canValidateInternalAffairs && <InternalAffairsForm item={item} api={api} working={working} execute={execute} />}
       {item.actions.canPublishCandidate && <button className="secondary-action" type="button" disabled={working} title="Gran Secretaría aprueba la ficha, la hace visible y notifica a los Hermanos." onClick={() => void execute(() => api.publishCeremonyCandidate(item.id), 'Ficha aprobada por Gran Secretaría. La insinuación quedó publicada y se generaron las notificaciones institucionales.')}>Aprobar ficha y publicar</button>}
@@ -125,7 +130,7 @@ function InternalAffairsForm({ item, api, working, execute }: {
   item: CeremonyReviewQueueItem
   api: PmgmApiClient
   working: boolean
-  execute: (action: () => Promise<unknown>, success: string) => Promise<void>
+  execute: (action: () => Promise<unknown>, success: string) => Promise<unknown | null>
 }) {
   const [status, setStatus] = useState<CeremonyInternalAffairsValidationRequest['status']>('approved')
   const [sourceReference, setSourceReference] = useState('')
@@ -166,4 +171,5 @@ function requirementStatusLabel(status: string) { return status === 'approved' ?
 function normalize(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
 function formatDateOnly(value: string) { const [year, month, day] = value.split('-').map(Number); return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(new Date(Date.UTC(year, month - 1, day, 12))) }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/Santiago' }).format(new Date(value)) }
+function formatMoney(value: number, currency: string) { return new Intl.NumberFormat('es-CL', { style: 'currency', currency, maximumFractionDigits: 0 }).format(value) }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'No fue posible completar la operación.' }

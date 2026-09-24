@@ -32,6 +32,7 @@ public static class CeremonyEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/aprobar-publicacion-insinuado", PublishCandidateAsync);
         group.MapPost("/solicitudes/{requestId:guid}/publicacion-insinuado", PublishCandidateAsync);
         group.MapGet("/solicitudes/{requestId:guid}/elegibilidad", GetEligibilityAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/derecho/pagos", RecordCeremonyRightPaymentAsync);
         group.MapPost("/solicitudes/{requestId:guid}/autorizar", AuthorizeAsync);
         group.MapPost("/solicitudes/{requestId:guid}/registrar-iniciacion", RegisterInitiationAsync);
         group.MapGet("/portal-insinuados", GetCandidatePortalAsync);
@@ -191,6 +192,79 @@ public static class CeremonyEndpoints
             entity.CandidatePersonId,
             entity.ProposedDate,
             entity.Status
+        });
+    }
+
+    private static async Task<IResult> RecordCeremonyRightPaymentAsync(
+        Guid requestId,
+        RecordCeremonyRightPaymentRequest request,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var ceremony = await db.CeremonyRequests.SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
+        if (ceremony is null) return Results.NotFound();
+        if (!access.CanManageTreasuryRegularity(httpContext.User)) return Results.Forbid();
+
+        var key = request.IdempotencyKey?.Trim();
+        var reference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
+        if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || request.Amount <= 0 ||
+            decimal.Truncate(request.Amount) != request.Amount || reference?.Length > 500 ||
+            !TreasuryCodes.LodgePaymentMethod.IsValid(request.PaymentMethod) || request.PaymentDate > ChileToday())
+            return Results.BadRequest(new { message = "Indique monto positivo, medio y fecha válidos e identificador de reintento." });
+
+        var prior = await db.CeremonyRightPayments.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId && x.IdempotencyKey == key, cancellationToken);
+        if (prior is not null)
+        {
+            if (prior.Amount != request.Amount || prior.PaymentMethod != request.PaymentMethod ||
+                prior.PaymentDate != request.PaymentDate || !string.Equals(prior.Reference, reference, StringComparison.Ordinal))
+                return Results.Conflict(new { message = "El identificador de reintento ya se usó con datos distintos." });
+            var priorTotal = await db.CeremonyRightPayments.Where(x => x.CeremonyRequestId == requestId)
+                .SumAsync(x => x.Amount, cancellationToken);
+            var priorDue = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, request.PaymentDate);
+            return Results.Ok(new { prior.Id, prior.ReceiptNumber, prior.Amount, prior.Currency, prior.PaymentMethod,
+                prior.PaymentDate, prior.Reference, paidTotal = priorTotal, balance = Math.Max(0m, (priorDue?.Amount ?? 0m) - priorTotal), replayed = true });
+        }
+
+        if (reference is not null && await db.CeremonyRightPayments.AnyAsync(x => x.CeremonyRequestId == requestId &&
+                x.Amount == request.Amount && x.PaymentMethod == request.PaymentMethod && x.PaymentDate == request.PaymentDate &&
+                x.Reference != null && x.Reference.ToUpper() == reference.ToUpper(), cancellationToken))
+            return Results.Conflict(new { message = "Este pago ya existe con el mismo monto, medio, fecha y referencia." });
+
+        var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, request.PaymentDate);
+        if (right is null) return Results.Conflict(new { message = "No existe un derecho de ceremonia vigente para esta fecha." });
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        var paid = await db.CeremonyRightPayments.Where(x => x.CeremonyRequestId == requestId)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        if (request.Amount > right.Value.Amount - paid)
+            return Results.Conflict(new { message = "El pago excede el saldo del derecho de ceremonia.", balance = Math.Max(0m, right.Value.Amount - paid) });
+
+        var payment = new CeremonyRightPayment
+        {
+            CeremonyRequestId = requestId,
+            Amount = request.Amount,
+            Currency = right.Value.Currency,
+            PaymentMethod = request.PaymentMethod,
+            PaymentDate = request.PaymentDate,
+            ReceiptNumber = $"CER-{request.PaymentDate:yyyy}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
+            IdempotencyKey = key,
+            Reference = reference,
+            RecordedBySubject = httpContext.User.FindFirst("sub")?.Value ?? "unknown"
+        };
+        db.CeremonyRightPayments.Add(payment);
+        audit.Add(httpContext, "treasury.ceremony_right.payment_recorded", nameof(CeremonyRightPayment), payment.Id.ToString(),
+            ceremony.OrganizationId, AuditResults.Success, new { requestId, payment.Amount, payment.Currency, payment.PaymentMethod, payment.ReceiptNumber });
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        var paidTotal = paid + payment.Amount;
+        return Results.Created($"/api/ceremonias/solicitudes/{requestId}/derecho/pagos/{payment.Id}", new
+        {
+            payment.Id, payment.ReceiptNumber, payment.Amount, payment.Currency, payment.PaymentMethod,
+            payment.PaymentDate, payment.Reference, paidTotal, balance = right.Value.Amount - paidTotal, replayed = false
         });
     }
 
@@ -946,6 +1020,12 @@ public static class CeremonyEndpoints
             .ThenByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
+        var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, today);
+        var rightPaid = await db.CeremonyRightPayments.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId && x.PaymentDate <= today)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var rightBalance = right is null ? 0m : Math.Max(0m, right.Value.Amount - rightPaid);
+
         CandidatePublicationSnapshot? publicationSnapshot = null;
         if (ceremony.CeremonyType == CeremonyCodes.Type.Initiation)
         {
@@ -991,9 +1071,11 @@ public static class CeremonyEndpoints
             treasury?.Status,
             hospitalaria?.Status,
             grandMaster?.Status,
-            evidence);
+            evidence,
+            ceremonyRightPaid: right is null || rightBalance == 0m);
 
-        return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot, decision, today);
+        return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
+            right?.Amount, right?.Currency, rightPaid, rightBalance, decision, today);
     }
 
     private static object ToEligibilityResponse(EligibilityContext context) => new
@@ -1005,6 +1087,14 @@ public static class CeremonyEndpoints
         status = context.Decision.Status,
         canAuthorize = context.Decision.CanAuthorize,
         requirements = context.Decision.Requirements,
+        ceremonyRight = context.CeremonyRightAmount is null ? null : new
+        {
+            amount = context.CeremonyRightAmount,
+            currency = context.CeremonyRightCurrency,
+            paid = context.CeremonyRightPaid,
+            balance = context.CeremonyRightBalance,
+            source = GrandTreasuryFeeSchedule.SourceReference
+        },
         evidence = new
         {
             regimenInteriorValidationId = context.InternalAffairs?.Id,
@@ -1077,6 +1167,10 @@ public static class CeremonyEndpoints
         HospitalariaRegularitySnapshot? Hospitalaria,
         CeremonyValidation? GrandMaster,
         CandidatePublicationSnapshot? Publication,
+        decimal? CeremonyRightAmount,
+        string? CeremonyRightCurrency,
+        decimal CeremonyRightPaid,
+        decimal CeremonyRightBalance,
         CeremonyEligibilityDecision Decision,
         DateOnly AsOfDate);
 
@@ -1099,6 +1193,13 @@ public sealed record CreateCeremonyRequest(
     Guid? CandidatePersonId,
     DateOnly? ProposedDate,
     string? Notes);
+
+public sealed record RecordCeremonyRightPaymentRequest(
+    decimal Amount,
+    string PaymentMethod,
+    DateOnly PaymentDate,
+    string? Reference,
+    string? IdempotencyKey);
 
 public sealed record CeremonyValidationRequest(
     string Status,

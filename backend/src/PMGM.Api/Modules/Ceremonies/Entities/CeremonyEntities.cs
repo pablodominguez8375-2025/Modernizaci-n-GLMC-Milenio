@@ -33,6 +33,22 @@ public sealed class CeremonyValidation
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
+public sealed class CeremonyRightPayment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid CeremonyRequestId { get; set; }
+    public CeremonyRequest CeremonyRequest { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public required string Currency { get; set; }
+    public required string PaymentMethod { get; set; }
+    public DateOnly PaymentDate { get; set; }
+    public required string ReceiptNumber { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public string? Reference { get; set; }
+    public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class CandidatePublication
 {
     public Guid Id { get; init; } = Guid.NewGuid();

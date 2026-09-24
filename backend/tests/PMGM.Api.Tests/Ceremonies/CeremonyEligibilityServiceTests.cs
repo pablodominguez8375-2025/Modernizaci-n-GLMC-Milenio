@@ -9,6 +9,23 @@ public sealed class CeremonyEligibilityServiceTests
     private static readonly DateTimeOffset Now = new(2026, 9, 7, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public void Ceremony_IsBlocked_WhenOfficialRightHasOutstandingBalance()
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.Exaltation,
+                FullyApprovedValidations(),
+                null,
+                null,
+                20,
+                CeremonyRightPaid: false),
+            Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Contains(result.BlockingReasons, x => x.Contains(CeremonyCodes.ValidationType.CeremonyRightPayment));
+    }
+
+    [Fact]
     public void Ceremony_IsBlocked_WhenTreasuryIsNotApproved()
     {
         var result = _service.Evaluate(

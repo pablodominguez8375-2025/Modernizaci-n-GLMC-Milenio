@@ -156,6 +156,13 @@ public static class CeremonyReviewQueueEndpoints
             .GroupBy(x => x.CeremonyRequestId)
             .ToDictionary(x => x.Key, x => x.First());
 
+        var rightPaymentRows = await db.CeremonyRightPayments.AsNoTracking()
+            .Where(x => requestIds.Contains(x.CeremonyRequestId) && x.PaymentDate <= today)
+            .GroupBy(x => x.CeremonyRequestId)
+            .Select(x => new { CeremonyRequestId = x.Key, Paid = x.Sum(y => y.Amount) })
+            .ToListAsync(cancellationToken);
+        var rightPaidByRequest = rightPaymentRows.ToDictionary(x => x.CeremonyRequestId, x => x.Paid);
+
         var items = ceremonies.Select(ceremony =>
         {
             internalAffairsByRequest.TryGetValue(ceremony.Id, out var regimenStatus);
@@ -163,6 +170,9 @@ public static class CeremonyReviewQueueEndpoints
             treasuryByOrganization.TryGetValue(ceremony.OrganizationId, out var treasuryStatus);
             hospitalariaByOrganization.TryGetValue(ceremony.OrganizationId, out var hospitalariaStatus);
             publicationByRequest.TryGetValue(ceremony.Id, out var publication);
+            rightPaidByRequest.TryGetValue(ceremony.Id, out var rightPaid);
+            var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, today);
+            var rightBalance = right is null ? 0m : Math.Max(0m, right.Value.Amount - rightPaid);
 
             CandidatePublicationEvidence? publicationEvidence = null;
             CeremonyQueuePublicationDto? publicationProjection = null;
@@ -196,7 +206,8 @@ public static class CeremonyReviewQueueEndpoints
                 treasuryStatus,
                 hospitalariaStatus,
                 grandMasterStatus,
-                publicationEvidence);
+                publicationEvidence,
+                ceremonyRightPaid: right is null || rightBalance == 0m);
 
             var isFinal = ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected;
             var activePublication = publication is not null &&
@@ -218,7 +229,9 @@ public static class CeremonyReviewQueueEndpoints
                 decision.Requirements
                     .Select(x => new CeremonyQueueRequirementDto(x.Code, x.Name, x.Status, x.Reason))
                     .ToList(),
-                publicationProjection);
+                publicationProjection,
+                right is null ? null : new CeremonyRightDto(right.Value.Amount, right.Value.Currency, rightPaid, rightBalance,
+                    GrandTreasuryFeeSchedule.SourceReference));
 
             return new CeremonyReviewQueueItemDto(
                 ceremony.Id,
@@ -281,7 +294,10 @@ public sealed record CeremonyQueueEligibilityDto(
     string Status,
     bool CanAuthorize,
     IReadOnlyList<CeremonyQueueRequirementDto> Requirements,
-    CeremonyQueuePublicationDto? Publication);
+    CeremonyQueuePublicationDto? Publication,
+    CeremonyRightDto? CeremonyRight);
+
+public sealed record CeremonyRightDto(decimal Amount, string Currency, decimal Paid, decimal Balance, string Source);
 
 public sealed record CeremonyQueueRequirementDto(
     string Code,

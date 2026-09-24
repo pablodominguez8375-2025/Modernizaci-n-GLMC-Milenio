@@ -32,7 +32,7 @@ const scenarios = [
     requiredTabs: ['Egresos por autorizar'],
     forbiddenTabs: ['Resumen', 'Cuotas y Cobranzas', 'Cuadro mensual', 'Configuraciones', 'Reportes'],
   },
-  { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería' },
+  { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería', requiredTabs: ['Cuadros mensuales', 'Estado de Talleres', 'Tarifas y Orientes', 'Derechos ceremoniales'], grandTreasuryRights: true },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },
   { slug: 'gran-archivero', profile: 'grandLodge', label: 'Gran Archivero' },
@@ -255,6 +255,36 @@ async function assertTreasuryPaymentAction(viewport) {
   if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}: ${JSON.stringify(result.overflowElements)}`)
 }
 
+async function openGrandTreasuryRights() {
+  const clicked = await evaluate(`(() => {
+    const tab = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')]
+      .find(candidate => (candidate.textContent || '').includes('Derechos ceremoniales'));
+    if (!tab) return false;
+    tab.click();
+    return true;
+  })()`)
+  if (!clicked) throw new Error('Grand Treasury tab not found: Derechos ceremoniales')
+  await waitForExpression(`!!document.querySelector('.ceremony-right-card')`, 'ceremony rights ledger')
+  await delay(250)
+}
+
+async function assertCeremonyRightPaymentAction(viewport) {
+  const result = await evaluate(`(() => {
+    const card = document.querySelector('.ceremony-right-card');
+    const details = card?.querySelector('details');
+    const summary = details?.querySelector('summary');
+    if (details && summary && !details.open) summary.click();
+    const button = card?.querySelector('form button');
+    const rect = card?.getBoundingClientRect();
+    return { card: !!card, button: !!button, touchSize: button?.getBoundingClientRect().height ?? 0,
+      cardRight: rect?.right ?? 0, viewportWidth: innerWidth, labels: card ? [...card.querySelectorAll('form label span')].map(x => (x.textContent || '').trim()) : [] };
+  })()`)
+  if (!result?.card || !result.button) throw new Error(`Ceremony right payment action is missing at ${viewport}.`)
+  if (result.touchSize < 44) throw new Error(`Ceremony right payment action is below 44px at ${viewport}.`)
+  if (result.cardRight > result.viewportWidth + 1) throw new Error(`Ceremony right card is clipped at ${viewport}.`)
+  if (result.labels.length !== 4) throw new Error(`Ceremony right form is incomplete at ${viewport}: ${JSON.stringify(result.labels)}.`)
+}
+
 async function assertNoGlobalHorizontalOverflow(label, viewport) {
   const metrics = await evaluate(`(() => {
     const root = document.documentElement;
@@ -340,6 +370,10 @@ try {
       if (scenario.treasuryCollection) {
         await openTreasuryCollection()
         await assertTreasuryPaymentAction(viewport.suffix)
+      }
+      if (scenario.grandTreasuryRights) {
+        await openGrandTreasuryRights()
+        await assertCeremonyRightPaymentAction(viewport.suffix)
       }
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug

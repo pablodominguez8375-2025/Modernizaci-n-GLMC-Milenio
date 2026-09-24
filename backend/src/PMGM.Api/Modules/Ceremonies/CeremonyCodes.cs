@@ -38,6 +38,7 @@ public static class CeremonyCodes
         public const string CandidateCeremonySubmission = "candidate_ceremony_submission";
         public const string CandidateRepresentationReview = "candidate_representation_review";
         public const string SpaceAvailability = "space_availability";
+        public const string CeremonyRightPayment = "ceremony_right_payment";
     }
 
     public static class ValidationStatus

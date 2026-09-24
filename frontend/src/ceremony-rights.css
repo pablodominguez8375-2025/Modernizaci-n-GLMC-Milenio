@@ -1,0 +1,22 @@
+.ceremony-rights-page { display: grid; gap: 16px; }
+.ceremony-rights-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.ceremony-rights-heading h2 { margin: 2px 0 5px; color: var(--ink); }
+.ceremony-rights-heading p:last-child { max-width: 680px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.ceremony-rights-list { display: grid; gap: 14px; }
+.ceremony-right-card { display: grid; gap: 14px; min-width: 0; }
+.ceremony-right-card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.ceremony-right-card-heading h3 { margin: 2px 0 4px; color: var(--ink); }
+.ceremony-right-card-heading p:last-child { margin: 0; color: var(--muted); font-size: 12px; }
+.ceremony-right-values { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; margin: 0; }
+.ceremony-right-values > div { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 11px; background: var(--surface-soft); }
+.ceremony-right-values dt { color: var(--muted); font-size: 10px; font-weight: 750; }
+.ceremony-right-values dd { margin: 5px 0 0; color: var(--ink); font-size: 13px; font-weight: 850; overflow-wrap: anywhere; }
+.ceremony-right-source { margin: 0; color: var(--muted); font-size: 10px; }
+.ceremony-right-payment { min-width: 0; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
+.ceremony-right-payment summary { min-height: 44px; display: flex; align-items: center; padding: 10px 13px; color: var(--ink); font-size: 12px; font-weight: 850; cursor: pointer; }
+.ceremony-right-payment form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; padding: 0 13px 13px; }
+.ceremony-right-payment label { display: grid; min-width: 0; gap: 5px; color: var(--muted); font-size: 11px; font-weight: 750; }
+.ceremony-right-payment input, .ceremony-right-payment select { width: 100%; min-width: 0; min-height: 44px; border: 1px solid #cbd2df; border-radius: 9px; padding: 9px 11px; background: #fff; color: var(--ink); font: inherit; }
+.ceremony-right-payment button { grid-column: 1 / -1; min-height: 44px; }
+@media (max-width: 720px) { .ceremony-right-values { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .ceremony-rights-heading, .ceremony-right-card-heading { align-items: flex-start; flex-direction: column; } .ceremony-right-payment form { grid-template-columns: 1fr; } .ceremony-right-payment button { grid-column: auto; width: 100%; } }

@@ -19,7 +19,8 @@ public static class CeremonyEligibilityPolicy
             treasuryStatus,
             hospitalariaStatus,
             CeremonyCodes.ValidationStatus.Approved,
-            publication);
+            publication,
+            ceremonyRightPaid: true);
 
     public static CeremonyEligibilityDecision Evaluate(
         string ceremonyType,
@@ -27,14 +28,16 @@ public static class CeremonyEligibilityPolicy
         string? treasuryStatus,
         string? hospitalariaStatus,
         string? grandMasterStatus,
-        CandidatePublicationEvidence? publication)
+        CandidatePublicationEvidence? publication,
+        bool ceremonyRightPaid = true)
     {
         var requirements = new List<CeremonyRequirementResult>
         {
             EvaluateRegimenInterior(regimenInteriorStatus),
             EvaluateTreasury(treasuryStatus),
             EvaluateHospitalaria(hospitalariaStatus),
-            EvaluateGrandMaster(grandMasterStatus)
+            EvaluateGrandMaster(grandMasterStatus),
+            EvaluateCeremonyRight(ceremonyType, ceremonyRightPaid)
         };
 
         if (ceremonyType == CeremonyCodes.Type.Initiation)
@@ -52,6 +55,22 @@ public static class CeremonyEligibilityPolicy
             overall,
             overall == "complies",
             requirements);
+    }
+
+    private static CeremonyRequirementResult EvaluateCeremonyRight(string ceremonyType, bool paid)
+    {
+        if (ceremonyType is not (CeremonyCodes.Type.Initiation or CeremonyCodes.Type.WageIncrease or
+            CeremonyCodes.Type.Exaltation or CeremonyCodes.Type.Affiliation or CeremonyCodes.Type.Incorporation))
+        {
+            return new(CeremonyCodes.ValidationType.CeremonyRightPayment, "Derecho de ceremonia", CeremonyCodes.ValidationStatus.Approved,
+                "Este trámite no tiene un derecho de ceremonia configurado.");
+        }
+
+        return paid
+            ? new(CeremonyCodes.ValidationType.CeremonyRightPayment, "Derecho de ceremonia", CeremonyCodes.ValidationStatus.Approved,
+                "El derecho de ceremonia está pagado según el libro de Tesorería.")
+            : new(CeremonyCodes.ValidationType.CeremonyRightPayment, "Derecho de ceremonia", CeremonyCodes.ValidationStatus.Rejected,
+                "El derecho de ceremonia registra saldo pendiente en Tesorería.");
     }
 
     private static CeremonyRequirementResult EvaluateRegimenInterior(string? status)

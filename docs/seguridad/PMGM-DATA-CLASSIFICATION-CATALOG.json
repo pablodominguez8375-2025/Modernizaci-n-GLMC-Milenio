@@ -562,6 +562,38 @@
       "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
       "owner": "Gran Tesorería",
       "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-036",
+      "module": "Gran Tesorería",
+      "entity": "CeremonyRightPayment",
+      "field": "Amount/Currency/PaymentMethod/PaymentDate/ReceiptNumber/IdempotencyKey/Reference/RecordedBySubject/RecordedAtUtc",
+      "classification": "sensitive",
+      "purpose": "Conciliar el derecho único oficial contra un expediente ceremonial y conservar trazabilidad contable del pago.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "authorized_grand_treasury_only",
+      "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
+      "owner": "Gran Tesorería",
+      "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-037",
+      "module": "Gran Tesorería",
+      "entity": "TreasuryCeremonyRightItem",
+      "field": "SubjectDisplayName/OrganizationId/CeremonyType/ProposedDate/Amount/Paid/Balance",
+      "classification": "sensitive",
+      "purpose": "Mostrar a Gran Tesorería únicamente los datos necesarios para conciliar derechos ceremoniales pendientes.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "authorized_grand_treasury_only",
+      "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
+      "owner": "Gran Tesorería",
+      "status": "active"
     }
   ]
 }

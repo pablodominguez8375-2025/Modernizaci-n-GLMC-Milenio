@@ -2,6 +2,7 @@
 
 | 23-09-2026 | El Product Owner autoriza ampliar Tesorería del Taller y consulta su publicación en GitHub Pages. | El menú autorizado suma seis vistas: Resumen, Cuotas y Cobranzas, Ingresos y Egresos, Cuadro mensual, Configuraciones y Reportes. QA-037 verifica el alcance; ver `PMGM-ARCH-012` y `PMGM-QA-V066`. Egresos afectan caja sólo después de la aprobación del Venerable; cargos pagados generan ingreso automáticamente. La publicación Pages corresponde al flujo del repositorio al integrar en `dev`. |
 | 23-09-2026 | El Product Owner autoriza incorporar mejoras compatibles de la referencia a Tesorería. | Se agregan cierres anuales auditados e inmutables, arrastre de saldo, bloqueo de movimientos retroactivos, reportes Debe/Haber/Neto, filtros, paginación y CSV. QA-038 y `PMGM-QA-V067` documentan la aceptación; no se automatiza la regla de cuotas por retiro/fallecimiento sin validación institucional. |
+| 24-09-2026 | El Product Owner continúa el desarrollo y autoriza avanzar el siguiente pendiente priorizado en la Línea Base Maestra. | Se inicia la conciliación del derecho único de ceremonia contra el expediente, con abonos, recibo idempotente, saldo autoritativo y bloqueo de autorización. QA-039 / `PMGM-QA-V070`; dev base `d7b931b323c191733a09f392c74759f7994e844b`, main intacta. QA física srv01 y UAT siguen pendientes por Issue #97. |
 
 **Última consolidación:** 13 de septiembre de 2026  
 **Repositorio:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  

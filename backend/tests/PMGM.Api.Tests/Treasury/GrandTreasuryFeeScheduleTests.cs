@@ -6,6 +6,24 @@ namespace PMGM.Api.Tests.Treasury;
 public sealed class GrandTreasuryFeeScheduleTests
 {
     [Theory]
+    [InlineData("initiation", 41000)]
+    [InlineData("wage_increase", 31000)]
+    [InlineData("exaltation", 41000)]
+    [InlineData("affiliation", 26000)]
+    [InlineData("incorporation", 31000)]
+    public void Resolves_decree_1759_ceremony_rights(string ceremonyType, decimal expected)
+    {
+        var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremonyType, new DateOnly(2026, 9, 24));
+        Assert.Equal((expected, "CLP"), right);
+    }
+
+    [Fact]
+    public void Does_not_apply_ceremony_right_before_decree_effective_date()
+    {
+        Assert.Null(GrandTreasuryFeeSchedule.ResolveCeremonyRight("initiation", new DateOnly(2025, 12, 31)));
+    }
+
+    [Theory]
     [InlineData(TreasuryCodes.LodgeFeeType.Normal, GrandTreasuryFeeSchedule.Santiago, 21000)]
     [InlineData(TreasuryCodes.LodgeFeeType.Spouse, GrandTreasuryFeeSchedule.Santiago, 13000)]
     [InlineData(TreasuryCodes.LodgeFeeType.Senior, GrandTreasuryFeeSchedule.Santiago, 10000)]

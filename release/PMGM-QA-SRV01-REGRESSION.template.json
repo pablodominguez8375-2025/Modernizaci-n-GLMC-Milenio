@@ -356,6 +356,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-039",
+      "category": "treasury",
+      "title": "Pago idempotente de derechos ceremoniales y bloqueo por saldo",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
