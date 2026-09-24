@@ -237,6 +237,7 @@ jobs:
       PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
       PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
       PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
+      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
 
     steps:
       - name: Checkout
