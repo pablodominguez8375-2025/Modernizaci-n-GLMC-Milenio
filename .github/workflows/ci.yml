@@ -219,7 +219,6 @@ jobs:
       PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
       PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
       PMGM_QA_USER_PASSWORD: ci_first_user_only
-      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
       PMGM_PILOT_HOSTNAME: localhost
       PMGM_PILOT_PUBLIC_URL: https://localhost:8443
       PMGM_PILOT_BIND_ADDRESS: 127.0.0.1
@@ -236,8 +235,6 @@ jobs:
       PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
       PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
       PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
-      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
-      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
 
     steps:
       - name: Checkout
@@ -377,6 +374,7 @@ jobs:
       PMGM_FIRST_MINIO_PASSWORD: ci_first_storage_only
       PMGM_FIRST_KEYCLOAK_ADMIN_PASSWORD: ci_first_keycloak_only
       PMGM_QA_USER_PASSWORD: ci_first_user_only
+      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
 
     steps:
       - name: Checkout
@@ -420,6 +418,7 @@ jobs:
       PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
       PMGM_PILOT_ADMIN_EMAIL: pilot-admin@ci.example.org
       PMGM_PILOT_ADMIN_PASSWORD: ci-pilot-user-secret-2026-004
+      PMGM_CI_COMPOSE_OVERRIDE: infrastructure/docker-compose.ci-s3mock.yml
 
     steps:
       - name: Checkout
