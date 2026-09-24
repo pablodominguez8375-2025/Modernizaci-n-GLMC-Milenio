@@ -130,7 +130,7 @@ jobs:
             http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ \
             frontend/visual-evidence
 
-          test "$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)" -ge 21
+          test "$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)" -ge 43
           printf 'RESPONSIVE VISUAL EVIDENCE OK\n'
 
       - name: Upload responsive visual evidence

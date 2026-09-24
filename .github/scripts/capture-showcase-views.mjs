@@ -39,6 +39,7 @@ const scenarios = [
 ]
 
 const viewports = [
+  { width: 360, height: 800, suffix: '360x800' },
   { width: 390, height: 844, suffix: '390x844' },
   { width: 768, height: 1024, suffix: '768x1024' },
   { width: 1440, height: 900, suffix: '1440x900' },
