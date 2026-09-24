@@ -256,6 +256,11 @@ jobs:
       - name: Validate first-implementation Docker Compose
         run: docker compose -f infrastructure/docker-compose.first.yml config
 
+      - name: Validate CI S3Mock overlays
+        run: |
+          docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml config
+          docker compose -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml config
+
       - name: Validate pilot Docker Compose
         shell: bash
         run: |
@@ -375,7 +380,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build and start first implementation
-        run: docker compose -f infrastructure/docker-compose.first.yml up -d --build
+        run: docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml up -d --build
 
       - name: Run authenticated stack smoke
         run: bash scripts/smoke-first-implementation.sh
@@ -385,11 +390,11 @@ jobs:
 
       - name: Show first-implementation logs on failure
         if: failure()
-        run: docker compose -f infrastructure/docker-compose.first.yml logs --no-color --tail=300
+        run: docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml logs --no-color --tail=300
 
       - name: Stop first implementation
         if: always()
-        run: docker compose -f infrastructure/docker-compose.first.yml down -v --remove-orphans
+        run: docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml down -v --remove-orphans
 
   pilot-operational-smoke:
     name: Pilot operational HTTPS and recovery
@@ -445,7 +450,7 @@ jobs:
         run: bash scripts/preflight-pilot.sh
 
       - name: Build and start operational pilot
-        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml up -d --build
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml up -d --build
 
       - name: Run pilot HTTPS/OIDC smoke
         run: bash scripts/smoke-pilot.sh
@@ -455,8 +460,8 @@ jobs:
 
       - name: Show pilot logs on failure
         if: failure()
-        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml logs --no-color --tail=400
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml logs --no-color --tail=400
 
       - name: Stop operational pilot
         if: always()
-        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml down -v --remove-orphans
+        run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml down -v --remove-orphans
