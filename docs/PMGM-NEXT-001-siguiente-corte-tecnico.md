@@ -251,3 +251,12 @@ Implementación en rama: API detallada con RUT/nombres, snapshot de cargos activ
 
 
 El incremento funcional autorizado añade cierres anuales inmutables, arrastre de saldo, reporte Debe/Haber/Neto y listado filtrable/exportable; revisar `PMGM-QA-V067` y QA-038. Se mantiene pendiente la validación física de QA por Issue #97.
+
+## 20. Ajuste responsive — tabla de Cuotas y Cobranzas
+
+El Showcase de `dev@8522b0dfd3e9db6eb964f6fdce5e8479c2a3525c` mostró un defecto que las comprobaciones anteriores no detectaban: los rótulos auxiliares de tarjeta aparecían junto a cada valor en escritorio y comprimían la tabla. La intención aprobada se conserva por tamaño de pantalla:
+
+- Hasta 900 px: seis rótulos y seis valores visibles dentro de tarjetas; acción de pago táctil y sin desbordamiento.
+- Sobre 900 px: los seis encabezados nativos de tabla y sus valores; rótulos auxiliares ocultos.
+
+Se actualiza `PMGM-QA-V069` y la aserción de Showcase para validar la composición correcta a 390×844, 768×1024 y 1440×900. El cambio es únicamente visual; no modifica montos, permisos, cálculos ni persistencia. Pruebas frontend, lint y build locales pasan; falta CI/Showcase exact-head en el PR. La QA física y UAT permanecen separadas en Issue #97.

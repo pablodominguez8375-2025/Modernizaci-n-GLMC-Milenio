@@ -238,6 +238,12 @@ async function assertTreasuryPaymentAction(viewport) {
         const rect = label.getBoundingClientRect();
         return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.right <= innerWidth + 1 && (label.textContent || '').trim().length > 0;
       }).length : 0,
+      tableHeaderVisible: (() => {
+        const header = table?.querySelector('thead');
+        const style = header ? getComputedStyle(header) : null;
+        const rect = header?.getBoundingClientRect();
+        return !!header && !!style && style.position !== 'absolute' && style.visibility !== 'hidden' && !!rect && rect.width > 1 && rect.height > 1;
+      })(),
       viewportWidth: innerWidth,
       pageScrollWidth: page.scrollWidth,
       overflowElements: [...document.querySelectorAll('body *')]
@@ -249,7 +255,11 @@ async function assertTreasuryPaymentAction(viewport) {
   })()`)
   if (!result?.rows) throw new Error(`No synthetic treasury rows available at ${viewport}.`)
   if (!result.actionVisible) throw new Error(`Registrar pago is not visible in Treasury collection at ${viewport}.`)
-  if (result.visibleDataValues !== 6 || result.visibleDataLabels !== 6) throw new Error(`Treasury data values/labels are hidden or clipped at ${viewport}: values=${result.visibleDataValues}, labels=${result.visibleDataLabels}.`)
+  const compactLayout = result.viewportWidth <= 900
+  const expectedLabels = compactLayout ? 6 : 0
+  if (result.visibleDataValues !== 6 || result.visibleDataLabels !== expectedLabels || result.tableHeaderVisible === compactLayout) {
+    throw new Error(`Treasury table layout is inconsistent at ${viewport}: values=${result.visibleDataValues}, labels=${result.visibleDataLabels}, header=${result.tableHeaderVisible}.`)
+  }
   if (result.cardRight > result.viewportWidth + 1) throw new Error(`Treasury collection card is clipped at the right edge at ${viewport}: right=${result.cardRight}, width=${result.viewportWidth}.`)
   if (result.touchSize < 44) throw new Error(`Registrar pago is below 44px touch height at ${viewport}: ${result.touchSize}px.`)
   if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}: ${JSON.stringify(result.overflowElements)}`)
