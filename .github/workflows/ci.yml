@@ -32,8 +32,8 @@ jobs:
     env:
       PMGM_TEST_POSTGRES: Host=localhost;Port=5432;Database=pmgm_ci;Username=pmgm;Password=pmgm_ci_only
       PMGM_TEST_S3_URL: http://127.0.0.1:9000
-      PMGM_TEST_S3_ACCESS_KEY: pmgm_minio_ci
-      PMGM_TEST_S3_SECRET_KEY: pmgm_minio_ci_secret_change_me
+      PMGM_TEST_S3_ACCESS_KEY: s3mock-ci
+      PMGM_TEST_S3_SECRET_KEY: s3mock-ci-secret-change-me
       PMGM_TEST_S3_BUCKET: pmgm-documents
       PMGM_TEST_CLAMAV_HOST: 127.0.0.1
       PMGM_TEST_CLAMAV_PORT: 3310
@@ -56,20 +56,19 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Start private MinIO for S3 integration
+      - name: Start S3-compatible mock for object-store integration
         shell: bash
         run: |
           set -euo pipefail
           docker run -d \
-            --name pmgm-minio-ci \
-            -p 9000:9000 \
-            -e MINIO_ROOT_USER="$PMGM_TEST_S3_ACCESS_KEY" \
-            -e MINIO_ROOT_PASSWORD="$PMGM_TEST_S3_SECRET_KEY" \
-            quay.io/minio/minio:latest server /data
+            --name pmgm-s3mock-ci \
+            -p 9000:9090 \
+            -e COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS="$PMGM_TEST_S3_BUCKET" \
+            adobe/s3mock:5.1.0
 
           ready=false
           for attempt in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:9000/minio/health/ready >/dev/null; then
+            if curl -fsS http://127.0.0.1:9000/favicon.ico >/dev/null; then
               ready=true
               break
             fi
@@ -77,17 +76,9 @@ jobs:
           done
 
           if [ "$ready" != "true" ]; then
-            docker logs pmgm-minio-ci
+            docker logs pmgm-s3mock-ci
             exit 1
           fi
-
-          curl --fail --silent --show-error --location \
-            https://dl.min.io/aistor/mc/release/linux-amd64/mc \
-            --output "$RUNNER_TEMP/minio-mc"
-          chmod +x "$RUNNER_TEMP/minio-mc"
-          "$RUNNER_TEMP/minio-mc" alias set pmgm "$PMGM_TEST_S3_URL" "$PMGM_TEST_S3_ACCESS_KEY" "$PMGM_TEST_S3_SECRET_KEY"
-          "$RUNNER_TEMP/minio-mc" mb --ignore-existing "pmgm/$PMGM_TEST_S3_BUCKET"
-          "$RUNNER_TEMP/minio-mc" anonymous set none "pmgm/$PMGM_TEST_S3_BUCKET"
 
       - name: Start ClamAV for malware integration
         shell: bash
@@ -154,9 +145,9 @@ jobs:
         if: always()
         run: docker rm -f pmgm-clamav-ci >/dev/null 2>&1 || true
 
-      - name: Stop MinIO
+      - name: Stop S3Mock
         if: always()
-        run: docker rm -f pmgm-minio-ci >/dev/null 2>&1 || true
+        run: docker rm -f pmgm-s3mock-ci >/dev/null 2>&1 || true
 
   frontend-build:
     name: Frontend lint and build
