@@ -227,6 +227,17 @@ async function assertTreasuryPaymentAction(viewport) {
       rows: rows.length,
       actionVisible: !!action && getComputedStyle(action).display !== 'none' && action.getBoundingClientRect().width > 0 && action.getBoundingClientRect().height > 0,
       touchSize: action ? action.getBoundingClientRect().height : 0,
+      cardRight: rows[0]?.getBoundingClientRect().right ?? 0,
+      visibleDataValues: rows[0] ? [...rows[0].querySelectorAll('.treasury-cell-value')].filter(value => {
+        const style = getComputedStyle(value);
+        const rect = value.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.right <= innerWidth + 1 && (value.textContent || '').trim().length > 0;
+      }).length : 0,
+      visibleDataLabels: rows[0] ? [...rows[0].querySelectorAll('.treasury-mobile-label')].filter(label => {
+        const style = getComputedStyle(label);
+        const rect = label.getBoundingClientRect();
+        return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.right <= innerWidth + 1 && (label.textContent || '').trim().length > 0;
+      }).length : 0,
       viewportWidth: innerWidth,
       pageScrollWidth: page.scrollWidth,
       overflowElements: [...document.querySelectorAll('body *')]
@@ -238,6 +249,8 @@ async function assertTreasuryPaymentAction(viewport) {
   })()`)
   if (!result?.rows) throw new Error(`No synthetic treasury rows available at ${viewport}.`)
   if (!result.actionVisible) throw new Error(`Registrar pago is not visible in Treasury collection at ${viewport}.`)
+  if (result.visibleDataValues !== 6 || result.visibleDataLabels !== 6) throw new Error(`Treasury data values/labels are hidden or clipped at ${viewport}: values=${result.visibleDataValues}, labels=${result.visibleDataLabels}.`)
+  if (result.cardRight > result.viewportWidth + 1) throw new Error(`Treasury collection card is clipped at the right edge at ${viewport}: right=${result.cardRight}, width=${result.viewportWidth}.`)
   if (result.touchSize < 44) throw new Error(`Registrar pago is below 44px touch height at ${viewport}: ${result.touchSize}px.`)
   if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}: ${JSON.stringify(result.overflowElements)}`)
 }
@@ -254,7 +267,7 @@ async function assertNoGlobalHorizontalOverflow(label, viewport) {
   }
 }
 
-async function capture(filePath) {
+async function capture(filePath, scrollSelector = null) {
   await evaluate(`(() => {
     window.scrollTo(0, 0);
     document.documentElement.scrollLeft = 0;
@@ -263,6 +276,25 @@ async function capture(filePath) {
     if (content) { content.scrollTop = 0; content.scrollLeft = 0; }
     const sidebar = document.querySelector('nav.sidebar');
     if (sidebar) { sidebar.scrollTop = 0; sidebar.scrollLeft = 0; }
+    const target = ${JSON.stringify(scrollSelector)} ? document.querySelector(${JSON.stringify(scrollSelector)}) : null;
+    if (target) {
+      target.scrollIntoView({ block: 'start', inline: 'nearest' });
+      const sidebarBottom = innerWidth <= 980
+        ? (document.querySelector('nav.sidebar')?.getBoundingClientRect().bottom || 0)
+        : 0;
+      const stickyBottom = Math.max(
+        document.querySelector('header.topbar')?.getBoundingClientRect().bottom || 0,
+        sidebarBottom
+      );
+      window.scrollBy(0, -(stickyBottom + 12));
+      if (${JSON.stringify(scrollSelector)} && target) {
+        const action = target.querySelector('button');
+        const actionRect = action?.getBoundingClientRect();
+        if (!actionRect || actionRect.top < stickyBottom || actionRect.bottom > innerHeight || actionRect.right > innerWidth) {
+          throw new Error('Treasury payment action is outside the visible viewport after positioning.');
+        }
+      }
+    }
   })()`)
   await delay(120)
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false })
@@ -312,7 +344,7 @@ try {
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
       const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
-      await capture(filePath)
+      await capture(filePath, scenario.treasuryCollection ? '.treasury-collection-table tbody tr:has(button)' : null)
       console.log(`captured ${path.basename(filePath)}`)
     }
   }
