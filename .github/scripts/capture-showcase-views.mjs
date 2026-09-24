@@ -337,7 +337,7 @@ try {
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
       const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
-      await capture(filePath, scenario.treasuryCollection ? '.treasury-collection-table tbody tr:first-child' : null)
+      await capture(filePath, scenario.treasuryCollection ? '.treasury-collection-table tbody tr:has(button)' : null)
       console.log(`captured ${path.basename(filePath)}`)
     }
   }
