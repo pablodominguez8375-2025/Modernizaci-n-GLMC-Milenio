@@ -251,3 +251,22 @@ Implementación en rama: API detallada con RUT/nombres, snapshot de cargos activ
 
 
 El incremento funcional autorizado añade cierres anuales inmutables, arrastre de saldo, reporte Debe/Haber/Neto y listado filtrable/exportable; revisar `PMGM-QA-V067` y QA-038. Se mantiene pendiente la validación física de QA por Issue #97.
+
+
+## 19. Corte posterior a PR #153 — decisión para multimoneda Perú
+
+Estado vivo verificado el 24-09-2026:
+
+- `dev`: `8522b0dfd3e9db6eb964f6fdce5e8479c2a3525c`.
+- `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin cambios.
+- PR #153 integrada; PMGM CI #1513, Showcase/Pages #769, QA Installable #407 y Pre-UAT #325 pasaron en el merge SHA.
+- Artefacto QA vigente: `proyecto-centenario-qa-srv01-8522b0dfd3e9db6eb964f6fdce5e8479c2a3525c`, digest `sha256:fbc88eec08890fa64777de93e8b2f88a414066f527367558497c42c4775dfb8f`, vence 24-10-2026 18:01 UTC.
+- Issue #97 permanece abierto: despliegue físico srv01, verificación de manifiesto/SOURCE_SHA, smoke, regresión y UAT están diferidos. Ningún gate de GitHub equivale a aprobación física.
+
+### Próxima línea funcional priorizada
+
+El Decreto N.º 1.759 fija la cuota ordinaria peruana en USD 6. El código actual conserva el importe en el catálogo informativo y bloquea generar planes/cargos para Perú, porque el modelo financiero existente no registra moneda y suma CLP directamente en cargos, pagos, Cuadro Gran Tesorería, caja y cierres.
+
+Se preparó la propuesta `docs/architecture/PMGM-ARCH-015-tesoreria-multimoneda-propuesta.md` y los criterios `docs/qa/PMGM-QA-V071-TESORERIA-MULTIMONEDA-PROPUESTA.md`. Ambos están pendientes de decisión del Sponsor/Product Owner y validación operativa de Gran Tesorería. La regla recomendada es mantener sublibros CLP/USD separados, moneda derivada en el backend, totales agrupados por moneda y ninguna conversión automática. El decreto consultado no define tarifa peruana para cónyuge, estudiante o tercera edad; mantenerlas bloqueadas.
+
+No iniciar la aplicación automática de cuotas de cesantía en el mismo incremento. Debe diseñarse por separado con su periodo, elegibilidad, evidencia, autorización y efecto contable; no convertir los importes de cesantía a categorías de tarifa ordinaria.
