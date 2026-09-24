@@ -17,16 +17,15 @@ public sealed class PrivacyRequestReadAuditPostgreSqlTests
         if (string.IsNullOrWhiteSpace(connectionString)) return;
 
         var cancellationToken = TestContext.Current.CancellationToken;
+        var correlationId = $"privacy-read-test-{Guid.NewGuid():N}";
         using var factory = new PmgmWebApplicationFactory(connectionString);
         using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Correlation-ID", correlationId);
 
-        int previousAuditCount;
         await using (var setupScope = factory.Services.CreateAsyncScope())
         {
             var db = setupScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
-            previousAuditCount = await db.AuditEvents.AsNoTracking()
-                .CountAsync(x => x.Action == "privacy.data_subject_request.listed", cancellationToken);
         }
 
         var response = await client.GetAsync("/api/privacy/data-subject-requests", cancellationToken);
@@ -36,13 +35,11 @@ public sealed class PrivacyRequestReadAuditPostgreSqlTests
 
         await using var verificationScope = factory.Services.CreateAsyncScope();
         var verificationDb = verificationScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
-        var auditRows = await verificationDb.AuditEvents.AsNoTracking()
-            .Where(x => x.Action == "privacy.data_subject_request.listed")
+        var metadata = await verificationDb.AuditEvents.AsNoTracking()
+            .Where(x => x.CorrelationId == correlationId)
             .Select(x => x.MetadataJson)
-            .ToListAsync(cancellationToken);
+            .SingleAsync(cancellationToken);
 
-        Assert.Equal(previousAuditCount + 1, auditRows.Count);
-        var metadata = Assert.Single(auditRows);
         Assert.NotNull(metadata);
         using var document = JsonDocument.Parse(metadata);
         var root = document.RootElement;
