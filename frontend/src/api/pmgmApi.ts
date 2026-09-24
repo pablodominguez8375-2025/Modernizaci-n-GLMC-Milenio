@@ -36,7 +36,7 @@ export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_ac
 export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number | null; workshopAmount: number | null; rateAvailable?: boolean; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
 export interface LodgeTreasurySummary { organizationId: string; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
 export interface LodgeTreasuryPayment { id:string; receiptNumber:string; amount:number; paymentMethod:'cash'|'transfer'|'deposit'|'other'; paymentDate:string; reference:string|null }
-export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplayName:string; memberAmount:number; monthlyFeeAmount?:number; maxPaymentAmount?:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; payments:LodgeTreasuryPayment[] }
+export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplayName:string; memberAmount:number; feeType?:LodgeFeeType; monthlyFeeAmount?:number; maxPaymentAmount?:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; payments:LodgeTreasuryPayment[] }
 export interface LodgeTreasuryExpense { id:string; organizationId:string; category:string; amount:number; expenseDate:string; description:string; evidenceReference:string|null; approvalStatus:'pending_approval'|'approved'; recordedBySubject:string; approvedBySubject:string|null; approvedAtUtc:string|null; recordedAtUtc:string }
 export interface LodgeTreasuryIncome { id:string; organizationId:string; category:string; amount:number; incomeDate:string; description:string; evidenceReference:string|null; recordedBySubject:string; recordedAtUtc:string }
 export interface LodgeCashSummary { organizationId:string; asOf:string; openingBalance:number; cumulativeIncome:number; cumulativeExpense:number; cumulativeBalance:number; monthIncome:number; monthExpense:number; monthBalance:number; pendingExpenses:number }
@@ -329,7 +329,6 @@ export class PmgmApiClient {
   private readonly mockDeathReplenishmentObligations = new Map<string, DeathReplenishmentObligation[]>()
   private mockReplenishmentRate: HospitalariaReplenishmentRate = { id: 'rate-demo', amountPerActiveMember: 1500, effectiveFrom: '2026-01-01', effectiveUntil: null, sourceReference: 'Configuración institucional demo' }
   private readonly mockLodgeFeePlans = new Map<string, LodgeFeePlan[]>()
-  private readonly mockLodgeTreasurySummaries = new Map<string, LodgeTreasurySummary>()
   private readonly mockLodgeTreasuryCharges = new Map<string, LodgeTreasuryCharge[]>()
   private readonly mockLodgeTreasuryExpenses = new Map<string, LodgeTreasuryExpense[]>()
   private readonly mockLodgeTreasuryIncomes = new Map<string, LodgeTreasuryIncome[]>()
@@ -376,17 +375,29 @@ export class PmgmApiClient {
   }
   async generateLodgeCharges(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
     if (this.useMocks) {
+      const key = `${organizationId}:${periodYear}-${periodMonth}`
+      const current = await this.getLodgeTreasuryCharges(organizationId, periodYear, periodMonth)
       const plans = (await this.getLodgeFeePlans(organizationId)).items
-      const normal = plans.find(item => item.feeType === 'normal')!; const student = plans.find(item => item.feeType === 'student')!; const senior = plans.find(item => item.feeType === 'senior')!;const spouse=plans.find(item=>item.feeType==='spouse')!
-      const memberExpected = normal.memberAmount * 14 + student.memberAmount * 3 + senior.memberAmount * 2 + spouse.memberAmount*3
-      const grandTreasuryExpected = (normal.grandTreasuryAmount??0) * 14 + (student.grandTreasuryAmount??0) * 3 + (senior.grandTreasuryAmount??0) * 2 + (spouse.grandTreasuryAmount??0)*3
-      const summary: LodgeTreasurySummary = { organizationId, periodYear, periodMonth, members: 22, memberExpected, collected: 438000, receivable: memberExpected - 438000, grandTreasuryExpected, workshopMarginProjected: memberExpected - grandTreasuryExpected, paid: 17, partial: 2, overdue: 3, trafficLight: 'amber' }
-      this.mockLodgeTreasurySummaries.set(`${organizationId}:${periodYear}-${periodMonth}`, summary); return { ...summary }
+      const charges = current.items.map(charge => {
+        if (!charge.feeType) throw new Error(`El cargo ficticio de ${charge.memberDisplayName} no tiene categoría de cuota.`)
+        const plan = mockEffectiveLodgeFeePlan(plans, charge.feeType, periodYear, periodMonth)
+        if (charge.feeType !== 'past_active' && !plan) throw new Error(`No hay una tarifa vigente para ${charge.feeType} en ${periodYear}-${String(periodMonth).padStart(2, '0')}.`)
+        const memberAmount = charge.feeType === 'past_active' ? charge.memberAmount : plan!.memberAmount
+        if (charge.paidAmount > memberAmount) throw new Error(`Los pagos registrados de ${charge.memberDisplayName} superan la tarifa vigente; no se regeneró el cargo.`)
+        const balance = memberAmount - charge.paidAmount
+        return { ...charge, memberAmount, monthlyFeeAmount: memberAmount, balance, status: balance === 0 ? 'paid' as const : charge.paidAmount > 0 ? 'partial' as const : 'pending' as const }
+      })
+      this.mockLodgeTreasuryCharges.set(key, charges)
+      return summarizeMockLodgeTreasury(organizationId, periodYear, periodMonth, charges, plans)
     }
     return this.postJson<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos/generar`, { periodYear, periodMonth, assignments: [] })
   }
   async getLodgeTreasurySummary(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
-    if (this.useMocks) return this.mockLodgeTreasurySummaries.get(`${organizationId}:${periodYear}-${periodMonth}`) ?? { organizationId, periodYear, periodMonth, members: 0, memberExpected: 0, collected: 0, receivable: 0, grandTreasuryExpected: 0, workshopMarginProjected: 0, paid: 0, partial: 0, overdue: 0, trafficLight: 'no_data' }
+    if (this.useMocks) {
+      const charges = await this.getLodgeTreasuryCharges(organizationId, periodYear, periodMonth)
+      const plans = (await this.getLodgeFeePlans(organizationId)).items
+      return summarizeMockLodgeTreasury(organizationId, periodYear, periodMonth, charges.items, plans)
+    }
     return this.request<LodgeTreasurySummary>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/resumen?year=${periodYear}&month=${periodMonth}`)
   }
   async getLodgeTreasuryCharges(organizationId:string,periodYear:number,periodMonth:number):Promise<{total:number;items:LodgeTreasuryCharge[]}>{
@@ -831,10 +842,30 @@ function defaultLodgeFeePlans(organizationId: string): LodgeFeePlan[] { return [
   { id: `fee-senior-${organizationId}`, organizationId, feeType: 'senior', memberAmount: 12000, grandTreasuryAmount: 10000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
   { id: `fee-spouse-${organizationId}`, organizationId, feeType: 'spouse', memberAmount: 15000, grandTreasuryAmount: 13000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
 ] }
+function mockEffectiveLodgeFeePlan(plans:LodgeFeePlan[],feeType:LodgeFeeType,periodYear:number,periodMonth:number):LodgeFeePlan|undefined{
+  const cutoff=new Date(Date.UTC(periodYear,periodMonth,0)).toISOString().slice(0,10)
+  return plans.filter(plan=>plan.feeType===feeType&&plan.effectiveFrom<=cutoff&&(plan.effectiveUntil===null||plan.effectiveUntil>=cutoff)).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+}
+function summarizeMockLodgeTreasury(organizationId:string,periodYear:number,periodMonth:number,charges:LodgeTreasuryCharge[],plans:LodgeFeePlan[]):LodgeTreasurySummary{
+  const memberExpected=charges.reduce((sum,charge)=>sum+charge.memberAmount,0)
+  const collected=charges.reduce((sum,charge)=>sum+charge.paidAmount,0)
+  const receivable=charges.reduce((sum,charge)=>sum+charge.balance,0)
+  const grandTreasuryExpected=charges.reduce((sum,charge)=>{
+    if(charge.feeType==='past_active')return sum
+    if(!charge.feeType)throw new Error(`El cargo ficticio de ${charge.memberDisplayName} no tiene categoría de cuota.`)
+    const plan=mockEffectiveLodgeFeePlan(plans,charge.feeType,periodYear,periodMonth)
+    if(!plan||plan.grandTreasuryAmount===null)throw new Error(`No hay aporte institucional vigente para ${charge.feeType} en ${periodYear}-${String(periodMonth).padStart(2, '0')}.`)
+    return sum+plan.grandTreasuryAmount
+  },0)
+  const paid=charges.filter(charge=>charge.status==='paid').length
+  const partial=charges.filter(charge=>charge.status==='partial').length
+  const pending=charges.filter(charge=>charge.status==='pending').length
+  return{organizationId,periodYear,periodMonth,members:charges.length,memberExpected,collected,receivable,grandTreasuryExpected,workshopMarginProjected:memberExpected-grandTreasuryExpected,paid,partial,overdue:pending,trafficLight:charges.length===0?'no_data':receivable===0?'green':collected>0?'amber':'red'}
+}
 function mockTreasuryCharges(organizationId:string):LodgeTreasuryCharge[]{return[
-  {id:`charge-1-${organizationId}`,memberId:'member-demo-001',memberDisplayName:'Andrea Demostrativa',memberAmount:26000,paidAmount:26000,balance:0,status:'paid',payments:[{id:'pay-demo-001',receiptNumber:'REC-DEMO-001',amount:26000,paymentMethod:'transfer',paymentDate:'2026-09-05',reference:'TRX-DEMO-001'}]},
-  {id:`charge-2-${organizationId}`,memberId:'member-demo-002',memberDisplayName:'Beatriz Demostrativa',memberAmount:26000,paidAmount:13000,balance:13000,status:'partial',payments:[{id:'pay-demo-002',receiptNumber:'REC-DEMO-002',amount:13000,paymentMethod:'cash',paymentDate:'2026-09-09',reference:null}]},
-  {id:`charge-3-${organizationId}`,memberId:'member-demo-003',memberDisplayName:'Carolina Demostrativa',memberAmount:16000,paidAmount:0,balance:16000,status:'pending',payments:[]}
+  {id:`charge-1-${organizationId}`,memberId:'member-demo-001',memberDisplayName:'Andrea Demostrativa',feeType:'normal',memberAmount:26000,monthlyFeeAmount:26000,paidAmount:26000,balance:0,status:'paid',payments:[{id:'pay-demo-001',receiptNumber:'REC-DEMO-001',amount:26000,paymentMethod:'transfer',paymentDate:'2026-09-05',reference:'TRX-DEMO-001'}]},
+  {id:`charge-2-${organizationId}`,memberId:'member-demo-002',memberDisplayName:'Beatriz Demostrativa',feeType:'normal',memberAmount:26000,monthlyFeeAmount:26000,paidAmount:13000,balance:13000,status:'partial',payments:[{id:'pay-demo-002',receiptNumber:'REC-DEMO-002',amount:13000,paymentMethod:'cash',paymentDate:'2026-09-09',reference:null}]},
+  {id:`charge-3-${organizationId}`,memberId:'member-demo-003',memberDisplayName:'Carolina Demostrativa',feeType:'spouse',memberAmount:15000,monthlyFeeAmount:15000,paidAmount:0,balance:15000,status:'pending',payments:[]}
 ]}
 function mockTreasuryExpenses(organizationId:string):LodgeTreasuryExpense[]{return[
   {id:`expense-1-${organizationId}`,organizationId,category:'Servicios',amount:42000,expenseDate:'2026-09-12',description:'Servicio operativo del Taller · dato ficticio',evidenceReference:'PDF-RESPALDO-DEMO-001',approvalStatus:'pending_approval',recordedBySubject:'tesoreria-demo',approvedBySubject:null,approvedAtUtc:null,recordedAtUtc:'2026-09-12T18:00:00Z'}

@@ -2,21 +2,34 @@ import { describe, expect, it } from 'vitest'
 import { PmgmApiClient } from './pmgmApi'
 
 describe('Tesorería del Taller en demostración', () => {
-  it('separa cobro, obligación a Gran Tesorería y saldo mensual', async () => {
+  it('alinea resumen, cargos ficticios, decreto y cuota de cónyuge configurable', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
     const plans = await api.getLodgeFeePlans(organizationId)
     expect(plans.items.map(item => item.feeType)).toEqual(['normal', 'student', 'senior', 'spouse'])
     expect(plans.items.find(item=>item.feeType==='student')?.grandTreasuryAmount).toBe(8000)
     expect(plans.items.find(item=>item.feeType==='spouse')?.grandTreasuryAmount).toBe(13000)
-    expect(plans.items[0].memberAmount).toBeGreaterThan(plans.items[0].grandTreasuryAmount??0)
+    expect(plans.items.find(item=>item.feeType==='spouse')?.memberAmount).toBe(15000)
 
-    const summary = await api.generateLodgeCharges(organizationId, 2026, 9)
-    expect(summary.members).toBe(22)
-    expect(summary.memberExpected).toBeGreaterThan(summary.grandTreasuryExpected)
-    expect(summary.receivable).toBe(summary.memberExpected - summary.collected)
-    expect(summary.workshopMarginProjected).toBe(summary.memberExpected - summary.grandTreasuryExpected)
-    expect(summary.trafficLight).toBe('amber')
+    const initial = await api.getLodgeTreasurySummary(organizationId, 2026, 9)
+    expect(initial).toMatchObject({ members: 3, memberExpected: 67000, collected: 39000, receivable: 28000, grandTreasuryExpected: 55000, workshopMarginProjected: 12000, paid: 1, partial: 1, overdue: 1 })
+    const charges = await api.getLodgeTreasuryCharges(organizationId, 2026, 9)
+    const spouse = charges.items.find(item => item.feeType === 'spouse')
+    expect(spouse).toMatchObject({ memberAmount: 15000, monthlyFeeAmount: 15000, paidAmount: 0, balance: 15000, status: 'pending' })
+
+    const generated = await api.generateLodgeCharges(organizationId, 2026, 9)
+    expect(generated).toEqual(initial)
+    expect(await api.getLodgeTreasurySummary(organizationId, 2026, 9)).toEqual(initial)
+    expect((await api.getLodgeTreasuryReport(organizationId, '2026-09-01', '2026-09-30')).income).toBe(39000)
+  })
+
+  it('reconcilia el resumen después de un pago completo de cónyuge', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    const organizationId = '23232323-2323-2323-2323-232323232323'
+    const charges = await api.getLodgeTreasuryCharges(organizationId, 2026, 9)
+    const spouse = charges.items.find(item => item.feeType === 'spouse')!
+    await api.addLodgeTreasuryPayment(spouse.id, { amount: 15000, paymentMethod: 'transfer', paymentDate: '2026-09-21', reference: 'TRX-SPOUSE-001' })
+    expect(await api.getLodgeTreasurySummary(organizationId, 2026, 9)).toMatchObject({ members: 3, memberExpected: 67000, collected: 54000, receivable: 13000, grandTreasuryExpected: 55000, paid: 2, partial: 1, overdue: 0 })
   })
 
   it('registra cobranza, comprobante y autorización separada del egreso', async () => {
