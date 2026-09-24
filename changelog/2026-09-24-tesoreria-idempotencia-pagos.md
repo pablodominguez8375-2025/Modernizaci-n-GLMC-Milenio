@@ -4,7 +4,7 @@
 - Se persiste una clave de idempotencia por cargo, con índice único para evitar pagos duplicados ante reintentos.
 - Repetir la misma solicitud devuelve el comprobante y saldo del pago ya registrado; reutilizar la clave con datos distintos produce conflicto.
 - La interfaz conserva la clave durante errores de red y genera una nueva al cambiar los datos del pago o seleccionar otro cargo.
-- El gate de integración S3 usa S3Mock versionado y un bucket inicial; evita depender de imágenes Quay que el runner rechaza. La prueba valida las operaciones usadas por el almacén (subir, leer, consultar y borrar); MinIO de srv01 continúa pendiente de validación física.
+- Los jobs CI de S3 usan S3Mock 5.1.0 con bucket inicial, evitando pulls de Quay denegados en los runners. La suite verifica subida, lectura, consulta y borrado; los smoke funcionales usan el mismo servicio de prueba. El compose normal de despliegue conserva MinIO; su validación física en srv01 sigue pendiente.
 
 ## Control contable
 Evita duplicar ingresos y emitir más de un comprobante cuando el servidor procesa un pago, pero el cliente no alcanza a recibir la respuesta.
