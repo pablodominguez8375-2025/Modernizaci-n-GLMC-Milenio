@@ -19,6 +19,10 @@ Centenario construye un ecosistema digital único para la Gran Logia Mixta de Ch
 
 Principio de ejecución aprobado: **QA primero; expansión modular después**.
 
+### Requisito permanente de responsividad
+
+Todas las páginas, módulos y flujos del sistema deben ser responsivos y fáciles de utilizar en computador, tablet y teléfono celular. Navegación, tablas, formularios y acciones deben adaptarse a cada tamaño de pantalla; las acciones operativas principales deben permanecer visibles, no debe existir desplazamiento horizontal global y los controles deben ser aptos para interacción táctil. Cada módulo debe validarse con la matriz de resoluciones y la evidencia visual establecidas en `docs/ui/PMGM-UI-001-identidad-visual-responsive.md`; la validación de una sola vista no certifica las demás.
+
 Flujo oficial de trabajo:
 
 `Requisito → Diseño → Aprobación → Desarrollo → CI/QA → UAT → Documentación → Promoción a main`
