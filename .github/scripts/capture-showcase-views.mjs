@@ -23,6 +23,7 @@ const scenarios = [
     requiredSidebar: ['Mi ficha', 'Mi calendario', 'Notificaciones', 'Insinuados publicados', 'Tesorería', 'Biblioteca Virtual'],
     forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Carga de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
     requiredTabs: ['Resumen', 'Cuotas y Cobranzas', 'Ingresos y Egresos', 'Cuadro mensual', 'Configuraciones', 'Reportes'],
+    treasuryCollection: true,
   },
   {
     slug: 'tesoreria-autorizacion-venerable',
@@ -39,6 +40,7 @@ const scenarios = [
 
 const viewports = [
   { width: 390, height: 844, suffix: '390x844' },
+  { width: 768, height: 1024, suffix: '768x1024' },
   { width: 1440, height: 900, suffix: '1440x900' },
 ]
 
@@ -200,6 +202,41 @@ async function assertNavigation(scenario) {
   }
 }
 
+async function openTreasuryCollection() {
+  const clicked = await evaluate(`(() => {
+    const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+    const tab = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')]
+      .find(candidate => normalize(candidate.querySelector('span')?.textContent) === 'Cuotas y Cobranzas');
+    if (!tab) return false;
+    tab.click();
+    return true;
+  })()`)
+  if (!clicked) throw new Error('Treasury tab not found: Cuotas y Cobranzas')
+  await waitForExpression(`[...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')].some(tab => tab.getAttribute('aria-selected') === 'true' && (tab.textContent || '').includes('Cuotas y Cobranzas'))`, 'active treasury collection tab')
+  await waitForExpression(`!!document.querySelector('.treasury-collection-table .treasury-table')`, 'treasury collection table')
+  await delay(300)
+}
+
+async function assertTreasuryPaymentAction(viewport) {
+  const result = await evaluate(`(() => {
+    const table = document.querySelector('.treasury-collection-table');
+    const rows = [...(table?.querySelectorAll('tbody tr') || [])];
+    const action = rows.flatMap(row => [...row.querySelectorAll('button')]).find(button => (button.textContent || '').trim() === 'Registrar pago');
+    const page = document.documentElement;
+    return {
+      rows: rows.length,
+      actionVisible: !!action && getComputedStyle(action).display !== 'none' && action.getBoundingClientRect().width > 0 && action.getBoundingClientRect().height > 0,
+      touchSize: action ? action.getBoundingClientRect().height : 0,
+      viewportWidth: innerWidth,
+      pageScrollWidth: page.scrollWidth,
+    };
+  })()`)
+  if (!result?.rows) throw new Error(`No synthetic treasury rows available at ${viewport}.`)
+  if (!result.actionVisible) throw new Error(`Registrar pago is not visible in Treasury collection at ${viewport}.`)
+  if (result.touchSize < 44) throw new Error(`Registrar pago is below 44px touch height at ${viewport}: ${result.touchSize}px.`)
+  if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}.`)
+}
+
 async function assertNoGlobalHorizontalOverflow(label, viewport) {
   const metrics = await evaluate(`(() => {
     const root = document.documentElement;
@@ -263,8 +300,13 @@ try {
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
       await assertNavigation(scenario)
-      if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
-      const filePath = path.join(outputDir, `${scenario.slug}-${viewport.suffix}.png`)
+      if (scenario.treasuryCollection) {
+        await openTreasuryCollection()
+        await assertTreasuryPaymentAction(viewport.suffix)
+      }
+      if (viewport.width <= 768) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
+      const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
+      const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
       await capture(filePath)
       console.log(`captured ${path.basename(filePath)}`)
     }
