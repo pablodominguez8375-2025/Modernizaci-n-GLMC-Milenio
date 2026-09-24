@@ -179,6 +179,33 @@ textarea:focus-visible {
 }
 
 @media (max-width: 980px) {
+  .topbar {
+    padding-inline: 14px;
+    gap: 10px;
+  }
+
+  .topbar-meta {
+    min-width: 0;
+    max-width: 62%;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .topbar-meta .environment-badge {
+    display: none;
+  }
+
+  .demo-profile-switcher {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .demo-profile-switcher select {
+    min-width: 90px;
+    max-width: 120px;
+  }
+
   .workspace {
     grid-template-columns: minmax(0, 1fr);
   }
