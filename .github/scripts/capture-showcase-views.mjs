@@ -39,6 +39,7 @@ const scenarios = [
 ]
 
 const viewports = [
+  { width: 360, height: 800, suffix: '360x800' },
   { width: 390, height: 844, suffix: '390x844' },
   { width: 768, height: 1024, suffix: '768x1024' },
   { width: 1440, height: 900, suffix: '1440x900' },
@@ -388,7 +389,12 @@ try {
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
       const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
-      await capture(filePath, scenario.treasuryCollection ? '.treasury-collection-table tbody tr:has(button)' : null)
+      const evidenceTarget = scenario.treasuryCollection
+        ? '.treasury-collection-table tbody tr:has(button)'
+        : scenario.grandTreasuryRights
+          ? '.ceremony-right-card form'
+          : null
+      await capture(filePath, evidenceTarget)
       console.log(`captured ${path.basename(filePath)}`)
     }
   }
