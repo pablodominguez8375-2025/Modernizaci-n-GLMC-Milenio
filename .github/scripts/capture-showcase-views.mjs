@@ -392,7 +392,7 @@ try {
       const evidenceTarget = scenario.treasuryCollection
         ? '.treasury-collection-table tbody tr:has(button)'
         : scenario.grandTreasuryRights
-          ? '.ceremony-right-card'
+          ? '.ceremony-right-card form'
           : null
       await capture(filePath, evidenceTarget)
       console.log(`captured ${path.basename(filePath)}`)

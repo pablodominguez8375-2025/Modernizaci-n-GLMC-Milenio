@@ -96,7 +96,7 @@ El artefacto visual contiene actualmente **43 capturas PNG**:
 
 **Mi ficha** conserva su matriz amplia en 360 × 800, 390 × 844, 768 × 1024, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080. En la matriz operativa se verifica que la acción «Registrar pago» sea visible y táctil, que las seis columnas/etiquetas permanezcan legibles según el breakpoint y que no exista scroll horizontal global. El flujo de Derechos ceremoniales valida la tarjeta, los cuatro campos del formulario, el botón táctil y el borde derecho dentro del viewport.
 
-El workflow exige al menos 43 capturas antes de considerar satisfactoria la validación visual automática. Cada captura se guarda después de abrir el módulo mediante la navegación real y de ejecutar las aserciones de contenido/acción correspondientes. En Cuotas y Cobranzas y Derechos ceremoniales, la captura desplaza la tarjeta para mostrar la acción de pago; el gate falla si el botón queda oculto por la navegación, recortado o fuera del viewport. Los PNG se conservan temporalmente como artefacto de GitHub Actions para revisión de PR y UAT.
+El workflow exige al menos 43 capturas antes de considerar satisfactoria la validación visual automática. Cada captura se guarda después de abrir el módulo mediante la navegación real y de ejecutar las aserciones de contenido/acción correspondientes. En Cuotas y Cobranzas y Derechos ceremoniales, la captura posiciona la fila o formulario de pago para mostrar su acción; el gate falla si el botón queda oculto por la navegación, recortado o fuera del viewport. Los PNG se conservan temporalmente como artefacto de GitHub Actions para revisión de PR y UAT.
 
 ## Validación visual observada
 
