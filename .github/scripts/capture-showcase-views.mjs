@@ -279,9 +279,12 @@ async function capture(filePath, scrollSelector = null) {
     const target = ${JSON.stringify(scrollSelector)} ? document.querySelector(${JSON.stringify(scrollSelector)}) : null;
     if (target) {
       target.scrollIntoView({ block: 'start', inline: 'nearest' });
+      const sidebarBottom = innerWidth <= 980
+        ? (document.querySelector('nav.sidebar')?.getBoundingClientRect().bottom || 0)
+        : 0;
       const stickyBottom = Math.max(
         document.querySelector('header.topbar')?.getBoundingClientRect().bottom || 0,
-        document.querySelector('nav.sidebar')?.getBoundingClientRect().bottom || 0
+        sidebarBottom
       );
       window.scrollBy(0, -(stickyBottom + 12));
     }
