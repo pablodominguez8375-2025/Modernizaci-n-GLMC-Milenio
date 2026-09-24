@@ -267,7 +267,7 @@ async function assertNoGlobalHorizontalOverflow(label, viewport) {
   }
 }
 
-async function capture(filePath) {
+async function capture(filePath, scrollSelector = null) {
   await evaluate(`(() => {
     window.scrollTo(0, 0);
     document.documentElement.scrollLeft = 0;
@@ -276,6 +276,15 @@ async function capture(filePath) {
     if (content) { content.scrollTop = 0; content.scrollLeft = 0; }
     const sidebar = document.querySelector('nav.sidebar');
     if (sidebar) { sidebar.scrollTop = 0; sidebar.scrollLeft = 0; }
+    const target = ${JSON.stringify(scrollSelector)} ? document.querySelector(${JSON.stringify(scrollSelector)}) : null;
+    if (target) {
+      target.scrollIntoView({ block: 'start', inline: 'nearest' });
+      const stickyBottom = Math.max(
+        document.querySelector('header.topbar')?.getBoundingClientRect().bottom || 0,
+        document.querySelector('nav.sidebar')?.getBoundingClientRect().bottom || 0
+      );
+      window.scrollBy(0, -(stickyBottom + 12));
+    }
   })()`)
   await delay(120)
   const screenshot = await cdp('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: false })
@@ -325,7 +334,7 @@ try {
       if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
       const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
-      await capture(filePath)
+      await capture(filePath, scenario.treasuryCollection ? '.treasury-collection-table tbody tr:first-child' : null)
       console.log(`captured ${path.basename(filePath)}`)
     }
   }
