@@ -1,5 +1,11 @@
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Actualización de continuidad — 24-09-2026
+
+El pago de derechos ceremoniales por expediente descrito en el checkpoint histórico de la Línea Base ya está integrado en `dev` mediante `8522b0dfd3e9db6eb964f6fdce5e8479c2a3525c`; el estado vivo se debe leer desde `dev@42a415ea9dbd235bde58454a5789eb352f952b06`. Los gates actuales de CI, Showcase/Pages, QA Installable y Pre-UAT están SUCCESS para ese SHA. El artifact QA #10829506011 confirma el SHA fuente en `BUILD-INFO.txt`; el Showcase artifact #10828807432 incluye evidencia de Gran Tesorería en 390×844, 768×1024 y 1440×900.
+
+Issue #97 sigue abierto. La tarea siguiente es completar la validación física ya pendiente —QA-001..QA-039, smoke y evidencia en `srv01`— cuando el entorno se reactive; Pages y CI no la sustituyen. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta. No abrir otro incremento funcional sin una autorización expresa con alcance concreto.
+
 ## 1. Hito operacional bloqueante vigente: QA srv01
 
 Issue #97 continúa abierto. El despliegue físico en `srv01` sigue siendo obligatorio antes de UAT/promoción a `main`.
