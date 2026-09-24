@@ -25,6 +25,7 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 
 ### Registro de actualizaciones
 
+| 24-09-2026 | El Product Owner define como capacidad permanente aplicar contabilidad, auditoría contable e ingeniería de procesos a las mejoras del Proyecto Centenario. | Revisar integridad y clasificación de ingresos/egresos, conciliación y rendición, segregación de funciones, trazabilidad, controles preventivos/detectivos y eficiencia del flujo; documentar supuestos, evidencia y riesgos, y separar recomendaciones técnicas de reglas que requieran validación institucional. Esta perspectiva complementa, no reemplaza, las fuentes normativas/documentales ni la revisión profesional aplicable. |
 | Fecha | Conversación / decisión | Resultado |
 |---|---|---|
 | 13-09-2026 | Se solicita centralizar todas las conversaciones del proyecto en un único documento para preservar continuidad. | Regla permanente adoptada; este documento queda como registro maestro. |
