@@ -171,6 +171,7 @@ public static class PrivacyEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IAuditService audit,
         CancellationToken cancellationToken)
     {
         if (!access.CanManagePrivacy(httpContext.User))
@@ -202,6 +203,16 @@ public static class PrivacyEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        audit.Add(
+            httpContext,
+            "privacy.data_subject_request.listed",
+            nameof(DataSubjectRequest),
+            "collection",
+            null,
+            AuditResults.Success,
+            new { status, resultCount = rows.Count });
+
+        await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(rows);
     }
 
