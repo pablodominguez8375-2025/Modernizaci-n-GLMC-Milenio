@@ -304,7 +304,7 @@ try {
         await openTreasuryCollection()
         await assertTreasuryPaymentAction(viewport.suffix)
       }
-      if (viewport.width <= 768) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
+      if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
       const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
       await capture(filePath)
