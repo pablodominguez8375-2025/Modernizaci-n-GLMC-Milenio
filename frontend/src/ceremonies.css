@@ -33,5 +33,13 @@
 .validation-form { display: grid; grid-template-columns: minmax(150px, .7fr) minmax(220px, 1fr) auto; gap: 10px; align-items: end; padding: 0 13px 13px; }
 .validation-notes { grid-column: 1 / -1; }
 .validation-notes textarea { min-height: 64px; }
+.ceremony-right-summary { border: 1px solid var(--line); border-radius: 11px; padding: 12px; background: var(--surface-soft); display: grid; gap: 10px; }
+.ceremony-right-summary > div:first-child { display: grid; gap: 4px; }
+.ceremony-right-summary strong { color: var(--ink); font-size: 12px; }
+.ceremony-right-summary span { color: var(--muted); font-size: 10px; }
+.ceremony-right-summary dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.ceremony-right-summary dl > div { display: grid; gap: 4px; }
+.ceremony-right-summary dt { color: var(--muted); font-size: 10px; }
+.ceremony-right-summary dd { margin: 0; font-weight: 800; font-size: 12px; }
 @media (max-width: 900px) { .ceremony-filters, .requirement-grid { grid-template-columns: 1fr; } .ceremony-meta { grid-template-columns: 1fr 1fr; } .validation-form { grid-template-columns: 1fr 1fr; } .validation-form .secondary-action { grid-column: 1 / -1; } }
-@media (max-width: 640px) { .ceremony-card-heading { display: grid; } .ceremony-state-stack { justify-content: flex-start; } .ceremony-meta, .validation-form { grid-template-columns: 1fr; } .validation-form .secondary-action { grid-column: auto; } .ceremony-actions > button { width: 100%; } }
+@media (max-width: 640px) { .ceremony-card-heading { display: grid; } .ceremony-state-stack { justify-content: flex-start; } .ceremony-meta, .validation-form, .ceremony-right-summary dl { grid-template-columns: 1fr; } .validation-form .secondary-action { grid-column: auto; } .ceremony-actions > button { width: 100%; } }

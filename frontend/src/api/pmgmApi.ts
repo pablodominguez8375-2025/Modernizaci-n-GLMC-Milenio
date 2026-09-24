@@ -80,7 +80,10 @@ export interface GrandSecretariatCeremonyQueueItem {
 export interface GrandSecretariatCeremonyQueueResponse { total: number; items: GrandSecretariatCeremonyQueueItem[] }
 export interface CeremonyQueueRequirement { code: string; name: string; status: string; reason: string }
 export interface CeremonyQueuePublication { status: string; requiredDays: number; completedDays: number; publishedFromUtc: string; publishedUntilUtc: string | null }
-export interface CeremonyQueueEligibility { status: string; canAuthorize: boolean; requirements: CeremonyQueueRequirement[]; publication: CeremonyQueuePublication | null }
+export interface CeremonyRightSummary { amount: number; currency: string; paid: number; balance: number; source: string }
+export interface TreasuryCeremonyRightItem extends CeremonyRightSummary { id: string; organizationId: string; organizationName: string; organizationNumber: string | null; ceremonyType: CeremonyType; proposedDate: string | null; subjectDisplayName: string }
+export interface TreasuryCeremonyRightsResponse { total: number; items: TreasuryCeremonyRightItem[] }
+export interface CeremonyQueueEligibility { status: string; canAuthorize: boolean; requirements: CeremonyQueueRequirement[]; publication: CeremonyQueuePublication | null; ceremonyRight?: CeremonyRightSummary | null }
 export interface CeremonyQueueActions { canValidateInternalAffairs: boolean; canPublishCandidate: boolean; canAuthorize: boolean }
 export interface CeremonyReviewQueueItem {
   id: string
@@ -280,22 +283,24 @@ const defaultMockCeremonies: GrandSecretariatCeremonyQueueItem[] = [
 const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
   {
     id: 'eeeeeeee-1111-1111-1111-111111111111', organizationId: defaultMockOrganizations[0].id, organizationName: defaultMockOrganizations[0].name, organizationNumber: '1', ceremonyType: 'wage_increase', subjectDisplayName: 'Hermano Demostrativo', proposedDate: '2026-09-25', status: 'under_review', createdAtUtc: '2026-09-08T13:00:00Z',
-    eligibility: { status: 'complies', canAuthorize: true, publication: null, requirements: [
+    eligibility: { status: 'does_not_comply', canAuthorize: false, publication: null, ceremonyRight: { amount: 31000, currency: 'CLP', paid: 10000, balance: 21000, source: 'Decreto N.º 1.759 — cuotas 2026' }, requirements: [
       { code: 'regimen_interior', name: 'Régimen Interior', status: 'approved', reason: 'Aprobación vigente registrada.' },
       { code: 'gran_tesoreria', name: 'Gran Tesorería', status: 'approved', reason: 'El Taller se encuentra al día para la fecha evaluada.' },
       { code: 'gran_hospitalaria', name: 'Gran Hospitalaria', status: 'approved', reason: 'El Taller se encuentra al día en reposiciones u obligaciones hospitalarias.' },
+      { code: 'ceremony_right_payment', name: 'Derecho de ceremonia', status: 'rejected', reason: 'El derecho de ceremonia registra saldo pendiente en Tesorería.' },
     ] },
-    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true },
+    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: false },
   },
   {
     id: 'eeeeeeee-2222-2222-2222-222222222222', organizationId: defaultMockOrganizations[1].id, organizationName: defaultMockOrganizations[1].name, organizationNumber: '23', ceremonyType: 'initiation', subjectDisplayName: 'Persona Demostrativa Uno', proposedDate: '2026-10-03', status: 'under_review', createdAtUtc: '2026-09-08T13:15:00Z',
-    eligibility: { status: 'does_not_comply', canAuthorize: false, publication: { status: 'published', requiredDays: 20, completedDays: 13, publishedFromUtc: '2026-08-26T15:00:00Z', publishedUntilUtc: null }, requirements: [
+    eligibility: { status: 'does_not_comply', canAuthorize: false, publication: { status: 'published', requiredDays: 20, completedDays: 13, publishedFromUtc: '2026-08-26T15:00:00Z', publishedUntilUtc: null }, ceremonyRight: { amount: 41000, currency: 'CLP', paid: 0, balance: 41000, source: 'Decreto N.º 1.759 — cuotas 2026' }, requirements: [
       { code: 'regimen_interior', name: 'Régimen Interior', status: 'rejected', reason: 'No existe una aprobación habilitante de Régimen Interior.' },
       { code: 'gran_tesoreria', name: 'Gran Tesorería', status: 'approved', reason: 'El Taller se encuentra al día para la fecha evaluada.' },
       { code: 'gran_hospitalaria', name: 'Gran Hospitalaria', status: 'approved', reason: 'El Taller se encuentra al día en reposiciones u obligaciones hospitalarias.' },
+      { code: 'ceremony_right_payment', name: 'Derecho de ceremonia', status: 'rejected', reason: 'El derecho de ceremonia registra saldo pendiente en Tesorería.' },
       { code: 'publicacion_insinuado', name: 'Publicación del insinuado', status: 'rejected', reason: 'Se requieren 20 días de publicación y se han cumplido 13 días válidos.' },
     ] },
-    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: true },
+    actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: false },
   },
 ]
 
@@ -320,6 +325,7 @@ export class PmgmApiClient {
   private readonly mockInterviewDocuments = new Map<string, { file: Blob; fileName: string; metadata: CandidateInterviewEvidence }>()
   private readonly mockCeremonies = defaultMockCeremonies.map(item => ({ ...item }))
   private readonly mockReviewCeremonies = defaultMockReviewCeremonies.map(cloneCeremonyQueueItem)
+  private readonly mockCeremonyRightPayments = new Map<string, { payload: string; receiptNumber: string; paidTotal: number; balance: number }>()
   private readonly mockTreasury = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'treasury-demo-1', organizationId: defaultMockOrganizations[0].id, scope: 'organization', status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'TES-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:00:00Z' }]])
   private readonly mockTreasuryStatements = new Map<string, TreasuryStatement>()
   private readonly mockHospitalaria = new Map<string, WorkshopRegularitySnapshot>([[defaultMockOrganizations[0].id, { id: 'hospitalaria-demo-1', organizationId: defaultMockOrganizations[0].id, status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO-001', notes: null, recordedAtUtc: '2026-09-08T12:05:00Z' }]])
@@ -474,6 +480,39 @@ export class PmgmApiClient {
   async getCeremonyReviewQueue(): Promise<CeremonyReviewQueueResponse> {
     if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
     return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
+  }
+  async getTreasuryCeremonyRights(): Promise<TreasuryCeremonyRightsResponse> {
+    if (this.useMocks) {
+      const items = this.mockReviewCeremonies.filter(item => (item.eligibility.ceremonyRight?.balance ?? 0) > 0).map(item => ({
+        id: item.id, organizationId: item.organizationId, organizationName: item.organizationName, organizationNumber: item.organizationNumber,
+        ceremonyType: item.ceremonyType, proposedDate: item.proposedDate, subjectDisplayName: item.subjectDisplayName,
+        ...item.eligibility.ceremonyRight!
+      }))
+      return { total: items.length, items }
+    }
+    return this.request<TreasuryCeremonyRightsResponse>('/api/tesoreria/derechos-ceremoniales')
+  }
+  async recordCeremonyRightPayment(ceremonyRequestId: string, payload: { amount: number; paymentMethod: 'cash'|'transfer'|'deposit'; paymentDate: string; reference: string|null; idempotencyKey: string }): Promise<{ receiptNumber: string; paidTotal: number; balance: number }> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      const paymentKey = `${ceremonyRequestId}:${payload.idempotencyKey}`
+      const payloadFingerprint = JSON.stringify({ amount: payload.amount, paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, reference: payload.reference })
+      const existing = this.mockCeremonyRightPayments.get(paymentKey)
+      if (existing) {
+        if (existing.payload !== payloadFingerprint) throw new Error('El identificador de reintento ya se usó con datos distintos.')
+        return { receiptNumber: existing.receiptNumber, paidTotal: existing.paidTotal, balance: existing.balance }
+      }
+      const right = item.eligibility.ceremonyRight
+      if (!right || payload.amount <= 0 || payload.amount > right.balance) throw new Error('El monto supera el saldo del derecho de ceremonia.')
+      right.paid += payload.amount; right.balance = Math.max(0, right.amount - right.paid)
+      const requirement = item.eligibility.requirements.find(value => value.code === 'ceremony_right_payment')
+      if (requirement) { requirement.status = right.balance === 0 ? 'approved' : 'rejected'; requirement.reason = right.balance === 0 ? 'El derecho de ceremonia está pagado según el libro de Tesorería.' : 'El derecho de ceremonia registra saldo pendiente en Tesorería.' }
+      recomputeMockEligibility(item)
+      const receiptNumber = `CER-DEMO-${payload.paymentDate.replaceAll('-', '')}-${String(this.mockCeremonyRightPayments.size + 1).padStart(4, '0')}`
+      this.mockCeremonyRightPayments.set(paymentKey, { payload: payloadFingerprint, receiptNumber, paidTotal: right.paid, balance: right.balance })
+      return { receiptNumber, paidTotal: right.paid, balance: right.balance }
+    }
+    return this.postJson(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/derecho/pagos`, payload)
   }
   async setCeremonyInternalAffairsValidation(ceremonyRequestId: string, payload: CeremonyInternalAffairsValidationRequest): Promise<unknown> {
     if (this.useMocks) {
@@ -875,8 +914,8 @@ function mockRegularitySnapshot(organizationId: string, payload: WorkshopRegular
 function mockTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): TreasuryStatement { return { id: crypto.randomUUID(), organizationId, periodYear: payload.periodYear, periodMonth: payload.periodMonth, cutoffDate: payload.cutoffDate, status: 'draft', sourceReference: payload.sourceReference ?? null, expectedAmount: 0, transferAmount: 0, depositAmount: 0, paidAmount: 0, differenceAmount: 0, unresolvedIdentities: 0, feeBreakdown:[], lines: [], payments: [], submittedAtUtc: null, reconciledAtUtc: null, closedAtUtc: null } }
 function recalculateMockTreasury(statement: TreasuryStatement) { statement.expectedAmount = statement.lines.reduce((total, line) => total + line.payableAmount, 0); statement.transferAmount = statement.payments.filter(payment => payment.paymentMethod === 'transfer').reduce((total, payment) => total + payment.amount, 0); statement.depositAmount = statement.payments.filter(payment => payment.paymentMethod === 'deposit').reduce((total, payment) => total + payment.amount, 0); statement.paidAmount = statement.transferAmount + statement.depositAmount; statement.differenceAmount = statement.expectedAmount - statement.paidAmount; statement.feeBreakdown=Array.from(statement.lines.reduce((map,line)=>{const current=map.get(line.contributionType)??{feeType:line.contributionType,members:0,amount:0};current.members++;current.amount+=line.payableAmount;map.set(line.contributionType,current);return map},new Map<LodgeFeeType,TreasuryFeeBreakdown>()).values()) }
 function cloneTreasuryStatement(statement: TreasuryStatement): TreasuryStatement { return { ...statement, feeBreakdown:statement.feeBreakdown.map(item=>({...item})), lines: statement.lines.map(line => ({ ...line })), payments: statement.payments.map(payment => ({ ...payment })) } }
-function cloneCeremonyQueueItem(item: CeremonyReviewQueueItem): CeremonyReviewQueueItem { return { ...item, eligibility: { ...item.eligibility, publication: item.eligibility.publication ? { ...item.eligibility.publication } : null, requirements: item.eligibility.requirements.map(value => ({ ...value })) }, actions: { ...item.actions } } }
-function recomputeMockEligibility(item: CeremonyReviewQueueItem) { const blocked = item.eligibility.requirements.some(value => value.status === 'rejected'); const observed = item.eligibility.requirements.some(value => value.status === 'observed'); item.eligibility.canAuthorize = !blocked && !observed; item.eligibility.status = item.eligibility.canAuthorize ? 'complies' : observed ? 'observed' : 'does_not_comply' }
+function cloneCeremonyQueueItem(item: CeremonyReviewQueueItem): CeremonyReviewQueueItem { return { ...item, eligibility: { ...item.eligibility, publication: item.eligibility.publication ? { ...item.eligibility.publication } : null, ceremonyRight: item.eligibility.ceremonyRight ? { ...item.eligibility.ceremonyRight } : null, requirements: item.eligibility.requirements.map(value => ({ ...value })) }, actions: { ...item.actions } } }
+function recomputeMockEligibility(item: CeremonyReviewQueueItem) { const blocked = item.eligibility.requirements.some(value => value.status === 'rejected'); const observed = item.eligibility.requirements.some(value => value.status === 'observed'); item.eligibility.canAuthorize = !blocked && !observed; item.eligibility.status = item.eligibility.canAuthorize ? 'complies' : observed ? 'observed' : 'does_not_comply'; item.actions.canAuthorize = item.eligibility.canAuthorize }
 function mockRegimenSummary(filters: { organizationId?: string; asOf?: string; from?: string }): RegimenInteriorSummary {
   const asOf = filters.asOf ?? '2026-09-08'
   const from = filters.from ?? '2026-01-01'

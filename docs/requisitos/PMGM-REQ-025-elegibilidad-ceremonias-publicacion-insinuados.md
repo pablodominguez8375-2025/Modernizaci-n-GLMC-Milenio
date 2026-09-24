@@ -17,6 +17,7 @@ Para autorizar cualquier ceremonia, el Taller solicitante deberá cumplir al men
 2. **Gran Tesorería:** Taller al día con sus obligaciones y pagos exigibles a la Gran Logia, o con excepción formal vigente.
 3. **Gran Hospitalaria:** Taller al día con las reposiciones u obligaciones hospitalarias exigibles, o con excepción formal vigente.
 4. **Otros requisitos configurables:** la Gran Logia podrá incorporar nuevas validaciones sin modificar el flujo base.
+5. **Derecho de ceremonia:** el monto oficial aplicable debe constar pagado y conciliado contra el expediente. El estado del derecho es independiente de la cuota mensual y de la regularidad general del Taller.
 
 La evaluación deberá registrar la fecha de corte de cada validación. Una autorización no podrá depender silenciosamente de un estado antiguo o sin fecha.
 
@@ -72,6 +73,7 @@ Cada solicitud deberá presentar una matriz de validaciones como mínimo:
 | Reposiciones hospitalarias | Gran Hospitalaria | al día/exento/excepción |
 | Publicación de insinuado | Portal/Régimen Interior | cumple plazo, sólo iniciación |
 | Disponibilidad del espacio | Gran Secretaría | disponible/reservado cuando aplique |
+| Derecho de ceremonia | Tesorería | pagado según tarifario oficial y saldo cero por expediente |
 
 Estados normalizados sugeridos:
 - `pending`;
@@ -130,3 +132,4 @@ La autorización debe conservar un snapshot de:
 8. Gran Secretaría visualiza una matriz única de requisitos y bloqueos antes de emitir la plancha.
 9. Toda excepción queda asociada a autoridad, fundamento, fecha y auditoría.
 10. La autorización emitida conserva evidencia de todas las validaciones utilizadas.
+11. La autorización se bloquea mientras exista saldo del derecho único y cada pago puede consultarse desde el mismo expediente con su comprobante y auditoría.

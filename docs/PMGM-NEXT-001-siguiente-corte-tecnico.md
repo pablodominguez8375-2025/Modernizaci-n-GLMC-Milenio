@@ -186,6 +186,10 @@ Artefacto QA #10723132819: `proyecto-centenario-qa-srv01-e0dd6e66fe5d6ab7f6be6a2
 
 Issue #97 sigue abierto: despliegue físico diferido en `srv01`, verificación `SOURCE_SHA`/`MANIFEST`, smoke autenticado, QA-001..QA-034, UAT y evidencia. No iniciar otro incremento funcional mientras siga el bloqueo, salvo decisión expresa del Product Owner con alcance concreto. Al retomar, consultar HEAD de `dev` y `main`, START-HERE, Drive y esta sección; no reutilizar artefactos expirados.
 
+### Continuación autorizada por el Product Owner — 24-09-2026
+
+El usuario indicó continuar, con autorización previa permanente para desarrollar mejoras y el siguiente punto recomendado por la Línea Base Maestra de Drive. Se abrió `feature/ceremony-rights-ledger` desde `dev@d7b931b323c191733a09f392c74759f7994e844b`. Alcance: pago/conciliación del derecho ceremonial por expediente y efecto bloqueante en elegibilidad. Ver `docs/qa/PMGM-QA-V070-DERECHOS-CEREMONIALES.md`; QA-039 amplía el kit a 39 controles. Mantener `main` y srv01 sin cambios.
+
 
 ## 16. Incremento funcional expresamente autorizado — Hospitalaria / reposiciones
 

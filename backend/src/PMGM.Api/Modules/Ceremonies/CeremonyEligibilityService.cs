@@ -12,7 +12,8 @@ public sealed record CeremonyEligibilityInput(
     bool PublicationSuspended = false,
     AdvancementThresholds? AdvancementThresholds = null,
     AdvancementEvidence? AdvancementEvidence = null,
-    DispensationEvidence? Dispensation = null);
+    DispensationEvidence? Dispensation = null,
+    bool CeremonyRightPaid = true);
 
 public sealed record CeremonyEligibilityResult(
     bool IsEligible,
@@ -89,7 +90,8 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             treasuryStatus,
             hospitalariaStatus,
             grandMasterStatus,
-            publication);
+            publication,
+            input.CeremonyRightPaid);
 
         var blockingReasons = decision.Requirements
             .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)

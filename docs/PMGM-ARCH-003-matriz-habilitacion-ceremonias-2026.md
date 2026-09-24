@@ -82,3 +82,7 @@ Además de los requisitos comunes:
 ## Regla de emisión
 
 Gran Secretaría puede emitir plancha únicamente desde una solicitud autorizable. La plancha debe quedar vinculada al snapshot de requisitos que justificó la autorización para impedir que una validación posterior altere retroactivamente la evidencia del acto administrativo.
+
+## Registro del derecho y conciliación
+
+El catálogo oficial de derechos se resuelve desde el Decreto N.º 1.759 según tipo de ceremonia y fecha. Cada pago se registra en un libro ligado al expediente, con abonos, medio, fecha efectiva, referencia, actor y comprobante. La clave idempotente evita duplicar un asiento cuando se reintenta una solicitud. El saldo se deriva de la suma de pagos y se incorpora como requisito financiero independiente de la regularidad mensual del Taller. Gran Secretaría no autoriza mientras el saldo del derecho sea mayor que cero. Ver `PMGM-ARCH-014-derechos-ceremoniales-por-expediente.md`.

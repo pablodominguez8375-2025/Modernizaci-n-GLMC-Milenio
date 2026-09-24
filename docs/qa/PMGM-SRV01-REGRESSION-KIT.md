@@ -8,7 +8,7 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 38 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 39 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
@@ -29,6 +29,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 38 contro
 - QA-036: nómina del Cuadro de Tesorería alineada a `CUADRO PAGO GRAN TESORERÍA.xlsx`, planchas para cuotas especiales y detalle personal protegido.
 - QA-037: navegación ampliada del Tesorero del Taller, caja, cobros, autorización de egresos y reportes de cuadratura.
 - QA-038: cierres anuales inmutables, arrastre del saldo y reporte Debe/Haber/Neto con filtros y exportación.
+- QA-039: pago parcial/total idempotente del derecho ceremonial, comprobante, saldo y bloqueo de autorización.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -175,6 +176,10 @@ Resultado esperado: caja local auditable y cuadrada, cuotas no duplicadas como i
 
 Resultado esperado: los cierres no se alteran retroactivamente y el detalle permite rastrear y cuadrar caja por ejercicio y período.
 
+### QA-039 — Pago de derecho ceremonial
+
+Con un expediente pendiente, registrar abono parcial y comprobar recibo, fecha, actor y saldo. Repetir la misma solicitud conserva un único movimiento y comprobante; sobrepago y clave idempotente reutilizada con contenido distinto se rechazan. La autorización queda bloqueada hasta saldo cero, y después se habilita sólo si los otros requisitos siguen conformes. Ver `docs/qa/PMGM-QA-V070-DERECHOS-CEREMONIALES.md`.
+
 Ejemplo de fallo:
 
 ```bash
@@ -199,7 +204,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 38/38 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 39/39 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 

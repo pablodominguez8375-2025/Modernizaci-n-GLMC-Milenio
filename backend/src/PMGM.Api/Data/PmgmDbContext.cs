@@ -50,6 +50,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<DeathReplenishmentTransfer> DeathReplenishmentTransfers => Set<DeathReplenishmentTransfer>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
+    public DbSet<CeremonyRightPayment> CeremonyRightPayments => Set<CeremonyRightPayment>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
     public DbSet<InstitutionalRuleSetting> InstitutionalRuleSettings => Set<InstitutionalRuleSetting>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
@@ -596,6 +597,24 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.RecordedAtUtc).IsRequired();
             entity.HasOne(x => x.CeremonyRequest).WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.CeremonyRequestId, x.ValidationType, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<CeremonyRightPayment>(entity =>
+        {
+            entity.ToTable("ceremony_right_payments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ReceiptNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(500);
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(200).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasOne(x => x.CeremonyRequest).WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CeremonyRequestId, x.PaymentDate });
+            entity.HasIndex(x => new { x.CeremonyRequestId, x.IdempotencyKey }).IsUnique();
+            entity.HasIndex(x => x.ReceiptNumber).IsUnique();
         });
 
         modelBuilder.Entity<CandidatePublication>(entity =>

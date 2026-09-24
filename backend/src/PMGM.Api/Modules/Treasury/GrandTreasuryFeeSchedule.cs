@@ -54,4 +54,19 @@ public static class GrandTreasuryFeeSchedule
         new { ceremonyType = "affiliation", label = "Afiliación", amount = 26000m, currency = "CLP" },
         new { ceremonyType = "incorporation", label = "Incorporación", amount = 31000m, currency = "CLP" }
     ];
+
+    public static (decimal Amount, string Currency)? ResolveCeremonyRight(string ceremonyType, DateOnly asOf)
+    {
+        if (asOf < EffectiveFrom) return null;
+        var amount = ceremonyType switch
+        {
+            "initiation" => 41000m,
+            "wage_increase" => 31000m,
+            "exaltation" => 41000m,
+            "affiliation" => 26000m,
+            "incorporation" => 31000m,
+            _ => (decimal?)null
+        };
+        return amount is null ? null : (amount.Value, "CLP");
+    }
 }

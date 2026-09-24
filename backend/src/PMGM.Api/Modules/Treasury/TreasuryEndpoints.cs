@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Treasury.Entities;
 
@@ -16,6 +17,7 @@ public static class TreasuryEndpoints
             .RequireAuthorization();
 
         group.MapGet("/tarifario-cuotas", GetOfficialFeeScheduleAsync);
+        group.MapGet("/derechos-ceremoniales", GetCeremonyRightsAsync);
         group.MapGet("/talleres/orientes", GetTreasuryTerritoriesAsync);
         group.MapGet("/talleres/{organizationId:guid}/oriente", GetTreasuryTerritoryAsync);
         group.MapPost("/talleres/{organizationId:guid}/oriente", SetTreasuryTerritoryAsync);
@@ -26,6 +28,48 @@ public static class TreasuryEndpoints
         group.MapTreasuryStatementEndpoints();
 
         return endpoints;
+    }
+
+    private static async Task<IResult> GetCeremonyRightsAsync(HttpContext context, PmgmDbContext db,
+        IInstitutionalAccessService access, CancellationToken cancellationToken)
+    {
+        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        var today = TodayInChile();
+        var ceremonies = await db.CeremonyRequests.AsNoTracking()
+            .Where(x => x.Status != CeremonyCodes.RequestStatus.Rejected && x.Status != CeremonyCodes.RequestStatus.Completed)
+            .OrderBy(x => x.ProposedDate).ThenByDescending(x => x.CreatedAtUtc)
+            .Select(x => new
+            {
+                x.Id, x.OrganizationId, organizationName = x.Organization.Name, organizationNumber = x.Organization.Number,
+                x.CeremonyType, x.ProposedDate,
+                subjectDisplayName = x.CandidatePerson != null
+                    ? (x.CandidatePerson.FirstNames + " " + x.CandidatePerson.LastNames).Trim()
+                    : x.Member != null ? (x.Member.Person.FirstNames + " " + x.Member.Person.LastNames).Trim() : "Persona no asociada"
+            }).Take(500).ToListAsync(cancellationToken);
+        if (ceremonies.Count == 0)
+        {
+            context.Response.Headers.CacheControl = "private, no-store";
+            return Results.Ok(new { total = 0, items = Array.Empty<object>() });
+        }
+
+        var ids = ceremonies.Select(x => x.Id).ToArray();
+        var paidRows = await db.CeremonyRightPayments.AsNoTracking().Where(x => ids.Contains(x.CeremonyRequestId) && x.PaymentDate <= today)
+            .GroupBy(x => x.CeremonyRequestId).Select(x => new { Id = x.Key, Paid = x.Sum(y => y.Amount) }).ToListAsync(cancellationToken);
+        var paidById = paidRows.ToDictionary(x => x.Id, x => x.Paid);
+        var items = new List<TreasuryCeremonyRightItem>();
+        foreach (var ceremony in ceremonies)
+        {
+            paidById.TryGetValue(ceremony.Id, out var paid);
+            var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, today);
+            if (right is null) continue;
+            var balance = Math.Max(0m, right.Value.Amount - paid);
+            if (balance <= 0m) continue;
+            items.Add(new TreasuryCeremonyRightItem(ceremony.Id, ceremony.OrganizationId, ceremony.organizationName,
+                ceremony.organizationNumber, ceremony.CeremonyType, ceremony.ProposedDate, ceremony.subjectDisplayName,
+                right.Value.Amount, right.Value.Currency, paid, balance, GrandTreasuryFeeSchedule.SourceReference));
+        }
+        context.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static IResult GetOfficialFeeScheduleAsync(DateOnly? asOf, IInstitutionalAccessService access, HttpContext context)
@@ -292,3 +336,17 @@ public sealed record RegularityRequest(
     DateOnly AsOfDate,
     string? SourceReference,
     string? Notes);
+
+public sealed record TreasuryCeremonyRightItem(
+    Guid Id,
+    Guid OrganizationId,
+    string OrganizationName,
+    string? OrganizationNumber,
+    string CeremonyType,
+    DateOnly? ProposedDate,
+    string SubjectDisplayName,
+    decimal Amount,
+    string Currency,
+    decimal Paid,
+    decimal Balance,
+    string Source);

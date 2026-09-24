@@ -4,8 +4,9 @@ import RegularityPage from './RegularityPage'
 import TreasuryRoleNavigation from './TreasuryRoleNavigation'
 import TreasuryStatementPage from './TreasuryStatementPage'
 import TreasuryTerritoryPage from './TreasuryTerritoryPage'
+import CeremonyRightsPage from './CeremonyRightsPage'
 
-type GrandSection = 'regularity' | 'statements' | 'territories'
+type GrandSection = 'regularity' | 'statements' | 'territories' | 'rights'
 
 export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
   const [section, setSection] = useState<GrandSection>('statements')
@@ -19,10 +20,11 @@ export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
         { id:'statements', label:'Cuadros mensuales', description:'Montos por línea de cuota y conciliación' },
         { id:'regularity', label:'Estado de Talleres', description:'Consulta y regularidad institucional' },
         { id:'territories', label:'Tarifas y Orientes', description:'Clasificación territorial y cuotas del decreto' },
+        { id:'rights', label:'Derechos ceremoniales', description:'Pagos y saldos por expediente' },
       ]}
       active={section}
       onChange={id => setSection(id as GrandSection)}
     />
-    {section === 'statements' ? <TreasuryStatementPage api={api} canPrepare={false} canReview /> : section==='regularity'?<RegularityPage api={api} kind="treasury"/>:<TreasuryTerritoryPage api={api}/>}
+    {section === 'statements' ? <TreasuryStatementPage api={api} canPrepare={false} canReview /> : section==='regularity'?<RegularityPage api={api} kind="treasury"/>:section==='territories'?<TreasuryTerritoryPage api={api}/>:<CeremonyRightsPage api={api}/>}
   </div>
 }

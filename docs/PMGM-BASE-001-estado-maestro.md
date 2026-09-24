@@ -731,3 +731,11 @@ Validación local: 149 pruebas frontend aprobadas y build de producción exitoso
 ---
 
 **Este documento es la referencia canónica de continuidad funcional/técnica del Proyecto Centenario.**
+
+## 22. Incremento en curso — pago de derechos ceremoniales por expediente
+
+El 24-09-2026 se inicia `feature/ceremony-rights-ledger` desde `dev@d7b931b323c191733a09f392c74759f7994e844b`, atendiendo la continuación priorizada en Drive: enlazar el pago/conciliación de derechos ceremoniales con cada expediente y su elegibilidad. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta.
+
+El alcance registra abonos parciales o totales en un libro ligado a `CeremonyRequest`; fija monto y moneda desde el Decreto N.º 1.759; emite comprobante y registra actor/auditoría; aplica idempotencia; presenta monto pagado y saldo en una vista financiera mínima de Gran Tesorería y en la evaluación del expediente; y bloquea la autorización mientras haya saldo. Sólo Gran Tesorería registra este derecho institucional; el Tesorero local no obtiene acceso a la bandeja de ceremonias de la Orden. El mock de Pages usa exclusivamente datos ficticios. QA-039 / `docs/qa/PMGM-QA-V070-DERECHOS-CEREMONIALES.md` define aceptación física.
+
+Validación local: frontend 196/196, lint/build, migration gate (50 migraciones), plantilla QA-039, privacy/classification/release gates aprobados. Se clasificaron explícitamente el asiento de pago ceremonial y su proyección restringida para Gran Tesorería. El entorno no dispone del SDK .NET; compilación backend y pruebas PostgreSQL dependen de PMGM CI. Pages y paquete QA deben publicarse desde el mismo SHA después del PR; srv01/UAT siguen diferidos por Issue #97. El incremento aún no está integrado ni publicado.

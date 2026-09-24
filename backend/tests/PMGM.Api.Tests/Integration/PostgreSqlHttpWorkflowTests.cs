@@ -126,6 +126,62 @@ public sealed class PostgreSqlHttpWorkflowTests
         var ceremonyJson = await ceremonyResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var ceremonyId = ceremonyJson.GetProperty("id").GetGuid();
 
+        var rightPaymentRequest = new
+        {
+            amount = 11000m,
+            paymentMethod = "transfer",
+            paymentDate = new DateOnly(2026, 9, 7),
+            reference = "CI-HTTP-CEREMONY-RIGHT",
+            idempotencyKey = $"ceremony-right-{Guid.NewGuid():N}"
+        };
+        var rightPaymentPath = $"/api/ceremonias/solicitudes/{ceremonyId}/derecho/pagos";
+        var rightPaymentResponse = await client.PostAsJsonAsync(rightPaymentPath, rightPaymentRequest, cancellationToken);
+        Assert.Equal(HttpStatusCode.Created, rightPaymentResponse.StatusCode);
+        var rightPaymentJson = await rightPaymentResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal("CLP", rightPaymentJson.GetProperty("currency").GetString());
+        Assert.Equal(20000m, rightPaymentJson.GetProperty("balance").GetDecimal());
+        var originalReceipt = rightPaymentJson.GetProperty("receiptNumber").GetString();
+
+        var rightPaymentRetry = await client.PostAsJsonAsync(rightPaymentPath, rightPaymentRequest, cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, rightPaymentRetry.StatusCode);
+        var retryJson = await rightPaymentRetry.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(originalReceipt, retryJson.GetProperty("receiptNumber").GetString());
+        Assert.True(retryJson.GetProperty("replayed").GetBoolean());
+        var treasuryRightsResponse = await client.GetAsync("/api/tesoreria/derechos-ceremoniales", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, treasuryRightsResponse.StatusCode);
+        var treasuryRightsJson = await treasuryRightsResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var treasuryRight = treasuryRightsJson.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
+        Assert.Equal(11000m, treasuryRight.GetProperty("paid").GetDecimal());
+        Assert.Equal(20000m, treasuryRight.GetProperty("balance").GetDecimal());
+        Assert.False(treasuryRight.TryGetProperty("notes", out _));
+        var duplicateReference = await client.PostAsJsonAsync(rightPaymentPath, new
+        {
+            amount = 11000m, rightPaymentRequest.paymentMethod, rightPaymentRequest.paymentDate,
+            rightPaymentRequest.reference, idempotencyKey = $"duplicate-reference-{Guid.NewGuid():N}"
+        }, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, duplicateReference.StatusCode);
+        var changedRetry = await client.PostAsJsonAsync(rightPaymentPath, new
+        {
+            amount = 12000m, rightPaymentRequest.paymentMethod, rightPaymentRequest.paymentDate,
+            rightPaymentRequest.reference, rightPaymentRequest.idempotencyKey
+        }, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, changedRetry.StatusCode);
+
+        var overpayment = await client.PostAsJsonAsync(rightPaymentPath, new
+        {
+            amount = 20001m, rightPaymentRequest.paymentMethod, rightPaymentRequest.paymentDate,
+            rightPaymentRequest.reference, idempotencyKey = $"overpay-{Guid.NewGuid():N}"
+        }, cancellationToken);
+        Assert.Equal(HttpStatusCode.Conflict, overpayment.StatusCode);
+        var remainingPayment = await client.PostAsJsonAsync(rightPaymentPath, new
+        {
+            amount = 20000m, rightPaymentRequest.paymentMethod, rightPaymentRequest.paymentDate,
+            rightPaymentRequest.reference, idempotencyKey = $"finish-{Guid.NewGuid():N}"
+        }, cancellationToken);
+        Assert.Equal(HttpStatusCode.Created, remainingPayment.StatusCode);
+        var remainingJson = await remainingPayment.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(0m, remainingJson.GetProperty("balance").GetDecimal());
+
         var validationResponse = await client.PostAsJsonAsync(
             $"/api/ceremonias/solicitudes/{ceremonyId}/validaciones/regimen-interior",
             new
@@ -230,6 +286,7 @@ public sealed class PostgreSqlHttpWorkflowTests
                 .AsNoTracking()
                 .SingleAsync(x => x.Id == ceremonyId, cancellationToken);
             Assert.Equal(CeremonyCodes.RequestStatus.Authorized, persistedCeremony.Status);
+            Assert.Equal(2, await db.CeremonyRightPayments.CountAsync(x => x.CeremonyRequestId == ceremonyId, cancellationToken));
 
             var auditActions = await db.AuditEvents
                 .AsNoTracking()
@@ -240,6 +297,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             Assert.Contains("treasury.workshop_regularity.recorded", auditActions);
             Assert.Contains("hospitalaria.workshop_regularity.recorded", auditActions);
             Assert.Contains("ceremony.request.created", auditActions);
+            Assert.Contains("treasury.ceremony_right.payment_recorded", auditActions);
             Assert.Contains("ceremony.internal_affairs_validation.recorded", auditActions);
             Assert.Contains("ceremony.grand_master_validation.recorded", auditActions);
             Assert.Contains("ceremony.authorization.approved", auditActions);
