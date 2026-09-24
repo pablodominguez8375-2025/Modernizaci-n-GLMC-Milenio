@@ -229,12 +229,17 @@ async function assertTreasuryPaymentAction(viewport) {
       touchSize: action ? action.getBoundingClientRect().height : 0,
       viewportWidth: innerWidth,
       pageScrollWidth: page.scrollWidth,
+      overflowElements: [...document.querySelectorAll('body *')]
+        .map(element => { const rect = element.getBoundingClientRect(); return { tag: element.tagName, className: typeof element.className === 'string' ? element.className : '', right: Math.round(rect.right), width: Math.round(rect.width) }; })
+        .filter(element => element.right > innerWidth + 2 && element.width > 0)
+        .sort((left, right) => right.right - left.right)
+        .slice(0, 8),
     };
   })()`)
   if (!result?.rows) throw new Error(`No synthetic treasury rows available at ${viewport}.`)
   if (!result.actionVisible) throw new Error(`Registrar pago is not visible in Treasury collection at ${viewport}.`)
   if (result.touchSize < 44) throw new Error(`Registrar pago is below 44px touch height at ${viewport}: ${result.touchSize}px.`)
-  if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}.`)
+  if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}: ${JSON.stringify(result.overflowElements)}`)
 }
 
 async function assertNoGlobalHorizontalOverflow(label, viewport) {
