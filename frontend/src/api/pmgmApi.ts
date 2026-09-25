@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 33648)
-Total output lines: 938
-
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
 export interface SystemInfo { project: string; api: string; version: string; runtime: string; culture: string; institutionalTimeZone: string; defaultCurrency: string }
@@ -435,7 +432,127 @@ export class PmgmApiClient {
     return this.postJson(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/ingresos`,payload)
   }
   async getLodgeCashSummary(organizationId:string,asOf:string):Promise<LodgeCashSummary>{
-    if(this.useMocks){const month=asOf.slice(0,7);const charges=await this.getLodgeTreasuryCharges(organizationId,Number(month.slice(0,4)),Number(month.slice(5,7)));const expenses=await this.getLodgeTreasuryExpenses(organizationId,'0001-01-0…3648 tokens truncated… string; status: string }>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/autorizar`, { method: 'POST' })
+    if(this.useMocks){const month=asOf.slice(0,7);const charges=await this.getLodgeTreasuryCharges(organizationId,Number(month.slice(0,4)),Number(month.slice(5,7)));const expenses=await this.getLodgeTreasuryExpenses(organizationId,'0001-01-01',asOf);const incomes=this.mockLodgeTreasuryIncomes.get(organizationId)??[];const payments=charges.items.flatMap(c=>c.payments);const allIncomes=[...payments.map(x=>({date:x.paymentDate,amount:x.amount})),...incomes.map(x=>({date:x.incomeDate,amount:x.amount}))];const approved=expenses.items.filter(x=>x.approvalStatus==='approved');const cumulativeIncome=allIncomes.filter(x=>x.date<=asOf).reduce((s,x)=>s+x.amount,0);const cumulativeExpense=approved.filter(x=>x.expenseDate<=asOf).reduce((s,x)=>s+x.amount,0);const monthIncome=allIncomes.filter(x=>x.date.startsWith(month)).reduce((s,x)=>s+x.amount,0);const monthExpense=approved.filter(x=>x.expenseDate.startsWith(month)).reduce((s,x)=>s+x.amount,0);return{organizationId,asOf,openingBalance:0,cumulativeIncome,cumulativeExpense,cumulativeBalance:cumulativeIncome-cumulativeExpense,monthIncome,monthExpense,monthBalance:monthIncome-monthExpense,pendingExpenses:expenses.items.filter(x=>x.approvalStatus==='pending_approval').length}}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/caja?asOf=${asOf}`)
+  }
+  async getLodgeTreasuryReport(organizationId:string,from:string,to:string,observedBalance?:number|null):Promise<LodgeTreasuryReport>{
+    if(this.useMocks){const charges=await this.getLodgeTreasuryCharges(organizationId,Number(to.slice(0,4)),Number(to.slice(5,7)));const expenses=await this.getLodgeTreasuryExpenses(organizationId,from,to);const incomeRows=this.mockLodgeTreasuryIncomes.get(organizationId)??[];const movements=[...charges.items.flatMap(c=>c.payments.filter(p=>p.paymentDate>=from&&p.paymentDate<=to).map(p=>({transactionId:p.id,date:p.paymentDate,type:'ingreso' as const,category:'Cuotas',description:`Cuota · ${c.memberDisplayName}`,amount:p.amount,status:'registrado',reference:p.receiptNumber,recordedBySubject:'tesorero-demo',recordedAtUtc:new Date().toISOString(),approvedBySubject:null,approvedAtUtc:null}))),...incomeRows.filter(x=>x.incomeDate>=from&&x.incomeDate<=to).map(x=>({transactionId:x.id,date:x.incomeDate,type:'ingreso' as const,category:x.category,description:x.description,amount:x.amount,status:'registrado',reference:x.evidenceReference,recordedBySubject:x.recordedBySubject,recordedAtUtc:x.recordedAtUtc,approvedBySubject:null,approvedAtUtc:null})),...expenses.items.map(x=>({transactionId:x.id,date:x.expenseDate,type:'egreso' as const,category:x.category,description:x.description,amount:x.amount,status:x.approvalStatus==='approved'?'autorizado':'pendiente de autorización',reference:x.evidenceReference,recordedBySubject:x.recordedBySubject,recordedAtUtc:x.recordedAtUtc,approvedBySubject:x.approvedBySubject,approvedAtUtc:x.approvedAtUtc}))].sort((a,b)=>a.date.localeCompare(b.date));const income=movements.filter(x=>x.type==='ingreso').reduce((s,x)=>s+x.amount,0);const authorizedExpenses=movements.filter(x=>x.type==='egreso'&&x.status==='autorizado').reduce((s,x)=>s+x.amount,0);return{organizationId,from,to,openingBalance:0,income,authorizedExpenses,pendingExpenses:movements.filter(x=>x.type==='egreso'&&x.status!=='autorizado').reduce((s,x)=>s+x.amount,0),closingBalance:income-authorizedExpenses,observedBalance:observedBalance??null,difference:observedBalance==null?null:observedBalance-(income-authorizedExpenses),movements}}
+    const query=new URLSearchParams({from,to});if(observedBalance!=null)query.set('observedBalance',String(observedBalance))
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/reportes?${query}`)
+  }
+  async getLodgeTreasuryConfiguration(organizationId:string):Promise<LodgeTreasuryConfiguration>{
+    if(this.useMocks)return this.mockLodgeTreasuryConfigurations.get(organizationId)??{organizationId,openingBalance:0,openingBalanceDate:'2026-01-01',incomeCategories:'Otros ingresos',expenseCategories:'Servicios;Materiales;Arriendo;Traslado'}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/configuracion`)
+  }
+  async getLodgeTreasuryYearClosures(organizationId:string):Promise<{total:number;items:LodgeTreasuryYearClosure[]}>{
+    if(this.useMocks){const items=this.mockLodgeTreasuryYearClosures.get(organizationId)??[];return{total:items.length,items:items.map(x=>({...x}))}}
+    return this.request('/api/gestion-logial/tesoreria/talleres/'+encodeURIComponent(organizationId)+'/cierres-anuales')
+  }
+  async closeLodgeTreasuryYear(organizationId:string,year:number):Promise<LodgeTreasuryYearClosure>{
+    if(this.useMocks){
+      if(year>=new Date().getFullYear())throw new Error('Sólo se puede cerrar un ejercicio anual ya finalizado.')
+      const items=this.mockLodgeTreasuryYearClosures.get(organizationId)??[]
+      if(items.some(x=>x.accountingYear===year))throw new Error('El ejercicio ya está cerrado.')
+      const report=await this.getLodgeTreasuryReport(organizationId,String(year)+'-01-01',String(year)+'-12-31')
+      const expenseRows=(this.mockLodgeTreasuryExpenses.get(organizationId)??[]).filter(x=>x.expenseDate.startsWith(String(year)))
+      if(expenseRows.some(x=>x.approvalStatus==='pending_approval'))throw new Error('No se puede cerrar: hay egresos pendientes de autorización.')
+      const item:LodgeTreasuryYearClosure={id:crypto.randomUUID(),organizationId,accountingYear:year,openingBalance:report.openingBalance,income:report.income,authorizedExpenses:report.authorizedExpenses,closingBalance:report.closingBalance,movementCount:report.movements.length,closedBySubject:'tesorero-demo',closedAtUtc:new Date().toISOString()}
+      items.unshift(item);this.mockLodgeTreasuryYearClosures.set(organizationId,items);return{...item}
+    }
+    return this.postJson('/api/gestion-logial/tesoreria/talleres/'+encodeURIComponent(organizationId)+'/cierres-anuales/'+year+'/cerrar',{})
+  }
+  private mockYearIsClosed(organizationId:string,year:number){return(this.mockLodgeTreasuryYearClosures.get(organizationId)??[]).some(x=>x.accountingYear>=year)}
+  async saveLodgeTreasuryConfiguration(organizationId:string,payload:Omit<LodgeTreasuryConfiguration,'organizationId'>):Promise<LodgeTreasuryConfiguration>{
+    if(this.useMocks){const configuration={organizationId,...payload};this.mockLodgeTreasuryConfigurations.set(organizationId,configuration);return configuration}
+    return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/configuracion`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+  }
+
+  async getRegimenInteriorSummary(filters: { organizationId?: string; asOf?: string; from?: string } = {}): Promise<RegimenInteriorSummary> {
+    if (this.useMocks) return mockRegimenSummary(filters)
+    const query = new URLSearchParams(); if (filters.organizationId) query.set('organizationId', filters.organizationId); if (filters.asOf) query.set('asOf', filters.asOf); if (filters.from) query.set('from', filters.from)
+    return this.request<RegimenInteriorSummary>(`/api/regimen-interior/summary${query.size ? `?${query}` : ''}`)
+  }
+  async getOrderRejectionAlerts(): Promise<OrderRejectionAlertResponse> {
+    if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', reason: 'Rechazo en Cámara del Medio / tercer grado', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
+    return this.request<OrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
+  }
+
+  async getCeremonyReviewQueue(): Promise<CeremonyReviewQueueResponse> {
+    if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
+    return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
+  }
+  async getTreasuryCeremonyRights(): Promise<TreasuryCeremonyRightsResponse> {
+    if (this.useMocks) {
+      const items = this.mockReviewCeremonies.filter(item => (item.eligibility.ceremonyRight?.balance ?? 0) > 0).map(item => ({
+        id: item.id, organizationId: item.organizationId, organizationName: item.organizationName, organizationNumber: item.organizationNumber,
+        ceremonyType: item.ceremonyType, proposedDate: item.proposedDate, subjectDisplayName: item.subjectDisplayName,
+        ...item.eligibility.ceremonyRight!
+      }))
+      return { total: items.length, items }
+    }
+    return this.request<TreasuryCeremonyRightsResponse>('/api/tesoreria/derechos-ceremoniales')
+  }
+  async recordCeremonyRightPayment(ceremonyRequestId: string, payload: { amount: number; paymentMethod: 'cash'|'transfer'|'deposit'; paymentDate: string; reference: string|null; idempotencyKey: string }): Promise<{ receiptNumber: string; paidTotal: number; balance: number }> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      const paymentKey = `${ceremonyRequestId}:${payload.idempotencyKey}`
+      const payloadFingerprint = JSON.stringify({ amount: payload.amount, paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, reference: payload.reference })
+      const existing = this.mockCeremonyRightPayments.get(paymentKey)
+      if (existing) {
+        if (existing.payload !== payloadFingerprint) throw new Error('El identificador de reintento ya se usó con datos distintos.')
+        return { receiptNumber: existing.receiptNumber, paidTotal: existing.paidTotal, balance: existing.balance }
+      }
+      const right = item.eligibility.ceremonyRight
+      if (!right || payload.amount <= 0 || payload.amount > right.balance) throw new Error('El monto supera el saldo del derecho de ceremonia.')
+      right.paid += payload.amount; right.balance = Math.max(0, right.amount - right.paid)
+      const requirement = item.eligibility.requirements.find(value => value.code === 'ceremony_right_payment')
+      if (requirement) { requirement.status = right.balance === 0 ? 'approved' : 'rejected'; requirement.reason = right.balance === 0 ? 'El derecho de ceremonia está pagado según el libro de Tesorería.' : 'El derecho de ceremonia registra saldo pendiente en Tesorería.' }
+      recomputeMockEligibility(item)
+      const receiptNumber = `CER-DEMO-${payload.paymentDate.replaceAll('-', '')}-${String(this.mockCeremonyRightPayments.size + 1).padStart(4, '0')}`
+      this.mockCeremonyRightPayments.set(paymentKey, { payload: payloadFingerprint, receiptNumber, paidTotal: right.paid, balance: right.balance })
+      return { receiptNumber, paidTotal: right.paid, balance: right.balance }
+    }
+    return this.postJson(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/derecho/pagos`, payload)
+  }
+  async setCeremonyInternalAffairsValidation(ceremonyRequestId: string, payload: CeremonyInternalAffairsValidationRequest): Promise<unknown> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { status: payload.status }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canValidateInternalAffairs) throw new Error('La solicitud ya no admite validación de Régimen Interior.')
+      const requirement = item.eligibility.requirements.find(value => value.code === 'regimen_interior')
+      if (requirement) {
+        const approved = payload.status === 'approved' || payload.status === 'exception_approved'
+        requirement.status = approved ? 'approved' : payload.status
+        requirement.reason = approved ? 'Aprobación vigente registrada.' : payload.status === 'observed' ? 'La solicitud tiene observaciones pendientes de Régimen Interior.' : 'No existe una aprobación habilitante de Régimen Interior.'
+      }
+      recomputeMockEligibility(item)
+      return { status: payload.status }
+    }
+    return this.postJson<unknown>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/validaciones/regimen-interior`, payload)
+  }
+  async publishCeremonyCandidate(ceremonyRequestId: string): Promise<CandidatePublicationWorkflowResponse> {
+    if (this.useMocks) {
+      if (ceremonyRequestId === 'eeeeeeee-2222-2222-2222-222222222222') return { id: 'publication-demo-2026-001', ceremonyRequestId, publishedFromUtc: '2026-09-21T15:00:00Z', requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canPublishCandidate || item.ceremonyType !== 'initiation') throw new Error('La solicitud no admite iniciar una nueva publicación del insinuado.')
+      item.eligibility.publication = { status: 'published', requiredDays: 20, completedDays: 0, publishedFromUtc: new Date().toISOString(), publishedUntilUtc: null }
+      const existing = item.eligibility.requirements.find(value => value.code === 'publicacion_insinuado')
+      const requirement = { code: 'publicacion_insinuado', name: 'Publicación del insinuado', status: 'rejected', reason: 'Se requieren 20 días de publicación y se han cumplido 0 días válidos.' }
+      if (existing) Object.assign(existing, requirement); else item.eligibility.requirements.push(requirement)
+      item.actions.canPublishCandidate = false; recomputeMockEligibility(item)
+      return { id: `publication-${item.id}`, ceremonyRequestId, publishedFromUtc: item.eligibility.publication.publishedFromUtc, requiredDays: 20, ruleCode: 'initiation.publication.minimum_days', status: 'published', alreadyPublished: false, notificationRecipients: 34, notificationsCreated: 34 }
+    }
+    return this.request<CandidatePublicationWorkflowResponse>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/publicacion-insinuado`, { method: 'POST' })
+  }
+  async authorizeCeremony(ceremonyRequestId: string): Promise<{ id?: string; status: string }> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      if (!item.actions.canAuthorize) throw new Error('Su cuenta no puede autorizar esta ceremonia.')
+      if (!item.eligibility.canAuthorize) throw new Error('La ceremonia aún tiene requisitos obligatorios pendientes.')
+      item.status = 'authorized'; item.actions = { canValidateInternalAffairs: false, canPublishCandidate: false, canAuthorize: false }
+      return { id: item.id, status: item.status }
+    }
+    return this.request<{ id?: string; status: string }>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/autorizar`, { method: 'POST' })
   }
   async registerInitiation(ceremonyRequestId: string, ceremonyDate: string, minuteReference: string): Promise<InitiationCompletionResponse> {
     if (this.useMocks) return { id: ceremonyRequestId, status: 'completed', memberId: 'member-demo-2026-001', membershipStatus: 'active', degree: 'apprentice', effectiveDate: ceremonyDate, documentCode: 'AUT-CER-DEMO-2026-001' }
