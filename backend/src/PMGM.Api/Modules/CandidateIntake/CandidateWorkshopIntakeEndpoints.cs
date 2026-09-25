@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.Ceremonies.Entities;
+using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Ceremonies;
 
 namespace PMGM.Api.Modules.CandidateIntake;
@@ -9,6 +12,12 @@ public static class CandidateWorkshopIntakeEndpoints
 {
     public static IEndpointRouteBuilder MapCandidateWorkshopIntakeEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapGet("/api/insinuados/taller/organizaciones", GetWorkshopOrganizationsAsync)
+            .WithTags("Ficha privada de insinuados")
+            .RequireAuthorization();
+        endpoints.MapPost("/api/insinuados/taller/solicitudes", CreateWorkshopRequestAsync)
+            .WithTags("Ficha privada de insinuados")
+            .RequireAuthorization();
         endpoints.MapGet("/api/insinuados/taller/solicitudes", GetWorkshopQueueAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
@@ -17,6 +26,107 @@ public static class CandidateWorkshopIntakeEndpoints
             .RequireAuthorization();
 
         return endpoints;
+    }
+
+    private static async Task<IResult> GetWorkshopOrganizationsAsync(
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        var organizationIds = httpContext.User.Claims
+            .Where(x => x.Type == InstitutionalClaims.Organization)
+            .Select(x => Guid.TryParse(x.Value, out var id) ? id : Guid.Empty)
+            .Where(x => x != Guid.Empty)
+            .Distinct()
+            .Where(id => access.CanManageLodgeSecretariat(httpContext.User, id))
+            .ToArray();
+        if (organizationIds.Length == 0 && access.HasOrderScope(httpContext.User) &&
+            access.HasRole(httpContext.User, InstitutionalRoles.GranLogiaAdmin))
+        {
+            organizationIds = await coreDb.Organizations.AsNoTracking()
+                .Where(x => x.Type == "lodge" || x.Type == "workshop")
+                .Select(x => x.Id)
+                .ToArrayAsync(cancellationToken);
+        }
+
+        var items = await coreDb.Organizations.AsNoTracking()
+            .Where(x => organizationIds.Contains(x.Id))
+            .OrderBy(x => x.Name)
+            .Select(x => new CandidateWorkshopOrganizationDto(x.Id, x.Name, x.Number))
+            .ToListAsync(cancellationToken);
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> CreateWorkshopRequestAsync(
+        CreateCandidateWorkshopRequest request,
+        HttpContext httpContext,
+        PmgmDbContext coreDb,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var firstNames = request.FirstNames?.Trim();
+        var lastNames = request.LastNames?.Trim();
+        var rut = request.RutOrInstitutionalId?.Trim().ToUpperInvariant();
+        if (request.OrganizationId == Guid.Empty || string.IsNullOrWhiteSpace(firstNames) ||
+            string.IsNullOrWhiteSpace(lastNames) || string.IsNullOrWhiteSpace(rut) ||
+            firstNames.Length > 160 || lastNames.Length > 160 || rut.Length > 16)
+            return Results.BadRequest(new { message = "Ingrese Taller, nombres, apellidos e identificación válida (máximo 16 caracteres)." });
+        if (!access.CanManageLodgeSecretariat(httpContext.User, request.OrganizationId))
+            return Results.Forbid();
+
+        var organization = await coreDb.Organizations.AsNoTracking()
+            .Where(x => x.Id == request.OrganizationId)
+            .Select(x => new { x.Id, x.Name, x.Number })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (organization is null) return Results.NotFound(new { message = "El Taller seleccionado no existe." });
+
+        var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut == rut, cancellationToken);
+        if (person is not null)
+        {
+            var activeRequest = await coreDb.CeremonyRequests.AnyAsync(x =>
+                x.CandidatePersonId == person.Id &&
+                x.CeremonyType == CeremonyCodes.Type.Initiation &&
+                x.Status != CeremonyCodes.RequestStatus.Completed &&
+                x.Status != CeremonyCodes.RequestStatus.Rejected, cancellationToken);
+            if (activeRequest)
+                return Results.Conflict(new { message = "Ya existe un expediente de iniciación activo para esta identificación. Continúe el expediente existente." });
+
+            var recentRejection = await coreDb.CeremonyValidations.AnyAsync(x =>
+                x.CeremonyRequest.CandidatePersonId == person.Id &&
+                (x.ValidationType == CeremonyCodes.ValidationType.CandidateThirdDegreeReview ||
+                 x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot) &&
+                x.Status == CeremonyCodes.ValidationStatus.Rejected &&
+                x.AsOfDate > DateOnly.FromDateTime(DateTime.UtcNow.Date.AddYears(-1)), cancellationToken);
+            if (recentRejection)
+                return Results.Conflict(new { message = "Existe un rechazo previo en el último año. El protocolo requiere esperar un año y subsanar sus causas antes de una nueva insinuación." });
+        }
+        else
+        {
+            person = new Person { FirstNames = firstNames, LastNames = lastNames, Rut = rut };
+            coreDb.People.Add(person);
+        }
+
+        var entity = new CeremonyRequest
+        {
+            OrganizationId = organization.Id,
+            CeremonyType = CeremonyCodes.Type.Initiation,
+            CandidatePersonId = person.Id,
+            Status = CeremonyCodes.RequestStatus.Draft,
+            Notes = "Expediente de insinuación iniciado por Secretaría Logial."
+        };
+        coreDb.CeremonyRequests.Add(entity);
+        audit.Add(httpContext, "candidate.intake.created", nameof(CeremonyRequest), entity.Id.ToString(),
+            organization.Id, AuditResults.Success, new { entity.CandidatePersonId, entity.CeremonyType, entity.Status });
+        await coreDb.SaveChangesAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Created($"/api/ceremonias/solicitudes/{entity.Id}", new CandidateWorkshopQueueItemDto(
+            entity.Id, person.FirstNames, person.LastNames, $"{person.FirstNames} {person.LastNames}".Trim(),
+            organization.Name, organization.Number, null, entity.Status, false, false,
+            CandidateIntakeCodes.ReviewStatus.Pending, entity.CreatedAtUtc, null));
     }
 
     private static async Task<IResult> GetOrderRejectionAlertsAsync(
@@ -193,6 +303,10 @@ public static class CandidateWorkshopIntakeEndpoints
             _ => CandidateIntakeCodes.ReviewStatus.Pending
         };
 }
+
+public sealed record CandidateWorkshopOrganizationDto(Guid Id, string Name, string? Number);
+
+public sealed record CreateCandidateWorkshopRequest(Guid OrganizationId, string FirstNames, string LastNames, string RutOrInstitutionalId);
 
 public sealed record CandidateWorkshopQueueItemDto(
     Guid CeremonyRequestId,
