@@ -2,13 +2,15 @@
 
 ## Verificación de continuidad — 25-09-2026
 
-Corte vivo consultado: `dev@69e649ff95abe58de0b791c17fd73131e1629504`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece sin cambios. PR #160 (corrección de límites diarios ante el cambio horario de Chile) y PR #159 (cobertura responsive de los ocho breakpoints oficiales) están integradas en `dev`.
+Corte vivo actualizado: `dev@7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue intacta.
 
-Los cuatro gates exact-head del corte terminaron SUCCESS: PMGM CI #1534, Showcase/Pages #795, QA Installable #433 y Pre-UAT #352. La prueba visual integrada cubre 80 capturas; no altera reglas de negocio.
+PR #162 dejó sincronizados los cargos y abreviaciones en la Línea Base Maestra de Drive y perfiles. PR #163 incorporó en Secretaría → Insinuados el alta de postulante y apertura de expediente privado en borrador, con continuidad en la ficha vigente, permisos acotados al Taller, control de duplicidad y bloqueo de reingreso antes del año reglamentario cuando existe rechazo pertinente.
 
-Issue #97 continúa abierto. No se verificó despliegue físico en `srv01`, smoke autenticado, regresión institucional ni UAT para este SHA; CI, Pages y los artefactos no equivalen a esas pruebas. `main` no se modificó.
+PR #163 se integró por squash. En el SHA integrado pasaron los gates post-merge: PMGM CI #1541, Showcase/Pages #805, QA Installable #443 y Pre-UAT Installable #355. Pages y los paquetes corresponden al mismo SHA; no acreditan despliegue físico ni aceptación UAT.
 
-**Próximo paso:** mantener la prioridad QA/UAT de Issue #97. No abrir otro incremento funcional sin cierre de la validación física o una decisión expresa del Product Owner con alcance concreto. Tras cerrar QA/UAT, revisar el residual de Insinuaciones y PR #116 contra el `dev` vivo, sin fusionar su rama histórica por los gates antiguos.
+Issue #97 continúa abierto: faltan instalación del SHA exacto en `srv01`, verificación de checksum/manifiesto, smoke autenticado, regresión institucional y UAT. `main` no debe promoverse hasta que el Product Owner acepte formalmente el corte.
+
+**Siguiente paso operativo:** retomar Issue #97, validar y desplegar en `srv01` los artefactos del SHA `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`, registrar evidencia de cada control y ejecutar UAT. No iniciar otro incremento funcional salvo autorización expresa del Product Owner con alcance concreto.
 
 ## 1. Hito operacional bloqueante vigente: QA srv01
 

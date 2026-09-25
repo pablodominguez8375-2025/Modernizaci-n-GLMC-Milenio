@@ -743,3 +743,28 @@ El incremento quedó incorporado en `dev` por el commit `8522b0dfd3e9db6eb964f6f
 Gates exact-head del `dev` vivo: PMGM CI #1519, Showcase/Pages #776, QA Installable #414 y Pre-UAT #348, todos SUCCESS. El Showcase publicado usa datos ficticios y sus capturas incluyen Gran Tesorería en 390×844, 768×1024 y 1440×900; la vista móvil muestra el acceso a Derechos ceremoniales sin desbordamiento horizontal global. Pages artifact #10829655132 (`sha256:2290457be3647fe5ad229f1845aa95683874ea07d5b4fa91c1e0fa8fbf21919c`); evidencia responsive #10828807432 (`sha256:9883852182184238ea3068c992b9f735bb833336a81d4f19b31bd8c3ece94158`). QA artifact #10829506011 (`sha256:15177174ec8090a78cb3a83401e371574444a22e99d51ac1dc0f3a9c6397a99a`) fue descargado y su `BUILD-INFO.txt` confirma `SOURCE_SHA=42a415ea9dbd235bde58454a5789eb352f952b06`; el manifiesto debe verificarse al instalarlo.
 
 La integración y publicación no cierran Issue #97: despliegue físico en `srv01`, verificación del manifiesto, smoke autenticado, regresión QA-001..QA-039 y UAT institucional siguen pendientes/diferidos. No promover a `main` ni declarar aceptación operacional hasta completar esos pasos.
+
+## 23. Corte de continuidad y seguimiento — 25-09-2026
+
+Corte vivo revisado: `dev@7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta.
+
+### Incrementos integrados
+- **PR #162 — cargos y abreviaciones:** sincronizados en la Línea Base Maestra de Google Drive y la documentación de perfiles. Cargos acordados:
+  - Dignidades: Venerable Maestra/Maestro — `V:. M:.`; Primer Vigilante — `P:. V:.`; Segundo Vigilante — `S:. V:.`.
+  - Oficiales mayores: Oradora/Orador — `Orad:.` o `Or:.`; Secretaria/Secretario — `Sec:.` o `Secr:.`; Tesorera/Tesorero — `Tes:.`; Hospitalaria/Hospitalario — `Hosp:.`.
+  - Oficiales menores: Maestra/Maestro de Ceremonias — `M:. de C:.`; Maestra/Maestro de Armonía — `M:. de Arm:.` o `M:. A:.`; Guarda Templo Interno — `G:. T:. I:.`; Guarda Templo Externo — `G:. T:. E:.`.
+- **PR #163 — alta de postulante desde Secretaría:** integrada en `dev`. En Secretaría → Insinuados se abre expediente de iniciación privado en borrador, limitado a Talleres autorizados. La ficha oficial existente se completa dentro del mismo expediente; no se publica antes de la revisión de Gran Secretaría. El alta evita duplicar expedientes activos y aplica la espera de un año ante rechazos reglamentarios de tercer grado/balotaje.
+
+### Validación exacta del SHA integrado
+PR #163 se integró por squash como `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`. Sobre ese mismo SHA terminaron SUCCESS:
+- PMGM CI #1541;
+- Showcase/Pages #805, incluido despliegue de Pages;
+- QA Installable #443;
+- Pre-UAT Installable #355.
+
+Estos resultados confirman compilación, pruebas automatizadas, generación/publicación del showcase y paquetes; **no equivalen a instalación ni aceptación física en srv01**.
+
+### Seguimiento bloqueante
+Issue #97 continúa abierto. Pendiente: desplegar el SHA exacto en `srv01`, verificar checksum/manifiesto, ejecutar smoke autenticado, regresión institucional y UAT. Mantener `main` sin cambios y no declarar QA/UAT cerradas hasta registrar evidencia de esos pasos. La prioridad QA puede exceptuarse sólo con autorización expresa del Product Owner para un alcance funcional concreto, como ocurrió con el alcance acotado de PR #163.
+
+Fuente de seguimiento y siguiente acción: `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md` e Issue #97.
