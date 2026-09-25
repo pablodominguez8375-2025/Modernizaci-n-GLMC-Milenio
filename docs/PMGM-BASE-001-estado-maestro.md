@@ -762,9 +762,16 @@ PR #163 se integró por squash como `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`. 
 - QA Installable #443;
 - Pre-UAT Installable #355.
 
-Estos resultados confirman compilación, pruebas automatizadas, generación/publicación del showcase y paquetes; **no equivalen a instalación ni aceptación física en srv01**. PR #164 añadió únicamente este registro documental y dejó el HEAD actual de `dev` en `bdcfa6efa12dd7ab6cf167302506121082a40dcb`; sobre ese HEAD documental pasaron también CI #1543, Showcase/Pages #808, QA Installable #446 y Pre-UAT #356. Para el próximo despliegue de QA se debe descargar el paquete del HEAD actual `bdcfa6e`, no el paquete anterior de `7aba5c9`.
+Estos resultados confirman compilación, pruebas automatizadas, generación/publicación del showcase y paquetes; **no equivalen a instalación ni aceptación física en srv01**. PR #164 dejó `dev@bdcfa6efa12dd7ab6cf167302506121082a40dcb`; PR #165 avanzó el handoff documental a `dev@3f13e3c58c6a609cdfc075cd48b0ea4fc7bcd1ae`. Sobre este último HEAD, el comentario más reciente de Issue #97 registra CI #1545, Showcase/Pages #811, QA Installable #449 y Pre-UAT #357 como SUCCESS. El paquete físico, smoke, regresión institucional y UAT siguen pendientes; los gates automáticos no sustituyen esas verificaciones.
 
 ### Seguimiento bloqueante
 Issue #97 continúa abierto. Pendiente: desplegar el SHA exacto en `srv01`, verificar checksum/manifiesto, ejecutar smoke autenticado, regresión institucional y UAT. Mantener `main` sin cambios y no declarar QA/UAT cerradas hasta registrar evidencia de esos pasos. La prioridad QA puede exceptuarse sólo con autorización expresa del Product Owner para un alcance funcional concreto, como ocurrió con el alcance acotado de PR #163.
 
 Fuente de seguimiento y siguiente acción: `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md` e Issue #97.
+
+
+## Decisión vigente del Sponsor — 25-09-2026
+
+Por instrucción del Sponsor / Product Owner, `srv01` queda pendiente y no se montará hasta nuevo aviso. Mientras esta pausa esté vigente, no iniciar instalación, despliegue, smoke autenticado, regresión física ni UAT. Issue #97 permanece abierto; la pausa no equivale a aceptación QA/UAT ni autoriza promoción a `main`.
+
+Al reanudarse el trabajo, tomar el HEAD vivo de `dev` y verificar la paridad entre Pages, `qa-current.json`, `BUILD-INFO`, checksum y `MANIFEST` antes de planificar el despliegue. No abrir otro incremento funcional mientras Issue #97 siga bloqueante, salvo autorización expresa del Product Owner con alcance concreto.
