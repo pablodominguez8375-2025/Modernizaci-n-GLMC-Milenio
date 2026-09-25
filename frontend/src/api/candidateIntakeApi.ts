@@ -205,6 +205,9 @@ export type PublishedCandidatePortalResponse = Omit<CandidatePortalResponse, 'it
 export type CandidateReviewDecision = 'observed' | 'rejected'
 export type AccessTokenProvider = () => Promise<string | null>
 
+export interface CandidateWorkshopOrganization { id: string; name: string; number: string | null }
+export interface CreateCandidateWorkshopRequest { organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string }
+
 export interface CandidateIntakeApiClientOptions {
   baseUrl?: string
   getAccessToken?: AccessTokenProvider
@@ -421,6 +424,38 @@ export class CandidateIntakeApiClient {
   async getWorkshopQueue(): Promise<CandidateWorkshopQueueResponse> {
     if (this.useMocks) return { total: this.mockWorkshopQueue.length, items: this.mockWorkshopQueue.map(item => ({ ...item })) }
     return this.request<CandidateWorkshopQueueResponse>('/api/insinuados/taller/solicitudes')
+  }
+
+  async getWorkshopOrganizations(): Promise<{ total: number; items: CandidateWorkshopOrganization[] }> {
+    if (this.useMocks) return { total: 1, items: [{ id: 'demo-workshop-23', name: 'Taller Demostrativo Nº 23', number: '23' }] }
+    return this.request('/api/insinuados/taller/organizaciones')
+  }
+
+  async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {
+    if (this.useMocks) {
+      const duplicate = this.mockWorkshopQueue.some(item => item.lastNames?.toLowerCase() === payload.lastNames.trim().toLowerCase())
+      if (duplicate) throw new CandidateIntakeApiHttpError(409, 'Ya existe un expediente demostrativo para este postulante.')
+      const item: CandidateWorkshopQueueItem = {
+        ceremonyRequestId: crypto.randomUUID(),
+        firstNames: payload.firstNames.trim(),
+        lastNames: payload.lastNames.trim(),
+        displayName: `${payload.firstNames.trim()} ${payload.lastNames.trim()}`,
+        workshopName: 'Taller Demostrativo Nº 23',
+        workshopNumber: '23',
+        proposedDate: null,
+        requestStatus: 'draft',
+        profileAvailable: false,
+        photoAvailable: false,
+        reviewStatus: 'pending_grand_secretariat',
+        createdAtUtc: new Date().toISOString(),
+        orderLevelAlert: null,
+      }
+      this.mockWorkshopQueue.unshift(item)
+      return { ...item }
+    }
+    return this.request<CandidateWorkshopQueueItem>('/api/insinuados/taller/solicitudes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
   }
 
   async getOrderRejectionAlerts(): Promise<CandidateOrderRejectionAlertResponse> {
