@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem } from './api/candidateIntakeApi'
+import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import './CandidateWorkshopIntakePage.css'
 
@@ -10,8 +10,8 @@ interface CandidateWorkshopIntakePageProps {
 
 const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayload => ({
   firstNames: item?.firstNames ?? '',
-  paternalSurname: '',
-  maternalSurname: null,
+  paternalSurname: item?.lastNames.split(/\\s+/)[0] ?? '',
+  maternalSurname: item?.lastNames.split(/\\s+/).slice(1).join(' ') || null,
   rutOrInstitutionalId: null,
   birthDate: null,
   nationality: null,
@@ -36,6 +36,10 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
 
 export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWorkshopIntakePageProps) {
   const [queue, setQueue] = useState<CandidateWorkshopQueueItem[]>([])
+  const [organizations, setOrganizations] = useState<CandidateWorkshopOrganization[]>([])
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [newCandidate, setNewCandidate] = useState({ organizationId: '', firstNames: '', lastNames: '', rutOrInstitutionalId: '' })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
@@ -64,6 +68,47 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [api])
+
+  useEffect(() => {
+    let active = true
+    api.getWorkshopOrganizations()
+      .then(result => {
+        if (!active) return
+        setOrganizations(result.items)
+        setNewCandidate(current => ({ ...current, organizationId: current.organizationId || result.items[0]?.id || '' }))
+      })
+      .catch(reason => { if (active) setError(errorMessage(reason, 'No fue posible identificar el Taller autorizado.')) })
+    return () => { active = false }
+  }, [api])
+
+  async function createNewRequest(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (creating) return
+    if (!newCandidate.organizationId || !newCandidate.firstNames.trim() || !newCandidate.lastNames.trim() || !newCandidate.rutOrInstitutionalId.trim()) {
+      setError('Seleccione el Taller e ingrese nombres, apellidos e identificación.')
+      return
+    }
+    setCreating(true); setError(null); setMessage(null)
+    try {
+      const created = await api.createWorkshopRequest({
+        organizationId: newCandidate.organizationId,
+        firstNames: newCandidate.firstNames.trim(),
+        lastNames: newCandidate.lastNames.trim(),
+        rutOrInstitutionalId: newCandidate.rutOrInstitutionalId.trim(),
+      })
+      const result = await api.getWorkshopQueue()
+      setQueue(result.items)
+      setSelectedId(created.ceremonyRequestId)
+      setCreateOpen(false)
+      setNewCandidate(current => ({ ...current, firstNames: '', lastNames: '', rutOrInstitutionalId: '' }))
+      setMessage('Expediente creado en borrador. Complete la ficha oficial de insinuación y sus patrocinantes para enviarlo a revisión.')
+    } catch (reason) {
+      setError(errorMessage(reason, 'No fue posible crear el expediente de iniciación.'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
 
   useEffect(() => {
     let active = true
@@ -201,6 +246,27 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     {api.useMocks && <div className="candidate-protected-notice">Datos ficticios para QA. Esta vista representa la operación real de Secretaría Logial con control de ámbito y auditoría.</div>}
     {error && <div className="error-banner" role="alert"><strong>Ficha de insinuado</strong><span>{error}</span></div>}
     {message && <div className="candidate-protected-notice" role="status">{message}</div>}
+
+    <section className="candidate-product-card workshop-new-intake">
+      <div className="candidate-section-title"><span>＋</span><h2>Nuevo postulante</h2><em>Apertura de expediente</em></div>
+      <p>Inicie un expediente único para el Taller autorizado. La ficha completa se abrirá en el expediente y seguirá pendiente hasta la revisión de Gran Secretaría.</p>
+      {!createOpen
+        ? <button className="candidate-primary-button" type="button" disabled={!organizations.length} onClick={() => setCreateOpen(true)}>＋ Abrir nuevo expediente de iniciación</button>
+        : <form className="workshop-form-grid" onSubmit={event => void createNewRequest(event)}>
+          <Field label="Taller autorizado *">
+            <select required value={newCandidate.organizationId} onChange={event => setNewCandidate({ ...newCandidate, organizationId: event.target.value })}>
+              {organizations.map(item => <option key={item.id} value={item.id}>{item.name}{item.number ? ` · Nº ${item.number}` : ''}</option>)}
+            </select>
+          </Field>
+          <Field label="Nombres *"><input required maxLength={160} value={newCandidate.firstNames} onChange={event => setNewCandidate({ ...newCandidate, firstNames: event.target.value })} /></Field>
+          <Field label="Apellidos *"><input required maxLength={160} value={newCandidate.lastNames} onChange={event => setNewCandidate({ ...newCandidate, lastNames: event.target.value })} /></Field>
+          <Field label="RUT / pasaporte / identificación *"><input required maxLength={16} value={newCandidate.rutOrInstitutionalId} onChange={event => setNewCandidate({ ...newCandidate, rutOrInstitutionalId: event.target.value })} /></Field>
+          <div className="workshop-new-intake-actions">
+            <button className="candidate-secondary-button" type="button" disabled={creating} onClick={() => setCreateOpen(false)}>Cancelar</button>
+            <button className="candidate-primary-button" type="submit" disabled={creating || !organizations.length}>{creating ? 'Abriendo expediente…' : 'Crear expediente y completar ficha'}</button>
+          </div>
+        </form>}
+    </section>
 
     <section className="workshop-intake-layout">
       <aside className="candidate-product-card workshop-intake-queue">
