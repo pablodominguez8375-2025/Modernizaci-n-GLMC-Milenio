@@ -18,8 +18,6 @@ public sealed class InstitutionalCalendarSourceSyncService(
     LodgeManagementDbContext lodgeDb,
     CalendarDbContext calendarDb) : IInstitutionalCalendarSourceSyncService
 {
-    private static readonly TimeZoneInfo Santiago = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
-
     public async Task<CalendarSourceSyncResult> ReconcileAsync(CancellationToken cancellationToken)
     {
         var created = 0;
@@ -224,13 +222,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
     }
 
     private static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) ToInstitutionalDay(DateOnly date)
-    {
-        var localStart = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var localEnd = date.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var startUtc = TimeZoneInfo.ConvertTimeToUtc(localStart, Santiago);
-        var endUtc = TimeZoneInfo.ConvertTimeToUtc(localEnd, Santiago);
-        return (new DateTimeOffset(startUtc, TimeSpan.Zero), new DateTimeOffset(endUtc, TimeSpan.Zero));
-    }
+        => InstitutionalCalendarDayRange.For(date);
 
     private static string MapCeremonyStatus(string status)
         => status switch

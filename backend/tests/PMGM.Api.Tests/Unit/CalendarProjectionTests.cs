@@ -11,6 +11,25 @@ public sealed class CalendarProjectionTests
     private readonly InstitutionalAccessService _access = new();
 
     [Fact]
+    public void Institutional_day_range_handles_chilean_dst_skipping_midnight()
+    {
+        var timeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
+        var skippedMidnight = new DateTime(2026, 9, 6, 0, 0, 0, DateTimeKind.Unspecified);
+        Assert.True(timeZone.IsInvalidTime(skippedMidnight));
+
+        var range = InstitutionalCalendarDayRange.For(new DateOnly(2026, 9, 5));
+        var nextDateStart = TimeZoneInfo.ConvertTime(range.EndUtc, timeZone);
+
+        Assert.Equal(new DateTime(2026, 9, 5, 0, 0, 0), TimeZoneInfo.ConvertTime(range.StartUtc, timeZone).DateTime);
+        Assert.Equal(new DateTime(2026, 9, 6, 1, 0, 0), nextDateStart.DateTime);
+        Assert.True(range.EndUtc > range.StartUtc);
+
+        var skippedDate = InstitutionalCalendarDayRange.For(new DateOnly(2026, 9, 6));
+        Assert.Equal(new DateTime(2026, 9, 6, 1, 0, 0), TimeZoneInfo.ConvertTime(skippedDate.StartUtc, timeZone).DateTime);
+        Assert.Equal(new DateTime(2026, 9, 7, 0, 0, 0), TimeZoneInfo.ConvertTime(skippedDate.EndUtc, timeZone).DateTime);
+    }
+
+    [Fact]
     public void Restricted_lodge_event_is_projected_as_occupied_for_regular_lodge_member()
     {
         var organizationId = Guid.NewGuid();
