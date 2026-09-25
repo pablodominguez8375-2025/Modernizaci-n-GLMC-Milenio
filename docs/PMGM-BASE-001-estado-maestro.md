@@ -742,7 +742,7 @@ El incremento quedó incorporado en `dev` por el commit `8522b0dfd3e9db6eb964f6f
 
 Gates exact-head del `dev` vivo: PMGM CI #1519, Showcase/Pages #776, QA Installable #414 y Pre-UAT #348, todos SUCCESS. El Showcase publicado usa datos ficticios y sus capturas incluyen Gran Tesorería en 390×844, 768×1024 y 1440×900; la vista móvil muestra el acceso a Derechos ceremoniales sin desbordamiento horizontal global. Pages artifact #10829655132 (`sha256:2290457be3647fe5ad229f1845aa95683874ea07d5b4fa91c1e0fa8fbf21919c`); evidencia responsive #10828807432 (`sha256:9883852182184238ea3068c992b9f735bb833336a81d4f19b31bd8c3ece94158`). QA artifact #10829506011 (`sha256:15177174ec8090a78cb3a83401e371574444a22e99d51ac1dc0f3a9c6397a99a`) fue descargado y su `BUILD-INFO.txt` confirma `SOURCE_SHA=42a415ea9dbd235bde58454a5789eb352f952b06`; el manifiesto debe verificarse al instalarlo.
 
-La integración y publicación no cierran Issue #97: despliegue físico en `srv01`, verificación del manifiesto, smoke autenticado, regresión QA-001..QA-039 y UAT institucional siguen pendientes/diferidos. No promover a `main` ni declarar aceptación operacional hasta completar esos pasos.
+La integración y publicación no cierran Issue #97: despliegue físico en `srv01`, verificación del manifiesto, smoke autenticado, regresión QA-001..QA-040 y UAT institucional siguen pendientes/diferidos. No promover a `main` ni declarar aceptación operacional hasta completar esos pasos.
 
 ## 23. Corte de continuidad y seguimiento — 25-09-2026
 
