@@ -148,3 +148,30 @@ Los roles incorporados/normalizados son:
 GitHub Pages debe mostrar los ocho perfiles base, sus vistas y acciones con datos ficticios. La configuración visual no reemplaza el control real de backend.
 
 QA debe validar los claims OIDC, límites de organización/Taller y autorización efectiva en API. Una función no se considera operacional sólo porque esté visible en la demo.
+
+
+## 9. Nomenclatura institucional y abreviaturas
+
+La siguiente nomenclatura se incorpora como referencia institucional para encabezados, documentos y vistas cuando corresponda. Se conserva el nombre completo del cargo en los registros, permisos y controles del sistema.
+
+### Dignidades (Las Luces)
+
+- Venerable Maestra / Venerable Maestro — **V:. M:.**
+- Primer Vigilante — **P:. V:.**
+- Segundo Vigilante — **S:. V:.**
+
+### Oficiales mayores
+
+- Oradora / Orador — **Orad:.** (o **Or:.**)
+- Secretaria / Secretario — **Sec:.** (o **Secr:.**)
+- Tesorera / Tesorero — **Tes:.**
+- Hospitalaria / Hospitalario — **Hosp:.**
+
+### Oficiales menores
+
+- Maestra / Maestro de Ceremonias — **M:. de C:.**
+- Maestra / Maestro de Armonía — **M:. de Arm:.** (o **M:. A:.**)
+- Guarda Templo Interno — **G:. T:. I:.**
+- Guarda Templo Externo — **G:. T:. E:.**
+
+Estas abreviaturas son una convención de escritura y presentación. No crean cargos, no cambian las responsabilidades reglamentarias, los firmantes ni las autorizaciones, y no sustituyen los nombres completos usados para autorización técnica.
