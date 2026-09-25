@@ -201,3 +201,8 @@ QA-036 amplía la regresión física a 36 controles. Verificaciones locales: fro
 ## Corrección de usabilidad móvil — Cuotas y Cobranzas (24-09-2026)
 
 La captura aportada por el Product Owner mostró que el ajuste previo de responsividad no permitía leer los datos en teléfono: las filas se recortaban a la derecha y sólo quedaban visibles encabezados. En la rama `feature/treasury-mobile-card-fix`, desde `dev@6eccbc64f75d0347ae277f1e3a7ceee9b8902e9f`, la propuesta sustituye las etiquetas CSS generadas por pares etiqueta/valor explícitos en el HTML, reduce cada fila a tarjeta ajustada al contenedor y apila el contenido en móvil. El chequeo de Showcase añade verificaciones de seis etiquetas, seis valores visibles, borde derecho de tarjeta, botón táctil y ausencia de overflow global. QA-V069 registra los criterios. Estado al registrar: PR y gates pendientes; no se desplegó ni fusionó. `main` permanece en `6dfb9546a4873baff15955cf86abfd7d47e3d111`; QA física/UAT continúan en Issue #97.
+
+
+## Nomenclatura institucional de cargos — 25-09-2026
+
+El Product Owner solicita conservar como referencia permanente la estructura de Dignidades (Las Luces), Oficiales Mayores y Oficiales Menores con sus abreviaturas institucionales. Se sincroniza la lista completa en la Línea Base Maestra de Google Drive y en `docs/PMGM-ARCH-007-perfiles-taller-responsabilidades-vistas.md`, mediante PR #162 a `dev`. La convención es para escritura y presentación; no crea cargos ni modifica responsabilidades, firmantes, autorizaciones o permisos. Cambio documental; CI exact-head ejecutándose al registrar este handoff. Issue #97 continúa abierto para QA física/UAT y `main` permanece intacta.
