@@ -1,5 +1,11 @@
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Decisión vigente del Sponsor — 25-09-2026
+
+El Sponsor / Product Owner indicó que `srv01` **queda pendiente y no se montará hasta nuevo aviso**. Issue #97 continúa abierto; la pausa no constituye aceptación de QA/UAT ni autorización de promoción a `main`. Mientras siga vigente, no se inicia instalación, despliegue, smoke autenticado, regresión física ni UAT en `srv01`.
+
+Esta instrucción reemplaza cualquier paso operativo más antiguo de este documento que indique montar o desplegar ahora. Cuando el Sponsor levante la pausa, retomar desde el HEAD vivo de `dev` y comprobar Pages, `qa-current.json`, `BUILD-INFO`, checksum y `MANIFEST` antes de planificar el despliegue. Mientras Issue #97 siga abierto, no iniciar otro incremento funcional salvo autorización expresa del Product Owner para un alcance concreto.
+
 ## Verificación de continuidad — 25-09-2026
 
 Último corte funcional: `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`; HEAD actual de `dev`: `bdcfa6efa12dd7ab6cf167302506121082a40dcb` (PR #164 sólo actualizó documentación); `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue intacta.
@@ -10,17 +16,17 @@ PR #163 se integró por squash. En el SHA integrado pasaron los gates post-merge
 
 Issue #97 continúa abierto: faltan instalación del SHA exacto en `srv01`, verificación de checksum/manifiesto, smoke autenticado, regresión institucional y UAT. `main` no debe promoverse hasta que el Product Owner acepte formalmente el corte.
 
-**Siguiente paso operativo:** retomar Issue #97, descargar y verificar que Pages, `qa-current.json` y el instalable correspondan todos al HEAD actual de `dev` (`bdcfa6efa12dd7ab6cf167302506121082a40dcb`; QA Installable #446, Pre-UAT #356, Showcase/Pages #808, CI #1543). Desplegar ese SHA exacto en `srv01`, registrar evidencia de cada control y ejecutar UAT. No iniciar otro incremento funcional salvo autorización expresa del Product Owner con alcance concreto.
+**Siguiente paso operativo:** mantener la pausa de `srv01` hasta nuevo aviso del Sponsor. No instalar ni desplegar por ahora. Cuando se reactive, verificar el HEAD vivo de `dev` y la paridad Pages / `qa-current.json` / BUILD-INFO / checksum-Manifiesto, y continuar Issue #97 con evidencia; no iniciar otro incremento funcional sin autorización expresa para un alcance concreto.
 
 ## 1. Hito operacional bloqueante vigente: QA srv01
 
-Issue #97 continúa abierto. El despliegue físico en `srv01` sigue siendo obligatorio antes de UAT/promoción a `main`.
+Issue #97 continúa abierto y la QA física en `srv01` está expresamente diferida por decisión del Sponsor hasta nuevo aviso. La pausa deja pendiente el gate de QA/UAT; no se monta el servidor ni se promueve `main` mientras siga vigente.
 
 El corte operativo debe usar siempre el HEAD vivo de `dev` y verificar paridad:
 
 `HEAD dev = Pages = qa-current.json = BUILD-INFO del ZIP QA`.
 
-Orden operacional:
+Orden de reanudación, sólo cuando el Sponsor levante la pausa:
 
 1. tomar HEAD vivo de `dev`;
 2. verificar Pages + `qa-current.json` + instalable;
