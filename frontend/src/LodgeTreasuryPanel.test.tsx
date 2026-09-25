@@ -1,11 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
-import LodgeTreasuryPanel from './LodgeTreasuryPanel'
+import LodgeTreasuryPanel, { csvSafe } from './LodgeTreasuryPanel'
 import { PmgmApiClient } from './api/pmgmApi'
 
 const api = () => new PmgmApiClient({ useMocks: true })
 
 describe('lodge treasury panel — segregación de funciones', () => {
+  it('prevents formula execution from descriptive CSV fields without changing negative numeric amounts', () => {
+    expect(csvSafe(' =HYPERLINK("https://example.test")', 4)).toBe("' =HYPERLINK(\"\"https://example.test\"\")")
+    expect(csvSafe('-12500', 8)).toBe('-12500')
+  })
+
   it('states the segregation rule: Tesorería registra, Venerable Maestro autoriza, Gran Tesorería solo concilia', () => {
     const html = renderToStaticMarkup(
       <LodgeTreasuryPanel api={api()} organizationId="org-1" canManage canApproveExpenses={false} section="summary" />
@@ -53,5 +58,6 @@ describe('lodge treasury panel — segregación de funciones', () => {
     const html = renderToStaticMarkup(<LodgeTreasuryPanel api={api()} organizationId="org-1" canManage section="reports" />)
     expect(html).toContain('Cuadratura de caja')
     expect(html).toContain('Exportar CSV')
+    expect(html).toContain('trazabilidad UTC de registro/autorización')
   })
 })

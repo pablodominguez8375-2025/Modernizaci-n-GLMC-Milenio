@@ -775,3 +775,10 @@ Fuente de seguimiento y siguiente acción: `docs/PMGM-NEXT-001-siguiente-corte-t
 Por instrucción del Sponsor / Product Owner, `srv01` queda pendiente y no se montará hasta nuevo aviso. Mientras esta pausa esté vigente, no iniciar instalación, despliegue, smoke autenticado, regresión física ni UAT. Issue #97 permanece abierto; la pausa no equivale a aceptación QA/UAT ni autoriza promoción a `main`.
 
 Al reanudarse el trabajo, tomar el HEAD vivo de `dev` y verificar la paridad entre Pages, `qa-current.json`, `BUILD-INFO`, checksum y `MANIFEST` antes de planificar el despliegue. No abrir otro incremento funcional mientras Issue #97 siga bloqueante, salvo autorización expresa del Product Owner con alcance concreto.
+
+
+## Mejora autorizada — Reportes contables de Tesorería del Taller — 25-09-2026
+
+Desde el HEAD vivo `dev@12b87c2e56ee99d7f96fdfd491b85b7dff67ea17`, el Product Owner autorizó mejorar control y auditoría contable sobre el módulo de Tesorería del Taller existente. El alcance mantiene caja y Cuadro Mensual institucional separados, evita duplicar pagos de cuota, excluye egresos pendientes del saldo calculado y no cambia permisos ni reglas de autorización.
+
+La implementación propuesta añade al detalle y CSV el ID de origen y trazabilidad de registro/aprobación (sujeto y UTC), una lectura directa del estado de cuadratura/pendientes y protección CSV ante inyección de fórmulas. Al cierre de esta nota está en trabajo local/preparación de PR; pruebas y gates del nuevo corte están pendientes. La aceptación física de srv01/UAT sigue diferida por instrucción del Sponsor; `main` permanece estable.
