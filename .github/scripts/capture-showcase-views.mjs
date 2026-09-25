@@ -42,7 +42,11 @@ const viewports = [
   { width: 360, height: 800, suffix: '360x800' },
   { width: 390, height: 844, suffix: '390x844' },
   { width: 768, height: 1024, suffix: '768x1024' },
+  { width: 820, height: 1180, suffix: '820x1180' },
+  { width: 1024, height: 768, suffix: '1024x768' },
+  { width: 1366, height: 768, suffix: '1366x768' },
   { width: 1440, height: 900, suffix: '1440x900' },
+  { width: 1920, height: 1080, suffix: '1920x1080' },
 ]
 
 const debugPort = 9227
@@ -256,7 +260,7 @@ async function assertTreasuryPaymentAction(viewport) {
   })()`)
   if (!result?.rows) throw new Error(`No synthetic treasury rows available at ${viewport}.`)
   if (!result.actionVisible) throw new Error(`Registrar pago is not visible in Treasury collection at ${viewport}.`)
-  const compactLayout = result.viewportWidth <= 900
+  const compactLayout = result.viewportWidth <= 1180
   const expectedLabels = compactLayout ? 6 : 0
   if (result.visibleDataValues !== 6 || result.visibleDataLabels !== expectedLabels || result.tableHeaderVisible === compactLayout) {
     throw new Error(`Treasury table layout is inconsistent at ${viewport}: values=${result.visibleDataValues}, labels=${result.visibleDataLabels}, header=${result.tableHeaderVisible}.`)
@@ -301,10 +305,41 @@ async function assertNoGlobalHorizontalOverflow(label, viewport) {
     const root = document.documentElement;
     const body = document.body;
     const scrollWidth = Math.max(root?.scrollWidth || 0, body?.scrollWidth || 0);
-    return { scrollWidth, innerWidth: window.innerWidth };
+    const offenders = [...document.querySelectorAll('body *')]
+      .map(element => {
+        const rect = element.getBoundingClientRect();
+        return {
+          tag: element.tagName.toLowerCase(),
+          className: typeof element.className === 'string' ? element.className : '',
+          left: Math.round(rect.left),
+          right: Math.round(rect.right),
+          width: Math.round(rect.width),
+          scrollWidth: element.scrollWidth,
+          clientWidth: element.clientWidth,
+        };
+      })
+      .filter(element => element.right > innerWidth + 1 && element.width > 0)
+      .sort((left, right) => right.right - left.right)
+      .slice(0, 12);
+    return { scrollWidth, innerWidth: window.innerWidth, offenders };
   })()`)
   if (!metrics || metrics.scrollWidth > metrics.innerWidth + 1) {
-    throw new Error(`Global horizontal overflow in ${label} at ${viewport}: scrollWidth=${metrics?.scrollWidth ?? 'unknown'}, innerWidth=${metrics?.innerWidth ?? 'unknown'}`)
+    throw new Error(`Global horizontal overflow in ${label} at ${viewport}: scrollWidth=${metrics?.scrollWidth ?? 'unknown'}, innerWidth=${metrics?.innerWidth ?? 'unknown'}, offenders=${JSON.stringify(metrics?.offenders ?? [])}`)
+  }
+}
+
+async function assertDashboardMetricLayout(viewport) {
+  const result = await evaluate(`(() => {
+    const grid = document.querySelector('.metric-grid');
+    if (!grid) return null;
+    return {
+      columns: getComputedStyle(grid).gridTemplateColumns.trim().split(/\\s+/).length,
+      cardCount: grid.children.length,
+    };
+  })()`)
+  const expectedColumns = viewport.width <= 480 ? 1 : viewport.width <= 1100 ? 2 : 4
+  if (!result || result.cardCount !== 4 || result.columns !== expectedColumns) {
+    throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 4 cards, got ${JSON.stringify(result)}.`)
   }
 }
 
@@ -378,6 +413,7 @@ try {
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
       await assertNavigation(scenario)
+      if (scenario.slug === 'inicio') await assertDashboardMetricLayout(viewport)
       if (scenario.treasuryCollection) {
         await openTreasuryCollection()
         await assertTreasuryPaymentAction(viewport.suffix)
@@ -386,7 +422,7 @@ try {
         await openGrandTreasuryRights()
         await assertCeremonyRightPaymentAction(viewport.suffix)
       }
-      if (viewport.width <= 480) await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
+      await assertNoGlobalHorizontalOverflow(scenario.label, viewport.suffix)
       const viewSlug = scenario.treasuryCollection ? 'tesoreria-taller-cuotas' : scenario.slug
       const filePath = path.join(outputDir, `${viewSlug}-${viewport.suffix}.png`)
       const evidenceTarget = scenario.treasuryCollection

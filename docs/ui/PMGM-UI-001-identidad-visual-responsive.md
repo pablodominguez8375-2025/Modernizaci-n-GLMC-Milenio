@@ -89,14 +89,14 @@ El workflow `PMGM Showcase Demo` levanta el build demostrativo y publica el arte
 
 ## Matriz de evidencia automática
 
-El artefacto visual contiene actualmente **43 capturas PNG**:
+El artefacto visual contiene actualmente **80 capturas PNG**:
 
-- **Mi ficha:** matriz completa en 360 × 800, 390 × 844, 768 × 1024, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080.
-- **Matriz representativa de módulos y operación:** 360 × 800, 390 × 844, 768 × 1024 y 1440 × 900 para Inicio, Biblioteca Virtual, Gestión Logial, Tesorería del Taller (incluida Cuotas y Cobranzas), autorización del Venerable, Gran Tesorería (incluidos Derechos ceremoniales), Gran Hospitalaria, Gran Secretaría y Gran Archivero.
+- **Mi ficha:** matriz completa en los ocho tamaños de aceptación.
+- **Matriz de módulos y operación:** 360 × 800, 390 × 844, 768 × 1024, 820 × 1180, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080 para Inicio, Biblioteca Virtual, Gestión Logial, Tesorería del Taller (incluida Cuotas y Cobranzas), autorización del Venerable, Gran Tesorería (incluidos Derechos ceremoniales), Gran Hospitalaria, Gran Secretaría y Gran Archivero.
 
-**Mi ficha** conserva su matriz amplia en 360 × 800, 390 × 844, 768 × 1024, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080. En la matriz operativa se verifica que la acción «Registrar pago» sea visible y táctil, que las seis columnas/etiquetas permanezcan legibles según el breakpoint y que no exista scroll horizontal global. El flujo de Derechos ceremoniales valida la tarjeta, los cuatro campos del formulario, el botón táctil y el borde derecho dentro del viewport.
+**Mi ficha** conserva su matriz amplia en los ocho tamaños de aceptación: 360 × 800, 390 × 844, 768 × 1024, 820 × 1180, 1024 × 768, 1366 × 768, 1440 × 900 y 1920 × 1080. En la matriz operativa se verifica que la acción «Registrar pago» sea visible y táctil, que las seis columnas/etiquetas permanezcan legibles según el breakpoint y que no exista scroll horizontal global en ninguno de los ocho tamaños. La cobranza del Taller usa tarjetas de datos hasta 1180 px para mantener visibles sus campos y acciones cuando la navegación lateral reduce el espacio disponible. El flujo de Derechos ceremoniales valida la tarjeta, los cuatro campos del formulario, el botón táctil y el borde derecho dentro del viewport.
 
-El workflow exige al menos 43 capturas antes de considerar satisfactoria la validación visual automática. Cada captura se guarda después de abrir el módulo mediante la navegación real y de ejecutar las aserciones de contenido/acción correspondientes. En Cuotas y Cobranzas y Derechos ceremoniales, la captura posiciona la fila o formulario de pago para mostrar su acción; el gate falla si el botón queda oculto por la navegación, recortado o fuera del viewport. Los PNG se conservan temporalmente como artefacto de GitHub Actions para revisión de PR y UAT.
+El workflow exige al menos 80 capturas antes de considerar satisfactoria la validación visual automática. Cada captura se guarda después de abrir el módulo mediante la navegación real y de ejecutar las aserciones de contenido/acción correspondientes. Inicio valida las columnas de sus indicadores para evitar texto comprimido o recortado en tablet horizontal. En Cuotas y Cobranzas y Derechos ceremoniales, la captura posiciona la fila o formulario de pago para mostrar su acción; el gate falla si el botón queda oculto por la navegación, recortado o fuera del viewport. Los PNG se conservan temporalmente como artefacto de GitHub Actions para revisión de PR y UAT.
 
 ## Validación visual observada
 

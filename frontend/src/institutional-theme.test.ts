@@ -19,7 +19,7 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     expect(css).toMatch(/img,\s*\nsvg,\s*\nvideo,\s*\ncanvas\s*\{[^}]*max-width:\s*100%/s)
   })
 
-  it.each([1180, 980, 720, 480])('defines responsive behavior at %ipx', breakpoint => {
+  it.each([1180, 1100, 980, 720, 480])('defines responsive behavior at %ipx', breakpoint => {
     expect(css).toContain(`@media (max-width: ${breakpoint}px)`)
   })
 
