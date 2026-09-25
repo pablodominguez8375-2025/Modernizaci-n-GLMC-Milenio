@@ -1,10 +1,14 @@
 # PMGM-NEXT-001 — Siguiente corte técnico
 
-## Actualización de continuidad — 24-09-2026
+## Verificación de continuidad — 25-09-2026
 
-El pago de derechos ceremoniales por expediente descrito en el checkpoint histórico de la Línea Base ya está integrado en `dev` mediante `8522b0dfd3e9db6eb964f6fdce5e8479c2a3525c`; el estado vivo se debe leer desde `dev@42a415ea9dbd235bde58454a5789eb352f952b06`. Los gates actuales de CI, Showcase/Pages, QA Installable y Pre-UAT están SUCCESS para ese SHA. El artifact QA #10829506011 confirma el SHA fuente en `BUILD-INFO.txt`; el Showcase artifact #10828807432 incluye evidencia de Gran Tesorería en 390×844, 768×1024 y 1440×900.
+Corte vivo consultado: `dev@69e649ff95abe58de0b791c17fd73131e1629504`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece sin cambios. PR #160 (corrección de límites diarios ante el cambio horario de Chile) y PR #159 (cobertura responsive de los ocho breakpoints oficiales) están integradas en `dev`.
 
-Issue #97 sigue abierto. La tarea siguiente es completar la validación física ya pendiente —QA-001..QA-039, smoke y evidencia en `srv01`— cuando el entorno se reactive; Pages y CI no la sustituyen. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta. No abrir otro incremento funcional sin una autorización expresa con alcance concreto.
+Los cuatro gates exact-head del corte terminaron SUCCESS: PMGM CI #1534, Showcase/Pages #795, QA Installable #433 y Pre-UAT #352. La prueba visual integrada cubre 80 capturas; no altera reglas de negocio.
+
+Issue #97 continúa abierto. No se verificó despliegue físico en `srv01`, smoke autenticado, regresión institucional ni UAT para este SHA; CI, Pages y los artefactos no equivalen a esas pruebas. `main` no se modificó.
+
+**Próximo paso:** mantener la prioridad QA/UAT de Issue #97. No abrir otro incremento funcional sin cierre de la validación física o una decisión expresa del Product Owner con alcance concreto. Tras cerrar QA/UAT, revisar el residual de Insinuaciones y PR #116 contra el `dev` vivo, sin fusionar su rama histórica por los gates antiguos.
 
 ## 1. Hito operacional bloqueante vigente: QA srv01
 
