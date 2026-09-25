@@ -70,6 +70,7 @@ public static class CandidateWorkshopIntakeEndpoints
         var firstNames = request.FirstNames?.Trim();
         var lastNames = request.LastNames?.Trim();
         var rut = request.RutOrInstitutionalId?.Trim().ToUpperInvariant();
+        var normalizedId = rut is null ? null : new string(rut.Where(char.IsLetterOrDigit).ToArray());
         if (request.OrganizationId == Guid.Empty || string.IsNullOrWhiteSpace(firstNames) ||
             string.IsNullOrWhiteSpace(lastNames) || string.IsNullOrWhiteSpace(rut) ||
             firstNames.Length > 160 || lastNames.Length > 160 || rut.Length > 16)
@@ -83,7 +84,8 @@ public static class CandidateWorkshopIntakeEndpoints
             .SingleOrDefaultAsync(cancellationToken);
         if (organization is null) return Results.NotFound(new { message = "El Taller seleccionado no existe." });
 
-        var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut == rut, cancellationToken);
+        var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut != null &&
+            x.Rut.Replace(".", "").Replace("-", "").Replace(" ", "").ToUpper() == normalizedId, cancellationToken);
         if (person is not null)
         {
             var activeRequest = await coreDb.CeremonyRequests.AnyAsync(x =>
@@ -124,7 +126,7 @@ public static class CandidateWorkshopIntakeEndpoints
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Created($"/api/ceremonias/solicitudes/{entity.Id}", new CandidateWorkshopQueueItemDto(
-            entity.Id, person.FirstNames, person.LastNames, $"{person.FirstNames} {person.LastNames}".Trim(),
+            entity.Id, person.FirstNames, person.LastNames, person.Rut, $"{person.FirstNames} {person.LastNames}".Trim(),
             organization.Name, organization.Number, null, entity.Status, false, false,
             CandidateIntakeCodes.ReviewStatus.Pending, entity.CreatedAtUtc, null));
     }
@@ -205,6 +207,7 @@ public static class CandidateWorkshopIntakeEndpoints
                 WorkshopNumber = x.Organization.Number,
                 FirstNames = x.CandidatePerson != null ? x.CandidatePerson.FirstNames : "",
                 LastNames = x.CandidatePerson != null ? x.CandidatePerson.LastNames : "",
+                RutOrInstitutionalId = x.CandidatePerson != null ? x.CandidatePerson.Rut : null,
                 x.ProposedDate,
                 x.Status,
                 x.CreatedAtUtc
@@ -278,6 +281,7 @@ public static class CandidateWorkshopIntakeEndpoints
                 candidate.Id,
                 candidate.FirstNames,
                 candidate.LastNames,
+                candidate.RutOrInstitutionalId,
                 $"{candidate.FirstNames} {candidate.LastNames}".Trim(),
                 candidate.WorkshopName,
                 candidate.WorkshopNumber,
@@ -312,6 +316,7 @@ public sealed record CandidateWorkshopQueueItemDto(
     Guid CeremonyRequestId,
     string FirstNames,
     string LastNames,
+    string? RutOrInstitutionalId,
     string DisplayName,
     string WorkshopName,
     string? WorkshopNumber,
