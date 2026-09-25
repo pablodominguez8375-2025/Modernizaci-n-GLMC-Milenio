@@ -762,7 +762,7 @@ PR #163 se integró por squash como `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`. 
 - QA Installable #443;
 - Pre-UAT Installable #355.
 
-Estos resultados confirman compilación, pruebas automatizadas, generación/publicación del showcase y paquetes; **no equivalen a instalación ni aceptación física en srv01**.
+Estos resultados confirman compilación, pruebas automatizadas, generación/publicación del showcase y paquetes; **no equivalen a instalación ni aceptación física en srv01**. PR #164 añadió únicamente este registro documental y dejó el HEAD actual de `dev` en `bdcfa6efa12dd7ab6cf167302506121082a40dcb`; sobre ese HEAD documental pasaron también CI #1543, Showcase/Pages #808, QA Installable #446 y Pre-UAT #356. Para el próximo despliegue de QA se debe descargar el paquete del HEAD actual `bdcfa6e`, no el paquete anterior de `7aba5c9`.
 
 ### Seguimiento bloqueante
 Issue #97 continúa abierto. Pendiente: desplegar el SHA exacto en `srv01`, verificar checksum/manifiesto, ejecutar smoke autenticado, regresión institucional y UAT. Mantener `main` sin cambios y no declarar QA/UAT cerradas hasta registrar evidencia de esos pasos. La prioridad QA puede exceptuarse sólo con autorización expresa del Product Owner para un alcance funcional concreto, como ocurrió con el alcance acotado de PR #163.
