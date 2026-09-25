@@ -435,7 +435,7 @@ export class CandidateIntakeApiClient {
 
   async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {
     if (this.useMocks) {
-      const duplicate = this.mockIdentifications.has(payload.rutOrInstitutionalId.trim().replace(/[.\\-\\s]/g, '').toUpperCase())
+      const duplicate = this.mockIdentifications.has(payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase())
       if (duplicate) throw new CandidateIntakeApiHttpError(409, 'Ya existe un expediente demostrativo para este postulante.')
       const item: CandidateWorkshopQueueItem = {
         ceremonyRequestId: crypto.randomUUID(),
@@ -453,7 +453,7 @@ export class CandidateIntakeApiClient {
         createdAtUtc: new Date().toISOString(),
         orderLevelAlert: null,
       }
-      this.mockIdentifications.add(payload.rutOrInstitutionalId.trim().replace(/[.\\-\\s]/g, '').toUpperCase())
+      this.mockIdentifications.add(payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase())
       this.mockWorkshopQueue.unshift(item)
       return { ...item }
     }
