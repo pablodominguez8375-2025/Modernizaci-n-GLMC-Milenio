@@ -12,7 +12,7 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
   firstNames: item?.firstNames ?? '',
   paternalSurname: item?.lastNames.split(/\\s+/)[0] ?? '',
   maternalSurname: item?.lastNames.split(/\\s+/).slice(1).join(' ') || null,
-  rutOrInstitutionalId: null,
+  rutOrInstitutionalId: item?.rutOrInstitutionalId ?? null,
   birthDate: null,
   nationality: null,
   civilStatus: null,
