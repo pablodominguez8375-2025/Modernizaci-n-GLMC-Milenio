@@ -1,4 +1,8 @@
 .workshop-intake-page { display: grid; gap: 18px; }
+.workshop-new-intake { display: grid; gap: 12px; }
+.workshop-new-intake > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.workshop-new-intake .workshop-form-grid { margin-top: 4px; }
+.workshop-new-intake-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; }
 .workshop-intake-scope { display: inline-flex; align-items: center; min-height: 38px; padding: 0 12px; border-radius: 999px; background: var(--gold-soft); color: #7b5d23; font-size: 11px; font-weight: 800; }
 .workshop-intake-layout { display: grid; grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .workshop-intake-queue { position: sticky; top: 92px; }
@@ -24,9 +28,9 @@
 .workshop-field { display: grid; gap: 6px; min-width: 0; }
 .workshop-field.wide { grid-column: 1 / -1; }
 .workshop-field > span, .workshop-photo-version > span { color: #526078; font-size: 11px; font-weight: 800; }
-.workshop-field input, .workshop-field textarea, .workshop-photo-version input { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #fff; outline: none; resize: vertical; }
-.workshop-field input:focus, .workshop-field textarea:focus, .workshop-photo-version input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
-.workshop-field input:disabled, .workshop-field textarea:disabled, .workshop-photo-version input:disabled { background: #f0f2f6; color: #7e8798; cursor: not-allowed; }
+.workshop-field input, .workshop-field textarea, .workshop-field select, .workshop-photo-version input { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #fff; outline: none; resize: vertical; }
+.workshop-field input:focus, .workshop-field textarea:focus, .workshop-field select:focus, .workshop-photo-version input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.workshop-field input:disabled, .workshop-field textarea:disabled, .workshop-field select:disabled, .workshop-photo-version input:disabled { background: #f0f2f6; color: #7e8798; cursor: not-allowed; }
 .workshop-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .workshop-form-actions small { max-width: 620px; color: var(--muted); line-height: 1.45; }
 .workshop-photo-layout { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 22px; align-items: start; }

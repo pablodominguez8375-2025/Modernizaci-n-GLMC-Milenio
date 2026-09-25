@@ -22,6 +22,7 @@ export interface CandidateWorkshopQueueItem {
   ceremonyRequestId: string
   firstNames: string
   lastNames: string
+  rutOrInstitutionalId?: string | null
   displayName: string
   workshopName: string
   workshopNumber: string | null
@@ -204,6 +205,9 @@ export type PublishedCandidate = CandidatePortalResponse['items'][number] & { ph
 export type PublishedCandidatePortalResponse = Omit<CandidatePortalResponse, 'items'> & { items: PublishedCandidate[] }
 export type CandidateReviewDecision = 'observed' | 'rejected'
 export type AccessTokenProvider = () => Promise<string | null>
+
+export interface CandidateWorkshopOrganization { id: string; name: string; number: string | null }
+export interface CreateCandidateWorkshopRequest { organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string }
 
 export interface CandidateIntakeApiClientOptions {
   baseUrl?: string
@@ -399,6 +403,7 @@ export class CandidateIntakeApiClient {
   private readonly onUnauthorized?: () => Promise<void>
   private readonly mockQueue = demoQueueSeed.map(item => ({ ...item }))
   private readonly mockWorkshopQueue = demoWorkshopQueueSeed.map(item => ({ ...item }))
+  private readonly mockIdentifications = new Set<string>()
   private readonly mockProfiles = new Map<string, CandidateIntakeProfile>([[demoRequestId, { ...demoProfile, presenters: [...demoProfile.presenters] }]])
   private readonly mockWorkflows = new Map<string, CandidateWorkflowResponse>([[demoRequestId, cloneWorkflow(demoWorkflowSeed)]])
   // QA only: browser-memory storage. Nothing is sent to or retained by the public demo.
@@ -421,6 +426,40 @@ export class CandidateIntakeApiClient {
   async getWorkshopQueue(): Promise<CandidateWorkshopQueueResponse> {
     if (this.useMocks) return { total: this.mockWorkshopQueue.length, items: this.mockWorkshopQueue.map(item => ({ ...item })) }
     return this.request<CandidateWorkshopQueueResponse>('/api/insinuados/taller/solicitudes')
+  }
+
+  async getWorkshopOrganizations(): Promise<{ total: number; items: CandidateWorkshopOrganization[] }> {
+    if (this.useMocks) return { total: 1, items: [{ id: 'demo-workshop-23', name: 'Taller Demostrativo Nº 23', number: '23' }] }
+    return this.request('/api/insinuados/taller/organizaciones')
+  }
+
+  async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {
+    if (this.useMocks) {
+      const duplicate = this.mockIdentifications.has(payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase())
+      if (duplicate) throw new CandidateIntakeApiHttpError(409, 'Ya existe un expediente demostrativo para este postulante.')
+      const item: CandidateWorkshopQueueItem = {
+        ceremonyRequestId: crypto.randomUUID(),
+        firstNames: payload.firstNames.trim(),
+        lastNames: payload.lastNames.trim(),
+        rutOrInstitutionalId: payload.rutOrInstitutionalId.trim().toUpperCase(),
+        displayName: `${payload.firstNames.trim()} ${payload.lastNames.trim()}`,
+        workshopName: 'Taller Demostrativo Nº 23',
+        workshopNumber: '23',
+        proposedDate: null,
+        requestStatus: 'draft',
+        profileAvailable: false,
+        photoAvailable: false,
+        reviewStatus: 'pending_grand_secretariat',
+        createdAtUtc: new Date().toISOString(),
+        orderLevelAlert: null,
+      }
+      this.mockIdentifications.add(payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase())
+      this.mockWorkshopQueue.unshift(item)
+      return { ...item }
+    }
+    return this.request<CandidateWorkshopQueueItem>('/api/insinuados/taller/solicitudes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
   }
 
   async getOrderRejectionAlerts(): Promise<CandidateOrderRejectionAlertResponse> {
