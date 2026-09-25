@@ -2,7 +2,7 @@
 
 ## Verificación de continuidad — 25-09-2026
 
-Corte vivo actualizado: `dev@7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue intacta.
+Último corte funcional: `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`; HEAD actual de `dev`: `bdcfa6efa12dd7ab6cf167302506121082a40dcb` (PR #164 sólo actualizó documentación); `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue intacta.
 
 PR #162 dejó sincronizados los cargos y abreviaciones en la Línea Base Maestra de Drive y perfiles. PR #163 incorporó en Secretaría → Insinuados el alta de postulante y apertura de expediente privado en borrador, con continuidad en la ficha vigente, permisos acotados al Taller, control de duplicidad y bloqueo de reingreso antes del año reglamentario cuando existe rechazo pertinente.
 
@@ -10,7 +10,7 @@ PR #163 se integró por squash. En el SHA integrado pasaron los gates post-merge
 
 Issue #97 continúa abierto: faltan instalación del SHA exacto en `srv01`, verificación de checksum/manifiesto, smoke autenticado, regresión institucional y UAT. `main` no debe promoverse hasta que el Product Owner acepte formalmente el corte.
 
-**Siguiente paso operativo:** retomar Issue #97, validar y desplegar en `srv01` los artefactos del SHA `7aba5c9f43df49d2d6d47bf2f522913dfa8863d3`, registrar evidencia de cada control y ejecutar UAT. No iniciar otro incremento funcional salvo autorización expresa del Product Owner con alcance concreto.
+**Siguiente paso operativo:** retomar Issue #97, descargar y verificar que Pages, `qa-current.json` y el instalable correspondan todos al HEAD actual de `dev` (`bdcfa6efa12dd7ab6cf167302506121082a40dcb`; QA Installable #446, Pre-UAT #356, Showcase/Pages #808, CI #1543). Desplegar ese SHA exacto en `srv01`, registrar evidencia de cada control y ejecutar UAT. No iniciar otro incremento funcional salvo autorización expresa del Product Owner con alcance concreto.
 
 ## 1. Hito operacional bloqueante vigente: QA srv01
 
