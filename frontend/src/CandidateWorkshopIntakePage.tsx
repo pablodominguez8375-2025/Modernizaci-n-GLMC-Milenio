@@ -10,8 +10,8 @@ interface CandidateWorkshopIntakePageProps {
 
 const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayload => ({
   firstNames: item?.firstNames ?? '',
-  paternalSurname: item?.lastNames.split(/\\s+/)[0] ?? '',
-  maternalSurname: item?.lastNames.split(/\\s+/).slice(1).join(' ') || null,
+  paternalSurname: item?.lastNames.split(/\s+/)[0] ?? '',
+  maternalSurname: item?.lastNames.split(/\s+/).slice(1).join(' ') || null,
   rutOrInstitutionalId: item?.rutOrInstitutionalId ?? null,
   birthDate: null,
   nationality: null,
@@ -282,6 +282,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             <div><small>Estado de revisión</small><strong className={`workshop-status ${selected.reviewStatus}`}>{statusLabel(selected.reviewStatus)}</strong></div>
             <div><small>Fecha propuesta de ceremonia</small><strong>{selected.proposedDate ? formatDateOnly(selected.proposedDate) : 'Por definir'}</strong></div>
           </section>
+
+          {selected.requestStatus === 'draft' && !profile && <div className="candidate-protected-notice">Expediente nuevo en borrador: complete la ficha oficial y registre al menos un patrocinante para enviarlo a revisión.</div>}
 
           {locked && <div className="candidate-protected-notice">Esta ficha está {selected.reviewStatus === 'approved' ? 'aprobada/publicada' : 'rechazada'} y se muestra en modo de sólo lectura. Cualquier reapertura deberá quedar trazada mediante un flujo institucional específico.</div>}
 
