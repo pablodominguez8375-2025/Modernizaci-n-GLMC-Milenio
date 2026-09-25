@@ -14,7 +14,6 @@ public sealed class CalendarSourceProjectionInterceptor(
     CalendarDbContext calendarDb,
     ILogger<CalendarSourceProjectionInterceptor> logger) : SaveChangesInterceptor
 {
-    private static readonly TimeZoneInfo Santiago = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
     private readonly ConcurrentDictionary<DbContext, List<SourceSnapshot>> _pending = new();
 
     public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
@@ -241,13 +240,7 @@ public sealed class CalendarSourceProjectionInterceptor(
     }
 
     private static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) ToInstitutionalDay(DateOnly date)
-    {
-        var localStart = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        var localEnd = date.AddDays(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        return (
-            new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localStart, Santiago), TimeSpan.Zero),
-            new DateTimeOffset(TimeZoneInfo.ConvertTimeToUtc(localEnd, Santiago), TimeSpan.Zero));
-    }
+        => InstitutionalCalendarDayRange.For(date);
 
     private static string MapCeremonyStatus(string status)
         => status switch
