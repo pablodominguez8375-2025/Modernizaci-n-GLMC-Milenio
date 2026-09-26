@@ -200,3 +200,24 @@ public sealed class LodgeTreasuryYearClosure
     public required string ClosedBySubject { get; set; }
     public DateTimeOffset ClosedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
+
+public sealed class LodgeTreasuryReconciliation
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Organization Organization { get; set; } = null!;
+    public DateOnly From { get; init; }
+    public DateOnly To { get; init; }
+    public decimal OpeningBalance { get; init; }
+    public decimal Income { get; init; }
+    public decimal AuthorizedExpenses { get; init; }
+    public decimal PendingExpenses { get; init; }
+    public decimal ClosingBalance { get; init; }
+    public decimal ObservedBalance { get; init; }
+    public decimal Difference { get; init; }
+    public int MovementCount { get; init; }
+    public string? EvidenceReference { get; init; }
+    public string? Notes { get; init; }
+    public required string RecordedBySubject { get; init; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}

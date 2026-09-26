@@ -8,7 +8,7 @@ No reemplaza la UAT institucional formal ni la aprobación del Sponsor/Product O
 
 ## Matriz
 
-La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 40 controles:
+La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 41 controles:
 
 - QA-001 a QA-020: cobertura equivalente a los 20 casos base históricos;
 - QA-021: Consejo de Administración por cargo, Taller y fecha.
@@ -31,6 +31,7 @@ La plantilla `release/PMGM-QA-SRV01-REGRESSION.template.json` contiene 40 contro
 - QA-038: cierres anuales inmutables, arrastre del saldo y reporte Debe/Haber/Neto con filtros y exportación.
 - QA-039: pago parcial/total idempotente del derecho ceremonial, comprobante, saldo y bloqueo de autorización.
 - QA-040: trazabilidad de movimientos de Tesorería, estado de cuadratura y CSV sin fórmulas ejecutables.
+- QA-041: conciliación inmutable por período, recálculo en servidor, diferencia reproducible, actor/UTC, respaldo y múltiples intentos históricos.
 
 Todos parten en `pending`. Ningún control cambia automáticamente a `pass`.
 
@@ -205,7 +206,7 @@ Para cerrar la regresión:
 python3 tests/qa_srv01_regression_gate.py evidence/PMGM-QA-srv01-<sha>.json
 ```
 
-El cierre exige 40/40 `pass`, evidencia en cada control y `result.decision=pass`.
+El cierre exige 41/41 `pass`, evidencia en cada control y `result.decision=pass`.
 
 ## Política de evidencia
 

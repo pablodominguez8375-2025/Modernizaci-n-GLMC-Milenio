@@ -23,6 +23,7 @@ public static class LodgeTreasuryEndpoints
         group.MapGet("/talleres/{organizationId:guid}/resumen", GetSummaryAsync);
         group.MapGet("/talleres/{organizationId:guid}/caja", GetCashSummaryAsync);
         group.MapGet("/talleres/{organizationId:guid}/reportes", GetCashReportAsync);
+        group.MapPost("/talleres/{organizationId:guid}/conciliaciones", SaveCashReconciliationAsync);
         group.MapPost("/talleres/{organizationId:guid}/ingresos", CreateIncomeAsync);
         group.MapGet("/talleres/{organizationId:guid}/configuracion", GetConfigurationAsync);
         group.MapPut("/talleres/{organizationId:guid}/configuracion", SaveConfigurationAsync);
@@ -335,10 +336,70 @@ public static class LodgeTreasuryEndpoints
                 return new { period = $"{group.Key.Year}-{group.Key.Month:00}", type = group.Key.type, category = group.Key.category,
                     debit, credit, net = credit - debit, pendingAmount, count = group.Count() };
             }).ToList();
+        var reconciliations = await db.LodgeTreasuryReconciliations.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId && x.From == from && x.To == to)
+            .OrderByDescending(x => x.RecordedAtUtc).Take(50).ToListAsync(ct);
         return Results.Ok(new { organizationId, from, to, openingBalance = periodOpening, income = received, authorizedExpenses = authorized,
             pendingExpenses = pending, closingBalance = calculatedBalance, observedBalance,
+            reconciliationHistory = reconciliations.Select(ToReconciliation),
             difference = observedBalance is null ? (decimal?)null : observedBalance.Value - calculatedBalance, monthlyTotals, movements });
     }
+
+    private static async Task<IResult> SaveCashReconciliationAsync(Guid organizationId, SaveLodgeTreasuryReconciliationRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (request.To < request.From || request.ObservedBalance < 0 ||
+            request.EvidenceReference?.Length > 300 || request.Notes?.Length > 1000)
+            return Results.BadRequest(new { message = "El rango, saldo observado y referencias de conciliación deben ser válidos." });
+
+        var config = await db.LodgeTreasuryConfigurations.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.OrganizationId == organizationId, ct);
+        var openingDate = config?.OpeningBalanceDate ?? DateOnly.MinValue;
+        var periodFrom = request.From < openingDate ? openingDate : request.From;
+        var opening = request.From < openingDate && request.To >= openingDate && config is not null
+            ? config.OpeningBalance
+            : await GetBalanceAtStartOfYearAsync(db, organizationId, request.From, ct);
+
+        var payments = await db.LodgeMemberPayments.AsNoTracking().Where(x => x.Charge.OrganizationId == organizationId &&
+            x.PaymentDate >= periodFrom && x.PaymentDate <= request.To).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
+        var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId &&
+            x.IncomeDate >= periodFrom && x.IncomeDate <= request.To).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
+        var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId &&
+            x.ExpenseDate >= periodFrom && x.ExpenseDate <= request.To).ToListAsync(ct);
+        var authorized = expenses.Where(x => x.ApprovalStatus == "approved").Sum(x => x.Amount);
+        var pending = expenses.Where(x => x.ApprovalStatus != "approved").Sum(x => x.Amount);
+        var movementCount = await db.LodgeMemberPayments.CountAsync(x => x.Charge.OrganizationId == organizationId &&
+                x.PaymentDate >= periodFrom && x.PaymentDate <= request.To, ct)
+            + await db.LodgeTreasuryIncomes.CountAsync(x => x.OrganizationId == organizationId &&
+                x.IncomeDate >= periodFrom && x.IncomeDate <= request.To, ct)
+            + expenses.Count;
+        var closing = opening + payments + incomes - authorized;
+        var reconciliation = new LodgeTreasuryReconciliation
+        {
+            OrganizationId = organizationId, From = request.From, To = request.To,
+            OpeningBalance = opening, Income = payments + incomes, AuthorizedExpenses = authorized,
+            PendingExpenses = pending, ClosingBalance = closing, ObservedBalance = request.ObservedBalance,
+            Difference = request.ObservedBalance - closing, MovementCount = movementCount,
+            EvidenceReference = Normalize(request.EvidenceReference), Notes = Normalize(request.Notes),
+            RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown"
+        };
+        db.LodgeTreasuryReconciliations.Add(reconciliation);
+        audit.Add(context, "lodge.treasury.reconciliation.recorded", nameof(LodgeTreasuryReconciliation),
+            reconciliation.Id.ToString(), organizationId, AuditResults.Success,
+            new { reconciliation.From, reconciliation.To, reconciliation.ClosingBalance, reconciliation.ObservedBalance,
+                reconciliation.Difference, reconciliation.MovementCount });
+        await db.SaveChangesAsync(ct);
+        return Results.Created($"/api/gestion-logial/tesoreria/talleres/{organizationId}/conciliaciones/{reconciliation.Id}",
+            ToReconciliation(reconciliation));
+    }
+
+    private static object ToReconciliation(LodgeTreasuryReconciliation x) => new
+    {
+        x.Id, x.OrganizationId, x.From, x.To, x.OpeningBalance, x.Income, x.AuthorizedExpenses,
+        x.PendingExpenses, x.ClosingBalance, x.ObservedBalance, x.Difference, x.MovementCount,
+        x.EvidenceReference, x.Notes, x.RecordedBySubject, x.RecordedAtUtc
+    };
 
     private static async Task<IResult> GetConfigurationAsync(Guid organizationId, HttpContext context, PmgmDbContext db,
         IInstitutionalAccessService access, CancellationToken ct)
@@ -508,3 +569,5 @@ public sealed record AddLodgeMemberPaymentRequest(decimal Amount, string Payment
 public sealed record CreateLodgeTreasuryExpenseRequest(string Category, decimal Amount, DateOnly ExpenseDate, string Description, string? EvidenceReference);
 public sealed record CreateLodgeTreasuryIncomeRequest(string Category, decimal Amount, DateOnly IncomeDate, string Description, string? EvidenceReference);
 public sealed record SaveLodgeTreasuryConfigurationRequest(decimal OpeningBalance, DateOnly OpeningBalanceDate, string IncomeCategories, string ExpenseCategories);
+public sealed record SaveLodgeTreasuryReconciliationRequest(DateOnly From, DateOnly To, decimal ObservedBalance,
+    string? EvidenceReference, string? Notes);

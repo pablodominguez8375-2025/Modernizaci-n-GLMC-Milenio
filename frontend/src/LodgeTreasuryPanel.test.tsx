@@ -59,5 +59,17 @@ describe('lodge treasury panel — segregación de funciones', () => {
     expect(html).toContain('Cuadratura de caja')
     expect(html).toContain('Exportar CSV')
     expect(html).toContain('trazabilidad UTC de registro/autorización')
+    expect(html).toContain('Guardar conciliación')
+  })
+
+  it('keeps repeated cash reconciliations as separate audit snapshots', async () => {
+    const client=api()
+    const first=await client.saveLodgeTreasuryReconciliation('org-1',{from:'2026-09-01',to:'2026-09-30',observedBalance:12000,evidenceReference:'arqueo-01'})
+    const second=await client.saveLodgeTreasuryReconciliation('org-1',{from:'2026-09-01',to:'2026-09-30',observedBalance:12500,evidenceReference:'arqueo-02'})
+    const report=await client.getLodgeTreasuryReport('org-1','2026-09-01','2026-09-30')
+    expect(first.id).not.toBe(second.id)
+    expect(report.reconciliationHistory).toHaveLength(2)
+    expect(report.reconciliationHistory?.map(x=>x.evidenceReference)).toEqual(['arqueo-02','arqueo-01'])
+    expect(report.reconciliationHistory?.[0].difference).toBe(12500-report.closingBalance)
   })
 })
