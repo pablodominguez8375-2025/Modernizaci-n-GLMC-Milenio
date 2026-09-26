@@ -374,6 +374,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-041",
+      "category": "treasury",
+      "title": "Conciliación de caja inmutable, atribuida y con cálculo validado en servidor",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {
