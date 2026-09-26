@@ -1,3 +1,9 @@
+## Estado vigente — PR #175 integrado — 26-09-2026
+
+El resaltado del menú activo del Portal del Hermano quedó integrado en `dev@d13428684b13f649d6732e9be4e555e90a94248d`. `member-portal.css` era la causa: sustituía el estado activo institucional por blanco translúcido y texto claro. El estilo corregido marca la selección con fondo dorado institucional y texto/iconos azul oscuro, manteniendo la navegación azul.
+
+CI exact-head del PR y gates post-merge, incluida publicación de Showcase y generación del instalable, finalizaron SUCCESS. Se verificaron `qa-current.json`, `BUILD-INFO`, checksum y MANIFEST contra el SHA integrado. Esto no implica instalación real, aceptación de QA/UAT ni levantamiento de la pausa de `srv01`. Issue #97 permanece abierto. No se inicia otro incremento funcional sin un alcance autorizado.
+
 ## Alcance autorizado — resaltado del menú activo del Portal del Hermano — 26-09-2026
 
 La captura móvil reportó que «Mi calendario» pierde el resaltado dorado. La causa confirmada es que `member-portal.css` define los accesos activos con fondo blanco translúcido, sobreescribiendo la señal visual institucional. El alcance autorizado se limita al estado activo de la navegación: fondo dorado institucional, texto e icono azul oscuro, manteniendo el fondo azul de la barra y los colores de los demás accesos. No cambia rutas, permisos ni lógica de navegación.

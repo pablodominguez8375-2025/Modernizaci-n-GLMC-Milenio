@@ -1,3 +1,12 @@
+## Corte visual integrado — navegación activa dorada — 26-09-2026
+
+- **Integrado en `dev`:** PR #175, merge `d13428684b13f649d6732e9be4e555e90a94248d`. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
+- **Causa corregida:** `member-portal.css` aplicaba fondo blanco translúcido y texto claro al elemento activo. La navegación seleccionada ahora usa dorado `#F3C609` / `#FBAE17` con texto e iconos azul oscuro `#06148E`, tanto en móvil como en escritorio; la barra y accesos no seleccionados siguen azules.
+- **CI exact-head del PR:** SUCCESS en frontend, backend, infraestructura, smokes locales de stack, Showcase y generación instalable.
+- **Gates post-merge:** PMGM CI #36250603693, Showcase/Pages #36250603669, QA Installable #36250603670 y Pre-UAT package #36250603700 — SUCCESS para el SHA integrado.
+- **Demo publicada:** `qa-current.json` y `BUILD-INFO` identifican `d13428684b13f649d6732e9be4e555e90a94248d`. El ZIP publicado por Pages valida con SHA-256 `80c3340dca8bd006f391a48a986431a6f01529791fdbb0023754bdb3156fc021`; su MANIFEST valida 755/755 entradas. El paquete de QA Actions también identifica el mismo SHA y su MANIFEST valida 755/755. La evidencia visual de Showcase (`mi-ficha-390x844.png` y `mi-ficha-1440x900.png`) confirma fondo dorado y texto/iconos azul oscuro en el menú activo.
+- **Límites operativos:** el paquete instalable es un artefacto, no una instalación. `srv01` sigue pausado; no se realizó instalación, smoke autenticado en el servidor, regresión física ni UAT. Issue #97 sigue abierto. No promover a `main`.
+
 ## Verificación de continuidad — 26-09-2026
 
 - HEAD vivo verificado: `dev@b68338026f4741360392a5f448a8999060e020d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta.
