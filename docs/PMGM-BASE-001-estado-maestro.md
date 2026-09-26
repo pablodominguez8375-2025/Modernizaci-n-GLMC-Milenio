@@ -805,3 +805,8 @@ El Product Owner autorizó aplicar a la interfaz la *Guía de uso del logotipo d
 - Textos alineados a la izquierda, sin justificar. Verde, rojo y otros tonos quedan para estados semánticos, no como paleta de marca.
 
 La implementación sustituye la antigua paleta `#102c54/#173b6e/#b48a37` y las fuentes Aptos/Inter por tokens institucionales en el tema global, los estilos de módulos y controles de regresión. Se mantiene la composición aprobada y el logotipo SVG oficial SHA-256 `d8e4660f95ffbdccb8c62fdc39eb8acd8f1aa5f27e8c17845c4bda64853d24bb`. Este cambio se desarrolla en `feature/institutional-brand-system-20260926`; Pages y el paquete instalable se actualizarán desde el mismo SHA integrado. `srv01` sigue pausado y `main` no se modifica.
+
+
+### Aclaración de contraste — iconografía sobre azul — 26-09-2026
+
+En las superficies institucionales sólidas azul marino o azul corporativo, los símbolos e iconos insertos se muestran en dorado `#F3C609` (o dorado fuerte `#FBAE17` cuando corresponda), para conservar contraste y concordancia con la identidad visual. Esta regla corrige las tarjetas de estado del portal de miembros: los mosaicos permanecen azules y los glifos de tesorería/hospitalaria pasan a dorado. Los acentos dorados con texto sobre fondo dorado conservan texto azul marino por legibilidad; los colores semánticos de estado no cambian.

@@ -191,6 +191,11 @@
   background: var(--member-ppt-navy);
 }
 
+.member-status-icon,
+.member-callout-icon {
+  color: var(--member-ppt-gold);
+}
+
 .member-calendar-days span.instruction,
 .member-calendar-legend i.instruction {
   background: #d2ad57;
