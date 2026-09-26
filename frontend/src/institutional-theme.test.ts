@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('./institutional-theme.css', import.meta.url), 'utf8')
+const fidelityCss = readFileSync(new URL('./ppt-fidelity.css', import.meta.url), 'utf8')
 const main = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 
 describe('PMGM-UI-001 institutional responsive contract', () => {
@@ -15,6 +16,10 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     expect(css).toContain('--brand-gold-strong: #FBAE17')
     expect(css).toContain('--font-ui: Cambria, Georgia, "Times New Roman", serif')
     expect(css).toContain('--font-institutional-name: "Arial Narrow", Arial, sans-serif')
+  })
+
+  it('uses gold glyphs on navy status and callout tiles', () => {
+    expect(fidelityCss).toMatch(/\\.member-status-icon,\\s*\\.member-callout-icon\\s*\\{\\s*color:\\s*var\\(--member-ppt-gold\\)/)
   })
 
   it('keeps navigation accents readable against the corporate gold', () => {

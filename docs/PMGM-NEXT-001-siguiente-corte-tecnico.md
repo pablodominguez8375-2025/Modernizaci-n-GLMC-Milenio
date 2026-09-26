@@ -301,3 +301,10 @@ PR #169 se integró por squash como `2db812f37c2080d166b74692f0118f566879138c`, 
 El Product Owner autorizó aplicar en el frontend los criterios de la Guía de uso del logotipo GLMCh y de la plantilla oficial de papelería. El cambio actualiza tema global, módulos y pruebas de contrato; sustituye colores/fuentes anteriores, conserva la composición responsive y el logo SVG original, y mantiene contraste accesible en texto sobre acentos dorados. Referencia de implementación: `docs/ui/PMGM-UI-001-identidad-visual-responsive.md`.
 
 Rama `feature/institutional-brand-system-20260926`, creada desde `dev@c2d49728179a10f163cd6fef8d9f8a07f81754de`. Tras pruebas y CI exact-head, integrar en `dev`, actualizar Pages y QA instalable y registrar el SHA. Esto no levanta la pausa de `srv01`: no instalar, desplegar, ejecutar smoke/regresión física ni UAT. Issue #97 sigue abierto, QA/UAT no están aceptadas y `main` permanece intacta.
+
+
+## Corrección autorizada — iconos dorados en mosaicos azules — 26-09-2026
+
+A partir de `dev@212e3fb50fc3e3ff87765494ff03334690333d8e`, el ajuste visual puntual mantiene los fondos azul marino de las tarjetas de estado del portal de miembros y fija en dorado institucional los símbolos de Tesorería y Hospitalaria. La regla también cubre los iconos de llamados sobre el mismo fondo azul; no afecta numeración del calendario, estados semánticos ni texto azul marino sobre botones dorados. Se añade una prueba de regresión del contrato de color.
+
+El cambio se prepara en `fix/gold-icons-member-portal-20260926` como PR hacia `dev`. No modifica permisos ni flujos. `main` no se toca. `srv01` permanece en pausa: instalación, smoke autenticado, regresión institucional y UAT siguen pendientes y no se declaran aceptadas.
