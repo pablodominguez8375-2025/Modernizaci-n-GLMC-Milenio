@@ -1,3 +1,16 @@
+## CORTE INTEGRADO — MENÚ ACTIVO DORADO AL TOCAR — 26-09-2026
+
+- **Código integrado:** PR #179 fusionado por squash en `dev@9eef03623fc5e441bb254d057ed533dfce443413`; base previa `e637320655cbfb6a553b10ec88d7df1fe2b05c12`. `main` sigue intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
+- **Hallazgo y causa:** el `:hover` podía quedar pegado después de tocar «Mi calendario» en móvil y prevalecía sobre `.active` (especificidad `0,4,0` frente a `0,3,0`), ocultando el dorado con fondo azul translúcido y texto blanco.
+- **Corrección:** `institutional-theme.css` y `member-portal.css` excluyen `.active` de sus reglas hover. El elemento seleccionado mantiene fondo institucional `#F3C609`/`#FBAE17`, texto e icono `#06148E`; los demás accesos y la barra conservan sus colores. No cambian rutas, permisos ni lógica.
+- **Pruebas locales:** la prueba de contrato nueva falló con el CSS previo y pasó tras el cambio; frontend 205/205, lint sin errores, build productivo exitoso y `git diff --check` limpio.
+- **Gates post-merge sobre el SHA integrado:** PMGM CI #1589 / run `36271893711`, Showcase/Pages #870 / run `36271893690`, QA Installable #508 / run `36271893691` y Pre-UAT #371 / run `36271893727` — todos SUCCESS.
+- **Demo publicada:** [GitHub Pages](https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/). El artifact Pages #10916241204 tiene digest `sha256:55bce43a008c067a71f0ad172fd860ca8f040ad1a42b4dc057182a8ee583ffc1`. `qa-current.json` declara `sourceSha=9eef03623fc5e441bb254d057ed533dfce443413`, paquete `Proyecto-Centenario-QA-srv01-9eef03623fc5.zip` y SHA-256 `484678413c8cbe69eff430f0cb2181cf0ddff3d96ade998e54884f5e7abc89d1`; checksum comparado contra el ZIP publicado.
+- **Artefacto QA Actions:** artifact #10915768285, digest `sha256:acb23f754addd0c40a36cbd2b34e08542a17e1028c40ff1d34b91bdc123e3549`; su `BUILD-INFO.txt` identifica el SHA integrado y `MANIFEST.sha256` valida 757/757. El ZIP dentro del artifact QA tiene SHA-256 `4d11c972686e23defa9822036a69bd96238fd0aafbdf0bcfb9b05ffbf3c0e0a7`. Pages y Actions son empaquetados independientes, ambos corresponden al mismo SOURCE_SHA; sus checksums de ZIP difieren.
+- **Artefacto Pre-UAT:** artifact #10915832891, digest `sha256:0bfcdaedbf9757892526089e5a8a91ff8cfc3eb15533ab3c2abc1fc1fa56cd5f`, generado desde el mismo SHA.
+- **Evidencia visual:** artifact Showcase #10916241201, digest `sha256:3c86ed7b0dd0b43ad22b2473c3b33422a9ca762197674af2992d2aa4bf656433`. La prueba de contrato cubre el hover activo; CI y artefactos no se presentan como QA física.
+- `srv01` sigue pausado. No se ejecutaron instalación, despliegue, smoke autenticado en el servidor, regresión física ni UAT. Ninguno de estos checks o artefactos equivale a instalación ni aceptación de QA/UAT. Issue #97 permanece abierto; no promover a `main`.
+
 ## Corte integrado — icono de Biblioteca Virtual en Mi ficha — 26-09-2026
 
 - **Integración:** PR #177 quedó integrada por squash en `dev@79401d05faf7cf25ab2523f283471cb10e7221a5`. `main` sigue intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
