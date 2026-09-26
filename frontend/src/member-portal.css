@@ -9,6 +9,18 @@
 .sidebar .nav-section { color: #8ea0bd; }
 
 .member-portal { display: grid; gap: 18px; }
+.member-account-tabs { display: flex; gap: 8px; overflow-x: auto; padding: 6px; border: 1px solid #d8dfeb; border-radius: 14px; background: #fff; scrollbar-width: thin; }
+.member-account-tabs button { flex: 0 0 auto; min-height: 42px; padding: 10px 15px; border: 0; border-radius: 10px; background: transparent; color: #43516a; font: 700 13px var(--font-ui); cursor: pointer; }
+.member-account-tabs button:hover { background: #f4f6fa; }
+.member-account-tabs button.active { background: linear-gradient(135deg,#F3C609,#FBAE17); color: #06148E; box-shadow: inset 0 -2px 0 #06148E; }
+.member-account-unavailable { max-width: 900px; }
+.member-account-unavailable h2 { margin: 4px 0 10px; color: #06148E; }
+.member-account-unavailable p:not(.member-card-kicker) { max-width: 70ch; color: #5d6980; line-height: 1.6; }
+.member-account-summary { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; }
+.member-account-summary article { display: grid; gap: 7px; padding: 16px; border: 1px solid #d8dfeb; border-radius: 14px; background: #fff; }
+.member-account-summary small { color: #748097; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.member-account-summary strong { color: #06148E; font-size: 19px; }
+.member-account-summary button { justify-self: start; padding: 0; border: 0; background: none; color: #004AD4; font-size: 11px; font-weight: 800; cursor: pointer; }
 .member-portal-heading { display: flex; align-items: end; justify-content: space-between; gap: 24px; padding: 4px 2px 0; }
 .member-portal-heading h1 { margin: 0 0 6px; color: #06148E; font-family: var(--font-ui); font-weight: 800; font-size: clamp(30px, 4vw, 42px); }
 .member-portal-heading > div > p:last-child { color: #647189; margin: 0; }
@@ -117,12 +129,16 @@
   .member-lower-grid { grid-template-columns: 1fr 1fr; }
   .member-library-callout { grid-column: 1 / -1; }
   .member-edit-grid { grid-template-columns: 1fr 1fr; }
+  .member-account-summary { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 760px) {
+  .member-account-tabs { margin-inline: -2px; }
+  .member-account-tabs button { min-height: 44px; padding-inline: 12px; font-size: 12px; }
   .member-portal-heading { align-items: stretch; flex-direction: column; }
   .member-primary-action { align-self: flex-start; }
   .member-profile-grid, .member-insight-grid, .member-lower-grid { grid-template-columns: 1fr; }
+  .member-account-summary { grid-template-columns: 1fr 1fr; }
   .member-quote-card, .member-library-callout { grid-column: auto; }
   .member-identity-card { grid-template-columns: 94px 1fr; }
   .member-data-grid, .member-institutional-summary, .member-edit-grid { grid-template-columns: 1fr; }
