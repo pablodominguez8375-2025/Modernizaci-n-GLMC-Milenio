@@ -37,6 +37,16 @@ Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575
 
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Revisión de menús del Sistema Logial referencial — 26-09-2026
+
+Se contrastó el Documento Maestro de “Sistema Logial de Ejemplo - solo como referencia” en Google Drive con los menús, vistas, permisos y contratos existentes en el HEAD vivo de `dev`. El cruce completo y las adaptaciones propuestas están en [`docs/reviews/PMGM-REV-LOGIAL-MENUS-2026-09-26.md`](reviews/PMGM-REV-LOGIAL-MENUS-2026-09-26.md).
+
+Conclusiones para próximos cortes: Tesorería del Taller, Gran Tesorería, Secretaría, Gestión Logial, Docencia, Hospitalaria, Mi ficha, perfiles/vistas y parte de las configuraciones ya tienen equivalentes en Centenario, con límites institucionales propios. Las brechas con mejor ajuste son el flujo personal y versionado de planchas de trabajo en Mi cuenta/Biblioteca, vistas de consulta por grado/período para asistencia e instrucciones, y una consulta de Oficialidad/historial de cargos. Comisiones y una portada tipo Libro de Oro quedan como candidatos que requieren justificar necesidad y cerrar reglas/autorizaciones antes de programar.
+
+Las planchas de trabajo siguen las reglas ya aprobadas por el Product Owner: autoría individual, Secretaría dentro de su ámbito, descripción corta, reemplazo versionado por el autor, historial, clasificación por grado efectivo y publicación sólo tras integridad y antivirus. La rama de trabajo existente no cuenta como código integrado en `dev`. No se copian del sistema de referencia la arquitectura PHP/SQLite/cPanel, permisos financieros, ni la nomenclatura “Padrón” para listados generales; `Padrón` se reserva a electores de la Gran Asamblea.
+
+Esta revisión prioriza adaptación documental y de navegación por tarea. Toda vista futura reutiliza datos actuales, aplica permisos del backend y mantiene separadas Tenidas/Consejo, planchas de trabajo/documentos oficiales y Tesorería/Hospitalaria. `srv01` continúa en pausa; el análisis no representa QA/UAT ni instalación.
+
 ## Decisión vigente del Sponsor — 25-09-2026
 
 El Sponsor / Product Owner indicó que `srv01` **queda pendiente y no se montará hasta nuevo aviso**. Issue #97 continúa abierto; la pausa no constituye aceptación de QA/UAT ni autorización de promoción a `main`. Mientras siga vigente, no se inicia instalación, despliegue, smoke autenticado, regresión física ni UAT en `srv01`.
