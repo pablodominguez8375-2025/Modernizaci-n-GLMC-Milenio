@@ -2,7 +2,7 @@
 .member-toolbar { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(260px, 1fr) 180px minmax(280px, 1.2fr); gap: 14px; align-items: end; margin-bottom: 16px; }
 .member-toolbar label > span { display: block; margin-bottom: 7px; color: #4d5870; font-size: 12px; font-weight: 750; }
 .member-toolbar input, .member-toolbar select { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 11px 12px; background: #fff; color: var(--ink); }
-.member-toolbar input:focus, .member-toolbar select:focus { outline: 0; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.member-toolbar input:focus, .member-toolbar select:focus { outline: 0; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(6,20,142,.14); }
 .member-context { min-height: 64px; padding: 9px 13px; border-left: 3px solid var(--gold); background: var(--surface-soft); border-radius: 8px; }
 .member-context strong, .member-context small { display: block; }
 .member-context strong { font-size: 13px; }
@@ -15,7 +15,7 @@
 .member-row:hover { border-color: #d4d9e2; background: #fbfcfe; }
 .member-row.selected { background: var(--gold-soft); border-color: #dbc889; box-shadow: inset 3px 0 0 var(--gold); }
 .member-avatar { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; background: #eaf0fa; color: #30466c; font-size: 11px; font-weight: 850; }
-.member-avatar.large { width: 62px; height: 62px; font-size: 16px; background: var(--gold-soft); color: #896625; }
+.member-avatar.large { width: 62px; height: 62px; font-size: 16px; background: var(--gold-soft); color: #06148E; }
 .member-row-main { min-width: 0; }
 .member-row-main strong, .member-row-main small { display: block; }
 .member-row-main strong { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -51,7 +51,7 @@
 .history-list strong, .history-list small { display: block; }
 .history-list strong { font-size: 12px; }
 .history-list small { margin-top: 3px; color: var(--muted); font-size: 10px; }
-.history-dot { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px rgba(180,138,55,.12); }
+.history-dot { width: 9px; height: 9px; margin-top: 4px; border-radius: 50%; background: var(--gold); box-shadow: 0 0 0 4px rgba(6,20,142,.14); }
 .transfer-block { background: linear-gradient(90deg, rgba(247,240,223,.55), transparent); margin: 0 -10px; padding-left: 10px; padding-right: 10px; }
 .transfer-card { border: 1px solid #ead7a9; border-radius: 10px; padding: 12px; background: #fffdf8; }
 .transfer-card strong, .transfer-card span { display: block; }

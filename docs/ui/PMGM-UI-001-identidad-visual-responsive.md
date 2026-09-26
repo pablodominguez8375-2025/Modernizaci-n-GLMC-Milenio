@@ -4,7 +4,7 @@
 Aprobado como requisito obligatorio por Product Owner.
 
 ## Fuente visual de verdad
-Las presentaciones ejecutivas y mockups funcionales entregados para Proyecto Milenio / Proyecto Centenario constituyen la referencia visual de la interfaz. El frontend no debe limitarse a compartir colores generales: debe mantener una identidad reconocible y consistente con esas piezas.
+Las presentaciones ejecutivas y mockups funcionales entregados para Proyecto Milenio / Proyecto Centenario constituyen la referencia de estructura y composición. Para logotipo, colores y tipografía institucional prevalece la *Guía de uso del logotipo de la GLMCh* y la plantilla institucional de papelería distribuidas por Publicaciones el 18-09-2026.
 
 Referencias principales:
 - `Proyecto_Milenio_Mapa_QA_Mockups.pptx`
@@ -13,16 +13,18 @@ Referencias principales:
 ## Principios visuales obligatorios
 
 1. **Paleta institucional**
-   - Azul profundo para navegación y encabezados: `#102c54` / `#0d2749`.
-   - Azul secundario: `#173b6e`.
-   - Dorado institucional para selección, énfasis y acentos: `#b48a37` / `#c79d45`.
-   - Fondos claros: `#f3f6f9`, blanco y grises suaves.
-   - Verde, rojo y azul informativo sólo para estados y semántica funcional.
+   - La fuente vigente es la *Guía de uso del logotipo de la GLMCh*, distribuida por Publicaciones el 18-09-2026. Esta edición reemplaza los valores de color anteriores de este documento.
+   - Azul oficial del mandil y la banda del Maestro: `#06148E`; se usa en navegación, títulos y elementos principales.
+   - Azul complementario: `#004AD4`; se usa en acciones primarias, enlaces y énfasis funcional.
+   - Azul claro: `#B4D0F4`; se usa en fondos y bordes secundarios con texto de alto contraste.
+   - Dorados institucionales `#F3C609` y `#FBAE17`; se reservan para acentos, indicadores y selección. Sobre estos fondos el texto y los iconos deben usar azul oscuro para conservar contraste.
+   - Blanco y neutros suaves forman las superficies de lectura. Verde, rojo y otros colores quedan reservados para estados semánticos y no reemplazan la paleta institucional.
+   - El nombre institucional en Arial Narrow y rojo `#C42E00` es parte del logotipo autorizado. La aplicación utiliza el archivo oficial sin modificar; no se recompone el logotipo con texto, no se recolorea y se conserva su proporción, versión autorizada y área de protección.
 
 2. **Tipografía**
-   - Interfaz y lectura operativa: Aptos/Inter/system sans-serif.
-   - Uso serif reservado para citas, elementos ceremoniales o títulos donde el mockup lo requiera.
-   - No utilizar tipografías decorativas que rompan la sobriedad institucional.
+   - La guía institucional identifica Arial Narrow para el nombre oficial dentro del logotipo. La plataforma usa el SVG oficial y no intenta reconstruir ese nombre tipográficamente.
+   - La plantilla oficial de papelería establece Cambria 12 pt para documentos, interlineado 1,15 y alineación izquierda sin justificar. La interfaz aplica Cambria con alternativas serif compatibles como familia operativa común; títulos y controles heredan esa familia salvo el nombre institucional contenido en el logotipo.
+   - No se usan fuentes remotas ni decorativas; los textos permanecen alineados a la izquierda y no justificados.
 
 3. **Iconografía**
    - Producción usa iconos SVG lineales, consistentes en tamaño, trazo y estilo.
@@ -77,7 +79,7 @@ Una pantalla se considera aprobable sólo si:
 
 ## Implementación
 
-El archivo `frontend/src/institutional-theme.css` concentra tokens y reglas globales de adaptación. Se carga al final de los estilos base para actuar como capa institucional sobre módulos existentes.
+El archivo `frontend/src/institutional-theme.css` concentra los tokens derivados de la guía oficial, el contraste accesible y reglas globales de adaptación. Se carga al final de los estilos base para actuar como capa institucional sobre módulos existentes.
 
 El archivo `frontend/src/InstitutionalIcon.tsx` concentra la iconografía SVG de navegación y acciones institucionales. Así el mismo icono mantiene geometría y aspecto en Windows, Android, iOS, macOS y Linux.
 

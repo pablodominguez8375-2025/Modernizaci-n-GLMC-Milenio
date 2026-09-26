@@ -1,19 +1,21 @@
 :root {
-  --brand-navy: #102c54;
-  --brand-navy-dark: #0d2749;
-  --brand-blue: #173b6e;
-  --brand-gold: #b48a37;
-  --brand-gold-strong: #c79d45;
-  --brand-gold-soft: #f7f0df;
-  --brand-canvas: #f3f6f9;
+  --brand-navy: #06148E;
+  --brand-navy-dark: #06148E;
+  --brand-blue: #004AD4;
+  --brand-blue-light: #B4D0F4;
+  --brand-gold: #F3C609;
+  --brand-gold-strong: #FBAE17;
+  --brand-gold-soft: #FFF8D6;
+  --brand-canvas: #F5F8FF;
   --brand-surface: #ffffff;
-  --brand-ink: #20304d;
-  --brand-muted: #6f7c90;
-  --brand-line: #e1e6ef;
+  --brand-ink: #17223B;
+  --brand-muted: #586680;
+  --brand-line: #D8E1F4;
   --brand-success: #28785a;
   --brand-danger: #a13b45;
-  --font-ui: Aptos, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: Georgia, "Times New Roman", serif;
+  --font-ui: Cambria, Georgia, "Times New Roman", serif;
+  --font-display: Cambria, Georgia, "Times New Roman", serif;
+  --font-institutional-name: "Arial Narrow", Arial, sans-serif;
 
   --navy: var(--brand-navy);
   --navy-2: var(--brand-blue);
@@ -54,7 +56,7 @@ textarea {
 
 .topbar {
   background: linear-gradient(100deg, var(--brand-navy) 0%, var(--brand-blue) 64%, var(--brand-navy) 100%);
-  border-bottom: 1px solid rgba(199, 157, 69, .55);
+  border-bottom: 1px solid rgba(251,174,23,.45);
   box-shadow: 0 5px 24px rgba(8, 26, 52, .2);
 }
 
@@ -63,6 +65,12 @@ textarea {
 }
 
 .brand strong {
+  letter-spacing: .025em;
+  font-family: var(--font-display);
+}
+
+.brand small {
+  font-family: var(--font-institutional-name);
   letter-spacing: .025em;
 }
 
@@ -107,15 +115,15 @@ textarea {
 }
 
 .sidebar .nav-item.active {
-  color: #fff;
-  background: linear-gradient(135deg, #a67d2f 0%, var(--brand-gold-strong) 100%);
+  color: var(--brand-navy);
+  background: linear-gradient(135deg, #F3C609 0%, var(--brand-gold-strong) 100%);
   border-color: rgba(255, 255, 255, .12);
   box-shadow: 0 8px 20px rgba(0, 0, 0, .13);
 }
 
 .sidebar .nav-item.active > span:first-child {
-  color: #fff;
-  background: rgba(16, 44, 84, .2);
+  color: var(--brand-navy);
+  background: rgba(6, 20, 142, .08);
   border-color: rgba(255, 255, 255, .18);
 }
 
@@ -125,7 +133,7 @@ textarea {
 
 .hero-panel {
   background: linear-gradient(125deg, var(--brand-navy) 0%, var(--brand-blue) 100%);
-  border: 1px solid rgba(199, 157, 69, .2);
+  border: 1px solid rgba(251,174,23,.22);
 }
 
 h1,
@@ -151,7 +159,7 @@ h2 {
 
 .eyebrow,
 .member-card-kicker {
-  color: var(--brand-gold);
+  color: var(--brand-navy);
 }
 
 button:focus-visible,
@@ -159,7 +167,7 @@ a:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 3px solid rgba(199, 157, 69, .42);
+  outline: 3px solid rgba(6,20,142,.38);
   outline-offset: 2px;
 }
 
@@ -256,7 +264,7 @@ textarea:focus-visible {
     overflow-y: auto;
     overscroll-behavior-block: contain;
     padding: 8px 12px;
-    border-bottom: 1px solid rgba(199, 157, 69, .35);
+    border-bottom: 1px solid rgba(251,174,23,.35);
     box-shadow: 0 7px 22px rgba(11, 31, 58, .1);
   }
 

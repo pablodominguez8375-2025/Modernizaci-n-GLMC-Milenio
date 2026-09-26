@@ -29,7 +29,7 @@
 .workshop-field.wide { grid-column: 1 / -1; }
 .workshop-field > span, .workshop-photo-version > span { color: #526078; font-size: 11px; font-weight: 800; }
 .workshop-field input, .workshop-field textarea, .workshop-field select, .workshop-photo-version input { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #fff; outline: none; resize: vertical; }
-.workshop-field input:focus, .workshop-field textarea:focus, .workshop-field select:focus, .workshop-photo-version input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.workshop-field input:focus, .workshop-field textarea:focus, .workshop-field select:focus, .workshop-photo-version input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(6,20,142,.14); }
 .workshop-field input:disabled, .workshop-field textarea:disabled, .workshop-field select:disabled, .workshop-photo-version input:disabled { background: #f0f2f6; color: #7e8798; cursor: not-allowed; }
 .workshop-form-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 .workshop-form-actions small { max-width: 620px; color: var(--muted); line-height: 1.45; }

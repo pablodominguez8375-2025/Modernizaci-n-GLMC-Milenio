@@ -9,7 +9,7 @@
 .calendar-period-nav > button:not(.secondary-button) { width: 38px; height: 38px; border-radius: 9px; border: 1px solid var(--line); background: var(--surface-soft); color: var(--navy); font-size: 22px; }
 .calendar-period-nav div { min-width: 170px; }
 .calendar-period-nav strong, .calendar-period-nav small { display: block; }
-.calendar-period-nav strong { font-family: Georgia, serif; font-size: 17px; }
+.calendar-period-nav strong { font-family: var(--font-display); font-size: 17px; }
 .calendar-period-nav small { color: var(--muted); font-size: 10px; margin-top: 3px; }
 .secondary-button { border: 1px solid var(--line); background: var(--surface); color: #59647b; border-radius: 9px; padding: 9px 12px; font-weight: 750; }
 .calendar-filters { display: grid; grid-template-columns: minmax(180px, 1.2fr) minmax(135px, .7fr) minmax(160px, .9fr); gap: 10px; }
@@ -21,7 +21,7 @@
 .calendar-agenda { display: grid; gap: 14px; }
 .agenda-day { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 18px; align-items: start; }
 .agenda-day > header { display: flex; gap: 12px; align-items: center; padding: 15px 6px; position: sticky; top: 90px; }
-.agenda-day-number { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 13px; background: var(--navy); color: #fff; font-family: Georgia, serif; font-size: 22px; }
+.agenda-day-number { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 13px; background: var(--navy); color: #fff; font-family: var(--font-display); font-size: 22px; }
 .agenda-day header strong, .agenda-day header small { display: block; }
 .agenda-day header strong { font-size: 13px; }
 .agenda-day header small { color: var(--muted); font-size: 10px; margin-top: 4px; }
@@ -35,7 +35,7 @@
 .event-title-row { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
 .event-title-row h3 { margin: 6px 0 0; }
 .event-kind { display: inline-block; padding: 4px 7px; border-radius: 999px; font-size: 9px; font-weight: 850; text-transform: uppercase; letter-spacing: .06em; background: #eef1f6; color: #667087; }
-.kind-ceremony { background: #f7f0df; color: #806020; }
+.kind-ceremony { background: #FFF8D6; color: #806020; }
 .kind-meeting { background: #eef0f8; color: #4c587a; }
 .kind-instruction { background: #ebf5f1; color: #30745c; }
 .kind-space { background: #f2edf7; color: #725284; }

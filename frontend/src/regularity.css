@@ -4,7 +4,7 @@
 .regularity-field { display: grid; gap: 6px; color: #4d5870; font-size: 12px; font-weight: 750; }
 .regularity-field input, .regularity-field select, .regularity-field textarea { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; color: var(--ink); background: #fff; outline: none; font: inherit; font-weight: 500; }
 .regularity-field textarea { resize: vertical; min-height: 100px; line-height: 1.45; }
-.regularity-field input:focus, .regularity-field select:focus, .regularity-field textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.regularity-field input:focus, .regularity-field select:focus, .regularity-field textarea:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(6,20,142,.14); }
 .regularity-primary, .regularity-secondary { min-height: 42px; border-radius: 10px; padding: 10px 15px; font-weight: 800; }
 .regularity-primary { border: 0; background: var(--navy); color: #fff; }
 .regularity-secondary { border: 1px solid #d9c28d; background: var(--gold-soft); color: #725421; }

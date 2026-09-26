@@ -3,13 +3,13 @@
 .lodge-profile-selector span { display: block; margin-bottom: 7px; color: #4d5870; font-size: 12px; font-weight: 750; }
 .lodge-profile-selector select { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 11px 12px; background: #fff; color: var(--ink); }
 .lodge-identity { display: grid; grid-template-columns: 68px minmax(0,1fr) auto; gap: 16px; align-items: center; margin-bottom: 14px; background: linear-gradient(120deg, #fff, #fbf8ef); }
-.lodge-emblem { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--navy); border: 3px solid #d7b968; color: #e4c77d; font-family: Georgia, serif; font-size: 28px; }
+.lodge-emblem { width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: var(--navy); border: 3px solid #d7b968; color: #06148E; font-family: var(--font-display); font-size: 28px; }
 .lodge-identity h2 { font-size: 28px; margin-bottom: 4px; }
 .lodge-identity p:last-child { color: var(--muted); margin: 0; font-size: 12px; text-transform: capitalize; }
 .lodge-identity-meta { text-align: right; }
 .lodge-identity-meta span, .lodge-identity-meta strong, .lodge-identity-meta small { display: block; }
 .lodge-identity-meta span { color: var(--muted); font-size: 9px; text-transform: uppercase; font-weight: 800; letter-spacing: .08em; }
-.lodge-identity-meta strong { margin: 5px 0; font-family: Georgia, serif; font-size: 24px; }
+.lodge-identity-meta strong { margin: 5px 0; font-family: var(--font-display); font-size: 24px; }
 .lodge-identity-meta small { color: var(--muted); font-size: 9px; }
 .lodge-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin-bottom: 14px; }
 .kpi-warning { color: #a16824 !important; }
@@ -26,10 +26,10 @@
 .degree-line strong { font-size: 12px; }
 .degree-line span { color: var(--muted); font-size: 11px; font-weight: 800; }
 .degree-track { height: 8px; margin-top: 7px; overflow: hidden; background: #edf0f4; border-radius: 99px; }
-.degree-track span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), #d8bc72); border-radius: inherit; }
+.degree-track span { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), #FBAE17); border-radius: inherit; }
 .degree-total { display: flex; justify-content: space-between; margin-top: 18px; border-top: 1px solid #edf0f4; padding-top: 12px; }
 .degree-total span { color: var(--muted); font-size: 10px; }
-.degree-total strong { font-family: Georgia, serif; font-size: 22px; }
+.degree-total strong { font-family: var(--font-display); font-size: 22px; }
 .activity-grid { grid-template-columns: 1fr 1fr; }
 .activity-list, .instruction-list { display: grid; gap: 8px; }
 .activity-list > div, .instruction-list > div { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 10px; align-items: center; border-bottom: 1px solid #edf0f4; padding: 9px 0; }

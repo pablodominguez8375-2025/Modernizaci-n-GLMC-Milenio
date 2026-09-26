@@ -4,14 +4,25 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('./institutional-theme.css', import.meta.url), 'utf8')
+const main = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 
 describe('PMGM-UI-001 institutional responsive contract', () => {
   it('keeps the approved institutional palette tokens', () => {
-    expect(css).toContain('--brand-navy: #102c54')
-    expect(css).toContain('--brand-blue: #173b6e')
-    expect(css).toContain('--brand-gold: #b48a37')
-    expect(css).toContain('--brand-gold-strong: #c79d45')
-    expect(css).toContain('--brand-canvas: #f3f6f9')
+    expect(css).toContain('--brand-navy: #06148E')
+    expect(css).toContain('--brand-blue: #004AD4')
+    expect(css).toContain('--brand-blue-light: #B4D0F4')
+    expect(css).toContain('--brand-gold: #F3C609')
+    expect(css).toContain('--brand-gold-strong: #FBAE17')
+    expect(css).toContain('--font-ui: Cambria, Georgia, "Times New Roman", serif')
+    expect(css).toContain('--font-institutional-name: "Arial Narrow", Arial, sans-serif')
+  })
+
+  it('keeps navigation accents readable against the corporate gold', () => {
+    expect(css).toMatch(/\.sidebar \.nav-item\.active\s*\{[^}]*color:\s*var\(--brand-navy\)/s)
+  })
+
+  it('loads the institutional layer last so module styles inherit the current standard', () => {
+    expect(main.lastIndexOf("import './institutional-theme.css'")).toBeGreaterThan(main.lastIndexOf("import './mobile-nav-compact.css'"))
   })
 
   it('prevents global horizontal scrolling and constrains media', () => {
