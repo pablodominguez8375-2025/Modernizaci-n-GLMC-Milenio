@@ -284,3 +284,8 @@ El Showcase de `dev@8522b0dfd3e9db6eb964f6fdce5e8479c2a3525c` mostró un defecto
 - Sobre 900 px: los seis encabezados nativos de tabla y sus valores; rótulos auxiliares ocultos.
 
 Se actualiza `PMGM-QA-V069` y la aserción de Showcase para validar la composición correcta a 390×844, 768×1024 y 1440×900. El cambio es únicamente visual; no modifica montos, permisos, cálculos ni persistencia. Pruebas frontend 196/196, lint y build pasan; CI #1517, Showcase/Pages #773, QA Installable #411 y Pre-UAT #347 SUCCESS sobre el merge SHA `eb9ca2f75523937b6871bcd24b23a7dd8a4b098a`. Pages `qa-current.json` identifica ese mismo SHA y el ZIP `Proyecto-Centenario-QA-srv01-eb9ca2f75523.zip` (SHA-256 `2ac85751b88218ef525bd602cd5f2526cfcdd49cc331e1d15023197173cec320`). PR #155 integrada. QA física/UAT continúan pendientes en Issue #97.
+
+
+## Corte integrado — PR #167 / control contable de Tesorería del Taller
+
+`dev@5d9e5b90c5a303a07ed21658e02902d8c93a719a`; `main` intacta. PMGM CI #1551 y QA Installable #459 SUCCESS; BUILD-INFO/SOURCE_SHA y MANIFEST del paquete corresponden al merge. Pages post-merge #821 sigue en cola y `qa-current.json` no está confirmado para este corte. Ver evidencia y alcance en PMGM-BASE-001, QA-V067 y Issue #97. srv01 continúa pausado: no hay instalación física, smoke autenticado, regresión institucional ni UAT, y ninguna QA/UAT se declara aceptada.
