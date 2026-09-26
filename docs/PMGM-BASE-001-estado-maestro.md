@@ -1,3 +1,9 @@
+## MEJORA PROPUESTA — VISTAS PERSONALES DE «MI CUENTA» — 26-09-2026
+
+La revisión del sistema Logial referencial en Drive identificó cinco vistas convenientes para la cuenta personal: Resumen, Mi ficha, Datos contables, Datos de asistencia y Mis planchas. En Centenario, los datos personales ya existen en el portal autenticado, pero se mostraban en una sola pantalla. La rama feature/member-account-views, derivada de dev@14019d2887a782250021a1eac2f3e8dc936e360c, los organiza en cinco vistas dentro del portal Mi ficha, sin cambiar el menú global, rutas ni permisos.
+
+Cobertura disponible: ficha y edición de contacto propio; cartola personal de Tesorería y estado general de Hospitalaria; asistencia de los últimos 12 meses e historial de instrucción; resumen de próximas tenidas y avisos. «Mis planchas» se identifica como pendiente de autoservicio: la API actual no expone el historial personal de planchas ni habilita descarga/carga personal de adjuntos. No se amplían accesos documentales ni se muestran antecedentes hospitalarios sensibles. Esta entrada queda pendiente de PR, CI exact-head, aprobación e integración; no registra QA/UAT ni publicación.
+
 ## CONFIRMACIÓN DE REVISIÓN VISUAL — MENÚ ACTIVO DORADO — 26-09-2026
 
 Pablo confirmó «Quedó perfecto» tras revisar la demo publicada. Queda aceptado visualmente el resaltado dorado del menú activo al tocar «Mi calendario», manteniendo el azul institucional en los demás accesos y en la barra. Esta constancia registra revisión visual del Sponsor / Product Owner sobre la demo; no constituye aceptación de instalación real, QA ni UAT. No abre un nuevo incremento funcional. 
