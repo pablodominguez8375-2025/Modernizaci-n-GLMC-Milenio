@@ -46,6 +46,14 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     }
   })
 
+  it('does not let the hover state override the gold active menu item (sticky hover after tapping on mobile)', () => {
+    for (const source of [css, memberPortalCss]) {
+      const hoverSelectors = [...source.matchAll(/([^{}]*\.sidebar \.nav-item:hover[^{]*)\{/g)].map(match => match[1].trim())
+      expect(hoverSelectors.length).toBeGreaterThan(0)
+      for (const selector of hoverSelectors) expect(selector).toContain(':not(.active)')
+    }
+  })
+
   it('loads the institutional layer last so module styles inherit the current standard', () => {
     expect(main.lastIndexOf("import './institutional-theme.css'")).toBeGreaterThan(main.lastIndexOf("import './mobile-nav-compact.css'"))
   })
