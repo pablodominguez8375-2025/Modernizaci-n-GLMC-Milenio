@@ -1,8 +1,10 @@
-## Hallazgo visual confirmado — «Mi calendario» activo se veía azul — 26-09-2026
+## Estado integrado — menú activo dorado al tocarlo — 26-09-2026
 
-El estado activo «Mi calendario» podía verse azul translúcido al tocarlo en móvil o al mantener el puntero encima en escritorio. La causa confirmada es la mayor especificidad de `.sidebar .nav-item:hover:not(.disabled)` (`0,4,0`) frente a `.sidebar .nav-item.active` (`0,3,0`) en `institutional-theme.css` y `member-portal.css`; en pantallas táctiles el pseudoestado `:hover` puede persistir tras tocar el botón.
+PR #179 quedó integrada por squash en `dev@9eef03623fc5e441bb254d057ed533dfce443413`. La causa era el mayor peso CSS de `:hover` sobre `.active` en `institutional-theme.css` y `member-portal.css`; excluir `.active` de ambas reglas mantiene el dorado institucional al tocar «Mi calendario» en móvil o dejar el puntero encima en escritorio. No cambia rutas, permisos ni lógica.
 
-La corrección añade `:not(.active)` a ambas reglas hover, de modo que el acceso seleccionado mantiene fondo dorado institucional (`#F3C609` / `#FBAE17`) y texto/icono azul oscuro (`#06148E`), sin cambiar rutas, permisos ni lógica. Una prueba de contrato falló con la implementación previa y valida ahora que los selectores hover excluyan `.active`. Pendiente CI exact-head, aprobación del Sponsor, merge a `dev`, publicación Pages y artefacto instalable. `srv01` permanece en pausa; esto no implica instalación ni aceptación de QA/UAT. Issue #97 sigue abierto y `main` no se modifica.
+Prueba nueva: falla antes de la corrección y pasa después; frontend local 205/205, lint y build SUCCESS. Gates post-merge del SHA exacto: PMGM CI #1589, Showcase/Pages #870, QA Installable #508 y Pre-UAT #371 — SUCCESS. Pages `qa-current.json`, BUILD-INFO y ZIP identifican el mismo SOURCE_SHA; SHA-256 del ZIP Pages `484678413c8cbe69eff430f0cb2181cf0ddff3d96ade998e54884f5e7abc89d1`. MANIFEST valida 757/757 en Pages y QA Actions. Los ZIP de Pages y Actions se generan de forma independiente y tienen hashes diferentes, pero comparten SOURCE_SHA.
+
+La demo está publicada: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/. `srv01` continúa en pausa; no hubo instalación, smoke autenticado en el servidor, regresión física ni UAT. CI, la demo y los paquetes no equivalen a QA/UAT aceptadas. Issue #97 sigue abierto; `main` no se modifica ni promueve.
 
 ## Estado vigente — icono de Biblioteca Virtual en Mi ficha
 
