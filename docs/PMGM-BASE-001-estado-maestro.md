@@ -1,3 +1,14 @@
+## Corte integrado — icono de Biblioteca Virtual en Mi ficha — 26-09-2026
+
+- **Integración:** PR #177 quedó integrada por squash en `dev@79401d05faf7cf25ab2523f283471cb10e7221a5`. `main` sigue intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
+- **Causa y corrección:** el SVG de libro ya se renderizaba, pero el fondo del mosaico y el trazo heredado compartían `#06148E`. El mosaico conserva el azul; el libro ahora usa dorado institucional. No cambian permisos, rutas, grado autorizado ni lógica.
+- **PR exact-head:** frontend, backend, infraestructura, Showcase y paquete QA SUCCESS. El paso de despliegue Pages se omite en evento pull_request y se completó post-merge.
+- **Gates post-merge:** PMGM CI run 36252401785, Showcase/Pages run 36252401856, QA Installable run 36252401796 y pre-UAT package run 36252401790 — SUCCESS en el SHA integrado.
+- **Pages:** artifact 10909143548, digest `sha256:07a0639775f31f6f18a48ec0c95b88874eb19803e1df6d1f790080fad53cff01`. `qa-current.json` declara `sourceSha=79401d05faf7cf25ab2523f283471cb10e7221a5`, archivo `Proyecto-Centenario-QA-srv01-79401d05faf7.zip` y SHA-256 `4b0cc9dfb77cfeea461db5b98234da1f949db19e5a3d4cecfe8ad89a722785ee`. BUILD-INFO y MANIFEST corresponden al mismo SHA; manifiesto 756/756.
+- **Artefacto QA:** Actions artifact 10910090647, digest `sha256:55bab6d86d4572323847a48f443b01ebfb2638b54ad37e4892aefd588261cc22`; BUILD-INFO identifica el mismo SOURCE_SHA y MANIFEST valida 756/756.
+- **Evidencia visual:** Showcase artifact 10908979113, digest `sha256:335f5eb0504ded3b9dd839cbf64cbbe467f5b587226d6e3ebcd6a5dd716dea51`; `mi-ficha-1440x900.png` muestra el libro dorado dentro del mosaico azul.
+- `srv01` continúa pausado. Artefactos y publicación no equivalen a instalación, QA física o UAT; no se ejecutaron esas actividades. Issue #97 sigue abierto; no promover a `main`.
+
 ## Hallazgo visual — mosaico de Biblioteca Virtual en Mi ficha — 26-09-2026
 
 - La captura mostró un cuadro azul sin libro visible. El componente ya renderizaba `InstitutionalIcon` con `name="library"`; el CSS asignaba el mismo azul marino (`#06148E`) al fondo y al trazo SVG (`currentColor`), ocultando el símbolo.
