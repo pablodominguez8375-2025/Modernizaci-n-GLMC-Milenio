@@ -1,3 +1,7 @@
+## Hallazgo visual reportado — atajo de Biblioteca Virtual — 26-09-2026
+
+El mosaico «Biblioteca Virtual · acceso por grado» de `Mi ficha` tenía un cuadro azul sin el icono del libro. `MemberPortalPage` sí renderizaba el SVG, pero `memberLibraryShortcut.css` le daba el mismo azul marino al fondo y al trazo. PR #177 cambia sólo el trazo a dorado institucional y agrega cobertura de regresión; la tarjeta conserva su fondo azul y su comportamiento de acceso por grado. El resultado se anotará al completar los gates del PR. No involucra instalación ni QA/UAT en `srv01`.
+
 ## Estado vigente — PR #175 integrado — 26-09-2026
 
 El resaltado del menú activo del Portal del Hermano quedó integrado en `dev@d13428684b13f649d6732e9be4e555e90a94248d`. `member-portal.css` era la causa: sustituía el estado activo institucional por blanco translúcido y texto claro. El estilo corregido marca la selección con fondo dorado institucional y texto/iconos azul oscuro, manteniendo la navegación azul.

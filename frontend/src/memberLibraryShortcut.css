@@ -33,7 +33,7 @@
   height: 42px;
   border-radius: 10px;
   background: #06148E;
-  color: #06148E;
+  color: var(--brand-gold);
 }
 
 .member-degree-library-copy {
