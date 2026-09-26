@@ -83,6 +83,7 @@ Mostrar un módulo fuera del rol correspondiente se considera una falla de parid
 ## Reglas de dominio visibles
 - Gran Archivo y Biblioteca Virtual son dominios distintos.
 - Las planchas autorizadas pueden publicarse en Biblioteca Virtual; nunca en Gran Archivo.
+- Excepción aprobada para las planchas de trabajo del Hermano: la carga por su autor o por Secretaría se publica automáticamente en la colección «Planchas de trabajo» después de validar integridad y antivirus. El autor puede reemplazar únicamente su propio trabajo, incluso si Secretaría hizo la primera carga; la versión anterior conserva su historial y sigue vigente si falla la nueva. La clasificación y acceso se calculan con el grado efectivo del autor. Cada versión lleva descripción corta.
 - CENDOC queda fuera del alcance de Proyecto Centenario.
 - La ficha privada del Insinuado puede contener foto tipo pasaporte y antecedentes completos; la publicación transversal sólo muestra los datos mínimos autorizados.
 - El Hermano puede modificar únicamente datos personales expresamente habilitados. Taller, grado, estado, fechas masónicas y demás datos institucionales no se editan desde autoservicio.
