@@ -782,3 +782,12 @@ Al reanudarse el trabajo, tomar el HEAD vivo de `dev` y verificar la paridad ent
 Desde el HEAD vivo `dev@12b87c2e56ee99d7f96fdfd491b85b7dff67ea17`, el Product Owner autorizó mejorar control y auditoría contable sobre el módulo de Tesorería del Taller existente. El alcance mantiene caja y Cuadro Mensual institucional separados, evita duplicar pagos de cuota, excluye egresos pendientes del saldo calculado y no cambia permisos ni reglas de autorización.
 
 La implementación se registra en el PR #167 hacia `dev`: añade al detalle y CSV el ID de origen y trazabilidad de registro/aprobación (sujeto y UTC), una lectura directa del estado de cuadratura/pendientes y protección CSV ante inyección de fórmulas. El PR conserva los checks exact-head y el estado de revisión vigentes. La aceptación física de srv01/UAT sigue diferida por instrucción del Sponsor; `main` permanece estable.
+
+
+### Corte integrado PR #167 — reportes de Tesorería del Taller
+
+PR #167 se integró por squash en `dev` como `5d9e5b90c5a303a07ed21658e02902d8c93a719a` (árbol `23f7739efd5673edd6e7b42444aeada3276ada6c`); `main` continúa intacta. Se incorporó trazabilidad por movimiento y autorización, estado explícito de cuadratura, egresos pendientes fuera del saldo de cierre, CSV con mitigación de fórmulas en descripciones y QA-040. Se mantienen separados Tesorería del Taller y Gran Tesorería; cargos, atribuciones y monedas no cambian.
+
+PMGM CI #1551 y QA Installable #459 finalizaron SUCCESS. El artefacto QA se descargó: digest Actions/ZIP `sha256:9e1283bd44513f5cb11ee11410b437e6a97b5c6a3b10e6ddc4c752acd7688333`; `BUILD-INFO.txt` identifica `SOURCE_SHA=5d9e5b90c5a303a07ed21658e02902d8c93a719a` y `MANIFEST.sha256` valida. Pages post-merge #821 aún está en cola; el workflow de PR #819 finalizó SUCCESS pero omitió publicación por ser `pull_request`. La paridad de Pages y `qa-current.json` queda sin confirmar hasta que finalice el despliegue post-merge.
+
+`srv01` sigue pausado por instrucción del Sponsor. Instalación física, smoke autenticado en srv01, regresión institucional y UAT no ejecutados ni aceptados; Issue #97 continúa abierto. No promover a `main`.
