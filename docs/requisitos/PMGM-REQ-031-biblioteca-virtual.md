@@ -23,9 +23,10 @@ La Biblioteca Virtual deberá permitir administrar y consultar, según permisos:
 - reglamentos, manuales y documentos de consulta cuando corresponda;
 - material audiovisual o multimedia autorizado;
 - colecciones temáticas y bibliografías;
-- documentos aportados por Talleres u órganos autorizados, previa revisión y publicación.
+- documentos aportados por Talleres u órganos autorizados, previa revisión y publicación;
+- planchas de trabajo cargadas por el autor o por Secretaría, incorporadas automáticamente a «Planchas de trabajo» y clasificadas por el grado efectivo del autor.
 
-La existencia de un documento en Gran Archivo o Gestión Documental **no implica publicación automática** en Biblioteca Virtual.
+La existencia de un documento en Gran Archivo o Gestión Documental **no implica publicación automática** en Biblioteca Virtual, salvo la regla específica aprobada para planchas de trabajo de hermanos. Estas se publican al quedar disponibles después de validación de integridad y análisis antimalware; el catálogo aplica el grado efectivo del autor como nivel mínimo de lectura.
 
 ## 3. Roles
 Roles funcionales mínimos:
@@ -52,6 +53,8 @@ La Biblioteca deberá soportar:
 - disponibilidad.
 
 Las taxonomías deberán ser configurables sin cambios de código.
+
+La colección visible para las planchas de trabajo se denomina **Planchas de trabajo**. El grado mínimo de lectura se calcula desde la ficha institucional del autor, nunca desde un valor enviado por frontend ni desde el perfil de quien cargó el archivo.
 
 ## 5. Registro bibliográfico
 Cada recurso podrá incluir:
@@ -86,7 +89,7 @@ Estados mínimos:
 5. `withdrawn` — retirado de consulta.
 6. `rejected` — rechazado con observación.
 
-La publicación deberá registrar actor, fecha, versión y política de acceso aplicada.
+La publicación deberá registrar actor, fecha, versión y política de acceso aplicada. La excepción de planchas de trabajo aprobada por el Product Owner automatiza el paso a publicado después de validación del archivo; no omite antivirus, integridad, auditoría ni política de grado.
 
 ## 7. Acceso y segmentación
 La política de acceso podrá considerar:
@@ -130,6 +133,10 @@ La Biblioteca no reemplaza el expediente operativo, el acta, la plancha original
 
 ## 11. Versiones
 Una nueva edición o versión publicada no sobrescribirá destructivamente la anterior cuando exista obligación de trazabilidad.
+
+El Hermano autor puede cargar una nueva versión de su propia plancha, aunque la versión publicada haya sido cargada inicialmente por Secretaría. Secretaría también puede cargar una versión actualizada dentro de su ámbito. La nueva versión conserva el mismo recurso bibliográfico; una vez íntegra y limpia pasa a ser la versión vigente. La anterior se conserva en el historial y deja de ser la descarga vigente. No se permite a un Hermano reemplazar planchas de otros autores.
+
+Cada carga admite una descripción corta obligatoria para explicar en pocas palabras el contenido. La descripción y la versión del archivo se actualizan juntas al activar la nueva versión. Si la nueva carga falla análisis o integridad, la publicación anterior permanece vigente.
 
 El sistema deberá permitir:
 - versión vigente;
@@ -178,10 +185,11 @@ Auditar como mínimo:
 1. Biblioteca Virtual existe como módulo independiente de Gran Archivo.
 2. CENDOC no aparece como módulo del Proyecto Milenio.
 3. Un recurso puede pasar por flujo borrador → revisión → aprobación → publicación.
-4. La publicación aplica permisos en backend.
-5. Los recursos pueden organizarse en colecciones y taxonomías configurables.
-6. Se puede publicar un derivado autorizado desde Gran Archivo sin alterar el original.
-7. Las versiones quedan trazables.
-8. Las operaciones sensibles quedan auditadas.
-9. Los binarios se almacenan fuera de PostgreSQL.
-10. La Biblioteca puede evolucionar sin asumir funciones de custodia archivística.
+4. Una plancha cargada por Hermano o Secretaría se incorpora en «Planchas de trabajo» con grado efectivo del autor y se publica después de pasar integridad y antivirus; el autor puede reemplazar sólo su propia plancha y se mantiene historial versionado.
+5. La publicación aplica permisos en backend.
+6. Los recursos pueden organizarse en colecciones y taxonomías configurables.
+7. Se puede publicar un derivado autorizado desde Gran Archivo sin alterar el original.
+8. Las versiones quedan trazables.
+9. Las operaciones sensibles quedan auditadas.
+10. Los binarios se almacenan fuera de PostgreSQL.
+11. La Biblioteca puede evolucionar sin asumir funciones de custodia archivística.
