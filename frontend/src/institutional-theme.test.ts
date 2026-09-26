@@ -19,7 +19,7 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
   })
 
   it('uses gold glyphs on navy status and callout tiles', () => {
-    expect(fidelityCss).toMatch(/\\.member-status-icon,\\s*\\.member-callout-icon\\s*\\{\\s*color:\\s*var\\(--member-ppt-gold\\)/)
+    expect(fidelityCss).toMatch(/\.member-status-icon,\s*\.member-callout-icon\s*\{\s*color:\s*var\(--member-ppt-gold\)/)
   })
 
   it('keeps navigation accents readable against the corporate gold', () => {
