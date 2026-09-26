@@ -810,3 +810,12 @@ La implementación sustituye la antigua paleta `#102c54/#173b6e/#b48a37` y las f
 ### Aclaración de contraste — iconografía sobre azul — 26-09-2026
 
 En las superficies institucionales sólidas azul marino o azul corporativo, los símbolos e iconos insertos se muestran en dorado `#F3C609` (o dorado fuerte `#FBAE17` cuando corresponda), para conservar contraste y concordancia con la identidad visual. Esta regla corrige las tarjetas de estado del portal de miembros: los mosaicos permanecen azules y los glifos de tesorería/hospitalaria pasan a dorado. Los acentos dorados con texto sobre fondo dorado conservan texto azul marino por legibilidad; los colores semánticos de estado no cambian.
+
+
+### Corte integrado PR #172 — iconografía dorada en superficies azules
+
+PR #172 corrigió el contraste de los mosaicos de estado del portal de miembros: Tesorería y Hospitalaria mantienen sus fondos azules y sus símbolos insertos quedan dorados. La regla se extiende a iconos de llamados sobre el mismo fondo azul, sin afectar cifras de calendario, estados semánticos ni texto azul marino sobre botones dorados. La norma visual se añadió a PMGM-UI-001 y cuenta con una prueba de regresión.
+
+Integrado en `dev@9931df6c8b2199f0c2b17edf1d31f6fa2f762886`. Checks exact-head SUCCESS: PMGM CI #1573, Showcase/Pages #846, QA Installable #484 y Pre-UAT #364. Pages y QA-current corresponden al mismo SOURCE_SHA; los paquetes BUILD-INFO/MANIFEST validaron 754/754 entradas. Captura responsiva `mi-ficha-1440x900.png` confirma el signo monetario dorado en el mosaico azul.
+
+`main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue sin cambios. `srv01` permanece pausado: no se ejecutó instalación, smoke autenticado en servidor, regresión institucional ni UAT. QA/UAT no se consideran aceptadas.
