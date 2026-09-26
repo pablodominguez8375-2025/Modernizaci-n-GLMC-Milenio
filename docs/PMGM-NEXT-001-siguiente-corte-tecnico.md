@@ -1,3 +1,6 @@
+## Conformidad visual del menú activo — 26-09-2026
+
+El Sponsor / Product Owner confirmó «Quedó perfecto» en la demo publicada, respecto del menú seleccionado en dorado al tocar «Mi calendario» y la conservación de los colores institucionales en la navegación. Se registra como conformidad visual de la demo. No equivale a instalación real, QA ni UAT; `srv01` continúa en pausa e Issue #97 sigue abierto. No se inicia otro incremento funcional. 
 ## Estado integrado — menú activo dorado al tocarlo — 26-09-2026
 
 PR #179 quedó integrada por squash en `dev@9eef03623fc5e441bb254d057ed533dfce443413`. La causa era el mayor peso CSS de `:hover` sobre `.active` en `institutional-theme.css` y `member-portal.css`; excluir `.active` de ambas reglas mantiene el dorado institucional al tocar «Mi calendario» en móvil o dejar el puntero encima en escritorio. No cambia rutas, permisos ni lógica.

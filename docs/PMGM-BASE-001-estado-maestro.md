@@ -1,3 +1,6 @@
+## CONFIRMACIÓN DE REVISIÓN VISUAL — MENÚ ACTIVO DORADO — 26-09-2026
+
+Pablo confirmó «Quedó perfecto» tras revisar la demo publicada. Queda aceptado visualmente el resaltado dorado del menú activo al tocar «Mi calendario», manteniendo el azul institucional en los demás accesos y en la barra. Esta constancia registra revisión visual del Sponsor / Product Owner sobre la demo; no constituye aceptación de instalación real, QA ni UAT. No abre un nuevo incremento funcional. 
 ## CORTE INTEGRADO — MENÚ ACTIVO DORADO AL TOCAR — 26-09-2026
 
 - **Código integrado:** PR #179 fusionado por squash en `dev@9eef03623fc5e441bb254d057ed533dfce443413`; base previa `e637320655cbfb6a553b10ec88d7df1fe2b05c12`. `main` sigue intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.

@@ -22,3 +22,8 @@ Se incorporó una prueba de contrato que exige que todos los selectores hover de
 - Pre-UAT artifact #10915832891 digest `sha256:0bfcdaedbf9757892526089e5a8a91ff8cfc3eb15533ab3c2abc1fc1fa56cd5f`.
 - `srv01` sigue en pausa. No se ejecutaron instalación ni smoke autenticado en el servidor, regresión física ni UAT. Checks y artefactos no equivalen a esas actividades ni a aceptación de QA/UAT.
 - `main` permanece intacta; Issue #97 continúa abierto.
+
+
+## Conformidad visual del Product Owner — 26-09-2026
+
+Pablo confirmó «Quedó perfecto» al revisar la demo publicada tras la corrección del menú activo. Alcance de la revisión: selección dorada de «Mi calendario» con los colores institucionales conservados. La confirmación corresponde sólo a la revisión visual de la demo; no declara instalación real, QA ni UAT aceptadas. `srv01` permanece en pausa e Issue #97 continúa abierto.
