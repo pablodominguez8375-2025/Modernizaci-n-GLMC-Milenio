@@ -108,7 +108,7 @@ textarea {
   line-height: 1;
 }
 
-.sidebar .nav-item:hover:not(.disabled) {
+.sidebar .nav-item:hover:not(.disabled):not(.active) {
   background: rgba(255, 255, 255, .075);
   color: #fff;
   border-color: rgba(255, 255, 255, .06);

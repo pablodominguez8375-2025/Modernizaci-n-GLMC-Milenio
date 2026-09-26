@@ -1,3 +1,9 @@
+## Hallazgo visual confirmado — «Mi calendario» activo se veía azul — 26-09-2026
+
+El estado activo «Mi calendario» podía verse azul translúcido al tocarlo en móvil o al mantener el puntero encima en escritorio. La causa confirmada es la mayor especificidad de `.sidebar .nav-item:hover:not(.disabled)` (`0,4,0`) frente a `.sidebar .nav-item.active` (`0,3,0`) en `institutional-theme.css` y `member-portal.css`; en pantallas táctiles el pseudoestado `:hover` puede persistir tras tocar el botón.
+
+La corrección añade `:not(.active)` a ambas reglas hover, de modo que el acceso seleccionado mantiene fondo dorado institucional (`#F3C609` / `#FBAE17`) y texto/icono azul oscuro (`#06148E`), sin cambiar rutas, permisos ni lógica. Una prueba de contrato falló con la implementación previa y valida ahora que los selectores hover excluyan `.active`. Pendiente CI exact-head, aprobación del Sponsor, merge a `dev`, publicación Pages y artefacto instalable. `srv01` permanece en pausa; esto no implica instalación ni aceptación de QA/UAT. Issue #97 sigue abierto y `main` no se modifica.
+
 ## Estado vigente — icono de Biblioteca Virtual en Mi ficha
 
 PR #177 quedó integrada en `dev@79401d05faf7cf25ab2523f283471cb10e7221a5`. El mosaico azul «Biblioteca Virtual · acceso por grado» ahora muestra el libro dorado; la causa era que su trazo heredaba el mismo azul del fondo. No cambian rutas, permisos ni acceso por grado. Los gates post-merge de CI, Showcase/Pages, QA instalable y paquete pre-UAT terminaron SUCCESS; `qa-current.json`, BUILD-INFO y MANIFEST se verificaron contra el mismo SHA. `srv01` sigue pausado y Issue #97 permanece abierto. La evidencia automática no equivale a instalación ni aceptación de QA/UAT.
