@@ -1,3 +1,7 @@
+## Estado vigente — icono de Biblioteca Virtual en Mi ficha
+
+PR #177 quedó integrada en `dev@79401d05faf7cf25ab2523f283471cb10e7221a5`. El mosaico azul «Biblioteca Virtual · acceso por grado» ahora muestra el libro dorado; la causa era que su trazo heredaba el mismo azul del fondo. No cambian rutas, permisos ni acceso por grado. Los gates post-merge de CI, Showcase/Pages, QA instalable y paquete pre-UAT terminaron SUCCESS; `qa-current.json`, BUILD-INFO y MANIFEST se verificaron contra el mismo SHA. `srv01` sigue pausado y Issue #97 permanece abierto. La evidencia automática no equivale a instalación ni aceptación de QA/UAT.
+
 ## Hallazgo visual reportado — atajo de Biblioteca Virtual — 26-09-2026
 
 El mosaico «Biblioteca Virtual · acceso por grado» de `Mi ficha` tenía un cuadro azul sin el icono del libro. `MemberPortalPage` sí renderizaba el SVG, pero `memberLibraryShortcut.css` le daba el mismo azul marino al fondo y al trazo. PR #177 cambia sólo el trazo a dorado institucional y agrega cobertura de regresión; la tarjeta conserva su fondo azul y su comportamiento de acceso por grado. El resultado se anotará al completar los gates del PR. No involucra instalación ni QA/UAT en `srv01`.
