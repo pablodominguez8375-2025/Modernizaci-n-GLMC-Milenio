@@ -375,6 +375,9 @@ async function capture(filePath, scrollSelector = null) {
         if (action && (!actionRect || actionRect.top < stickyBottom || actionRect.bottom > innerHeight || actionRect.right > innerWidth)) {
           action.scrollIntoView({ block: 'center', inline: 'nearest' });
           actionRect = action.getBoundingClientRect();
+          if (actionRect.top < stickyBottom + 12) window.scrollBy(0, -(stickyBottom + 12 - actionRect.top));
+          else if (actionRect.bottom > innerHeight - 12) window.scrollBy(0, actionRect.bottom - innerHeight + 12);
+          actionRect = action.getBoundingClientRect();
         }
         if (!actionRect || actionRect.top < stickyBottom || actionRect.bottom > innerHeight || actionRect.right > innerWidth) {
           throw new Error('Treasury payment action is outside the visible viewport after positioning: ' + JSON.stringify({ action: actionRect && { top: actionRect.top, bottom: actionRect.bottom, right: actionRect.right }, stickyBottom, innerWidth, innerHeight, main: document.querySelector('main.content')?.getBoundingClientRect().toJSON(), sidebar: document.querySelector('nav.sidebar')?.getBoundingClientRect().toJSON() }));
