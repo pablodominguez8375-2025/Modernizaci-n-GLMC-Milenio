@@ -330,7 +330,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
     {activeView === 'planchas' && <section className="member-card member-account-unavailable">
       <p className="member-card-kicker">Trabajos personales</p>
       <h2>Mis planchas de trabajo</h2>
-      <p>Esta vista está en preparación. Mostrará sólo las planchas asociadas a tu autoría y Tenida. Podrás cargar una plancha cuando esa Tenida todavía no tenga una asociada; no permitirá reemplazar una plancha existente ni acceder a trabajos de otro Hermano.</p>
+      <p>Esta vista está en preparación. Mostrará sólo tus planchas de trabajo. Podrás cargar una en una Tenida que aún no tenga plancha y reemplazar la versión de tu propio trabajo, aunque la haya subido Secretaría. Cada versión conservará su historial y descripción breve; se publicará como vigente en Biblioteca Virtual tras superar integridad y antivirus. No podrás modificar trabajos de otro Hermano.</p>
       <span className="member-lock-badge">Autoservicio pendiente</span>
     </section>}
   </div>
