@@ -8,21 +8,21 @@
   padding: 14px 16px;
   border: 1px solid rgba(180, 138, 55, .48);
   border-radius: 10px;
-  background: linear-gradient(135deg, #f7f0df 0%, #ffffff 72%);
-  color: #102c54;
+  background: linear-gradient(135deg, #FFF8D6 0%, #ffffff 72%);
+  color: #06148E;
   text-align: left;
   cursor: pointer;
   transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
 }
 
 .member-degree-library-link:hover {
-  border-color: #b48a37;
+  border-color: #06148E;
   box-shadow: 0 8px 20px rgba(16, 44, 84, .10);
   transform: translateY(-1px);
 }
 
 .member-degree-library-link:focus-visible {
-  outline: 3px solid #c79d45;
+  outline: 3px solid #FBAE17;
   outline-offset: 2px;
 }
 
@@ -32,8 +32,8 @@
   width: 42px;
   height: 42px;
   border-radius: 10px;
-  background: #102c54;
-  color: #c79d45;
+  background: #06148E;
+  color: #06148E;
 }
 
 .member-degree-library-copy {
@@ -51,7 +51,7 @@
 }
 
 .member-degree-library-copy strong {
-  color: #102c54;
+  color: #06148E;
   font-size: 14px;
   line-height: 1.25;
 }
@@ -63,7 +63,7 @@
 }
 
 .member-degree-library-action {
-  color: #173b6e;
+  color: #004AD4;
   font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;

@@ -1,10 +1,10 @@
 /* PMGM-UI-001 · Dashboard / home fidelity layer from approved Proyecto Milenio mockup. */
 
 .dashboard-page {
-  --dashboard-navy: #102c54;
-  --dashboard-blue: #173b6e;
-  --dashboard-gold: #b48a37;
-  --dashboard-gold-soft: #f7f0df;
+  --dashboard-navy: #06148E;
+  --dashboard-blue: #004AD4;
+  --dashboard-gold: #F3C609;
+  --dashboard-gold-soft: #FFF8D6;
   display: grid;
   gap: 14px;
 }
@@ -17,7 +17,7 @@
   border-radius: 8px;
   background:
     radial-gradient(circle at 78% 35%, rgba(213, 172, 87, .18), transparent 24%),
-    linear-gradient(120deg, #0b203b 0%, #102c54 50%, #173b6e 100%);
+    linear-gradient(120deg, #0b203b 0%, #06148E 50%, #004AD4 100%);
   box-shadow: 0 7px 24px rgba(12, 36, 67, .14);
 }
 
@@ -37,7 +37,7 @@
 
 .dashboard-page .executive-hero h1 {
   max-width: 720px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-display);
   font-size: clamp(30px, 4vw, 48px);
   line-height: 1.08;
 }

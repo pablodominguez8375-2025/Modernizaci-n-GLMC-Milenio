@@ -118,7 +118,10 @@ function cdp(method, params = {}) {
 
 async function evaluate(expression) {
   const result = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text ?? 'Browser evaluation failed.')
+  if (result.exceptionDetails) {
+    const exception = result.exceptionDetails.exception
+    throw new Error(`${result.exceptionDetails.text ?? 'Browser evaluation failed.'} ${exception?.description ?? exception?.value ?? ''}`.trim())
+  }
   return result.result?.value
 }
 
@@ -356,7 +359,10 @@ async function capture(filePath, scrollSelector = null) {
     if (target) {
       target.scrollIntoView({ block: 'start', inline: 'nearest' });
       const sidebarBottom = innerWidth <= 980
-        ? (document.querySelector('nav.sidebar')?.getBoundingClientRect().bottom || 0)
+        ? (() => {
+            const rect = document.querySelector('nav.sidebar')?.getBoundingClientRect();
+            return rect && rect.top < innerHeight / 2 ? rect.bottom : 0;
+          })()
         : 0;
       const stickyBottom = Math.max(
         document.querySelector('header.topbar')?.getBoundingClientRect().bottom || 0,
@@ -365,9 +371,16 @@ async function capture(filePath, scrollSelector = null) {
       window.scrollBy(0, -(stickyBottom + 12));
       if (${JSON.stringify(scrollSelector)} && target) {
         const action = target.querySelector('button');
-        const actionRect = action?.getBoundingClientRect();
+        let actionRect = action?.getBoundingClientRect();
+        if (action && (!actionRect || actionRect.top < stickyBottom || actionRect.bottom > innerHeight || actionRect.right > innerWidth)) {
+          action.scrollIntoView({ block: 'center', inline: 'nearest' });
+          actionRect = action.getBoundingClientRect();
+          if (actionRect.top < stickyBottom + 12) window.scrollBy(0, -(stickyBottom + 12 - actionRect.top));
+          else if (actionRect.bottom > innerHeight - 12) window.scrollBy(0, actionRect.bottom - innerHeight + 12);
+          actionRect = action.getBoundingClientRect();
+        }
         if (!actionRect || actionRect.top < stickyBottom || actionRect.bottom > innerHeight || actionRect.right > innerWidth) {
-          throw new Error('Treasury payment action is outside the visible viewport after positioning.');
+          throw new Error('Treasury payment action is outside the visible viewport after positioning: ' + JSON.stringify({ action: actionRect && { top: actionRect.top, bottom: actionRect.bottom, right: actionRect.right }, stickyBottom, innerWidth, innerHeight, main: document.querySelector('main.content')?.getBoundingClientRect().toJSON(), sidebar: document.querySelector('nav.sidebar')?.getBoundingClientRect().toJSON() }));
         }
       }
     }

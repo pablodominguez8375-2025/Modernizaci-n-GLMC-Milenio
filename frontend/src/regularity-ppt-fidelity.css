@@ -1,10 +1,10 @@
 /* PMGM-UI-001 · Gran Tesorería / Gran Hospitalaria visual fidelity. */
 
 .regularity-page {
-  --regularity-navy: #102c54;
-  --regularity-blue: #173b6e;
-  --regularity-accent: #b48a37;
-  --regularity-accent-soft: #f7f0df;
+  --regularity-navy: #06148E;
+  --regularity-blue: #004AD4;
+  --regularity-accent: #F3C609;
+  --regularity-accent-soft: #FFF8D6;
   --regularity-line: #dce3ec;
   display: grid;
   gap: 14px;

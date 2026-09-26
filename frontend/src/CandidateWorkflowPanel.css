@@ -18,7 +18,7 @@
 .candidate-workflow-grid label.wide { grid-column: 1 / -1; }
 .candidate-workflow-grid label > span { font-size: 11px; color: #526078; font-weight: 800; }
 .candidate-workflow-grid input, .candidate-workflow-grid select, .candidate-workflow-grid textarea { width: 100%; border: 1px solid #d9dee8; border-radius: 10px; padding: 10px 12px; background: #fff; color: var(--ink); }
-.candidate-workflow-grid input:focus, .candidate-workflow-grid select:focus, .candidate-workflow-grid textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(180,138,55,.12); }
+.candidate-workflow-grid input:focus, .candidate-workflow-grid select:focus, .candidate-workflow-grid textarea:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(6,20,142,.14); }
 .candidate-workflow-grid .candidate-check { grid-template-columns: auto 1fr; align-items: center; align-content: center; }
 .candidate-workflow-grid .candidate-check input { width: auto; }
 .candidate-workflow-private-refs { margin-top: 4px; }

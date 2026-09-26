@@ -4,7 +4,7 @@
   .sidebar {
     max-height: 204px;
     scrollbar-width: thin;
-    scrollbar-color: rgba(199, 157, 69, .78) rgba(255, 255, 255, .08);
+    scrollbar-color: rgba(251,174,23,.78) rgba(255, 255, 255, .08);
     box-shadow:
       inset 0 -18px 18px -22px rgba(255, 255, 255, .3),
       0 7px 22px rgba(11, 31, 58, .1);
@@ -20,7 +20,7 @@
 
   .sidebar::-webkit-scrollbar-thumb {
     border-radius: 999px;
-    background: rgba(199, 157, 69, .72);
+    background: rgba(251,174,23,.72);
   }
 }
 
