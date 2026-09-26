@@ -35,6 +35,7 @@ Referencias principales:
 
 4. **Navegación**
    - Escritorio: navegación lateral azul oscuro, activa en dorado.
+   - En todos los tamaños, el acceso activo del menú mantiene fondo dorado institucional (`#F3C609` / `#FBAE17`) con texto e iconos azul oscuro (`#06148E`); los demás accesos conservan la navegación azul.
    - Tablet: navegación compacta en rejilla de tres columnas, sin desplazamiento horizontal de la página.
    - Móvil: navegación táctil en rejilla de dos columnas dentro de una zona de altura acotada y desplazamiento vertical propio cuando la cantidad de módulos lo requiera.
    - El contenido principal debe ser visible inmediatamente debajo de la navegación en pantallas pequeñas, incluso para perfiles con muchos módulos como Gran Logia.
