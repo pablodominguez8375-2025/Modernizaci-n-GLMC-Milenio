@@ -72,6 +72,13 @@ type MemberSelfOperationalProfile = MemberSelfProfile & {
 }
 
 export const editableMemberFields = ['email', 'phone', 'address'] as const
+export const memberAccountViews = [
+  ['resumen', 'Resumen'],
+  ['ficha', 'Mi ficha'],
+  ['contabilidad', 'Datos contables'],
+  ['asistencia', 'Datos de asistencia'],
+  ['planchas', 'Mis planchas'],
+] as const
 
 export const memberPortalDemoData = {
   fullName: 'Hermano Demostrativo',
@@ -117,6 +124,7 @@ export const memberPortalDemoData = {
 } as const
 
 export default function MemberPortalPage({ profile, useMocks, membershipApi, onOpenCalendar, onOpenNotifications, onOpenLibrary, onOpenLodge }: MemberPortalPageProps) {
+  const [activeView, setActiveView] = useState<'resumen' | 'ficha' | 'contabilidad' | 'asistencia' | 'planchas'>('resumen')
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
@@ -197,18 +205,29 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
   return <div className="member-portal">
     <section className="member-portal-heading">
       <div>
-        <p className="member-breadcrumb">Portal del Hermano <span>›</span> Mi ficha</p>
-        <h1>Mi ficha</h1>
-        <p>Tu información personal, masónica y de participación en un solo lugar.</p>
+        <p className="member-breadcrumb">Portal del Hermano <span>›</span> Mi cuenta</p>
+        <h1>Mi cuenta</h1>
+        <p>Consulta tu información institucional, participación y situación personal.</p>
       </div>
-      <button className="member-primary-action" type="button" disabled={!canEdit || loadingSelf || saving} onClick={() => setEditing(value => !value)}>{editing ? 'Cerrar edición' : 'Editar mis datos'}</button>
+      {activeView === 'ficha' && <button className="member-primary-action" type="button" disabled={!canEdit || loadingSelf || saving} onClick={() => setEditing(value => !value)}>{editing ? 'Cerrar edición' : 'Editar mis datos'}</button>}
     </section>
+
+    <nav className="member-account-tabs" aria-label="Vistas de Mi cuenta">
+      {memberAccountViews.map(([view, label]) => <button key={view} type="button" className={activeView === view ? 'active' : ''} aria-current={activeView === view ? 'page' : undefined} onClick={() => { setActiveView(view); setEditing(false) }}>{label}</button>)}
+    </nav>
 
     {loadingSelf && <div className="member-live-notice">Cargando tu expediente institucional…</div>}
     {selfError && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{selfError}</span></div>}
     {saveMessage && <div className="member-live-notice">{saveMessage}</div>}
 
-    <section className="member-profile-grid">
+    {activeView === 'resumen' && <section className="member-account-summary" aria-label="Resumen de mi cuenta">
+      <article><small>Grado vigente</small><strong>{degree}</strong><button type="button" onClick={() => setActiveView('ficha')}>Ver mi ficha</button></article>
+      <article><small>Tesorería</small><strong>{treasuryAccount ? money.format(treasuryAccount.balance) + ' pendiente' : treasury.status}</strong><button type="button" onClick={() => setActiveView('contabilidad')}>Ver datos contables</button></article>
+      <article><small>Hospitalaria</small><strong>{hospitalaria.status}</strong><button type="button" onClick={() => setActiveView('contabilidad')}>Ver situación</button></article>
+      <article><small>Asistencia</small><strong>{useMocks ? `${memberPortalDemoData.attendance.percentage}%` : activity?.attendance?.percentage == null ? 'Sin registros' : `${activity.attendance.percentage}%`}</strong><button type="button" onClick={() => setActiveView('asistencia')}>Ver asistencia</button></article>
+    </section>}
+
+    {activeView === 'ficha' && <section className="member-profile-grid">
       <article className="member-card member-identity-card">
         <div className="member-avatar-wrap"><img className="member-avatar-photo" src={`${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={useMocks ? 'Avatar demostrativo' : 'Avatar institucional'} /></div>
         <div className="member-identity-content">
@@ -244,9 +263,9 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
       </article>
 
       <aside className="member-quote-card"><span className="member-quote-mark">“</span><p>Que nuestras acciones sean testimonio de los principios que profesamos.</p><span className="member-quote-rule" /><strong>Proyecto Centenario</strong><small>Libertad · Igualdad · Fraternidad</small></aside>
-    </section>
+    </section>}
 
-    {editing && <section className="member-card member-edit-card">
+    {activeView === 'ficha' && editing && <section className="member-card member-edit-card">
       <div className="member-card-title-row"><div><p className="member-card-kicker">Autogestión</p><h2>Datos personales editables</h2><p>Los datos institucionales permanecen protegidos.</p></div><span className="member-demo-chip">{useMocks ? 'Demostración local' : 'Edición auditada'}</span></div>
       <div className="member-edit-grid">
         <MemberInput label="Correo" value={personal.email} onChange={value => setPersonal(current => ({ ...current, email: value }))} />
@@ -258,42 +277,42 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
     </section>}
 
     <section className="member-insight-grid">
-      <article className="member-card member-attendance-card">
+      {activeView === 'asistencia' && <article className="member-card member-attendance-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Participación</p><h2>Asistencia a tenidas</h2><p>Últimos 12 meses</p></div></div>
         {useMocks
           ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${memberPortalDemoData.attendance.percentage}%` } as CSSProperties}><div><strong>{memberPortalDemoData.attendance.percentage}%</strong><small>{memberPortalDemoData.attendance.attended} de {memberPortalDemoData.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{memberPortalDemoData.attendance.attended}</strong></li><li><span className="dot danger" />Inasistencias <strong>{memberPortalDemoData.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{memberPortalDemoData.attendance.excused}</strong></li></ul></div>
           : activity?.attendance && activity.attendance.total > 0
             ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${activity.attendance.percentage ?? 0}%` } as CSSProperties}><div><strong>{activity.attendance.percentage ?? 0}%</strong><small>{activity.attendance.present} de {activity.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{activity.attendance.present}</strong></li><li><span className="dot danger" />Inasistencias <strong>{activity.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{activity.attendance.excused}</strong></li></ul></div>
             : <PortalPendingData text="Aún no existen registros personales de asistencia dentro de los últimos 12 meses." />}
-      </article>
+      </article>}
 
-      <article className="member-card member-instruction-card">
+      {activeView === 'asistencia' && <article className="member-card member-instruction-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Historial de instrucciones</h2><p>Sesiones y asistencia registradas por los encargados de instrucción del Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
         {useMocks
           ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></>
           : activity?.instruction && activity.instruction.history.length > 0
             ? <><div className="member-instruction-summary"><strong>{activity.instruction.total} sesiones registradas</strong><span>Historial real proveniente de Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{activity.instruction.history.map(item => <div className="member-instruction-row" role="row" key={item.instructionSessionId}><span data-label="Fecha">{formatShortDate(item.instructionDate)}</span><span data-label="Grado">{formatLodgeGrade(item.grade)}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={`member-instruction-status ${attendanceStatusClass(item.attendanceStatus)}`}>{formatAttendanceStatus(item.attendanceStatus)}</span><span data-label="Encargado">{formatResponsibleOffice(item.responsibleOffice)}</span></div>)}</div></>
             : <PortalPendingData text="Aún no existen sesiones de instrucción registradas para tu ficha." />}
-      </article>
+      </article>}
 
-      <div className="member-status-stack">
+      {activeView === 'contabilidad' && <div className="member-status-stack">
         <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? money.format(treasuryAccount.balance) + ' pendiente' : treasury.status}</strong><p>{treasuryAccount ? `${money.format(treasuryAccount.totalPaid)} pagado de ${money.format(treasuryAccount.totalCharged)}` : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
-        <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
-      </div>
+        <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><span className="member-lock-badge">Estado general</span></article>
+      </div>}
 
-      {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
+      {activeView === 'contabilidad' && showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
         <div className="member-institutional-summary"><MemberDatum label="Cargado" value={money.format(treasuryAccount.totalCharged)} /><MemberDatum label="Pagado" value={money.format(treasuryAccount.totalPaid)} /><MemberDatum label="Saldo" value={money.format(treasuryAccount.balance)} success={treasuryAccount.balance === 0} /></div>
         <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{item.organization}</td><td>{money.format(item.chargedAmount)}</td><td>{money.format(item.paidAmount)}</td><td>{money.format(item.balance)}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {money.format(payment.amount)}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
       </article>}
 
-      <article className="member-card member-calendar-card">
+      {activeView === 'resumen' && <article className="member-card member-calendar-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda</p><h2>{useMocks ? 'Septiembre 2026' : 'Calendario institucional'}</h2></div><button className="member-inline-button" type="button" onClick={onOpenCalendar}>Ver calendario</button></div>
         {useMocks ? <><div className="member-calendar-week"><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span><span>Do</span></div><div className="member-calendar-days">{Array.from({ length: 30 }, (_, index) => index + 1).map(day => <span key={day} className={day === 12 ? 'meeting' : day === 26 ? 'instruction' : ''}>{day}</span>)}</div><div className="member-calendar-legend"><span><i className="meeting" />Tenida</span><span><i className="instruction" />Instrucción</span></div></> : <PortalPendingData text="Abre Mi calendario para consultar únicamente los eventos autorizados por grado, rol y ámbito." />}
-      </article>
+      </article>}
     </section>
 
-    <section className="member-lower-grid">
+    {activeView === 'resumen' && <section className="member-lower-grid">
       <article className="member-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda personal</p><h2>Próximas tenidas</h2></div>{onOpenLodge && <button className="member-inline-button" type="button" onClick={onOpenLodge}>Ver Taller</button>}</div>
         {useMocks
@@ -306,7 +325,14 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
         <div className="member-card-title-row"><div><p className="member-card-kicker">Centro de avisos</p><h2>Notificaciones recientes</h2></div><button className="member-inline-button" type="button" onClick={onOpenNotifications}>Ver todas</button></div>
         {useMocks ? <div className="member-notification-list">{memberPortalDemoData.notifications.map(item => <div key={item.title}><span className="member-notification-dot" /><div><strong>{item.title}</strong><p>{item.detail}</p></div><small>{item.age}</small></div>)}</div> : <PortalPendingData text="Abre Notificaciones para consultar avisos institucionales dirigidos a tu identidad autenticada." />}
       </article>
-    </section>
+    </section>}
+
+    {activeView === 'planchas' && <section className="member-card member-account-unavailable">
+      <p className="member-card-kicker">Trabajos personales</p>
+      <h2>Mis planchas</h2>
+      <p>Esta vista de autoservicio aún no está conectada a un registro personal seguro. Los documentos y adjuntos se mantienen bajo los permisos actuales de Secretaría; aquí no se muestran archivos de otros miembros ni se habilitan cargas o descargas.</p>
+      <span className="member-lock-badge">Disponibilidad pendiente</span>
+    </section>}
   </div>
 }
 
