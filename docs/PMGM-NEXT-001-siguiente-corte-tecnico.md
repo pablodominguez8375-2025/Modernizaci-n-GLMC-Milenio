@@ -1,3 +1,11 @@
+## Verificación de continuidad — 26-09-2026
+
+HEAD vivo verificado: `dev@b68338026f4741360392a5f448a8999060e020d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta. PR #172 quedó integrada y PR #173 documentó la regla visual de iconos dorados sobre fondos azules.
+
+Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575, Showcase/Pages #850, QA Installable #488 y Pre-UAT #365. La Línea Base Maestra de Drive y el último comentario de Issue #97 contienen la referencia de Pages y artefactos asociados a este corte.
+
+`srv01` continúa pausado hasta nuevo aviso. No se ejecuta instalación, despliegue, smoke autenticado, regresión física ni UAT. Los resultados CI/artefactos no constituyen aceptación de QA/UAT. No iniciar incremento funcional sin autorización expresa para un alcance concreto; no modificar ni promover `main`.
+
 # PMGM-NEXT-001 — Siguiente corte técnico
 
 ## Decisión vigente del Sponsor — 25-09-2026

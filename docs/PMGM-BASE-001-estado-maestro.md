@@ -1,3 +1,11 @@
+## Verificación de continuidad — 26-09-2026
+
+- HEAD vivo verificado: `dev@b68338026f4741360392a5f448a8999060e020d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta.
+- PR #172 está integrada en `dev` y PR #173 consolidó la regla visual y su evidencia documental.
+- Corte post-merge registrado: PMGM CI #1575, Showcase/Pages #850, QA Installable #488 y Pre-UAT #365 SUCCESS para el SHA exacto indicado. La Línea Base Maestra de Drive y el último comentario de Issue #97 registran Pages, `qa-current.json`, BUILD-INFO, checksum y MANIFEST.
+- `srv01` sigue pausado por instrucción del Sponsor. Instalación, smoke autenticado, regresión en servidor y UAT permanecen pendientes; checks y artefactos automáticos no equivalen a QA/UAT aceptadas.
+- No se cambia código funcional, no se inicia otro incremento funcional y no se modifica/promueve `main`.
+
 # PMGM-BASE-001 — Hilo Maestro y Estado Único del Proyecto Centenario
 
 **Nombre vigente:** Proyecto Centenario / Modernización Centenario  
