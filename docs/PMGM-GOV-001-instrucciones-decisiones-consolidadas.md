@@ -153,7 +153,11 @@ Regla vigente:
 - vive en Gestión Logial asociada al hermano/Taller;
 - forma parte del historial del hermano;
 - **no se envía al Gran Archivo por el solo hecho de ser una plancha de trabajo**;
-- si se autoriza su publicación, se proyecta a la sección **Planchas de Trabajo** de Biblioteca Virtual;
+- por decisión del Product Owner del 26-09-2026, toda plancha cargada por su autor o por Secretaría se proyecta automáticamente a la colección **Planchas de trabajo** de Biblioteca Virtual y queda publicada tras completar integridad y análisis antimalware;
+- se clasifica por el grado efectivo de su autor, no por el usuario que realizó la carga; los permisos de Biblioteca limitan lectura por grado;
+- el autor puede consultar y sustituir por una nueva versión únicamente su propio trabajo, aunque la primera carga haya sido realizada por Secretaría; Secretaría conserva la carga y actualización en su ámbito;
+- la descripción corta acompaña cada nueva versión; sólo la versión íntegra y limpia más reciente pasa a ser vigente y la versión anterior se conserva en historial;
+- la existencia de una plancha en Biblioteca no la envía al Gran Archivo;
 - su acceso en Biblioteca respeta grado efectivo y demás permisos;
 - Biblioteca mantiene referencia al origen sin sustituir el registro de Gestión Logial.
 
