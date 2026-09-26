@@ -1,6 +1,6 @@
 # PMGM-QA-V067 — Cierre anual y cuadratura de Tesorería
 
-**Estado:** base funcional existente en `dev`; ampliación de trazabilidad de control/auditoría registrada en PR #167 hacia `dev`. QA física/UAT siguen pendientes por Issue #97 y la pausa de srv01.
+**Estado:** PR #167 y PR #169 integrados en `dev`; QA física/UAT siguen pendientes por Issue #97 y la pausa de srv01.
 **Origen funcional:** mejoras compatibles del “Sistema Logial de Ejemplo - solo como referencia”.
 
 ## Entregado
@@ -33,4 +33,4 @@ La revisión del Sistema Logial de Ejemplo mantiene como referencia los reportes
 
 El nuevo registro de conciliación es append-only por Taller y fechas Desde/Hasta. Guarda los importes recalculados en el backend desde pagos, ingresos, egresos autorizados y pendientes; además, saldo contado, diferencia, cantidad de movimientos, referencia/nota opcional, actor y UTC. La lectura y el guardado usan una transacción PostgreSQL `RepeatableRead` para que el snapshot aritmético represente un estado coherente del libro aunque ingresen movimientos concurrentes. Repetir el arqueo crea una nueva evidencia; no reemplaza una anterior y no genera ni edita movimientos. El reporte lista hasta 50 últimas conciliaciones del mismo rango. QA-041 cubrirá consistencia aritmética, aislamiento por Taller, atribución, repetición inmutable y que guardar no altere el saldo del libro.
 
-El desarrollo está propuesto en PR #169 desde `feature/treasury-reconciliation-audit-20260926`, con base `dev@85fc5a5816910ae9c477a0aecc1121aca21429b8`. Pruebas frontend 199/199, lint/build y gates locales de plantilla, clasificación, migración y diff-check pasan; CI/backend y prueba PostgreSQL exact-head están pendientes. `srv01` sigue pausado; no se declara QA/UAT aceptada.
+PR #169 quedó integrado por squash como `2db812f37c2080d166b74692f0118f566879138c`. Pruebas frontend 199/199, lint/build y gates locales pasan. PMGM CI #1559 (run 36205450888), Showcase/Pages #829 (run 36205450889), QA Installable #467 (run 36205450901) y Pre-UAT #361 (run 36205450882) SUCCESS. El ZIP QA Actions tiene digest `sha256:673d107bdb5de4cafcc265437177f22074d4c490ffe9fe5148a15dff8dc1c1cb`; BUILD-INFO confirma el SHA integrado y MANIFEST valida. Pages `qa-current.json` identifica el mismo SHA y su ZIP con digest `sha256:0a8989a5aaac3bf8fc2a5ecb13dc2ca16a9b9127b30de8eccfc1774323a942be`; BUILD-INFO y MANIFEST del ZIP Pages validan. Los checks automáticos no acreditan instalación ni aceptación física. `srv01` sigue pausado; no se declara QA/UAT aceptada.
