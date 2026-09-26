@@ -58,6 +58,12 @@ Pablo confirmó «Quedó perfecto» tras revisar la demo publicada. Queda acepta
 **Desarrollo y automatización:** Codex  
 **Rama de trabajo:** `dev`  
 **Rama estable:** `main`  
+
+## Revisión de menús referenciales — 26-09-2026
+
+Se realizó un cruce documental del “Sistema Logial de Ejemplo - solo como referencia” en Drive contra el código de `dev@14019d2887a782250021a1eac2f3e8dc936e360c`. El resultado se mantiene en [`docs/reviews/PMGM-REV-LOGIAL-MENUS-2026-09-26.md`](reviews/PMGM-REV-LOGIAL-MENUS-2026-09-26.md). Las vistas de Secretaría/Gestión Logial, Docencia, Tesorería local e institucional, Hospitalaria, Mi ficha y perfiles/configuración tienen equivalentes parciales o completos, descritos en el cruce. No se importa la arquitectura PHP/SQLite/cPanel ni se cambian las responsabilidades del proyecto.
+
+Brechas candidatas: completar en `Mi cuenta` el ciclo versionado de planchas de trabajo y Biblioteca Virtual según las reglas aprobadas; ofrecer vistas de consulta de asistencia/instrucciones por grado y período; y facilitar la consulta de Oficialidad/historial reutilizando los registros actuales. Comisiones y una portada tipo Libro de Oro requieren validar necesidad, autoridad y permisos antes de diseñar el módulo. `Padrón` se reserva a electores de la Gran Asamblea; las listas generales siguen denominándose Cuadro de miembros/Taller según ámbito. La revisión no declara código pendiente como integrado ni equivale a QA/UAT. `srv01` permanece en pausa y `main` intacta.
 **Repositorio histórico conservado:** `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`  
 **Regla:** GitHub es la fuente única de verdad técnica y funcional; Google Drive es la fuente documental institucional.
 
