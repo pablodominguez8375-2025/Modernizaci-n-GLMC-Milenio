@@ -18,6 +18,7 @@ Referencias principales:
    - Azul complementario: `#004AD4`; se usa en acciones primarias, enlaces y énfasis funcional.
    - Azul claro: `#B4D0F4`; se usa en fondos y bordes secundarios con texto de alto contraste.
    - Dorados institucionales `#F3C609` y `#FBAE17`; se reservan para acentos, indicadores y selección. Sobre estos fondos el texto y los iconos deben usar azul oscuro para conservar contraste.
+   - Sobre superficies sólidas azul marino o azul corporativo, la iconografía inserta (símbolos e iconos) debe ser dorada `#F3C609` / `#FBAE17`. Esta regla es independiente de la anterior: texto e iconos usan azul oscuro cuando el fondo es dorado.
    - Blanco y neutros suaves forman las superficies de lectura. Verde, rojo y otros colores quedan reservados para estados semánticos y no reemplazan la paleta institucional.
    - El nombre institucional en Arial Narrow y rojo `#C42E00` es parte del logotipo autorizado. La aplicación utiliza el archivo oficial sin modificar; no se recompone el logotipo con texto, no se recolorea y se conserva su proporción, versión autorizada y área de protección.
 
