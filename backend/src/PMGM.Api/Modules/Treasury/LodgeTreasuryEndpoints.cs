@@ -1,3 +1,4 @@
+using System.Data;
 using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
@@ -353,6 +354,7 @@ public static class LodgeTreasuryEndpoints
             request.EvidenceReference?.Length > 300 || request.Notes?.Length > 1000)
             return Results.BadRequest(new { message = "El rango, saldo observado y referencias de conciliación deben ser válidos." });
 
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
         var config = await db.LodgeTreasuryConfigurations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.OrganizationId == organizationId, ct);
         var openingDate = config?.OpeningBalanceDate ?? DateOnly.MinValue;
@@ -390,6 +392,7 @@ public static class LodgeTreasuryEndpoints
             new { reconciliation.From, reconciliation.To, reconciliation.ClosingBalance, reconciliation.ObservedBalance,
                 reconciliation.Difference, reconciliation.MovementCount });
         await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
         return Results.Created($"/api/gestion-logial/tesoreria/talleres/{organizationId}/conciliaciones/{reconciliation.Id}",
             ToReconciliation(reconciliation));
     }
