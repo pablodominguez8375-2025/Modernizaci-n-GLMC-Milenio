@@ -1,3 +1,9 @@
+## Hallazgo visual — mosaico de Biblioteca Virtual en Mi ficha — 26-09-2026
+
+- La captura mostró un cuadro azul sin libro visible. El componente ya renderizaba `InstitutionalIcon` con `name="library"`; el CSS asignaba el mismo azul marino (`#06148E`) al fondo y al trazo SVG (`currentColor`), ocultando el símbolo.
+- PR #177 corrige únicamente el color del libro a `var(--brand-gold)`, conserva el fondo azul y agrega una prueba de contrato visual. No cambia rutas, permisos, grado autorizado ni apertura de Biblioteca.
+- La integración y evidencia post-merge se registrarán una vez que PR #177 complete sus gates. `srv01` sigue pausado; la captura/demo y CI no representan instalación ni aceptación QA/UAT.
+
 ## Corte visual integrado — navegación activa dorada — 26-09-2026
 
 - **Integrado en `dev`:** PR #175, merge `d13428684b13f649d6732e9be4e555e90a94248d`. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
