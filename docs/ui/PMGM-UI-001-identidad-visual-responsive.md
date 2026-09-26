@@ -7,7 +7,7 @@ Aprobado como requisito obligatorio por Product Owner.
 
 La pantalla existente Mi ficha ofrece vistas internas: Resumen, Mi ficha, Datos contables, Datos de asistencia y Mis planchas. La selección se identifica con dorado institucional (`#F3C609` / `#FBAE17`) y texto azul oscuro, manteniendo el acceso global y la navegación principal sin cambios. En móvil, las vistas se desplazan horizontalmente dentro de su propia barra y conservan controles táctiles.
 
-La vista Mis planchas debe explicar cuando no exista autoservicio documental autorizado. No presentar una acción de carga/descarga sin una ruta segura que verifique la pertenencia del trabajo al miembro autenticado.
+«Mis planchas» lista sólo los trabajos del miembro autenticado y ofrece carga asociada a una Tenida únicamente cuando esa Tenida no tenga ya una plancha registrada. No permite reemplazar trabajos existentes ni consultar planchas ajenas. La carga se mantiene deshabilitada hasta que exista una ruta segura que compruebe autoría, membresía, grado/Tenida y que aplique integridad y antivirus.
 
 ## Fuente visual de verdad
 Las presentaciones ejecutivas y mockups funcionales entregados para Proyecto Milenio / Proyecto Centenario constituyen la referencia de estructura y composición. Para logotipo, colores y tipografía institucional prevalece la *Guía de uso del logotipo de la GLMCh* y la plantilla institucional de papelería distribuidas por Publicaciones el 18-09-2026.
