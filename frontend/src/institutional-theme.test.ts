@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 
 const css = readFileSync(new URL('./institutional-theme.css', import.meta.url), 'utf8')
 const fidelityCss = readFileSync(new URL('./ppt-fidelity.css', import.meta.url), 'utf8')
+const memberPortalCss = readFileSync(new URL('./member-portal.css', import.meta.url), 'utf8')
 const main = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 
 describe('PMGM-UI-001 institutional responsive contract', () => {
@@ -24,6 +25,18 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
 
   it('keeps navigation accents readable against the corporate gold', () => {
     expect(css).toMatch(/\.sidebar \.nav-item\.active\s*\{[^}]*color:\s*var\(--brand-navy\)/s)
+  })
+
+  it('keeps the active member portal menu gold on desktop and mobile', () => {
+    const desktopActiveRule = memberPortalCss.match(/\.sidebar \.nav-item\.active\s*\{([^}]+)\}/)?.[1] ?? ''
+    const mobileActiveRule = memberPortalCss.match(/@media \(max-width: 980px\)[\s\S]*?\.sidebar \.nav-item\.active\s*\{([^}]+)\}/)?.[1] ?? ''
+
+    for (const rule of [desktopActiveRule, mobileActiveRule]) {
+      expect(rule).toContain('color: var(--brand-navy)')
+      expect(rule).toMatch(/background:\s*linear-gradient/)
+      expect(rule).toContain('var(--brand-gold)')
+      expect(rule).toContain('var(--brand-gold-strong)')
+    }
   })
 
   it('loads the institutional layer last so module styles inherit the current standard', () => {

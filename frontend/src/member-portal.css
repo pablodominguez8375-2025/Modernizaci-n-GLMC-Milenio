@@ -3,7 +3,7 @@
 .sidebar { background: linear-gradient(180deg, #06148E 0%, #06148E 100%); border-right: 0; }
 .sidebar .nav-item { color: #d8e2ef; }
 .sidebar .nav-item:hover:not(.disabled) { background: rgba(255,255,255,.07); color: #fff; }
-.sidebar .nav-item.active { color: #fff; background: rgba(255,255,255,.12); box-shadow: inset 3px 0 0 var(--gold); }
+.sidebar .nav-item.active { color: var(--brand-navy); background: linear-gradient(135deg, var(--brand-gold) 0%, var(--brand-gold-strong) 100%); box-shadow: inset 3px 0 0 var(--brand-navy); }
 .sidebar .nav-item.disabled { color: #7083a1; }
 .sidebar .nav-item em { color: #7788a5; }
 .sidebar .nav-section { color: #8ea0bd; }
@@ -138,5 +138,5 @@
 @media (max-width: 980px) {
   .sidebar { background: #06148E; }
   .sidebar .nav-item { color: #d8e2ef; }
-  .sidebar .nav-item.active { background: rgba(255,255,255,.12); box-shadow: inset 0 -3px 0 var(--gold); }
+  .sidebar .nav-item.active { color: var(--brand-navy); background: linear-gradient(135deg, var(--brand-gold) 0%, var(--brand-gold-strong) 100%); box-shadow: inset 0 -3px 0 var(--brand-navy); }
 }

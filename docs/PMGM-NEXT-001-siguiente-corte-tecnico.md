@@ -1,3 +1,7 @@
+## Alcance autorizado — resaltado del menú activo del Portal del Hermano — 26-09-2026
+
+La captura móvil reportó que «Mi calendario» pierde el resaltado dorado. La causa confirmada es que `member-portal.css` define los accesos activos con fondo blanco translúcido, sobreescribiendo la señal visual institucional. El alcance autorizado se limita al estado activo de la navegación: fondo dorado institucional, texto e icono azul oscuro, manteniendo el fondo azul de la barra y los colores de los demás accesos. No cambia rutas, permisos ni lógica de navegación.
+
 ## Verificación de continuidad — 26-09-2026
 
 HEAD vivo verificado: `dev@b68338026f4741360392a5f448a8999060e020d3`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta. PR #172 quedó integrada y PR #173 documentó la regla visual de iconos dorados sobre fondos azules.
