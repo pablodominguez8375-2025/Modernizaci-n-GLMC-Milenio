@@ -118,7 +118,10 @@ function cdp(method, params = {}) {
 
 async function evaluate(expression) {
   const result = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text ?? 'Browser evaluation failed.')
+  if (result.exceptionDetails) {
+    const exception = result.exceptionDetails.exception
+    throw new Error(`${result.exceptionDetails.text ?? 'Browser evaluation failed.'} ${exception?.description ?? exception?.value ?? ''}`.trim())
+  }
   return result.result?.value
 }
 
