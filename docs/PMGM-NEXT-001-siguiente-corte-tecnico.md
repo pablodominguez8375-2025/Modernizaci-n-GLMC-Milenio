@@ -37,6 +37,14 @@ Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575
 
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Mejora en preparación — vistas personales de «Mi cuenta» — 26-09-2026
+
+La referencia funcional en Drive organiza el espacio personal en Resumen, Mi ficha, Datos contables, Datos de asistencia y Mis planchas. Centenario ya dispone de ficha y contacto auto-restringidos, cartola de Tesorería, regularidad general de Hospitalaria, asistencia de los últimos 12 meses, historial de instrucciones, próximas tenidas y avisos. La interfaz actual los concentraba en «Mi ficha».
+
+Se propone presentar esos datos en cinco vistas dentro de la pantalla existente, sin alterar la navegación global, rutas, permisos ni API. «Mis planchas» quedará identificada como no disponible para autoservicio: el endpoint vigente no entrega ese historial y los permisos actuales de archivos no habilitan descargas personales. No se agregan datos ficticios, acceso documental ni cambios de permisos. La vista contable muestra la regularidad general de Hospitalaria, no sus cargos o ayudas individuales; la asistencia conserva el período disponible de 12 meses.
+
+Estado al abrir el trabajo: rama feature/member-account-views derivada de dev@14019d2887a782250021a1eac2f3e8dc936e360c; main@6dfb9546a4873baff15955cf86abfd7d47e3d111 permanece intacta. Cambio y registro siguen pendientes de PR, CI exact-head y aprobación de integración. srv01 continúa en pausa, Issue #97 abierto; demo, artefacto QA, instalación, QA y UAT no se consideran equivalentes.
+
 ## Decisión vigente del Sponsor — 25-09-2026
 
 El Sponsor / Product Owner indicó que `srv01` **queda pendiente y no se montará hasta nuevo aviso**. Issue #97 continúa abierto; la pausa no constituye aceptación de QA/UAT ni autorización de promoción a `main`. Mientras siga vigente, no se inicia instalación, despliegue, smoke autenticado, regresión física ni UAT en `srv01`.
