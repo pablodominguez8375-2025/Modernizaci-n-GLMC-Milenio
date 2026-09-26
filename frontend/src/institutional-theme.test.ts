@@ -28,12 +28,12 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
   })
 
   it('keeps the active member portal menu gold on desktop and mobile', () => {
-    const desktopActiveRule = memberPortalCss.match(/\\.sidebar \\.nav-item\\.active\\s*\\{([^}]+)\\}/)?.[1] ?? ''
-    const mobileActiveRule = memberPortalCss.match(/@media \\(max-width: 980px\\)[\\s\\S]*?\\.sidebar \\.nav-item\\.active\\s*\\{([^}]+)\\}/)?.[1] ?? ''
+    const desktopActiveRule = memberPortalCss.match(/\.sidebar \.nav-item\.active\s*\{([^}]+)\}/)?.[1] ?? ''
+    const mobileActiveRule = memberPortalCss.match(/@media \(max-width: 980px\)[\s\S]*?\.sidebar \.nav-item\.active\s*\{([^}]+)\}/)?.[1] ?? ''
 
     for (const rule of [desktopActiveRule, mobileActiveRule]) {
       expect(rule).toContain('color: var(--brand-navy)')
-      expect(rule).toMatch(/background:\\s*linear-gradient/)
+      expect(rule).toMatch(/background:\s*linear-gradient/)
       expect(rule).toContain('var(--brand-gold)')
       expect(rule).toContain('var(--brand-gold-strong)')
     }
