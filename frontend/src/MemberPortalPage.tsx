@@ -329,9 +329,9 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
 
     {activeView === 'planchas' && <section className="member-card member-account-unavailable">
       <p className="member-card-kicker">Trabajos personales</p>
-      <h2>Mis planchas</h2>
-      <p>Esta vista de autoservicio aún no está conectada a un registro personal seguro. Los documentos y adjuntos se mantienen bajo los permisos actuales de Secretaría; aquí no se muestran archivos de otros miembros ni se habilitan cargas o descargas.</p>
-      <span className="member-lock-badge">Disponibilidad pendiente</span>
+      <h2>Mis planchas de trabajo</h2>
+      <p>Esta vista está en preparación. Mostrará sólo las planchas asociadas a tu autoría y Tenida. Podrás cargar una plancha cuando esa Tenida todavía no tenga una asociada; no permitirá reemplazar una plancha existente ni acceder a trabajos de otro Hermano.</p>
+      <span className="member-lock-badge">Autoservicio pendiente</span>
     </section>}
   </div>
 }
