@@ -1,6 +1,6 @@
 # PMGM-QA-V067 — Cierre anual y cuadratura de Tesorería
 
-**Estado al 25-09-2026:** base funcional existente en `dev`; ampliación de trazabilidad de control/auditoría en preparación para PR. QA física/UAT siguen pendientes por Issue #97 y la pausa de srv01.
+**Estado:** base funcional existente en `dev`; ampliación de trazabilidad de control/auditoría registrada en PR #167 hacia `dev`. QA física/UAT siguen pendientes por Issue #97 y la pausa de srv01.
 **Origen funcional:** mejoras compatibles del “Sistema Logial de Ejemplo - solo como referencia”.
 
 ## Entregado
@@ -19,7 +19,7 @@ La regla referencial de cuota al retirarse o fallecer un miembro no se automatiz
 
 ## Verificación
 
-- Frontend: falta ejecutar pruebas, lint y build del corte actual; este entorno no tenía `vitest` instalado al primer intento.
+- Frontend local: 198/198 pruebas, lint y build TypeScript/Vite aprobados. Los gates exact-head se consultan en PR #167; no sustituyen QA física/UAT.
 - Backend y migración PostgreSQL: CI exact-head requerido; el entorno local no dispone de .NET SDK.
 - QA-038 de `release/PMGM-QA-SRV01-REGRESSION.template.json` cubre cierre, bloqueo, arrastre, Debe/Haber/Neto, filtros y CSV. Ampliar su evidencia para verificar ID + actor/UTC de registro y autorización, cuadratura en cero/diferencia/pendiente, CSV con prefijo de fórmula y preservación numérica de netos negativos.
 - La aceptación física en srv01/UAT queda pendiente por Issue #97.

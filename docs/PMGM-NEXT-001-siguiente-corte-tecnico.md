@@ -22,7 +22,7 @@ Issue #97 continúa abierto: faltan instalación del SHA exacto en `srv01`, veri
 
 El Product Owner autorizó ampliar los reportes del módulo existente. Se mantiene el libro único, la separación de pagos de cuotas, y la regla de que sólo egresos aprobados afectan caja. La implementación suma trazabilidad por movimiento (ID, sujeto y marca temporal UTC de registro y, cuando exista, de autorización), presentación explícita del resultado de cuadratura y pendientes, y exportación CSV con escape de entradas tipo fórmula. No se agregan monedas ni atribuciones institucionales nuevas. La revisión de aprobación conserva el permiso actual del Venerable Maestro y los reportes siguen restringidos al Tesorero del Taller.
 
-La mejora está en implementación desde `dev@12b87c2e56ee99d7f96fdfd491b85b7dff67ea17`; aún no existe PR ni CI del nuevo corte. `srv01` sigue pausado por instrucción del Sponsor. Issue #97 y UAT no se consideran aceptados.
+La mejora quedó registrada en el PR #167 contra `dev@12b87c2e56ee99d7f96fdfd491b85b7dff67ea17`, con QA-040 y el gate de regresión actualizado a 40 controles. El PR registra los resultados de frontend y los gates automáticos sobre el HEAD exacto vigente; la integración en `dev` requiere completar el flujo del PR. `srv01` sigue pausado por instrucción del Sponsor. Issue #97 y UAT no se consideran aceptados.
 
 ## 1. Hito operacional bloqueante vigente: QA srv01
 
