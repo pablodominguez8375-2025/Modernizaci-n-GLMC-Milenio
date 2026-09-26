@@ -13,7 +13,7 @@ El menú `Tesorería` reúne:
 3. **Ingresos y Egresos:** libro de caja para ingresos varios y egresos. Los pagos de cuotas se contabilizan desde el registro de pagos para evitar duplicación; el egreso afecta el saldo sólo una vez autorizado por el Venerable Maestro.
 4. **Cuadro mensual:** preparación, pago y envío del Cuadro Logial Mensual a Gran Tesorería, manteniendo separada la caja local.
 5. **Configuraciones:** parámetros propios del Taller y planes de cuota con vigencia; el tarifario institucional continúa bajo control de Gran Tesorería. Las categorías de ingresos y egresos se especifican y filtran por registro.
-6. **Reportes:** detalle de movimientos por rango, ingresos, egresos autorizados y pendientes, saldo de apertura/cierre, diferencia de cuadratura y exportación CSV.
+6. **Reportes:** detalle de movimientos por rango, ingresos, egresos autorizados y pendientes, saldo de apertura/cierre, diferencia de cuadratura y exportación CSV. El detalle conserva ID de origen y metadatos de registro/autorización para trazabilidad; el CSV protege datos textuales ante fórmulas al abrirlo en planillas.
 
 El Venerable Maestro accede exclusivamente a `Egresos por autorizar` dentro de Ingresos y Egresos; puede revisar y autorizar, pero no editar cuotas, cargos, pagos ni Cuadros mensuales. Los egresos pendientes no reducen el saldo de caja ni el cierre reportado.
 

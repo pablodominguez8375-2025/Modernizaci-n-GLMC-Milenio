@@ -365,6 +365,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-040",
+      "category": "treasury",
+      "title": "Trazabilidad de reportes, cuadratura y exportación CSV segura",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": null
     }
   ],
   "result": {

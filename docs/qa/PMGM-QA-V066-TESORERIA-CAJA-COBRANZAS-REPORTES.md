@@ -10,7 +10,8 @@
 - El resumen expone saldos acumulados y del mes. Configuraciones admite saldo inicial con fecha, categorías configurables y planes de cuota con vigencia.
 - El registro de pago de cuota genera el ingreso automáticamente desde la fila de cobranza; no se crea otro ingreso manual por ese mismo pago.
 - Todo egreso queda pendiente hasta aprobación del Venerable Maestro. Sólo egresos aprobados reducen caja.
-- Reportes presentan movimientos detallados, saldo inicial, ingresos, egresos aprobados, egresos pendientes, cierre calculado y diferencia frente al saldo contado; se puede exportar el detalle como CSV.
+- Reportes presentan movimientos detallados, saldo inicial, ingresos, egresos aprobados, egresos pendientes, cierre calculado y diferencia frente al saldo contado; el control comunica si la cuadratura está pendiente, sin diferencia o requiere revisión.
+- Cada movimiento reportado identifica su registro de origen y quién/cuándo lo registró; los egresos además exponen quién/cuándo los autorizó. El CSV mantiene estos campos y neutraliza entradas textuales que pudieran interpretarse como fórmulas, preservando montos negativos como números.
 - Se conservan la separación de caja del Taller y Cuadro Logial Mensual a Gran Tesorería, y la autoridad de backend para los permisos.
 
 ## Verificación local

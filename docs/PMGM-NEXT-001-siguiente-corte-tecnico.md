@@ -18,6 +18,12 @@ Issue #97 continúa abierto: faltan instalación del SHA exacto en `srv01`, veri
 
 **Siguiente paso operativo:** mantener la pausa de `srv01` hasta nuevo aviso del Sponsor. No instalar ni desplegar por ahora. Cuando se reactive, verificar el HEAD vivo de `dev` y la paridad Pages / `qa-current.json` / BUILD-INFO / checksum-Manifiesto, y continuar Issue #97 con evidencia; no iniciar otro incremento funcional sin autorización expresa para un alcance concreto.
 
+## Mejora autorizada — Reportes de control y auditoría contable de Tesorería del Taller — 25-09-2026
+
+El Product Owner autorizó ampliar los reportes del módulo existente. Se mantiene el libro único, la separación de pagos de cuotas, y la regla de que sólo egresos aprobados afectan caja. La implementación suma trazabilidad por movimiento (ID, sujeto y marca temporal UTC de registro y, cuando exista, de autorización), presentación explícita del resultado de cuadratura y pendientes, y exportación CSV con escape de entradas tipo fórmula. No se agregan monedas ni atribuciones institucionales nuevas. La revisión de aprobación conserva el permiso actual del Venerable Maestro y los reportes siguen restringidos al Tesorero del Taller.
+
+La mejora quedó registrada en el PR #167 contra `dev@12b87c2e56ee99d7f96fdfd491b85b7dff67ea17`, con QA-040 y el gate de regresión actualizado a 40 controles. El PR registra los resultados de frontend y los gates automáticos sobre el HEAD exacto vigente; la integración en `dev` requiere completar el flujo del PR. `srv01` sigue pausado por instrucción del Sponsor. Issue #97 y UAT no se consideran aceptados.
+
 ## 1. Hito operacional bloqueante vigente: QA srv01
 
 Issue #97 continúa abierto y la QA física en `srv01` está expresamente diferida por decisión del Sponsor hasta nuevo aviso. La pausa deja pendiente el gate de QA/UAT; no se monta el servidor ni se promueve `main` mientras siga vigente.
