@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { editableMemberFields, memberPortalDemoData } from './MemberPortalPage'
+import { editableMemberFields, memberAccountViews, memberPortalDemoData } from './MemberPortalPage'
 
 describe('MemberPortalPage contract', () => {
   it('keeps institutional identity fields outside member-editable fields', () => {
@@ -22,6 +22,16 @@ describe('MemberPortalPage contract', () => {
     expect(memberPortalDemoData.hospitalaria.status).toBeTruthy()
     expect(memberPortalDemoData.meetings.length).toBeGreaterThan(0)
     expect(memberPortalDemoData.notifications.length).toBeGreaterThan(0)
+  })
+
+  it('offers the five reference account views without changing the global member menu', () => {
+    expect(memberAccountViews).toEqual([
+      ['resumen', 'Resumen'],
+      ['ficha', 'Mi ficha'],
+      ['contabilidad', 'Datos contables'],
+      ['asistencia', 'Datos de asistencia'],
+      ['planchas', 'Mis planchas'],
+    ])
   })
 
   it('represents instructions as attendance history, never thematic progress', () => {
