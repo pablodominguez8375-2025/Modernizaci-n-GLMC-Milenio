@@ -3,7 +3,7 @@ import { type LodgeSummaryAccess, type OrganizationProfile, type OrganizationPro
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './lodgeProfile.css'
 
-export default function LodgeProfilePage({ api, organizationProfileApi, canManageAccess = false }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient; canManageAccess?: boolean }) {
+export default function LodgeProfilePage({ api, organizationProfileApi, canManageAccess = false, canEditWorkshopProfile = false }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient; canManageAccess?: boolean; canEditWorkshopProfile?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [profile, setProfile] = useState<OrganizationProfile | null>(null)
@@ -13,13 +13,15 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
   const [selectedMasterId, setSelectedMasterId] = useState('')
   const [grantReason, setGrantReason] = useState('')
   const [savingGrant, setSavingGrant] = useState(false)
+  const [savingWorkshopProfile, setSavingWorkshopProfile] = useState(false)
+  const [workshopProfileDraft, setWorkshopProfileDraft] = useState({ establishedOn: '', city: '', country: '' })
 
   useEffect(() => {
     let active = true
     api.getOrganizationOptions()
       .then(response => {
         if (!active) return
-        const workshops = response.items.filter(item => item.type.toLowerCase() !== 'order')
+        const workshops = response.items.filter(item => item.type.toLowerCase() === 'workshop')
         setOrganizations(workshops)
         setOrganizationId(workshops[0]?.id ?? '')
       })
@@ -33,7 +35,11 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
     let active = true
     setLoading(true); setError(null)
     organizationProfileApi.getProfile(organizationId)
-      .then(response => { if (active) setProfile(response) })
+      .then(response => {
+        if (!active) return
+        setProfile(response)
+        setWorkshopProfileDraft({ establishedOn: response.organization.establishedOn ?? '', city: response.organization.city ?? '', country: response.organization.country ?? '' })
+      })
       .catch(reason => { if (active) setError(toMessage(reason)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
@@ -68,6 +74,20 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
     } catch (reason) { setError(toMessage(reason)) }
   }
 
+  const saveWorkshopProfile = async () => {
+    if (!organizationId || !profile) return
+    setSavingWorkshopProfile(true); setError(null)
+    try {
+      await organizationProfileApi.updateWorkshopMetadata(organizationId, {
+        establishedOn: workshopProfileDraft.establishedOn || null,
+        city: workshopProfileDraft.city.trim() || null,
+        country: workshopProfileDraft.country.trim() || null,
+      })
+      setProfile(await organizationProfileApi.getProfile(organizationId))
+    } catch (reason) { setError(toMessage(reason)) }
+    finally { setSavingWorkshopProfile(false) }
+  }
+
   const degrees = useMemo(() => {
     const entries = Object.entries(profile?.members.degreeDistribution ?? {})
     return entries.sort((a, b) => b[1] - a[1])
@@ -79,12 +99,23 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
       <label className="lodge-profile-selector"><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
     </section>
 
-    {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta.</strong><span>{error}</span></div>}
+    {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta o guardar la ficha.</strong><span>{error}</span></div>}
     {loading ? <div className="panel"><Loading /></div> : !profile ? <div className="panel empty-state"><strong>Seleccione un Taller.</strong></div> : <>
       <section className="lodge-identity panel">
         <div className="lodge-emblem" aria-hidden="true">M</div>
         <div><p className="eyebrow">Taller autorizado</p><h2>{profile.organization.name}</h2><p>{profile.organization.number ? `Nº ${profile.organization.number} · ` : ''}{profile.organization.type}</p></div>
-        <div className="lodge-identity-meta"><span>Registro institucional</span><strong>{profile.organization.number ?? 'Sin número'}</strong><small>Creado {formatDateTime(profile.organization.createdAtUtc)}</small></div>
+        <div className="lodge-identity-meta"><span>Registro institucional</span><strong>{profile.organization.number ?? 'Sin número'}</strong><small>Registro creado el {formatDateTime(profile.organization.createdAtUtc)}</small></div>
+      </section>
+
+      <section className="panel workshop-origin-panel" aria-labelledby="workshop-origin-heading">
+        <div className="panel-heading"><div><p className="eyebrow">Identidad institucional</p><h2 id="workshop-origin-heading">Origen y pertenencia del Taller</h2></div></div>
+        {canEditWorkshopProfile ? <div className="workshop-origin-form">
+          <label><span>Fecha de creación del Taller</span><input type="date" value={workshopProfileDraft.establishedOn} onChange={event => setWorkshopProfileDraft(value => ({ ...value, establishedOn: event.target.value }))} /></label>
+          <label><span>Ciudad / Oriente</span><input maxLength={120} value={workshopProfileDraft.city} onChange={event => setWorkshopProfileDraft(value => ({ ...value, city: event.target.value }))} /></label>
+          <label><span>País</span><input maxLength={120} value={workshopProfileDraft.country} onChange={event => setWorkshopProfileDraft(value => ({ ...value, country: event.target.value }))} /></label>
+          <button type="button" className="primary-action" disabled={savingWorkshopProfile} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>
+        </div> : <dl className="workshop-origin-readonly"><div><dt>Fecha de creación del Taller</dt><dd>{profile.organization.establishedOn ? formatDate(profile.organization.establishedOn) : 'Sin registrar'}</dd></div><div><dt>Ciudad / Oriente</dt><dd>{profile.organization.city ?? 'Sin registrar'}</dd></div><div><dt>País</dt><dd>{profile.organization.country ?? 'Sin registrar'}</dd></div></dl>}
+        <p className="workshop-origin-note">La clasificación de cuotas se administra aparte por Gran Tesorería: {treasuryTerritoryLabel(profile.organization.treasuryTerritory)}. No se deduce de la ciudad ni del país.</p>
       </section>
 
       <section className="lodge-kpi-grid">
@@ -149,6 +180,7 @@ function degreeLabel(value: string) { return value === 'master' || value === 'th
 function meetingTypeLabel(value: string) { return value === 'regular' ? 'Tenida regular' : value === 'instruction' ? 'Tenida de instrucción' : value.replaceAll('_', ' ') }
 function regularityLabel(value?: string | null) { return value === 'up_to_date' ? 'Al día' : value === 'pending' ? 'Pendiente' : value === 'delinquent' || value === 'overdue' ? 'Morosidad' : value === 'exempt' ? 'Exento' : 'Sin dato' }
 function regularityDate(value?: string | null) { return value ? `Estado al ${formatDate(value)}` : 'Según permisos y datos disponibles' }
+function treasuryTerritoryLabel(value: string | null) { return value === 'santiago' ? 'Santiago' : value === 'other_oriente' ? 'Otro Oriente' : value === 'peru' ? 'Perú' : 'Sin clasificar' }
 function activityStatusLabel(value: string) { return value === 'closed' || value === 'completed' ? 'Realizada' : value === 'scheduled' ? 'Programada' : value }
 function activityStatusClass(value: string) { return value === 'closed' || value === 'completed' ? 'activity-status done' : value === 'scheduled' ? 'activity-status scheduled' : 'activity-status' }
 function transferStatusLabel(value: string) { return value === 'executed' ? 'Ejecutado' : value === 'approved' ? 'Aprobado' : value === 'requested' ? 'Solicitado' : value }

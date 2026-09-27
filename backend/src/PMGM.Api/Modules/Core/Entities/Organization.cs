@@ -8,5 +8,8 @@ public sealed class Organization
     public required string Type { get; set; }
     public Guid? ParentOrganizationId { get; set; }
     public string? TreasuryTerritory { get; set; }
+    public DateOnly? EstablishedOn { get; set; }
+    public string? City { get; set; }
+    public string? Country { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }

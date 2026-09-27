@@ -21,6 +21,7 @@ export interface SessionCapabilities {
   canConfigureSystem?: boolean
   canReadLodgeCouncilSummary?: boolean
   canManageLodgeCouncilSummaryAccess?: boolean
+  canManageAnyWorkshopProfile?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'

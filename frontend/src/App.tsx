@@ -45,7 +45,7 @@ import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
 type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean }
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -94,7 +94,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
   const isLodgeTreasurerWorkspace = canLodgeTreasury && !canLodgeOperations
   const canMembers = hasInstitutionalScope && !isLodgeTreasurerWorkspace
-  const canLodgeProfile = capabilities?.canReadLodgeCouncilSummary ?? false
+  const canManageWorkshopProfile = capabilities?.canManageAnyWorkshopProfile ?? false
+  const canLodgeProfile = (capabilities?.canReadLodgeCouncilSummary ?? false) || canManageWorkshopProfile
   const canManageLodgeSummaryAccess = capabilities?.canManageLodgeCouncilSummaryAccess ?? false
   const canCeremonies = capabilities?.canReviewCeremonies ?? false
   const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
@@ -134,6 +135,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Control administrativo y Plancha de autorización' },
     { id: 'ceremonies', label: 'Ceremonias', description: 'Solicitudes, requisitos y autorizaciones' },
     { id: 'members', label: 'Cuadro General', description: 'Consulta mínima de fichas institucionales' },
+    { id: 'lodgeProfile', label: 'Ficha del Taller', description: 'Origen histórico, ciudad, país y resumen institucional' },
     { id: 'documents', label: 'Documentos', description: 'Carga y consulta de PDF oficiales firmados' },
   ]
   const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive
@@ -210,7 +212,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
         {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
-        {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} />}
+        {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
         {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} caseApi={dataQualityCaseApi} onOpenCases={() => setView('caseQueue')} />}

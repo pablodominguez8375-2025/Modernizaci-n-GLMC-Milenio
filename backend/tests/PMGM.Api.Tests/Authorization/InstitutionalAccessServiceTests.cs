@@ -68,6 +68,39 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Theory]
+    [InlineData(InstitutionalRoles.TallerSecretaria, false)]
+    [InlineData(InstitutionalRoles.GranSecretaria, true)]
+    [InlineData(InstitutionalRoles.RegimenInterior, true)]
+    public void WorkshopProfileMetadata_IsEditableByTheThreeApprovedProfilesWithinScope(string role, bool orderScoped)
+    {
+        var ownOrganization = Guid.NewGuid();
+        var claims = new List<Claim> { new(InstitutionalClaims.Role, role) };
+        if (orderScoped) claims.Add(new Claim(InstitutionalClaims.Scope, "order"));
+        else claims.Add(new Claim(InstitutionalClaims.Organization, ownOrganization.ToString()));
+        var user = CreateUser(claims.ToArray());
+
+        Assert.True(_service.CanManageWorkshopProfile(user, ownOrganization));
+        Assert.Equal(orderScoped, _service.CanManageWorkshopProfile(user, Guid.NewGuid()));
+    }
+
+    [Theory]
+    [InlineData(InstitutionalRoles.GranTesoreria, true)]
+    [InlineData(InstitutionalRoles.TallerTesoreria, false)]
+    [InlineData(InstitutionalRoles.TallerVenerable, false)]
+    [InlineData(InstitutionalRoles.GranLogiaAdmin, true)]
+    [InlineData(InstitutionalRoles.PlatformSuperAdmin, true)]
+    public void WorkshopProfileMetadata_IsNotEditableByTreasuryOrOtherWorkshopOfficers(string role, bool orderScoped)
+    {
+        var organizationId = Guid.NewGuid();
+        var claims = new List<Claim> { new(InstitutionalClaims.Role, role) };
+        if (orderScoped) claims.Add(new Claim(InstitutionalClaims.Scope, "order"));
+        else claims.Add(new Claim(InstitutionalClaims.Organization, organizationId.ToString()));
+        var user = CreateUser(claims.ToArray());
+
+        Assert.False(_service.CanManageWorkshopProfile(user, organizationId));
+    }
+
+    [Theory]
     [InlineData(InstitutionalRoles.TallerVenerable)]
     [InlineData(InstitutionalRoles.TallerInmediatoExVenerable)]
     [InlineData(InstitutionalRoles.TallerPrimerVigilante)]

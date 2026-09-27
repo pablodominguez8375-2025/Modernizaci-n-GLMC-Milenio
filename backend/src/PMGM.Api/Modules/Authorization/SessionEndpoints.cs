@@ -97,7 +97,8 @@ public sealed record SessionCapabilitiesDto(
     bool CanManagePrivacy,
     bool CanConfigureSystem,
     bool CanReadLodgeCouncilSummary,
-    bool CanManageLodgeCouncilSummaryAccess);
+    bool CanManageLodgeCouncilSummaryAccess,
+    bool CanManageAnyWorkshopProfile);
 
 public static class SessionProfileBuilder
 {
@@ -154,6 +155,7 @@ public static class SessionProfileBuilder
                 CanManagePrivacy: access.CanManagePrivacy(user),
                 CanConfigureSystem: access.CanConfigureSystem(user),
                 CanReadLodgeCouncilSummary: false,
-                CanManageLodgeCouncilSummaryAccess: false));
+                CanManageLodgeCouncilSummaryAccess: false,
+                CanManageAnyWorkshopProfile: access.CanEditAnyWorkshopProfile(user)));
     }
 }

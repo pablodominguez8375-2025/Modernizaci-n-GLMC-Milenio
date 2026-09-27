@@ -1,3 +1,13 @@
+## PR en curso — origen y pertenencia de Ficha del Taller — 27-09-2026
+
+El Product Owner confirmó que **Secretaría del Taller**, **Gran Secretaría** y **Régimen Interior** pueden editar los campos de la ficha: fecha histórica de creación/fundación, ciudad/Oriente y país. La Secretaría local queda limitada a su Taller; los dos perfiles centrales actúan con alcance institucional de Orden. No se concede esta edición a Tesorería, Venerable ni administrador técnico.
+
+PR #189, rama `feature/workshop-origin-metadata-20260927`, se abrió contra `dev@80dd71222aa391984709847436a1dc507b679d84`, con HEAD inicial `28fdadc6b00f92aad4cbb3ffaea35c801d29c7c3`. Issue #188 registra el requisito. `Organization.CreatedAtUtc` conserva la fecha técnica del registro, diferenciada de la fecha histórica `EstablishedOn`. `City` y `Country` quedan separados de `TreasuryTerritory`: no se infiere el tramo tarifario desde ubicación porque el Decreto 1759 no da una asignación general.
+
+El PR incluye migración nullable, lectura/escritura auditada, control de perfil y organización en backend, formulario y datos sintéticos de Demo, pruebas de permisos y contrato. Especificación: `docs/PMGM-ARCH-017-ficha-taller-origen-y-permisos.md`. Frontend local: 212/212 pruebas, lint y build SUCCESS. Gates de migración (54), privacidad y clasificación de datos SUCCESS. .NET SDK no está disponible localmente; backend/PostgreSQL dependen de CI exact-head.
+
+Para el HEAD inicial `28fdadc6b00f92aad4cbb3ffaea35c801d29c7c3`, PMGM CI #1610, Showcase #898 y QA Installable #536 terminaron SUCCESS. Showcase fue validación de PR; no hubo publicación de Pages. Se añadió un commit documental posterior, por lo que hay que repetir/confirmar CI exact-head para el HEAD final antes de considerar el PR listo. No hay instalación, despliegue QA ni UAT; `srv01` sigue pausado e Issue #97 abierto. El paquete QA no equivale a instalación. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue intacta.
+
 ## CIERRE POST-MERGE — MIS PLANCHAS — 27-09-2026
 
 HEAD verificado de `dev`: `49744d10472e739580f58e0752e211ce25f22655`; PR #185 integrada. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
