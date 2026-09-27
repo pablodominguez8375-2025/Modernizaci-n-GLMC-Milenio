@@ -59,11 +59,17 @@ Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575
 
 # PMGM-NEXT-001 — Siguiente corte técnico
 
-## Incremento en curso — menú Ficha del Taller, identidad y logo — 27-09-2026
+## CIERRE — menú Ficha del Taller, identidad y logo — 27-09-2026
 
 El Product Owner reportó que no encontraba la ficha del Taller, y confirmó incluir logo personalizado opcional. Issue #199 formaliza el alcance: enlace directo bajo Taller; nombre, fecha de iniciación, ciudad/Oriente, país y logo. Se mantiene el permiso vigente de lectura/edición; Secretaría del Taller, Gran Secretaría y Régimen Interior editan dentro de su alcance; Venerable consulta/supervisa según la matriz. El logo es PNG/JPEG ≤2 MiB, firma validada, escáner antimalware y almacenamiento privado. No se otorgan permisos nuevos ni se modifica `TreasuryTerritory`.
 
-Rama `feature/workshop-profile-menu-logo-20260927`, desde `dev@c6da21c92beac84a70fca0aadb6b26a984842242`. Estado: implementado localmente; PR/CI exact-head pendientes. QA-V071 registra criterios. Frontend local: 215/215 pruebas, lint y build SUCCESS. Backend no compilado localmente por falta de .NET SDK; CI exact-head es gate. `srv01` sigue pausado, Issue #97 mantiene QA física/UAT pendiente y `main` no se toca. Especificación: `docs/PMGM-ARCH-017-ficha-taller-origen-y-permisos.md`.
+PR #200 se integró por squash en `dev@d455d454dff0e8cb135ca8d21c04bbd2242be38b`, desde `dev@c6da21c92beac84a70fca0aadb6b26a984842242`; SHA exacto validado del head del PR: `48809f9f0d78e623593a774c1b46f48e7a9bd62a`. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` no cambió. Issue #199 queda como referencia del alcance.
+
+Checks exact-head: PMGM CI #1634 (run 36357065482), Showcase #931 (run 36357065425) y QA Installable #569 (run 36357065389), todos SUCCESS. Tras integración, Showcase/Pages #932 (run 36357277072) y QA Installable #570 (run 36357277061) SUCCESS. Frontend local: 215/215 pruebas, lint y build SUCCESS; backend build y suites (incluye PostgreSQL, S3 y ClamAV) pasan en CI.
+
+Pages artifact #10943798335, digest `sha256:56674bd800e26ebd53a77d621a67a03eefc44108e126146d2dfcf76040497023`; evidencia visual #10943753398, digest `sha256:528efbe90622f557ef90fab61b11d25978ecb9e67227f4542060fa614a92511a`. `qa-current.json` y ZIP descargado de Pages identifican `sourceSha=d455d454dff0e8cb135ca8d21c04bbd2242be38b`; archivo `Proyecto-Centenario-QA-srv01-d455d454dff0.zip`, SHA-256 verificado `b189f06728348a78df999d7f48f1bb08898d58e9a046f5d12da3e85656c08080`. QA Installable artifact #10943758277, digest `sha256:fcc17f55691aa078ed3a8d32fbb056275b63f6c7a8be55e9a763491eaa734954`; su workflow valida SHA/manifiesto para el mismo SHA integrado.
+
+**Límites:** publicación Pages y artefactos no significan instalación ni UAT. `srv01` continúa pausado; no hubo instalación, smoke autenticado en servidor, regresión física ni UAT. Issue #97 conserva esos pendientes. Issues #190/#191 y PR #182 no fueron parte de este alcance. Especificación y criterios: `docs/PMGM-ARCH-017-ficha-taller-origen-y-permisos.md`, `docs/qa/PMGM-QA-V071-FICHA-TALLER-LOGO.md`.
 
 ## Mejora autorizada en implementación — Mis planchas y Biblioteca Virtual — 27-09-2026
 
