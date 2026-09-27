@@ -70,9 +70,16 @@ Si GitHub y Drive difieren en una regla funcional o normativa, se compara fuente
 
 No se requiere autorización adicional para continuar una tarea ya aprobada dentro de su alcance; sí se requiere decisión cuando el cambio altera arquitectura, normativa, alcance o una decisión previamente aprobada.
 
-## 6. Handoff
+## 6. Registro obligatorio al terminar cada tarea
 
-Cada intervención debe dejar commit/PR, pruebas, estado de demo, estado QA, documentación y pendientes. La siguiente intervención vuelve a validar el estado vivo antes de continuar.
+Al cerrar cada tarea del Proyecto Centenario, con o sin cambios de código, deja un registro en **GitHub y Google Drive**:
+
+- GitHub: Issue/PR y documentos versionados pertinentes; fecha, SHA exacto de `dev` y `main`, rama/commit/PR, alcance, archivos, pruebas/gates y artefactos, situación de Pages/QA/UAT, límites y próximos pasos.
+- Drive: Línea Base Maestra sincronizada con el mismo resultado, enlaces y evidencias; si no cambió el estado, registra brevemente la revisión y el próximo paso.
+- Continuidad: instrucciones claras, fuentes persistentes a consultar y un handoff copiable para cualquier chat o IA.
+- Verifica mediante lectura de retorno que ambos registros quedaron escritos. No cierres la tarea antes de esa comprobación.
+
+En cada continuación, vuelve a verificar el HEAD y el estado de PRs/issues; este documento, los comentarios y los chats son checkpoints y no reemplazan el estado vivo.
 
 ## 7. Regla de no regresión
 
