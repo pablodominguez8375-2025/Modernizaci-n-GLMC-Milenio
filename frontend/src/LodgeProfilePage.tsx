@@ -96,7 +96,9 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
         city: workshopProfileDraft.city.trim() || null,
         country: workshopProfileDraft.country.trim() || null,
       })
-      setProfile(await organizationProfileApi.getProfile(organizationId))
+      const updated = await organizationProfileApi.getProfile(organizationId)
+      setProfile(updated)
+      setOrganizations(items => items.map(item => item.id === organizationId ? { ...item, name: updated.organization.name } : item))
     } catch (reason) { setError(toMessage(reason)) }
     finally { setSavingWorkshopProfile(false) }
   }
