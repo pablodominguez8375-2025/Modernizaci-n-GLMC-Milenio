@@ -43,7 +43,13 @@ Se reemplaza la propuesta referencial «Libro de Oro» por el menú **Resumen de
 
 La delegación requiere fundamento y auditoría; no incorpora al destinatario al Consejo ni otorga edición, firma, autorización o acceso a otros módulos. En cada lectura se comprueban nuevamente el grado de Maestro, la membresía activa y el Taller del permiso. Un cambio de grado o baja suspende su efecto y la delegación se conserva para revocación e historial. `lodge_admin` y el administrador de plataforma no sustituyen al Venerable en esta gestión. Esta delegación es una decisión funcional del Sponsor y no se atribuye como facultad textual de la Constitución.
 
-PR #183 se abrió contra `dev@14019d2887a782250021a1eac2f3e8dc936e360c`. El SHA de implementación `abca87a7b112b219a92146ecdabb17a9f7c0ec0b` pasó PMGM CI #1596, Showcase #880 e Installable #518 (SUCCESS); frontend local: 206/206, lint y build SUCCESS. Artifact Actions #10919471075, digest `sha256:5a85c8fdf3cd647dfdb0e5ff2ef5ada616b242482b9d179fcbd3aa890a11a34c`. Showcase compiló sin desplegar Pages desde el PR. Esta actualización documental posterior cambia el HEAD del PR: repetir gates exact-head antes de integrar. Código no integrado ni demo actualizada; artifact no es instalación ni aceptación QA/UAT. `srv01` sigue pausado; Issue #97 abierto y `main` intacta.
+## Corte integrado — PR #183 / Resumen del Taller — 26-09-2026
+
+PR #183 se fusionó por squash en `dev@f625a0c1c7e7d4010051b5fe2ed0d7fa26a2809b`, con aprobación del Sponsor. La implementación reutiliza Ficha de Taller para el menú Resumen del Taller, da lectura acotada al Consejo y permite al Venerable del Taller delegar/revocar consulta a un Maestro activo de su Taller. No cambia permisos de otros módulos ni otorga voz o voto al delegado.
+
+Gates post-merge sobre el SHA exacto: PMGM CI #1598 (run 36283920282), Showcase/Pages #882 (run 36283920245), QA Installable #520 (run 36283920204) y Pre-UAT #374 (run 36283920260): SUCCESS. `qa-current.json`, BUILD-INFO y checksum del paquete publicado señalan el mismo SOURCE_SHA `f625a0c1c7e7d4010051b5fe2ed0d7fa26a2809b`; MANIFEST valida 762/762 entradas en Pages y QA Actions. SHA-256 del ZIP indicado por `qa-current.json`: `2b0278074b0d36046c74eb7a0437b2325e3154635fab2dd3c160e235cf0044bf`. Los artefactos Pages/QA/Pre-UAT y sus digests quedan en PMGM-BASE-001 y Issue #97.
+
+Demo Pages publicada: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/. `srv01` sigue en pausa; no hubo instalación, smoke en servidor, regresión física ni UAT. CI/Pages/artefactos no significan QA/UAT aceptadas. Issue #97 permanece abierto; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` no se modifica.
 
 ## Decisión vigente del Sponsor — 25-09-2026
 
