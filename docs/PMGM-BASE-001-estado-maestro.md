@@ -911,3 +911,10 @@ Gates post-merge exact-head de `f625a0c`: PMGM CI #1598 (run 36283920282), Showc
 Artifact Pages Actions #10919578545, digest `sha256:25e4e9e3af1ecbe4f21b91d6789c0373f0731097d93ee0cecc5dea3070794f85`. Artifact QA Actions #10919279685, digest `sha256:784c82463fa9d299b69f58fc8efe0b045b58afe00e498bdb55dc01c155229f2b`. Artifact Pre-UAT #10920025972, digest `sha256:a342808632d9434ec951335111d7b7ff88a389ba346831a040b9e11e8bbb0790`. Son artefactos automatizados y evidencias de publicación; no equivalen a instalación física, aceptación QA ni UAT.
 
 `srv01` continúa en pausa: no se ejecutó instalación, despliegue manual, smoke autenticado en el servidor ni regresión física/UAT. Issue #97 sigue abierto como seguimiento operacional.
+
+
+## Handoff post-merge — 27-09-2026
+
+La cuenta propietaria fusionó PR #187, #189 y #192. HEAD verificado: `dev@316db1bf65507a0af25f8f9a391bda2064818e00`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta. PMGM CI #1618 / run 36346169507 falló dos veces en “First implementation authenticated smoke” al descargar `public.ecr.aws/aws-cli/aws-cli:2.32.25`, HTTP 429 “Data limit exceeded”. Revisión del job: backend/tests, frontend, piloto y configuración de infraestructura SUCCESS. Showcase #908 SUCCESS; QA Installable #546 y Pre-UAT #380 SUCCESS como artefactos únicamente. No hay despliegue Pages confirmado en esta consulta, no hubo instalación ni UAT; `srv01` permanece pausado (Issue #97). Issue #188/#191 abiertos.
+
+Se abre PR de corrección para usar la imagen oficial AWS CLI desde Docker Hub manteniendo la versión fijada, y para aclarar que una autorización del Product Owner ya dada no requiere un segundo aprobador de proyecto. Pendiente verificar CI exact-head; no fusionar con gates fallidos. Consultar protección real de GitHub en cada merge; no inventar revisión externa. `main` y `srv01` permanecen fuera de alcance.

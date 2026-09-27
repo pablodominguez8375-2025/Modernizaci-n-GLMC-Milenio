@@ -389,3 +389,10 @@ PR #172 corrigió el contraste de iconografía en el portal de miembros: se cons
 Integrado por squash en `dev` como `9931df6c8b2199f0c2b17edf1d31f6fa2f762886`, desde PR #172. Checks exact-head SUCCESS: PMGM CI #1573, Showcase/Pages #846, QA Installable #484 y Pre-UAT #364. El artefacto QA Actions #10896758099 tiene digest externo `sha256:6c604107882f69834a71873200aba95b53d7b390a01b3bfda614c0f47f914d31`; BUILD-INFO identifica el mismo SOURCE_SHA y MANIFEST valida 754/754 entradas. Pages #10896848056 contiene `qa-current.json` con el mismo SHA y el ZIP publicado con SHA-256 `b4b22f6bdd2301997d145aee7e6915284c762ec190e2f73c079b291cb78e5039`; BUILD-INFO coincide y MANIFEST valida 754/754 entradas. Las capturas responsivas del run #846 incluyen `mi-ficha-1440x900.png` y muestran el símbolo dorado sobre mosaico azul.
 
 `main` sigue en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` permanece pausado: no hubo instalación, smoke autenticado en el servidor, regresión institucional ni UAT; QA/UAT no se aceptan.
+
+
+## Handoff post-merge — 27-09-2026
+
+La cuenta propietaria fusionó PR #187, #189 y #192. HEAD verificado: `dev@316db1bf65507a0af25f8f9a391bda2064818e00`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta. PMGM CI #1618 / run 36346169507 falló dos veces en “First implementation authenticated smoke” al descargar `public.ecr.aws/aws-cli/aws-cli:2.32.25`, HTTP 429 “Data limit exceeded”. Revisión del job: backend/tests, frontend, piloto y configuración de infraestructura SUCCESS. Showcase #908 SUCCESS; QA Installable #546 y Pre-UAT #380 SUCCESS como artefactos únicamente. No hay despliegue Pages confirmado en esta consulta, no hubo instalación ni UAT; `srv01` permanece pausado (Issue #97). Issue #188/#191 abiertos.
+
+Se abre PR de corrección para usar la imagen oficial AWS CLI desde Docker Hub manteniendo la versión fijada, y para aclarar que una autorización del Product Owner ya dada no requiere un segundo aprobador de proyecto. Pendiente verificar CI exact-head; no fusionar con gates fallidos. Consultar protección real de GitHub en cada merge; no inventar revisión externa. `main` y `srv01` permanecen fuera de alcance.
