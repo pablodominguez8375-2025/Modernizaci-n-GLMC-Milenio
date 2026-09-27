@@ -4,15 +4,14 @@
 
 Este bloque es una fotografía del último estado revisado, no reemplaza la verificación en vivo. Antes de actuar, vuelve a consultar GitHub y Drive.
 
-### Estado del proyecto al preparar este handoff
+### Estado del proyecto verificado — 27-09-2026
 
 - Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
-- `dev@49744d10472e739580f58e0752e211ce25f22655`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`.
-- PR #185 está integrada. `Mis planchas` está en `Mi ficha`; gates exact-head post-merge y Pages/paquete QA fueron verificados para ese SHA.
-- Demo: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/ . El `qa-current.json` de Pages indicó el SHA de `dev`; checksum publicado y descargado coincidieron y MANIFEST verificó 768/768 archivos.
-- Issue #97 sigue abierto para la QA operacional. Por decisión del Sponsor, `srv01` continúa en pausa; no instalar, desplegar, ejecutar smoke de servidor, regresión física ni UAT hasta recibir instrucción explícita.
-- PR #186 es documental y permanece abierta al momento de este registro. Consulta su HEAD y checks actuales antes de revisarla. No infieras autorización de fusión a partir de su estado verde.
-- Los checks de CI y los paquetes no son aceptación física de QA/UAT ni promoción a `main`.
+- HEAD verificado después de integrar PR #193: `dev@435a0a6870a7db645d98256a7b8fbdac411d307d`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambio.
+- PR #187, #189, #192 y #193 están fusionadas en `dev`. PR #193 corrigió el rate limit de ECR usando la imagen oficial AWS CLI de Docker Hub fijada en 2.32.25 y formalizó la política de integración sin aprobación redundante de terceros.
+- Sobre el HEAD integrado: PMGM CI #1620 SUCCESS; Showcase #911 SUCCESS (artifact Pages y paso Deploy showcase SUCCESS); QA Installable #549 y Pre-UAT #381 SUCCESS. Artefactos no significan instalación/UAT.
+- Issue #188 y #191 continúan abiertos para pendientes; Issue #97 abierto y `srv01` en pausa. No hubo instalación ni UAT. No promover a `main`.
+- Para una PR a `dev`, la autorización ya otorgada por el Product Owner para el alcance aprobado permite integrar cuando CI exact-head esté SUCCESS y GitHub lo permita técnicamente. No pedir segunda autorización de colaborador. Un check verde aislado no es autorización. Verificar cualquier protección real de GitHub en vivo; promoción a `main` y levantamiento de pausa de `srv01` requieren decisiones separadas.
 
 ### Procedimiento obligatorio para continuar
 

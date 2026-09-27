@@ -4,15 +4,14 @@
 
 Este bloque es una fotografía del último estado revisado, no reemplaza la verificación en vivo. Antes de actuar, vuelve a consultar GitHub y Drive.
 
-### Estado del proyecto al preparar este handoff — 27-09-2026, 17:04 America/Santiago
+### Estado del proyecto verificado — 27-09-2026
 
 - Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
-- HEAD verificado: `dev@316db1bf65507a0af25f8f9a391bda2064818e00`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` (sin cambio).
-- PR #187, #189 y #192 aparecen fusionadas por la cuenta propietaria. Sus merge commits son `c3aeed1b9865594a2020050b88caeace26314ebe`, `aad04d056dfbec74b4045ac82110621a8cdb6018` y `316db1bf65507a0af25f8f9a391bda2064818e00` respectivamente.
-- PMGM CI #1618 (run 36346169507), intento 2, falló en “First implementation authenticated smoke” porque ECR Public devolvió HTTP 429 “Data limit exceeded” al descargar la imagen oficial AWS CLI. Los demás jobs finalizaron SUCCESS. Se prepara una corrección de origen de imagen y una aclaración de gobierno, mediante rama y PR a `dev`.
-- Showcase #908 SUCCESS; no asumir publicación Pages. QA Installable #546 y Pre-UAT #380 SUCCESS son artefactos, no instalación ni UAT.
-- Issue #188 y #191 continúan abiertos. Issue #97 sigue abierto y `srv01` pausado; no hubo instalación ni UAT. No promover a `main`.
-- Una PR a `dev` no requiere aprobación de un tercero por regla de proyecto. Si el Product Owner ya autorizó el alcance e indicó integrarlo si está listo, no volver a pedir autorización: comprobar gates exact-head y reglas técnicas reales de GitHub. La revisión externa sólo se solicita si una protección efectiva de GitHub la exige.
+- HEAD verificado después de integrar PR #193: `dev@435a0a6870a7db645d98256a7b8fbdac411d307d`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambio.
+- PR #187, #189, #192 y #193 están fusionadas en `dev`. PR #193 corrigió el rate limit de ECR usando la imagen oficial AWS CLI de Docker Hub fijada en 2.32.25 y formalizó la política de integración sin aprobación redundante de terceros.
+- Sobre el HEAD integrado: PMGM CI #1620 SUCCESS; Showcase #911 SUCCESS (artifact Pages y paso Deploy showcase SUCCESS); QA Installable #549 y Pre-UAT #381 SUCCESS. Artefactos no significan instalación/UAT.
+- Issue #188 y #191 continúan abiertos para pendientes; Issue #97 abierto y `srv01` en pausa. No hubo instalación ni UAT. No promover a `main`.
+- Para una PR a `dev`, la autorización ya otorgada por el Product Owner para el alcance aprobado permite integrar cuando CI exact-head esté SUCCESS y GitHub lo permita técnicamente. No pedir segunda autorización de colaborador. Un check verde aislado no es autorización. Verificar cualquier protección real de GitHub en vivo; promoción a `main` y levantamiento de pausa de `srv01` requieren decisiones separadas.
 
 ### Procedimiento obligatorio para continuar
 
