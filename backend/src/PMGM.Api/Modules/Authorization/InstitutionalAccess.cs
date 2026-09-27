@@ -42,6 +42,8 @@ public interface IInstitutionalAccessService
     bool HasRole(ClaimsPrincipal user, params string[] roles);
     bool CanReadOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
+    bool CanManageWorkshopProfile(ClaimsPrincipal user, Guid organizationId);
+    bool CanEditAnyWorkshopProfile(ClaimsPrincipal user);
     bool CanManageLodgeOperations(ClaimsPrincipal user);
     bool CanManageLodgeSecretariat(ClaimsPrincipal user, Guid organizationId);
     bool CanReadLodgeSecretariat(ClaimsPrincipal user, Guid organizationId);
@@ -126,6 +128,21 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
         return HasOrganizationClaim(user, organizationId) &&
                HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
+    }
+
+    public bool CanManageWorkshopProfile(ClaimsPrincipal user, Guid organizationId)
+        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior)) ||
+           (HasOrganizationClaim(user, organizationId) && HasExplicitRole(user, InstitutionalRoles.TallerSecretaria));
+
+    public bool CanEditAnyWorkshopProfile(ClaimsPrincipal user)
+        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior)) ||
+           (HasExplicitRole(user, InstitutionalRoles.TallerSecretaria) && user.Claims.Any(x =>
+               x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
+
+    private static bool HasExplicitRole(ClaimsPrincipal user, params string[] roles)
+    {
+        var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return user.Claims.Any(x => x.Type == InstitutionalClaims.Role && roleSet.Contains(x.Value));
     }
 
     public bool CanManageLodgeOperations(ClaimsPrincipal user)

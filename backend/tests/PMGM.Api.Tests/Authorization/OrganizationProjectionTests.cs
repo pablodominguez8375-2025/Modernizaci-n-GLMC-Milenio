@@ -6,6 +6,18 @@ namespace PMGM.Api.Tests.Authorization;
 public sealed class OrganizationProjectionTests
 {
     [Fact]
+    public void WorkshopMetadataUpdateContract_ContainsOnlyApprovedFields()
+    {
+        var properties = typeof(UpdateOrganizationMetadataRequest)
+            .GetProperties()
+            .Select(x => x.Name)
+            .Order()
+            .ToArray();
+
+        Assert.Equal(new[] { "City", "Country", "EstablishedOn" }, properties);
+    }
+
+    [Fact]
     public void OrganizationOptionSurface_IsPurposeMinimized()
     {
         var properties = typeof(OrganizationOptionDto)

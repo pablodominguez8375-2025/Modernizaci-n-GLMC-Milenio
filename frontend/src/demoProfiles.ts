@@ -17,6 +17,7 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canApproveLodgeExpenses?: boolean
   canReadLodgeCouncilSummary?: boolean
   canManageLodgeCouncilSummaryAccess?: boolean
+  canManageAnyWorkshopProfile?: boolean
 }
 
 export type DemoSessionProfile = Omit<SessionProfile, 'capabilities'> & {
@@ -77,7 +78,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   lodgeSecretary: {
     displayName: 'Secretaría del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canManageDocuments: true, canReadLodgeCouncilSummary: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canManageDocuments: true, canReadLodgeCouncilSummary: true, canManageAnyWorkshopProfile: true },
   },
   lodgeHospitalaria: {
     displayName: 'Hospitalaria del Taller · Demostración', accessScope: 'organization',
@@ -101,7 +102,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   regimen: {
     displayName: 'Régimen Interior · Demostración', accessScope: 'order',
-    capabilities: { ...deniedCoreCapabilities, canRunRegimenInteriorReports: true, canReviewCeremonies: true, canValidateCeremonyInternalAffairs: true, canReadLibrary: true },
+    capabilities: { ...deniedCoreCapabilities, canRunRegimenInteriorReports: true, canReviewCeremonies: true, canValidateCeremonyInternalAffairs: true, canReadLibrary: true, canManageAnyWorkshopProfile: true },
   },
   treasury: {
     displayName: 'Gran Tesorero · Demostración', accessScope: 'order',
@@ -113,7 +114,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   secretariat: {
     displayName: 'Gran Secretaría · Demostración', accessScope: 'order',
-    capabilities: { ...deniedCoreCapabilities, canManageGrandSecretariat: true, canReviewCeremonies: true, canManageDocuments: true, canReadLibrary: true },
+    capabilities: { ...deniedCoreCapabilities, canManageGrandSecretariat: true, canReviewCeremonies: true, canManageDocuments: true, canReadLibrary: true, canManageAnyWorkshopProfile: true },
   },
   grandMaster: {
     displayName: 'Gran Maestra · Demostración', accessScope: 'order',

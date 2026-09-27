@@ -19,6 +19,7 @@ public sealed class SessionProfileTests
         Assert.Equal("Hermana Institucional", profile.DisplayName);
         Assert.Equal("order", profile.AccessScope);
         Assert.True(profile.Capabilities.CanManageGrandSecretariat);
+        Assert.True(profile.Capabilities.CanManageAnyWorkshopProfile);
         Assert.True(profile.Capabilities.CanEvaluateCeremonies);
         Assert.True(profile.Capabilities.CanReviewCeremonies);
         Assert.False(profile.Capabilities.CanValidateCeremonyInternalAffairs);
@@ -40,6 +41,7 @@ public sealed class SessionProfileTests
         Assert.True(profile.Capabilities.CanEvaluateCeremonies);
         Assert.True(profile.Capabilities.CanReviewCeremonies);
         Assert.True(profile.Capabilities.CanValidateCeremonyInternalAffairs);
+        Assert.True(profile.Capabilities.CanManageAnyWorkshopProfile);
         Assert.False(profile.Capabilities.CanAuthorizeCeremonies);
     }
 
@@ -63,6 +65,7 @@ public sealed class SessionProfileTests
         Assert.False(access.CanReviewCeremonies(principal, Guid.NewGuid()));
         Assert.False(profile.Capabilities.CanManageGrandSecretariat);
         Assert.False(profile.Capabilities.CanRunRegimenInteriorReports);
+        Assert.True(profile.Capabilities.CanManageAnyWorkshopProfile);
     }
 
     [Fact]

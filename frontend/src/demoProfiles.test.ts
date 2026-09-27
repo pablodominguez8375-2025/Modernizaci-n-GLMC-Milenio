@@ -28,6 +28,7 @@ describe('showcase role profiles', () => {
       expect(profile.accessScope).toBe('organization')
       expect(profile.capabilities.canManageLodgeOperations).toBe(true)
     }
+    expect(getDemoProfile('lodgeSecretary').capabilities.canManageAnyWorkshopProfile).toBe(true)
 
     const treasurer = getDemoProfile('lodgeTreasurer')
     expect(treasurer.accessScope).toBe('organization')
@@ -36,6 +37,14 @@ describe('showcase role profiles', () => {
     expect(treasurer.capabilities.canReadLodgeSecretariat).toBe(false)
     expect(treasurer.capabilities.canManageLodgeSecretariat).toBe(false)
     expect(treasurer.capabilities.canManageDocuments).toBe(false)
+    expect(treasurer.capabilities.canManageAnyWorkshopProfile).not.toBe(true)
+  })
+
+  it('allows only the three named profiles to edit workshop origin metadata', () => {
+    expect(getDemoProfile('lodgeSecretary').capabilities.canManageAnyWorkshopProfile).toBe(true)
+    expect(getDemoProfile('secretariat').capabilities.canManageAnyWorkshopProfile).toBe(true)
+    expect(getDemoProfile('regimen').capabilities.canManageAnyWorkshopProfile).toBe(true)
+    expect(getDemoProfile('grandLodge').capabilities.canManageAnyWorkshopProfile).not.toBe(true)
   })
 
   it('separates Hospitalaria management from Venerable inspection and approval', () => {

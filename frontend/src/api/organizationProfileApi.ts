@@ -42,7 +42,7 @@ export interface OrganizationTransfer {
 }
 
 export interface OrganizationProfile {
-  organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string }
+  organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string; establishedOn: string | null; city: string | null; country: string | null; treasuryTerritory: string | null }
   members: { active: number; degreeDistribution: Record<string, number> }
   authorities: OrganizationAuthority[]
   regularity: {
@@ -66,6 +66,7 @@ interface OrganizationProfileApiClientOptions { baseUrl?: string; getAccessToken
 const ORG_1 = '11111111-1111-1111-1111-111111111111'
 const ORG_23 = '23232323-2323-2323-2323-232323232323'
 const demoSummaryGrants = new Map<string, LodgeSummaryGrant[]>([[ORG_1, []], [ORG_23, []]])
+const demoWorkshopMetadata = new Map<string, { establishedOn: string | null; city: string | null; country: string | null }>()
 
 export class OrganizationProfileApiClient {
   private readonly baseUrl: string
@@ -83,6 +84,14 @@ export class OrganizationProfileApiClient {
   async getProfile(organizationId: string): Promise<OrganizationProfile> {
     if (this.useMocks) return demoProfile(organizationId)
     return this.request<OrganizationProfile>(organizationId, 'profile')
+  }
+
+  async updateWorkshopMetadata(organizationId: string, metadata: { establishedOn: string | null; city: string | null; country: string | null }): Promise<void> {
+    if (this.useMocks) {
+      demoWorkshopMetadata.set(organizationId, metadata)
+      return
+    }
+    await this.request(organizationId, 'profile/metadata', 'PUT', metadata)
   }
 
   async getSummaryAccess(organizationId: string): Promise<LodgeSummaryAccess> {
@@ -120,7 +129,7 @@ export class OrganizationProfileApiClient {
     })
     if (!response.ok) {
       if (response.status === 401) await this.onUnauthorized?.()
-      if (response.status === 403) throw new Error('Su cuenta no tiene permiso para consultar este Taller.')
+      if (response.status === 403) throw new Error('Su cuenta no tiene permiso para esta operación del Taller.')
       const error = await response.json().catch(() => null) as { message?: string } | null
       throw new Error(error?.message ?? `La API respondió ${response.status} ${response.statusText}.`)
     }
@@ -145,7 +154,7 @@ function demoProfile(organizationId: string): OrganizationProfile {
   const other = second ? 'Taller Demostrativo Nº 1' : 'Taller Demostrativo Nº 23'
   const otherId = second ? ORG_1 : ORG_23
   return {
-    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z' },
+    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: demoWorkshopMetadata.get(id)?.establishedOn ?? (second ? '1984-03-10' : '1967-08-21'), city: demoWorkshopMetadata.get(id)?.city ?? (second ? 'Valparaíso' : 'Santiago'), country: demoWorkshopMetadata.get(id)?.country ?? 'Chile', treasuryTerritory: second ? 'other_oriente' : 'santiago' },
     members: { active: second ? 19 : 27, degreeDistribution: second ? { apprentice: 6, fellowcraft: 5, master: 8 } : { apprentice: 8, fellowcraft: 7, master: 12 } },
     authorities: [
       { id: `${id}-vm`, officeType: 'venerable_master', period: '2026', memberId: 'demo-vm', displayName: second ? 'Valentina Torres' : 'Alejandra Rojas', startDate: '2026-01-01', endDate: '2026-12-31' },

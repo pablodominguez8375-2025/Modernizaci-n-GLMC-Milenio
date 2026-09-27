@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.Core;
@@ -14,6 +16,10 @@ public static class OrganizationEndpoints
             .RequireAuthorization();
 
         endpoints.MapGet("/api/institutional/organizations/{id:guid}/profile", GetOrganizationProfileAsync)
+            .WithTags("Organizaciones institucionales")
+            .RequireAuthorization();
+
+        endpoints.MapPut("/api/institutional/organizations/{id:guid}/profile/metadata", UpdateOrganizationMetadataAsync)
             .WithTags("Organizaciones institucionales")
             .RequireAuthorization();
 
@@ -76,7 +82,11 @@ public static class OrganizationEndpoints
                 x.Number,
                 x.Type,
                 x.ParentOrganizationId,
-                x.CreatedAtUtc
+                x.CreatedAtUtc,
+                x.EstablishedOn,
+                x.City,
+                x.Country,
+                x.TreasuryTerritory
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -233,7 +243,53 @@ public static class OrganizationEndpoints
             }
         });
     }
+
+    private static async Task<IResult> UpdateOrganizationMetadataAsync(
+        Guid id,
+        UpdateOrganizationMetadataRequest request,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        var organization = await db.Organizations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
+        if (organization is null) return Results.NotFound();
+        if (!access.CanManageWorkshopProfile(httpContext.User, id)) return Results.Forbid();
+        if (!string.Equals(organization.Type, "workshop", StringComparison.OrdinalIgnoreCase))
+            return Results.NotFound();
+
+        var todayInChile = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow, "America/Santiago"));
+        if ((request.EstablishedOn.HasValue && request.EstablishedOn.Value > todayInChile) ||
+            request.City?.Length > 120 || request.Country?.Length > 120)
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["metadata"] = ["Revise la fecha de fundación (no puede ser futura) y los campos de ubicación (máximo 120 caracteres)."]
+            });
+
+        var previous = new { organization.EstablishedOn, organization.City, organization.Country };
+        organization.EstablishedOn = request.EstablishedOn;
+        organization.City = NormalizeOptional(request.City);
+        organization.Country = NormalizeOptional(request.Country);
+
+        audit.Add(httpContext, "organization.workshop_profile.metadata_updated", nameof(Organization), id.ToString(), id,
+            AuditResults.Success, new
+            {
+                previous,
+                current = new { organization.EstablishedOn, organization.City, organization.Country }
+            });
+        await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static string? NormalizeOptional(string? value)
+    {
+        var normalized = value?.Trim();
+        return string.IsNullOrEmpty(normalized) ? null : normalized;
+    }
 }
+
+public sealed record UpdateOrganizationMetadataRequest(DateOnly? EstablishedOn, string? City, string? Country);
 
 public sealed record OrganizationOptionDto(
     Guid Id,
