@@ -2,6 +2,8 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
+import type { DocumentApiClient } from './api/documentApi'
+import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import './memberPortalInstruction.css'
 import './memberLibraryShortcut.css'
 
@@ -11,6 +13,7 @@ interface MemberPortalPageProps {
   profile: SessionProfile | null
   useMocks: boolean
   membershipApi: MembershipApiClient
+  documentApi: DocumentApiClient
   onOpenCalendar?: () => void
   onOpenNotifications?: () => void
   onOpenLibrary?: () => void
@@ -116,7 +119,7 @@ export const memberPortalDemoData = {
   ],
 } as const
 
-export default function MemberPortalPage({ profile, useMocks, membershipApi, onOpenCalendar, onOpenNotifications, onOpenLibrary, onOpenLodge }: MemberPortalPageProps) {
+export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenCalendar, onOpenNotifications, onOpenLibrary, onOpenLodge }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
@@ -307,6 +310,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, onO
         {useMocks ? <div className="member-notification-list">{memberPortalDemoData.notifications.map(item => <div key={item.title}><span className="member-notification-dot" /><div><strong>{item.title}</strong><p>{item.detail}</p></div><small>{item.age}</small></div>)}</div> : <PortalPendingData text="Abre Notificaciones para consultar avisos institucionales dirigidos a tu identidad autenticada." />}
       </article>
     </section>
+    <MemberWorkPapersPanel api={documentApi} organizationId={useMocks ? 'demo-org-23' : selfProfile?.current.membership?.organizationId ?? ''} enabled={useMocks || selfProfile?.current.membership?.status === 'active'} />
   </div>
 }
 

@@ -185,3 +185,18 @@ Auditar como mínimo:
 8. Las operaciones sensibles quedan auditadas.
 9. Los binarios se almacenan fuera de PostgreSQL.
 10. La Biblioteca puede evolucionar sin asumir funciones de custodia archivística.
+
+### 16.1. Planchas de trabajo
+
+- El autor autenticado lista sólo sus propias planchas; no puede crear, listar ni versionar trabajos de otro hermano.
+- Secretaría del Taller puede cargar a nombre de un hermano activo del mismo Taller.
+- Secretaría puede actualizar la misma plancha vinculada a la Tenida; la actualización agrega versión al mismo historial en vez de publicar un duplicado.
+- Autoría y grado se resuelven con datos institucionales; el formulario no permite suplantar el autor ni declarar el grado.
+- Cada versión incluye descripción breve, archivo PDF/DOCX, autor y sujeto cargador auditables.
+- Una versión nueva reemplaza la vigente en Biblioteca sólo después de integridad y antivirus satisfactorios; el rechazo conserva la publicación previa.
+- El autor puede reemplazar su plancha aunque Secretaría haya subido la primera versión; el historial no se borra.
+- Catálogo, facetas, detalle y descarga aplican el grado mínimo efectivo y los permisos vigentes.
+- El vínculo a Tenida conserva su uso de gestión, pero no elude el acceso por grado de Biblioteca. Tenidas ceremoniales no llevan planchas de trabajo.
+- Plancha de trabajo y Plancha de Autorización de Ceremonia son tipos/roles documentales distintos; las planchas de trabajo no ingresan a Gran Archivero.
+
+La autorización y los criterios detallados se registran en PMGM-ARCH-016.

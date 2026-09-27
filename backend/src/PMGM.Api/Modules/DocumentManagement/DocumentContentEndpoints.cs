@@ -29,8 +29,10 @@ public static class DocumentContentEndpoints
     private static async Task<IResult> UploadContentAsync(
         Guid versionId,
         HttpContext httpContext,
+        PmgmDbContext institutionalDb,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberResolver,
         IDocumentObjectStore objectStore,
         IOptions<DocumentStorageOptions> storageOptions,
         CancellationToken cancellationToken)
@@ -40,7 +42,9 @@ public static class DocumentContentEndpoints
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
 
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
-        if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType)
+                ? !await MemberWorkPaperEndpoints.CanManageAsync(version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken)
+                : !access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
         if (version.ProcessingStatus != DocumentManagementCodes.ProcessingStatus.PendingUpload)
             return Results.Conflict(new { message = "Esta versión ya inició su ciclo de carga y no puede sobrescribirse." });
 
@@ -170,8 +174,10 @@ public static class DocumentContentEndpoints
     private static async Task<IResult> ScanContentAsync(
         Guid versionId,
         HttpContext httpContext,
+        PmgmDbContext institutionalDb,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberResolver,
         IDocumentObjectStore objectStore,
         IDocumentMalwareScanner scanner,
         CancellationToken cancellationToken)
@@ -181,7 +187,9 @@ public static class DocumentContentEndpoints
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
 
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
-        if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType)
+                ? !await MemberWorkPaperEndpoints.CanManageAsync(version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken)
+                : !access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
 
         if (version.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Uploaded)
         {
@@ -249,6 +257,16 @@ public static class DocumentContentEndpoints
 
         version.ScanReference = scanResult.EvidenceReference;
         version.ProcessingStatus = targetStatus;
+        if (scanResult.IsClean && MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType))
+        {
+            version.Document.Title = version.SubmittedTitle ?? version.Document.Title;
+            version.Document.ShortDescription = version.SubmittedShortDescription ?? version.Document.ShortDescription;
+            version.Document.PublishedVersionId = version.Id;
+            version.Document.PublishedAtUtc = DateTimeOffset.UtcNow;
+            version.Document.Status = DocumentManagementCodes.DocumentStatus.Published;
+            if (version.AuthorEffectiveDegreeAtUpload is >= 1)
+                version.Document.MinimumDegreeRequired = version.AuthorEffectiveDegreeAtUpload;
+        }
 
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
@@ -311,6 +329,7 @@ public static class DocumentContentEndpoints
         HttpContext httpContext,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         IDocumentObjectStore objectStore,
         CancellationToken cancellationToken)
     {
@@ -324,7 +343,8 @@ public static class DocumentContentEndpoints
             return Results.NotFound();
         }
 
-        if (!CanReadPublishedDocument(httpContext, access, document)) return Results.Forbid();
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        if (!CanReadPublishedDocument(httpContext, access, document, memberContext?.EffectiveDegree)) return Results.Forbid();
 
         var version = await db.DocumentVersions.AsNoTracking()
             .SingleOrDefaultAsync(
@@ -347,8 +367,11 @@ public static class DocumentContentEndpoints
     private static bool CanReadPublishedDocument(
         HttpContext httpContext,
         IInstitutionalAccessService access,
-        InstitutionalDocument document)
+        InstitutionalDocument document,
+        int? effectiveDegree)
     {
+        if (document.MinimumDegreeRequired is not null &&
+            (effectiveDegree is null || document.MinimumDegreeRequired > effectiveDegree)) return false;
         if (document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated) return true;
 
         return document.AccessPolicy == DocumentManagementCodes.AccessPolicy.OrganizationAuthenticated &&

@@ -37,6 +37,12 @@ Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575
 
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Mejora autorizada en implementación — Mis planchas y Biblioteca Virtual — 27-09-2026
+
+El Hermano consulta sólo sus planchas, puede cargar y reemplazar su propio trabajo aunque la carga anterior la haya hecho Secretaría. Secretaría puede subir a nombre de un autor activo del Taller. Cada carga exige descripción breve y conserva versiones. Después de validación de integridad y escaneo antimalware limpio se publica automáticamente la nueva versión en Biblioteca Virtual → «Planchas de Trabajo», clasificada por el grado efectivo del autor. Si el proceso falla, sigue visible la última versión válida. El grado también se controla en listado, detalle y descarga directa, y las rutas genéricas no pueden eludir el flujo seguro. Se reutilizan el gestor documental y el catálogo por grado; no se alteran permisos generales, actas ni planchas oficiales.
+
+Estado: rama `feature/member-work-papers-20260927` sobre `dev@8f41db9dc18e4cb5f1577d35c1af86a7c4b9b138`; código sin integrar, validaciones locales aún en curso. `main` intacta; `srv01` en pausa. Esta implementación no constituye publicación, instalación, QA ni UAT. Especificación: `docs/PMGM-ARCH-016-planchas-trabajo-personales-y-biblioteca.md`.
+
 ## Mejora autorizada — Resumen del Taller y acceso de consulta delegado — 27-09-2026
 
 Se reemplaza la propuesta referencial «Libro de Oro» por el menú **Resumen del Taller**, reutilizando la vista existente de Ficha de Taller y sus proyecciones actuales. La vista corresponde a los ocho cargos que integran constitucionalmente el Consejo de Administración, sólo dentro de su Taller. El Venerable Maestro puede otorgar o revocar manualmente permiso de consulta a otro Maestro con membresía activa en ese mismo Taller.

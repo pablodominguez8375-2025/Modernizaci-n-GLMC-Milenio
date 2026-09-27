@@ -19,6 +19,8 @@ public sealed class InstitutionalDocument
     public Guid CollectionId { get; set; }
     public DocumentCollection Collection { get; set; } = null!;
     public Guid? OrganizationId { get; set; }
+    public Guid? AuthorMemberId { get; set; }
+    public ICollection<DocumentVersion> Versions { get; set; } = new List<DocumentVersion>();
     public string Title { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
     public string Classification { get; set; } = DocumentManagementCodes.Classification.Internal;
@@ -57,6 +59,9 @@ public sealed class DocumentVersion
     public string ObjectKey { get; set; } = string.Empty;
     public string ProcessingStatus { get; set; } = DocumentManagementCodes.ProcessingStatus.PendingUpload;
     public string? ScanReference { get; set; }
+    public int? AuthorEffectiveDegreeAtUpload { get; set; }
+    public string? SubmittedTitle { get; set; }
+    public string? SubmittedShortDescription { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public string CreatedBySubject { get; set; } = string.Empty;
 }

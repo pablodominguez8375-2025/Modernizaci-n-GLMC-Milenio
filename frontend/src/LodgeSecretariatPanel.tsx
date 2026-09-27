@@ -59,6 +59,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
   const [recordType, setRecordType] = useState<LodgeSecretariatRecordType>('tenida')
   const [sourceRecordId, setSourceRecordId] = useState('')
   const [workPaperAuthorMemberId, setWorkPaperAuthorMemberId] = useState('')
+  const [workPaperDescription, setWorkPaperDescription] = useState('')
   const [uploadingKind, setUploadingKind] = useState<DocumentKind | null>(null)
 
   useEffect(() => {
@@ -187,11 +188,14 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       setError('Seleccione al hermano autor de la plancha.')
       return
     }
+    if (kind === 'work_paper' && !workPaperDescription.trim()) {
+      setError('Agregue una descripción breve de referencia para la plancha.')
+      return
+    }
 
     setUploadingKind(kind); setError(null); setMessage(null)
     try {
       const normalized = normalizeInstitutionalFile(file)
-      const collectionId = await ensureSecretariatCollection()
       const labels = {
         work_paper: { title: `Plancha de trabajo · ${currentSource.label}`, documentType: 'work_paper', classification: 'confidential' as const },
         extract: { title: `Extracto de acta · ${currentSource.label}`, documentType: 'minute_extract', classification: 'confidential' as const },
@@ -200,25 +204,36 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       if (kind === 'extract' && normalized.type !== 'application/pdf') throw new Error('El extracto debe cargarse obligatoriamente en PDF.')
       if ((kind === 'work_paper' || kind === 'full_minute') && !isPdfOrWord(normalized)) throw new Error('La plancha y el acta completa admiten PDF o Word (.docx).')
 
-      const uploaded = await documentApi.uploadManagedFile(collectionId, {
-        title: labels[kind].title,
-        documentType: labels[kind].documentType,
-        classification: labels[kind].classification,
-        accessPolicy: 'management_only',
-      }, normalized)
+      let versionId: string
+      if (kind === 'work_paper') {
+        const linkedVersionId = currentRecord?.workPaperDocumentVersionId
+        const linkedPaper = linkedVersionId ? await documentApi.getWorkPaperByVersion(linkedVersionId) : null
+        versionId = linkedPaper?.authorMemberId === workPaperAuthorMemberId
+          ? (await documentApi.replaceWorkPaper(linkedPaper.documentId, { title: labels[kind].title, shortDescription: workPaperDescription, file: normalized })).versionId
+          : (await documentApi.submitWorkPaper({ organizationId, authorMemberId: workPaperAuthorMemberId, title: labels[kind].title, shortDescription: workPaperDescription, file: normalized })).versionId
+      } else {
+        const uploaded = await documentApi.uploadManagedFile(await ensureSecretariatCollection(), {
+          title: labels[kind].title,
+          documentType: labels[kind].documentType,
+          classification: labels[kind].classification,
+          accessPolicy: 'management_only',
+        }, normalized)
+        versionId = uploaded.version.id
+      }
 
       const current = currentRecord
       const payload = {
-        workPaperDocumentVersionId: kind === 'work_paper' ? uploaded.version.id : current?.workPaperDocumentVersionId ?? null,
+        workPaperDocumentVersionId: kind === 'work_paper' ? versionId : current?.workPaperDocumentVersionId ?? null,
         workPaperAuthorMemberId: kind === 'work_paper' ? workPaperAuthorMemberId : current?.workPaperAuthorMemberId ?? null,
-        extractDocumentVersionId: kind === 'extract' ? uploaded.version.id : current?.extractDocumentVersionId ?? null,
-        fullMinuteDocumentVersionId: kind === 'full_minute' ? uploaded.version.id : current?.fullMinuteDocumentVersionId ?? null,
+        extractDocumentVersionId: kind === 'extract' ? versionId : current?.extractDocumentVersionId ?? null,
+        fullMinuteDocumentVersionId: kind === 'full_minute' ? versionId : current?.fullMinuteDocumentVersionId ?? null,
         ceremonyAuthorizationDocumentId: current?.ceremonyAuthorizationDocumentId ?? null,
       }
       await lodgeApi.upsertSecretariatRecord(organizationId, recordType, sourceRecordId, payload)
       await refreshRecords()
+      if (kind === 'work_paper') setWorkPaperDescription('')
       setMessage(kind === 'work_paper'
-        ? 'Plancha de trabajo guardada en el archivo privado del Taller. Puede cargarse o reemplazarse posteriormente.'
+        ? 'Plancha cargada en Biblioteca Virtual por grado, con su vínculo de Tenida y versión trazable. El autor podrá reemplazar su propio trabajo desde Mis planchas.'
         : kind === 'extract'
           ? 'Extracto PDF guardado. En una Tenida realizada puede remitirse a Gran Secretaría.'
           : 'Acta completa guardada como documento opcional y privado del Taller.')
@@ -326,7 +341,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
       {currentSource && canManage && <div className="lodge-secretariat-document-actions">
         <div className="secretariat-document-card">
           <strong>Plancha de trabajo</strong><span>{planchaAllowed?'Opcional · PDF o Word · puede cargarse posteriormente':'No corresponde a este registro'}</span>
-          {planchaAllowed && <><select aria-label="Hermano autor de la plancha" value={workPaperAuthorMemberId} onChange={e=>setWorkPaperAuthorMemberId(e.target.value)}><option value="">Hermano autor…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select><FileButton disabled={!!uploadingKind} accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" label={currentRecord?.workPaperDocumentVersionId?'Reemplazar plancha':'Cargar plancha'} onFile={file=>void uploadDocument('work_paper',file)} /></>}
+          {planchaAllowed && <><select aria-label="Hermano autor de la plancha" value={workPaperAuthorMemberId} onChange={e=>setWorkPaperAuthorMemberId(e.target.value)}><option value="">Hermano autor…</option>{members.map(m=><option key={m.id} value={m.id}>{m.displayName}</option>)}</select><textarea aria-label="Descripción breve de la plancha" maxLength={300} value={workPaperDescription} onChange={event=>setWorkPaperDescription(event.target.value)} placeholder="Descripción breve de referencia" rows={2} /><FileButton disabled={!!uploadingKind} accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" label={currentRecord?.workPaperDocumentVersionId?'Reemplazar plancha':'Cargar plancha'} onFile={file=>void uploadDocument('work_paper',file)} /></>}
           {currentRecord?.workPaperDocumentVersionId && <small>Plancha vinculada al registro.</small>}
         </div>
         <div className="secretariat-document-card">

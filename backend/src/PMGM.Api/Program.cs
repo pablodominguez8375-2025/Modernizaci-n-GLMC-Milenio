@@ -196,6 +196,7 @@ app.MapSecretariatOperationsEndpoints();
 app.MapLodgeCouncilEndpoints();
 app.MapLodgeInstructionEndpoints();
 app.MapDocumentManagementEndpoints();
+app.MapMemberWorkPaperEndpoints();
 app.MapDocumentManagementQueryEndpoints();
 app.MapDocumentContentEndpoints();
 app.MapDocumentContentRecoveryEndpoints();

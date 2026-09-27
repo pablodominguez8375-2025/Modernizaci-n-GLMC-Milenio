@@ -77,6 +77,9 @@ export interface LibraryCatalogMetadata extends LibraryCatalogMetadataRequest {
 export interface CreateDocumentCollectionRequest { code: string; name: string; description?: string | null; scope: DocumentScope; organizationId?: string | null }
 export interface CreateInstitutionalDocumentRequest { title: string; documentType: string; classification: DocumentClassification; accessPolicy: DocumentAccessPolicy }
 export interface CreateDocumentVersionRequest { originalFileName: string; contentType: string; sizeBytes: number }
+export interface MemberWorkPaperVersion { id: string; versionNumber: number; originalFileName: string; processingStatus: DocumentProcessingStatus; createdAtUtc: string; isCurrent: boolean }
+export interface MemberWorkPaper { id: string; title: string; shortDescription: string; minimumDegreeRequired: number; status: DocumentStatus; publishedVersionId: string | null; versions: MemberWorkPaperVersion[] }
+export interface MemberWorkPaperLink { documentId: string; authorMemberId: string | null; title: string; shortDescription: string }
 export type DocumentAccessTokenProvider = () => Promise<string | null>
 
 interface DocumentApiClientOptions { baseUrl?: string; getAccessToken?: DocumentAccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
@@ -161,6 +164,10 @@ export class DocumentApiClient {
   private readonly mockCollections: DocumentCollection[] = [{ ...demoCollection }]
   private readonly mockDocuments = new Map<string, InstitutionalDocument>()
   private readonly mockLibrary: LibraryDocument[] = demoLibrary.map(item => ({ ...item }))
+  private readonly mockWorkPapers: MemberWorkPaper[] = [{
+    id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1',
+    versions: [{ id: 'demo-own-work-paper-version-1', versionNumber: 1, originalFileName: 'trabajo-aprendiz-demo.pdf', processingStatus: 'available', createdAtUtc: '2026-09-10T15:00:00Z', isCurrent: true }],
+  }]
 
   constructor(options: DocumentApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -172,6 +179,60 @@ export class DocumentApiClient {
   async getLibrary(): Promise<LibraryDocumentsResponse> {
     if (this.useMocks) return { total: this.mockLibrary.length, items: this.mockLibrary.map(item => ({ ...item })) }
     return this.request<LibraryDocumentsResponse>('/api/biblioteca')
+  }
+
+  async getMyWorkPapers(): Promise<MemberWorkPaper[]> {
+    if (this.useMocks) return this.mockWorkPapers.map(item => ({ ...item, versions: item.versions.map(version => ({ ...version })) }))
+    const response = await this.request<{ items: MemberWorkPaper[] }>('/api/biblioteca/mis-planchas')
+    return response.items
+  }
+
+  async getWorkPaperByVersion(versionId: string): Promise<MemberWorkPaperLink> {
+    if (this.useMocks) {
+      const paper = this.mockWorkPapers.find(item => item.versions.some(version => version.id === versionId))
+      if (!paper) return { documentId: '', authorMemberId: null, title: '', shortDescription: '' }
+      return { documentId: paper.id, authorMemberId: 'demo-member-1', title: paper.title, shortDescription: paper.shortDescription }
+    }
+    return this.request<MemberWorkPaperLink>(`/api/biblioteca/mis-planchas/versiones/${encodeURIComponent(versionId)}`)
+  }
+
+  async submitWorkPaper(input: { organizationId: string; title: string; shortDescription: string; file: File; authorMemberId?: string }): Promise<{ documentId: string; versionId: string }> {
+    const { file } = input
+    if (this.useMocks) {
+      const id = crypto.randomUUID(); const versionId = crypto.randomUUID(); const now = new Date().toISOString()
+      this.mockWorkPapers.unshift({ id, title: input.title.trim(), shortDescription: input.shortDescription.trim(), minimumDegreeRequired: 3, status: 'published', publishedVersionId: versionId, versions: [{ id: versionId, versionNumber: 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: true }] })
+      this.mockLibrary.unshift({ id, title: input.title.trim(), documentType: 'work_paper', collectionName: 'Planchas de Trabajo', versionNumber: 1, contentType: file.type, sizeBytes: file.size, publishedAtUtc: now, minimumDegreeRequired: 3, shortDescription: input.shortDescription.trim(), authorName: 'Hermano Demostrativo', authorLodgeName: 'Taller Demostrativo Nº 23' })
+      return { documentId: id, versionId }
+    }
+    const created = await this.postJson<{ documentId: string; versionId: string }>('/api/biblioteca/mis-planchas', {
+      organizationId: input.organizationId, authorMemberId: input.authorMemberId ?? null, title: input.title.trim(), shortDescription: input.shortDescription.trim(),
+      originalFileName: file.name, contentType: file.type, sizeBytes: file.size,
+    })
+    await this.uploadVersionContent(created.versionId, file)
+    const scanned = await this.scanVersionContent(created.versionId)
+    if (scanned.processingStatus !== 'available') throw new Error('La plancha no quedó publicada: el análisis de seguridad no la declaró disponible.')
+    return created
+  }
+
+  async replaceWorkPaper(documentId: string, input: { title: string; shortDescription: string; file: File }): Promise<{ versionId: string }> {
+    const { file } = input
+    if (this.useMocks) {
+      const document = this.mockWorkPapers.find(item => item.id === documentId)
+      if (!document) throw new Error('La plancha indicada no existe en tus trabajos.')
+      const versionId = crypto.randomUUID(); const now = new Date().toISOString()
+      document.title = input.title.trim(); document.shortDescription = input.shortDescription.trim(); document.publishedVersionId = versionId; document.status = 'published'
+      document.versions = [{ id: versionId, versionNumber: Math.max(0, ...document.versions.map(version => version.versionNumber)) + 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: true }, ...document.versions.map(version => ({ ...version, isCurrent: false }))]
+      const libraryIndex = this.mockLibrary.findIndex(item => item.id === documentId)
+      if (libraryIndex >= 0) this.mockLibrary[libraryIndex] = { ...this.mockLibrary[libraryIndex], title: document.title, shortDescription: document.shortDescription, versionNumber: document.versions[0].versionNumber, sizeBytes: file.size, publishedAtUtc: now }
+      return { versionId }
+    }
+    const created = await this.postJson<{ versionId: string }>(`/api/biblioteca/mis-planchas/${encodeURIComponent(documentId)}/versiones`, {
+      title: input.title.trim(), shortDescription: input.shortDescription.trim(), originalFileName: file.name, contentType: file.type, sizeBytes: file.size,
+    })
+    await this.uploadVersionContent(created.versionId, file)
+    const scanned = await this.scanVersionContent(created.versionId)
+    if (scanned.processingStatus !== 'available') throw new Error('La nueva versión no quedó disponible; se conserva publicada la versión anterior.')
+    return created
   }
 
   async searchLibrary(params: LibrarySearchParams = {}): Promise<LibraryCatalogResponse> {

@@ -383,6 +383,15 @@
       "status": "pending",
       "evidence": [],
       "notes": null
+    },
+    {
+      "id": "QA-042",
+      "category": "library",
+      "title": "Mis planchas: autoría, versiones, grado, publicación segura y rechazo sin pérdida de versión vigente",
+      "required": true,
+      "status": "pending",
+      "evidence": [],
+      "notes": "Control futuro; srv01 sigue en pausa."
     }
   ],
   "result": {
