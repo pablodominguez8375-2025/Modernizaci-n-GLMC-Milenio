@@ -106,3 +106,49 @@ it('demo library works without token or network', async () => {
   expect(fetch).not.toHaveBeenCalled()
   expect(token).not.toHaveBeenCalled()
 })
+
+it('submits a work paper through the server scan pipeline and does not publish around the backend', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'paper-1', versionId: 'version-1', versionNumber: 1, processingStatus: 'pending_upload' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ processingStatus: 'uploaded', sizeBytes: 8, hasIntegrityHash: true })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ processingStatus: 'available', clean: true })))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'member-token' })
+  const file = new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])], 'plancha.pdf', { type: 'application/pdf' })
+
+  await client.submitWorkPaper({ organizationId: 'workshop-23', title: 'Trabajo de prueba', shortDescription: 'Referencia breve', file })
+
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/biblioteca/mis-planchas',
+    '/api/documentos/versiones/version-1/contenido',
+    '/api/documentos/versiones/version-1/analizar',
+  ])
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ organizationId: 'workshop-23', title: 'Trabajo de prueba', shortDescription: 'Referencia breve', authorMemberId: null })
+  expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer member-token')
+})
+
+it('demo work paper replacement retains older versions in the member history', async () => {
+  const client = new DocumentApiClient({ useMocks: true })
+  const file = new File(['revision'], 'revision.pdf', { type: 'application/pdf' })
+  const before = await client.getMyWorkPapers()
+  const id = before[0].id
+
+  await client.replaceWorkPaper(id, { title: 'Trabajo revisado', shortDescription: 'Versión mejorada', file })
+
+  const after = await client.getMyWorkPapers()
+  expect(after[0].versions).toHaveLength(2)
+  expect(after[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: true, processingStatus: 'available' })
+  expect(after[0].versions[1]).toMatchObject({ versionNumber: 1, isCurrent: false })
+  expect(after[0].title).toBe('Trabajo revisado')
+})
+
+it('resolves a Tenida plancha link only through the authenticated work-paper endpoint', async () => {
+  const payload = { documentId: 'paper-1', authorMemberId: 'member-1', title: 'Trabajo', shortDescription: 'Referencia' }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload)))
+  vi.stubGlobal('fetch', fetch)
+  const result = await new DocumentApiClient({ getAccessToken: async () => 'secretariat-token' }).getWorkPaperByVersion('version-1')
+
+  expect(result).toEqual(payload)
+  expect(fetch.mock.calls[0][0]).toBe('/api/biblioteca/mis-planchas/versiones/version-1')
+  expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer secretariat-token')
+})

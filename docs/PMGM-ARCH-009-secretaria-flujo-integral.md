@@ -88,7 +88,7 @@ En una Tenida no ceremonial:
 - puede cargarse antes o después de marcar la Tenida como Realizada;
 - admite PDF o DOCX;
 - debe vincularse al hermano autor, integrante activo del Cuadro del Taller;
-- permanece privada dentro del Taller.
+- queda vinculada al registro de la Tenida, y su recurso se incorpora a Biblioteca Virtual por grado una vez aprobados los controles de integridad y antivirus. El vínculo a Tenida no cambia la audiencia ni sustituye el filtro de grado de Biblioteca.
 
 No se bloquea la realización de una Tenida por ausencia de plancha adjunta.
 
@@ -110,7 +110,7 @@ Para una Tenida:
 
 - **Extracto de Acta PDF**: documento remitible a Gran Secretaría; debe estar disponible antes de remitir;
 - **Acta completa**: adjunto opcional PDF/DOCX, privado del Taller;
-- **Plancha de trabajo**: adjunto opcional PDF/DOCX, privado del Taller.
+- **Plancha de trabajo**: adjunto opcional PDF/DOCX vinculado al autor; su versión vigente se consulta en Biblioteca Virtual de acuerdo con grado y permisos. El Acta completa sigue siendo privada del Taller.
 
 Una Tenida sólo puede remitirse a Gran Secretaría después de estar Realizada y tener Extracto PDF válido.
 

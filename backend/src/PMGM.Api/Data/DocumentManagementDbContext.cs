@@ -39,6 +39,7 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.Property(x => x.Classification).HasMaxLength(40).IsRequired();
             entity.Property(x => x.AccessPolicy).HasMaxLength(80).IsRequired();
             entity.Property(x => x.MinimumDegreeRequired);
+            entity.Property(x => x.AuthorMemberId);
             entity.Property(x => x.AuthorName).HasMaxLength(320);
             entity.Property(x => x.AuthorLodgeName).HasMaxLength(320);
             entity.Property(x => x.DocumentDate).HasColumnType("date");
@@ -56,6 +57,7 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.HasIndex(x => x.PublishedVersionId);
             entity.HasIndex(x => new { x.Status, x.MinimumDegreeRequired });
             entity.HasIndex(x => new { x.DocumentType, x.MinimumDegreeRequired });
+            entity.HasIndex(x => new { x.DocumentType, x.AuthorMemberId });
         });
 
         modelBuilder.Entity<DocumentVersion>(entity =>
@@ -68,9 +70,12 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.Property(x => x.ObjectKey).HasMaxLength(500).IsRequired();
             entity.Property(x => x.ProcessingStatus).HasMaxLength(40).IsRequired();
             entity.Property(x => x.ScanReference).HasMaxLength(500);
+            entity.Property(x => x.AuthorEffectiveDegreeAtUpload);
+            entity.Property(x => x.SubmittedTitle).HasMaxLength(240);
+            entity.Property(x => x.SubmittedShortDescription).HasMaxLength(300);
             entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();
-            entity.HasOne(x => x.Document).WithMany().HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Document).WithMany(x => x.Versions).HasForeignKey(x => x.DocumentId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.DocumentId, x.VersionNumber }).IsUnique();
             entity.HasIndex(x => x.ObjectKey).IsUnique();
             entity.HasIndex(x => new { x.DocumentId, x.ProcessingStatus });

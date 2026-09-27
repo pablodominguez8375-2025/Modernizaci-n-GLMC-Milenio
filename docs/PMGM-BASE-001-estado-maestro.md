@@ -50,6 +50,12 @@ Pablo confirmó «Quedó perfecto» tras revisar la demo publicada. Queda acepta
 
 # PMGM-BASE-001 — Hilo Maestro y Estado Único del Proyecto Centenario
 
+## Mejora autorizada en implementación — Mis planchas y Biblioteca Virtual por grado — 27-09-2026
+
+El alcance aprobado permite al Hermano ver sólo sus planchas de trabajo y cargar nuevas; Secretaría puede cargar una plancha a nombre de un Hermano activo del Taller. Cada versión exige una descripción breve, registra el grado efectivo del autor y conserva la historia. El autor puede reemplazar una versión cargada por Secretaría; nadie puede reemplazar el trabajo ajeno. Tras verificar integridad y completar el escaneo antimalware sin hallazgos, la versión pasa a ser la vigente y queda visible en Biblioteca Virtual → «Planchas de Trabajo», clasificada según el grado efectivo del autor. Si una carga falla o se rechaza, se conserva la versión publicada anteriormente.
+
+Se reutiliza el gestor documental, el almacenamiento privado y el catálogo por grado existentes; no se crea un repositorio paralelo. El grado se verifica también en los endpoints de listado, detalle y descarga directa para impedir eludir el filtro del catálogo. Las rutas de gestión genéricas no pueden saltarse la autoría ni el escaneo. La plancha de trabajo personal no es una plancha oficial de Gran Secretaría ni un documento del Gran Archivero; puede vincularse a la Tenida correspondiente sin alterar el acta ni el flujo de documentos oficiales. Implementación en curso en `feature/member-work-papers-20260927`, nacida de `dev@8f41db9dc18e4cb5f1577d35c1af86a7c4b9b138`; todavía no está integrada ni publicada. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` intacta. No se ejecutaron instalación ni QA/UAT física; `srv01` sigue en pausa. Ver `docs/PMGM-ARCH-016-planchas-trabajo-personales-y-biblioteca.md`.
+
 **Nombre vigente:** Proyecto Centenario / Modernización Centenario  
 **Nombre histórico:** Proyecto Milenio / Modernización Gran Logia Mixta Milenio  
 **Estado:** Activo  

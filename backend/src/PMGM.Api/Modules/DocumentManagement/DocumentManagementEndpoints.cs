@@ -154,6 +154,8 @@ public static class DocumentManagementEndpoints
 
         if (title is null || documentType is null)
             return Results.BadRequest(new { message = "Título y tipo documental son obligatorios." });
+        if (MemberWorkPaperEndpoints.IsWorkPaper(documentType))
+            return Results.BadRequest(new { message = "Las planchas de trabajo deben crearse desde el flujo personal para registrar autoría y grado efectivo." });
         if (!DocumentManagementCodes.Classification.IsValid(classification))
             return Results.BadRequest(new { message = "La clasificación documental no es válida." });
         if (!DocumentManagementCodes.AccessPolicy.IsValid(accessPolicy))
@@ -218,6 +220,8 @@ public static class DocumentManagementEndpoints
     {
         var document = await db.InstitutionalDocuments.SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
         if (document is null) return Results.NotFound(new { message = "El documento indicado no existe." });
+        if (MemberWorkPaperEndpoints.IsWorkPaper(document.DocumentType))
+            return Results.BadRequest(new { message = "Use el flujo de Mis planchas para conservar la autoría, descripción y grado de cada versión." });
         if (!access.CanManageDocuments(httpContext.User, document.OrganizationId)) return Results.Forbid();
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden agregar versiones a un documento retirado." });
@@ -272,6 +276,8 @@ public static class DocumentManagementEndpoints
             .Include(x => x.Document)
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType))
+            return Results.Conflict(new { message = "El ciclo de una plancha se completa automáticamente tras el escaneo de seguridad." });
         if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
 
         var targetStatus = request.TargetStatus?.Trim().ToLowerInvariant() ?? string.Empty;
@@ -319,6 +325,8 @@ public static class DocumentManagementEndpoints
             .SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
         if (document is null) return Results.NotFound(new { message = "El documento indicado no existe." });
         if (!access.CanManageDocuments(httpContext.User, document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(document.DocumentType))
+            return Results.Conflict(new { message = "La plancha se publica automáticamente sólo después de superar integridad y escaneo antimalware." });
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "El documento se encuentra retirado." });
         if (!DocumentManagementCodes.AccessPolicy.CanPublish(document.AccessPolicy))
@@ -362,6 +370,8 @@ public static class DocumentManagementEndpoints
         var document = await db.InstitutionalDocuments.SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
         if (document is null) return Results.NotFound();
         if (!access.CanManageDocuments(httpContext.User, document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(document.DocumentType))
+            return Results.Conflict(new { message = "La visibilidad de las planchas sigue el ciclo de validación de versiones." });
         if (document.PublishedVersionId is null)
             return Results.Conflict(new { message = "El documento no tiene una versión publicada." });
 
@@ -387,8 +397,11 @@ public static class DocumentManagementEndpoints
         HttpContext httpContext,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         CancellationToken cancellationToken)
     {
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        var effectiveDegree = memberContext?.EffectiveDegree;
         var organizationIds = GetOrganizationIds(httpContext.User);
         var canReadAllOrganizations = access.CanManageDocuments(httpContext.User, null);
 
@@ -398,6 +411,8 @@ public static class DocumentManagementEndpoints
             join version in db.DocumentVersions.AsNoTracking() on document.PublishedVersionId equals version.Id
             where document.Status == DocumentManagementCodes.DocumentStatus.Published &&
                   version.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Available &&
+                  (document.MinimumDegreeRequired == null ||
+                   (effectiveDegree != null && document.MinimumDegreeRequired <= effectiveDegree)) &&
                   (document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated ||
                    (document.AccessPolicy == DocumentManagementCodes.AccessPolicy.OrganizationAuthenticated &&
                     document.OrganizationId != null &&
@@ -423,6 +438,7 @@ public static class DocumentManagementEndpoints
         HttpContext httpContext,
         DocumentManagementDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         CancellationToken cancellationToken)
     {
         var row = await (
@@ -436,7 +452,8 @@ public static class DocumentManagementEndpoints
             .SingleOrDefaultAsync(cancellationToken);
 
         if (row is null) return Results.NotFound();
-        if (!CanReadPublishedDocument(httpContext.User, access, row.document)) return Results.Forbid();
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        if (!CanReadPublishedDocument(httpContext.User, access, row.document, memberContext?.EffectiveDegree)) return Results.Forbid();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(ToLibraryDto(row.document, row.CollectionName, row.version));
@@ -445,8 +462,11 @@ public static class DocumentManagementEndpoints
     private static bool CanReadPublishedDocument(
         ClaimsPrincipal user,
         IInstitutionalAccessService access,
-        InstitutionalDocument document)
+        InstitutionalDocument document,
+        int? effectiveDegree)
     {
+        if (document.MinimumDegreeRequired is not null &&
+            (effectiveDegree is null || document.MinimumDegreeRequired > effectiveDegree)) return false;
         if (document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated) return true;
         if (document.AccessPolicy != DocumentManagementCodes.AccessPolicy.OrganizationAuthenticated || document.OrganizationId is null) return false;
         return access.CanReadOrganizationLibrary(user, document.OrganizationId.Value);

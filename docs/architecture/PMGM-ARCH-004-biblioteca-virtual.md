@@ -123,6 +123,10 @@ La Biblioteca tendrá estados editoriales propios (`draft`, `review`, `approved`
 
 En v0.16.0 se reutiliza la publicación controlada ya existente en Gestión Documental como proyección mínima, manteniendo el límite de dominio preparado para extraer el flujo editorial posteriormente.
 
+### Planchas de trabajo de los Hermanos
+
+El flujo aprobado para planchas de trabajo se especifica en `docs/PMGM-ARCH-016-planchas-trabajo-personales-y-biblioteca.md`. El autor consulta únicamente sus propias planchas en Mi ficha; Secretaría puede cargar a nombre de un hermano activo de su Taller. La versión se publica o reemplaza después de integridad y antivirus, conservando la anterior ante rechazo/falla. El grado efectivo del autor determina el grado mínimo requerido y se verifica por la autorización acumulativa en backend. El archivo no pertenece a Gran Archivero.
+
 ## 11. Auditoría y privacidad
 - las descargas de clasificación sensible/restringida mantienen auditoría;
 - el catálogo no expone metadata técnica privada;
