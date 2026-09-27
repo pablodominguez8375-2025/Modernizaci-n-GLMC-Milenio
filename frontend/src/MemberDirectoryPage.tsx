@@ -141,7 +141,7 @@ function Summary({ label, value, detail }: { label: string; value: string; detai
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(item => item[0]?.toUpperCase()).join('') }
-function officePeriod(startDate: string, endDate: string | null) { return `${formatDate(startDate)} → ${endDate ? formatDate(endDate) : 'vigente'}` }
+export function officePeriod(startDate: string, endDate: string | null) { return `${formatDate(startDate)} → ${endDate ? formatDate(endDate) : 'vigente'}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }
 function degreeLabel(value: string | null | undefined) { return value === 'master' ? 'Maestro/a' : value === 'fellowcraft' ? 'Compañero/a' : value === 'apprentice' ? 'Aprendiz' : value || 'Sin grado registrado' }
 function officeLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase()) }
