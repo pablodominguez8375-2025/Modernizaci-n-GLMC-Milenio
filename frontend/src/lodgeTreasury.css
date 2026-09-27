@@ -35,5 +35,14 @@
   .treasury-collection-table .treasury-table tbody tr{padding:10px}
   .treasury-collection-table .treasury-table tbody tr td{grid-template-columns:minmax(0,1fr);gap:4px;padding:10px 2px}
   .treasury-collection-table .treasury-mobile-label{font-size:.72rem}
+  .treasury-collection-table .treasury-table tbody tr{grid-template-columns:repeat(3,minmax(0,1fr));gap:0 8px}
+  .treasury-collection-table .treasury-table tbody tr .treasury-collection-member,
+  .treasury-collection-table .treasury-table tbody tr .treasury-collection-history,
+  .treasury-collection-table .treasury-table tbody tr .treasury-collection-action{grid-column:1/-1}
+  .treasury-collection-table .treasury-table tbody tr .treasury-collection-metric{align-content:start;padding:10px 6px;border:1px solid #e5edf5;border-radius:10px;background:#f7f9fc}
+  .treasury-collection-table .treasury-table tbody tr .treasury-collection-metric .treasury-cell-value{font-size:.85rem;font-weight:800}
 }
 .treasury-collection-table .regularity-primary{min-height:46px}
+.treasury-period-help{margin:0;color:#52687d;font-size:.86rem;line-height:1.5}
+.treasury-period-history{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.treasury-period-history>span{display:inline-flex;gap:4px;align-items:center;padding:4px 8px;border:1px solid #dbe4ee;border-radius:999px;background:#f7f9fc;color:#52687d;font-size:.75rem;line-height:1.25}
