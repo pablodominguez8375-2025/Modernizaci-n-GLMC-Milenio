@@ -2,6 +2,12 @@
 
 Al terminar cada tarea del proyecto, registrar el resultado en GitHub y Drive, aunque no haya cambios de código. Incluir fecha, HEAD de `dev`/`main`, alcance y archivos, PR/Issue, pruebas/gates/artefactos, situación de Pages/QA/UAT, límites y pendientes. Actualizar la Línea Base Maestra y dejar un handoff con instrucciones transferibles a cualquier IA/chat. Verificar la lectura de retorno en ambos sistemas antes de cerrar. Si una fuente no está disponible, declararlo y no inventar ni completar el estado desde recuerdos.
 
+## PR en curso — ficha del Taller con fecha, ciudad y país — 27-09-2026
+
+PR #189 contra `dev`, desde `dev@80dd71222aa391984709847436a1dc507b679d84`; HEAD inicial `28fdadc6b00f92aad4cbb3ffaea35c801d29c7c3`. Issue #188. Campos: `EstablishedOn` (fecha histórica de creación/fundación, no `CreatedAtUtc`), `City` y `Country`. Edición backend limitada exactamente a Secretaría del Taller dentro de su organización, Gran Secretaría y Régimen Interior con scope de Orden; otros perfiles técnicos o de Taller no obtienen este permiso.
+
+`TreasuryTerritory` permanece independiente; ubicación no asigna automáticamente tarifas. Frontend local 212/212, lint/build y gates estructurales de migración, privacidad y clasificación SUCCESS. Para el HEAD inicial `28fdadc6b00f92aad4cbb3ffaea35c801d29c7c3`, PMGM CI #1610, Showcase #898 y QA Installable #536 SUCCESS; el Showcase fue validación de PR, sin despliegue Pages. Se añadió un commit documental después de esos resultados; volver a verificar los gates sobre el HEAD final del PR. Pages/paquete no es instalación/UAT; `srv01` sigue en pausa e Issue #97 abierto. `main` no se modifica. Especificación: `docs/PMGM-ARCH-017-ficha-taller-origen-y-permisos.md`.
+
 ## CIERRE POST-MERGE — MIS PLANCHAS — 27-09-2026
 
 HEAD verificado de `dev`: `49744d10472e739580f58e0752e211ce25f22655`; PR #185 integrada. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
