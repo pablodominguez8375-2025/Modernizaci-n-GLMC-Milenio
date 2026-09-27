@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.DocumentManagement.Entities;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -31,12 +32,22 @@ public sealed class LibraryCatalogMetadataHttpTests
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var collectionId = await CreateCollectionAsync(client, suffix, cancellationToken);
 
-        var workPaperId = await CreateDocumentAsync(
-            client,
-            collectionId,
-            $"Plancha catalogada {suffix}",
-            "work_paper",
-            cancellationToken);
+        var workPaperId = Guid.NewGuid();
+        await using (var fixtureScope = factory.Services.CreateAsyncScope())
+        {
+            var db = fixtureScope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            db.InstitutionalDocuments.Add(new InstitutionalDocument
+            {
+                Id = workPaperId,
+                CollectionId = collectionId,
+                Title = $"Plancha catalogada {suffix}",
+                DocumentType = "work_paper",
+                Classification = DocumentManagementCodes.Classification.Internal,
+                AccessPolicy = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
+                CreatedBySubject = "test-fixture"
+            });
+            await db.SaveChangesAsync(cancellationToken);
+        }
 
         var invalidWorkPaperMetadata = await client.PutAsJsonAsync(
             $"/api/documentos/{workPaperId}/metadatos-biblioteca",
