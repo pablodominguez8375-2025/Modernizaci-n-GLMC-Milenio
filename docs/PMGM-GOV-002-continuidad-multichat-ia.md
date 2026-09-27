@@ -84,3 +84,10 @@ En cada continuación, vuelve a verificar el HEAD y el estado de PRs/issues; est
 ## 7. Regla de no regresión
 
 Nunca sustituir el código activo de `dev` por prototipos, código simplificado o implementaciones paralelas provenientes de chats o ramas desactualizadas. Reutilizar y extender el sistema existente.
+
+
+## 8. Aprobación de PR y autoridad del Product Owner
+
+Para fusionar una PR a `dev`, el proyecto no requiere por defecto una aprobación adicional de un tercero o colaborador. La autorización expresa del Product Owner para continuar e integrar un alcance aprobado es suficiente, siempre que los gates exact-head requeridos estén en SUCCESS y GitHub permita el merge. Cuando el Product Owner pide “continuar” y fusionar los cambios “si están listos”, esa instrucción autoriza la integración al cumplirse esas condiciones; no se vuelve a preguntar por una segunda aprobación.
+
+Los checks verdes prueban gates técnicos y no sustituyen la autorización del Product Owner. A la vez, no se debe inventar un requisito de revisión externa porque una PR no muestre reviews. Comprueba la protección/regla de la rama en vivo: si hay un bloqueo real de GitHub, describe exactamente ese bloqueo y aplica la configuración vigente sin atribuirlo a una regla de proyecto no documentada. La promoción a `main` sigue requiriendo autorización explícita y el flujo de estabilidad; esta regla no levanta la pausa de `srv01` ni autoriza UAT.

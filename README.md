@@ -172,6 +172,9 @@ El workflow `PMGM Showcase Demo` valida también la identidad del SHA visible y 
 
 No se fusiona un PR con CI fallando, incompleto o correspondiente a un SHA anterior.
 
+No existe revisión obligatoria de un tercero para fusionar a `dev`, salvo que una regla técnica vigente de GitHub la exija expresamente. La autorización del Product Owner de un alcance para implementar e integrar, junto con CI exact-head exitoso y merge permitido por GitHub, basta; no vuelvas a pedir una segunda aprobación. Los checks verdes por sí solos no autorizan el merge. La promoción a `main` requiere autorización expresa separada.
+
+
 ## Documentación de referencia
 
 - `docs/qa/PMGM-GITHUB-PAGES-SHOWCASE.md` — demo pública de GitHub Pages.

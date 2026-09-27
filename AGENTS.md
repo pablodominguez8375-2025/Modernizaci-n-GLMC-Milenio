@@ -198,3 +198,10 @@ Al terminar una intervención, dejar hechos verificables:
 ## 12. Regla final
 
 **Continuar siempre el Proyecto Centenario existente. Trabajar desde `dev`, preservar lo ya programado, usar PR/CI, mantener Demo + QA, verificar Drive y normativa, y no reconstruir ni bifurcar el sistema desde memoria conversacional.**
+
+
+## 12. Autorización de integración a dev
+
+No existe una regla universal del proyecto que exija aprobación de un tercero o colaborador para fusionar una PR a `dev`. Para un alcance que el Product Owner ya aprobó, su instrucción explícita de continuar e integrar autoriza el merge a `dev` cuando el CI corresponde al HEAD exacto y está SUCCESS y GitHub permite la operación. No vuelvas a solicitar una segunda autorización ni inventes un requisito de review externo. Un check verde por sí solo no es autorización: debe existir instrucción del Product Owner para integrar, que puede darse al aprobar el alcance y pedir que se aplique si está listo.
+
+La protección efectiva de ramas y cualquier requisito técnico configurado en GitHub se verifica en vivo; si GitHub bloquea el merge, informa la regla concreta y no la presentes como política universal del proyecto. La promoción de `dev` a `main` conserva su autorización explícita y flujo de estabilidad separados. La pausa de `srv01` también se mantiene hasta instrucción explícita.

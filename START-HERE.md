@@ -4,15 +4,15 @@
 
 Este bloque es una fotografía del último estado revisado, no reemplaza la verificación en vivo. Antes de actuar, vuelve a consultar GitHub y Drive.
 
-### Estado del proyecto al preparar este handoff
+### Estado del proyecto al preparar este handoff — 27-09-2026, 17:04 America/Santiago
 
 - Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
-- `dev@49744d10472e739580f58e0752e211ce25f22655`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`.
-- PR #185 está integrada. `Mis planchas` está en `Mi ficha`; gates exact-head post-merge y Pages/paquete QA fueron verificados para ese SHA.
-- Demo: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/ . El `qa-current.json` de Pages indicó el SHA de `dev`; checksum publicado y descargado coincidieron y MANIFEST verificó 768/768 archivos.
-- Issue #97 sigue abierto para la QA operacional. Por decisión del Sponsor, `srv01` continúa en pausa; no instalar, desplegar, ejecutar smoke de servidor, regresión física ni UAT hasta recibir instrucción explícita.
-- PR #186 es documental y permanece abierta al momento de este registro. Consulta su HEAD y checks actuales antes de revisarla. No infieras autorización de fusión a partir de su estado verde.
-- Los checks de CI y los paquetes no son aceptación física de QA/UAT ni promoción a `main`.
+- HEAD verificado: `dev@316db1bf65507a0af25f8f9a391bda2064818e00`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` (sin cambio).
+- PR #187, #189 y #192 aparecen fusionadas por la cuenta propietaria. Sus merge commits son `c3aeed1b9865594a2020050b88caeace26314ebe`, `aad04d056dfbec74b4045ac82110621a8cdb6018` y `316db1bf65507a0af25f8f9a391bda2064818e00` respectivamente.
+- PMGM CI #1618 (run 36346169507), intento 2, falló en “First implementation authenticated smoke” porque ECR Public devolvió HTTP 429 “Data limit exceeded” al descargar la imagen oficial AWS CLI. Los demás jobs finalizaron SUCCESS. Se prepara una corrección de origen de imagen y una aclaración de gobierno, mediante rama y PR a `dev`.
+- Showcase #908 SUCCESS; no asumir publicación Pages. QA Installable #546 y Pre-UAT #380 SUCCESS son artefactos, no instalación ni UAT.
+- Issue #188 y #191 continúan abiertos. Issue #97 sigue abierto y `srv01` pausado; no hubo instalación ni UAT. No promover a `main`.
+- Una PR a `dev` no requiere aprobación de un tercero por regla de proyecto. Si el Product Owner ya autorizó el alcance e indicó integrarlo si está listo, no volver a pedir autorización: comprobar gates exact-head y reglas técnicas reales de GitHub. La revisión externa sólo se solicita si una protección efectiva de GitHub la exige.
 
 ### Procedimiento obligatorio para continuar
 
