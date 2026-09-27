@@ -4,6 +4,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 
 namespace PMGM.Api.Modules.Core;
 

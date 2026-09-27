@@ -29,8 +29,20 @@ public partial class AddLodgeSummaryAccessGrants : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_lodge_summary_access_grants", x => x.Id);
-                table.ForeignKey("FK_lodge_summary_access_grants_members_MemberId", x => x.MemberId, "members", "Id", schema: "core", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_lodge_summary_access_grants_organizations_OrganizationId", x => x.OrganizationId, "organizations", "Id", schema: "core", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_lodge_summary_access_grants_members_MemberId",
+                    column: x => x.MemberId,
+                    principalSchema: "core",
+                    principalTable: "members",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_lodge_summary_access_grants_organizations_OrganizationId",
+                    column: x => x.OrganizationId,
+                    principalSchema: "core",
+                    principalTable: "organizations",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex(
