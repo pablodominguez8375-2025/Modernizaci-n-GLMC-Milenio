@@ -63,6 +63,11 @@
 .trajectory-grid strong, .trajectory-grid span { display: block; }
 .trajectory-grid strong { font-size: 11px; margin-bottom: 7px; }
 .trajectory-grid span { color: var(--muted); font-size: 10px; padding: 3px 0; }
+.office-history-list { display: grid; gap: 7px; }
+.office-history-list article { padding: 8px 9px; border: 1px solid #e7eaf0; border-radius: 8px; background: #fbfcfe; }
+.office-history-list strong, .office-history-list span, .office-history-list small { display: block; }
+.office-history-list strong { font-size: 10px; }
+.office-history-list span, .office-history-list small { margin-top: 3px; color: var(--muted); font-size: 9px; line-height: 1.35; }
 
 @media (max-width: 1100px) {
   .member-toolbar { grid-template-columns: 1fr 1fr; }
