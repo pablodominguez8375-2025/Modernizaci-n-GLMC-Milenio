@@ -138,6 +138,7 @@ El alcance autorizado de Tesorería del Taller añade los menús Ingresos y Egre
 - Cuadro Mensual de Tesorería: PR #112.
 - Continuidad Tesorería: PR #113.
 - Hospitalaria integral Taller + Gran Hospitalaria: PR #114.
+
 ## 4. Último incremento integrado — PR #114
 
 PR #114 `feat(hospitalaria): flujo integral Taller y Gran Hospitalaria` quedó integrado.
@@ -277,6 +278,7 @@ Este ajuste automatiza un control del alcance QA-031/v0.59; no añade ni modific
 ## 14. Incremento autorizado — logotipo oficial en la plataforma
 
 El Product Owner solicita integrar el logotipo oficial de la Gran Logia Mixta de Chile junto a la identidad corporativa de Proyecto Centenario. El recurso fuente es `Logo Gran Logia Mixta de Chile.svg` en Drive, ID `1_BLXseShbQX-ioGMNLd5xKPYGtLMEvFm`; la guía institucional exige fondo blanco, proporciones originales, área de protección y no recortar ni recolorear la marca.
+
 El incremento v0.62 sustituye la “C” provisional de la cabecera por el SVG oficial y refuerza Showcase para comprobar carga, proporción, fondo y encuadre no superpuesto en móvil/escritorio. La paleta v0.61 se conserva. El PR #137 quedó integrado por squash en `e0dd6e66fe5d6ab7f6be6a2d4c7170f4729c06a0`.
 
 Gates exact-head sobre el merge SHA: CI #1436, Showcase/Pages #676, QA Installable #314 y Pre-UAT #329 SUCCESS. Demo y ZIP se generaron desde el mismo SHA. QA-062 registra la verificación live y digests. `main` sigue intacta (`6dfb9546a4873baff15955cf86abfd7d47e3d111`). La excepción autorizada cubre sólo la incorporación del logo; no cambia la decisión de mantener pendiente la QA física ni autoriza promoción a `main`.
@@ -408,6 +410,7 @@ Se abre PR de corrección para usar la imagen oficial AWS CLI desde Docker Hub m
 PR #193 se fusionó por squash: `435a0a6870a7db645d98256a7b8fbdac411d307d`. HEAD vigente verificado: `dev@435a0a6870a7db645d98256a7b8fbdac411d307d`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambio. PMGM CI #1620 SUCCESS, incluido backend/tests, frontend, “First implementation authenticated smoke”, piloto HTTPS/OIDC/recovery e infraestructura. Showcase #911 SUCCESS con artifact Pages y Deploy showcase SUCCESS. QA Installable #549 y Pre-UAT #381 SUCCESS como artefactos. No hubo instalación/UAT; `srv01` permanece pausado (Issue #97). Issues #188/#191 siguen abiertos para sus pendientes.
 
 PR #193 reemplazó en CI `public.ecr.aws/aws-cli/aws-cli:2.32.25` por la imagen oficial `amazon/aws-cli:2.32.25`; el smoke exact-head y post-merge pasó. Formalizó que no se exige aprobación de tercero para PR a `dev` cuando el Product Owner ya autorizó el alcance e indicó integrarlo si está listo. No pedir confirmación redundante; validar gates exact-head y bloqueos técnicos reales de GitHub. Checks verdes por sí solos no dan autorización. `main` y srv01 conservan decisiones separadas.
+
 ## Cierre post-merge — PR #196 — 27-09-2026
 
 PR #196 quedó integrada por squash como `807954f2d79a81d5f9ec496b08cc267a4c407317`; actualiza este handoff después del merge de Tesorería PR #195. HEAD de `dev`: `807954f2d79a81d5f9ec496b08cc267a4c407317`. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta.
