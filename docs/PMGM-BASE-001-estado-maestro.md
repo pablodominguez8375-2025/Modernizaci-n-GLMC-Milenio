@@ -1,3 +1,15 @@
+## CIERRE POST-MERGE — MIS PLANCHAS — 27-09-2026
+
+HEAD verificado de `dev`: `49744d10472e739580f58e0752e211ce25f22655`; PR #185 integrada. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
+
+Gates exact-head SUCCESS: PMGM CI #1604 (run `36288091657`), Showcase/Pages #890 (run `36288091706`), QA Installable #528 (run `36288091679`) y Pre-UAT #376 (run `36288091698`). El despliegue de Pages pasó.
+
+Se verificó la URL pública `/downloads/qa-current.json` y se descargó el paquete desde Pages. `sourceSha=49744d10472e739580f58e0752e211ce25f22655`; SHA-256 esperado y calculado `d4f2162cf183120efc1491654b594966ba2f76c1d2134b45000d27f323f9f931`; BUILD-INFO identifica el mismo SHA y MANIFEST valida 768/768. Artifact Pages #10921566427, digest `sha256:42efde6c2eec1f488a9a67a1a5778d56549f3446eb1d9abb895175419736e1a1`. El build se publicó por el flujo post-merge; `SOURCE_REF` conserva el nombre de la rama del PR y el workflow usa el merge SHA exacto.
+
+Artifact QA #10921187044, digest `sha256:b32be48b4c7fc926d426331aecdef7dd68c1116aaac8547353dc5d81c85058db`; BUILD-INFO del mismo SHA y MANIFEST 768/768. Artifact Pre-UAT #10921176157, digest `sha256:cb54e8d1472d37b1729591230ab91a97e700f33ee19c92b0051565e4db1da58a`.
+
+**Límite vigente:** `srv01` sigue en pausa. No hubo instalación, smoke autenticado en servidor, regresión física ni UAT; CI y artefactos no son aceptación QA/UAT. Issue #97 continúa abierto. Esta sección supersede los estados de pre-merge de abajo.
+
 ## CONFIRMACIÓN DE REVISIÓN VISUAL — MENÚ ACTIVO DORADO — 26-09-2026
 
 Pablo confirmó «Quedó perfecto» tras revisar la demo publicada. Queda aceptado visualmente el resaltado dorado del menú activo al tocar «Mi calendario», manteniendo el azul institucional en los demás accesos y en la barra. Esta constancia registra revisión visual del Sponsor / Product Owner sobre la demo; no constituye aceptación de instalación real, QA ni UAT. No abre un nuevo incremento funcional. 
