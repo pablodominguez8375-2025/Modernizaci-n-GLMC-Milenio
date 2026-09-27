@@ -27,9 +27,15 @@ it('demo mode exposes a populated roster and transfer history without network ca
   const roster = await client.getMembers('11111111-1111-1111-1111-111111111111')
   expect(roster.items.length).toBeGreaterThanOrEqual(4)
   const transferred = await client.getMembers('23232323-2323-2323-2323-232323232323')
-  const profile = await client.getProfile(transferred.items[0].memberId)
+  const transferredMaster = transferred.items.find(item => item.currentDegree === 'master')
+  expect(transferredMaster).toBeDefined()
+  const profile = await client.getProfile(transferredMaster!.memberId)
   expect(profile.transfers).toHaveLength(1)
   expect(profile.memberships).toHaveLength(2)
+  expect(profile.offices).toEqual(expect.arrayContaining([
+    expect.objectContaining({ officeType: 'secretary', organization: 'Taller Demostrativo Nº 1', evidenceReference: 'ACTA-DEMO-2023-04' }),
+    expect.objectContaining({ officeType: 'master_of_ceremonies', organization: 'Taller Demostrativo Nº 23', evidenceReference: 'ACTA-DEMO-2026-01' })
+  ]))
   expect(fetch).not.toHaveBeenCalled()
 })
 
