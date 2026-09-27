@@ -1,3 +1,7 @@
+## REGLA PERMANENTE — REGISTRO AL CIERRE DE CADA TAREA
+
+Al terminar cada tarea del proyecto, registrar el resultado en GitHub y Drive, aunque no haya cambios de código. Incluir fecha, HEAD de `dev`/`main`, alcance y archivos, PR/Issue, pruebas/gates/artefactos, situación de Pages/QA/UAT, límites y pendientes. Actualizar la Línea Base Maestra y dejar un handoff con instrucciones transferibles a cualquier IA/chat. Verificar la lectura de retorno en ambos sistemas antes de cerrar. Si una fuente no está disponible, declararlo y no inventar ni completar el estado desde recuerdos.
+
 ## CIERRE POST-MERGE — MIS PLANCHAS — 27-09-2026
 
 HEAD verificado de `dev`: `49744d10472e739580f58e0752e211ce25f22655`; PR #185 integrada. `main` permanece intacta en `6dfb9546a4873baff15955cf86abfd7d47e3d111`.
