@@ -163,6 +163,7 @@ app.MapGet("/api/system/info", () => Results.Ok(new
 app.MapSessionEndpoints();
 app.MapBootstrapEndpoints();
 app.MapOrganizationEndpoints();
+app.MapLodgeSummaryAccessEndpoints();
 app.MapMembershipEndpoints();
 app.MapMemberSelfEndpoints();
 app.MapTransferEndpoints();

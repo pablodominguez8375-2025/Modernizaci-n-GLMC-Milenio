@@ -45,7 +45,7 @@ import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 
 type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'library' | 'documents' | 'grandArchive'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean }
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -94,7 +94,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canLodgeTreasury = capabilities?.canManageLodgeTreasury ?? false
   const isLodgeTreasurerWorkspace = canLodgeTreasury && !canLodgeOperations
   const canMembers = hasInstitutionalScope && !isLodgeTreasurerWorkspace
-  const canLodgeProfile = hasInstitutionalScope && !isLodgeTreasurerWorkspace
+  const canLodgeProfile = capabilities?.canReadLodgeCouncilSummary ?? false
+  const canManageLodgeSummaryAccess = capabilities?.canManageLodgeCouncilSummaryAccess ?? false
   const canCeremonies = capabilities?.canReviewCeremonies ?? false
   const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
   const canReporting = canRegimen
@@ -124,7 +125,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     { id: 'candidateProfile', label: 'Insinuados', description: 'Nuevo insinuado y seguimiento del expediente privado' },
     { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Entrevistas, balotaje y solicitud de Plancha' },
     { id: 'members', label: 'Cuadro del Taller', description: 'Fichas e historial de los hermanos del Taller' },
-    { id: 'lodgeProfile', label: 'Ficha del Taller', description: 'Datos institucionales y autoridades vigentes' },
+    { id: 'lodgeProfile', label: 'Resumen del Taller', description: 'Vista unificada de datos y actividad del Taller' },
     { id: 'documents', label: 'Documentos', description: 'Carga y consulta de respaldos firmados' },
   ]
   const grandSecretariatSections: SecretariatSection[] = [
@@ -186,7 +187,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         </>}
         {(canLodgeProfile || canLodge || canLodgeTreasury || canApproveLodgeExpenses || canReadLodgeHospitalaria) && <>
           <div className="nav-section">Taller</div>
-          {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="lodge" label="Ficha de Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />}
+          {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="lodge" label="Resumen del Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />}
           {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" allowed active={localSecretariatViews.includes(view)} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
           <ModuleAccess icon="treasury" label="Tesorería" allowed={canLodgeTreasury || canApproveLodgeExpenses} active={view === 'lodgeTreasury'} onOpen={canLodgeTreasury || canApproveLodgeExpenses ? () => setView('lodgeTreasury') : undefined} />
           {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
@@ -209,7 +210,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
         {view === 'members' && canMembers && <MemberDirectoryPage api={api} membershipApi={membershipApi} />}
-        {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} />}
+        {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
         {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} caseApi={dataQualityCaseApi} onOpenCases={() => setView('caseQueue')} />}

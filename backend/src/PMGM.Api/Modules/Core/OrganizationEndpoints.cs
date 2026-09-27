@@ -24,6 +24,7 @@ public static class OrganizationEndpoints
         HttpContext httpContext,
         PmgmDbContext db,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         CancellationToken cancellationToken)
     {
         var rows = await db.Organizations
@@ -35,8 +36,21 @@ public static class OrganizationEndpoints
             .Take(2000)
             .ToListAsync(cancellationToken);
 
+        var grantedOrganizationIds = new HashSet<Guid>();
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        if (memberContext is { EffectiveDegree: 3 })
+        {
+            var grantRows = await (from grant in db.LodgeSummaryAccessGrants.AsNoTracking()
+                                   join membership in db.Memberships.AsNoTracking() on grant.MemberId equals membership.MemberId
+                                   where grant.MemberId == memberContext.MemberId && grant.RevokedAtUtc == null &&
+                                         membership.OrganizationId == grant.OrganizationId &&
+                                         membership.Status == MembershipCodes.MembershipStatus.Active && membership.EndDate == null
+                                   select grant.OrganizationId).Distinct().ToListAsync(cancellationToken);
+            grantedOrganizationIds.UnionWith(grantRows);
+        }
+
         var items = rows
-            .Where(x => access.CanReadOrganization(httpContext.User, x.Id))
+            .Where(x => access.CanReadOrganization(httpContext.User, x.Id) || grantedOrganizationIds.Contains(x.Id))
             .ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -49,6 +63,7 @@ public static class OrganizationEndpoints
         PmgmDbContext db,
         LodgeManagementDbContext lodgeDb,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         CancellationToken cancellationToken)
     {
         var organization = await db.Organizations
@@ -70,7 +85,9 @@ public static class OrganizationEndpoints
             return Results.NotFound();
         }
 
-        if (!access.CanReadOrganization(httpContext.User, id))
+        var canRead = (access.HasOrderScope(httpContext.User) && access.CanReadOrganization(httpContext.User, id)) ||
+                      await LodgeSummaryAccessPolicy.CanReadAsync(httpContext.User, id, db, access, memberContextResolver, cancellationToken);
+        if (!canRead)
         {
             return Results.Forbid();
         }

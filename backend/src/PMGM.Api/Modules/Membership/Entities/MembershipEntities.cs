@@ -116,3 +116,19 @@ public sealed class MemberWithdrawalRequest
     public string? OratorSignatureSubject { get; set; }
     public DateTimeOffset? OratorSignedAtUtc { get; set; }
 }
+
+/// <summary>
+/// Delegación individual, revocable y de sólo lectura para el Resumen del Taller.
+/// La autorización efectiva vuelve a comprobar pertenencia y grado en cada lectura.
+/// </summary>
+public sealed class LodgeSummaryAccessGrant
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Guid MemberId { get; set; }
+    public required string GrantedBySubject { get; set; }
+    public DateTimeOffset GrantedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public required string GrantReason { get; set; }
+    public string? RevokedBySubject { get; set; }
+    public DateTimeOffset? RevokedAtUtc { get; set; }
+}

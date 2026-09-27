@@ -67,6 +67,47 @@ public sealed class InstitutionalAccessServiceTests
         Assert.False(_service.CanManageOrganization(user, otherOrganization));
     }
 
+    [Theory]
+    [InlineData(InstitutionalRoles.TallerVenerable)]
+    [InlineData(InstitutionalRoles.TallerInmediatoExVenerable)]
+    [InlineData(InstitutionalRoles.TallerPrimerVigilante)]
+    [InlineData(InstitutionalRoles.TallerSegundoVigilante)]
+    [InlineData(InstitutionalRoles.TallerOrador)]
+    [InlineData(InstitutionalRoles.TallerSecretaria)]
+    [InlineData(InstitutionalRoles.TallerTesoreria)]
+    [InlineData(InstitutionalRoles.TallerHospitalaria)]
+    public void LodgeCouncilOfficers_CanReadSummaryOnlyWithinTheirWorkshop(string role)
+    {
+        var own = Guid.NewGuid();
+        var user = CreateUser(new Claim(InstitutionalClaims.Role, role), new Claim(InstitutionalClaims.Organization, own.ToString()));
+
+        Assert.True(_service.CanReadLodgeCouncilSummary(user, own));
+        Assert.False(_service.CanReadLodgeCouncilSummary(user, Guid.NewGuid()));
+        Assert.Equal(role == InstitutionalRoles.TallerVenerable, _service.CanManageLodgeCouncilSummaryAccess(user, own));
+    }
+
+    [Fact]
+    public void LodgeAdminAlone_IsNeitherCouncilReaderNorSummaryDelegateManager()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerAdmin), new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.False(_service.CanReadLodgeCouncilSummary(user, organization));
+        Assert.False(_service.CanManageLodgeCouncilSummaryAccess(user, organization));
+    }
+
+    [Fact]
+    public void PlatformAdministratorCannotDelegateCouncilSummaryAccessInPlaceOfVenerable()
+    {
+        var organization = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin),
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
+
+        Assert.False(_service.CanManageLodgeCouncilSummaryAccess(user, organization));
+    }
+
     [Fact]
     public void LodgeTreasurer_CanPrepareMonthlyStatementOnlyForOwnWorkshop()
     {

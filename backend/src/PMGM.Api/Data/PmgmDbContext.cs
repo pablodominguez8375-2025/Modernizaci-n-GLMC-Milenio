@@ -18,6 +18,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<MemberTransfer> MemberTransfers => Set<MemberTransfer>();
     public DbSet<MemberWithdrawalRequest> MemberWithdrawalRequests => Set<MemberWithdrawalRequest>();
+    public DbSet<LodgeSummaryAccessGrant> LodgeSummaryAccessGrants => Set<LodgeSummaryAccessGrant>();
     public DbSet<InstitutionalStatusEvent> InstitutionalStatusEvents => Set<InstitutionalStatusEvent>();
     public DbSet<DegreeEvent> DegreeEvents => Set<DegreeEvent>();
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
@@ -160,6 +161,21 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.OriginOrganization).WithMany().HasForeignKey(x => x.OriginOrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.MemberId, x.Status });
             entity.HasIndex(x => new { x.OriginOrganizationId, x.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<LodgeSummaryAccessGrant>(entity =>
+        {
+            entity.ToTable("lodge_summary_access_grants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.GrantedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.GrantReason).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RevokedBySubject).HasMaxLength(320);
+            entity.Property(x => x.GrantedAtUtc).IsRequired();
+            entity.HasOne<Member>().WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.MemberId })
+                .IsUnique()
+                .HasFilter("\"RevokedAtUtc\" IS NULL");
         });
 
         modelBuilder.Entity<InstitutionalStatusEvent>(entity =>

@@ -869,3 +869,11 @@ PR #172 corrigió el contraste de los mosaicos de estado del portal de miembros:
 Integrado en `dev@9931df6c8b2199f0c2b17edf1d31f6fa2f762886`. Checks exact-head SUCCESS: PMGM CI #1573, Showcase/Pages #846, QA Installable #484 y Pre-UAT #364. Pages y QA-current corresponden al mismo SOURCE_SHA; los paquetes BUILD-INFO/MANIFEST validaron 754/754 entradas. Captura responsiva `mi-ficha-1440x900.png` confirma el signo monetario dorado en el mosaico azul.
 
 `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sigue sin cambios. `srv01` permanece pausado: no se ejecutó instalación, smoke autenticado en servidor, regresión institucional ni UAT. QA/UAT no se consideran aceptadas.
+
+## Alcance autorizado — Resumen del Taller y acceso de consulta delegado — 27-09-2026
+
+La decisión posterior del Sponsor reemplaza la alternativa «Libro de Oro» por **Resumen del Taller**. Se reutiliza la proyección existente de Ficha de Taller; no se crea una portada o fuente de datos paralela. La vista de consulta corresponde a los ocho cargos del Consejo de Administración establecidos en el Art. 10.1 de la Constitución y Reglamento, cada uno en el ámbito de su Taller.
+
+El Venerable Maestro puede delegar y revocar el acceso de sólo lectura a un hermano Maestro con membresía activa en el mismo Taller. El sistema registra fundamento, actor y fecha; verifica en cada lectura que la membresía siga activa y el grado efectivo siga siendo Maestro; y conserva el historial tras una revocación, baja o cambio de grado. La delegación no incorpora al Consejo ni habilita Tesorería, Hospitalaria, Secretaría, edición, firma o autorización. Sólo el Venerable del Taller administra la delegación; administradores técnicos no la sustituyen. Esta atribución manual es una regla de producto aprobada, no una cita de la Constitución.
+
+La implementación está en `feature/lodge-council-summary`, basada en `dev@14019d2887a782250021a1eac2f3e8dc936e360c`; aún no integrada ni publicada. La verificación frontend local consta de 206 pruebas, lint y build exitosos. La compilación/pruebas backend queda pendiente de CI exact-head porque este entorno no dispone de .NET. `srv01` está en pausa; este estado no implica instalación, aceptación de QA ni UAT. Issue #97 sigue abierto y `main` intacta.

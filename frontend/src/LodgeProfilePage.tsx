@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
-import { type OrganizationProfile, type OrganizationProfileApiClient } from './api/organizationProfileApi'
+import { type LodgeSummaryAccess, type OrganizationProfile, type OrganizationProfileApiClient } from './api/organizationProfileApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './lodgeProfile.css'
 
-export default function LodgeProfilePage({ api, organizationProfileApi }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient }) {
+export default function LodgeProfilePage({ api, organizationProfileApi, canManageAccess = false }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient; canManageAccess?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [profile, setProfile] = useState<OrganizationProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [accessManagement, setAccessManagement] = useState<LodgeSummaryAccess | null>(null)
+  const [selectedMasterId, setSelectedMasterId] = useState('')
+  const [grantReason, setGrantReason] = useState('')
+  const [savingGrant, setSavingGrant] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -35,6 +39,35 @@ export default function LodgeProfilePage({ api, organizationProfileApi }: { api:
     return () => { active = false }
   }, [organizationId, organizationProfileApi])
 
+  useEffect(() => {
+    if (!canManageAccess || !organizationId) { setAccessManagement(null); return }
+    let active = true
+    organizationProfileApi.getSummaryAccess(organizationId)
+      .then(response => { if (active) setAccessManagement(response) })
+      .catch(reason => { if (active) setError(toMessage(reason)) })
+    return () => { active = false }
+  }, [canManageAccess, organizationId, organizationProfileApi])
+
+  const grantSummaryAccess = async () => {
+    if (!organizationId || !selectedMasterId || !grantReason.trim()) return
+    setSavingGrant(true); setError(null)
+    try {
+      await organizationProfileApi.grantSummaryAccess(organizationId, selectedMasterId, grantReason.trim())
+      setAccessManagement(await organizationProfileApi.getSummaryAccess(organizationId))
+      setSelectedMasterId(''); setGrantReason('')
+    } catch (reason) { setError(toMessage(reason)) }
+    finally { setSavingGrant(false) }
+  }
+
+  const revokeSummaryAccess = async (grantId: string) => {
+    if (!organizationId) return
+    setError(null)
+    try {
+      await organizationProfileApi.revokeSummaryAccess(organizationId, grantId)
+      setAccessManagement(await organizationProfileApi.getSummaryAccess(organizationId))
+    } catch (reason) { setError(toMessage(reason)) }
+  }
+
   const degrees = useMemo(() => {
     const entries = Object.entries(profile?.members.degreeDistribution ?? {})
     return entries.sort((a, b) => b[1] - a[1])
@@ -42,11 +75,11 @@ export default function LodgeProfilePage({ api, organizationProfileApi }: { api:
 
   return <>
     <section className="page-heading lodge-profile-heading">
-      <div><p className="eyebrow">Identidad y gobierno del Taller</p><h1>Ficha de Taller</h1><p>Autoridades, composición del Cuadro, regularidad y actividad reciente en una sola proyección institucional.</p></div>
+      <div><p className="eyebrow">Vista para el Consejo de Administración</p><h1>Resumen del Taller</h1><p>Datos institucionales, autoridades, regularidad y actividad logial reunidos en una sola vista.</p></div>
       <label className="lodge-profile-selector"><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
     </section>
 
-    {error && <div className="error-banner" role="alert"><strong>No fue posible cargar la ficha.</strong><span>{error}</span></div>}
+    {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta.</strong><span>{error}</span></div>}
     {loading ? <div className="panel"><Loading /></div> : !profile ? <div className="panel empty-state"><strong>Seleccione un Taller.</strong></div> : <>
       <section className="lodge-identity panel">
         <div className="lodge-emblem" aria-hidden="true">M</div>
@@ -91,6 +124,17 @@ export default function LodgeProfilePage({ api, organizationProfileApi }: { api:
         {profile.activity.recentTransfers.length === 0 ? <Empty text="No hay traslados recientes." /> : <div className="transfer-table"><div className="transfer-table-head"><span>Miembro</span><span>Movimiento</span><span>Fecha</span><span>Estado</span></div>{profile.activity.recentTransfers.map(item => <div key={item.id}><strong>{item.memberDisplayName}</strong><span>{item.direction === 'incoming' ? `Ingreso desde ${item.sourceOrganization}` : `Salida hacia ${item.targetOrganization}`}</span><span>{formatDate(item.approvedEffectiveDate ?? item.requestedDate)}</span><span className="transfer-status">{transferStatusLabel(item.status)}</span></div>)}</div>}
         <p className="lodge-privacy-note">La ficha del Taller muestra información institucional necesaria para gestión y gobierno. No expone correo, teléfono ni dirección de los miembros.</p>
       </article>
+
+      {canManageAccess && <article className="panel lodge-summary-access">
+        <div className="panel-heading"><div><p className="eyebrow">Permiso de consulta</p><h2>Accesos delegados</h2></div><span className="count-badge">{accessManagement?.activeGrants.length ?? 0}</span></div>
+        <p>Como Venerable Maestro puede delegar y revocar el acceso de solo lectura a un Maestro activo de este Taller. La delegación no lo integra al Consejo ni habilita otros módulos.</p>
+        <div className="lodge-summary-grant-form">
+          <label><span>Hermano Maestro</span><select value={selectedMasterId} onChange={event => setSelectedMasterId(event.target.value)}><option value="">Seleccione un Maestro activo…</option>{accessManagement?.eligibleMasters.map(item => <option key={item.memberId} value={item.memberId}>{item.displayName}</option>)}</select></label>
+          <label><span>Fundamento breve</span><input maxLength={500} value={grantReason} onChange={event => setGrantReason(event.target.value)} placeholder="Motivo de la delegación" /></label>
+          <button type="button" className="primary-action" disabled={savingGrant || !selectedMasterId || !grantReason.trim()} onClick={() => void grantSummaryAccess()}>{savingGrant ? 'Guardando…' : 'Otorgar acceso'}</button>
+        </div>
+        {!accessManagement ? <div className="empty-state compact"><strong>Cargando permisos…</strong></div> : accessManagement.activeGrants.length === 0 ? <div className="empty-state compact"><strong>No hay accesos delegados vigentes.</strong></div> : <div className="summary-grant-list">{accessManagement.activeGrants.map(item => <div key={item.id}><div><strong>{item.displayName}</strong><small>Desde {formatDateTime(item.grantedAtUtc)} · {item.reason}</small><small className={item.isCurrentlyEligible ? 'summary-grant-effective' : 'summary-grant-ineffective'}>{item.isCurrentlyEligible ? 'Acceso vigente' : 'Acceso no efectivo: debe mantener membresía activa y grado de Maestro'}</small></div><button type="button" className="secondary-action" onClick={() => void revokeSummaryAccess(item.id)}>Revocar</button></div>)}</div>}
+      </article>}
     </>}
   </>
 }
