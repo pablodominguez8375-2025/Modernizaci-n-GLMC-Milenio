@@ -2,30 +2,34 @@
 
 ## HANDOFF VIGENTE PARA CUALQUIER CHAT O IA — 27-09-2026
 
-Este bloque es una fotografía del último estado revisado, no reemplaza la verificación en vivo. Antes de actuar, vuelve a consultar GitHub y Drive.
+Este resumen es un checkpoint, no reemplaza la verificación en vivo. GitHub y Drive prevalecen sobre mensajes, resúmenes o memoria. La fecha del checkpoint es 27-09-2026 (America/Santiago).
 
-### Estado del proyecto verificado — 27-09-2026
+### Estado vivo verificado
 
 - Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
-- HEAD verificado después de integrar PR #193: `dev@435a0a6870a7db645d98256a7b8fbdac411d307d`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambio.
-- PR #187, #189, #192 y #193 están fusionadas en `dev`. PR #193 corrigió el rate limit de ECR usando la imagen oficial AWS CLI de Docker Hub fijada en 2.32.25 y formalizó la política de integración sin aprobación redundante de terceros.
-- Sobre el HEAD integrado: PMGM CI #1620 SUCCESS; Showcase #911 SUCCESS (artifact Pages y paso Deploy showcase SUCCESS); QA Installable #549 y Pre-UAT #381 SUCCESS. Artefactos no significan instalación/UAT.
-- Issue #188 y #191 continúan abiertos para pendientes; Issue #97 abierto y `srv01` en pausa. No hubo instalación ni UAT. No promover a `main`.
-- Para una PR a `dev`, la autorización ya otorgada por el Product Owner para el alcance aprobado permite integrar cuando CI exact-head esté SUCCESS y GitHub lo permita técnicamente. No pedir segunda autorización de colaborador. Un check verde aislado no es autorización. Verificar cualquier protección real de GitHub en vivo; promoción a `main` y levantamiento de pausa de `srv01` requieren decisiones separadas.
+- HEAD de `dev`: `bd311106f9418181ba8cc82164b7b02a47fcb0b2` (PR #197). `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin cambios.
+- PR #197 es documental y está integrada. En el HEAD exacto de su rama: PMGM CI #1629 SUCCESS, Showcase #924 SUCCESS y QA Installable #562 SUCCESS. Tras integración, Showcase #925 y Deploy showcase SUCCESS; QA Installable #563 SUCCESS.
+- Pages artifact #10942713140: digest SHA-256 `745f49aa87c426f1eca2186cf1e3ad16fc55d753a2b0c6a7cfccd02288d7c58a`. Su `qa-current.json` confirma `sourceSha=bd311106f9418181ba8cc82164b7b02a47fcb0b2`; ZIP `Proyecto-Centenario-QA-srv01-bd311106f941.zip`, SHA-256 `29fee7dbc138f6dcd35eb7bead657e4d761c4a6d79bdaa405bf0204f7be8df0a`. QA Actions artifact #10943455063: digest `sha256:ed08c7ce2d3c17058f19be810814007bbe7fc4ea30da591fbb5b0e0ba169793a`.
+- Demo publicada: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
+- La mejora de cobranza PR #195 está integrada: la fecha real de recepción del pago se conserva para contabilidad/caja y el año/mes elegido determina la cuota abonada en historial/cartola; no duplica ingresos. Los artefactos son evidencia de publicación/paquete, no de instalación.
+- `srv01` está expresamente pausado por el Sponsor. Issue #97 sigue abierto. No instalar, desplegar manualmente, ejecutar smoke en servidor, regresión física ni UAT hasta que el Sponsor levante la pausa. No promover a `main`.
+- Issues #190 y #191 permanecen pendientes de definiciones contables/de tarifas; no inventar montos, moneda, conversiones ni tratamiento de anticipos. PR #182 (revisión de menús del Sistema Logial) está abierta con base antigua `14019d2`; no fusionar su rama obsoleta. Comparar su contenido con `dev` y Drive antes de decidir si rebase, sustituir o cerrar.
+- La autorización anterior cubre la mejora de cobranza y su demo, además de la continuidad documental. No extiende automáticamente permiso a cambios funcionales distintos. Si Issue #97 continúa bloqueante, iniciar otra función sólo cuando el Product Owner dé un alcance concreto o exista una decisión registrada vigente que lo autorice.
 
-### Procedimiento obligatorio para continuar
+### Protocolo obligatorio de continuidad
 
-1. Verifica conexión y consulta los SHA vivos de `origin/dev` y `origin/main`. En el checkout, usa `git fetch origin dev main`; no asumas que la rama local o este handoff siguen al día.
-2. Lee `AGENTS.md`, `START-HERE.md`, `README.md`, `docs/PMGM-BASE-001-estado-maestro.md`, `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`, `docs/PMGM-GOV-001-instrucciones-decisiones-consolidadas.md`, `docs/PMGM-GOV-002-continuidad-multichat-ia.md`, ADR, pruebas y workflows relacionados en el HEAD vivo de `dev`.
-3. Consulta en Drive la Línea Base Maestra vigente y los documentos oficiales que afecten el tema. Revisa la fecha/versión y resuelve diferencias antes de cambiar reglas, permisos, cargos, firmas o flujos.
-4. Comprueba estado de PRs/issues, Actions, Pages y paquete instalable por SHA. Informa por separado: documentado, implementado en rama, integrado en `dev`, publicado en Pages, artefacto generado, instalado en QA física y aceptado en UAT. No deduzcas una etapa de otra.
-5. Mantén `srv01` en pausa mientras esa instrucción siga vigente. No empieces un nuevo incremento funcional sin alcance aprobado. Para un alcance autorizado, crea `feature/*` desde el HEAD actual de `dev`, implementa con pruebas/documentación, abre PR a `dev`, verifica gates exact-head y sigue la regla de aprobación vigente. No cambies `main` directamente.
-6. Registra decisiones y resultados en GitHub y Drive; actualiza BASE/NEXT/handoff con SHAs, PRs, runs, artefactos, límites y pendientes. Deja el árbol y la rama local identificados al cerrar.
+1. Consulta GitHub en vivo: ramas `dev` y `main`, árbol, PRs/issues abiertos, checks y Pages. En un clone ejecuta `git fetch origin dev main`; crea toda rama nueva desde el HEAD vivo de `dev`, nunca desde esta fotografía.
+2. Lee en ese mismo HEAD: `START-HERE.md`, `AGENTS.md`, `README.md`, Estado Maestro (`docs/PMGM-BASE-001-estado-maestro.md`), `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`, GOV-001/GOV-002, ADR, QA, pruebas y workflows pertinentes.
+3. Consulta en Drive la Línea Base Maestra y los documentos oficiales vigentes de Proyecto Centenario. Verifica versión/fecha y reconcilia discrepancias. Para normas, cargos, atribuciones, firmas, permisos y aprobaciones, verifica Constitución, Reglamento, protocolos y formularios aplicables.
+4. Separa claramente estados: requerido/aprobado, documentado, implementado en rama, integrado en `dev`, publicado en Pages, artefacto QA generado, instalado en servidor, regresión física aprobada, UAT aceptada y promovido a `main`. Un check verde o paquete nunca prueba una etapa posterior.
+5. No regresión: inspecciona implementación, modelos, permisos, auditoría, migraciones, pruebas y demo existentes; extiende el producto real, no lo reemplaces con mocks, esqueletos ni sistemas paralelos. Conserva terminología institucional: “Cuadro del Taller/Orden”; “Padrón” se reserva a electores de Gran Asamblea.
+6. Para alcance funcional autorizado: rama `feature/*` desde `dev`; cambios mínimos y pruebas necesarias; PR a `dev`; valida CI sobre el SHA exacto; integra sólo si está autorizado y GitHub lo permite. No solicites aprobación redundante del Product Owner para un alcance ya autorizado ni inventes revisores obligatorios. `main` requiere promoción explícita separada.
+7. Mantén en sincronía código, Demo GitHub Pages con datos ficticios y paquete instalable QA provenientes del mismo SHA cuando el cambio funcional lo requiera. Cumple la pausa de `srv01`.
+8. Al terminar, actualiza documentación de GitHub y Drive; registra SHAs de inicio/cierre, rama/PR, archivos, cambios, pruebas, runs, Pages, checksum del instalable, riesgos, pendientes y decisión requerida. Verifica lectura de retorno y deja handoff apto para otra IA.
 
-### Instrucción reutilizable para iniciar otro chat o IA
+### Prompt universal para copiar en un nuevo chat
 
-> Continúa el Proyecto Centenario desde las fuentes persistentes. No uses conversaciones ni memoria como fuente de verdad. Consulta el HEAD vivo de `dev` y `main` en `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`; lee `START-HERE.md`, `AGENTS.md`, README, BASE/NEXT, GOV-001/GOV-002, ADR y documentación relacionada en ese mismo SHA. Consulta en Drive la Línea Base Maestra y los documentos oficiales aplicables. Compara ambas fuentes antes de cambiar código o reglas. Conserva `main` y respeta la pausa vigente de `srv01`; no declares QA/UAT por CI o artefactos. Continúa sólo el alcance aprobado, por feature branch y PR a `dev`. Registra el avance en GitHub y Drive y termina con un handoff verificable.
-
+> Continúa el Proyecto Centenario / Modernización Gran Logia Mixta de Chile como parte del mismo proyecto, sin reiniciar ni reconstruirlo desde conversaciones. Tu primera tarea es verificar en vivo el HEAD de `dev` y `main` en `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`, los PRs/issues/checks recientes, la Demo Pages y el artefacto QA. Lee `START-HERE.md`, `AGENTS.md`, `README.md`, Estado Maestro, NEXT, GOV-001/GOV-002, ADR y documentación relacionada en el HEAD actual de `dev`; consulta además en Google Drive la Línea Base Maestra y fuentes institucionales aplicables. Las fuentes persistentes y sus versiones prevalecen sobre memoria o chats. Conserva todo lo aprobado y sigue el flujo `feature/* → pruebas/documentación → PR → CI exact-head → dev`; no cambies `main` sin promoción expresa. `srv01` permanece pausado hasta instrucción del Sponsor: no instales, despliegues ni declares QA/UAT aceptada por CI, Pages o paquetes. No inicies alcance funcional ajeno a autorizaciones vigentes; reconcilia los pendientes de Issue #97, #190, #191 y PR #182 con las decisiones/documentos actuales antes de elegir el siguiente paso. Mantén terminología y reglas institucionales, datos de demo ficticios, no regresión y código/demo/QA trazables al mismo SHA. Actualiza GitHub y Drive al cerrar y deja un handoff verificable. Si no puedes acceder a una fuente necesaria, dilo y no supongas su contenido.
 
 **Este archivo es el punto de entrada obligatorio para cualquier chat nuevo, ChatGPT Work, Codex, IA de desarrollo, agente o desarrollador humano.**
 
