@@ -15,6 +15,6 @@ La revisión de los menús referenciales dejó «Libro de Oro» como una idea pe
 
 ## Verificación y estado
 
-Frontend local: 206 pruebas Vitest, lint y build exitosos. La prueba API cubre que concesión/revocación usan el Taller elegido y autenticación bearer. La migración, compilación/pruebas backend y CI exact-head esperan revisión y gates del PR.
+Frontend local: 206 pruebas Vitest, lint y build exitosos. La migración, compilación/pruebas backend, smoke de CI y gates exact-head pasaron en el SHA de implementación `abca87a7b112b219a92146ecdabb17a9f7c0ec0b`: PMGM CI #1596, Showcase #880, Installable #518 (SUCCESS). Artifact Actions #10919471075, digest `sha256:5a85c8fdf3cd647dfdb0e5ff2ef5ada616b242482b9d179fcbd3aa890a11a34c`. Showcase compiló y omitió el despliegue de Pages por tratarse de PR. Esta actualización documental cambia el HEAD; se repetirán gates exact-head antes de integrar.
 
 Estado actual: en `feature/lodge-council-summary`, basado en `dev@14019d2887a782250021a1eac2f3e8dc936e360c`; aún no integrado, no publicado en Pages ni generado como artefacto QA. `srv01` sigue en pausa. No implica instalación, QA aceptada ni UAT. Issue #97 sigue abierto; `main` permanece intacta.
