@@ -45,8 +45,10 @@ describe('lodge treasury panel — segregación de funciones', () => {
     expect(html).toContain('Saldo adeudado')
     expect(html).toContain('Semáforo')
     expect(html).toContain('Abre el registro desde la fila')
-    expect(html).toContain('Hermano y período al que se imputa')
-    expect(html).toContain('La fecha efectiva registra el ingreso en caja')
+    expect(html).toContain('Año de cuota')
+    expect(html).toContain('Mes aplicado')
+    expect(html).toContain('Fecha de recepción del pago')
+    expect(html).toContain('período contable en que se recibió')
     expect(html).toContain('Historial por período')
   })
 

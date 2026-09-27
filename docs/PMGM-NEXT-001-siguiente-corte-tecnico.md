@@ -391,6 +391,13 @@ Integrado por squash en `dev` como `9931df6c8b2199f0c2b17edf1d31f6fa2f762886`, d
 `main` sigue en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. `srv01` permanece pausado: no hubo instalación, smoke autenticado en el servidor, regresión institucional ni UAT; QA/UAT no se aceptan.
 
 
+## Ajuste en curso — cobranza e imputación de cuotas
+
+Requisito confirmado por el Product Owner y alineado con `Manual_Modulo_Tesoreria.md` de Drive: para registrar una cobranza se selecciona hermano, fecha efectiva de recepción, monto/medio y el año y mes de cuota por separado. La fecha de recepción conserva el período de caja/contable del ingreso; el cargo de cuota seleccionado determina la obligación que se reduce en la cartola e historial. No se registra un ingreso duplicado desde el libro manual.
+
+La interfaz se actualiza en `LodgeTreasuryPanel`, se agrega selector dependiente de año/mes, se mejora la lectura móvil del historial y se amplían las pruebas del contrato visible. El POST conserva `paymentDate` y apunta al `chargeId` del período elegido; no se alteran reglas, permisos ni esquema backend. Rama `feature/treasury-mobile-review-20260927`, creada desde `dev@6a4579c763b8af91c5317089110cbe504d40a6c3`; pendiente commit, PR, gates exact-head y despliegues de showcase e instalable QA. QA física/UAT no ejecutadas; `srv01` continúa pausado y `main` intacta.
+
+
 ## Handoff post-merge — 27-09-2026
 
 La cuenta propietaria fusionó PR #187, #189 y #192. HEAD verificado: `dev@316db1bf65507a0af25f8f9a391bda2064818e00`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, intacta. PMGM CI #1618 / run 36346169507 falló dos veces en “First implementation authenticated smoke” al descargar `public.ecr.aws/aws-cli/aws-cli:2.32.25`, HTTP 429 “Data limit exceeded”. Revisión del job: backend/tests, frontend, piloto y configuración de infraestructura SUCCESS. Showcase #908 SUCCESS; QA Installable #546 y Pre-UAT #380 SUCCESS como artefactos únicamente. No hay despliegue Pages confirmado en esta consulta, no hubo instalación ni UAT; `srv01` permanece pausado (Issue #97). Issue #188/#191 abiertos.
