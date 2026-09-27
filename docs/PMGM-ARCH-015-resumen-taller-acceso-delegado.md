@@ -1,6 +1,6 @@
 # PMGM-ARCH-015 — Resumen del Taller y acceso delegado
 
-**Estado:** alcance autorizado; implementación en rama de trabajo / revisión pendiente
+**Estado:** integrado en `dev@f625a0c1c7e7d4010051b5fe2ed0d7fa26a2809b`; demo Pages y artefactos QA/Pre-UAT generados para el mismo SHA. Instalación física, QA y UAT pendientes por pausa de `srv01`.
 **Fecha:** 2026-09-27
 **Módulo:** Gestión Logial / Perfil del Taller
 
@@ -47,4 +47,8 @@ La delegación manual es una decisión funcional expresa del Sponsor / Product O
 
 No se alteran rutas ni permisos de Tesorería, Hospitalaria, Secretaría, Biblioteca Virtual, Consejo, Tenidas o planchas. Se conserva el límite de que «Padrón» sólo denomina a electores de la Gran Asamblea.
 
-Implementación en PR #183 contra `dev@14019d2887a782250021a1eac2f3e8dc936e360c`; SHA de implementación verificado `abca87a7b112b219a92146ecdabb17a9f7c0ec0b`. Gates exact-head PMGM CI #1596, Showcase #880 e Installable #518: SUCCESS. Frontend local: 206 pruebas, lint y build SUCCESS. Artifact Actions #10919471075, digest `sha256:5a85c8fdf3cd647dfdb0e5ff2ef5ada616b242482b9d179fcbd3aa890a11a34c`. Showcase omitió publicar Pages desde el PR. La actualización documental de esta revisión requiere gates exact-head nuevos antes de integrar. No hay integración, demo actualizada, instalación ni aceptación QA/UAT. `srv01` en pausa, Issue #97 abierto y `main` intacta.
+PR #183 quedó integrada por squash en `dev@f625a0c1c7e7d4010051b5fe2ed0d7fa26a2809b`. Gates post-merge exact-head SUCCESS: PMGM CI #1598 (run 36283920282), Showcase/Pages #882 (run 36283920245), QA Installable #520 (run 36283920204) y Pre-UAT #374 (run 36283920260). Frontend local: 206/206 Vitest, lint y build SUCCESS.
+
+Pages y QA identifican `SOURCE_SHA=f625a0c1c7e7d4010051b5fe2ed0d7fa26a2809b` en `qa-current.json`/BUILD-INFO. El ZIP Pages tiene SHA-256 `2b0278074b0d36046c74eb7a0437b2325e3154635fab2dd3c160e235cf0044bf`; MANIFEST validó 762/762 entradas en Pages y QA Actions. Artifact Pages #10919578545 (digest `sha256:25e4e9e3af1ecbe4f21b91d6789c0373f0731097d93ee0cecc5dea3070794f85`), QA #10919279685 (digest `sha256:784c82463fa9d299b69f58fc8efe0b045b58afe00e498bdb55dc01c155229f2b`) y Pre-UAT #10920025972 (digest `sha256:a342808632d9434ec951335111d7b7ff88a389ba346831a040b9e11e8bbb0790`). La demo se publicó en https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/.
+
+Esto no implica instalación real ni aceptación QA/UAT. `srv01` continúa en pausa; no se ejecutaron instalación, smoke en servidor ni regresión física. Issue #97 sigue abierto y `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta.
