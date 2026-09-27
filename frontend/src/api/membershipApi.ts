@@ -63,8 +63,8 @@ export interface MemberSelfProfile {
 }
 
 export interface MemberTreasuryPayment { id: string; receiptNumber: string; amount: number; paymentMethod: string; paymentDate: string; reference: string | null }
-export interface MemberTreasuryCharge { chargeId: string; organizationId: string; organization: string; periodYear: number; periodMonth: number; chargedAmount: number; paidAmount: number; balance: number; status: string; payments: MemberTreasuryPayment[] }
-export interface MemberTreasuryAccount { totalCharged: number; totalPaid: number; balance: number; items: MemberTreasuryCharge[] }
+export interface MemberTreasuryCharge { chargeId: string; organizationId: string; organization: string; periodYear: number; periodMonth: number; chargedAmount: number; paidAmount: number; balance: number; periodStatus: 'overdue'|'due'|'partial'|'paid'|'future_due'|'advance_partial'|'advance_paid'; status: string; payments: MemberTreasuryPayment[] }
+export interface MemberTreasuryAccount { totalCharged: number; totalPaid: number; balance: number; overdueBalance: number; currentPeriodBalance: number; futurePeriodBalance: number; futurePaidAmount: number; items: MemberTreasuryCharge[] }
 
 export interface UpdateMemberSelfContactRequest { email?: string | null; phone?: string | null; address?: string | null }
 export interface UpdateMemberSelfContactResponse { status: 'updated' | 'unchanged'; changedFields: string[] }
@@ -102,12 +102,16 @@ const demoSelfProfile: MemberSelfProfile = {
   },
   treasuryAccount: {
     totalCharged: 75000,
-    totalPaid: 75000,
-    balance: 0,
+    totalPaid: 50000,
+    balance: 25000,
+    overdueBalance: 25000,
+    currentPeriodBalance: 0,
+    futurePeriodBalance: 0,
+    futurePaidAmount: 25000,
     items: [
-      { chargeId: 'charge-demo-2026-09', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 9, chargedAmount: 25000, paidAmount: 25000, balance: 0, status: 'paid', payments: [{ id: 'payment-demo-2026-09', receiptNumber: 'REC-DEMO-003', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-09-10', reference: 'TRX-DEMO-003' }] },
-      { chargeId: 'charge-demo-2026-08', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 8, chargedAmount: 25000, paidAmount: 25000, balance: 0, status: 'paid', payments: [{ id: 'payment-demo-2026-08', receiptNumber: 'REC-DEMO-002', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-08-08', reference: 'TRX-DEMO-002' }] },
-      { chargeId: 'charge-demo-2026-07', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 7, chargedAmount: 25000, paidAmount: 25000, balance: 0, status: 'paid', payments: [{ id: 'payment-demo-2026-07', receiptNumber: 'REC-DEMO-001', amount: 25000, paymentMethod: 'cash', paymentDate: '2026-07-06', reference: null }] },
+      { chargeId: 'charge-demo-2025-12', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2025, periodMonth: 12, chargedAmount: 25000, paidAmount: 0, balance: 25000, periodStatus: 'overdue', status: 'pending', payments: [] },
+      { chargeId: 'charge-demo-2026-09', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 9, chargedAmount: 25000, paidAmount: 25000, balance: 0, periodStatus: 'paid', status: 'paid', payments: [{ id: 'payment-demo-2026-09', receiptNumber: 'REC-DEMO-003', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-09-10', reference: 'TRX-DEMO-003' }] },
+      { chargeId: 'charge-demo-2026-10', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 10, chargedAmount: 25000, paidAmount: 25000, balance: 0, periodStatus: 'advance_paid', status: 'paid', payments: [{ id: 'payment-demo-2026-10', receiptNumber: 'REC-DEMO-004', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-09-27', reference: 'TRX-DEMO-004' }] },
     ],
   },
 }

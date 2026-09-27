@@ -33,6 +33,8 @@ describe('Tesorería del Taller en demostración', () => {
     expect(replay.receiptNumber).toBe(firstPayment.receiptNumber)
     expect((await api.getLodgeTreasuryCharges(organizationId, 2026, 9)).items.find(item => item.id === spouse.id)?.payments).toHaveLength(1)
     expect(await api.getLodgeTreasurySummary(organizationId, 2026, 9)).toMatchObject({ members: 3, memberExpected: 67000, collected: 54000, receivable: 13000, grandTreasuryExpected: 55000, paid: 2, partial: 1, overdue: 0 })
+    const cashReport = await api.getLodgeTreasuryReport(organizationId, '2026-09-01', '2026-09-30')
+    expect(cashReport.movements.find(item => item.transactionId === firstPayment.id)?.category).toBe('Ingreso por pago de cuotas')
   })
 
   it('registra cobranza, comprobante y autorización separada del egreso', async () => {

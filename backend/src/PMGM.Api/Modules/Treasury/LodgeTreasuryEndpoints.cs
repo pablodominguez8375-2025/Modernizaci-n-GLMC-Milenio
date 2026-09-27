@@ -226,6 +226,21 @@ public static class LodgeTreasuryEndpoints
                     paidAmount = totalPaid, balance = totalBalance,
                     maxPaymentAmount = nextDueCharge.MemberAmount - nextDueCharge.Payments.Sum(p => p.Amount),
                     status = totalBalance <= 0 ? TreasuryCodes.LodgeChargeStatus.Paid : totalPaid > 0 ? TreasuryCodes.LodgeChargeStatus.Partial : TreasuryCodes.LodgeChargeStatus.Pending,
+                    periods = memberCharges.Select(charge =>
+                    {
+                        var paid = charge.Payments.Sum(payment => payment.Amount);
+                        var periodRelation = charge.PeriodYear < year || (charge.PeriodYear == year && charge.PeriodMonth < month)
+                            ? "past"
+                            : charge.PeriodYear == year && charge.PeriodMonth == month ? "selected" : "future";
+                        var periodStatus = charge.MemberAmount <= paid
+                            ? periodRelation == "future" ? "advance_paid" : "paid"
+                            : periodRelation == "past" ? "overdue"
+                            : periodRelation == "future" ? paid > 0 ? "advance_partial" : "future_due"
+                            : paid > 0 ? "partial" : "due";
+                        return new { chargeId = charge.Id, charge.PeriodYear, charge.PeriodMonth,
+                            chargedAmount = charge.MemberAmount, paidAmount = paid,
+                            balance = charge.MemberAmount - paid, status = periodStatus };
+                    }),
                     payments = memberCharges.SelectMany(x => x.Payments).OrderByDescending(p => p.PaymentDate).Select(p => new
                         { p.Id, p.ReceiptNumber, p.Amount, p.PaymentMethod, p.PaymentDate, p.Reference }) };
             }).ToList();
@@ -319,7 +334,7 @@ public static class LodgeTreasuryEndpoints
             .Where(x => x.Charge.OrganizationId == organizationId && x.PaymentDate >= periodFrom && x.PaymentDate <= to).ToListAsync(ct);
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.IncomeDate >= periodFrom && x.IncomeDate <= to).ToListAsync(ct);
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.ExpenseDate >= periodFrom && x.ExpenseDate <= to).ToListAsync(ct);
-        var movements = payments.Select(x => new { date = x.PaymentDate, type = "ingreso", category = "Cuotas", description = $"Cuota {x.Charge.PeriodMonth:00}/{x.Charge.PeriodYear} · {x.Charge.Member.Person.FirstNames} {x.Charge.Member.Person.LastNames}", amount = x.Amount, status = "registrado", reference = (string?)x.ReceiptNumber, paymentMethod = (string?)x.PaymentMethod, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = (string?)null, approvedAtUtc = (DateTimeOffset?)null })
+        var movements = payments.Select(x => new { date = x.PaymentDate, type = "ingreso", category = "Ingreso por pago de cuotas", description = $"Cuota {x.Charge.PeriodMonth:00}/{x.Charge.PeriodYear} · {x.Charge.Member.Person.FirstNames} {x.Charge.Member.Person.LastNames}", amount = x.Amount, status = "registrado", reference = (string?)x.ReceiptNumber, paymentMethod = (string?)x.PaymentMethod, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = (string?)null, approvedAtUtc = (DateTimeOffset?)null })
             .Concat(incomes.Select(x => new { date = x.IncomeDate, type = "ingreso", category = x.Category, description = x.Description, amount = x.Amount, status = "registrado", reference = x.EvidenceReference, paymentMethod = (string?)null, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = (string?)null, approvedAtUtc = (DateTimeOffset?)null }))
             .Concat(expenses.Select(x => new { date = x.ExpenseDate, type = "egreso", category = x.Category, description = x.Description, amount = x.Amount, status = x.ApprovalStatus == "approved" ? "autorizado" : "pendiente de autorización", reference = x.EvidenceReference, paymentMethod = (string?)null, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = x.ApprovedBySubject, approvedAtUtc = x.ApprovedAtUtc }))
             .OrderBy(x => x.date).ToList();

@@ -280,14 +280,14 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       </article>
 
       <div className="member-status-stack">
-        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? money.format(treasuryAccount.balance) + ' pendiente' : treasury.status}</strong><p>{treasuryAccount ? `${money.format(treasuryAccount.totalPaid)} pagado de ${money.format(treasuryAccount.totalCharged)}` : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
+        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? money.format(treasuryAccount.balance) + ' pendiente total' : treasury.status}</strong><p>{treasuryAccount ? `${money.format(treasuryAccount.overdueBalance)} en morosidad anterior · ${money.format(treasuryAccount.futurePaidAmount)} pagado por adelantado` : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
         <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
       </div>
 
       {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-        <div className="member-institutional-summary"><MemberDatum label="Cargado" value={money.format(treasuryAccount.totalCharged)} /><MemberDatum label="Pagado" value={money.format(treasuryAccount.totalPaid)} /><MemberDatum label="Saldo" value={money.format(treasuryAccount.balance)} success={treasuryAccount.balance === 0} /></div>
-        <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{item.organization}</td><td>{money.format(item.chargedAmount)}</td><td>{money.format(item.paidAmount)}</td><td>{money.format(item.balance)}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {money.format(payment.amount)}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
+        <div className="member-institutional-summary"><MemberDatum label="Cargado histórico" value={money.format(treasuryAccount.totalCharged)} /><MemberDatum label="Pagado histórico" value={money.format(treasuryAccount.totalPaid)} /><MemberDatum label="Morosidad anterior" value={money.format(treasuryAccount.overdueBalance)} /><MemberDatum label="Cuotas futuras pagadas" value={money.format(treasuryAccount.futurePaidAmount)} /><MemberDatum label="Saldo total" value={money.format(treasuryAccount.balance)} success={treasuryAccount.balance === 0} /></div>
+        <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Estado</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{memberTreasuryPeriodLabel(item.periodStatus)}</td><td>{item.organization}</td><td>{money.format(item.chargedAmount)}</td><td>{money.format(item.paidAmount)}</td><td>{money.format(item.balance)}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {money.format(payment.amount)}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
       </article>}
 
       <article className="member-card member-calendar-card">
@@ -370,6 +370,11 @@ function formatRegularity(value: string | undefined, kind: 'tesorería' | 'hospi
   if (value === 'delinquent' || value === 'overdue') return { status: 'Pendiente', detail: kind === 'tesorería' ? 'Existen obligaciones por regularizar' : 'Existen reposiciones u obligaciones por regularizar' }
   if (value === 'exempt') return { status: 'Exento', detail: 'Condición institucional registrada' }
   return { status: 'Sin información', detail: 'No existe una regularidad vigente registrada' }
+}
+
+function memberTreasuryPeriodLabel(value: string) {
+  const labels: Record<string, string> = { overdue: 'Morosa', due: 'Vigente', partial: 'Abono parcial', paid: 'Pagada', future_due: 'Futura pendiente', advance_partial: 'Adelanto parcial', advance_paid: 'Adelantada pagada' }
+  return labels[value] ?? 'Sin estado'
 }
 
 function formatAttendanceStatus(value: string) {
