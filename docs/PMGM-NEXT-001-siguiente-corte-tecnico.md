@@ -37,6 +37,14 @@ Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575
 
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Mejora autorizada — Resumen del Taller y acceso de consulta delegado — 27-09-2026
+
+Se reemplaza la propuesta referencial «Libro de Oro» por el menú **Resumen del Taller**, reutilizando la vista existente de Ficha de Taller y sus proyecciones actuales. La vista corresponde a los ocho cargos que integran constitucionalmente el Consejo de Administración, sólo dentro de su Taller. El Venerable Maestro puede otorgar o revocar manualmente permiso de consulta a otro Maestro con membresía activa en ese mismo Taller.
+
+La delegación requiere fundamento y auditoría; no incorpora al destinatario al Consejo ni otorga edición, firma, autorización o acceso a otros módulos. En cada lectura se comprueban nuevamente el grado de Maestro, la membresía activa y el Taller del permiso. Un cambio de grado o baja suspende su efecto y la delegación se conserva para revocación e historial. `lodge_admin` y el administrador de plataforma no sustituyen al Venerable en esta gestión. Esta delegación es una decisión funcional del Sponsor y no se atribuye como facultad textual de la Constitución.
+
+PR #183 se abrió contra `dev@14019d2887a782250021a1eac2f3e8dc936e360c`. El SHA de implementación `abca87a7b112b219a92146ecdabb17a9f7c0ec0b` pasó PMGM CI #1596, Showcase #880 e Installable #518 (SUCCESS); frontend local: 206/206, lint y build SUCCESS. Artifact Actions #10919471075, digest `sha256:5a85c8fdf3cd647dfdb0e5ff2ef5ada616b242482b9d179fcbd3aa890a11a34c`. Showcase compiló sin desplegar Pages desde el PR. Esta actualización documental posterior cambia el HEAD del PR: repetir gates exact-head antes de integrar. Código no integrado ni demo actualizada; artifact no es instalación ni aceptación QA/UAT. `srv01` sigue pausado; Issue #97 abierto y `main` intacta.
+
 ## Decisión vigente del Sponsor — 25-09-2026
 
 El Sponsor / Product Owner indicó que `srv01` **queda pendiente y no se montará hasta nuevo aviso**. Issue #97 continúa abierto; la pausa no constituye aceptación de QA/UAT ni autorización de promoción a `main`. Mientras siga vigente, no se inicia instalación, despliegue, smoke autenticado, regresión física ni UAT en `srv01`.

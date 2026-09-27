@@ -15,6 +15,8 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
+  canReadLodgeCouncilSummary?: boolean
+  canManageLodgeCouncilSummaryAccess?: boolean
 }
 
 export type DemoSessionProfile = Omit<SessionProfile, 'capabilities'> & {
@@ -47,6 +49,8 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManageDocuments: false,
       canManageGrandArchive: false,
       canBootstrapInstitutional: false,
+      canReadLodgeCouncilSummary: false,
+      canManageLodgeCouncilSummaryAccess: false,
     },
   },
   lodge: {
@@ -63,35 +67,37 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManageDocuments: true,
       canManageGrandArchive: false,
       canBootstrapInstitutional: false,
+      canReadLodgeCouncilSummary: true,
+      canManageLodgeCouncilSummaryAccess: true,
     },
   },
   lodgeTreasurer: {
     displayName: 'Tesorero del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: false, canManageLodgeTreasury: true, canManageDocuments: false },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: false, canManageLodgeTreasury: true, canManageDocuments: false, canReadLodgeCouncilSummary: true },
   },
   lodgeSecretary: {
     displayName: 'Secretaría del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: true, canManageDocuments: true, canReadLodgeCouncilSummary: true },
   },
   lodgeHospitalaria: {
     displayName: 'Hospitalaria del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: false, canReadLodgeHospitalaria: true, canManageLodgeHospitalaria: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: false, canReadLodgeHospitalaria: true, canManageLodgeHospitalaria: true, canManageDocuments: true, canReadLodgeCouncilSummary: true },
   },
   lodgeOrator: {
     displayName: 'Orador del Taller · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: false, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canReadLodgeSecretariat: true, canManageLodgeSecretariat: false, canManageDocuments: true, canReadLodgeCouncilSummary: true },
   },
   lodgeFirstWarden: {
     displayName: 'Primer Vigilante · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true, canReadLodgeCouncilSummary: true },
   },
   lodgeSecondWarden: {
     displayName: 'Segundo Vigilante · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true, canReadLodgeCouncilSummary: true },
   },
   lodgePastMaster: {
     displayName: 'Ex Venerable Maestro · Demostración', accessScope: 'organization',
-    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true },
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLodgeOperations: true, canManageDocuments: true, canReadLodgeCouncilSummary: true },
   },
   regimen: {
     displayName: 'Régimen Interior · Demostración', accessScope: 'order',

@@ -56,6 +56,8 @@ public interface IInstitutionalAccessService
     bool CanSignLodgeDocuments(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeInstruction(ClaimsPrincipal user, Guid organizationId, int degree);
     bool CanParticipateInLodgeCouncil(ClaimsPrincipal user, Guid organizationId);
+    bool CanReadLodgeCouncilSummary(ClaimsPrincipal user, Guid organizationId);
+    bool CanManageLodgeCouncilSummaryAccess(ClaimsPrincipal user, Guid organizationId);
     bool CanApproveTransfers(ClaimsPrincipal user);
     bool CanRunRegimenInteriorReports(ClaimsPrincipal user);
     bool CanManageGrandSecretariat(ClaimsPrincipal user);
@@ -201,6 +203,14 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
             InstitutionalRoles.TallerSecretaria,
             InstitutionalRoles.TallerTesoreria,
             InstitutionalRoles.TallerHospitalaria);
+
+    public bool CanReadLodgeCouncilSummary(ClaimsPrincipal user, Guid organizationId)
+        => CanParticipateInLodgeCouncil(user, organizationId);
+
+    public bool CanManageLodgeCouncilSummaryAccess(ClaimsPrincipal user, Guid organizationId)
+        => HasOrganizationClaim(user, organizationId) && user.Claims.Any(x =>
+            x.Type == InstitutionalClaims.Role &&
+            string.Equals(x.Value, InstitutionalRoles.TallerVenerable, StringComparison.OrdinalIgnoreCase));
 
     public bool CanApproveTransfers(ClaimsPrincipal user)
         => HasOrderScope(user) &&

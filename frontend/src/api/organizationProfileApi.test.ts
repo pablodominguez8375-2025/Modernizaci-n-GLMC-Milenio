@@ -24,3 +24,20 @@ it('demo profile includes authorities, degrees and activity without network call
   expect(profile.activity.recentMeetings.length).toBeGreaterThan(0)
   expect(fetch).not.toHaveBeenCalled()
 })
+
+it('scopes summary delegation grant and revocation to the selected workshop', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'grant-1' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  const client = new OrganizationProfileApiClient({ getAccessToken: async () => 'vm-token' })
+
+  await client.grantSummaryAccess('workshop-23', 'master-9', 'Apoyo temporal al Consejo')
+  await client.revokeSummaryAccess('workshop-23', 'grant-1')
+
+  expect(fetch.mock.calls[0][0]).toBe('/api/institutional/organizations/workshop-23/summary-access')
+  expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'POST', credentials: 'omit', cache: 'no-store' })
+  expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toEqual({ memberId: 'master-9', reason: 'Apoyo temporal al Consejo' })
+  expect(fetch.mock.calls[1][0]).toBe('/api/institutional/organizations/workshop-23/summary-access/grant-1')
+  expect(fetch.mock.calls[1][1]).toMatchObject({ method: 'DELETE', credentials: 'omit', cache: 'no-store' })
+})

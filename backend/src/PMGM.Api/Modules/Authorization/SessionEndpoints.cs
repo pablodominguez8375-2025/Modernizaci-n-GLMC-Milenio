@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -18,6 +20,7 @@ public static class SessionEndpoints
     private static async Task<IResult> GetCurrentSession(
         HttpContext httpContext,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberContextResolver,
         PmgmDbContext db,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -25,6 +28,39 @@ public static class SessionEndpoints
         httpContext.Response.Headers.CacheControl = "no-store";
         httpContext.Response.Headers.Pragma = "no-cache";
         var profile = SessionProfileBuilder.Build(httpContext.User, access);
+        var organizationSet = httpContext.User.Claims
+            .Where(x => x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _))
+            .Select(x => Guid.Parse(x.Value))
+            .Distinct()
+            .ToHashSet();
+        var memberContext = await memberContextResolver.ResolveAsync(httpContext.User, cancellationToken);
+        if (memberContext is { EffectiveDegree: 3 })
+        {
+            var delegatedOrganizations = await (from grant in db.LodgeSummaryAccessGrants.AsNoTracking()
+                                                join membership in db.Memberships.AsNoTracking() on grant.MemberId equals membership.MemberId
+                                                where grant.MemberId == memberContext.MemberId && grant.RevokedAtUtc == null &&
+                                                      membership.OrganizationId == grant.OrganizationId &&
+                                                      membership.Status == MembershipCodes.MembershipStatus.Active && membership.EndDate == null
+                                                select grant.OrganizationId).Distinct().ToListAsync(cancellationToken);
+            organizationSet.UnionWith(delegatedOrganizations);
+        }
+        var canReadLodgeSummary = false;
+        var canManageLodgeSummaryAccess = false;
+        foreach (var organizationId in organizationSet)
+        {
+            canReadLodgeSummary |= await LodgeSummaryAccessPolicy.CanReadAsync(
+                httpContext.User, organizationId, db, access, memberContextResolver, cancellationToken);
+            canReadLodgeSummary |= access.HasOrderScope(httpContext.User) && access.CanReadOrganization(httpContext.User, organizationId);
+            canManageLodgeSummaryAccess |= access.CanManageLodgeCouncilSummaryAccess(httpContext.User, organizationId);
+        }
+        profile = profile with
+        {
+            Capabilities = profile.Capabilities with
+            {
+                CanReadLodgeCouncilSummary = canReadLodgeSummary,
+                CanManageLodgeCouncilSummaryAccess = canManageLodgeSummaryAccess
+            }
+        };
         audit.Add(httpContext, "identity.session.started", "Session", httpContext.TraceIdentifier, null, AuditResults.Success,
             new { profile.AccessScope });
         await db.SaveChangesAsync(cancellationToken);
@@ -59,7 +95,9 @@ public sealed record SessionCapabilitiesDto(
     bool CanManageDocuments,
     bool CanReadLibrary,
     bool CanManagePrivacy,
-    bool CanConfigureSystem);
+    bool CanConfigureSystem,
+    bool CanReadLodgeCouncilSummary,
+    bool CanManageLodgeCouncilSummaryAccess);
 
 public static class SessionProfileBuilder
 {
@@ -114,6 +152,8 @@ public static class SessionProfileBuilder
                 CanManageDocuments: canManageDocuments,
                 CanReadLibrary: user.Identity?.IsAuthenticated == true,
                 CanManagePrivacy: access.CanManagePrivacy(user),
-                CanConfigureSystem: access.CanConfigureSystem(user)));
+                CanConfigureSystem: access.CanConfigureSystem(user),
+                CanReadLodgeCouncilSummary: false,
+                CanManageLodgeCouncilSummaryAccess: false));
     }
 }

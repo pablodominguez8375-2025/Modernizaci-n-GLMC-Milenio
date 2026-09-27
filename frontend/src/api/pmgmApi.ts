@@ -19,6 +19,8 @@ export interface SessionCapabilities {
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
   canConfigureSystem?: boolean
+  canReadLodgeCouncilSummary?: boolean
+  canManageLodgeCouncilSummaryAccess?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'

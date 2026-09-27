@@ -56,11 +56,16 @@ export interface OrganizationProfile {
   }
 }
 
+export interface LodgeSummaryMaster { memberId: string; displayName: string }
+export interface LodgeSummaryGrant { id: string; memberId: string; displayName: string; grantedAtUtc: string; reason: string; isCurrentlyEligible: boolean }
+export interface LodgeSummaryAccess { eligibleMasters: LodgeSummaryMaster[]; activeGrants: LodgeSummaryGrant[] }
+
 export type OrganizationAccessTokenProvider = () => Promise<string | null>
 interface OrganizationProfileApiClientOptions { baseUrl?: string; getAccessToken?: OrganizationAccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
 const ORG_1 = '11111111-1111-1111-1111-111111111111'
 const ORG_23 = '23232323-2323-2323-2323-232323232323'
+const demoSummaryGrants = new Map<string, LodgeSummaryGrant[]>([[ORG_1, []], [ORG_23, []]])
 
 export class OrganizationProfileApiClient {
   private readonly baseUrl: string
@@ -77,17 +82,50 @@ export class OrganizationProfileApiClient {
 
   async getProfile(organizationId: string): Promise<OrganizationProfile> {
     if (this.useMocks) return demoProfile(organizationId)
+    return this.request<OrganizationProfile>(organizationId, 'profile')
+  }
+
+  async getSummaryAccess(organizationId: string): Promise<LodgeSummaryAccess> {
+    if (this.useMocks) return demoSummaryAccess(organizationId)
+    return this.request<LodgeSummaryAccess>(organizationId, 'summary-access')
+  }
+
+  async grantSummaryAccess(organizationId: string, memberId: string, reason: string): Promise<void> {
+    if (this.useMocks) {
+      const state = demoSummaryAccess(organizationId)
+      if (!state.eligibleMasters.some(item => item.memberId === memberId)) throw new Error('La delegación sólo puede otorgarse a un Maestro del Taller.')
+      if (state.activeGrants.some(item => item.memberId === memberId)) throw new Error('Este Hermano ya tiene acceso vigente.')
+      state.activeGrants.push({ id: crypto.randomUUID(), memberId, displayName: state.eligibleMasters.find(item => item.memberId === memberId)!.displayName, grantedAtUtc: new Date().toISOString(), reason, isCurrentlyEligible: true })
+      return
+    }
+    await this.request(organizationId, 'summary-access', 'POST', { memberId, reason })
+  }
+
+  async revokeSummaryAccess(organizationId: string, grantId: string): Promise<void> {
+    if (this.useMocks) {
+      demoSummaryGrants.set(organizationId, demoSummaryAccess(organizationId).activeGrants.filter(item => item.id !== grantId))
+      return
+    }
+    await this.request(organizationId, `summary-access/${encodeURIComponent(grantId)}`, 'DELETE')
+  }
+
+  private async request<T = void>(organizationId: string, endpoint: string, method = 'GET', body?: unknown): Promise<T> {
     const headers = new Headers({ Accept: 'application/json' })
     const token = await this.getAccessToken?.()
-    if (!token) throw new Error('Debe ingresar para consultar la ficha del Taller.')
+    if (!token) throw new Error('Debe ingresar para consultar el Resumen del Taller.')
     headers.set('Authorization', `Bearer ${token}`)
-    const response = await fetch(`${this.baseUrl}/api/institutional/organizations/${encodeURIComponent(organizationId)}/profile`, { credentials: 'omit', redirect: 'error', cache: 'no-store', headers })
+    if (body !== undefined) headers.set('Content-Type', 'application/json')
+    const response = await fetch(`${this.baseUrl}/api/institutional/organizations/${encodeURIComponent(organizationId)}/${endpoint}`, {
+      method, credentials: 'omit', redirect: 'error', cache: 'no-store', headers, ...(body === undefined ? {} : { body: JSON.stringify(body) })
+    })
     if (!response.ok) {
       if (response.status === 401) await this.onUnauthorized?.()
       if (response.status === 403) throw new Error('Su cuenta no tiene permiso para consultar este Taller.')
-      throw new Error(`La API respondió ${response.status} ${response.statusText}.`)
+      const error = await response.json().catch(() => null) as { message?: string } | null
+      throw new Error(error?.message ?? `La API respondió ${response.status} ${response.statusText}.`)
     }
-    return response.json() as Promise<OrganizationProfile>
+    if (response.status === 204) return undefined as T
+    return response.json() as Promise<T>
   }
 }
 
@@ -130,4 +168,14 @@ function demoProfile(organizationId: string): OrganizationProfile {
       ],
     },
   }
+}
+
+function demoSummaryAccess(organizationId: string): LodgeSummaryAccess {
+  const second = organizationId === ORG_23
+  const candidates = second
+    ? [{ memberId: 'demo-master-23-1', displayName: 'Hermano Maestro Demostrativo Uno' }, { memberId: 'demo-master-23-2', displayName: 'Hermana Maestra Demostrativa Dos' }]
+    : [{ memberId: 'demo-master-1-1', displayName: 'Hermano Maestro Demostrativo Uno' }, { memberId: 'demo-master-1-2', displayName: 'Hermana Maestra Demostrativa Dos' }]
+  const grants = demoSummaryGrants.get(organizationId) ?? []
+  demoSummaryGrants.set(organizationId, grants)
+  return { eligibleMasters: candidates, activeGrants: grants }
 }
