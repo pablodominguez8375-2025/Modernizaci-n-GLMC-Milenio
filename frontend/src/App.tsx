@@ -119,14 +119,13 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canGrandArchive = capabilities?.canManageGrandArchive ?? false
   const isLodgeSecretaryWorkspace = canManageLodgeSecretariat && !canSecretariat
   const isGrandSecretaryWorkspace = canSecretariat
-  const localSecretariatViews: View[] = ['lodge', 'candidateProfile', 'initiationCircuit', 'members', 'lodgeProfile', 'documents']
-  const grandSecretariatViews: View[] = ['secretariat', 'candidateProfile', 'initiationCircuit', 'ceremonies', 'members', 'lodgeProfile', 'documents']
+  const localSecretariatViews: View[] = ['lodge', 'candidateProfile', 'initiationCircuit', 'members', 'documents']
+  const grandSecretariatViews: View[] = ['secretariat', 'candidateProfile', 'initiationCircuit', 'ceremonies', 'members', 'documents']
   const localSecretariatSections: SecretariatSection[] = [
     { id: 'lodge', label: 'Tenidas y actas', description: 'Agenda, asistencia, extractos, correspondencia y pendientes' },
     { id: 'candidateProfile', label: 'Insinuados', description: 'Nuevo insinuado y seguimiento del expediente privado' },
     { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Entrevistas, balotaje y solicitud de Plancha' },
     { id: 'members', label: 'Cuadro del Taller', description: 'Fichas e historial de los hermanos del Taller' },
-    { id: 'lodgeProfile', label: 'Resumen del Taller', description: 'Vista unificada de datos y actividad del Taller' },
     { id: 'documents', label: 'Documentos', description: 'Carga y consulta de respaldos firmados' },
   ]
   const grandSecretariatSections: SecretariatSection[] = [
@@ -135,7 +134,6 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Control administrativo y Plancha de autorización' },
     { id: 'ceremonies', label: 'Ceremonias', description: 'Solicitudes, requisitos y autorizaciones' },
     { id: 'members', label: 'Cuadro General', description: 'Consulta mínima de fichas institucionales' },
-    { id: 'lodgeProfile', label: 'Ficha del Taller', description: 'Origen histórico, ciudad, país y resumen institucional' },
     { id: 'documents', label: 'Documentos', description: 'Carga y consulta de PDF oficiales firmados' },
   ]
   const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive
@@ -189,7 +187,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         </>}
         {(canLodgeProfile || canLodge || canLodgeTreasury || canApproveLodgeExpenses || canReadLodgeHospitalaria) && <>
           <div className="nav-section">Taller</div>
-          {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="lodge" label="Resumen del Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />}
+          <ModuleAccess icon="lodge" label="Ficha del Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
           {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" allowed active={localSecretariatViews.includes(view)} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
           <ModuleAccess icon="treasury" label="Tesorería" allowed={canLodgeTreasury || canApproveLodgeExpenses} active={view === 'lodgeTreasury'} onOpen={canLodgeTreasury || canApproveLodgeExpenses ? () => setView('lodgeTreasury') : undefined} />
           {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}

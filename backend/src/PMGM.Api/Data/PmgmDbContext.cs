@@ -92,6 +92,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.TreasuryTerritory).HasMaxLength(40);
             entity.Property(x => x.City).HasMaxLength(120);
             entity.Property(x => x.Country).HasMaxLength(120);
+            entity.Property(x => x.LogoObjectKey).HasMaxLength(240);
+            entity.Property(x => x.LogoContentType).HasMaxLength(80);
+            entity.Property(x => x.LogoSha256).HasMaxLength(64);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasOne<Organization>()
                 .WithMany()

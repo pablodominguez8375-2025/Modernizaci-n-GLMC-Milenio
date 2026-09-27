@@ -59,6 +59,12 @@ Los gates post-merge del SHA exacto `b683380` finalizaron SUCCESS: PMGM CI #1575
 
 # PMGM-NEXT-001 — Siguiente corte técnico
 
+## Incremento en curso — menú Ficha del Taller, identidad y logo — 27-09-2026
+
+El Product Owner reportó que no encontraba la ficha del Taller, y confirmó incluir logo personalizado opcional. Issue #199 formaliza el alcance: enlace directo bajo Taller; nombre, fecha de iniciación, ciudad/Oriente, país y logo. Se mantiene el permiso vigente de lectura/edición; Secretaría del Taller, Gran Secretaría y Régimen Interior editan dentro de su alcance; Venerable consulta/supervisa según la matriz. El logo es PNG/JPEG ≤2 MiB, firma validada, escáner antimalware y almacenamiento privado. No se otorgan permisos nuevos ni se modifica `TreasuryTerritory`.
+
+Rama `feature/workshop-profile-menu-logo-20260927`, desde `dev@c6da21c92beac84a70fca0aadb6b26a984842242`. Estado: implementado localmente; PR/CI exact-head pendientes. QA-V071 registra criterios. Frontend local: 215/215 pruebas, lint y build SUCCESS. Backend no compilado localmente por falta de .NET SDK; CI exact-head es gate. `srv01` sigue pausado, Issue #97 mantiene QA física/UAT pendiente y `main` no se toca. Especificación: `docs/PMGM-ARCH-017-ficha-taller-origen-y-permisos.md`.
+
 ## Mejora autorizada en implementación — Mis planchas y Biblioteca Virtual — 27-09-2026
 
 El Hermano consulta sólo sus planchas, puede cargar y reemplazar su propio trabajo aunque la carga anterior la haya hecho Secretaría. Secretaría puede subir a nombre de un autor activo del Taller. Cada carga exige descripción breve y conserva versiones. Después de validación de integridad y escaneo antimalware limpio se publica automáticamente la nueva versión en Biblioteca Virtual → «Planchas de Trabajo», clasificada por el grado efectivo del autor. Si el proceso falla, sigue visible la última versión válida. El grado también se controla en listado, detalle y descarga directa, y las rutas genéricas no pueden eludir el flujo seguro. Se reutilizan el gestor documental y el catálogo por grado; no se alteran permisos generales, actas ni planchas oficiales.

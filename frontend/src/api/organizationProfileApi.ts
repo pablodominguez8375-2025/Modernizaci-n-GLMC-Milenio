@@ -42,7 +42,7 @@ export interface OrganizationTransfer {
 }
 
 export interface OrganizationProfile {
-  organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string; establishedOn: string | null; city: string | null; country: string | null; treasuryTerritory: string | null }
+  organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string; establishedOn: string | null; city: string | null; country: string | null; treasuryTerritory: string | null; hasLogo?: boolean }
   members: { active: number; degreeDistribution: Record<string, number> }
   authorities: OrganizationAuthority[]
   regularity: {
@@ -66,7 +66,8 @@ interface OrganizationProfileApiClientOptions { baseUrl?: string; getAccessToken
 const ORG_1 = '11111111-1111-1111-1111-111111111111'
 const ORG_23 = '23232323-2323-2323-2323-232323232323'
 const demoSummaryGrants = new Map<string, LodgeSummaryGrant[]>([[ORG_1, []], [ORG_23, []]])
-const demoWorkshopMetadata = new Map<string, { establishedOn: string | null; city: string | null; country: string | null }>()
+const demoWorkshopMetadata = new Map<string, { name: string; establishedOn: string | null; city: string | null; country: string | null }>()
+const demoWorkshopLogos = new Map<string, Blob>()
 
 export class OrganizationProfileApiClient {
   private readonly baseUrl: string
@@ -86,12 +87,29 @@ export class OrganizationProfileApiClient {
     return this.request<OrganizationProfile>(organizationId, 'profile')
   }
 
-  async updateWorkshopMetadata(organizationId: string, metadata: { establishedOn: string | null; city: string | null; country: string | null }): Promise<void> {
+  async updateWorkshopMetadata(organizationId: string, metadata: { name: string; establishedOn: string | null; city: string | null; country: string | null }): Promise<void> {
     if (this.useMocks) {
       demoWorkshopMetadata.set(organizationId, metadata)
       return
     }
     await this.request(organizationId, 'profile/metadata', 'PUT', metadata)
+  }
+
+  async getWorkshopLogo(organizationId: string): Promise<Blob | null> {
+    if (this.useMocks) return demoWorkshopLogos.get(organizationId) ?? null
+    const response = await this.requestRaw(organizationId, 'profile/logo', 'GET')
+    return response.status === 404 ? null : response.blob()
+  }
+
+  async uploadWorkshopLogo(organizationId: string, file: File): Promise<void> {
+    if (!['image/png', 'image/jpeg'].includes(file.type) || file.size > 2 * 1024 * 1024 || file.size === 0) throw new Error('Use PNG o JPEG de hasta 2 MiB.')
+    if (this.useMocks) { demoWorkshopLogos.set(organizationId, file); return }
+    await this.requestRaw(organizationId, 'profile/logo', 'PUT', file, file.type)
+  }
+
+  async removeWorkshopLogo(organizationId: string): Promise<void> {
+    if (this.useMocks) { demoWorkshopLogos.delete(organizationId); return }
+    await this.requestRaw(organizationId, 'profile/logo', 'DELETE')
   }
 
   async getSummaryAccess(organizationId: string): Promise<LodgeSummaryAccess> {
@@ -136,6 +154,18 @@ export class OrganizationProfileApiClient {
     if (response.status === 204) return undefined as T
     return response.json() as Promise<T>
   }
+
+  private async requestRaw(organizationId: string, endpoint: string, method: string, body?: BodyInit, contentType?: string): Promise<Response> {
+    const token = await this.getAccessToken?.()
+    if (!token) throw new Error('Debe ingresar para consultar la Ficha del Taller.')
+    const headers = new Headers({ Authorization: `Bearer ${token}` })
+    if (contentType) headers.set('Content-Type', contentType)
+    const response = await fetch(`${this.baseUrl}/api/institutional/organizations/${encodeURIComponent(organizationId)}/${endpoint}`, { method, credentials: 'omit', redirect: 'error', cache: 'no-store', headers, ...(body === undefined ? {} : { body }) })
+    if (response.ok || (method === 'GET' && response.status === 404)) return response
+    if (response.status === 401) await this.onUnauthorized?.()
+    if (response.status === 403) throw new Error('Su cuenta no tiene permiso para esta operación del Taller.')
+    throw new Error(`La API respondió ${response.status} ${response.statusText}.`)
+  }
 }
 
 export function createDefaultOrganizationProfileApiClient(getAccessToken?: OrganizationAccessTokenProvider, onUnauthorized?: () => Promise<void>): OrganizationProfileApiClient {
@@ -150,12 +180,12 @@ function demoProfile(organizationId: string): OrganizationProfile {
   const second = organizationId === ORG_23
   const id = second ? ORG_23 : ORG_1
   const metadata = demoWorkshopMetadata.get(id)
-  const name = second ? 'Taller Demostrativo Nº 23' : 'Taller Demostrativo Nº 1'
+  const name = metadata?.name ?? (second ? 'Taller Demostrativo Nº 23' : 'Taller Demostrativo Nº 1')
   const number = second ? '23' : '1'
   const other = second ? 'Taller Demostrativo Nº 1' : 'Taller Demostrativo Nº 23'
   const otherId = second ? ORG_1 : ORG_23
   return {
-    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: metadata ? metadata.establishedOn : (second ? '1984-03-10' : '1967-08-21'), city: metadata ? metadata.city : (second ? 'Valparaíso' : 'Santiago'), country: metadata ? metadata.country : 'Chile', treasuryTerritory: second ? 'other_oriente' : 'santiago' },
+    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: metadata ? metadata.establishedOn : (second ? '1984-03-10' : '1967-08-21'), city: metadata ? metadata.city : (second ? 'Valparaíso' : 'Santiago'), country: metadata ? metadata.country : 'Chile', treasuryTerritory: second ? 'other_oriente' : 'santiago', hasLogo: demoWorkshopLogos.has(id) },
     members: { active: second ? 19 : 27, degreeDistribution: second ? { apprentice: 6, fellowcraft: 5, master: 8 } : { apprentice: 8, fellowcraft: 7, master: 12 } },
     authorities: [
       { id: `${id}-vm`, officeType: 'venerable_master', period: '2026', memberId: 'demo-vm', displayName: second ? 'Valentina Torres' : 'Alejandra Rojas', startDate: '2026-01-01', endDate: '2026-12-31' },

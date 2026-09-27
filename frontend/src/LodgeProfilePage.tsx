@@ -14,7 +14,11 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
   const [grantReason, setGrantReason] = useState('')
   const [savingGrant, setSavingGrant] = useState(false)
   const [savingWorkshopProfile, setSavingWorkshopProfile] = useState(false)
-  const [workshopProfileDraft, setWorkshopProfileDraft] = useState({ establishedOn: '', city: '', country: '' })
+  const [workshopProfileDraft, setWorkshopProfileDraft] = useState({ name: '', establishedOn: '', city: '', country: '' })
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [logoFile, setLogoFile] = useState<File | null>(null)
+  const [savingLogo, setSavingLogo] = useState(false)
+  const [logoRevision, setLogoRevision] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -38,12 +42,20 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
       .then(response => {
         if (!active) return
         setProfile(response)
-        setWorkshopProfileDraft({ establishedOn: response.organization.establishedOn ?? '', city: response.organization.city ?? '', country: response.organization.country ?? '' })
+        setWorkshopProfileDraft({ name: response.organization.name, establishedOn: response.organization.establishedOn ?? '', city: response.organization.city ?? '', country: response.organization.country ?? '' })
       })
       .catch(reason => { if (active) setError(toMessage(reason)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [organizationId, organizationProfileApi])
+
+  useEffect(() => {
+    let active = true
+    let url: string | null = null
+    setLogoUrl(null); setLogoFile(null)
+    if (organizationId) void organizationProfileApi.getWorkshopLogo(organizationId).then(blob => { if (active && blob) { url = URL.createObjectURL(blob); setLogoUrl(url) } }).catch(reason => { if (active) setError(toMessage(reason)) })
+    return () => { active = false; if (url) URL.revokeObjectURL(url) }
+  }, [organizationId, organizationProfileApi, profile?.organization.hasLogo, logoRevision])
 
   useEffect(() => {
     if (!canManageAccess || !organizationId) { setAccessManagement(null); return }
@@ -79,13 +91,31 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
     setSavingWorkshopProfile(true); setError(null)
     try {
       await organizationProfileApi.updateWorkshopMetadata(organizationId, {
+        name: workshopProfileDraft.name.trim(),
         establishedOn: workshopProfileDraft.establishedOn || null,
         city: workshopProfileDraft.city.trim() || null,
         country: workshopProfileDraft.country.trim() || null,
       })
-      setProfile(await organizationProfileApi.getProfile(organizationId))
+      const updated = await organizationProfileApi.getProfile(organizationId)
+      setProfile(updated)
+      setOrganizations(items => items.map(item => item.id === organizationId ? { ...item, name: updated.organization.name } : item))
     } catch (reason) { setError(toMessage(reason)) }
     finally { setSavingWorkshopProfile(false) }
+  }
+
+  const saveWorkshopLogo = async () => {
+    if (!organizationId || !logoFile) return
+    setSavingLogo(true); setError(null)
+    try { await organizationProfileApi.uploadWorkshopLogo(organizationId, logoFile); setLogoFile(null); setProfile(await organizationProfileApi.getProfile(organizationId)); setLogoRevision(value => value + 1) }
+    catch (reason) { setError(toMessage(reason)) }
+    finally { setSavingLogo(false) }
+  }
+  const removeWorkshopLogo = async () => {
+    if (!organizationId) return
+    setSavingLogo(true); setError(null)
+    try { await organizationProfileApi.removeWorkshopLogo(organizationId); setProfile(await organizationProfileApi.getProfile(organizationId)); setLogoRevision(value => value + 1) }
+    catch (reason) { setError(toMessage(reason)) }
+    finally { setSavingLogo(false) }
   }
 
   const degrees = useMemo(() => {
@@ -95,14 +125,14 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
 
   return <>
     <section className="page-heading lodge-profile-heading">
-      <div><p className="eyebrow">Vista para el Consejo de Administración</p><h1>Resumen del Taller</h1><p>Datos institucionales, autoridades, regularidad y actividad logial reunidos en una sola vista.</p></div>
+      <div><p className="eyebrow">Identidad y administración</p><h1>Ficha del Taller</h1><p>Datos de identidad, origen, autoridades, regularidad y actividad logial.</p></div>
       <label className="lodge-profile-selector"><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta o guardar la ficha.</strong><span>{error}</span></div>}
     {loading ? <div className="panel"><Loading /></div> : !profile ? <div className="panel empty-state"><strong>Seleccione un Taller.</strong></div> : <>
       <section className="lodge-identity panel">
-        <div className="lodge-emblem" aria-hidden="true">M</div>
+        <div className="lodge-emblem">{logoUrl ? <img src={logoUrl} alt={`Logo de ${profile.organization.name}`} /> : <span aria-hidden="true">M</span>}</div>
         <div><p className="eyebrow">Taller autorizado</p><h2>{profile.organization.name}</h2><p>{profile.organization.number ? `Nº ${profile.organization.number} · ` : ''}{profile.organization.type}</p></div>
         <div className="lodge-identity-meta"><span>Registro institucional</span><strong>{profile.organization.number ?? 'Sin número'}</strong><small>Registro creado el {formatDateTime(profile.organization.createdAtUtc)}</small></div>
       </section>
@@ -110,11 +140,13 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
       <section className="panel workshop-origin-panel" aria-labelledby="workshop-origin-heading">
         <div className="panel-heading"><div><p className="eyebrow">Identidad institucional</p><h2 id="workshop-origin-heading">Origen y pertenencia del Taller</h2></div></div>
         {canEditWorkshopProfile ? <div className="workshop-origin-form">
-          <label><span>Fecha de creación del Taller</span><input type="date" value={workshopProfileDraft.establishedOn} onChange={event => setWorkshopProfileDraft(value => ({ ...value, establishedOn: event.target.value }))} /></label>
+          <label className="workshop-name-field"><span>Nombre del Taller</span><input required maxLength={200} value={workshopProfileDraft.name} onChange={event => setWorkshopProfileDraft(value => ({ ...value, name: event.target.value }))} /></label>
+          <label><span>Fecha de iniciación</span><input type="date" value={workshopProfileDraft.establishedOn} onChange={event => setWorkshopProfileDraft(value => ({ ...value, establishedOn: event.target.value }))} /></label>
           <label><span>Ciudad / Oriente</span><input maxLength={120} value={workshopProfileDraft.city} onChange={event => setWorkshopProfileDraft(value => ({ ...value, city: event.target.value }))} /></label>
           <label><span>País</span><input maxLength={120} value={workshopProfileDraft.country} onChange={event => setWorkshopProfileDraft(value => ({ ...value, country: event.target.value }))} /></label>
-          <button type="button" className="primary-action" disabled={savingWorkshopProfile} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>
-        </div> : <dl className="workshop-origin-readonly"><div><dt>Fecha de creación del Taller</dt><dd>{profile.organization.establishedOn ? formatDate(profile.organization.establishedOn) : 'Sin registrar'}</dd></div><div><dt>Ciudad / Oriente</dt><dd>{profile.organization.city ?? 'Sin registrar'}</dd></div><div><dt>País</dt><dd>{profile.organization.country ?? 'Sin registrar'}</dd></div></dl>}
+          <label className="workshop-logo-field"><span>Logo personalizado (opcional, PNG/JPEG hasta 2 MiB)</span><input type="file" accept="image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0] ?? null; setLogoFile(file); if (file) { const url = URL.createObjectURL(file); setLogoUrl(current => { if (current) URL.revokeObjectURL(current); return url }) } }} /></label>
+          <div className="workshop-profile-actions"><button type="button" className="primary-action" disabled={savingWorkshopProfile || !workshopProfileDraft.name.trim()} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>{logoFile && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void saveWorkshopLogo()}>{savingLogo ? 'Subiendo…' : 'Guardar logo'}</button>}{profile.organization.hasLogo && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void removeWorkshopLogo()}>Quitar logo</button>}</div>
+        </div> : <dl className="workshop-origin-readonly"><div><dt>Nombre del Taller</dt><dd>{profile.organization.name}</dd></div><div><dt>Fecha de iniciación</dt><dd>{profile.organization.establishedOn ? formatDate(profile.organization.establishedOn) : 'Sin registrar'}</dd></div><div><dt>Ciudad / Oriente</dt><dd>{profile.organization.city ?? 'Sin registrar'}</dd></div><div><dt>País</dt><dd>{profile.organization.country ?? 'Sin registrar'}</dd></div></dl>}
         <p className="workshop-origin-note">La clasificación de cuotas se administra aparte por Gran Tesorería: {treasuryTerritoryLabel(profile.organization.treasuryTerritory)}. No se deduce de la ciudad ni del país.</p>
       </section>
 
