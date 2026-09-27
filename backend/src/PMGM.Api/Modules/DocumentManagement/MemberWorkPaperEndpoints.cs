@@ -128,7 +128,7 @@ public static class MemberWorkPaperEndpoints
             CreatedBySubject = GetSubject(context.User)
         };
         documentsDb.InstitutionalDocuments.Add(document);
-        var version = NewVersion(document, filename, contentType, request.SizeBytes, degree, context.User, title: title, description: description);
+        var version = NewVersion(document, filename, contentType, request.SizeBytes, degree.Value, context.User, title: title, description: description);
         documentsDb.DocumentVersions.Add(version);
         documentsDb.AuditEvents.Add(AuditEventFactory.Create(context, "library.work_paper.submitted", nameof(InstitutionalDocument), document.Id.ToString(), organizationId, AuditResults.Success,
             new { document.AuthorMemberId, document.DocumentType, document.MinimumDegreeRequired, Version = version.VersionNumber, UploadedByAuthor = ownMember?.MemberId == authorId }));
@@ -169,7 +169,7 @@ public static class MemberWorkPaperEndpoints
             return Results.BadRequest(new { message = fileError ?? "Sólo se aceptan PDF y DOCX." });
 
         var lastVersion = await documentsDb.DocumentVersions.Where(x => x.DocumentId == documentId).MaxAsync(x => (int?)x.VersionNumber, cancellationToken) ?? 0;
-        var version = NewVersion(document, filename, contentType, request.SizeBytes, degree, context.User, lastVersion + 1, title, description);
+        var version = NewVersion(document, filename, contentType, request.SizeBytes, degree.Value, context.User, lastVersion + 1, title, description);
         documentsDb.DocumentVersions.Add(version);
         documentsDb.AuditEvents.Add(AuditEventFactory.Create(context, "library.work_paper.version_submitted", nameof(DocumentVersion), version.Id.ToString(), document.OrganizationId, AuditResults.Success,
             new { version.DocumentId, version.VersionNumber, document.AuthorMemberId, AuthorEffectiveDegreeAtUpload = degree }));
