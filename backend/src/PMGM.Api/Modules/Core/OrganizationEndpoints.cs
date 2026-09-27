@@ -4,6 +4,8 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.DocumentManagement;
+using System.Security.Cryptography;
 
 namespace PMGM.Api.Modules.Core;
 
@@ -22,6 +24,10 @@ public static class OrganizationEndpoints
         endpoints.MapPut("/api/institutional/organizations/{id:guid}/profile/metadata", UpdateOrganizationMetadataAsync)
             .WithTags("Organizaciones institucionales")
             .RequireAuthorization();
+
+        endpoints.MapGet("/api/institutional/organizations/{id:guid}/profile/logo", GetWorkshopLogoAsync).WithTags("Organizaciones institucionales").RequireAuthorization();
+        endpoints.MapPut("/api/institutional/organizations/{id:guid}/profile/logo", PutWorkshopLogoAsync).WithTags("Organizaciones institucionales").RequireAuthorization();
+        endpoints.MapDelete("/api/institutional/organizations/{id:guid}/profile/logo", DeleteWorkshopLogoAsync).WithTags("Organizaciones institucionales").RequireAuthorization();
 
         return endpoints;
     }
@@ -86,7 +92,8 @@ public static class OrganizationEndpoints
                 x.EstablishedOn,
                 x.City,
                 x.Country,
-                x.TreasuryTerritory
+                x.TreasuryTerritory,
+                hasLogo = x.LogoObjectKey != null
             })
             .SingleOrDefaultAsync(cancellationToken);
 
@@ -260,14 +267,17 @@ public static class OrganizationEndpoints
             return Results.NotFound();
 
         var todayInChile = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow, "America/Santiago"));
-        if ((request.EstablishedOn.HasValue && request.EstablishedOn.Value > todayInChile) ||
+        var name = request.Name?.Trim();
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 200 ||
+            (request.EstablishedOn.HasValue && request.EstablishedOn.Value > todayInChile) ||
             request.City?.Length > 120 || request.Country?.Length > 120)
             return Results.ValidationProblem(new Dictionary<string, string[]>
             {
                 ["metadata"] = ["Revise la fecha de fundación (no puede ser futura) y los campos de ubicación (máximo 120 caracteres)."]
             });
 
-        var previous = new { organization.EstablishedOn, organization.City, organization.Country };
+        var previous = new { organization.Name, organization.EstablishedOn, organization.City, organization.Country };
+        organization.Name = name;
         organization.EstablishedOn = request.EstablishedOn;
         organization.City = NormalizeOptional(request.City);
         organization.Country = NormalizeOptional(request.Country);
@@ -276,9 +286,67 @@ public static class OrganizationEndpoints
             AuditResults.Success, new
             {
                 previous,
-                current = new { organization.EstablishedOn, organization.City, organization.Country }
+                current = new { organization.Name, organization.EstablishedOn, organization.City, organization.Country }
             });
         await db.SaveChangesAsync(cancellationToken);
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> GetWorkshopLogoAsync(Guid id, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IInstitutionalMemberContextResolver memberContextResolver, IDocumentObjectStore store, CancellationToken ct)
+    {
+        var org = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (org is null || !string.Equals(org.Type, "workshop", StringComparison.OrdinalIgnoreCase)) return Results.NotFound();
+        var canRead = (access.HasOrderScope(context.User) && access.CanReadOrganization(context.User, id)) || await LodgeSummaryAccessPolicy.CanReadAsync(context.User, id, db, access, memberContextResolver, ct);
+        if (!canRead) return Results.Forbid();
+        if (org.LogoObjectKey is null || org.LogoContentType is null) return Results.NotFound();
+        if (!await store.ExistsAsync(org.LogoObjectKey, ct)) return Results.NotFound();
+        context.Response.Headers.CacheControl = "private, no-store";
+        context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+        return Results.Stream(await store.OpenReadAsync(org.LogoObjectKey, ct), org.LogoContentType, enableRangeProcessing: false);
+    }
+
+    private static async Task<IResult> PutWorkshopLogoAsync(Guid id, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, IDocumentObjectStore store, IDocumentMalwareScanner scanner, CancellationToken ct)
+    {
+        var org = await db.Organizations.SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (org is null || !string.Equals(org.Type, "workshop", StringComparison.OrdinalIgnoreCase)) return Results.NotFound();
+        if (!access.CanManageWorkshopProfile(context.User, id)) return Results.Forbid();
+        if (context.Request.ContentLength is null or <= 0 or > WorkshopLogoContentTypePolicy.MaxUploadBytes) return Results.BadRequest(new { message = "El logo debe pesar entre 1 byte y 2 MiB." });
+        var content = new byte[(int)context.Request.ContentLength.Value];
+        var offset = 0;
+        while (offset < content.Length)
+        {
+            var read = await context.Request.Body.ReadAsync(content.AsMemory(offset), ct);
+            if (read == 0) return Results.BadRequest(new { message = "El archivo está incompleto." });
+            offset += read;
+        }
+        var contentType = context.Request.ContentType?.Split(';')[0].Trim();
+        if (!WorkshopLogoContentTypePolicy.IsAllowed(contentType, content)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["logo"] = ["Use un archivo PNG o JPEG válido."] });
+        var key = $"organization-profile/{id:N}/logo/{Guid.NewGuid():N}";
+        var sha = Convert.ToHexString(SHA256.HashData(content)).ToLowerInvariant();
+        DocumentMalwareScanResult scan;
+        try { using var scanStream = new MemoryStream(content, writable: false); scan = await scanner.ScanAsync(scanStream, ct); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.Net.Sockets.SocketException) { return Results.Problem("No se pudo verificar el archivo. Intente más tarde.", statusCode: 503); }
+        if (!scan.IsClean) return Results.ValidationProblem(new Dictionary<string, string[]> { ["logo"] = ["El archivo fue rechazado por el análisis de seguridad."] });
+        var oldKey = org.LogoObjectKey;
+        await store.StoreAsync(key, new MemoryStream(content, writable: false), contentType!, ct);
+        org.LogoObjectKey = key; org.LogoContentType = contentType; org.LogoSha256 = sha;
+        audit.Add(context, "organization.workshop_profile.logo_updated", nameof(Organization), id.ToString(), id, AuditResults.Success, new { oldKey, newKey = key, sha256 = sha, scan.EvidenceReference });
+        try { await db.SaveChangesAsync(ct); }
+        catch { await store.DeleteAsync(key, ct); throw; }
+        if (oldKey is not null) try { await store.DeleteAsync(oldKey, ct); } catch (IOException) { }
+        return Results.NoContent();
+    }
+
+    private static async Task<IResult> DeleteWorkshopLogoAsync(Guid id, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, IDocumentObjectStore store, CancellationToken ct)
+    {
+        var org = await db.Organizations.SingleOrDefaultAsync(x => x.Id == id, ct);
+        if (org is null || !string.Equals(org.Type, "workshop", StringComparison.OrdinalIgnoreCase)) return Results.NotFound();
+        if (!access.CanManageWorkshopProfile(context.User, id)) return Results.Forbid();
+        var oldKey = org.LogoObjectKey;
+        org.LogoObjectKey = null; org.LogoContentType = null; org.LogoSha256 = null;
+        audit.Add(context, "organization.workshop_profile.logo_removed", nameof(Organization), id.ToString(), id, AuditResults.Success, new { oldKey });
+        await db.SaveChangesAsync(ct);
+        if (oldKey is not null) try { await store.DeleteAsync(oldKey, ct); } catch (IOException) { }
         return Results.NoContent();
     }
 
@@ -289,7 +357,7 @@ public static class OrganizationEndpoints
     }
 }
 
-public sealed record UpdateOrganizationMetadataRequest(DateOnly? EstablishedOn, string? City, string? Country);
+public sealed record UpdateOrganizationMetadataRequest(string? Name, DateOnly? EstablishedOn, string? City, string? Country);
 
 public sealed record OrganizationOptionDto(
     Guid Id,

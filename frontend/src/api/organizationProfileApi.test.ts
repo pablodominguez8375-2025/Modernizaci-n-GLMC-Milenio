@@ -30,23 +30,36 @@ it('updates workshop origin metadata through its organization-scoped endpoint', 
   vi.stubGlobal('fetch', fetch)
   const client = new OrganizationProfileApiClient({ getAccessToken: async () => 'secretariat-token' })
 
-  await client.updateWorkshopMetadata('workshop-23', { establishedOn: '1984-03-10', city: 'Valparaíso', country: 'Chile' })
+  await client.updateWorkshopMetadata('workshop-23', { name: 'Taller Horizonte', establishedOn: '1984-03-10', city: 'Valparaíso', country: 'Chile' })
 
   expect(fetch.mock.calls[0][0]).toBe('/api/institutional/organizations/workshop-23/profile/metadata')
   expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'PUT', credentials: 'omit', cache: 'no-store' })
-  expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toEqual({ establishedOn: '1984-03-10', city: 'Valparaíso', country: 'Chile' })
+  expect(JSON.parse(fetch.mock.calls[0][1].body as string)).toEqual({ name: 'Taller Horizonte', establishedOn: '1984-03-10', city: 'Valparaíso', country: 'Chile' })
 })
 
 it('demo workshop origin metadata remains available after editing', async () => {
   const client = new OrganizationProfileApiClient({ useMocks: true })
   const workshopId = '11111111-1111-1111-1111-111111111111'
-  await client.updateWorkshopMetadata(workshopId, { establishedOn: '1974-05-12', city: 'Concepción', country: 'Chile' })
+  await client.updateWorkshopMetadata(workshopId, { name: 'Taller Concepción', establishedOn: '1974-05-12', city: 'Concepción', country: 'Chile' })
   const profile = await client.getProfile(workshopId)
 
-  expect(profile.organization).toMatchObject({ establishedOn: '1974-05-12', city: 'Concepción', country: 'Chile' })
-  await client.updateWorkshopMetadata(workshopId, { establishedOn: null, city: null, country: null })
+  expect(profile.organization).toMatchObject({ name: 'Taller Concepción', establishedOn: '1974-05-12', city: 'Concepción', country: 'Chile' })
+  await client.updateWorkshopMetadata(workshopId, { name: 'Taller Concepción', establishedOn: null, city: null, country: null })
   const cleared = await client.getProfile(workshopId)
   expect(cleared.organization).toMatchObject({ establishedOn: null, city: null, country: null })
+})
+
+it('uploads and removes optional workshop logos with raw image content', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  const client = new OrganizationProfileApiClient({ getAccessToken: async () => 'secretariat-token' })
+  const file = new File(['logo'], 'logo.png', { type: 'image/png' })
+  await client.uploadWorkshopLogo('workshop-23', file)
+  expect(fetch.mock.calls[0][0]).toBe('/api/institutional/organizations/workshop-23/profile/logo')
+  expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'PUT', credentials: 'omit', body: file })
+  expect(fetch.mock.calls[0][1].headers.get('Content-Type')).toBe('image/png')
+  await client.removeWorkshopLogo('workshop-23')
+  expect(fetch.mock.calls[1][1]).toMatchObject({ method: 'DELETE', cache: 'no-store' })
 })
 
 it('scopes summary delegation grant and revocation to the selected workshop', async () => {
