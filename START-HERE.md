@@ -7,14 +7,16 @@ Este resumen es un checkpoint, no reemplaza la verificación en vivo. GitHub y D
 ### Estado vivo verificado
 
 - Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
-- HEAD de `dev`: `bd311106f9418181ba8cc82164b7b02a47fcb0b2` (PR #197). `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin cambios.
+- HEAD de `dev`: `d455d454dff0e8cb135ca8d21c04bbd2242be38b` (PR #200, Ficha del Taller). `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin cambios.
+- PR #200 / Issue #199 integrados: menú directo **Taller → Ficha del Taller**, identidad y logo opcional. CI #1634, Showcase exact-head #931, QA Installable exact-head #569, Showcase/Pages post-merge #932 y QA Installable post-merge #570 — SUCCESS.
+- Pages artifact #10943798335, digest `sha256:56674bd800e26ebd53a77d621a67a03eefc44108e126146d2dfcf76040497023`; `qa-current.json` confirma el SHA integrado y ZIP QA SHA-256 `b189f06728348a78df999d7f48f1bb08898d58e9a046f5d12da3e85656c08080`. QA Actions artifact #10943758277, digest `sha256:fcc17f55691aa078ed3a8d32fbb056275b63f6c7a8be55e9a763491eaa734954`.
 - PR #197 es documental y está integrada. En el HEAD exacto de su rama: PMGM CI #1629 SUCCESS, Showcase #924 SUCCESS y QA Installable #562 SUCCESS. Tras integración, Showcase #925 y Deploy showcase SUCCESS; QA Installable #563 SUCCESS.
 - Pages artifact #10942713140: digest SHA-256 `745f49aa87c426f1eca2186cf1e3ad16fc55d753a2b0c6a7cfccd02288d7c58a`. Su `qa-current.json` confirma `sourceSha=bd311106f9418181ba8cc82164b7b02a47fcb0b2`; ZIP `Proyecto-Centenario-QA-srv01-bd311106f941.zip`, SHA-256 `29fee7dbc138f6dcd35eb7bead657e4d761c4a6d79bdaa405bf0204f7be8df0a`. QA Actions artifact #10943455063: digest `sha256:ed08c7ce2d3c17058f19be810814007bbe7fc4ea30da591fbb5b0e0ba169793a`.
 - Demo publicada: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
 - La mejora de cobranza PR #195 está integrada: la fecha real de recepción del pago se conserva para contabilidad/caja y el año/mes elegido determina la cuota abonada en historial/cartola; no duplica ingresos. Los artefactos son evidencia de publicación/paquete, no de instalación.
 - `srv01` está expresamente pausado por el Sponsor. Issue #97 sigue abierto. No instalar, desplegar manualmente, ejecutar smoke en servidor, regresión física ni UAT hasta que el Sponsor levante la pausa. No promover a `main`.
 - Issues #190 y #191 permanecen pendientes de definiciones contables/de tarifas; no inventar montos, moneda, conversiones ni tratamiento de anticipos. PR #182 (revisión de menús del Sistema Logial) está abierta con base antigua `14019d2`; no fusionar su rama obsoleta. Comparar su contenido con `dev` y Drive antes de decidir si rebase, sustituir o cerrar.
-- La autorización anterior cubre la mejora de cobranza y su demo, además de la continuidad documental. No extiende automáticamente permiso a cambios funcionales distintos. Si Issue #97 continúa bloqueante, iniciar otra función sólo cuando el Product Owner dé un alcance concreto o exista una decisión registrada vigente que lo autorice.
+- La mejora de ficha #199 se autorizó de forma explícita y ya está integrada. Esa aprobación no autoriza automáticamente otro incremento funcional; si Issue #97 sigue bloqueante, se requiere alcance definido por el Product Owner o decisión vigente para la siguiente función.
 
 ### Protocolo obligatorio de continuidad
 

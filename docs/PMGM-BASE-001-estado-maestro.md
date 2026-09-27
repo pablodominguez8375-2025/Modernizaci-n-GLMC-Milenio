@@ -2,6 +2,16 @@
 
 Al terminar cada tarea del proyecto, registrar el resultado en GitHub y Drive, aunque no haya cambios de código. Incluir fecha, HEAD de `dev`/`main`, alcance y archivos, PR/Issue, pruebas/gates/artefactos, situación de Pages/QA/UAT, límites y pendientes. Actualizar la Línea Base Maestra y dejar un handoff con instrucciones transferibles a cualquier IA/chat. Verificar la lectura de retorno en ambos sistemas antes de cerrar. Si una fuente no está disponible, declararlo y no inventar ni completar el estado desde recuerdos.
 
+## CIERRE POST-MERGE — FICHA DEL TALLER, NOMBRE Y LOGO — 27-09-2026
+
+PR #200 / Issue #199 quedó integrada por squash en `dev@d455d454dff0e8cb135ca8d21c04bbd2242be38b`; inicio `dev@c6da21c92beac84a70fca0aadb6b26a984842242`. `main` permanece en `6dfb9546a4873baff15955cf86abfd7d47e3d111`. La ficha está accesible desde Taller con entrada directa y permite gestionar nombre, fecha de iniciación, ciudad/Oriente, país y logo opcional según roles ya vigentes. Logo: PNG/JPEG ≤2 MiB, firma validada, análisis antimalware, objeto privado y auditoría. No cambia el ID del Taller ni `TreasuryTerritory`.
+
+En el head exacto del PR `48809f9f0d78e623593a774c1b46f48e7a9bd62a`: PMGM CI #1634 / run 36357065482, Showcase #931 / run 36357065425 y QA Installable #569 / run 36357065389 — SUCCESS. Tras merge: Showcase/Pages #932 / run 36357277072 y QA Installable #570 / run 36357277061 — SUCCESS. Frontend local 215/215, lint/build SUCCESS; backend build y suites PostgreSQL/S3/ClamAV SUCCESS en CI.
+
+Pages artifact #10943798335 digest `sha256:56674bd800e26ebd53a77d621a67a03eefc44108e126146d2dfcf76040497023`; evidencia visual #10943753398 digest `sha256:528efbe90622f557ef90fab61b11d25978ecb9e67227f4542060fa614a92511a`. `qa-current.json` declara `sourceSha=d455d454dff0e8cb135ca8d21c04bbd2242be38b`; ZIP `Proyecto-Centenario-QA-srv01-d455d454dff0.zip`, SHA-256 calculado y coincidente `b189f06728348a78df999d7f48f1bb08898d58e9a046f5d12da3e85656c08080`. QA Actions artifact #10943758277 digest `sha256:fcc17f55691aa078ed3a8d32fbb056275b63f6c7a8be55e9a763491eaa734954`, identificado con el SHA integrado.
+
+**No equivale a instalación ni aceptación:** `srv01` sigue en pausa; no hubo instalación, smoke autenticado en servidor, regresión física ni UAT. Issue #97 sigue abierto para QA física/UAT; `main` no se promueve. Véanse `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`, `docs/PMGM-ARCH-017-ficha-taller-origen-y-permisos.md`, `docs/qa/PMGM-QA-V071-FICHA-TALLER-LOGO.md` y changelog de la tarea.
+
 ## PR en curso — ficha del Taller con fecha, ciudad y país — 27-09-2026
 
 PR #189 contra `dev`, desde `dev@80dd71222aa391984709847436a1dc507b679d84`; HEAD inicial `28fdadc6b00f92aad4cbb3ffaea35c801d29c7c3`. Issue #188. Campos: `EstablishedOn` (fecha histórica de creación/fundación, no `CreatedAtUtc`), `City` y `Country`. Edición backend limitada exactamente a Secretaría del Taller dentro de su organización, Gran Secretaría y Régimen Interior con scope de Orden; otros perfiles técnicos o de Taller no obtienen este permiso.
