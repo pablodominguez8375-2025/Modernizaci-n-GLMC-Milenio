@@ -128,13 +128,24 @@ public static class MemberSelfEndpoints
             .OrderByDescending(x => x.PeriodYear)
             .ThenByDescending(x => x.PeriodMonth)
             .ToListAsync(cancellationToken);
+        var treasuryAsOf = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
+            TimeZoneInfo.FindSystemTimeZoneById("America/Santiago")).DateTime);
+        var currentTreasuryPeriod = treasuryAsOf.Year * 100 + treasuryAsOf.Month;
 
         var treasuryAccount = new
         {
             totalCharged = treasuryCharges.Sum(x => x.MemberAmount),
             totalPaid = treasuryCharges.Sum(x => x.Payments.Sum(payment => payment.Amount)),
             balance = treasuryCharges.Sum(x => x.MemberAmount - x.Payments.Sum(payment => payment.Amount)),
-            items = treasuryCharges.Take(24).Select(x => new
+            overdueBalance = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth < currentTreasuryPeriod)
+                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+            currentPeriodBalance = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth == currentTreasuryPeriod)
+                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+            futurePeriodBalance = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
+                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+            futurePaidAmount = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
+                .Sum(x => x.Payments.Sum(payment => payment.Amount)),
+            items = treasuryCharges.Select(x => new
             {
                 chargeId = x.Id,
                 x.OrganizationId,
@@ -144,6 +155,12 @@ public static class MemberSelfEndpoints
                 chargedAmount = x.MemberAmount,
                 paidAmount = x.Payments.Sum(payment => payment.Amount),
                 balance = x.MemberAmount - x.Payments.Sum(payment => payment.Amount),
+                periodStatus = x.MemberAmount <= x.Payments.Sum(payment => payment.Amount)
+                    ? x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod ? "advance_paid" : "paid"
+                    : x.PeriodYear * 100 + x.PeriodMonth < currentTreasuryPeriod ? "overdue"
+                    : x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod
+                        ? x.Payments.Any() ? "advance_partial" : "future_due"
+                        : x.Payments.Any() ? "partial" : "due",
                 x.Status,
                 payments = x.Payments
                     .OrderByDescending(payment => payment.PaymentDate)

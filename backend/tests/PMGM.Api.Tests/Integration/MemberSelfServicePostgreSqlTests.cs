@@ -158,7 +158,29 @@ public sealed class MemberSelfServicePostgreSqlTests
                 RecordedBySubject = "treasury-test"
             };
 
-            db.AddRange(organization, person, member, membership, initiation, exaltation, status, financial, hospitalaria, feePlan, charge, payment);
+            var oldPeriod = today.AddMonths(-2);
+            var priorCharge = new LodgeMemberCharge
+            {
+                Organization = organization, OrganizationId = organization.Id, Member = member, MemberId = member.Id,
+                FeePlan = feePlan, FeePlanId = feePlan.Id, PeriodYear = oldPeriod.Year, PeriodMonth = oldPeriod.Month,
+                MemberAmount = 25_000m, GrandTreasuryAmount = 20_000m, Status = "pending"
+            };
+            var futurePeriod = today.AddMonths(2);
+            var futureCharge = new LodgeMemberCharge
+            {
+                Organization = organization, OrganizationId = organization.Id, Member = member, MemberId = member.Id,
+                FeePlan = feePlan, FeePlanId = feePlan.Id, PeriodYear = futurePeriod.Year, PeriodMonth = futurePeriod.Month,
+                MemberAmount = 25_000m, GrandTreasuryAmount = 20_000m, Status = "paid"
+            };
+            var futurePayment = new LodgeMemberPayment
+            {
+                Charge = futureCharge, ChargeId = futureCharge.Id, Amount = 25_000m, PaymentMethod = "transfer",
+                PaymentDate = today, ReceiptNumber = "REC-SELF-ADV-001", Reference = "TRX-SELF-ADV-001",
+                RecordedBySubject = "treasury-test"
+            };
+
+            db.AddRange(organization, person, member, membership, initiation, exaltation, status, financial, hospitalaria,
+                feePlan, charge, payment, priorCharge, futureCharge, futurePayment);
             await db.SaveChangesAsync(cancellationToken);
 
             memberId = member.Id;
@@ -253,13 +275,23 @@ public sealed class MemberSelfServicePostgreSqlTests
         Assert.Equal("up_to_date", profileJson.GetProperty("regularity").GetProperty("financial").GetProperty("status").GetString());
 
         var treasuryAccount = profileJson.GetProperty("treasuryAccount");
-        Assert.Equal(25_000m, treasuryAccount.GetProperty("totalCharged").GetDecimal());
-        Assert.Equal(10_000m, treasuryAccount.GetProperty("totalPaid").GetDecimal());
-        Assert.Equal(15_000m, treasuryAccount.GetProperty("balance").GetDecimal());
-        var treasuryCharge = treasuryAccount.GetProperty("items").EnumerateArray().Single();
-        Assert.Equal(today.Year, treasuryCharge.GetProperty("periodYear").GetInt32());
-        Assert.Equal(today.Month, treasuryCharge.GetProperty("periodMonth").GetInt32());
-        Assert.Equal("REC-SELF-001", treasuryCharge.GetProperty("payments").EnumerateArray().Single().GetProperty("receiptNumber").GetString());
+        Assert.Equal(75_000m, treasuryAccount.GetProperty("totalCharged").GetDecimal());
+        Assert.Equal(35_000m, treasuryAccount.GetProperty("totalPaid").GetDecimal());
+        Assert.Equal(40_000m, treasuryAccount.GetProperty("balance").GetDecimal());
+        Assert.Equal(25_000m, treasuryAccount.GetProperty("overdueBalance").GetDecimal());
+        Assert.Equal(15_000m, treasuryAccount.GetProperty("currentPeriodBalance").GetDecimal());
+        Assert.Equal(25_000m, treasuryAccount.GetProperty("futurePaidAmount").GetDecimal());
+        var treasuryItems = treasuryAccount.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(3, treasuryItems.Count);
+        var overdueItem = treasuryItems.Single(x => x.GetProperty("periodStatus").GetString() == "overdue");
+        Assert.Equal(25_000m, overdueItem.GetProperty("balance").GetDecimal());
+        var currentItem = treasuryItems.Single(x => x.GetProperty("periodStatus").GetString() == "partial");
+        Assert.Equal(today.Year, currentItem.GetProperty("periodYear").GetInt32());
+        Assert.Equal(today.Month, currentItem.GetProperty("periodMonth").GetInt32());
+        Assert.Equal("REC-SELF-001", currentItem.GetProperty("payments").EnumerateArray().Single().GetProperty("receiptNumber").GetString());
+        var advanceItem = treasuryItems.Single(x => x.GetProperty("periodStatus").GetString() == "advance_paid");
+        Assert.Equal(0m, advanceItem.GetProperty("balance").GetDecimal());
+        Assert.Equal("REC-SELF-ADV-001", advanceItem.GetProperty("payments").EnumerateArray().Single().GetProperty("receiptNumber").GetString());
 
         var activity = profileJson.GetProperty("activity");
         var attendance = activity.GetProperty("attendance");

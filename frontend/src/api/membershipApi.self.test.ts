@@ -22,9 +22,12 @@ describe('member self-service API client', () => {
     expect(after.current.effectiveDegree).toBe(before.current.effectiveDegree)
     expect(after.current.membership?.organizationId).toBe(before.current.membership?.organizationId)
     expect(after.treasuryAccount.totalCharged).toBe(75000)
-    expect(after.treasuryAccount.totalPaid).toBe(75000)
-    expect(after.treasuryAccount.balance).toBe(0)
-    expect(after.treasuryAccount.items[0].payments[0].receiptNumber).toBe('REC-DEMO-003')
+    expect(after.treasuryAccount.totalPaid).toBe(50000)
+    expect(after.treasuryAccount.balance).toBe(25000)
+    expect(after.treasuryAccount.overdueBalance).toBe(25000)
+    expect(after.treasuryAccount.futurePaidAmount).toBe(25000)
+    expect(after.treasuryAccount.items.find(item => item.periodStatus === 'overdue')?.balance).toBe(25000)
+    expect(after.treasuryAccount.items.find(item => item.periodStatus === 'advance_paid')?.payments[0].receiptNumber).toBe('REC-DEMO-004')
   })
 
   it('reports unchanged when no personal field changes', async () => {

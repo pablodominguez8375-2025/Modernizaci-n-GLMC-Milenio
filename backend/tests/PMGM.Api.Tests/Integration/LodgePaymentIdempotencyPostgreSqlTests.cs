@@ -24,6 +24,7 @@ public sealed class LodgePaymentIdempotencyPostgreSqlTests
         using var factory = new PmgmWebApplicationFactory(connectionString);
         using var client = factory.CreateClient();
         Guid chargeId;
+        Guid organizationId;
         await using (var setupScope = factory.Services.CreateAsyncScope())
         {
             var db = setupScope.ServiceProvider.GetRequiredService<PmgmDbContext>();
@@ -38,6 +39,7 @@ public sealed class LodgePaymentIdempotencyPostgreSqlTests
                 GrandTreasuryAmount = 5000m, Status = TreasuryCodes.LodgeChargeStatus.Pending };
             db.AddRange(organization, person, member, plan, charge);
             await db.SaveChangesAsync(cancellationToken);
+            organizationId = organization.Id;
             chargeId = charge.Id;
         }
 
@@ -55,6 +57,16 @@ public sealed class LodgePaymentIdempotencyPostgreSqlTests
         Assert.Equal(receipt, retryBody.RootElement.GetProperty("receiptNumber").GetString());
         Assert.Equal(2500m, retryBody.RootElement.GetProperty("paidAmount").GetDecimal());
         Assert.Equal(2500m, retryBody.RootElement.GetProperty("balance").GetDecimal());
+
+        var chargesResponse = await client.GetAsync($"/api/gestion-logial/tesoreria/talleres/{organizationId}/cargos?year=2026&month=09", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, chargesResponse.StatusCode);
+        using var chargesBody = JsonDocument.Parse(await chargesResponse.Content.ReadAsStringAsync(cancellationToken));
+        var chargePeriod = chargesBody.RootElement.GetProperty("items").EnumerateArray().Single()
+            .GetProperty("periods").EnumerateArray().Single();
+        Assert.Equal(2026, chargePeriod.GetProperty("periodYear").GetInt32());
+        Assert.Equal(9, chargePeriod.GetProperty("periodMonth").GetInt32());
+        Assert.Equal("partial", chargePeriod.GetProperty("status").GetString());
+        Assert.Equal(2500m, chargePeriod.GetProperty("balance").GetDecimal());
 
         var changedPayload = await client.PostAsJsonAsync(path, new { amount = 3000m, request.paymentMethod, request.paymentDate,
             request.reference, request.idempotencyKey }, cancellationToken);
