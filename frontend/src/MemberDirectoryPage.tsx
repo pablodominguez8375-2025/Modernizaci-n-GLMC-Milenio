@@ -131,7 +131,7 @@ function Profile({ profile }: { profile: MemberProfile }) {
 
     <section className="profile-block">
       <div className="profile-block-heading"><div><p className="eyebrow">Trayectoria</p><h3>Grados y cargos</h3></div></div>
-      <div className="trajectory-grid"><div><strong>Grados</strong>{profile.degreeEvents.map(item => <span key={item.id}>{degreeLabel(item.degree)} · {formatDate(item.effectiveDate)}</span>)}</div><div><strong>Cargos</strong>{profile.offices.length === 0 ? <span>Sin cargos registrados.</span> : profile.offices.map(item => <span key={item.id}>{officeLabel(item.officeType)} · {item.period}</span>)}</div></div>
+      <div className="trajectory-grid"><div><strong>Grados</strong>{profile.degreeEvents.map(item => <span key={item.id}>{degreeLabel(item.degree)} · {formatDate(item.effectiveDate)}</span>)}</div><div><strong>Historial de cargos · {profile.offices.length}</strong>{profile.offices.length === 0 ? <span>Sin cargos registrados.</span> : <div className="office-history-list">{profile.offices.map(item => <article key={item.id}><strong>{officeLabel(item.officeType)} · {item.period}</strong><span>{item.organization}</span><small>{officePeriod(item.startDate, item.endDate)}</small>{item.evidenceReference && <small>Respaldo: {item.evidenceReference}</small>}</article>)}</div>}</div></div>
     </section>
   </>
 }
@@ -141,6 +141,7 @@ function Summary({ label, value, detail }: { label: string; value: string; detai
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
 function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(item => item[0]?.toUpperCase()).join('') }
+function officePeriod(startDate: string, endDate: string | null) { return `${formatDate(startDate)} → ${endDate ? formatDate(endDate) : 'vigente'}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }
 function degreeLabel(value: string | null | undefined) { return value === 'master' ? 'Maestro/a' : value === 'fellowcraft' ? 'Compañero/a' : value === 'apprentice' ? 'Aprendiz' : value || 'Sin grado registrado' }
 function officeLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase()) }
