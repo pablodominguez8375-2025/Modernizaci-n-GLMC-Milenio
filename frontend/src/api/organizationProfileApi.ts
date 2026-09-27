@@ -149,12 +149,13 @@ export function createDefaultOrganizationProfileApiClient(getAccessToken?: Organ
 function demoProfile(organizationId: string): OrganizationProfile {
   const second = organizationId === ORG_23
   const id = second ? ORG_23 : ORG_1
+  const metadata = demoWorkshopMetadata.get(id)
   const name = second ? 'Taller Demostrativo Nº 23' : 'Taller Demostrativo Nº 1'
   const number = second ? '23' : '1'
   const other = second ? 'Taller Demostrativo Nº 1' : 'Taller Demostrativo Nº 23'
   const otherId = second ? ORG_1 : ORG_23
   return {
-    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: demoWorkshopMetadata.get(id)?.establishedOn ?? (second ? '1984-03-10' : '1967-08-21'), city: demoWorkshopMetadata.get(id)?.city ?? (second ? 'Valparaíso' : 'Santiago'), country: demoWorkshopMetadata.get(id)?.country ?? 'Chile', treasuryTerritory: second ? 'other_oriente' : 'santiago' },
+    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: metadata ? metadata.establishedOn : (second ? '1984-03-10' : '1967-08-21'), city: metadata ? metadata.city : (second ? 'Valparaíso' : 'Santiago'), country: metadata ? metadata.country : 'Chile', treasuryTerritory: second ? 'other_oriente' : 'santiago' },
     members: { active: second ? 19 : 27, degreeDistribution: second ? { apprentice: 6, fellowcraft: 5, master: 8 } : { apprentice: 8, fellowcraft: 7, master: 12 } },
     authorities: [
       { id: `${id}-vm`, officeType: 'venerable_master', period: '2026', memberId: 'demo-vm', displayName: second ? 'Valentina Torres' : 'Alejandra Rojas', startDate: '2026-01-01', endDate: '2026-12-31' },

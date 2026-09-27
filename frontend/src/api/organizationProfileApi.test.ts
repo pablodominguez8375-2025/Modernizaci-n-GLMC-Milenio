@@ -44,6 +44,9 @@ it('demo workshop origin metadata remains available after editing', async () => 
   const profile = await client.getProfile(workshopId)
 
   expect(profile.organization).toMatchObject({ establishedOn: '1974-05-12', city: 'Concepción', country: 'Chile' })
+  await client.updateWorkshopMetadata(workshopId, { establishedOn: null, city: null, country: null })
+  const cleared = await client.getProfile(workshopId)
+  expect(cleared.organization).toMatchObject({ establishedOn: null, city: null, country: null })
 })
 
 it('scopes summary delegation grant and revocation to the selected workshop', async () => {
