@@ -88,9 +88,15 @@ Un incremento **no se considera terminado** solo porque el PR esté fusionado o 
 
 La demo pública nunca usa datos personales reales, secretos ni servicios institucionales reales. El instalable QA sí valida la arquitectura operacional con API, PostgreSQL, OIDC/Keycloak, almacenamiento S3/MinIO, ClamAV y demás componentes vigentes.
 
-## 7. Handoff obligatorio
+## 7. Registro obligatorio al terminar cada tarea
 
-Toda intervención debe terminar dejando, como mínimo:
+Al terminar **cada tarea del Proyecto Centenario**, actualiza ambos registros persistentes, aunque la tarea no cambie código:
+
+1. **GitHub:** deja el resultado en el Issue/PR pertinente y actualiza documentación versionada cuando cambie el estado, decisión, código, validación o próximo paso. Registra fecha, HEAD exacto de `dev` y `main`, rama/commit/PR, archivos afectados, pruebas/gates/artefactos, límites operacionales y pendientes. Si no hubo cambios técnicos, indícalo expresamente.
+2. **Google Drive:** actualiza la Línea Base Maestra con el mismo estado y enlaces/evidencias. Si no cambió el estado maestro, deja constancia breve de la revisión y del próximo paso.
+3. **Handoff transferible:** deja instrucciones suficientes para que cualquier chat/IA continúe desde GitHub y Drive, indicando fuentes a consultar y qué no se debe asumir desde conversaciones.
+
+La intervención se cierra sólo después de verificar la lectura de retorno de ambos registros. Luego deja, como mínimo:
 
 - HEAD de `dev` observado al inicio y al cierre;
 - rama/commit/PR trabajados y estado del PR;
