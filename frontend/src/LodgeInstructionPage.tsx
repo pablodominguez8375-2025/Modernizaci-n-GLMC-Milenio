@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { PmgmApiClient } from './api/pmgmApi'
-import type { LodgeApiClient, LodgeGrade, LodgeInstruction, LodgeMemberOption } from './api/lodgeApi'
+import type { LodgeApiClient, LodgeGrade, LodgeInstruction, LodgeInstructionAttendanceStatus, LodgeMemberOption } from './api/lodgeApi'
 import './lodgeManagement.css'
 
 type TeachingGrade = Exclude<LodgeGrade, 'all'>
@@ -29,7 +29,7 @@ export default function LodgeInstructionPage({ api, lodgeApi, allowedGrades }: {
   const [topic, setTopic] = useState('')
   const [members, setMembers] = useState<LodgeMemberOption[]>([])
   const [instructions, setInstructions] = useState<LodgeInstruction[]>([])
-  const [attendance, setAttendance] = useState<Record<string, 'present' | 'absent'>>({})
+  const [attendance, setAttendance] = useState<Record<string, LodgeInstructionAttendanceStatus | ''>>({})
   const [selectedId, setSelectedId] = useState('')
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -90,7 +90,7 @@ export default function LodgeInstructionPage({ api, lodgeApi, allowedGrades }: {
       setSelectedId(item.id)
       setAttendance({})
       setTopic('')
-      setNotice('Instrucción registrada. Indica quiénes asistieron y marca la sesión como realizada para actualizar Mi ficha.')
+      setNotice('Instrucción registrada. Indica el estado de asistencia de cada hermano y marca la sesión como realizada para actualizar Mi ficha.')
     } catch (reason) { setError(messageOf(reason)) } finally { setWorking(false) }
   }
 
@@ -98,8 +98,12 @@ export default function LodgeInstructionPage({ api, lodgeApi, allowedGrades }: {
     if (!selectedInstruction || !allowed.has(selectedInstruction.grade)) return
     setWorking(true); setError(null); setNotice(null)
     try {
+      if (!members.every(member => attendance[member.id])) {
+        setError('Selecciona Presente, Ausente o Justificada para cada hermano.')
+        return
+      }
+      const items = members.map(member => ({ memberId: member.id, status: attendance[member.id] as LodgeInstructionAttendanceStatus }))
       await lodgeApi.completeInstruction(selectedInstruction.id)
-      const items = members.map(member => ({ memberId: member.id, status: attendance[member.id] ?? 'present' as const }))
       await lodgeApi.recordInstructionAttendance(selectedInstruction.id, items)
       await refreshInstructions(organizationId)
       setSelectedId('')
@@ -130,7 +134,7 @@ export default function LodgeInstructionPage({ api, lodgeApi, allowedGrades }: {
           {instructions.filter(item => allowed.has(item.grade)).length === 0 && <p className="lodge-empty-copy">No hay instrucciones registradas para este grado.</p>}
         </article>
       </div>
-      {selectedInstruction && allowed.has(selectedInstruction.grade) && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Asistencia · {formatDate(selectedInstruction.instructionDate)}</p><h3>{selectedInstruction.topic}</h3><p>Marca ausente cuando corresponda. El resto quedará registrado como presente.</p></div>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={attendance[member.id] ?? 'present'} onChange={event => setAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || members.length === 0} onClick={markHeld}>{working ? 'Guardando…' : 'Marcar realizada y guardar asistencia'}</button></section>}
+      {selectedInstruction && allowed.has(selectedInstruction.grade) && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Asistencia · {formatDate(selectedInstruction.instructionDate)}</p><h3>{selectedInstruction.topic}</h3><p>Indica el estado real de cada hermano: Presente si asistió; Ausente si no asistió ni avisó; Justificada si avisó, tenía permiso o comunicó una razón.</p></div>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} aria-required="true" value={attendance[member.id] ?? ''} onChange={event => setAttendance(current => ({ ...current, [member.id]: event.target.value as LodgeInstructionAttendanceStatus | '' }))}><option value="" disabled>Selecciona estado</option><option value="present">Presente</option><option value="absent">Ausente</option><option value="excused">Justificada</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || members.length === 0} onClick={markHeld}>{working ? 'Guardando…' : 'Marcar realizada y guardar asistencia'}</button></section>}
     </section>
   </div>
 }

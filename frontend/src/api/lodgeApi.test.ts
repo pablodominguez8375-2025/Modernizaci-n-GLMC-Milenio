@@ -61,8 +61,9 @@ it('uses the same instruction contract for list, creation and attendance', async
 
   await client.getInstructions('o1')
   await client.createInstruction('o1', { instructionDate: '2026-09-12', grade: 'apprentice', topic: 'Símbolos' })
-  await client.recordInstructionAttendance('i1', [{ memberId: 'm1', status: 'present' }])
+  await client.recordInstructionAttendance('i1', [{ memberId: 'm1', status: 'excused' }])
 
+  expect(JSON.parse(fetch.mock.calls[2][1].body).items[0].status).toBe('excused')
   expect(fetch.mock.calls.map(call => call[0])).toEqual([
     '/api/gestion-logial/talleres/o1/instrucciones',
     '/api/gestion-logial/talleres/o1/instrucciones',

@@ -5,7 +5,7 @@
 
 ## Decisión funcional
 
-Se mantiene el registro operativo de instrucciones en el Taller y el historial individual asociado a la asistencia de cada hermano. Se agrega una vista institucional **Docencia de la Orden**, de solo lectura, para consultar las instrucciones realizadas, por Taller, por período y por grado. El reporte consolidado evita exponer nombres, identificadores u otros datos personales de asistentes; entrega cantidades presentes/ausentes y los datos de cada sesión realizada.
+Se mantiene el registro operativo de instrucciones en el Taller y el historial individual asociado a la asistencia de cada hermano. Se agrega una vista institucional **Docencia de la Orden**, de solo lectura, para consultar las instrucciones realizadas, por Taller, por período y por grado. El reporte consolidado evita exponer nombres, identificadores u otros datos personales de asistentes; entrega cantidades presentes/justificadas/ausentes y los datos de cada sesión realizada.
 
 | Cargo institucional | Grado que puede consultar |
 | --- | --- |
@@ -22,7 +22,7 @@ Los Grandes Oficiales pueden seleccionar un Taller o consultar el conjunto de Ta
 - La vista institucional no concede gestión de sesiones, cierre, asistencia, permisos de Taller, firmas, aprobaciones ni atribuciones de nombramiento.
 - Ninguno de los cargos de lectura institucional recibe las capacidades de edición de los vigilantes de Taller.
 - La Jefatura de Docencia puede consultar los tres grados por definición expresa del Product Owner. Esta regla técnica no define cómo se designa esa jefatura.
-- El reporte muestra Taller, fecha, grado, tema, cargo responsable y conteos de asistencia; no muestra instructores por nombre ni hermanos por nombre.
+- El reporte muestra Taller, fecha, grado, tema, cargo responsable y conteos de presentes, justificadas y ausentes; no muestra instructores por nombre ni hermanos por nombre.
 - Los historiales de `Mi ficha` continúan siendo individuales y sólo para el propio hermano conforme al flujo vigente.
 
 ## Base normativa y funcional

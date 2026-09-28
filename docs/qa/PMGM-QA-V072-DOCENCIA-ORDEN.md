@@ -19,10 +19,10 @@
 ## Controles automatizables
 
 1. El instructor consulta/crea sólo su grado y sólo en su Taller; la lista de asistentes corresponde al grado vigente a la fecha de la instrucción.
-2. Al marcar una sesión como realizada y registrar asistencia, el hermano ve su registro en `Mi ficha` con fecha, tema, grado y estado de asistencia.
+2. Al marcar una sesión como realizada y registrar asistencia, el hermano ve su registro en `Mi ficha` con fecha, tema, grado y estado de asistencia (Presente, Ausente o Justificada).
 3. Los perfiles institucionales sólo consultan; un acceso directo al endpoint de escritura devuelve prohibición y no produce cambios.
 4. El reporte permite filtrar por Taller/período. La Jefatura puede consultar un grado o todos; cada Gran Oficial mantiene el grado fijo aunque altere la URL.
-5. Sólo se cuentan instrucciones realizadas y para cada hermano/sesión se considera la última asistencia registrada. La respuesta agrega presentes/ausentes y no contiene nombre, correo ni ID de hermano.
+5. Sólo se cuentan instrucciones realizadas y para cada hermano/sesión se considera la última asistencia registrada. La respuesta agrega presentes/justificadas/ausentes y no contiene nombre, correo ni ID de hermano.
 6. La demostración muestra más de un Taller y sesiones ficticias en los grados aplicables; no hace llamadas de red.
 
 ## Evidencia y límites
@@ -32,3 +32,10 @@ Registrar SHA exacto de la rama/PR y resultado de CI, Showcase/Pages y QA Instal
 ## Resultado automatizado — 2026-09-28
 
 PR #206 exact-head `8dc936301b597b1c2aeaf0b48ec309c8456c59bc`: PMGM CI #1651, Showcase #954 y QA Installable #592 SUCCESS. Post-merge `dev@7f2079b3c1d89564cc181f6efad5f231de6db081`: PMGM CI #1652, Showcase/Pages #955, QA Installable #593 y Pre-UAT #393 SUCCESS. Artifact Pages #10967675504 digest `sha256:f7ae60ac8f7af3c8a8aa051b8c2b19820626e571795f7a4c0f221395a0054053`; qa-current confirma SHA integrado. Artifact QA #10966054591 digest `sha256:19cac46d170b79fe09d2f8be0814c78d2be0f14540e51e6eb63552feab965414`, BUILD-INFO confirma el mismo SHA, MANIFEST 780/780 comprobado. No hubo instalación física, UAT ni aceptación operacional.
+
+## Validación de estados acordados por el Product Owner — 28-09-2026
+
+7. La asistencia de cada hermano debe seleccionarse explícitamente; no asumir “Presente” por defecto.
+8. Validar y persistir los tres estados: Presente (asistió), Ausente (no asistió ni avisó), Justificada (no asistió pero avisó, tenía permiso o comunicó una razón).
+9. Verificar que Mi ficha muestra “Justificada” y que los reportes de Taller/Orden contabilizan justificadas aparte de presentes y ausentes.
+10. Rechazar estados de asistencia distintos de los tres definidos.
