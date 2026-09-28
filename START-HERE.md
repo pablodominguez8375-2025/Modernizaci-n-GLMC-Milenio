@@ -1,5 +1,14 @@
 # START HERE — Proyecto Centenario
 
+## Verificación viva posterior al cierre de PR #201 — 27-09-2026
+
+- `dev`: `d9ce300511c735af28d3fc01497ecacf54d0a904`; `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111` (sin promoción). Árbol de trabajo local limpio al verificar.
+- PR #200 / Issue #199: Ficha del Taller integrada en `dev`; PR #201: cierre documental integrado. Este HEAD reemplaza los SHA antiguos indicados en el handoff histórico que sigue.
+- Para el SHA `d9ce300…`, PMGM CI #1637, Showcase #935, Pre-UAT #388 y QA Installable #573 finalizaron SUCCESS. El workflow Showcase/Pages post-merge #936 y QA Installable #574 también finalizaron SUCCESS. `qa-current.json` del artifact Pages #10944379382 informa `sourceSha=d9ce300…`; ZIP QA `Proyecto-Centenario-QA-srv01-d9ce300511c7.zip`, SHA-256 `a7a1ad89c175a9b7f7423dc8bbe153c4d641a2cc186318a7d1750cbbbca4dcbc`. Estos resultados prueban ejecución automatizada/publicación y empaquetado, no instalación ni UAT.
+- Issue #97 sigue abierto y `srv01` pausado por instrucción del Sponsor: no instalar, desplegar, hacer smoke físico, regresión física ni UAT. `main` no se modifica sin decisión explícita.
+- No se inicia otro incremento funcional sin alcance aprobado. Pendientes existentes: revisar decisiones de tarifa/contabilidad de #190/#191 y comparar PR #182 (base histórica) contra `dev` y Drive antes de decidir sobre ella.
+- El documento de estado más reciente es `docs/PMGM-BASE-001-estado-maestro.md`; la siguiente acción está en `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`. La sección de handoff inferior contiene antecedentes y checkpoints históricos: no usar sus cifras antiguas como estado vivo.
+
 ## HANDOFF VIGENTE PARA CUALQUIER CHAT O IA — 27-09-2026
 
 Este resumen es un checkpoint, no reemplaza la verificación en vivo. GitHub y Drive prevalecen sobre mensajes, resúmenes o memoria. La fecha del checkpoint es 27-09-2026 (America/Santiago).
