@@ -346,6 +346,139 @@ async function assertDashboardMetricLayout(viewport) {
   }
 }
 
+const slugify = value => value
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '')
+
+async function inspectAllVisibleMediaAndNavigation(profile) {
+  const result = await evaluate(`(() => {
+    const nav = document.querySelector('nav.sidebar');
+    const main = document.querySelector('main.content');
+    const buttons = [...(nav?.querySelectorAll('button') || [])].filter(button => !button.disabled && getComputedStyle(button).display !== 'none');
+    const navRect = nav?.getBoundingClientRect();
+    const media = [...document.querySelectorAll('img, video, canvas')].filter(element => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+    }).map(element => {
+      const rect = element.getBoundingClientRect();
+      const container = element.closest('.panel, .member-card, .metric-card, figure, .brand-mark, main.content') || element.parentElement;
+      const box = container?.getBoundingClientRect();
+      return { src: element.getAttribute('src') || element.tagName.toLowerCase(), left: Math.round(rect.left), right: Math.round(rect.right),
+        containerLeft: box ? Math.round(box.left) : null, containerRight: box ? Math.round(box.right) : null };
+    });
+    const tabs = [...document.querySelectorAll('main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button')]
+      .filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
+      .map((button, index) => ({ index, label: (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim() }))
+      .filter(item => item.label);
+    return {
+      nav: nav && navRect ? { width: Math.round(navRect.width), clientWidth: nav.clientWidth, scrollWidth: nav.scrollWidth,
+        clientHeight: nav.clientHeight, scrollHeight: nav.scrollHeight, overflowY: getComputedStyle(nav).overflowY,
+        buttons: buttons.map(button => { const r = button.getBoundingClientRect(); return { label: (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim(),
+          height: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right), disabled: button.disabled }; }) } : null,
+      viewportWidth: innerWidth,
+      documentWidth: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth),
+      mainWidth: main?.getBoundingClientRect().width ?? 0,
+      media,
+      tabs,
+    };
+  })()`)
+  if (!result?.nav || !result.nav.buttons.length) throw new Error(`Mobile navigation is missing for ${profile}.`)
+  if (result.documentWidth > result.viewportWidth + 1) throw new Error(`Global horizontal overflow for ${profile}: ${result.documentWidth}px > ${result.viewportWidth}px.`)
+  if (result.nav.buttons.some(button => button.height < 44)) throw new Error(`A mobile navigation target is below 44px for ${profile}: ${JSON.stringify(result.nav.buttons.filter(button => button.height < 44))}`)
+  if (result.nav.buttons.some(button => button.left < -1 || button.right > result.viewportWidth + 1)) throw new Error(`A mobile navigation item exceeds the viewport for ${profile}: ${JSON.stringify(result.nav.buttons.filter(button => button.left < -1 || button.right > result.viewportWidth + 1))}`)
+  if (result.nav.scrollHeight > result.nav.clientHeight && !['auto', 'scroll'].includes(result.nav.overflowY)) throw new Error(`Long mobile navigation is not vertically scrollable for ${profile}.`)
+  const overflowingMedia = result.media.filter(item => item.left < -1 || item.right > result.viewportWidth + 1 || (item.containerLeft !== null && item.left < item.containerLeft - 1) || (item.containerRight !== null && item.right > item.containerRight + 1))
+  if (overflowingMedia.length) throw new Error(`Media extends beyond its visible container for ${profile}: ${JSON.stringify(overflowingMedia)}`)
+  return result
+}
+
+async function openModuleFromMobileNavigation(label) {
+  const opened = await evaluate(`(() => {
+    const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+    const nav = document.querySelector('nav.sidebar');
+    const button = [...(nav?.querySelectorAll('button') || [])].find(candidate => !candidate.disabled && normalize(candidate.innerText || candidate.textContent) === ${JSON.stringify(label)});
+    if (!button || !nav) return false;
+    const navRect = nav.getBoundingClientRect();
+    const buttonRect = button.getBoundingClientRect();
+    if (buttonRect.top < navRect.top) nav.scrollTop -= navRect.top - buttonRect.top + 4;
+    else if (buttonRect.bottom > navRect.bottom) nav.scrollTop += buttonRect.bottom - navRect.bottom + 4;
+    const visibleRect = button.getBoundingClientRect();
+    if (visibleRect.top < nav.getBoundingClientRect().top - 1 || visibleRect.bottom > nav.getBoundingClientRect().bottom + 1) return false;
+    button.click();
+    return true;
+  })()`)
+  if (!opened) throw new Error(`Mobile navigation item cannot be scrolled into view: ${label}`)
+  await waitForExpression(`(() => { const normalize = value => (value || '').replace(/\\s+/g, ' ').trim(); return [...document.querySelectorAll('nav.sidebar button.active')].some(button => normalize(button.innerText || button.textContent) === ${JSON.stringify(label)}); })()`, `mobile module ${label}`)
+  await delay(500)
+}
+
+async function openMobileSubview(label) {
+  const clicked = await evaluate(`(() => {
+    const selectors = 'main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button';
+    const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+    const button = [...document.querySelectorAll(selectors)].find(candidate => !candidate.disabled && normalize(candidate.innerText || candidate.textContent) === ${JSON.stringify(label)});
+    if (!button) return false;
+    button.click();
+    return true;
+  })()`)
+  if (!clicked) throw new Error(`Mobile subview control disappeared: ${label}`)
+  await delay(250)
+}
+
+async function auditEveryMobileMenuView() {
+  const mobileViewport = { width: 360, height: 800, suffix: '360x800' }
+  await resetPage(mobileViewport.width, mobileViewport.height)
+  const profiles = await evaluate(`(() => [...document.querySelectorAll('select[aria-label="Seleccionar perfil de demostración"] option')].map(option => option.value).filter(Boolean))()`)
+  if (!Array.isArray(profiles) || profiles.length < 10) throw new Error(`Expected the complete demo profile selector; found ${JSON.stringify(profiles)}.`)
+  let auditedViews = 0
+
+  for (const profile of profiles) {
+    await resetPage(mobileViewport.width, mobileViewport.height)
+    await selectProfile(profile)
+    const menuLabels = await evaluate(`(() => [...new Set([...document.querySelectorAll('nav.sidebar button')]
+      .filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
+      .map(button => (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean)) )()`)
+    if (!menuLabels?.length) throw new Error(`No active menu items found for demo profile ${profile}.`)
+    const navigation = await inspectAllVisibleMediaAndNavigation(profile)
+    const canReachMenuEnd = await evaluate(`(() => {
+      const nav = document.querySelector('nav.sidebar');
+      if (!nav) return false;
+      nav.scrollTop = nav.scrollHeight;
+      const buttons = [...nav.querySelectorAll('button')].filter(button => !button.disabled && getComputedStyle(button).display !== 'none');
+      const last = buttons.at(-1)?.getBoundingClientRect();
+      const rect = nav.getBoundingClientRect();
+      const reachable = !!last && last.bottom <= rect.bottom + 1 && last.top >= rect.top - 1;
+      nav.scrollTop = 0;
+      return reachable;
+    })()`)
+    if (!canReachMenuEnd) throw new Error(`Last mobile menu item cannot be reached by vertical scrolling for ${profile}.`)
+    console.log(`mobile navigation ${profile}: ${navigation.nav.buttons.length} items`)
+
+    for (const menuLabel of menuLabels) {
+      await openModuleFromMobileNavigation(menuLabel)
+      await assertNoGlobalHorizontalOverflow(`${profile}/${menuLabel}`, mobileViewport.suffix)
+      const defaults = await inspectAllVisibleMediaAndNavigation(`${profile}/${menuLabel}`)
+      const baseSlug = `all-${slugify(profile)}-${slugify(menuLabel)}`
+      await capture(path.join(outputDir, `${baseSlug}-${mobileViewport.suffix}.png`))
+      auditedViews += 1
+
+      for (const { label, index } of defaults.tabs) {
+        await openMobileSubview(label)
+        await assertNoGlobalHorizontalOverflow(`${profile}/${menuLabel}/${label}`, mobileViewport.suffix)
+        await inspectAllVisibleMediaAndNavigation(`${profile}/${menuLabel}/${label}`)
+        await capture(path.join(outputDir, `${baseSlug}-${String(index + 1).padStart(2, '0')}-${slugify(label)}-${mobileViewport.suffix}.png`))
+        auditedViews += 1
+      }
+    }
+  }
+  if (auditedViews < 100) throw new Error(`Mobile navigation/view audit coverage is unexpectedly low: ${auditedViews} states.`)
+  console.log(`MOBILE ALL-MENU VIEW AUDIT OK: ${profiles.length} profiles, ${auditedViews} module/subview states at ${mobileViewport.suffix}`)
+}
+
 async function capture(filePath, scrollSelector = null) {
   await evaluate(`(() => {
     window.scrollTo(0, 0);
@@ -354,7 +487,15 @@ async function capture(filePath, scrollSelector = null) {
     const content = document.querySelector('main.content');
     if (content) { content.scrollTop = 0; content.scrollLeft = 0; }
     const sidebar = document.querySelector('nav.sidebar');
-    if (sidebar) { sidebar.scrollTop = 0; sidebar.scrollLeft = 0; }
+    if (sidebar) {
+      sidebar.scrollTop = 0;
+      sidebar.scrollLeft = 0;
+      const active = sidebar.querySelector('button.active');
+      const sidebarRect = sidebar.getBoundingClientRect();
+      const activeRect = active?.getBoundingClientRect();
+      if (activeRect && activeRect.top < sidebarRect.top) sidebar.scrollTop -= sidebarRect.top - activeRect.top + 4;
+      else if (activeRect && activeRect.bottom > sidebarRect.bottom) sidebar.scrollTop += activeRect.bottom - sidebarRect.bottom + 4;
+    }
     const target = ${JSON.stringify(scrollSelector)} ? document.querySelector(${JSON.stringify(scrollSelector)}) : null;
     if (target) {
       target.scrollIntoView({ block: 'start', inline: 'nearest' });
@@ -447,6 +588,7 @@ try {
       console.log(`captured ${path.basename(filePath)}`)
     }
   }
+  await auditEveryMobileMenuView()
 } finally {
   await stopChromeAndClean()
 }
