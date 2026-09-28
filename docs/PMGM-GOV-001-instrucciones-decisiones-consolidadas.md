@@ -8,23 +8,18 @@
 ## 1. Propósito
 Este documento consolida las instrucciones funcionales, técnicas, operativas y de gobierno vigentes del **Proyecto Milenio — Modernización Gran Logia Mixta de Chile**. Ante una contradicción entre una definición antigua y una instrucción posterior, **prevalece la instrucción posterior aprobada** y debe corregirse la documentación afectada.
 
-## 2. Hilo maestro único y gobierno del proyecto
-- Este chat queda definido como **hilo maestro único** de dirección y continuidad del Proyecto Milenio.
-- Requisitos, correcciones, decisiones, avances, QA, arquitectura, documentación y coordinación se continúan desde este hilo.
-- Las conversaciones anteriores se consideran antecedentes históricos; las decisiones vigentes deben consolidarse aquí y en GitHub.
-- GitHub privado continúa siendo la fuente única de verdad de código, documentación, backlog, arquitectura y evidencias.
+## 2. Continuidad persistente y gobierno del proyecto
+- Cualquier chat o IA con acceso suficiente puede continuar el proyecto usando las fuentes persistentes vigentes; un chat específico no es condición ni repositorio maestro.
+- La memoria, los resúmenes y los mensajes conversacionales son antecedentes, no sustituyen el estado actual de GitHub ni la Línea Base y documentos oficiales de Drive.
+- GitHub es la fuente de verdad técnica para código, backlog, arquitectura, decisiones técnicas y evidencias. Google Drive conserva la Línea Base funcional/documental y las fuentes oficiales institucionales.
+- Toda continuación empieza por `START-HERE.md` y verifica el HEAD vivo de `dev`, `main`, PRs, Issues, Actions, Pages y artefactos aplicables; debe comprobar además las fuentes oficiales vigentes en Drive.
+- Cada cierre deja un registro de continuidad en GitHub y Drive con cambios, SHAs, validaciones, artefactos, estado de publicación/QA/UAT y próximo paso.
 - Sponsor / Product Owner: Pablo Domínguez.
 - ChatGPT: arquitectura funcional/técnica, consolidación de requisitos, documentación, QA y coordinación del avance.
-- Codex: desarrollo/automatización cuando corresponda.
-- Flujo obligatorio: requisito → diseño → aprobación de arquitectura → desarrollo → pruebas → documentación → publicación.
-- `dev` concentra el desarrollo activo.
-- `main` es rama estable y **no se fusiona sin autorización expresa del Product Owner**.
-- El PR es la vía de promoción controlada entre `dev` y `main`.
-- Ningún incremento se declara estable si rompe compilación, migraciones, seguridad, gates o pruebas de CI.
-- QA tiene prioridad máxima de corto plazo: trabajar en incrementos cerrados, comprobables y demostrables.
-- La documentación de instalación/QA debe avanzar junto con el desarrollo.
-- La presentación ejecutiva debe evolucionar junto con el sistema y mostrar estado **Hecho / En curso / Siguiente**.
-
+- Codex: desarrollo y automatización cuando corresponda.
+- Flujo obligatorio: requisito aprobado → diseño → desarrollo → pruebas → documentación → publicación según los gates vigentes.
+- `dev` concentra el desarrollo activo; `main` es la rama estable y sólo se modifica/promueve por decisión expresa del Product Owner.
+- `srv01` permanece sujeto a la pausa/instrucción expresa del Sponsor. Un CI, un paquete o Pages no significan instalación, QA física ni UAT.
 ## 3. Objetivo inmediato y ambientes
 El objetivo prioritario es obtener cuanto antes un **QA instalable, usable y presentable en una máquina virtual**.
 
