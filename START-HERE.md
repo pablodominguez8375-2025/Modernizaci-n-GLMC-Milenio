@@ -1,3 +1,15 @@
+## Verificación viva y handoff — 28-09-2026
+
+- HEAD comprobado: `dev@57412f9afd90586899edd4885f371b96cceb36ac`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambios. No hay clone local en el workspace; inspección remota de raíz/árbol completada, sin modificaciones de código.
+- PR #209 integrada por squash (head exacto `bee0f62d0da9a56eee4de3e5cb6d58b4f875a21d`). Sólo modificó la auditoría responsive y documentación para incluir SVG visibles.
+- CI exact-head de #209: PMGM CI #1659, Showcase #965, QA Installable #603 SUCCESS. Auditoría Chromium: 20 perfiles, 483 estados a 360×800, 563 capturas, sin overflow detectado. Esto es evidencia automatizada; no equivale a revisión institucional, dispositivos reales ni UAT.
+- Post-merge del SHA vigente: PMGM CI run 36430246829 SUCCESS; Showcase/Pages run 36430246786 SUCCESS y Deploy testing showcase SUCCESS; QA Installable run 36430246937 SUCCESS; Pre-UAT run 36430247019 SUCCESS.
+- Pages artifact #10973542145, digest `sha256:f107ec8feaff05c588b3a2611e7dc9a259ebf0d1e3377e661474b61e8c469555`. Se leyó `downloads/qa-current.json`: `sourceSha=57412f9afd90586899edd4885f371b96cceb36ac`. ZIP publicado `Proyecto-Centenario-QA-srv01-57412f9afd90.zip`, SHA-256 `0e8704690a0b067ceca5734169f48cf3b9b7031bf16e0d7c3e9546b85b52f293`.
+- QA artifact #10971934945, digest/SHA-256 del artefacto `8247265d7241579e9e6374356f8794e4ccfea0458239cf204481df961c2bb5b6`. ZIP interior `Proyecto-Centenario-QA-srv01-57412f9afd90.zip`, SHA-256 `b223222c8cf895f668e8489ed9ee2820938a781bd023caa67e882962a2e8ef89`; `BUILD-INFO` confirma SOURCE_SHA y run 36430246937. Paquetes de Pages y QA se construyeron separadamente y sus checksums difieren.
+- Estados: funcionalidad de docencia por grado integrada en dev; auditoría SVG integrada; Pages publicado en el SHA actual; artefactos QA/Pre-UAT generados. Nada instalado, sin QA física/UAT aceptada. Issue #97 mantiene `srv01` pausado por el Sponsor; no desplegar/instalar/probar físicamente ni promover `main`.
+- No iniciar otro incremento funcional sin alcance aprobado por el Product Owner. Issue #190 conserva decisiones de tarifas/monedas pendientes; #191 requiere definición de presentación contable; PR #182 está cerrada sin merge y sustituida por #204. El filtro de fecha/grado expuesto por API pero no por vista, señalado en el cruce documental, requiere alcance aprobado antes de ampliarlo.
+- Próximo paso: esperar un alcance aprobado o instrucción del Sponsor para reanudar QA física/UAT. Revisar la discrepancia documental: GOV-001 conserva una frase histórica de “hilo maestro único”; START-HERE/GOV-002 y la Línea Base vigente establecen continuidad desde GitHub + Drive y verificable por cualquier IA. No cambiar reglas institucionales a partir de esa diferencia.
+
 # START HERE — Proyecto Centenario
 
 ## Cierre integrado — Docencia por grado y consulta de Orden — 28-09-2026
