@@ -27,4 +27,12 @@ describe('nómina de Tesorería del Taller con formato del cuadro institucional'
     }]} />)
     expect(html).toContain('Pendiente de plancha')
   })
+
+  it('formatea el aporte ordinario peruano como USD con decimales', () => {
+    const html = renderToStaticMarkup(<TreasuryStatementLinesTable currency="USD" lines={[{
+      id:'member-peru', memberId:'peru-1', membershipId:'membership-peru-1', rut:'RUT-DEMO-004', firstNames:'Hermano', lastNames:'Perú Demo', degreeCodeAtCutoff:'master', officeCodeAtCutoff:null, baseAmount:6, adjustmentAmount:0, payableAmount:6, adjustmentType:'normal', authorizationReference:null, observation:null, identityMatchStatus:'matched', contributionType:'normal'
+    }]} />)
+    expect(html).toContain('US$')
+    expect(html).toContain('6,00')
+  })
 })
