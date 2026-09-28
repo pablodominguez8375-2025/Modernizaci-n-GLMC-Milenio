@@ -50,11 +50,18 @@ public sealed class GrandTreasuryFeeScheduleTests
     }
 
     [Fact]
-    public void Does_not_convert_peru_usd_tariff_to_clp()
+    public void Peru_normal_fee_is_recorded_in_usd_without_conversion()
     {
-        Assert.Null(GrandTreasuryFeeSchedule.Resolve(
+        Assert.Equal((6m, "USD"), GrandTreasuryFeeSchedule.Resolve(
             TreasuryCodes.LodgeFeeType.Normal, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1)));
         Assert.Null(GrandTreasuryFeeSchedule.Resolve(
             TreasuryCodes.LodgeFeeType.Spouse, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1)));
+    }
+
+    [Fact]
+    public void Peru_past_active_component_is_zero_usd()
+    {
+        Assert.Equal((0m, "USD"), GrandTreasuryFeeSchedule.Resolve(
+            TreasuryCodes.LodgeFeeType.PastActive, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1)));
     }
 }
