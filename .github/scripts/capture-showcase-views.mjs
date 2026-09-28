@@ -364,7 +364,7 @@ async function inspectAllVisibleMediaAndNavigation(profile) {
     const main = document.querySelector('main.content');
     const buttons = [...(nav?.querySelectorAll('button') || [])].filter(button => !button.disabled && getComputedStyle(button).display !== 'none');
     const navRect = nav?.getBoundingClientRect();
-    const media = [...document.querySelectorAll('img, video, canvas')].filter(element => {
+    const media = [...document.querySelectorAll('img, video, canvas, svg')].filter(element => {
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
       return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
