@@ -18,11 +18,102 @@ public static class LodgeInstructionEndpoints
 
         group.MapPost("/talleres/{organizationId:guid}/instrucciones", CreateInstructionAsync);
         group.MapGet("/talleres/{organizationId:guid}/instrucciones", GetInstructionsAsync);
+        group.MapGet("/instrucciones/orden", GetOrderInstructionReportAsync);
         group.MapPost("/instrucciones/{instructionId:guid}/realizar", CompleteInstructionAsync);
         group.MapPost("/instrucciones/{instructionId:guid}/asistencia", RecordInstructionAttendanceAsync);
         group.MapGet("/miembros/{memberId:guid}/instrucciones", GetMemberInstructionHistoryAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> GetOrderInstructionReportAsync(
+        Guid? organizationId,
+        DateOnly? from,
+        DateOnly? to,
+        string? grade,
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        LodgeManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (from is not null && to is not null && to < from)
+            return Results.BadRequest(new { message = "La fecha final no puede ser anterior a la fecha inicial." });
+
+        var normalizedGrade = string.IsNullOrWhiteSpace(grade) ? null : grade.Trim().ToLowerInvariant();
+        if (normalizedGrade is not null &&
+            (!LodgeManagementCodes.Grade.IsValid(normalizedGrade) || normalizedGrade == LodgeManagementCodes.Grade.All))
+            return Results.BadRequest(new { message = "El grado de filtro no es válido." });
+
+        var numericGrade = normalizedGrade is null ? null : LodgeManagementCodes.Grade.ToNumeric(normalizedGrade);
+        if (!access.CanReadOrderLodgeInstructions(httpContext.User, numericGrade)) return Results.Forbid();
+
+        var workshops = await institutionalDb.Organizations.AsNoTracking()
+            .Where(x => x.Type == "workshop")
+            .OrderBy(x => x.Number).ThenBy(x => x.Name)
+            .Select(x => new { x.Id, x.Name, x.Number })
+            .ToListAsync(cancellationToken);
+        if (organizationId is not null && workshops.All(x => x.Id != organizationId.Value))
+            return Results.NotFound(new { message = "El Taller indicado no existe." });
+
+        var query = db.LodgeInstructionSessions.AsNoTracking()
+            .Where(x => x.Status == LodgeManagementCodes.InstructionStatus.Held);
+        if (organizationId is not null) query = query.Where(x => x.OrganizationId == organizationId.Value);
+        if (normalizedGrade is not null) query = query.Where(x => x.Grade == normalizedGrade);
+        if (from is not null) query = query.Where(x => x.InstructionDate >= from.Value);
+        if (to is not null) query = query.Where(x => x.InstructionDate <= to.Value);
+
+        var sessions = await query.OrderByDescending(x => x.InstructionDate)
+            .ThenBy(x => x.OrganizationId)
+            .Select(x => new { x.Id, x.OrganizationId, x.InstructionDate, x.Grade, x.Topic, x.ResponsibleOffice })
+            .Take(5000).ToListAsync(cancellationToken);
+        var sessionIds = sessions.Select(x => x.Id).ToArray();
+        var attendanceEvents = await db.LodgeInstructionAttendanceRecords.AsNoTracking()
+            .Where(x => sessionIds.Contains(x.InstructionSessionId))
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(x => new { x.InstructionSessionId, x.MemberId, x.Status, x.RecordedAtUtc })
+            .ToListAsync(cancellationToken);
+        var latestAttendance = attendanceEvents.GroupBy(x => new { x.InstructionSessionId, x.MemberId })
+            .Select(g => g.First()).ToArray();
+        var attendanceBySession = latestAttendance.GroupBy(x => x.InstructionSessionId)
+            .ToDictionary(g => g.Key, g => new
+            {
+                Present = g.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Present),
+                Absent = g.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Absent)
+            });
+        var workshopLookup = workshops.ToDictionary(x => x.Id);
+        var items = sessions.Where(x => workshopLookup.ContainsKey(x.OrganizationId)).Select(x =>
+        {
+            var attendance = attendanceBySession.GetValueOrDefault(x.Id);
+            var workshop = workshopLookup[x.OrganizationId];
+            return new OrderInstructionReportItemDto(
+                x.Id, workshop.Id, workshop.Name, workshop.Number, x.InstructionDate, x.Grade,
+                x.Topic, x.ResponsibleOffice, attendance?.Present ?? 0, attendance?.Absent ?? 0);
+        }).ToArray();
+        var groupedSummary = items.GroupBy(x => new { x.OrganizationId, x.Grade })
+            .ToDictionary(g => (g.Key.OrganizationId, g.Key.Grade), g => new
+            {
+                SessionCount = g.Count(),
+                Present = g.Sum(x => x.Present),
+                Absent = g.Sum(x => x.Absent)
+            });
+        var reportGrades = normalizedGrade is null
+            ? new[] { LodgeManagementCodes.Grade.Apprentice, LodgeManagementCodes.Grade.Fellowcraft, LodgeManagementCodes.Grade.Master }
+            : new[] { normalizedGrade! };
+        var summary = workshops
+            .Where(x => organizationId is null || x.Id == organizationId.Value)
+            .SelectMany(workshop => reportGrades.Select(reportGrade =>
+            {
+                groupedSummary.TryGetValue((workshop.Id, reportGrade), out var counts);
+                return new OrderInstructionWorkshopSummaryDto(
+                    workshop.Id, workshop.Name, workshop.Number, reportGrade,
+                    counts?.SessionCount ?? 0, counts?.Present ?? 0, counts?.Absent ?? 0);
+            }))
+            .OrderBy(x => x.OrganizationNumber).ThenBy(x => x.OrganizationName).ThenBy(x => x.Grade).ToArray();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        var workshopOptions = workshops.Select(x => new OrderInstructionWorkshopOptionDto(x.Id, x.Name, x.Number)).ToArray();
+        return Results.Ok(new OrderInstructionReportResponse(items.Length, workshopOptions, summary, items));
     }
 
     private static async Task<IResult> CreateInstructionAsync(
@@ -34,11 +125,13 @@ public static class LodgeInstructionEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageOrganization(httpContext.User, organizationId)) return Results.Forbid();
-
         var grade = request.Grade?.Trim().ToLowerInvariant() ?? string.Empty;
         if (!LodgeManagementCodes.Grade.IsValid(grade) || grade == LodgeManagementCodes.Grade.All)
             return Results.BadRequest(new { message = "La instrucción debe corresponder a un grado específico." });
+
+        var numericGrade = LodgeManagementCodes.Grade.ToNumeric(grade);
+        if (numericGrade is null || !access.CanManageLodgeInstruction(httpContext.User, organizationId, numericGrade.Value))
+            return Results.Forbid();
 
         var responsibleOffice = LodgeManagementCodes.InstructionOffice.ForGrade(grade);
         if (responsibleOffice is null)
@@ -111,7 +204,8 @@ public static class LodgeInstructionEndpoints
     {
         var instruction = await db.LodgeInstructionSessions.SingleOrDefaultAsync(x => x.Id == instructionId, cancellationToken);
         if (instruction is null) return Results.NotFound();
-        if (!access.CanManageOrganization(httpContext.User, instruction.OrganizationId)) return Results.Forbid();
+        var numericGrade = LodgeManagementCodes.Grade.ToNumeric(instruction.Grade);
+        if (numericGrade is null || !access.CanManageLodgeInstruction(httpContext.User, instruction.OrganizationId, numericGrade.Value)) return Results.Forbid();
         if (instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled)
             return Results.Conflict(new { message = "Una instrucción cancelada no puede marcarse como realizada." });
         if (instruction.Status == LodgeManagementCodes.InstructionStatus.Held)
@@ -136,7 +230,6 @@ public static class LodgeInstructionEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageOrganization(httpContext.User, organizationId)) return Results.Forbid();
         if (from is not null && to is not null && to < from)
             return Results.BadRequest(new { message = "La fecha final no puede ser anterior a la fecha inicial." });
 
@@ -147,9 +240,24 @@ public static class LodgeInstructionEndpoints
             return Results.BadRequest(new { message = "El grado de filtro no es válido." });
         }
 
+        var canManageAll = access.CanManageOrganization(httpContext.User, organizationId);
+        var allowedGrades = new[]
+            {
+                (Degree: 1, Grade: LodgeManagementCodes.Grade.Apprentice),
+                (Degree: 2, Grade: LodgeManagementCodes.Grade.Fellowcraft),
+                (Degree: 3, Grade: LodgeManagementCodes.Grade.Master)
+            }
+            .Where(x => access.CanManageLodgeInstruction(httpContext.User, organizationId, x.Degree))
+            .Select(x => x.Grade)
+            .ToArray();
+        if (!canManageAll && allowedGrades.Length == 0) return Results.Forbid();
+        if (!canManageAll && normalizedGrade is not null && !allowedGrades.Contains(normalizedGrade)) return Results.Forbid();
+
         var query = db.LodgeInstructionSessions
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId);
+
+        if (!canManageAll) query = query.Where(x => allowedGrades.Contains(x.Grade));
 
         if (from is not null) query = query.Where(x => x.InstructionDate >= from.Value);
         if (to is not null) query = query.Where(x => x.InstructionDate <= to.Value);
@@ -192,7 +300,8 @@ public static class LodgeInstructionEndpoints
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == instructionId, cancellationToken);
         if (instruction is null) return Results.NotFound();
-        if (!access.CanManageOrganization(httpContext.User, instruction.OrganizationId)) return Results.Forbid();
+        var numericGrade = LodgeManagementCodes.Grade.ToNumeric(instruction.Grade);
+        if (numericGrade is null || !access.CanManageLodgeInstruction(httpContext.User, instruction.OrganizationId, numericGrade.Value)) return Results.Forbid();
         if (instruction.Status == LodgeManagementCodes.InstructionStatus.Cancelled)
             return Results.Conflict(new { message = "No se puede registrar asistencia en una instrucción cancelada." });
         if (instruction.Status != LodgeManagementCodes.InstructionStatus.Held)
@@ -415,6 +524,21 @@ public sealed record LodgeInstructionDto(
     string Status);
 
 public sealed record LodgeInstructionsResponse(int Total, IReadOnlyCollection<LodgeInstructionDto> Items);
+
+public sealed record OrderInstructionReportItemDto(
+    Guid InstructionId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber,
+    DateOnly InstructionDate, string Grade, string Topic, string ResponsibleOffice, int Present, int Absent);
+
+public sealed record OrderInstructionWorkshopSummaryDto(
+    Guid OrganizationId, string OrganizationName, string? OrganizationNumber, string Grade,
+    int SessionCount, int Present, int Absent);
+
+public sealed record OrderInstructionReportResponse(
+    int Total, IReadOnlyCollection<OrderInstructionWorkshopOptionDto> Workshops,
+    IReadOnlyCollection<OrderInstructionWorkshopSummaryDto> Summary,
+    IReadOnlyCollection<OrderInstructionReportItemDto> Items);
+
+public sealed record OrderInstructionWorkshopOptionDto(Guid OrganizationId, string OrganizationName, string? OrganizationNumber);
 
 public sealed record MemberInstructionHistoryItemDto(
     Guid InstructionId,

@@ -98,7 +98,14 @@ public sealed record SessionCapabilitiesDto(
     bool CanConfigureSystem,
     bool CanReadLodgeCouncilSummary,
     bool CanManageLodgeCouncilSummaryAccess,
-    bool CanManageAnyWorkshopProfile);
+    bool CanManageAnyWorkshopProfile,
+    bool CanManageApprenticeInstruction,
+    bool CanManageFellowcraftInstruction,
+    bool CanManageMasterInstruction,
+    bool CanReadOrderApprenticeInstructions,
+    bool CanReadOrderFellowcraftInstructions,
+    bool CanReadOrderMasterInstructions,
+    bool CanReadAllOrderInstructions);
 
 public static class SessionProfileBuilder
 {
@@ -156,6 +163,13 @@ public static class SessionProfileBuilder
                 CanConfigureSystem: access.CanConfigureSystem(user),
                 CanReadLodgeCouncilSummary: false,
                 CanManageLodgeCouncilSummaryAccess: false,
-                CanManageAnyWorkshopProfile: access.CanEditAnyWorkshopProfile(user)));
+                CanManageAnyWorkshopProfile: access.CanEditAnyWorkshopProfile(user),
+                CanManageApprenticeInstruction: organizationId is not null && access.CanManageLodgeInstruction(user, organizationId.Value, 1),
+                CanManageFellowcraftInstruction: organizationId is not null && access.CanManageLodgeInstruction(user, organizationId.Value, 2),
+                CanManageMasterInstruction: organizationId is not null && access.CanManageLodgeInstruction(user, organizationId.Value, 3),
+                CanReadOrderApprenticeInstructions: access.CanReadOrderLodgeInstructions(user, 1),
+                CanReadOrderFellowcraftInstructions: access.CanReadOrderLodgeInstructions(user, 2),
+                CanReadOrderMasterInstructions: access.CanReadOrderLodgeInstructions(user, 3),
+                CanReadAllOrderInstructions: access.CanReadOrderLodgeInstructions(user, null)));
     }
 }

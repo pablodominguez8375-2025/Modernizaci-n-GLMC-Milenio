@@ -31,6 +31,10 @@ export default function DemoProfileSwitcher({ value, onChange }: DemoProfileSwit
       <option value="lodgeFirstWarden">Primer Vigilante</option>
       <option value="lodgeSecondWarden">Segundo Vigilante</option>
       <option value="lodgePastMaster">Ex Venerable Maestro</option>
+      <option value="grandFirstWarden">Gran Primer Vigilante</option>
+      <option value="grandSecondWarden">Gran Segundo Vigilante</option>
+      <option value="immediatePastGrandMaster">Inmediato Ex Gran Maestro</option>
+      <option value="instructionDepartmentHead">Jefatura de Docencia</option>
       <option value="regimen">Régimen Interior</option>
       <option value="treasury">Gran Tesorero</option>
       <option value="hospitalaria">Gran Hospitalaria</option>

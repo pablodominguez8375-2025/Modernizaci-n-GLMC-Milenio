@@ -36,14 +36,23 @@ public static class LodgeManagementEndpoints
 
     private static async Task<IResult> GetMemberOptionsAsync(
         Guid organizationId,
+        string? grade,
+        DateOnly? asOf,
         HttpContext httpContext,
         PmgmDbContext institutionalDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!access.CanManageOrganization(httpContext.User, organizationId)) return Results.Forbid();
+        var canManageAll = access.CanManageOrganization(httpContext.User, organizationId);
+        var hasFilter = !string.IsNullOrWhiteSpace(grade) || asOf is not null;
+        var normalizedGrade = grade?.Trim().ToLowerInvariant();
+        var expectedDegree = normalizedGrade is null ? null : LodgeManagementCodes.Grade.ToNumeric(normalizedGrade);
+        if (hasFilter && (expectedDegree is null || asOf is null || normalizedGrade == LodgeManagementCodes.Grade.All))
+            return Results.BadRequest(new { message = "Para filtrar asistentes debe indicar un grado específico y la fecha de la instrucción." });
+        if (!canManageAll && (!hasFilter || !access.CanManageLodgeInstruction(httpContext.User, organizationId, expectedDegree!.Value)))
+            return Results.Forbid();
 
-        var items = await institutionalDb.Memberships
+        var members = await institutionalDb.Memberships
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId &&
                         x.EndDate == null &&
@@ -56,8 +65,31 @@ public static class LodgeManagementEndpoints
             .Take(1000)
             .ToListAsync(cancellationToken);
 
+        if (hasFilter)
+        {
+            var memberIds = members.Select(x => x.Id).ToArray();
+            var events = await institutionalDb.DegreeEvents
+                .AsNoTracking()
+                .Where(x => memberIds.Contains(x.MemberId) && x.EffectiveDate <= asOf.Value)
+                .OrderByDescending(x => x.EffectiveDate)
+                .ThenByDescending(x => x.RecordedAtUtc)
+                .Select(x => new { x.MemberId, x.Degree })
+                .ToListAsync(cancellationToken);
+            var effectiveDegrees = events
+                .GroupBy(x => x.MemberId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group.Select(x => InstitutionalDegree.TryParse(x.Degree, out var parsed) ? parsed : (int?)null)
+                        .FirstOrDefault(x => x is not null));
+
+            members = members.Where(member => effectiveDegrees.TryGetValue(member.Id, out var memberDegree) &&
+                memberDegree is not null && (expectedDegree.Value == 3
+                    ? memberDegree.Value >= 3
+                    : memberDegree.Value == expectedDegree.Value)).ToList();
+        }
+
         httpContext.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new LodgeMemberOptionsResponse(items.Count, items));
+        return Results.Ok(new LodgeMemberOptionsResponse(members.Count, members));
     }
 
     private static async Task<IResult> CreateMeetingAsync(

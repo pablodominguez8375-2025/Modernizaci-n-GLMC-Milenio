@@ -276,9 +276,15 @@ internal sealed class LodgeManagementTestAuthenticationHandler(
             new Claim("sub", "ci-lodge-admin"),
             new Claim(ClaimTypes.NameIdentifier, "ci-lodge-admin"),
             new Claim(ClaimTypes.Name, "CI Lodge Admin"),
-            new Claim(InstitutionalClaims.Scope, "order"),
-            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin)
-        };
+            new Claim(InstitutionalClaims.Scope, "order")
+        }.ToList();
+        var requestedRole = Request.Headers["X-Test-Role"].FirstOrDefault();
+        claims.Add(new Claim(InstitutionalClaims.Role, string.IsNullOrWhiteSpace(requestedRole) ? InstitutionalRoles.GranLogiaAdmin : requestedRole));
+        if (Guid.TryParse(Request.Headers["X-Test-Organization"].FirstOrDefault(), out var organizationId))
+        {
+            claims.Add(new Claim(InstitutionalClaims.Organization, organizationId.ToString()));
+            claims.Add(new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerSegundoVigilante));
+        }
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName)));

@@ -95,6 +95,22 @@ public sealed class LodgeInstructionHttpWorkflowTests
             memberId = member.Id;
         }
 
+        client.DefaultRequestHeaders.Add("X-Test-Organization", organizationId.ToString());
+
+        var wrongGrade = await client.PostAsJsonAsync(
+            $"/api/gestion-logial/talleres/{organizationId}/instrucciones",
+            new { instructionDate = new DateOnly(2026, 9, 8), grade = LodgeManagementCodes.Grade.Master, topic = "Grado no asignado" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, wrongGrade.StatusCode);
+
+        var filteredMembers = await client.GetAsync(
+            $"/api/gestion-logial/talleres/{organizationId}/miembros/opciones?grade=apprentice&asOf=2026-09-08",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, filteredMembers.StatusCode);
+        var filteredJson = await filteredMembers.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Equal(1, filteredJson.GetProperty("total").GetInt32());
+        Assert.Equal(memberId, filteredJson.GetProperty("items")[0].GetProperty("id").GetGuid());
+
         const string topic = "Símbolos y deberes del Aprendiz";
         var createResponse = await client.PostAsJsonAsync(
             $"/api/gestion-logial/talleres/{organizationId}/instrucciones",
@@ -173,6 +189,29 @@ public sealed class LodgeInstructionHttpWorkflowTests
         Assert.Equal(topic, correctedItem.GetProperty("topic").GetString());
         Assert.True(correctedItem.GetProperty("attended").GetBoolean());
         Assert.Equal(LodgeManagementCodes.InstructionAttendanceStatus.Present, correctedItem.GetProperty("status").GetString());
+
+        var selfProfileResponse = await client.GetAsync("/api/member-self/profile", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, selfProfileResponse.StatusCode);
+        var selfProfile = await selfProfileResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var selfInstructions = selfProfile.GetProperty("activity").GetProperty("instruction");
+        Assert.Contains(selfInstructions.GetProperty("history").EnumerateArray(), item =>
+            item.GetProperty("topic").GetString() == topic &&
+            item.GetProperty("attendanceStatus").GetString() == LodgeManagementCodes.InstructionAttendanceStatus.Present);
+
+        client.DefaultRequestHeaders.Remove("X-Test-Organization");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "grand_second_warden");
+        var orderReport = await client.GetAsync("/api/gestion-logial/instrucciones/orden?grade=apprentice", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, orderReport.StatusCode);
+        var reportJson = await orderReport.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        Assert.Contains(reportJson.GetProperty("items").EnumerateArray(), item => item.GetProperty("instructionId").GetGuid() == instructionId);
+        Assert.DoesNotContain(reportJson.GetProperty("items")[0].EnumerateObject(), property => property.Name.Contains("member", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("displayName", StringComparison.OrdinalIgnoreCase));
+        var otherGradeReport = await client.GetAsync("/api/gestion-logial/instrucciones/orden?grade=fellowcraft", cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, otherGradeReport.StatusCode);
+        var editAttempt = await client.PostAsJsonAsync(
+            $"/api/gestion-logial/talleres/{organizationId}/instrucciones",
+            new { instructionDate = new DateOnly(2026, 9, 9), grade = LodgeManagementCodes.Grade.Apprentice, topic = "Edición no autorizada" },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden, editAttempt.StatusCode);
 
         await using var verificationScope = factory.Services.CreateAsyncScope();
         var lodgeDb = verificationScope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
