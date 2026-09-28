@@ -1,3 +1,14 @@
+## Handoff vivo — post-merge PR #210 — 28-09-2026
+
+- Estado verificado: `dev@4087f47a575ba6bf48fead93838de5425a62bb10`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambios. No había clon Git local; lectura remota de ramas, árbol, fuentes y estado completada.
+- PR #210 documental quedó integrada por squash en el SHA vigente. Exact-head del PR y post-merge PMGM CI, Showcase/Pages, QA Installable y Pre-UAT: SUCCESS.
+- Pages artifact #10984181780 digest `sha256:4cff4268bee16ca3e48cffc9d0f0ddfff0bb1fa107571c741867a54f8b1dd566`. `qa-current.json` confirma `sourceSha=4087f47a575ba6bf48fead93838de5425a62bb10`; ZIP publicado SHA-256 `a43f2b7490b6f3b5e7b44d96c9137ae655ca5aa0aaa2f1f1686b133d7c0d9a6c`.
+- QA artifact #10983728727 digest `sha256:353e3808fd25424fe1837e217303cbdc79a3c692ae62331cf04036a9ae456b92`; ZIP instalable interior SHA-256 `cbe8e16c66b4cd0d7d470160fe41102fc4212d7c35bc1f0e9acd85478fac2ceb`; BUILD-INFO verifica el SHA de origen. Paquete generado, no instalado.
+- Issue #97 sigue abierto. `srv01` pausado por instrucción del Sponsor: no instalar, desplegar ni ejecutar smoke/regresión física/UAT. No promover `main`.
+- Issue #46 / PMGM-BLG-078 sigue abierto. El código vigente de Mi ficha presenta historial propio de instrucciones con fecha, grado, tema, asistencia y encargado, en modo sólo consulta; la demo usa registros ficticios y la prueba frontend actual impide agregar un campo `progress` a los datos demo. La prueba no sustituye aceptación visual institucional. Antes de tocar código, identificar una brecha concreta frente a sus criterios; no duplicar lo integrado por PR #206.
+- No se inició un incremento funcional. #190 mantiene pendientes tarifas/monedas; #191 requiere cerrar presentación contable. PR #182 fue cerrada sin merge y sustituida por #204.
+- La continuidad se rige por estado persistente: cualquier chat o IA puede continuar leyendo START-HERE, GitHub `dev` y la Línea Base/documentos oficiales de Drive. Ningún chat o memoria conversacional es requisito ni fuente de verdad. GitHub gobierna código/backlog/decisiones técnicas; Drive conserva Línea Base y fuentes oficiales. Esta regla armoniza las instrucciones vigentes y no altera gobierno institucional.
+
 # PMGM-GOV-002 — Continuidad multichat, multi-IA y gobierno de ramas
 
 ## HANDOFF VIGENTE PARA CUALQUIER CHAT O IA — 27-09-2026
