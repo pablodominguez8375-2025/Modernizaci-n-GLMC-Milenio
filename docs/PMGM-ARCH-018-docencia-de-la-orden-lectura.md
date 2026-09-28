@@ -1,6 +1,6 @@
 # PMGM-ARCH-018 — Consulta de docencia de la Orden
 
-**Estado:** implementación propuesta en rama feature; pendiente CI exact-head e integración.  
+**Estado:** implementado, integrado en `dev@7f2079b3c1d89564cc181f6efad5f231de6db081`; PR #206.
 **Fecha:** 2026-09-28
 
 ## Decisión funcional
@@ -39,3 +39,7 @@ La Línea Base Maestra de Drive, `LINEA BASE MAESTRA - Proyecto Centenario - 17-
 - Probar que perfiles de lectura reciben `403` al invocar creación, marcar realizada o registrar asistencia.
 - Confirmar que la asistencia permanece enlazada a `Mi ficha` y que los nuevos registros figuran en la sesión del mismo Taller/grado.
 - Las pruebas automatizadas y el demo con datos ficticios no sustituyen instalación, regresión física ni UAT. Issue #97 y la pausa de `srv01` siguen vigentes.
+
+## Resultado del corte 2026-09-28
+
+PR #206: exact-head `8dc936301b597b1c2aeaf0b48ec309c8456c59bc`; PMGM CI #1651, Showcase #954, QA Installable #592 SUCCESS. Post-merge dev `7f2079b3c1d89564cc181f6efad5f231de6db081`: CI #1652, Showcase/Pages #955 (Deploy SUCCESS), QA Installable #593 y Pre-UAT #393 SUCCESS. Frontend local 216/216, lint/build SUCCESS; gates privacidad, clasificación y migración SUCCESS. Checksum ZIP QA distribuido en Pages `567b15253b585c7919ae90afe05dda43d5827112885b783b7f7172c874e14cc3`; QA Actions artifact digest `sha256:19cac46d170b79fe09d2f8be0814c78d2be0f14540e51e6eb63552feab965414`. `srv01` sigue pausado: no instalación ni UAT; no promoción a `main`.

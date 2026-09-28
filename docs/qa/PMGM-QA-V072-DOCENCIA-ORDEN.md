@@ -1,6 +1,6 @@
 # PMGM-QA-V072 — Docencia de la Orden y registro por grado
 
-**Estado:** criterios para CI/demo; la aceptación física y UAT permanecen pendientes.  
+**Estado:** criterios implementados y verificados en CI/demo; la aceptación física y UAT permanecen pendientes.
 **Fecha:** 2026-09-28  
 **Requisito técnico:** `docs/PMGM-ARCH-018-docencia-de-la-orden-lectura.md`
 
@@ -28,3 +28,7 @@
 ## Evidencia y límites
 
 Registrar SHA exacto de la rama/PR y resultado de CI, Showcase/Pages y QA Installable en el handoff. Los controles locales y CI no prueban instalación ni configuración de roles en `srv01`. No instalar, desplegar, ejecutar smoke/regresión física ni UAT mientras continúe la pausa del Sponsor y Issue #97. No promover a `main`.
+
+## Resultado automatizado — 2026-09-28
+
+PR #206 exact-head `8dc936301b597b1c2aeaf0b48ec309c8456c59bc`: PMGM CI #1651, Showcase #954 y QA Installable #592 SUCCESS. Post-merge `dev@7f2079b3c1d89564cc181f6efad5f231de6db081`: PMGM CI #1652, Showcase/Pages #955, QA Installable #593 y Pre-UAT #393 SUCCESS. Artifact Pages #10967675504 digest `sha256:f7ae60ac8f7af3c8a8aa051b8c2b19820626e571795f7a4c0f221395a0054053`; qa-current confirma SHA integrado. Artifact QA #10966054591 digest `sha256:19cac46d170b79fe09d2f8be0814c78d2be0f14540e51e6eb63552feab965414`, BUILD-INFO confirma el mismo SHA, MANIFEST 780/780 comprobado. No hubo instalación física, UAT ni aceptación operacional.
