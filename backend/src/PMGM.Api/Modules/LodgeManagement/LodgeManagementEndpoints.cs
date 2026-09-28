@@ -49,7 +49,7 @@ public static class LodgeManagementEndpoints
         var expectedDegree = normalizedGrade is null ? null : LodgeManagementCodes.Grade.ToNumeric(normalizedGrade);
         if (hasFilter && (expectedDegree is null || asOf is null || normalizedGrade == LodgeManagementCodes.Grade.All))
             return Results.BadRequest(new { message = "Para filtrar asistentes debe indicar un grado específico y la fecha de la instrucción." });
-        if (!canManageAll && (!hasFilter || !access.CanManageLodgeInstruction(httpContext.User, organizationId, expectedDegree!.Value)))
+        if (!canManageAll && (!hasFilter || !access.CanManageLodgeInstruction(httpContext.User, organizationId, expectedDegree.GetValueOrDefault())))
             return Results.Forbid();
 
         var members = await institutionalDb.Memberships
@@ -67,10 +67,12 @@ public static class LodgeManagementEndpoints
 
         if (hasFilter)
         {
+            var instructionDate = asOf.GetValueOrDefault();
+            var targetDegree = expectedDegree.GetValueOrDefault();
             var memberIds = members.Select(x => x.Id).ToArray();
             var events = await institutionalDb.DegreeEvents
                 .AsNoTracking()
-                .Where(x => memberIds.Contains(x.MemberId) && x.EffectiveDate <= asOf.Value)
+                .Where(x => memberIds.Contains(x.MemberId) && x.EffectiveDate <= instructionDate)
                 .OrderByDescending(x => x.EffectiveDate)
                 .ThenByDescending(x => x.RecordedAtUtc)
                 .Select(x => new { x.MemberId, x.Degree })
@@ -83,9 +85,9 @@ public static class LodgeManagementEndpoints
                         .FirstOrDefault(x => x is not null));
 
             members = members.Where(member => effectiveDegrees.TryGetValue(member.Id, out var memberDegree) &&
-                memberDegree is not null && (expectedDegree.Value == 3
+                memberDegree is not null && (targetDegree == 3
                     ? memberDegree.Value >= 3
-                    : memberDegree.Value == expectedDegree.Value)).ToList();
+                    : memberDegree.Value == targetDegree)).ToList();
         }
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
