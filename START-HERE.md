@@ -1,5 +1,11 @@
 # START HERE — Proyecto Centenario
 
+## Incremento activo — Docencia por grado y consulta de Orden — 28-09-2026
+
+Al continuar, vuelve a consultar GitHub y Drive en vivo. El trabajo parte de `dev@1baf752c8be94e4d7b667d03ac0cad9f4b05fb31` y `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, en `feature/instruction-instructors-by-grade-20260928`. El alcance aprobado registra instrucciones por los responsables de cada grado, su asistencia e historial en Mi ficha, y agrega reportes de solo lectura por Taller/grado para los Grandes Oficiales y Docencia institucional. Especificación: `docs/PMGM-ARCH-018-docencia-de-la-orden-lectura.md`; criterios automáticos: `docs/qa/PMGM-QA-V072-DOCENCIA-ORDEN.md`.
+
+Implementación en rama, aún no integrada: frontend lint/build y 216 pruebas pasan; .NET SDK no está instalado en este entorno, por lo que backend/Integration depende de CI exact-head. La última publicación/paquete de `dev` verificada es `1baf752…`, no contiene esta rama. Issue #97 sigue abierto y `srv01` pausado: no instalar, desplegar, smoke/regresión física ni UAT. No promover a `main`. Al cierre, reemplazar este estado provisional por PR, SHA validado e integración/artefactos efectivos; actualizar también Drive y verificar lectura de retorno.
+
 ## Corte documental integrado — PR #204 — 28-09-2026
 
 **SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio de dev: `c05fa74e4e481a481a4e5054512675b006c4c57a`. Árbol local limpio, detached en `origin/dev`.
