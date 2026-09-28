@@ -20,7 +20,7 @@ Validar que el archivo histórico opere como catálogo institucional independien
 
 ## Perfil QA de la demo
 
-La demo pública debe ofrecer el perfil seleccionable Gran Archivero (grandArchivist) y mostrar la vista con esa capacidad específica. El escenario no debe usar la autoridad amplia de Gran Logia: verifica que aparezca “Gran Archivero” y que no aparezcan Sistema, Secretaría, Tesorería, Hospitalaria, fichas de miembros ni Gestión Logial. El perfil es ficticio y su capability no modifica roles reales.
+La demo pública debe ofrecer el perfil seleccionable Gran Archivero (grandArchivist) y mostrar la vista con esa capacidad específica. El escenario no debe usar la autoridad amplia de Gran Logia: verifica que aparezca “Gran Archivero” y que no aparezcan Sistema, Secretaría, Tesorería, Hospitalaria ni Gestión Logial. El perfil es ficticio y no modifica roles reales. El alcance order conserva las vistas institucionales ya disponibles conforme a los permisos existentes; esta adición no los amplía.
 
 Fuente institucional: Constitución y Reglamento.pdf en Drive, actualizada el 17-09-2026, enumera Gran Archivero como cargo y su Art. 20.7 le atribuye custodia/catastro de documentos institucionales. PMGM-REQ-036 confirma rol técnico grand_archivist con ámbito Order y reserva administración central a grand_lodge_admin. La prueba refleja esa separación.
 

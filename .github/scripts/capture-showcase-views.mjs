@@ -35,7 +35,7 @@ const scenarios = [
   { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería', requiredTabs: ['Cuadros mensuales', 'Estado de Talleres', 'Tarifas y Orientes', 'Derechos ceremoniales'], grandTreasuryRights: true },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },
-  { slug: 'gran-archivero', profile: 'grandArchivist', label: 'Gran Archivero', requiredSidebar: ['Gran Archivero'], forbiddenSidebar: ['Parámetros del sistema', 'Configuración inicial', 'Gran Secretaría', 'Gran Tesorería', 'Gran Hospitalaria', 'Fichas de miembros', 'Gestión Logial'] },
+  { slug: 'gran-archivero', profile: 'grandArchivist', label: 'Gran Archivero', requiredSidebar: ['Gran Archivero'], forbiddenSidebar: ['Parámetros del sistema', 'Configuración inicial', 'Gran Secretaría', 'Gran Tesorería', 'Gran Hospitalaria', 'Gestión Logial'] },
 ]
 
 const viewports = [
