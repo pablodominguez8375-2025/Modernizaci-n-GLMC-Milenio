@@ -1,3 +1,15 @@
+# Handoff vigente — Proyecto Centenario — 28-09-2026 UTC
+
+- Ramas comprobadas: `dev@bca36d5d0fb49c224aaa355f4cecefc43b3037df`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambios.
+- PR #214, rama `feature/instruction-attendance-status-20260928`, head `921cefab91470dac83e9d2e9a79d5a18b51d8810`, integrada por squash en dev. Estados aprobados por PO para #46: Presente = asistió; Ausente = no asistió ni avisó; Justificada = no asistió, pero avisó, tuvo permiso o comunicó una razón.
+- Validaciones exact-head de PR #214: PMGM CI #1669, Showcase #980 y QA Installable #618 SUCCESS. Post-merge: PMGM CI #1670, QA Installable #619, Pre-UAT #401 y Showcase/Pages run 36485694042 SUCCESS; “Deploy testing showcase” SUCCESS.
+- Pages artifact #10998698098, SHA-256 `79425532171f8566ae8dd2726ed76622510e5092fb34469bd31c1a3f6781fa4f`. `qa-current.json` del artefacto verifica `sourceSha=bca36d5d0fb49c224aaa355f4cecefc43b3037df`, base URL `https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio`, ZIP publicado `Proyecto-Centenario-QA-srv01-bca36d5d0fb4.zip`, SHA-256 `0f329c7cd3000509cd32c1d6f89e395b987303741d96cee372f3fd5f9d2df6ad`. El job de despliegue terminó SUCCESS; queda verificar acceso público y actualizar la baseline/URL de Issue #63.
+- QA Installable #10999940575: artifact SHA-256 `b6a8ccf4ad63df12a960113cd937c923d11a5668d8196574c3ccd56dba5b0235`; ZIP interno `c32b00683a8bcaf8d7c16e016ccee1eaead3cfb73b52a0caca2f99754d75a881`; BUILD-INFO y MANIFEST 784/784 verificados. Está empaquetado, no instalado. `srv01` continúa pausado; no hacer instalación, despliegue manual, smoke/regresión física ni UAT. Issue #97 sigue abierto por instrucción explícita del Sponsor.
+- Automatización responsive: 20 perfiles, 483 estados a 360×800; evidencia automatizada, no revisión institucional ni UAT.
+- Aprobaciones/definiciones por resolver: Issue #191 requiere fuente o decisión contable sobre presentación de anticipos, recuperaciones, pagos multiperíodo y reversos/correcciones. Issue #190 sigue abierto para completar el alcance general del tarifario; Perú USD se aprobó e integró por PR #213, conforme a Decreto 1759 (cuota ordinaria USD 6), sin fijar otras tarifas USD ni conversión. Revisar propuestas/PR abiertas sobre ramas históricas antes de cualquier merge; no promover `main`.
+- Issue #46 registra su aclaración e implementación. La Línea Base Maestra de Drive fue actualizada y leída de vuelta.
+- Este bloque supersede handoffs fechados anteriores: contrastar siempre HEAD, Actions, Pages, Issues/PRs y fuentes Drive vigentes antes de actuar.
+
 ## Handoff vivo — revisión de aprobaciones — 28-09-2026 UTC
 
 - SHA observado al abrir este handoff: `dev@26deb078a25b62fa863bf4e709e6820a337d67a2`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin promoción. PR #211 documental integrada en dev@26deb078. Pages run 36455750108 SUCCESS; `qa-current.json.sourceSha` coincide con 26deb078. QA artifact #10985078472 empaquetado; no instalado. Issue #97 mantiene la pausa de srv01.
