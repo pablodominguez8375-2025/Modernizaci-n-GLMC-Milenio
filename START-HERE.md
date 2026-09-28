@@ -1,5 +1,18 @@
 # START HERE — Proyecto Centenario
 
+## Corte documental integrado — PR #204 — 28-09-2026
+
+**SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio de dev: `c05fa74e4e481a481a4e5054512675b006c4c57a`. Árbol local limpio, detached en `origin/dev`.
+
+Archivos PR #204: `docs/reviews/PMGM-REV-LOGIAL-MENUS-2026-09-28.md` (nuevo) y `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`. Actualiza el cruce con la referencia Drive antigua y explica acceso a **Taller → Ficha del Taller** condicionado por capacidades. No hubo cambios de código, permisos, migraciones ni funciones. Mis planchas y Resumen del Taller constan ya integrados; se separa historial individual de cargos de una Oficialidad histórica por períodos. La API de instrucciones acepta filtros de fecha/grado; falta exponerlos en cliente/vista y requiere definición de alcance del Product Owner.
+
+Checks exact-head del PR #204: PMGM CI #1645, Showcase #946 y QA Installable #584 — SUCCESS; despliegue Pages omitido en el evento PR. Post-merge sobre el SHA integrado: PMGM CI #1646, Showcase/Pages #947 (incluido Deploy showcase SUCCESS), QA Installable #585 y Pre-UAT #391 — SUCCESS. Artefactos: Pages #10947342572 digest `sha256:c657c49f942ed48775cde2e9260cc1cb62d2027466241bc95f7966fc28d7d5b1`; evidencia visual #10947551850 digest `sha256:d9ee224ea735874c5590ad078b36517c16b924255e2bf06a7614df19f0ee6aeb`; QA Actions #10947382198 digest `sha256:78056dbe4c062b23f66718dbca0feafddc73c50479c001a0fdcc05a39fddbec0`; Pre-UAT #10947138143 digest `sha256:1979ab2b6d5bf4827a78e8f92fc4b02f6419312a47de5d359187104eb22f88b3`.
+
+Pages está publicado. El artefacto Pages contiene `qa-current.json` con `sourceSha=4f1396820846342f3bd5091b51c6a62857d3a39c`; el ZIP publicado `Proyecto-Centenario-QA-srv01-4f1396820846.zip` tiene SHA-256 verificado `c65cd218e7ca5b99943f31e9c364345bc99050c5a506a27b066d24ea6e83cf47`. El ZIP del artefacto QA, del mismo SOURCE_SHA, tiene SHA-256 `3b29c38beae40358b07d5c296bf2cded8ccbf9c304547aedaf9fc784f4c14116`; BUILD-INFO coincide y MANIFEST valida 776/776 archivos. Estos resultados representan publicación/empaquetado, no instalación ni aceptación.
+
+PR #182 fue cerrada sin merge y con enlace a PR #204 como sustitución. Issue #97 sigue abierto; `srv01` continúa pausado: no hubo instalación, smoke/regresión física ni UAT. No promover a `main`. Issues #190/#191 mantienen pendientes sus definiciones monetarias/contables. Antes de cualquier función nueva, esperar alcance aprobado del Product Owner. En un nuevo chat, leer START-HERE y volver a consultar HEAD, árbol, PRs/issues, Actions y Drive en vivo.
+
+
 ## Verificación viva posterior al cierre de PR #201 — 27-09-2026
 
 - `dev`: `d9ce300511c735af28d3fc01497ecacf54d0a904`; `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111` (sin promoción). Árbol de trabajo local limpio al verificar.
