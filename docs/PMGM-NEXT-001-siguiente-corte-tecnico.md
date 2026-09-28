@@ -1,3 +1,22 @@
+## Handoff vigente — comparación de PR #182 con dev y Drive — 27-09-2026 (America/Santiago)
+
+**Estado de partida:** `dev@179f200f605ec4a8cb0e64c16843c3969c690612`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. Esta revisión es documental y no inicia un incremento funcional.
+
+PR #182 sigue abierta en `review/logial-menu-crosswalk`, contra una base histórica `14019d2887a782250021a1eac2f3e8dc936e360c`. Su tabla debe actualizarse antes de integrar. La referencia de Drive está en `Proyecto Centenario/Sistema Logial de Ejemplo - solo como referencia`: `Documento_Maestro_App_Gestion_Taller_Masonico_FINAL.docx` y su copia `.md` registran versión interna 03-07-2026; metadata de Drive indica modificación 21-09-2026. La referencia se usa sólo como antecedente funcional, no como fuente de arquitectura o permisos.
+
+Hallazgos verificados contra el HEAD actual que contradicen/actualizan la matriz de PR #182:
+
+- **Mis planchas** ya está integrado por PR #185 en `dev`; no sigue pendiente. Reutiliza el Gestor Documental/Biblioteca Virtual y conserva autoría, versiones, clasificación por grado, controles de integridad y antivirus.
+- **Libro de Oro** no se traslada con ese nombre: la adaptación aprobada es **Resumen del Taller**, integrada por PR #183, con consulta acotada y delegación revocable según sus reglas.
+- La **Ficha del Taller** ya tiene menú directo e identidad del Taller, incluida fecha de iniciación, ciudad/Oriente, país y logo opcional; PR #200 la integró.
+- Los puntos de consulta de **Oficialidad/historial de cargos** y **asistencia/instrucciones** deben reexaminarse sobre las vistas y datos actuales antes de recomendar otro corte.
+
+No fusionar PR #182 en su estado actual. Se dejó comentario con los hallazgos y se mantiene abierta para actualizar o sustituir el cruce. Las recomendaciones P2/P3 no quedan autorizadas como funciones por esta revisión. Próximo paso: refrescar el documento comparativo contra el código vivo y los archivos Drive actuales; si de allí resulta un nuevo alcance funcional, confirmarlo con el Product Owner antes de programarlo.
+
+Checks/entrega del corte de partida `179f200f…`: PMGM CI #1639, Showcase/Pages #938, QA Installable #576 y Pre-UAT #389 SUCCESS. Pages artifact #10945258861 digest `sha256:87a7ca6facd1ff307cefca9b0a00ef8c7ee2ec9682f99562951085e948e18a18`; `qa-current.json` confirma ese SHA. ZIP QA `Proyecto-Centenario-QA-srv01-179f200f605e.zip`, SHA-256 `3a6702af873103a6b29a2065bde5249eeed9d931b32c48a286949c48cc909eb9`. Artefactos no equivalen a instalación ni UAT. Issue #97 abierto, `srv01` pausado; no instalar, desplegar, ejecutar smoke/regresión física ni UAT. `main` no se modifica/promueve.
+
+Esta entrada supersede para el estado de PR #182 los bloques históricos de abajo.
+
 ## PR en curso — origen y pertenencia de Ficha del Taller — 27-09-2026
 
 El Product Owner confirmó que **Secretaría del Taller**, **Gran Secretaría** y **Régimen Interior** pueden editar los campos de la ficha: fecha histórica de creación/fundación, ciudad/Oriente y país. La Secretaría local queda limitada a su Taller; los dos perfiles centrales actúan con alcance institucional de Orden. No se concede esta edición a Tesorería, Venerable ni administrador técnico.
