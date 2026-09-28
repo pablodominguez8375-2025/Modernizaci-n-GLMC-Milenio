@@ -1,3 +1,11 @@
+## Incremento activo — Docencia por grado y consulta de Orden — 28-09-2026
+
+Desde `dev@1baf752c8be94e4d7b667d03ac0cad9f4b05fb31` / `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` se trabaja en `feature/instruction-instructors-by-grade-20260928`. El alcance autorizado registra instrucciones por Aprendices, Compañeros y Maestros a cargo del Segundo Vigilante, Primer Vigilante e Inmediato Ex-Venerable Maestro; la asistencia se asocia al historial en Mi ficha. Agrega Docencia de la Orden de solo lectura: Gran Segundo Vigilante → Aprendices; Gran Primer Vigilante → Compañeros; Inmediato Ex Gran Maestro → Maestros; Jefatura de Docencia → los tres grados. Reporte por Taller o consolidado, filtros por período/grado, totales agregados y sesiones realizadas; sin datos de identidad de asistentes ni mutaciones institucionales.
+
+Especificación `PMGM-ARCH-018`; pruebas de aceptación automática `docs/qa/PMGM-QA-V072-DOCENCIA-ORDEN.md`; GOV-001 §10.1 actualizado. Fuente oficial contrastada en Drive: Línea Base Maestra `17-09-2026` (modificada 28-09), Matriz Funcional Normativa Cargos de Taller v1.0 (17-09) y Constitución/Reglamento (17-09). Arts. 12.5, 20.1, 20.2 y 22.1(b); el acceso completo de la Jefatura es una definición de producto, no una atribución constitucional.
+
+Estado provisional: frontend lint/build y 216 pruebas SUCCESS. No se pudo ejecutar .NET localmente porque el SDK no está instalado; los tests backend y PostgreSQL deben validarse en CI exact-head del PR. Pages/instalable verificados antes de este cambio corresponden a `dev@1baf752…`; esta rama aún no está publicada ni empaquetada. Issue #97 abierto, `srv01` pausado, sin instalación/QA física/regresión/UAT; `main` no se modifica. Actualizar esta sección tras CI, merge, Pages/artefactos y lectura de retorno en Drive.
+
 ## Cierre documental integrado — PR #204 — 28-09-2026
 
 **SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio: `c05fa74e4e481a481a4e5054512675b006c4c57a`.

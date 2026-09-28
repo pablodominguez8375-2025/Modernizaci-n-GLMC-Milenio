@@ -146,6 +146,12 @@ En la ficha del hermano, por ahora el historial de instrucción debe mostrar pri
 
 Evaluaciones, puntajes o avance curricular por temas se dejan para una etapa posterior.
 
+### 10.1. Consulta institucional de instrucciones realizadas
+
+Por definición expresa del Product Owner, se agrega una vista institucional de **solo lectura** para los reportes de instrucciones realizadas en todos los Talleres: Gran Segundo Vigilante consulta Aprendices; Gran Primer Vigilante consulta Compañeros; Inmediato Ex Gran Maestro consulta Maestros; Jefatura del Departamento de Docencia consulta los tres grados. Los Grandes Oficiales pueden filtrar por Taller o consultar el total de su grado; la Jefatura puede filtrar por grado o consultar el conjunto. La respuesta incluye sesiones realizadas y estadísticas de asistencia agregadas, sin identidad de hermanos.
+
+Esta consulta no otorga gestión, edición, aprobación ni nombramiento de cargos. La asignación constitucional de la supervisión de Grandes Vigilantes e Inmediato Ex Gran Maestro se fundamenta en los Arts. 20.1 y 20.2 de Constitución/Reglamento; el acceso a los tres grados de la Jefatura es un permiso de producto de lectura y no una interpretación o ampliación de sus atribuciones reglamentarias. Especificación técnica: `docs/PMGM-ARCH-018-docencia-de-la-orden-lectura.md`.
+
 ## 11. Planchas de trabajo
 Una **plancha de trabajo** es un trabajo preparado por un hermano, asociado a título/tema, autor, Taller y grado, y puede ser presentado en una tenida o instancia de trabajo.
 

@@ -18,6 +18,10 @@ public static class InstitutionalRoles
     public const string GranSecretaria = "grand_secretariat";
     public const string GranTesoreria = "grand_treasury";
     public const string GranHospitalaria = "grand_hospitalaria";
+    public const string GranPrimerVigilante = "grand_first_warden";
+    public const string GranSegundoVigilante = "grand_second_warden";
+    public const string InmediatoExGranMaestro = "immediate_past_grand_master";
+    public const string JefaturaDepartamentoDocencia = "instruction_department_head";
     public const string GrandArchivist = "grand_archivist";
     public const string PrivacyOfficer = "privacy_officer";
     public const string DocumentManager = "document_manager";
@@ -57,6 +61,7 @@ public interface IInstitutionalAccessService
     bool CanApproveLodgeExpenses(ClaimsPrincipal user, Guid organizationId);
     bool CanSignLodgeDocuments(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeInstruction(ClaimsPrincipal user, Guid organizationId, int degree);
+    bool CanReadOrderLodgeInstructions(ClaimsPrincipal user, int? degree);
     bool CanParticipateInLodgeCouncil(ClaimsPrincipal user, Guid organizationId);
     bool CanReadLodgeCouncilSummary(ClaimsPrincipal user, Guid organizationId);
     bool CanManageLodgeCouncilSummaryAccess(ClaimsPrincipal user, Guid organizationId);
@@ -205,6 +210,23 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
             1 => HasRole(user, InstitutionalRoles.TallerSegundoVigilante),
             2 => HasRole(user, InstitutionalRoles.TallerPrimerVigilante),
             3 => HasRole(user, InstitutionalRoles.TallerInmediatoExVenerable),
+            _ => false
+        };
+    }
+
+    public bool CanReadOrderLodgeInstructions(ClaimsPrincipal user, int? degree)
+    {
+        if (!HasOrderScope(user)) return false;
+        if (HasRole(user, InstitutionalRoles.GranLogiaAdmin)) return true;
+
+        var departmentHead = HasRole(user, InstitutionalRoles.JefaturaDepartamentoDocencia);
+        if (degree is null) return departmentHead;
+
+        return degree switch
+        {
+            1 => departmentHead || HasRole(user, InstitutionalRoles.GranSegundoVigilante),
+            2 => departmentHead || HasRole(user, InstitutionalRoles.GranPrimerVigilante),
+            3 => departmentHead || HasRole(user, InstitutionalRoles.InmediatoExGranMaestro),
             _ => false
         };
     }

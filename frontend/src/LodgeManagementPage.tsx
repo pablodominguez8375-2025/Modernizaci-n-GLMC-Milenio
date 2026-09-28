@@ -72,12 +72,13 @@ export const instructionResponsibilityByGrade = {
   master: 'Inmediato Ex-Venerable Maestro',
 } as const
 
-export default function LodgeManagementPage({ api, lodgeApi, documentApi, canReadSecretariat = false, canManageSecretariat = false }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; canReadSecretariat?: boolean; canManageSecretariat?: boolean }) {
+export default function LodgeManagementPage({ api, lodgeApi, documentApi, canReadSecretariat = false, canManageSecretariat = false, instructionGrades = [], focusInstructions = false }: { api: PmgmApiClient; lodgeApi: LodgeApiClient; documentApi: DocumentApiClient; canReadSecretariat?: boolean; canManageSecretariat?: boolean; instructionGrades?: Exclude<LodgeGrade, 'all'>[]; focusInstructions?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [meetings, setMeetings] = useState<LodgeMeeting[]>([])
   const [selectedMeetingId, setSelectedMeetingId] = useState('')
   const [members, setMembers] = useState<LodgeMemberOption[]>([])
+  const [instructionMembers, setInstructionMembers] = useState<LodgeMemberOption[]>([])
   const [attendance, setAttendance] = useState<LodgeAttendanceCurrent[]>([])
   const [minutes, setMinutes] = useState<LodgeMinute[]>([])
   const [instructions, setInstructions] = useState<LodgeInstruction[]>([])
@@ -87,7 +88,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   const [error, setError] = useState<string | null>(null)
   const [showOperations, setShowOperations] = useState(false)
   const [instructionDate, setInstructionDate] = useState(todayInChile())
-  const [instructionGrade, setInstructionGrade] = useState<Exclude<LodgeGrade, 'all'>>('apprentice')
+  const [instructionGrade, setInstructionGrade] = useState<Exclude<LodgeGrade, 'all'>>(instructionGrades[0] ?? 'apprentice')
   const [instructionTopic, setInstructionTopic] = useState('')
   const [instructionAttendance, setInstructionAttendance] = useState<Record<string, 'present' | 'absent'>>({})
   const [instructionConfirmation, setInstructionConfirmation] = useState<string | null>(null)
@@ -151,6 +152,23 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
       .finally(() => { if (active) setWorking(false) })
     return () => { active = false }
   }, [lodgeApi, organizationId])
+
+  useEffect(() => {
+    if (!instructionGrades.includes(instructionGrade)) setInstructionGrade(instructionGrades[0] ?? 'apprentice')
+  }, [instructionGrades, instructionGrade])
+
+  useEffect(() => {
+    if (!organizationId || instructionGrades.length === 0) { setInstructionMembers([]); return }
+    let active = true
+    lodgeApi.getMemberOptions(organizationId, instructionGrade, instructionDate)
+      .then(response => { if (active) setInstructionMembers(response.items) })
+      .catch(reason => { if (active) setError(toMessage(reason)) })
+    return () => { active = false }
+  }, [lodgeApi, organizationId, instructionGrade, instructionDate, instructionGrades])
+
+  useEffect(() => {
+    if (focusInstructions) document.getElementById('lodge-instruction-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [focusInstructions, loading])
 
   useEffect(() => {
     if (!selectedMeetingId) { setAttendance([]); setMinutes([]); return }
@@ -275,7 +293,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
 
   const saveInstruction = async (event: FormEvent) => {
     event.preventDefault()
-    if (!organizationId || !instructionTopic.trim() || members.length === 0) return
+    if (!organizationId || !instructionTopic.trim() || instructionGrades.length === 0 || !instructionGrades.includes(instructionGrade)) return
     setWorking(true); setError(null); setInstructionConfirmation(null)
     try {
       const instruction = await lodgeApi.createInstruction(organizationId, { instructionDate, grade: instructionGrade, topic: instructionTopic })
@@ -292,11 +310,11 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
     setWorking(true); setError(null); setInstructionConfirmation(null)
     try {
       await lodgeApi.completeInstruction(selectedInstructionId)
-      const items = members.map(member => ({ memberId: member.id, status: instructionAttendance[member.id] ?? 'present' as const }))
+      const items = instructionMembers.map(member => ({ memberId: member.id, status: instructionAttendance[member.id] ?? 'present' as const }))
       await lodgeApi.recordInstructionAttendance(selectedInstructionId, items)
       const response = await lodgeApi.getInstructions(organizationId)
       setInstructions(response.items)
-      setInstructionConfirmation(`Instrucción realizada · ${items.filter(item => item.status === 'present').length} asistentes registrados.`)
+      setInstructionConfirmation(`Instrucción realizada · ${items.filter(item => item.status === 'present').length} asistentes registrados. El historial ya está disponible en Mi ficha del hermano.`)
       setSelectedInstructionId('')
       setInstructionAttendance({})
     } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
@@ -346,20 +364,20 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
 
     {canReadSecretariat && <LodgeSecretariatPanel organizationId={organizationId} lodgeApi={lodgeApi} documentApi={documentApi} meetings={meetings} members={members} canManage={canManageSecretariat} onMeetingChanged={meetingId => refreshMeetings(meetingId)} />}
 
-    <section className="lodge-instruction-workspace">
+    <section id="lodge-instruction-workspace" className="lodge-instruction-workspace">
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Gestión Logial › Docencia</p><h2>Registrar instrucción y asistencia</h2><p>El grado determina automáticamente al responsable. La asistencia queda en el historial formativo individual.</p></div><span className="lodge-live-chip">{api.useMocks ? 'Demostración con datos ficticios' : 'Operativo'}</span></div>
       {instructionConfirmation && <div className="regularity-success" role="status">{instructionConfirmation}</div>}
       <div className="lodge-instruction-workspace-grid">
-        <form className="lodge-instruction-form" onSubmit={saveInstruction}>
+        {instructionGrades.length > 0 ? <form className="lodge-instruction-form" onSubmit={saveInstruction}>
           <label><span>Fecha</span><input type="date" value={instructionDate} onChange={event => setInstructionDate(event.target.value)} required /></label>
-          <label><span>Grado</span><select value={instructionGrade} onChange={event => setInstructionGrade(event.target.value as Exclude<LodgeGrade, 'all'>)}><option value="apprentice">Aprendices</option><option value="fellowcraft">Compañeros</option><option value="master">Maestros</option></select></label>
+          <label><span>Grado</span><select value={instructionGrade} onChange={event => setInstructionGrade(event.target.value as Exclude<LodgeGrade, 'all'>)} disabled={instructionGrades.length === 1}>{instructionGrades.map(value => <option key={value} value={value}>{gradeLabel(value)}</option>)}</select></label>
           <label className="lodge-instruction-topic"><span>Tema de la instrucción</span><input value={instructionTopic} onChange={event => setInstructionTopic(event.target.value)} placeholder="Ej.: Simbología del grado" required /></label>
           <div className="lodge-instruction-responsible"><small>Responsable asignado</small><strong>{instructionResponsible}</strong><span>{instructionGrade === 'apprentice' ? 'Instrucción de Aprendices' : instructionGrade === 'fellowcraft' ? 'Instrucción de Compañeros' : 'Instrucción de Maestros'}</span></div>
-          <button className="lodge-blue-button" type="submit" disabled={working}>{working ? 'Guardando…' : 'Programar instrucción'}</button>
-        </form>
-        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Agenda e historial</p><h2>Instrucciones del Taller</h2></div></div>{instructions.map(instruction => <div className="lodge-instruction-history-row" key={instruction.id}><div><strong>{instruction.topic}</strong><span>{formatDateOnly(instruction.instructionDate)} · {gradeLabel(instruction.grade)}</span></div><div><small>{instructionOfficeLabel(instruction.responsibleOffice)}</small><em>{instruction.status === 'scheduled' ? 'Programada' : instruction.status === 'held' ? 'Realizada' : 'Cancelada'}</em>{instruction.status === 'scheduled' && <button className="lodge-secondary-button" type="button" onClick={() => setSelectedInstructionId(instruction.id)}>Registrar ejecución</button>}</div></div>)}</article>
+          <button className="lodge-blue-button" type="submit" disabled={working || !organizationId}>{working ? 'Guardando…' : 'Registrar instrucción'}</button>
+        </form> : <div className="lodge-instruction-form lodge-instruction-readonly"><p>La carga y asistencia de instrucciones está limitada al cargo responsable de cada grado.</p><small>Consulta las sesiones registradas en el historial del Taller y en Mi ficha.</small></div>}
+        <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Agenda e historial</p><h2>Instrucciones del Taller</h2></div></div>{instructions.map(instruction => <div className="lodge-instruction-history-row" key={instruction.id}><div><strong>{instruction.topic}</strong><span>{formatDateOnly(instruction.instructionDate)} · {gradeLabel(instruction.grade)}</span></div><div><small>{instructionOfficeLabel(instruction.responsibleOffice)}</small><em>{instruction.status === 'scheduled' ? 'Programada' : instruction.status === 'held' ? 'Realizada' : 'Cancelada'}</em>{instruction.status === 'scheduled' && instructionGrades.includes(instruction.grade) && <button className="lodge-secondary-button" type="button" onClick={() => setSelectedInstructionId(instruction.id)}>Registrar ejecución</button>}</div></div>)}</article>
       </div>
-      {selectedInstructionId && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Después de la ejecución</p><h3>Registrar asistencia de la instrucción</h3></div>{members.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || members.length === 0} onClick={completeInstructionAndRecordAttendance}>Marcar realizada y guardar asistencia</button></section>}
+      {selectedInstructionId && instructions.some(item => item.id === selectedInstructionId && instructionGrades.includes(item.grade)) && <section className="lodge-instruction-attendance"><div><p className="lodge-kicker">Después de la ejecución</p><h3>Registrar asistencia de la instrucción</h3><p>Se muestran hermanos activos cuyo grado corresponde a esta sesión en la fecha indicada.</p></div>{instructionMembers.map(member => <div className="lodge-instruction-member" key={member.id}><strong>{member.displayName}</strong><select aria-label={`Asistencia de ${member.displayName}`} value={instructionAttendance[member.id] ?? 'present'} onChange={event => setInstructionAttendance(current => ({ ...current, [member.id]: event.target.value as 'present' | 'absent' }))}><option value="present">Presente</option><option value="absent">Ausente</option></select></div>)}<button className="lodge-blue-button" type="button" disabled={working || instructionMembers.length === 0} onClick={completeInstructionAndRecordAttendance}>Marcar realizada y guardar asistencia</button></section>}
     </section>
 
     <LodgeWithdrawalsPanel lodgeApi={lodgeApi} organizationId={organizationId} members={members} />

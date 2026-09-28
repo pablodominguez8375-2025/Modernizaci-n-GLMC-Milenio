@@ -22,6 +22,13 @@ export interface SessionCapabilities {
   canReadLodgeCouncilSummary?: boolean
   canManageLodgeCouncilSummaryAccess?: boolean
   canManageAnyWorkshopProfile?: boolean
+  canManageApprenticeInstruction?: boolean
+  canManageFellowcraftInstruction?: boolean
+  canManageMasterInstruction?: boolean
+  canReadOrderApprenticeInstructions?: boolean
+  canReadOrderFellowcraftInstructions?: boolean
+  canReadOrderMasterInstructions?: boolean
+  canReadAllOrderInstructions?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'

@@ -65,6 +65,8 @@ export interface LodgeInstruction {
   status: 'scheduled' | 'held' | 'cancelled'
 }
 export interface LodgeInstructionsResponse { total: number; items: LodgeInstruction[] }
+export interface OrderInstructionReportItem { instructionId: string; organizationId: string; organizationName: string; organizationNumber: string | null; instructionDate: string; grade: Exclude<LodgeGrade, 'all'>; topic: string; responsibleOffice: string; present: number; absent: number }
+export interface OrderInstructionReport { total: number; workshops: Array<{ organizationId: string; organizationName: string; organizationNumber: string | null }>; summary: Array<{ organizationId: string; organizationName: string; organizationNumber: string | null; grade: Exclude<LodgeGrade, 'all'>; sessionCount: number; present: number; absent: number }>; items: OrderInstructionReportItem[] }
 export interface CreateLodgeInstructionRequest {
   instructionDate: string
   grade: Exclude<LodgeGrade, 'all'>
@@ -146,10 +148,10 @@ class LodgeApiHttpError extends Error {
 const DEMO_LODGE_1_ID = '11111111-1111-1111-1111-111111111111'
 const DEMO_LODGE_23_ID = '23232323-2323-2323-2323-232323232323'
 
-const demoMembers: LodgeMemberOption[] = [
-  { id: 'aaaaaaaa-1111-1111-1111-111111111111', displayName: 'Hermana Demostrativa Uno' },
-  { id: 'aaaaaaaa-2222-2222-2222-222222222222', displayName: 'Hermano Demostrativo Dos' },
-  { id: 'aaaaaaaa-3333-3333-3333-333333333333', displayName: 'Hermana Demostrativa Tres' },
+const demoMembers: Array<LodgeMemberOption & { grade: Exclude<LodgeGrade, 'all'> }> = [
+  { id: 'aaaaaaaa-1111-1111-1111-111111111111', displayName: 'Hermana Demostrativa Uno', grade: 'apprentice' },
+  { id: 'aaaaaaaa-2222-2222-2222-222222222222', displayName: 'Hermano Demostrativo Dos', grade: 'fellowcraft' },
+  { id: 'aaaaaaaa-3333-3333-3333-333333333333', displayName: 'Hermana Demostrativa Tres', grade: 'master' },
 ]
 
 export const demoLodgeSeed = {
@@ -199,6 +201,9 @@ export const demoLodgeSeed = {
   ] satisfies LodgeCeremonyAuthorizationOption[],
   instructions: [
     { id: 'eeeeeeee-0001-0001-0001-000000000001', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-05', grade: 'apprentice' as const, topic: 'Simbología del grado', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
+    { id: 'eeeeeeee-0003-0003-0003-000000000003', organizationId: DEMO_LODGE_1_ID, instructionDate: '2026-09-12', grade: 'apprentice' as const, topic: 'Herramientas del Aprendiz', responsibleOffice: 'second_warden' as const, instructorMemberId: null, status: 'held' as const },
+    { id: 'eeeeeeee-0004-0004-0004-000000000004', organizationId: DEMO_LODGE_1_ID, instructionDate: '2026-09-14', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'held' as const },
+    { id: 'eeeeeeee-0005-0005-0005-000000000005', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-19', grade: 'master' as const, topic: 'Deberes del Maestro', responsibleOffice: 'immediate_past_master' as const, instructorMemberId: null, status: 'held' as const },
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
   ] satisfies LodgeInstruction[],
 } as const
@@ -213,7 +218,12 @@ export class LodgeApiClient {
   private readonly mockMinutes = new Map<string, LodgeMinute[]>([[demoLodgeSeed.meetings[2].id, [{ ...demoLodgeSeed.minute }]]])
   private readonly mockBallots = new Map<string, LodgeAnonymousBallot[]>([[demoLodgeSeed.meetings[2].id, demoLodgeSeed.ballots.map(item => ({ ...item }))]])
   private readonly mockInstructions: LodgeInstruction[] = demoLodgeSeed.instructions.map(item => ({ ...item }))
-  private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>()
+  private readonly mockInstructionAttendance = new Map<string, LodgeInstructionAttendanceItem[]>([
+    [demoLodgeSeed.instructions[0].id, [{ memberId: demoMembers[0].id, status: 'present' }, { memberId: demoMembers[1].id, status: 'absent' }]],
+    [demoLodgeSeed.instructions[1].id, [{ memberId: demoMembers[0].id, status: 'present' }]],
+    [demoLodgeSeed.instructions[2].id, [{ memberId: demoMembers[1].id, status: 'present' }]],
+    [demoLodgeSeed.instructions[3].id, [{ memberId: demoMembers[2].id, status: 'present' }]],
+  ])
   private readonly mockWithdrawals: LodgeWithdrawal[] = []
   private readonly mockHistoricalIntakes: HistoricalMemberIntake[] = []
   private readonly mockAdministrativeMeetings: LodgeAdministrativeMeeting[] = []
@@ -230,9 +240,13 @@ export class LodgeApiClient {
     this.onUnauthorized = options.onUnauthorized
   }
 
-  async getMemberOptions(organizationId: string): Promise<LodgeMemberOptionsResponse> {
-    if (this.useMocks) return { total: demoMembers.length, items: demoMembers.map(item => ({ ...item })) }
-    return this.request<LodgeMemberOptionsResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/miembros/opciones`)
+  async getMemberOptions(organizationId: string, grade?: Exclude<LodgeGrade, 'all'>, asOf?: string): Promise<LodgeMemberOptionsResponse> {
+    if (this.useMocks) {
+      const items = demoMembers.filter(item => !grade || item.grade === grade).map(({ id, displayName }) => ({ id, displayName }))
+      return { total: items.length, items }
+    }
+    const query = grade && asOf ? `?grade=${encodeURIComponent(grade)}&asOf=${encodeURIComponent(asOf)}` : ''
+    return this.request<LodgeMemberOptionsResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/miembros/opciones${query}`)
   }
 
 
@@ -507,6 +521,28 @@ export class LodgeApiClient {
       return { total: items.length, items }
     }
     return this.request<LodgeInstructionsResponse>(`/api/gestion-logial/talleres/${encodeURIComponent(organizationId)}/instrucciones`)
+  }
+
+  async getOrderInstructionReport(filters: { grade?: Exclude<LodgeGrade, 'all'> | 'all'; organizationId?: string; from?: string; to?: string } = {}): Promise<OrderInstructionReport> {
+    if (this.useMocks) {
+      const workshops = [
+        { organizationId: DEMO_LODGE_23_ID, organizationName: 'Taller Demostrativo', organizationNumber: '23' },
+        { organizationId: DEMO_LODGE_1_ID, organizationName: 'Taller Aurora Demostrativo', organizationNumber: '1' },
+      ]
+      const items: OrderInstructionReportItem[] = this.mockInstructions.filter(item => item.status === 'held' &&
+        (!filters.grade || filters.grade === 'all' || item.grade === filters.grade) &&
+        (!filters.organizationId || item.organizationId === filters.organizationId) &&
+        (!filters.from || item.instructionDate >= filters.from) && (!filters.to || item.instructionDate <= filters.to))
+        .map(item => { const workshop = workshops.find(row => row.organizationId === item.organizationId)!; const attendance = this.mockInstructionAttendance.get(item.id) ?? []; return { instructionId: item.id, ...workshop, instructionDate: item.instructionDate, grade: item.grade, topic: item.topic, responsibleOffice: item.responsibleOffice, present: attendance.filter(x => x.status === 'present').length, absent: attendance.filter(x => x.status === 'absent').length } })
+      const summary = workshops.filter(w => !filters.organizationId || w.organizationId === filters.organizationId).flatMap(workshop => (['apprentice', 'fellowcraft', 'master'] as const).filter(g => !filters.grade || filters.grade === 'all' || filters.grade === g).map(grade => { const rows = items.filter(x => x.organizationId === workshop.organizationId && x.grade === grade); return { ...workshop, grade, sessionCount: rows.length, present: rows.reduce((sum, x) => sum + x.present, 0), absent: rows.reduce((sum, x) => sum + x.absent, 0) } }))
+      return { total: items.length, workshops, summary, items }
+    }
+    const query = new URLSearchParams()
+    if (filters.grade) query.set('grade', filters.grade)
+    if (filters.organizationId) query.set('organizationId', filters.organizationId)
+    if (filters.from) query.set('from', filters.from)
+    if (filters.to) query.set('to', filters.to)
+    return this.request<OrderInstructionReport>(`/api/gestion-logial/instrucciones/orden${query.size ? `?${query}` : ''}`)
   }
 
   async createInstruction(organizationId: string, payload: CreateLodgeInstructionRequest): Promise<LodgeInstruction> {

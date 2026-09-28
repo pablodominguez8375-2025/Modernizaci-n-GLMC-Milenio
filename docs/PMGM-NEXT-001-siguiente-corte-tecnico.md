@@ -1,3 +1,11 @@
+## Handoff activo — Docencia por grado y consulta institucional — 28-09-2026
+
+Rama `feature/instruction-instructors-by-grade-20260928`, basada en `dev@1baf752c8be94e4d7b667d03ac0cad9f4b05fb31`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece intacta. El Product Owner definió: instructores por grado registran sesiones realizadas y asistencia con reflejo en Mi ficha; Grandes Oficiales consultan su grado por Taller o transversalmente; Jefatura de Docencia consulta los tres. Sólo lectura en Orden.
+
+Implementación provisional en la rama incluye formulario de Docencia del Taller, historial personal, endpoint agregado de Orden con conteo presente/ausente, filtros de fecha/grado/Taller y perfiles ficticios de los cuatro roles de consulta. Backend valida los alcances por rol y no concede escritura. Criterios/spec: `docs/PMGM-ARCH-018-docencia-de-la-orden-lectura.md`, `docs/qa/PMGM-QA-V072-DOCENCIA-ORDEN.md`; GOV-001 §10.1. Frontend lint/build y 216 pruebas locales SUCCESS. .NET SDK ausente; confirmar compilación y suites de integración en CI exact-head antes de merge.
+
+Al abrir PR, vincular Issue #46 si sigue abierto, registrar checks/artefactos SHA exactos y actualizar esta nota. A la fecha de inicio, los workflows verdes y el Pages de `dev` apuntan a `1baf752…` (antes del incremento), no a esta rama. Issue #97 sigue abierto; `srv01` pausado por Sponsor: no instalación/despliegue/smoke físico/regresión/UAT. Sin promoción a `main`.
+
 ## Handoff vigente — cierre de revisión referencial y acceso a Ficha del Taller — 28-09-2026
 
 **SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio de dev: `c05fa74e4e481a481a4e5054512675b006c4c57a`. Árbol local limpio, detached en `origin/dev`.

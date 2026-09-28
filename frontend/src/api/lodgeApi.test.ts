@@ -70,6 +70,15 @@ it('uses the same instruction contract for list, creation and attendance', async
   ])
 })
 
+it('requests the order-wide instruction report with grade and workshop filters', async () => {
+  const report = { total: 0, workshops: [], summary: [], items: [] }
+  const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(report)))
+  vi.stubGlobal('fetch', fetch)
+  const result = await new LodgeApiClient({ getAccessToken: async () => 'token' }).getOrderInstructionReport({ grade: 'fellowcraft', organizationId: 'workshop-1', from: '2026-01-01', to: '2026-12-31' })
+  expect(result.total).toBe(0)
+  expect(fetch.mock.calls[0][0]).toBe('/api/gestion-logial/instrucciones/orden?grade=fellowcraft&organizationId=workshop-1&from=2026-01-01&to=2026-12-31')
+})
+
 it('demo mode preserves corrections and minute versions without token or network', async () => {
   const fetch = vi.fn(), token = vi.fn()
   vi.stubGlobal('fetch', fetch)
