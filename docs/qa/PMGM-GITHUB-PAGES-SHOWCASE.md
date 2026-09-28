@@ -158,7 +158,7 @@ La automatización multipantalla se implementa en `.github/scripts/capture-showc
 
 Las capturas se almacenan temporalmente en el artefacto `pmgm-responsive-visual-evidence` para revisión técnica y UAT visual.
 
-La corrida de Showcase también recorre en 360 × 800 px todos los perfiles presentes en el selector demo, sus botones de navegación habilitados y los selectores de vista/pestañas implementados como navegación interna. Verifica que el menú conserve objetivos táctiles de 44 px y sea alcanzable mediante su desplazamiento vertical propio, que imágenes, video y canvas no excedan su contenedor y que ningún estado produzca desplazamiento horizontal global. Emite una captura por estado recorrido. Este gate es automatizado y no equivale a aceptación visual institucional ni UAT.
+La corrida de Showcase también recorre en 360 × 800 px todos los perfiles presentes en el selector demo, sus botones de navegación habilitados, pestañas y modos segmentados; además revisa las categorías de vistas que usan filtro. Verifica que el menú conserve objetivos táctiles de 44 px y sea alcanzable mediante su desplazamiento vertical propio, que imágenes, video y canvas no excedan su contenedor y que ningún estado produzca desplazamiento horizontal global. Emite una captura por estado recorrido. Este gate es automatizado y no equivale a aceptación visual institucional ni UAT.
 
 ## Seguridad
 

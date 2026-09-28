@@ -375,10 +375,14 @@ async function inspectAllVisibleMediaAndNavigation(profile) {
       return { src: element.getAttribute('src') || element.tagName.toLowerCase(), left: Math.round(rect.left), right: Math.round(rect.right),
         containerLeft: box ? Math.round(box.left) : null, containerRight: box ? Math.round(box.right) : null };
     });
-    const tabs = [...document.querySelectorAll('main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button')]
+    const tabs = [...document.querySelectorAll('main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button, main .segmented button, main .segmented-control button')]
       .filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
       .map((button, index) => ({ index, label: (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim() }))
       .filter(item => item.label);
+    const filters = [...document.querySelectorAll('main .system-filter select')].flatMap(select => {
+      const fieldLabel = select.closest('label')?.querySelector('span')?.textContent?.trim() || 'Filtro';
+      return [...select.options].filter(option => option.value !== select.value).map(option => ({ fieldLabel, value: option.value, label: option.textContent?.trim() || option.value }));
+    });
     return {
       nav: nav && navRect ? { width: Math.round(navRect.width), clientWidth: nav.clientWidth, scrollWidth: nav.scrollWidth,
         clientHeight: nav.clientHeight, scrollHeight: nav.scrollHeight, overflowY: getComputedStyle(nav).overflowY,
@@ -389,6 +393,7 @@ async function inspectAllVisibleMediaAndNavigation(profile) {
       mainWidth: main?.getBoundingClientRect().width ?? 0,
       media,
       tabs,
+      filters,
     };
   })()`)
   if (!result?.nav || !result.nav.buttons.length) throw new Error(`Mobile navigation is missing for ${profile}.`)
@@ -423,7 +428,7 @@ async function openModuleFromMobileNavigation(label) {
 
 async function openMobileSubview(label) {
   const clicked = await evaluate(`(() => {
-    const selectors = 'main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button';
+    const selectors = 'main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button, main .segmented button, main .segmented-control button';
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
     const button = [...document.querySelectorAll(selectors)].find(candidate => !candidate.disabled && normalize(candidate.innerText || candidate.textContent) === ${JSON.stringify(label)});
     if (!button) return false;
@@ -431,6 +436,19 @@ async function openMobileSubview(label) {
     return true;
   })()`)
   if (!clicked) throw new Error(`Mobile subview control disappeared: ${label}`)
+  await delay(250)
+}
+
+async function selectMobileFilter(fieldLabel, value) {
+  const selected = await evaluate(`(() => {
+    const normalize = text => (text || '').replace(/\\s+/g, ' ').trim();
+    const select = [...document.querySelectorAll('main .system-filter select')].find(element => normalize(element.closest('label')?.querySelector('span')?.textContent) === ${JSON.stringify(fieldLabel)});
+    if (!select || ![...select.options].some(option => option.value === ${JSON.stringify(value)})) return false;
+    select.value = ${JSON.stringify(value)};
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`)
+  if (!selected) throw new Error(`Mobile filter option disappeared: ${fieldLabel}/${value}`)
   await delay(250)
 }
 
@@ -477,6 +495,14 @@ async function auditEveryMobileMenuView() {
         await assertNoGlobalHorizontalOverflow(`${profile}/${menuLabel}/${label}`, mobileViewport.suffix)
         await inspectAllVisibleMediaAndNavigation(`${profile}/${menuLabel}/${label}`)
         await capture(path.join(outputDir, `${baseSlug}-${String(index + 1).padStart(2, '0')}-${slugify(label)}-${mobileViewport.suffix}.png`))
+        auditedViews += 1
+      }
+
+      for (const { fieldLabel, value, label } of defaults.filters) {
+        await selectMobileFilter(fieldLabel, value)
+        await assertNoGlobalHorizontalOverflow(`${profile}/${menuLabel}/${fieldLabel}/${label}`, mobileViewport.suffix)
+        await inspectAllVisibleMediaAndNavigation(`${profile}/${menuLabel}/${fieldLabel}/${label}`)
+        await capture(path.join(outputDir, `${baseSlug}-filter-${slugify(fieldLabel)}-${slugify(label)}-${mobileViewport.suffix}.png`))
         auditedViews += 1
       }
     }
