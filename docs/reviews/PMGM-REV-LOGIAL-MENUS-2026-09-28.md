@@ -4,7 +4,7 @@
 
 Corte comparado con `dev@c05fa74e4e481a481a4e5054512675b006c4c57a`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece estable. PR #182 conserva base histórica `14019d2887a782250021a1eac2f3e8dc936e360c` y head `8bc4951a842154837abe504b148012b417034b52`; no representa el estado actual y no debe integrarse sin actualizar.
 
-El documento de Drive `Documento_Maestro_App_Gestion_Taller_Masonico_FINAL.md` pertenece a “Sistema Logial de Ejemplo - solo como referencia”. Drive muestra modificación el 21-09-2026; el texto declara versión interna 03-07-2026. Se consultó como referencia funcional, no como fuente de arquitectura, permisos o gobierno de Centenario. Propone PHP/SQLite/cPanel y perfiles SaaS que no se importan al monolito ASP.NET/React vigente.
+El documento de Drive `Documento_Maestro_App_Gestion_Taller_Masonico_FINAL.md` pertenece a “Sistema Logial de Ejemplo - solo como referencia”. Drive muestra modificación el 21-09-2026; el texto declara versión interna 03-07-2026. Se consultó como referencia funcional, no como fuente de arquitectura, permisos o gobierno de Centenario. La Línea Base Maestra y la decisión aprobada de la ficha prevalecen en los perfiles con acceso. Propone PHP/SQLite/cPanel y perfiles SaaS que no se importan al monolito ASP.NET/React vigente.
 
 Esta revisión actualiza contradicciones materiales de la revisión de PR #182. No constituye una auditoría completa de cada criterio de ese documento ni autoriza funciones adicionales. No se alteran cargos, atribuciones, firmas, aprobaciones o procedimientos institucionales.
 
@@ -28,7 +28,7 @@ La edición se limita a Secretaría del Taller en su organización, Gran Secreta
 ## Límites y próximo paso
 
 - PR #182 debe refrescarse o cerrarse como obsoleta; no fusionar su rama histórica.
-- Los temas de asistencia/instrucciones y Oficialidad/historial sólo pueden pasar a un alcance funcional después de precisar una brecha actual y obtener definición del Product Owner.
+- Para asistencia/instrucciones, la API ya ofrece filtros que faltan en el cliente/vista; cualquier cambio sigue sujeto a definición de prioridad y criterios del Product Owner. Para Oficialidad por períodos, falta confirmar la fuente institucional, el modelo de períodos y el alcance antes de proponer implementación.
 - Issues #190 y #191 siguen gobernando las definiciones tarifarias/monetarias y contables; esta revisión no cambia esos estados.
 - Issue #97 mantiene pendiente QA física/UAT. `srv01` continúa pausado; no hubo instalación, smoke/regresión física ni UAT. Pages, CI y paquetes no prueban esas etapas.
 - No se modifica `main`.
