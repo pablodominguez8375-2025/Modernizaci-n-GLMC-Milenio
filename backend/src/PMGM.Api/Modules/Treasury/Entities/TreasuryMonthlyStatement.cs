@@ -11,6 +11,7 @@ public sealed class TreasuryMonthlyStatement
     public Organization Organization { get; set; } = null!;
     public int PeriodYear { get; set; }
     public int PeriodMonth { get; set; }
+    public string Currency { get; set; } = "CLP";
     public DateOnly CutoffDate { get; set; }
     public required string Status { get; set; }
     public string? SourceReference { get; set; }
@@ -19,6 +20,8 @@ public sealed class TreasuryMonthlyStatement
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public DateTimeOffset? SubmittedAtUtc { get; set; }
     public DateTimeOffset? ReconciledAtUtc { get; set; }
+    public string? BankReceiptConfirmedBySubject { get; set; }
+    public DateTimeOffset? BankReceiptConfirmedAtUtc { get; set; }
     public DateTimeOffset? ClosedAtUtc { get; set; }
     public ICollection<TreasuryMonthlyStatementLine> Lines { get; set; } = new List<TreasuryMonthlyStatementLine>();
     public ICollection<TreasuryPayment> Payments { get; set; } = new List<TreasuryPayment>();
@@ -82,6 +85,7 @@ public sealed class LodgeFeePlan
     public required string FeeType { get; set; }
     public decimal MemberAmount { get; set; }
     public decimal GrandTreasuryAmount { get; set; }
+    public string Currency { get; set; } = "CLP";
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveUntil { get; set; }
     public bool IsActive { get; set; } = true;
@@ -101,6 +105,7 @@ public sealed class LodgeMemberCharge
     public int PeriodMonth { get; set; }
     public decimal MemberAmount { get; set; }
     public decimal GrandTreasuryAmount { get; set; }
+    public string Currency { get; set; } = "CLP";
     public required string Status { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public ICollection<LodgeMemberPayment> Payments { get; set; } = new List<LodgeMemberPayment>();
@@ -112,6 +117,7 @@ public sealed class LodgeMemberPayment
     public Guid ChargeId { get; set; }
     public LodgeMemberCharge Charge { get; set; } = null!;
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CLP";
     public required string PaymentMethod { get; set; }
     public DateOnly PaymentDate { get; set; }
     public required string ReceiptNumber { get; set; }
@@ -150,6 +156,7 @@ public sealed class LodgeTreasuryExpense
     public Organization Organization { get; set; } = null!;
     public required string Category { get; set; }
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CLP";
     public DateOnly ExpenseDate { get; set; }
     public required string Description { get; set; }
     public string? EvidenceReference { get; set; }
@@ -167,6 +174,7 @@ public sealed class LodgeTreasuryIncome
     public Organization Organization { get; set; } = null!;
     public required string Category { get; set; }
     public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CLP";
     public DateOnly IncomeDate { get; set; }
     public required string Description { get; set; }
     public string? EvidenceReference { get; set; }
@@ -180,6 +188,7 @@ public sealed class LodgeTreasuryConfiguration
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
     public decimal OpeningBalance { get; set; }
+    public string Currency { get; set; } = "CLP";
     public DateOnly OpeningBalanceDate { get; set; }
     public required string IncomeCategories { get; set; }
     public required string ExpenseCategories { get; set; }
@@ -192,6 +201,7 @@ public sealed class LodgeTreasuryYearClosure
     public Guid OrganizationId { get; set; }
     public Organization Organization { get; set; } = null!;
     public int AccountingYear { get; set; }
+    public string Currency { get; set; } = "CLP";
     public decimal OpeningBalance { get; set; }
     public decimal Income { get; set; }
     public decimal AuthorizedExpenses { get; set; }
@@ -208,6 +218,7 @@ public sealed class LodgeTreasuryReconciliation
     public Organization Organization { get; set; } = null!;
     public DateOnly From { get; init; }
     public DateOnly To { get; init; }
+    public string Currency { get; init; } = "CLP";
     public decimal OpeningBalance { get; init; }
     public decimal Income { get; init; }
     public decimal AuthorizedExpenses { get; init; }
