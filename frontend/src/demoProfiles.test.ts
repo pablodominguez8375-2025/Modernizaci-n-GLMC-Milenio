@@ -71,6 +71,20 @@ describe('showcase role profiles', () => {
     expect(profile.capabilities.canManageTreasuryRegularity).toBe(false)
   })
 
+  it('provides a least-privilege Gran Archivero profile for the public showcase', () => {
+    const profile = getDemoProfile('grandArchivist')
+    expect(profile.displayName).toBe('Gran Archivero · Demostración')
+    expect(profile.accessScope).toBe('order')
+    expect(profile.capabilities.canManageGrandArchive).toBe(true)
+    expect(profile.capabilities.canManageGrandSecretariat).not.toBe(true)
+    expect(profile.capabilities.canManageTreasuryRegularity).not.toBe(true)
+    expect(profile.capabilities.canManageHospitalariaRegularity).not.toBe(true)
+    expect(profile.capabilities.canConfigureSystem).not.toBe(true)
+    expect(profile.capabilities.canBootstrapInstitutional).not.toBe(true)
+    expect(profile.capabilities.canManageDocuments).not.toBe(true)
+    expect(profile.capabilities.canReadLibrary).not.toBe(true)
+  })
+
   it('gives a Gran Logia authority order-level institutional capabilities', () => {
     const profile = getDemoProfile('grandLodge')
     expect(profile.accessScope).toBe('order')
