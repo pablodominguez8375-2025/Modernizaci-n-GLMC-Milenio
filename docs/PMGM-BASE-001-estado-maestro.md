@@ -1,3 +1,15 @@
+## Cierre documental integrado — PR #204 — 28-09-2026
+
+**SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio: `c05fa74e4e481a481a4e5054512675b006c4c57a`.
+
+Se actualizó el cruce de menús referenciales y el handoff NEXT; sin cambios de código, permisos, migraciones o funciones. El nuevo informe es `docs/reviews/PMGM-REV-LOGIAL-MENUS-2026-09-28.md`. El menú **Taller → Ficha del Taller** está condicionado por capacidades: Secretaría del Taller edita; Venerable consulta; Hermano no ve la opción en Demo. No se amplían permisos. Mis planchas y Resumen del Taller ya constan integrados. La API de instrucciones admite filtros fecha/grado que faltan en la vista; la Oficialidad histórica por períodos requiere confirmar una fuente institucional y alcance.
+
+Exact-head PR #204: PMGM CI #1645, Showcase #946 y QA Installable #584 SUCCESS. Post-merge: PMGM CI #1646, Showcase/Pages #947 con Deploy SUCCESS, QA Installable #585, Pre-UAT #391 SUCCESS. Pages artifact #10947342572 digest `sha256:c657c49f942ed48775cde2e9260cc1cb62d2027466241bc95f7966fc28d7d5b1`; evidencia #10947551850 digest `sha256:d9ee224ea735874c5590ad078b36517c16b924255e2bf06a7614df19f0ee6aeb`; QA Actions #10947382198 digest `sha256:78056dbe4c062b23f66718dbca0feafddc73c50479c001a0fdcc05a39fddbec0`; Pre-UAT #10947138143 digest `sha256:1979ab2b6d5bf4827a78e8f92fc4b02f6419312a47de5d359187104eb22f88b3`.
+
+Pages publicado; `qa-current.json` confirma `sourceSha=4f1396820846342f3bd5091b51c6a62857d3a39c`. ZIP QA publicado `Proyecto-Centenario-QA-srv01-4f1396820846.zip`, SHA-256 `c65cd218e7ca5b99943f31e9c364345bc99050c5a506a27b066d24ea6e83cf47`. ZIP del artefacto QA, mismo SOURCE_SHA, SHA-256 `3b29c38beae40358b07d5c296bf2cded8ccbf9c304547aedaf9fc784f4c14116`; BUILD-INFO coincide y MANIFEST valida 776/776. Empaquetar/publicar no acredita instalación ni aceptación.
+
+PR #182 se cerró sin merge, enlazada al reemplazo #204. Issue #97 sigue abierto; `srv01` en pausa, sin instalación, smoke/regresión física ni UAT. No promover a `main`. Issues #190/#191 pendientes. No iniciar funciones nuevas sin alcance aprobado; el siguiente chat debe verificar el HEAD vivo y consultar START-HERE, estado, NEXT y Drive.
+
 ## REGLA PERMANENTE — REGISTRO AL CIERRE DE CADA TAREA
 
 Al terminar cada tarea del proyecto, registrar el resultado en GitHub y Drive, aunque no haya cambios de código. Incluir fecha, HEAD de `dev`/`main`, alcance y archivos, PR/Issue, pruebas/gates/artefactos, situación de Pages/QA/UAT, límites y pendientes. Actualizar la Línea Base Maestra y dejar un handoff con instrucciones transferibles a cualquier IA/chat. Verificar la lectura de retorno en ambos sistemas antes de cerrar. Si una fuente no está disponible, declararlo y no inventar ni completar el estado desde recuerdos.
