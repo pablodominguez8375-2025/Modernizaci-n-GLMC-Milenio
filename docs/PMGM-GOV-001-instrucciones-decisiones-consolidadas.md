@@ -118,6 +118,11 @@ La Secretaría del Taller solicita, entre otras:
 Gran Secretaría es quien aprueba/autoriza cuando corresponda y emite la documentación formal institucional.
 
 ## 10. Docencia e instrucciones por grado
+
+## Aclaración vigente del Product Owner — Issue #46 — 28-09-2026
+
+El Sponsor define los estados de asistencia a instrucciones: **Presente** = asistió; **Ausente** = no asistió y no avisó; **Justificada** = no asistió, pero avisó, tenía permiso o comunicó una razón. Docencia del Taller debe registrar explícitamente uno de los tres estados por cada hermano, sin asignar “Presente” automáticamente. Mi ficha conserva consulta individual; Docencia de la Orden presenta conteos agregados de presentes, justificadas y ausentes sin exponer identidades.
+
 La instrucción se modela inicialmente como una **clase/instrucción realizada**, no como progreso independiente por tema.
 
 Responsables vigentes:
@@ -131,7 +136,7 @@ Cada instrucción registra como mínimo:
 - grado correspondiente;
 - responsable/instructor;
 - tema tratado;
-- asistencia o inasistencia por hermano;
+- asistencia por hermano con tres estados: **Presente** si asistió; **Ausente** si no asistió y no avisó; **Justificada** si no asistió, pero avisó, tenía permiso o comunicó una razón;
 - observaciones cuando corresponda.
 
 En la ficha del hermano, por ahora el historial de instrucción debe mostrar principalmente:

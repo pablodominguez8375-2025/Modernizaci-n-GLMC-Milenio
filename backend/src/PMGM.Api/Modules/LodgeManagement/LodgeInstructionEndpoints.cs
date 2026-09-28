@@ -79,6 +79,7 @@ public static class LodgeInstructionEndpoints
             .ToDictionary(g => g.Key, g => new
             {
                 Present = g.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Present),
+                Excused = g.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Excused),
                 Absent = g.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Absent)
             });
         var workshopLookup = workshops.ToDictionary(x => x.Id);
@@ -88,13 +89,14 @@ public static class LodgeInstructionEndpoints
             var workshop = workshopLookup[x.OrganizationId];
             return new OrderInstructionReportItemDto(
                 x.Id, workshop.Id, workshop.Name, workshop.Number, x.InstructionDate, x.Grade,
-                x.Topic, x.ResponsibleOffice, attendance?.Present ?? 0, attendance?.Absent ?? 0);
+                x.Topic, x.ResponsibleOffice, attendance?.Present ?? 0, attendance?.Excused ?? 0, attendance?.Absent ?? 0);
         }).ToArray();
         var groupedSummary = items.GroupBy(x => new { x.OrganizationId, x.Grade })
             .ToDictionary(g => (g.Key.OrganizationId, g.Key.Grade), g => new
             {
                 SessionCount = g.Count(),
                 Present = g.Sum(x => x.Present),
+                Excused = g.Sum(x => x.Excused),
                 Absent = g.Sum(x => x.Absent)
             });
         var reportGrades = normalizedGrade is null
@@ -107,7 +109,7 @@ public static class LodgeInstructionEndpoints
                 groupedSummary.TryGetValue((workshop.Id, reportGrade), out var counts);
                 return new OrderInstructionWorkshopSummaryDto(
                     workshop.Id, workshop.Name, workshop.Number, reportGrade,
-                    counts?.SessionCount ?? 0, counts?.Present ?? 0, counts?.Absent ?? 0);
+                    counts?.SessionCount ?? 0, counts?.Present ?? 0, counts?.Excused ?? 0, counts?.Absent ?? 0);
             }))
             .OrderBy(x => x.OrganizationNumber).ThenBy(x => x.OrganizationName).ThenBy(x => x.Grade).ToArray();
 
@@ -386,6 +388,7 @@ public static class LodgeInstructionEndpoints
                 InstructionSessionId = instruction.Id,
                 Count = request.Items.Count,
                 Present = request.Items.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Present),
+                Excused = request.Items.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Excused),
                 Absent = request.Items.Count(x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Absent)
             }));
         await db.SaveChangesAsync(cancellationToken);
@@ -527,11 +530,11 @@ public sealed record LodgeInstructionsResponse(int Total, IReadOnlyCollection<Lo
 
 public sealed record OrderInstructionReportItemDto(
     Guid InstructionId, Guid OrganizationId, string OrganizationName, string? OrganizationNumber,
-    DateOnly InstructionDate, string Grade, string Topic, string ResponsibleOffice, int Present, int Absent);
+    DateOnly InstructionDate, string Grade, string Topic, string ResponsibleOffice, int Present, int Excused, int Absent);
 
 public sealed record OrderInstructionWorkshopSummaryDto(
     Guid OrganizationId, string OrganizationName, string? OrganizationNumber, string Grade,
-    int SessionCount, int Present, int Absent);
+    int SessionCount, int Present, int Excused, int Absent);
 
 public sealed record OrderInstructionReportResponse(
     int Total, IReadOnlyCollection<OrderInstructionWorkshopOptionDto> Workshops,

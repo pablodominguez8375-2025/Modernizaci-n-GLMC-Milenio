@@ -4,6 +4,7 @@ export type LodgeMeetingStatus = 'scheduled' | 'open' | 'held' | 'closed' | 'can
 export type LodgeMeetingModality = 'in_person' | 'virtual'
 export type LodgeCeremonyType = 'initiation' | 'wage_increase' | 'exaltation'
 export type LodgeAttendanceStatus = 'present' | 'excused' | 'absent'
+export type LodgeInstructionAttendanceStatus = 'present' | 'excused' | 'absent'
 export type LodgeMinuteStatus = 'draft' | 'approved' | 'superseded'
 
 export interface LodgeMemberOption { id: string; displayName: string }
@@ -65,15 +66,15 @@ export interface LodgeInstruction {
   status: 'scheduled' | 'held' | 'cancelled'
 }
 export interface LodgeInstructionsResponse { total: number; items: LodgeInstruction[] }
-export interface OrderInstructionReportItem { instructionId: string; organizationId: string; organizationName: string; organizationNumber: string | null; instructionDate: string; grade: Exclude<LodgeGrade, 'all'>; topic: string; responsibleOffice: string; present: number; absent: number }
-export interface OrderInstructionReport { total: number; workshops: Array<{ organizationId: string; organizationName: string; organizationNumber: string | null }>; summary: Array<{ organizationId: string; organizationName: string; organizationNumber: string | null; grade: Exclude<LodgeGrade, 'all'>; sessionCount: number; present: number; absent: number }>; items: OrderInstructionReportItem[] }
+export interface OrderInstructionReportItem { instructionId: string; organizationId: string; organizationName: string; organizationNumber: string | null; instructionDate: string; grade: Exclude<LodgeGrade, 'all'>; topic: string; responsibleOffice: string; present: number; excused: number; absent: number }
+export interface OrderInstructionReport { total: number; workshops: Array<{ organizationId: string; organizationName: string; organizationNumber: string | null }>; summary: Array<{ organizationId: string; organizationName: string; organizationNumber: string | null; grade: Exclude<LodgeGrade, 'all'>; sessionCount: number; present: number; excused: number; absent: number }>; items: OrderInstructionReportItem[] }
 export interface CreateLodgeInstructionRequest {
   instructionDate: string
   grade: Exclude<LodgeGrade, 'all'>
   topic: string
   instructorMemberId?: string | null
 }
-export interface LodgeInstructionAttendanceItem { memberId: string; status: 'present' | 'absent' }
+export interface LodgeInstructionAttendanceItem { memberId: string; status: LodgeInstructionAttendanceStatus }
 export interface LodgeMinutesResponse { total: number; items: LodgeMinute[] }
 export type LodgeBallotType = 'white_black' | 'positive_negative' | 'candidate'
 export interface LodgeAnonymousBallot { id: string; meetingId: string; version: number; ballotType: LodgeBallotType; procedureNumber: 1 | 2 | 3 | null; subject: string; attendeeCount: number; eligibleCount: number; positiveCount: number; negativeCount: number; recountObservation: string | null; status: 'closed' | 'superseded'; recordedAtUtc: string }
@@ -533,8 +534,8 @@ export class LodgeApiClient {
         (!filters.grade || filters.grade === 'all' || item.grade === filters.grade) &&
         (!filters.organizationId || item.organizationId === filters.organizationId) &&
         (!filters.from || item.instructionDate >= filters.from) && (!filters.to || item.instructionDate <= filters.to))
-        .map(item => { const workshop = workshops.find(row => row.organizationId === item.organizationId)!; const attendance = this.mockInstructionAttendance.get(item.id) ?? []; return { instructionId: item.id, ...workshop, instructionDate: item.instructionDate, grade: item.grade, topic: item.topic, responsibleOffice: item.responsibleOffice, present: attendance.filter(x => x.status === 'present').length, absent: attendance.filter(x => x.status === 'absent').length } })
-      const summary = workshops.filter(w => !filters.organizationId || w.organizationId === filters.organizationId).flatMap(workshop => (['apprentice', 'fellowcraft', 'master'] as const).filter(g => !filters.grade || filters.grade === 'all' || filters.grade === g).map(grade => { const rows = items.filter(x => x.organizationId === workshop.organizationId && x.grade === grade); return { ...workshop, grade, sessionCount: rows.length, present: rows.reduce((sum, x) => sum + x.present, 0), absent: rows.reduce((sum, x) => sum + x.absent, 0) } }))
+        .map(item => { const workshop = workshops.find(row => row.organizationId === item.organizationId)!; const attendance = this.mockInstructionAttendance.get(item.id) ?? []; return { instructionId: item.id, ...workshop, instructionDate: item.instructionDate, grade: item.grade, topic: item.topic, responsibleOffice: item.responsibleOffice, present: attendance.filter(x => x.status === 'present').length, excused: attendance.filter(x => x.status === 'excused').length, absent: attendance.filter(x => x.status === 'absent').length } })
+      const summary = workshops.filter(w => !filters.organizationId || w.organizationId === filters.organizationId).flatMap(workshop => (['apprentice', 'fellowcraft', 'master'] as const).filter(g => !filters.grade || filters.grade === 'all' || filters.grade === g).map(grade => { const rows = items.filter(x => x.organizationId === workshop.organizationId && x.grade === grade); return { ...workshop, grade, sessionCount: rows.length, present: rows.reduce((sum, x) => sum + x.present, 0), excused: rows.reduce((sum, x) => sum + x.excused, 0), absent: rows.reduce((sum, x) => sum + x.absent, 0) } }))
       return { total: items.length, workshops, summary, items }
     }
     const query = new URLSearchParams()

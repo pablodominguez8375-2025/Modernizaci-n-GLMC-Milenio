@@ -96,10 +96,11 @@ public static class LodgeManagementCodes
     public static class InstructionAttendanceStatus
     {
         public const string Present = "present";
+        public const string Excused = "excused";
         public const string Absent = "absent";
 
         public static bool IsValid(string value)
-            => value is Present or Absent;
+            => value is Present or Excused or Absent;
     }
 
     public static class InstructionOffice

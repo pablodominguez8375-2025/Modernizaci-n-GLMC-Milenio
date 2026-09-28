@@ -190,20 +190,44 @@ public sealed class LodgeInstructionHttpWorkflowTests
         Assert.True(correctedItem.GetProperty("attended").GetBoolean());
         Assert.Equal(LodgeManagementCodes.InstructionAttendanceStatus.Present, correctedItem.GetProperty("status").GetString());
 
+        var justifiedResponse = await client.PostAsJsonAsync(
+            $"/api/gestion-logial/instrucciones/{instructionId}/asistencia",
+            new { items = new[] { new { memberId, status = LodgeManagementCodes.InstructionAttendanceStatus.Excused } } },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, justifiedResponse.StatusCode);
+
+        var justifiedHistory = await client.GetAsync(
+            $"/api/gestion-logial/miembros/{memberId}/instrucciones",
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, justifiedHistory.StatusCode);
+        var justifiedJson = await justifiedHistory.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        var justifiedItem = justifiedJson.GetProperty("items")[0];
+        Assert.False(justifiedItem.GetProperty("attended").GetBoolean());
+        Assert.Equal(LodgeManagementCodes.InstructionAttendanceStatus.Excused, justifiedItem.GetProperty("status").GetString());
+
         var selfProfileResponse = await client.GetAsync("/api/member-self/profile", cancellationToken);
         Assert.Equal(HttpStatusCode.OK, selfProfileResponse.StatusCode);
         var selfProfile = await selfProfileResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var selfInstructions = selfProfile.GetProperty("activity").GetProperty("instruction");
         Assert.Contains(selfInstructions.GetProperty("history").EnumerateArray(), item =>
             item.GetProperty("topic").GetString() == topic &&
-            item.GetProperty("attendanceStatus").GetString() == LodgeManagementCodes.InstructionAttendanceStatus.Present);
+            item.GetProperty("attendanceStatus").GetString() == LodgeManagementCodes.InstructionAttendanceStatus.Excused);
 
         client.DefaultRequestHeaders.Remove("X-Test-Organization");
         client.DefaultRequestHeaders.Add("X-Test-Role", "grand_second_warden");
         var orderReport = await client.GetAsync("/api/gestion-logial/instrucciones/orden?grade=apprentice", cancellationToken);
         Assert.Equal(HttpStatusCode.OK, orderReport.StatusCode);
         var reportJson = await orderReport.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.Contains(reportJson.GetProperty("items").EnumerateArray(), item => item.GetProperty("instructionId").GetGuid() == instructionId);
+        var reportItem = reportJson.GetProperty("items").EnumerateArray().Single(item => item.GetProperty("instructionId").GetGuid() == instructionId);
+        Assert.Equal(0, reportItem.GetProperty("present").GetInt32());
+        Assert.Equal(0, reportItem.GetProperty("absent").GetInt32());
+        Assert.Equal(1, reportItem.GetProperty("excused").GetInt32());
+        var summaryRow = reportJson.GetProperty("summary").EnumerateArray().Single(item =>
+            item.GetProperty("organizationId").GetGuid() == organizationId &&
+            item.GetProperty("grade").GetString() == LodgeManagementCodes.Grade.Apprentice);
+        Assert.Equal(0, summaryRow.GetProperty("present").GetInt32());
+        Assert.Equal(0, summaryRow.GetProperty("absent").GetInt32());
+        Assert.Equal(1, summaryRow.GetProperty("excused").GetInt32());
         Assert.DoesNotContain(reportJson.GetProperty("items")[0].EnumerateObject(), property => property.Name.Contains("member", StringComparison.OrdinalIgnoreCase) || property.Name.Contains("displayName", StringComparison.OrdinalIgnoreCase));
         var otherGradeReport = await client.GetAsync("/api/gestion-logial/instrucciones/orden?grade=fellowcraft", cancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, otherGradeReport.StatusCode);
@@ -220,9 +244,10 @@ public sealed class LodgeInstructionHttpWorkflowTests
             .Where(x => x.InstructionSessionId == instructionId && x.MemberId == memberId)
             .OrderBy(x => x.RecordedAtUtc)
             .ToListAsync(cancellationToken);
-        Assert.Equal(2, persistedAttendance.Count);
+        Assert.Equal(3, persistedAttendance.Count);
         Assert.Contains(persistedAttendance, x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Absent);
         Assert.Contains(persistedAttendance, x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Present);
+        Assert.Contains(persistedAttendance, x => x.Status == LodgeManagementCodes.InstructionAttendanceStatus.Excused);
 
         var auditActions = await lodgeDb.AuditEvents
             .AsNoTracking()
@@ -231,6 +256,6 @@ public sealed class LodgeInstructionHttpWorkflowTests
             .ToListAsync(cancellationToken);
         Assert.Contains("lodge.instruction.created", auditActions);
         Assert.Contains("lodge.instruction.completed", auditActions);
-        Assert.Equal(2, auditActions.Count(x => x == "lodge.instruction.attendance_recorded"));
+        Assert.Equal(3, auditActions.Count(x => x == "lodge.instruction.attendance_recorded"));
     }
 }

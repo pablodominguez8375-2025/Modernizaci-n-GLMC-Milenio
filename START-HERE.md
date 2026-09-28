@@ -35,6 +35,15 @@
 
 # START HERE — Proyecto Centenario
 
+## Handoff vigente — Issue #46, estados de asistencia — 28-09-2026 UTC
+
+- Decisión PO registrada en GitHub Issue #46 y Drive Línea Base: Presente = asistió; Ausente = faltó sin aviso; Justificada = faltó, pero avisó, tenía permiso o comunicó una razón.
+- Base de implementación: `dev@b252d1e2a1b1b5a2a111037f743b6e57823b6ef7`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambios. Rama `feature/instruction-attendance-status-20260928` creada desde ese SHA.
+- Brecha confirmada: el registro de instrucciones aceptaba sólo presente/ausente y la interfaz asignaba Presente silenciosamente a todos. Mi ficha ya representaba “Justificada”; el reporte de Orden agregaba sólo presentes/ausentes.
+- Este incremento añade selección obligatoria de los tres estados, conserva los registros de asistencia existentes, agrega el conteo de justificadas al reporte agregado, pruebas backend/frontend y criterios QA. No requiere migración: el estado se persiste en el campo existente.
+- Cambios en rama/PR hasta CI exact-head SUCCESS; no declarar integrado/publicado antes de verificarlo. `srv01` sigue pausado por Issue #97: no instalación ni QA física/UAT. No promover `main`.
+
+
 ## Cierre integrado — Docencia por grado y consulta de Orden — 28-09-2026
 
 PR #206 se integró por squash. SHA exacto validado del PR: `8dc936301b597b1c2aeaf0b48ec309c8456c59bc`; integración de funcionalidad en `dev@7f2079b3c1d89564cc181f6efad5f231de6db081`. Inicio: `dev@1baf752c8be94e4d7b667d03ac0cad9f4b05fb31`. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece sin cambios.
