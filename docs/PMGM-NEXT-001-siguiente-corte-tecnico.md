@@ -1,7 +1,5 @@
 ## Handoff vigente — cierre de revisión referencial y acceso a Ficha del Taller — 28-09-2026
 
-## Corte documental integrado — PR #204 — 28-09-2026
-
 **SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio de dev: `c05fa74e4e481a481a4e5054512675b006c4c57a`. Árbol local limpio, detached en `origin/dev`.
 
 Archivos PR #204: `docs/reviews/PMGM-REV-LOGIAL-MENUS-2026-09-28.md` (nuevo) y `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`. Actualiza el cruce con la referencia Drive antigua y explica acceso a **Taller → Ficha del Taller** condicionado por capacidades. No hubo cambios de código, permisos, migraciones ni funciones. Mis planchas y Resumen del Taller constan ya integrados; se separa historial individual de cargos de una Oficialidad histórica por períodos. La API de instrucciones acepta filtros de fecha/grado; falta exponerlos en cliente/vista y requiere definición de alcance del Product Owner.
