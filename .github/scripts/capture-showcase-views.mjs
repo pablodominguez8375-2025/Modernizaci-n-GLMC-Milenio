@@ -117,6 +117,11 @@ function cdp(method, params = {}) {
 }
 
 async function evaluate(expression) {
+  try {
+    new Function(`return (${expression})`)
+  } catch (error) {
+    throw new Error(`Invalid browser expression: ${error instanceof Error ? error.message : String(error)}`)
+  }
   const result = await cdp('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true })
   if (result.exceptionDetails) {
     const exception = result.exceptionDetails.exception
@@ -439,9 +444,10 @@ async function auditEveryMobileMenuView() {
   for (const profile of profiles) {
     await resetPage(mobileViewport.width, mobileViewport.height)
     await selectProfile(profile)
-    const menuLabels = await evaluate(`(() => [...new Set([...document.querySelectorAll('nav.sidebar button')]
-      .filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
-      .map(button => (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean)) )()`)
+    const menuLabels = await evaluate(`(() => {
+      const buttons = [...document.querySelectorAll('nav.sidebar button')].filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
+      return [...new Set(buttons.map(button => (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean))]
+    })()`)
     if (!menuLabels?.length) throw new Error(`No active menu items found for demo profile ${profile}.`)
     const navigation = await inspectAllVisibleMediaAndNavigation(profile)
     const canReachMenuEnd = await evaluate(`(() => {
