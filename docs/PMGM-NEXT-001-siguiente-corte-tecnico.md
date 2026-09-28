@@ -1,19 +1,14 @@
-## Handoff vigente — comparación de PR #182 con dev y Drive — 27-09-2026 (America/Santiago)
+## Handoff vigente — revisión de menú Ficha del Taller y cruce referencial actualizado — 28-09-2026
 
-**Estado de partida:** `dev@179f200f605ec4a8cb0e64c16843c3969c690612`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. Esta revisión es documental y no inicia un incremento funcional.
+**Base verificada:** `dev@c05fa74e4e481a481a4e5054512675b006c4c57a`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. Este corte es documental, sin cambios de código ni permisos.
 
-PR #182 sigue abierta en `review/logial-menu-crosswalk`, contra una base histórica `14019d2887a782250021a1eac2f3e8dc936e360c`. Su tabla debe actualizarse antes de integrar. La referencia de Drive está en `Proyecto Centenario/Sistema Logial de Ejemplo - solo como referencia`: `Documento_Maestro_App_Gestion_Taller_Masonico_FINAL.docx` y su copia `.md` registran versión interna 03-07-2026; metadata de Drive indica modificación 21-09-2026. La referencia se usa sólo como antecedente funcional, no como fuente de arquitectura o permisos.
+PR #182 conserva base histórica `14019d2887a782250021a1eac2f3e8dc936e360c` y no debe fusionarse tal como está. La comparación actualizada está en [PMGM-REV-LOGIAL-MENUS-2026-09-28](reviews/PMGM-REV-LOGIAL-MENUS-2026-09-28.md). Drive mantiene como referencia funcional el documento del Sistema Logial modificado el 21-09-2026, cuya versión interna indica 03-07-2026; no es fuente normativa, arquitectónica ni de permisos para Centenario.
 
-Hallazgos verificados contra el HEAD actual que contradicen/actualizan la matriz de PR #182:
+Ficha del Taller está integrada en PR #200 y se ubica en **Taller → Ficha del Taller**. El grupo y la opción sólo aparecen cuando la sesión tiene capacidad de consulta o edición. En Demo, Secretaría del Taller permite editar identidad, fecha de iniciación, Oriente/ciudad, país y logo; Venerable Maestro puede consultar; Hermano no ve la opción. No ampliar perfiles por inferencia ni habilitar administrador técnico sin una decisión aprobada. Si el Product Owner necesita que otro perfil edite, registrar el alcance explícito y contrastarlo con la matriz institucional antes de modificar autorización.
 
-- **Mis planchas** ya está integrado por PR #185 en `dev`; no sigue pendiente. Reutiliza el Gestor Documental/Biblioteca Virtual y conserva autoría, versiones, clasificación por grado, controles de integridad y antivirus.
-- **Libro de Oro** no se traslada con ese nombre: la adaptación aprobada es **Resumen del Taller**, integrada por PR #183, con consulta acotada y delegación revocable según sus reglas.
-- La **Ficha del Taller** ya tiene menú directo e identidad del Taller, incluida fecha de iniciación, ciudad/Oriente, país y logo opcional; PR #200 la integró.
-- Los puntos de consulta de **Oficialidad/historial de cargos** y **asistencia/instrucciones** deben reexaminarse sobre las vistas y datos actuales antes de recomendar otro corte.
+El cruce confirma como superados los estados antiguos de Mis planchas (PR #185) y Libro de Oro (adaptado como Resumen del Taller por PR #183). El historial individual de cargos existe, pero no equivale a una vista de Oficialidad por períodos; falta confirmar la fuente institucional de esos períodos. La API de instrucciones acepta filtros de fecha/grado, aunque el cliente/vista aún no los expone. Esta brecha no autoriza su implementación: el Product Owner debe definir prioridad y criterios. Issues #190/#191 mantienen sus definiciones monetarias/contables pendientes.
 
-No fusionar PR #182 en su estado actual. Se dejó comentario con los hallazgos y se mantiene abierta para actualizar o sustituir el cruce. Las recomendaciones P2/P3 no quedan autorizadas como funciones por esta revisión. Próximo paso: refrescar el documento comparativo contra el código vivo y los archivos Drive actuales; si de allí resulta un nuevo alcance funcional, confirmarlo con el Product Owner antes de programarlo.
-
-Checks/entrega del corte de partida `179f200f…`: PMGM CI #1639, Showcase/Pages #938, QA Installable #576 y Pre-UAT #389 SUCCESS. Pages artifact #10945258861 digest `sha256:87a7ca6facd1ff307cefca9b0a00ef8c7ee2ec9682f99562951085e948e18a18`; `qa-current.json` confirma ese SHA. ZIP QA `Proyecto-Centenario-QA-srv01-179f200f605e.zip`, SHA-256 `3a6702af873103a6b29a2065bde5249eeed9d931b32c48a286949c48cc909eb9`. Artefactos no equivalen a instalación ni UAT. Issue #97 abierto, `srv01` pausado; no instalar, desplegar, ejecutar smoke/regresión física ni UAT. `main` no se modifica/promueve.
+Issue #97 conserva la QA física/UAT pendiente y `srv01` pausado. No instalar, desplegar, ejecutar smoke/regresión física ni UAT mientras siga vigente la pausa. Pages y artefactos son etapas técnicas, no aceptación. `main` no se modifica. Tras integrar esta revisión documental, actualizar Línea Base Maestra y comprobar lectura de retorno.
 
 Esta entrada supersede para el estado de PR #182 los bloques históricos de abajo.
 
