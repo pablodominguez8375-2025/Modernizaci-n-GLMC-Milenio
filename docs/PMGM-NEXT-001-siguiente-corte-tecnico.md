@@ -1,3 +1,11 @@
+## Estado actual — Tesorería Perú USD (28-09-2026 UTC)
+
+Este bloque supersede afirmaciones previas de estos handoffs que indiquen que las decisiones #190/#191 de moneda siguen pendientes. El PO aprobó en Drive Línea Base Maestra y en comentarios de GitHub #190/#154: libros CLP y USD separados sin conversión; componente local peruano en USD separado del aporte oficial; Gran Tesorería verifica y confirma la recepción en su cuenta bancaria para dejar al Taller al día. Issue #191 sigue pendiente sólo en políticas de anticipos, reversos y correcciones no definidas.
+
+Fuente vigente comprobada: Decreto N.º 1.759 (emitido 15-12-2025, vigente 01-01-2026, archivo actualizado 22-09-2026) fija Perú ordinario en USD 6; no fija otras categorías USD ni tipo de cambio. Manual de Tesorería 2026 (actualizado 21-09-2026) preserva fecha real de recepción separada del período de cuota. Ver PMGM-ADR-005 y PMGM-QA-V072.
+
+Base del trabajo: `dev@a6f5cc9f73fc485621732efd8ec021a6ba7e0dab`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. Rama local `feature/peru-usd-ledger-20260928`. Cambios en rama de feature; PR y CI exact-head pendientes antes de integrar. No se instaló ni se ejecutó UAT. Issue #97 mantiene srv01 pausado. No tocar `main`.
+
 ## Handoff vivo — revisión de aprobaciones — 28-09-2026 UTC
 
 - SHA observado al abrir este handoff: `dev@26deb078a25b62fa863bf4e709e6820a337d67a2`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin promoción. PR #211 documental integrada en dev@26deb078. Pages run 36455750108 SUCCESS; `qa-current.json.sourceSha` coincide con 26deb078. QA artifact #10985078472 empaquetado; no instalado. Issue #97 mantiene la pausa de srv01.

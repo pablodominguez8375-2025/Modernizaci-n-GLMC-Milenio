@@ -131,25 +131,40 @@ public static class MemberSelfEndpoints
         var treasuryAsOf = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
             TimeZoneInfo.FindSystemTimeZoneById("America/Santiago")).DateTime);
         var currentTreasuryPeriod = treasuryAsOf.Year * 100 + treasuryAsOf.Month;
+        var treasuryCurrencies = treasuryCharges.GroupBy(x => x.Currency).Select(group => new
+        {
+            currency = group.Key,
+            totalCharged = group.Sum(x => x.MemberAmount),
+            totalPaid = group.Sum(x => x.Payments.Sum(payment => payment.Amount)),
+            balance = group.Sum(x => x.MemberAmount - x.Payments.Sum(payment => payment.Amount)),
+            overdueBalance = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth < currentTreasuryPeriod)
+                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+            currentPeriodBalance = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth == currentTreasuryPeriod)
+                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+            futurePeriodBalance = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
+                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+            futurePaidAmount = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
+                .Sum(x => x.Payments.Sum(payment => payment.Amount))
+        }).ToList();
+        var singleCurrency = treasuryCurrencies.Count == 1 ? treasuryCurrencies[0] : null;
 
         var treasuryAccount = new
         {
-            totalCharged = treasuryCharges.Sum(x => x.MemberAmount),
-            totalPaid = treasuryCharges.Sum(x => x.Payments.Sum(payment => payment.Amount)),
-            balance = treasuryCharges.Sum(x => x.MemberAmount - x.Payments.Sum(payment => payment.Amount)),
-            overdueBalance = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth < currentTreasuryPeriod)
-                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
-            currentPeriodBalance = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth == currentTreasuryPeriod)
-                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
-            futurePeriodBalance = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
-                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
-            futurePaidAmount = treasuryCharges.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
-                .Sum(x => x.Payments.Sum(payment => payment.Amount)),
+            currency = singleCurrency?.currency,
+            currencies = treasuryCurrencies,
+            totalCharged = singleCurrency?.totalCharged,
+            totalPaid = singleCurrency?.totalPaid,
+            balance = singleCurrency?.balance,
+            overdueBalance = singleCurrency?.overdueBalance,
+            currentPeriodBalance = singleCurrency?.currentPeriodBalance,
+            futurePeriodBalance = singleCurrency?.futurePeriodBalance,
+            futurePaidAmount = singleCurrency?.futurePaidAmount,
             items = treasuryCharges.Select(x => new
             {
                 chargeId = x.Id,
                 x.OrganizationId,
                 organization = x.Organization.Name,
+                x.Currency,
                 x.PeriodYear,
                 x.PeriodMonth,
                 chargedAmount = x.MemberAmount,
@@ -168,6 +183,7 @@ public static class MemberSelfEndpoints
                     .Select(payment => new
                     {
                         payment.Id,
+                        payment.Currency,
                         payment.ReceiptNumber,
                         payment.Amount,
                         payment.PaymentMethod,

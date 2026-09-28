@@ -9,17 +9,19 @@ public static class GrandTreasuryFeeSchedule
     public const string OtherOriente = "other_oriente";
     public const string Peru = "peru";
     public const string PastActiveMembershipType = "past_active";
+    public const string Clp = "CLP";
+    public const string Usd = "USD";
 
     public static bool IsValidTerritory(string value) => value is Santiago or OtherOriente or Peru;
 
     public static (decimal Amount, string Currency)? Resolve(string feeType, string territory, DateOnly asOf)
     {
         if (asOf < EffectiveFrom) return null;
-        if (feeType == TreasuryCodes.LodgeFeeType.PastActive) return (0m, "CLP");
+        if (feeType == TreasuryCodes.LodgeFeeType.PastActive)
+            return territory == Peru ? (0m, Usd) : (0m, Clp);
 
-        // The decree states USD 6 for ordinary dues in Peru, but the current
-        // statement/payment model is CLP-only. Do not convert or create a CLP charge.
-        if (territory == Peru) return null;
+        if (territory == Peru)
+            return feeType == TreasuryCodes.LodgeFeeType.Normal ? (6m, Usd) : null;
 
         if (territory is not (Santiago or OtherOriente)) return null;
         var amount = feeType switch
@@ -30,7 +32,7 @@ public static class GrandTreasuryFeeSchedule
             TreasuryCodes.LodgeFeeType.Student => 8000m,
             _ => (decimal?)null
         };
-        return amount is null ? null : (amount.Value, "CLP");
+        return amount is null ? null : (amount.Value, Clp);
     }
 
     public static IReadOnlyList<object> Rates =>

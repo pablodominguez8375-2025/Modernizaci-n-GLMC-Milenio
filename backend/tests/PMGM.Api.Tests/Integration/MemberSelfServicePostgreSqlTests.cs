@@ -170,11 +170,11 @@ public sealed class MemberSelfServicePostgreSqlTests
             {
                 Organization = organization, OrganizationId = organization.Id, Member = member, MemberId = member.Id,
                 FeePlan = feePlan, FeePlanId = feePlan.Id, PeriodYear = futurePeriod.Year, PeriodMonth = futurePeriod.Month,
-                MemberAmount = 25_000m, GrandTreasuryAmount = 20_000m, Status = "paid"
+                MemberAmount = 6m, GrandTreasuryAmount = 6m, Currency = "USD", Status = "paid"
             };
             var futurePayment = new LodgeMemberPayment
             {
-                Charge = futureCharge, ChargeId = futureCharge.Id, Amount = 25_000m, PaymentMethod = "transfer",
+                Charge = futureCharge, ChargeId = futureCharge.Id, Amount = 6m, Currency = "USD", PaymentMethod = "transfer",
                 PaymentDate = today, ReceiptNumber = "REC-SELF-ADV-001", Reference = "TRX-SELF-ADV-001",
                 RecordedBySubject = "treasury-test"
             };
@@ -275,12 +275,18 @@ public sealed class MemberSelfServicePostgreSqlTests
         Assert.Equal("up_to_date", profileJson.GetProperty("regularity").GetProperty("financial").GetProperty("status").GetString());
 
         var treasuryAccount = profileJson.GetProperty("treasuryAccount");
-        Assert.Equal(75_000m, treasuryAccount.GetProperty("totalCharged").GetDecimal());
-        Assert.Equal(35_000m, treasuryAccount.GetProperty("totalPaid").GetDecimal());
-        Assert.Equal(40_000m, treasuryAccount.GetProperty("balance").GetDecimal());
-        Assert.Equal(25_000m, treasuryAccount.GetProperty("overdueBalance").GetDecimal());
-        Assert.Equal(15_000m, treasuryAccount.GetProperty("currentPeriodBalance").GetDecimal());
-        Assert.Equal(25_000m, treasuryAccount.GetProperty("futurePaidAmount").GetDecimal());
+        Assert.Equal(JsonValueKind.Null, treasuryAccount.GetProperty("totalCharged").ValueKind);
+        var books = treasuryAccount.GetProperty("currencies").EnumerateArray().ToList();
+        Assert.Equal(2, books.Count);
+        var clpBook = books.Single(x => x.GetProperty("currency").GetString() == "CLP");
+        Assert.Equal(50_000m, clpBook.GetProperty("totalCharged").GetDecimal());
+        Assert.Equal(10_000m, clpBook.GetProperty("totalPaid").GetDecimal());
+        Assert.Equal(40_000m, clpBook.GetProperty("balance").GetDecimal());
+        Assert.Equal(25_000m, clpBook.GetProperty("overdueBalance").GetDecimal());
+        Assert.Equal(15_000m, clpBook.GetProperty("currentPeriodBalance").GetDecimal());
+        var usdBook = books.Single(x => x.GetProperty("currency").GetString() == "USD");
+        Assert.Equal(6m, usdBook.GetProperty("totalCharged").GetDecimal());
+        Assert.Equal(6m, usdBook.GetProperty("futurePaidAmount").GetDecimal());
         var treasuryItems = treasuryAccount.GetProperty("items").EnumerateArray().ToList();
         Assert.Equal(3, treasuryItems.Count);
         var overdueItem = treasuryItems.Single(x => x.GetProperty("periodStatus").GetString() == "overdue");
@@ -291,6 +297,7 @@ public sealed class MemberSelfServicePostgreSqlTests
         Assert.Equal("REC-SELF-001", currentItem.GetProperty("payments").EnumerateArray().Single().GetProperty("receiptNumber").GetString());
         var advanceItem = treasuryItems.Single(x => x.GetProperty("periodStatus").GetString() == "advance_paid");
         Assert.Equal(0m, advanceItem.GetProperty("balance").GetDecimal());
+        Assert.Equal("USD", advanceItem.GetProperty("currency").GetString());
         Assert.Equal("REC-SELF-ADV-001", advanceItem.GetProperty("payments").EnumerateArray().Single().GetProperty("receiptNumber").GetString());
 
         var activity = profileJson.GetProperty("activity");

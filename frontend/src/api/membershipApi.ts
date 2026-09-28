@@ -62,9 +62,10 @@ export interface MemberSelfProfile {
   treasuryAccount: MemberTreasuryAccount
 }
 
-export interface MemberTreasuryPayment { id: string; receiptNumber: string; amount: number; paymentMethod: string; paymentDate: string; reference: string | null }
-export interface MemberTreasuryCharge { chargeId: string; organizationId: string; organization: string; periodYear: number; periodMonth: number; chargedAmount: number; paidAmount: number; balance: number; periodStatus: 'overdue'|'due'|'partial'|'paid'|'future_due'|'advance_partial'|'advance_paid'; status: string; payments: MemberTreasuryPayment[] }
-export interface MemberTreasuryAccount { totalCharged: number; totalPaid: number; balance: number; overdueBalance: number; currentPeriodBalance: number; futurePeriodBalance: number; futurePaidAmount: number; items: MemberTreasuryCharge[] }
+export interface MemberTreasuryPayment { id: string; receiptNumber: string; amount: number; currency?:'CLP'|'USD'; paymentMethod: string; paymentDate: string; reference: string | null }
+export interface MemberTreasuryCharge { chargeId: string; organizationId: string; organization: string; currency?:'CLP'|'USD'; periodYear: number; periodMonth: number; chargedAmount: number; paidAmount: number; balance: number; periodStatus: 'overdue'|'due'|'partial'|'paid'|'future_due'|'advance_partial'|'advance_paid'; status: string; payments: MemberTreasuryPayment[] }
+export interface MemberTreasuryCurrencyBalance { currency:'CLP'|'USD'; totalCharged:number; totalPaid:number; balance:number; overdueBalance:number; currentPeriodBalance:number; futurePeriodBalance:number; futurePaidAmount:number }
+export interface MemberTreasuryAccount { currency?:'CLP'|'USD'|null; currencies?:MemberTreasuryCurrencyBalance[]; totalCharged?: number|null; totalPaid?: number|null; balance?: number|null; overdueBalance?: number|null; currentPeriodBalance?: number|null; futurePeriodBalance?: number|null; futurePaidAmount?: number|null; items: MemberTreasuryCharge[] }
 
 export interface UpdateMemberSelfContactRequest { email?: string | null; phone?: string | null; address?: string | null }
 export interface UpdateMemberSelfContactResponse { status: 'updated' | 'unchanged'; changedFields: string[] }

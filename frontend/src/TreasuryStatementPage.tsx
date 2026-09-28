@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { type OrganizationOption, type PmgmApiClient, type TreasuryStatement } from './api/pmgmApi'
+import { type OrganizationOption, type PmgmApiClient, type TreasuryStatement, type TreasuryTerritory } from './api/pmgmApi'
 import './treasuryStatement.css'
 
-const money = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP', maximumFractionDigits: 0 })
+function formatMoney(amount:number,currency:'CLP'|'USD'='CLP'){return new Intl.NumberFormat('es-CL',{style:'currency',currency,maximumFractionDigits:currency==='USD'?2:0}).format(amount)}
 const degreeLabel: Record<string, string> = { master: 'Maestro/a', fellowcraft: 'Compañero/a', apprentice: 'Aprendiz' }
 const statusLabel: Record<string, string> = { draft: 'Borrador', submitted: 'Enviado', observed: 'Observado', reconciled: 'Conciliado', closed: 'Cerrado' }
 const feeTypeLabel: Record<string,string> = { normal:'Cuota normal', senior:'Tercera edad', student:'Estudiante', spouse:'Cónyuge', past_active:'Past Activo' }
@@ -26,6 +26,7 @@ interface Props {
 export default function TreasuryStatementPage({ api, canPrepare, canReview, organizationId: fixedOrganizationId }: Props) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
+  const [territory,setTerritory]=useState<TreasuryTerritory|null>(null)
   const [period, setPeriod] = useState(currentPeriodInChile())
   const [baseAmount, setBaseAmount] = useState(21000)
   const [paymentMethod, setPaymentMethod] = useState<'transfer' | 'deposit'>('transfer')
@@ -34,6 +35,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
   const [payerDisplayName, setPayerDisplayName] = useState('Tesorería del Taller')
   const [paymentReference, setPaymentReference] = useState('')
   const [statement, setStatement] = useState<TreasuryStatement | null>(null)
+  const currency=statement?.currency??(territory==='peru'?'USD':'CLP')
   const [busy, setBusy] = useState(false)
   const [loadingStatement, setLoadingStatement] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +54,8 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
       .catch(reason => { if (active) setError(toMessage(reason)) })
     return () => { active = false }
   }, [api, fixedOrganizationId])
+
+  useEffect(()=>{if(!organizationId)return;let active=true;api.getTreasuryTerritory(organizationId).then(result=>{if(active){setTerritory(result.territory);if(result.territory==='peru')setBaseAmount(6)}}).catch(()=>{if(active)setTerritory(null)});return()=>{active=false}},[api,organizationId])
 
   useEffect(() => {
     if (!organizationId || !period) return
@@ -130,7 +134,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
 
   const reconcile = () => statement && run(
     () => api.reconcileTreasuryStatement(statement.id),
-    'Gran Tesorería concilió el Cuadro. La regularidad financiera institucional quedó actualizada.',
+    `Gran Tesorería confirmó la recepción bancaria en ${currency} y el Taller quedó al día en sus compromisos financieros.`,
   )
 
   const consultMemberDetail=async()=>{if(!statement)return;setBusy(true);setError(null);try{setStatement(await api.getTreasuryStatement(statement.id,true));setShowMemberDetail(true)}catch(reason){setError(toMessage(reason))}finally{setBusy(false)}}
@@ -166,11 +170,11 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
       <label className="regularity-field"><span>Período</span><input type="month" value={period} disabled={busy || loadingStatement} onChange={event => setPeriod(event.target.value)} /></label>
       {canPrepare && !statement && <button className="regularity-primary" type="button" disabled={!organizationId || !period || busy || loadingStatement} onClick={create}>Crear Cuadro</button>}
       {canPrepare && statement?.status === 'draft' && statement.lines.length === 0 && <>
-        <label className="regularity-field"><span>Cuota base Gran Tesorería</span><input type="number" min="0" step="1000" value={baseAmount} disabled={busy} onChange={event => setBaseAmount(Number(event.target.value))} /></label>
+        <label className="regularity-field"><span>Cuota base Gran Tesorería · {currency}</span><input type="number" min="0" step={currency==='USD'?'0.01':'1000'} value={baseAmount} disabled={busy||territory==='peru'} onChange={event => setBaseAmount(Number(event.target.value))} /></label>
         <button className="regularity-primary" type="button" disabled={busy || baseAmount < 0} onClick={generate}>Generar nómina</button>
       </>}
       {canPrepare && statement?.status === 'draft' && statement.lines.length > 0 && <button className="regularity-primary" type="button" disabled={busy || !canSubmit} onClick={submit}>Enviar a Gran Tesorería</button>}
-      {canReview && (statement?.status === 'submitted' || statement?.status === 'observed') && <button className="regularity-primary" type="button" disabled={busy || statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0} onClick={reconcile}>Conciliar institucionalmente</button>}
+      {canReview && (statement?.status === 'submitted' || statement?.status === 'observed') && <><p>Al confirmar, Gran Tesorería declara que verificó el abono en la cuenta bancaria. Esa conformidad en {currency} actualiza la regularidad financiera del Taller.</p><button className="regularity-primary" type="button" disabled={busy || statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0} onClick={reconcile}>Confirmar recepción bancaria y conciliar</button></>}
     </section>
 
     {loadingStatement && <section className="panel treasury-empty"><strong>Cargando Cuadro del período…</strong></section>}
@@ -179,21 +183,21 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
       ? <section className="panel treasury-empty"><strong>{canPrepare ? 'No existe un Cuadro para este período.' : 'Gran Tesorería aún no ha recibido un Cuadro para este Taller y período.'}</strong><p>La demo utiliza datos ficticios y conserva la estructura oficial: Cuadro completo, rebajas respaldadas por Plancha, transferencias/depósitos y Diferencia.</p></section>
       : statement && <>
         <section className="treasury-kpis">
-          <article><span>Total esperado</span><strong>{money.format(statement.expectedAmount)}</strong></article>
-          <article><span>Transferencias</span><strong>{money.format(statement.transferAmount)}</strong></article>
-          <article><span>Depósitos</span><strong>{money.format(statement.depositAmount)}</strong></article>
-          <article className={statement.differenceAmount === 0 ? 'balanced' : 'difference'}><span>Diferencia</span><strong>{money.format(statement.differenceAmount)}</strong></article>
+          <article><span>Total esperado</span><strong>{formatMoney(statement.expectedAmount,currency)}</strong></article>
+          <article><span>Transferencias</span><strong>{formatMoney(statement.transferAmount,currency)}</strong></article>
+          <article><span>Depósitos</span><strong>{formatMoney(statement.depositAmount,currency)}</strong></article>
+          <article className={statement.differenceAmount === 0 ? 'balanced' : 'difference'}><span>Diferencia</span><strong>{formatMoney(statement.differenceAmount,currency)}</strong></article>
         </section>
 
         <section className="panel treasury-table-panel">
           <div className="section-title"><div><p className="eyebrow">Cuadro Logial Mensual</p><h2>Resumen por línea de cuota</h2></div><span>{statement.feeBreakdown.reduce((total,item)=>total+item.members,0)} miembros activos</span></div>
-          <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Tipo de cuota</th><th>Miembros</th><th>Monto a Gran Tesorería</th></tr></thead><tbody>{statement.feeBreakdown.map(item=><tr key={item.feeType}><td><strong>{feeTypeLabel[item.feeType]??item.feeType}</strong></td><td>{item.members}</td><td><strong>{money.format(item.amount)}</strong></td></tr>)}</tbody><tfoot><tr><th>Total mes</th><th>{statement.feeBreakdown.reduce((total,item)=>total+item.members,0)}</th><th>{money.format(statement.expectedAmount)}</th></tr></tfoot></table></div>
+          <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Tipo de cuota</th><th>Miembros</th><th>Monto a Gran Tesorería</th></tr></thead><tbody>{statement.feeBreakdown.map(item=><tr key={item.feeType}><td><strong>{feeTypeLabel[item.feeType]??item.feeType}</strong></td><td>{item.members}</td><td><strong>{formatMoney(item.amount,currency)}</strong></td></tr>)}</tbody><tfoot><tr><th>Total mes</th><th>{statement.feeBreakdown.reduce((total,item)=>total+item.members,0)}</th><th>{formatMoney(statement.expectedAmount,currency)}</th></tr></tfoot></table></div>
           {canReview&&<p>Gran Tesorería recibe inicialmente sólo cantidades y montos por tipo de cuota. El detalle mínimo individual se consulta únicamente para resolver diferencias.</p>}
         </section>
 
         <section className="panel treasury-payments">
           <div><p className="eyebrow">Control previo al envío</p><h2>Cuadre obligatorio</h2></div>
-          <div className="payment-row"><span>Total pagado vs. Cuadro</span><strong>{statement.differenceAmount === 0 ? '✅ Cuadrado' : '❌ Diferencia pendiente'}</strong><small>{money.format(statement.differenceAmount)}</small></div>
+          <div className="payment-row"><span>Total pagado vs. Cuadro</span><strong>{statement.differenceAmount === 0 ? '✅ Cuadrado' : '❌ Diferencia pendiente'}</strong><small>{formatMoney(statement.differenceAmount,currency)}</small></div>
           <div className="payment-row"><span>Identidades del Cuadro</span><strong>{statement.unresolvedIdentities === 0 ? '✅ Conciliadas' : '❌ Pendientes'}</strong><small>{statement.unresolvedIdentities} sin conciliar</small></div>
           {statement.status === 'draft' && canPrepare && !canSubmit && <p>El sistema bloqueará el envío hasta que la Diferencia sea 0, todas las identidades estén conciliadas y cada cuota especial tenga su plancha de autorización.</p>}
           {statement.status === 'submitted' && <p>Cuadro enviado por Tesorería del Taller. La conciliación institucional corresponde a Gran Tesorería.</p>}
@@ -204,7 +208,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
           <div className="section-title"><div><p className="eyebrow">Cuadro del Taller al día 10</p><h2>{statement.periodMonth.toString().padStart(2, '0')}/{statement.periodYear}</h2></div><span>{statement.lines.length} integrantes</span></div>
           {statement.lines.length === 0
             ? <div className="empty-state">La nómina aún no ha sido generada.</div>
-            : <TreasuryStatementLinesTable lines={statement.lines} />}
+            : <TreasuryStatementLinesTable lines={statement.lines} currency={currency} />}
           {canPrepare&&<p>Las cuotas distintas de la normal deben llevar el número o referencia de su plancha de autorización. Esta nómina sigue la estructura del archivo institucional de pago.</p>}
         </section>}
 
@@ -220,7 +224,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
           </div>}
           {statement.payments.length === 0
             ? <p>No hay pagos registrados.</p>
-            : statement.payments.map(payment => <div className="payment-row" key={payment.id}><span>{payment.paymentMethod === 'transfer' ? 'Transferencia' : 'Depósito'} · {payment.paymentDate}</span><strong>{money.format(payment.amount)}</strong><small>{payment.reference || 'Sin referencia'}</small></div>)}
+            : statement.payments.map(payment => <div className="payment-row" key={payment.id}><span>{payment.paymentMethod === 'transfer' ? 'Transferencia' : 'Depósito'} · {payment.paymentDate}</span><strong>{formatMoney(payment.amount,currency)}</strong><small>{payment.reference || 'Sin referencia'}</small></div>)}
         </section>
       </>}
   </>
@@ -235,8 +239,8 @@ export function groupStatementLines(lines: TreasuryStatement['lines']) {
   }).map(([degree,groupLines])=>({degree,label:degreeLabel[degree]??degree,lines:groupLines}))
 }
 
-export function TreasuryStatementLinesTable({lines}:{lines:TreasuryStatement['lines']}) {
-  return <div className="table-scroll"><table className="treasury-table"><thead><tr><th>RUT</th><th>Nombre y apellidos</th><th>Grado</th><th>Cargo(s)</th><th>Cuota</th><th>Respaldo</th></tr></thead>{groupStatementLines(lines).map(group=><tbody key={group.degree}><tr className="treasury-degree-group"><th colSpan={6}>{group.label}</th></tr>{group.lines.map((line,index)=><tr key={line.id}><td>{line.rut??'—'}</td><td>{line.firstNames||line.lastNames?`${line.firstNames??''} ${line.lastNames??''}`.trim():line.observation??`Integrante ${index+1}`}</td><td>{degreeLabel[line.degreeCodeAtCutoff]??line.degreeCodeAtCutoff}</td><td>{formatOfficeCodes(line.officeCodeAtCutoff)}</td><td><span className="treasury-fee-type">{feeTypeLabel[line.contributionType]??line.contributionType}</span><strong>{money.format(line.payableAmount)}</strong></td><td>{line.authorizationReference?<span className="treasury-authorization-reference">{line.authorizationReference}</span>:requiresPlancha(line.contributionType)||line.adjustmentAmount!==0?<span className="treasury-authorization-missing">Pendiente de plancha</span>:'—'}</td></tr>)}</tbody>)}</table></div>
+export function TreasuryStatementLinesTable({lines,currency='CLP'}:{lines:TreasuryStatement['lines'];currency?:'CLP'|'USD'}) {
+  return <div className="table-scroll"><table className="treasury-table"><thead><tr><th>RUT</th><th>Nombre y apellidos</th><th>Grado</th><th>Cargo(s)</th><th>Cuota</th><th>Respaldo</th></tr></thead>{groupStatementLines(lines).map(group=><tbody key={group.degree}><tr className="treasury-degree-group"><th colSpan={6}>{group.label}</th></tr>{group.lines.map((line,index)=><tr key={line.id}><td>{line.rut??'—'}</td><td>{line.firstNames||line.lastNames?`${line.firstNames??''} ${line.lastNames??''}`.trim():line.observation??`Integrante ${index+1}`}</td><td>{degreeLabel[line.degreeCodeAtCutoff]??line.degreeCodeAtCutoff}</td><td>{formatOfficeCodes(line.officeCodeAtCutoff)}</td><td><span className="treasury-fee-type">{feeTypeLabel[line.contributionType]??line.contributionType}</span><strong>{formatMoney(line.payableAmount,currency)}</strong></td><td>{line.authorizationReference?<span className="treasury-authorization-reference">{line.authorizationReference}</span>:requiresPlancha(line.contributionType)||line.adjustmentAmount!==0?<span className="treasury-authorization-missing">Pendiente de plancha</span>:'—'}</td></tr>)}</tbody>)}</table></div>
 }
 
 export function formatOfficeCodes(value: string|null) {

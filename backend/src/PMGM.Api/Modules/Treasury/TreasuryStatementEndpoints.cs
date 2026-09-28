@@ -36,11 +36,15 @@ public static class TreasuryStatementEndpoints
         if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count != 0)
             return Results.Conflict(new { message = "La generación automática requiere un cuadro vacío en borrador." });
 
+        var territory = await db.Organizations.AsNoTracking().Where(x => x.Id == statement.OrganizationId)
+            .Select(x => x.TreasuryTerritory).SingleOrDefaultAsync(cancellationToken);
+        if (territory is null) return Results.Conflict(new { message = "Gran Tesorería debe clasificar el Oriente antes de generar el Cuadro." });
+
         var cutoff = statement.CutoffDate;
         var monthlyCharges = await db.LodgeMemberCharges.AsNoTracking()
             .Include(x => x.FeePlan)
             .Where(x => x.OrganizationId == statement.OrganizationId &&
-                        x.PeriodYear == statement.PeriodYear && x.PeriodMonth == statement.PeriodMonth)
+                        x.PeriodYear == statement.PeriodYear && x.PeriodMonth == statement.PeriodMonth && x.Currency == statement.Currency)
             .ToListAsync(cancellationToken);
         var memberships = await db.Memberships.AsNoTracking()
             .Where(x => x.OrganizationId == statement.OrganizationId && x.StartDate <= cutoff &&
@@ -96,7 +100,16 @@ public static class TreasuryStatementEndpoints
             var charge = monthlyCharges.FirstOrDefault(x => x.MemberId == membership.MemberId);
             var degree = degreeEvents.First(x => x.MemberId == membership.MemberId).Degree;
             var contributionType = charge?.FeePlan.FeeType ?? TreasuryCodes.LodgeFeeType.Normal;
-            var baseAmount = charge?.GrandTreasuryAmount ?? request.AmountFor(degree);
+            var peruOfficialAmount = territory == GrandTreasuryFeeSchedule.Peru
+                ? GrandTreasuryFeeSchedule.Resolve(contributionType, territory, cutoff)?.Amount
+                : null;
+            if (territory == GrandTreasuryFeeSchedule.Peru && peruOfficialAmount is null)
+                return Results.Conflict(new { message = "No hay una tarifa institucional vigente en USD para esta categoría de cuota en Perú.", memberId = membership.MemberId, contributionType });
+            if (territory == GrandTreasuryFeeSchedule.Peru && charge is not null && charge.GrandTreasuryAmount != peruOfficialAmount)
+                return Results.Conflict(new { message = "El cargo registrado no coincide con la tarifa oficial en USD del período; regularice el plan antes de generar el Cuadro.", memberId = membership.MemberId });
+            var baseAmount = territory == GrandTreasuryFeeSchedule.Peru
+                ? peruOfficialAmount
+                : charge?.GrandTreasuryAmount ?? request.AmountFor(degree);
             if (baseAmount is null)
                 return Results.BadRequest(new { message = $"El grado '{degree}' no tiene una cuota base configurada." });
             var memberOffices = offices.Where(x => x.MemberId == membership.MemberId)
@@ -148,6 +161,7 @@ public static class TreasuryStatementEndpoints
         var statement = new TreasuryMonthlyStatement
         {
             OrganizationId = organizationId,
+            Currency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, cancellationToken),
             PeriodYear = request.PeriodYear,
             PeriodMonth = request.PeriodMonth,
             CutoffDate = request.CutoffDate,
@@ -310,6 +324,8 @@ public static class TreasuryStatementEndpoints
 
         statement.Status = TreasuryCodes.StatementStatus.Reconciled;
         statement.ReconciledAtUtc = DateTimeOffset.UtcNow;
+        statement.BankReceiptConfirmedBySubject = context.User.FindFirst("sub")?.Value ?? "unknown";
+        statement.BankReceiptConfirmedAtUtc = statement.ReconciledAtUtc;
         var snapshot = new FinancialRegularitySnapshot
         {
             OrganizationId = statement.OrganizationId,
@@ -317,11 +333,11 @@ public static class TreasuryStatementEndpoints
             Status = TreasuryCodes.RegularityStatus.UpToDate,
             AsOfDate = statement.CutoffDate,
             SourceReference = $"TREASURY-STATEMENT:{statement.Id}",
-            Notes = $"Cuadro {statement.PeriodYear:D4}-{statement.PeriodMonth:D2} conciliado."
+            Notes = $"Cuadro {statement.PeriodYear:D4}-{statement.PeriodMonth:D2} conciliado; recepción bancaria {statement.Currency} confirmada por Gran Tesorería."
         };
         db.FinancialRegularitySnapshots.Add(snapshot);
         audit.Add(context, "treasury.statement.reconciled", nameof(TreasuryMonthlyStatement), statement.Id.ToString(),
-            statement.OrganizationId, AuditResults.Success, new { totals.ExpectedAmount, totals.PaidAmount, snapshotId = snapshot.Id });
+            statement.OrganizationId, AuditResults.Success, new { totals.ExpectedAmount, totals.PaidAmount, statement.Currency, bankReceiptConfirmed = true, snapshotId = snapshot.Id });
         await db.SaveChangesAsync(cancellationToken);
         return Results.Ok(ToResponse(statement, includeMemberDetail: false));
     }
@@ -378,14 +394,15 @@ public static class TreasuryStatementEndpoints
         return new
         {
             statement.Id, statement.OrganizationId, statement.PeriodYear, statement.PeriodMonth, statement.CutoffDate,
-            statement.Status, statement.SourceReference, totals.ExpectedAmount, totals.TransferAmount,
+            statement.Currency, statement.Status, statement.SourceReference, totals.ExpectedAmount, totals.TransferAmount,
             totals.DepositAmount, totals.PaidAmount, totals.DifferenceAmount,
             feeBreakdown,
             unresolvedIdentities = statement.Lines.Count(x => x.IdentityMatchStatus != TreasuryCodes.IdentityMatchStatus.Matched),
             lines = statement.Lines.Select(x => ToLineResponse(x, includeMemberDetail, memberDetails)),
             payments = statement.Payments.Select(x => new { x.Id, x.PaymentMethod, x.PaymentDate, x.Amount,
-                x.PayerDisplayName, x.Reference, x.RecordedAtUtc }),
-            statement.SubmittedAtUtc, statement.ReconciledAtUtc, statement.ClosedAtUtc
+                x.PayerDisplayName, x.Reference, x.RecordedAtUtc, currency = statement.Currency }),
+            statement.SubmittedAtUtc, statement.ReconciledAtUtc, statement.BankReceiptConfirmedBySubject,
+            statement.BankReceiptConfirmedAtUtc, statement.ClosedAtUtc
         };
     }
 
