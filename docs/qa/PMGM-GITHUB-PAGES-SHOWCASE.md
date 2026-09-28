@@ -156,7 +156,7 @@ El workflow mantiene dos niveles de evidencia:
 
 La automatización multipantalla se implementa en `.github/scripts/capture-showcase-views.mjs`. Controla Chrome mediante DevTools, cambia el perfil QA usando el selector real y accede a los módulos mediante los botones reales de navegación. No se agregan deep links, credenciales, rutas especiales ni comportamientos exclusivos de captura al runtime de producción.
 
-Las capturas se almacenan temporalmente en el artefacto `pmgm-responsive-visual-evidence` para revisión técnica y UAT visual.
+Las capturas se almacenan temporalmente en el artefacto `pmgm-responsive-visual-evidence` para revisión técnica y UAT visual. La auditoría celular comprueba que `<img>`, `<video>`, `<canvas>` y `<svg>` visibles no excedan el viewport ni su contenedor, además del ancho global de página. Esto cubre logos vectoriales en línea junto con recursos rasterizados.
 
 La corrida de Showcase también recorre en 360 × 800 px todos los perfiles presentes en el selector demo, sus botones de navegación habilitados, pestañas y modos segmentados; además revisa las categorías de vistas que usan filtro. Verifica que el menú conserve objetivos táctiles de 44 px y sea alcanzable mediante su desplazamiento vertical propio, que imágenes, video y canvas no excedan su contenedor y que ningún estado produzca desplazamiento horizontal global. Emite una captura por estado recorrido. Este gate es automatizado y no equivale a aceptación visual institucional ni UAT.
 
