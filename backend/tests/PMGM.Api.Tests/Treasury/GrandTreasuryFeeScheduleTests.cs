@@ -41,6 +41,14 @@ public sealed class GrandTreasuryFeeScheduleTests
     }
 
     [Fact]
+    public void Past_active_is_not_a_regular_fee_type()
+    {
+        Assert.False(GrandTreasuryFeeSchedule.IsOrdinaryFeeType(TreasuryCodes.LodgeFeeType.PastActive));
+        Assert.True(GrandTreasuryFeeSchedule.IsOrdinaryFeeType(TreasuryCodes.LodgeFeeType.Normal));
+        Assert.True(GrandTreasuryFeeSchedule.IsOrdinaryFeeType(TreasuryCodes.LodgeFeeType.Spouse));
+    }
+
+    [Fact]
     public void Past_active_has_no_ordinary_dues_or_grand_treasury_assessment()
     {
         Assert.False(GrandTreasuryFeeSchedule.HasOrdinaryDues(GrandTreasuryFeeSchedule.PastActiveMembershipType));
