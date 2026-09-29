@@ -16,27 +16,29 @@ describe('régimen interior page', () => {
     expect(html).toContain('No hay rechazos registrados.')
   })
 
-  it('shows the demo Gran Asamblea roster only when the API client is in mock mode', () => {
+  it('shows a preliminary habilitation review only in mock mode', () => {
     const withMocks = renderToStaticMarkup(<RegimenInteriorPage api={new PmgmApiClient({ useMocks: true })} />)
-    expect(withMocks).toContain('Padrón preliminar de asambleístas')
+    expect(withMocks).toContain('Revisión preliminar de habilitaciones')
+    expect(withMocks).toContain('Esta vista incluye casos pendientes y observados; no constituye el Padrón de la Gran Asamblea.')
+    expect(withMocks).not.toContain('Padrón preliminar de asambleístas')
 
     const withoutMocks = renderToStaticMarkup(<RegimenInteriorPage api={new PmgmApiClient({ useMocks: false })} />)
-    expect(withoutMocks).not.toContain('Padrón preliminar de asambleístas')
+    expect(withoutMocks).not.toContain('Revisión preliminar de habilitaciones')
   })
 
-  it('keeps the ballot-secrecy guarantee visible: the roster tracks eligibility, never how someone voted', () => {
+  it('limits the electoral roster term to enabled electors and preserves ballot secrecy', () => {
     // This line is the UI-level restatement of PMGM-ARCH-006 (balotaje y
     // sufragio siempre anónimos). It must never be removed or weakened.
     const html = renderToStaticMarkup(<RegimenInteriorPage api={new PmgmApiClient({ useMocks: true })} />)
-    expect(html).toContain('El padrón identifica quién puede asistir y sufragar, pero nunca registra ni permite reconstruir cómo votó una persona.')
+    expect(html).toContain('El Padrón de la Gran Asamblea comprende exclusivamente a electores vigentes habilitados. Esta revisión nunca registra ni permite reconstruir cómo votó una persona.')
   })
 
-  it('blocks closing the roster (Cerrar padrón) while pending/observed entries remain', () => {
+  it('blocks closing the preliminary review while pending/observed entries remain', () => {
     // The seeded demo data has 2 unresolved entries (one pending, one
     // observed), so on first render the close button must be disabled.
     const html = renderToStaticMarkup(<RegimenInteriorPage api={new PmgmApiClient({ useMocks: true })} />)
     expect(html).toContain('2 pendientes')
-    const closeButtonMatch = html.match(/<button[^>]*>Cerrar padrón<\/button>/)
+    const closeButtonMatch = html.match(/<button[^>]*>Cerrar revisión<\/button>/)
     expect(closeButtonMatch).not.toBeNull()
     expect(closeButtonMatch?.[0]).toContain('disabled')
   })

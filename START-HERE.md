@@ -1,3 +1,13 @@
+## Handoff vigente — correcciones de PR #117 y #119 — 29-09-2026
+
+- Base verificada: `dev@90988f1bb09d86eb017248ce02040ebe47e053a2`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`.
+- Rama `feature/cuadro-padron-qa42-20260929`; PR #219 hacia `dev`, reemplaza los parches históricos #117/#119.
+- Se corrige el rótulo de la revisión electoral preliminar para no llamarla Padrón; “Padrón de la Gran Asamblea” queda para electores vigentes habilitados. La consulta con estados históricos se identifica como fichas e historial.
+- El procedimiento activo de regresión queda en QA-001..QA-042, conforme a plantilla y gate vigentes. No se modifica el plan UAT histórico de 20 casos. Los conteos 21/26 se conservan sólo donde documentan cortes históricos.
+- Antes de integrar, verificar PMGM CI, Showcase y QA Installable en el SHA más reciente del PR #219; no reutilizar resultados de un SHA anterior. Un workflow de PR no certifica publicación en Pages.
+- Issue #97 mantiene pausado `srv01`: sin instalación, despliegue manual, smoke/regresión física ni UAT. No promover `main`.
+
+---
 # Handoff vigente — Proyecto Centenario — 28-09-2026 UTC
 
 - Ramas comprobadas: `dev@bca36d5d0fb49c224aaa355f4cecefc43b3037df`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambios.
