@@ -1,13 +1,12 @@
-## Handoff vigente — integración de PR #219 — 29-09-2026
+## Handoff vigente — integración y publicación de PR #219 — 29-09-2026
 
 - HEAD observado al inicio: `dev@90988f1bb09d86eb017248ce02040ebe47e053a2`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`.
 - PR #219 se integró por squash desde `feature/cuadro-padron-qa42-20260929`, head exacto `2f31d8b7629ffc08a2e8c6574da63a180ca9afa2`; commit integrado y HEAD de `dev`: `3a695b0b8b8808f02ca7d0e91811010b096f623f`. PR #117 y #119 cerrados sin merge como reemplazados.
 - Cambios: terminología institucional para Cuadro, fichas/historial y Padrón de la Gran Asamblea; revisión preliminar con estados pendientes/observados; runbook sincronizado a QA-001..QA-042. UAT institucional histórica de 20 casos preservada.
-- Gates exact-head del PR: PMGM CI #1681, Showcase #997 y QA Installable #635 SUCCESS. Post-merge en `3a695b0`: PMGM CI #1682 SUCCESS; QA Installable #636 y Pre-UAT #402 SUCCESS. Los artefactos están generados, no instalados.
-- Showcase/Pages post-merge #998 seguía capturando evidencia responsive al redactar esta actualización. No afirmar publicación actual ni `qa-current.json.sourceSha` hasta confirmar el despliegue y leer ese archivo.
-- Issue #97 mantiene `srv01` pausado: sin instalación, despliegue manual, smoke/regresión física ni UAT. No promover `main`.
-- Evidencias PR #219: responsive artifact #11031229544 SHA-256 `f337753e3161be9a22d9bc67da999aed67f94ae21613f06e66f3d50857ea1771`; QA artifact #11031093341 SHA-256 `2d91d76121e99ff184b9cb967839a73cdb378c2c88398d9149f00c87ce183974`.
-- Artefactos post-merge: QA #11032197880 SHA-256 `598567c8ae8667c34c7e42d6cae954fef5813113f072a4752bf14dc7371b0fcc`; Pre-UAT #11031963231 SHA-256 `cebc5431283578c5ae607ab9c9d24a816e5f4d12ac626849318678c0f8cad977`.
+- Gates exact-head del PR: PMGM CI #1681, Showcase #997 y QA Installable #635 SUCCESS. Post-merge en `3a695b0`: PMGM CI #1682, Showcase/Pages #998 (Deploy testing showcase SUCCESS), QA Installable #636 y Pre-UAT #406 SUCCESS.
+- Pages artifact #11032562325, SHA-256 `78e5292b2840009c84533e6224bc4ff28d28dea1af284cbbce7dc86667bbdbf8`. El `qa-current.json` incluido se leyó de vuelta: `sourceSha=3a695b0b8b8808f02ca7d0e91811010b096f623f`; paquete `Proyecto-Centenario-QA-srv01-3a695b0b8b88.zip`, SHA-256 verificado `58d7f8018670959766178b6308cd3601bfdffdc634054997b0363d47ab8e15e6`. URL Pages: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
+- Evidencia responsive de post-merge #11032922148, SHA-256 `551df40d23c47728297d32be7151e3f954c7a107ca068e41fce88708f3aa8cc6`. Artefactos post-merge QA #11032197880 SHA-256 `598567c8ae8667c34c7e42d6cae954fef5813113f072a4752bf14dc7371b0fcc`; Pre-UAT #11031963231 SHA-256 `cebc5431283578c5ae607ab9c9d24a816e5f4d12ac626849318678c0f8cad977`.
+- Los artefactos están empaquetados/publicados, no instalados. Issue #97 mantiene `srv01` pausado: no instalación, despliegue manual, smoke/regresión física ni UAT. No promover `main`.
 
 ---
 # Handoff vigente — Proyecto Centenario — 28-09-2026 UTC
