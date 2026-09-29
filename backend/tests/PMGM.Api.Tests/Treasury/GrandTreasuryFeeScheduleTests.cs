@@ -41,8 +41,10 @@ public sealed class GrandTreasuryFeeScheduleTests
     }
 
     [Fact]
-    public void Past_active_has_no_grand_treasury_assessment()
+    public void Past_active_has_no_ordinary_dues_or_grand_treasury_assessment()
     {
+        Assert.False(GrandTreasuryFeeSchedule.HasOrdinaryDues(GrandTreasuryFeeSchedule.PastActiveMembershipType));
+        Assert.True(GrandTreasuryFeeSchedule.HasOrdinaryDues("active"));
         var rate = GrandTreasuryFeeSchedule.Resolve(
             TreasuryCodes.LodgeFeeType.PastActive, GrandTreasuryFeeSchedule.Santiago, new DateOnly(2026, 9, 1));
         Assert.Equal(0m, rate?.Amount);
