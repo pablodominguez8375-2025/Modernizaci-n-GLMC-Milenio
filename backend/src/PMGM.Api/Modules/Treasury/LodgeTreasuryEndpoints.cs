@@ -45,7 +45,7 @@ public static class LodgeTreasuryEndpoints
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         if (!TreasuryCodes.LodgeFeeType.IsValid(request.FeeType) || request.MemberAmount < 0 || request.GrandTreasuryAmount < 0)
             return Results.BadRequest(new { message = "El tipo y los montos de cuota deben ser válidos." });
-        if (request.FeeType == TreasuryCodes.LodgeFeeType.PastActive)
+        if (!GrandTreasuryFeeSchedule.IsOrdinaryFeeType(request.FeeType))
             return Results.BadRequest(new { message = "Past Activo no admite planes de cuota ordinaria; su derecho anual de reposición se gestiona por Hospitalaria." });
         if (request.EffectiveUntil is not null && request.EffectiveUntil < request.EffectiveFrom)
             return Results.BadRequest(new { message = "La vigencia final no puede ser anterior a la inicial." });
@@ -124,7 +124,7 @@ public static class LodgeTreasuryEndpoints
         {
             if (!GrandTreasuryFeeSchedule.HasOrdinaryDues(membership.MembershipType)) continue;
             var feeType = assignments.GetValueOrDefault(membership.MemberId, TreasuryCodes.LodgeFeeType.Normal);
-            if (!TreasuryCodes.LodgeFeeType.IsValid(feeType) || feeType == TreasuryCodes.LodgeFeeType.PastActive)
+            if (!GrandTreasuryFeeSchedule.IsOrdinaryFeeType(feeType))
                 return Results.BadRequest(new { message = $"El tipo de cuota '{feeType}' no corresponde a una cuota ordinaria válida.", memberId = membership.MemberId });
             if (!plans.TryGetValue(feeType, out var plan))
                 return Results.BadRequest(new { message = $"No existe una cuota vigente para el tipo '{feeType}'.", memberId = membership.MemberId });
