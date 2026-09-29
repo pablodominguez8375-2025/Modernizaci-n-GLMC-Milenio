@@ -1,5 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
-import { type LodgeCashSummary, type LodgeFeePlan, type LodgeMemberReceipt, type LodgeTreasuryCharge, type LodgeTreasuryExpense, type LodgeTreasuryReport, type LodgeTreasurySummary, type LodgeTreasuryYearClosure, type PmgmApiClient, type TreasuryTerritory } from './api/pmgmApi'
+import { type LodgeCashSummary, type LodgeFeePlan, type LodgeMemberReceipt, type LodgeTreasuryCharge, type LodgeTreasuryChargePeriod, type LodgeTreasuryExpense, type LodgeTreasuryReport, type LodgeTreasurySummary, type LodgeTreasuryYearClosure, type PmgmApiClient, type TreasuryTerritory } from './api/pmgmApi'
 import './lodgeTreasury.css'
 
 type Section = 'summary'|'collection'|'movements'|'settings'|'reports'
@@ -36,7 +36,7 @@ export default function LodgeTreasuryPanel({ api, organizationId, treasuryTerrit
   const addFeePlan=(event:FormEvent)=>{event.preventDefault();if(feeGrandAmount===null)return;void execute(()=>api.createLodgeFeePlan(organizationId,{feeType,memberAmount:feeMemberAmount,grandTreasuryAmount:feeGrandAmount,effectiveFrom:feeEffectiveFrom}),`${feeLabel(feeType)} configurada desde ${feeEffectiveFrom}.`)}
   const saveConfiguration=(event:FormEvent)=>{event.preventDefault();void execute(()=>api.saveLodgeTreasuryConfiguration(organizationId,{openingBalance,openingBalanceDate,incomeCategories,expenseCategories,currency}),'Configuración contable guardada y auditada.')}
   const reportMovements=report?.movements??[]
-  const paymentTargets=charges.flatMap(member=>member.periods?.length
+  const paymentTargets=charges.flatMap<LodgeTreasuryChargePeriod & {memberId:string;memberDisplayName:string}>(member=>member.periods?.length
     ? member.periods.map(period=>({...period,memberId:member.memberId,memberDisplayName:member.memberDisplayName}))
     : [{chargeId:member.id,periodYear:year,periodMonth:month,currency,chargedAmount:member.memberAmount,paidAmount:member.paidAmount,balance:member.balance,status:member.status==='paid'?'paid':member.status==='partial'?'partial':'due',memberId:member.memberId,memberDisplayName:member.memberDisplayName}])
   const openPaymentTargets=paymentTargets.filter(target=>target.balance>0&&target.currency===currency)
