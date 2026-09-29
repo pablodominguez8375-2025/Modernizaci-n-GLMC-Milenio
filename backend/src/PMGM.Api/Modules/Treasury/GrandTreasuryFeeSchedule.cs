@@ -17,6 +17,10 @@ public static class GrandTreasuryFeeSchedule
     public static bool HasOrdinaryDues(string membershipType)
         => membershipType != PastActiveMembershipType;
 
+    public static bool IsOrdinaryFeeType(string feeType)
+        => feeType is TreasuryCodes.LodgeFeeType.Normal or TreasuryCodes.LodgeFeeType.Student or
+            TreasuryCodes.LodgeFeeType.Senior or TreasuryCodes.LodgeFeeType.Spouse;
+
     public static (decimal Amount, string Currency)? Resolve(string feeType, string territory, DateOnly asOf)
     {
         if (asOf < EffectiveFrom) return null;
