@@ -122,17 +122,12 @@ public static class LodgeTreasuryEndpoints
         var created = 0;
         foreach (var membership in members)
         {
-            var feeType = assignments.GetValueOrDefault(membership.MemberId,
-                membership.MembershipType == GrandTreasuryFeeSchedule.PastActiveMembershipType
-                    ? TreasuryCodes.LodgeFeeType.PastActive
-                    : TreasuryCodes.LodgeFeeType.Normal);
-            if (!TreasuryCodes.LodgeFeeType.IsValid(feeType))
-                return Results.BadRequest(new { message = $"El tipo de cuota '{feeType}' no es válido.", memberId = membership.MemberId });
+            if (!GrandTreasuryFeeSchedule.HasOrdinaryDues(membership.MembershipType)) continue;
+            var feeType = assignments.GetValueOrDefault(membership.MemberId, TreasuryCodes.LodgeFeeType.Normal);
+            if (!TreasuryCodes.LodgeFeeType.IsValid(feeType) || feeType == TreasuryCodes.LodgeFeeType.PastActive)
+                return Results.BadRequest(new { message = $"El tipo de cuota '{feeType}' no corresponde a una cuota ordinaria válida.", memberId = membership.MemberId });
             if (!plans.TryGetValue(feeType, out var plan))
-            {
-                if (feeType == TreasuryCodes.LodgeFeeType.PastActive) continue;
                 return Results.BadRequest(new { message = $"No existe una cuota vigente para el tipo '{feeType}'.", memberId = membership.MemberId });
-            }
             var officialAmount = GrandTreasuryFeeSchedule.Resolve(feeType, territory, cutoff);
             if (officialAmount is null)
                 return Results.Conflict(new { message = "No existe una tarifa institucional aplicable para esta moneda, categoría y vigencia.", memberId = membership.MemberId, feeType, territory });
