@@ -45,6 +45,8 @@ public static class LodgeTreasuryEndpoints
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         if (!TreasuryCodes.LodgeFeeType.IsValid(request.FeeType) || request.MemberAmount < 0 || request.GrandTreasuryAmount < 0)
             return Results.BadRequest(new { message = "El tipo y los montos de cuota deben ser válidos." });
+        if (request.FeeType == TreasuryCodes.LodgeFeeType.PastActive)
+            return Results.BadRequest(new { message = "Past Activo no admite planes de cuota ordinaria; su derecho anual de reposición se gestiona por Hospitalaria." });
         if (request.EffectiveUntil is not null && request.EffectiveUntil < request.EffectiveFrom)
             return Results.BadRequest(new { message = "La vigencia final no puede ser anterior a la inicial." });
 
