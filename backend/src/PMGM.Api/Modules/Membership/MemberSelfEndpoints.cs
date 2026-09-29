@@ -3,6 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.LodgeManagement;
+using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -124,6 +125,7 @@ public static class MemberSelfEndpoints
             .AsNoTracking()
             .Include(x => x.Organization)
             .Include(x => x.Payments)
+            .Include(x => x.Allocations).ThenInclude(x => x.Receipt)
             .Where(x => x.MemberId == context.MemberId)
             .OrderByDescending(x => x.PeriodYear)
             .ThenByDescending(x => x.PeriodMonth)
@@ -135,18 +137,24 @@ public static class MemberSelfEndpoints
         {
             currency = group.Key,
             totalCharged = group.Sum(x => x.MemberAmount),
-            totalPaid = group.Sum(x => x.Payments.Sum(payment => payment.Amount)),
-            balance = group.Sum(x => x.MemberAmount - x.Payments.Sum(payment => payment.Amount)),
+            totalPaid = group.Sum(TreasuryPaid),
+            balance = group.Sum(x => x.MemberAmount - TreasuryPaid(x)),
             overdueBalance = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth < currentTreasuryPeriod)
-                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+                .Sum(x => Math.Max(0m, x.MemberAmount - TreasuryPaid(x))),
             currentPeriodBalance = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth == currentTreasuryPeriod)
-                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+                .Sum(x => Math.Max(0m, x.MemberAmount - TreasuryPaid(x))),
             futurePeriodBalance = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
-                .Sum(x => Math.Max(0m, x.MemberAmount - x.Payments.Sum(payment => payment.Amount))),
+                .Sum(x => Math.Max(0m, x.MemberAmount - TreasuryPaid(x))),
             futurePaidAmount = group.Where(x => x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod)
-                .Sum(x => x.Payments.Sum(payment => payment.Amount))
+                .Sum(x => TreasuryPaid(x))
         }).ToList();
         var singleCurrency = treasuryCurrencies.Count == 1 ? treasuryCurrencies[0] : null;
+        var memberReceipts = await db.LodgeMemberReceipts.AsNoTracking().Include(x => x.Allocations)
+            .Where(x => x.MemberId == context.MemberId).OrderByDescending(x => x.PaymentDate).ThenByDescending(x => x.RecordedAtUtc)
+            .ToListAsync(cancellationToken);
+        var unappliedCredits = memberReceipts.Select(x => new { x.Currency, x.Id, x.ReceiptNumber, x.PaymentDate,
+            amount = x.Amount - x.Allocations.Sum(a => a.Amount), x.Reference })
+            .Where(x => x.amount > 0).ToList();
 
         var treasuryAccount = new
         {
@@ -159,6 +167,7 @@ public static class MemberSelfEndpoints
             currentPeriodBalance = singleCurrency?.currentPeriodBalance,
             futurePeriodBalance = singleCurrency?.futurePeriodBalance,
             futurePaidAmount = singleCurrency?.futurePaidAmount,
+            unappliedCredits = unappliedCredits,
             items = treasuryCharges.Select(x => new
             {
                 chargeId = x.Id,
@@ -168,28 +177,20 @@ public static class MemberSelfEndpoints
                 x.PeriodYear,
                 x.PeriodMonth,
                 chargedAmount = x.MemberAmount,
-                paidAmount = x.Payments.Sum(payment => payment.Amount),
-                balance = x.MemberAmount - x.Payments.Sum(payment => payment.Amount),
-                periodStatus = x.MemberAmount <= x.Payments.Sum(payment => payment.Amount)
+                paidAmount = TreasuryPaid(x),
+                balance = x.MemberAmount - TreasuryPaid(x),
+                periodStatus = x.MemberAmount <= TreasuryPaid(x)
                     ? x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod ? "advance_paid" : "paid"
                     : x.PeriodYear * 100 + x.PeriodMonth < currentTreasuryPeriod ? "overdue"
                     : x.PeriodYear * 100 + x.PeriodMonth > currentTreasuryPeriod
-                        ? x.Payments.Any() ? "advance_partial" : "future_due"
-                        : x.Payments.Any() ? "partial" : "due",
+                        ? x.Payments.Any() || x.Allocations.Any() ? "advance_partial" : "future_due"
+                        : x.Payments.Any() || x.Allocations.Any() ? "partial" : "due",
                 x.Status,
-                payments = x.Payments
-                    .OrderByDescending(payment => payment.PaymentDate)
-                    .ThenByDescending(payment => payment.RecordedAtUtc)
-                    .Select(payment => new
-                    {
-                        payment.Id,
-                        payment.Currency,
-                        payment.ReceiptNumber,
-                        payment.Amount,
-                        payment.PaymentMethod,
-                        payment.PaymentDate,
-                        payment.Reference
-                    })
+                payments = x.Payments.Select(payment => new { id = payment.Id, payment.Currency, payment.ReceiptNumber,
+                        amount = payment.Amount, payment.PaymentMethod, payment.PaymentDate, payment.Reference })
+                    .Concat(x.Allocations.Select(a => new { id = a.ReceiptId, currency = a.Receipt.Currency,
+                        a.Receipt.ReceiptNumber, amount = a.Amount, a.Receipt.PaymentMethod, a.Receipt.PaymentDate, a.Receipt.Reference }))
+                    .OrderByDescending(payment => payment.PaymentDate).ToList()
             })
         };
 
@@ -445,6 +446,9 @@ public static class MemberSelfEndpoints
         var normalized = value?.Trim();
         return string.IsNullOrWhiteSpace(normalized) ? null : normalized;
     }
+
+    private static decimal TreasuryPaid(LodgeMemberCharge charge) =>
+        charge.Payments.Sum(payment => payment.Amount) + charge.Allocations.Sum(allocation => allocation.Amount);
 
     private static bool LooksLikeEmail(string value)
     {

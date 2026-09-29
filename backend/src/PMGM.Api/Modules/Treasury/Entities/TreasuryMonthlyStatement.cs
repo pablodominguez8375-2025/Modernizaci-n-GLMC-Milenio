@@ -109,6 +109,37 @@ public sealed class LodgeMemberCharge
     public required string Status { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public ICollection<LodgeMemberPayment> Payments { get; set; } = new List<LodgeMemberPayment>();
+    public ICollection<LodgeMemberPaymentAllocation> Allocations { get; set; } = new List<LodgeMemberPaymentAllocation>();
+}
+
+public sealed class LodgeMemberReceipt
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Guid MemberId { get; set; }
+    public Member Member { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public string Currency { get; set; } = "CLP";
+    public required string PaymentMethod { get; set; }
+    public DateOnly PaymentDate { get; set; }
+    public required string ReceiptNumber { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public string? Reference { get; set; }
+    public required string RecordedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public ICollection<LodgeMemberPaymentAllocation> Allocations { get; set; } = new List<LodgeMemberPaymentAllocation>();
+}
+
+public sealed class LodgeMemberPaymentAllocation
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ReceiptId { get; set; }
+    public LodgeMemberReceipt Receipt { get; set; } = null!;
+    public Guid ChargeId { get; set; }
+    public LodgeMemberCharge Charge { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public required string AllocatedBySubject { get; set; }
+    public DateTimeOffset AllocatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
 public sealed class LodgeMemberPayment

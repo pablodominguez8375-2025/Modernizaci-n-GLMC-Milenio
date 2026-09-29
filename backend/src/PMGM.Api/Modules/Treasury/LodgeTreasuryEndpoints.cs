@@ -31,6 +31,8 @@ public static class LodgeTreasuryEndpoints
         group.MapGet("/talleres/{organizationId:guid}/cierres-anuales", GetAnnualClosuresAsync);
         group.MapPost("/talleres/{organizationId:guid}/cierres-anuales/{year:int}/cerrar", CloseAnnualPeriodAsync);
         group.MapPost("/cargos/{chargeId:guid}/pagos", AddPaymentAsync);
+        group.MapPost("/talleres/{organizationId:guid}/pagos", RecordReceiptAsync);
+        group.MapPost("/recibos/{receiptId:guid}/imputaciones", AllocateReceiptCreditAsync);
         group.MapPost("/talleres/{organizationId:guid}/egresos", CreateExpenseAsync);
         group.MapGet("/talleres/{organizationId:guid}/egresos", GetExpensesAsync);
         group.MapPost("/egresos/{expenseId:guid}/aprobar", ApproveExpenseAsync);
@@ -152,7 +154,8 @@ public static class LodgeTreasuryEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
         CancellationToken cancellationToken)
     {
-        var charge = await db.LodgeMemberCharges.Include(x => x.Payments).FirstOrDefaultAsync(x => x.Id == chargeId, cancellationToken);
+        var charge = await db.LodgeMemberCharges.Include(x => x.Payments).Include(x => x.Allocations)
+            .FirstOrDefaultAsync(x => x.Id == chargeId, cancellationToken);
         if (charge is null) return Results.NotFound(new { message = "El cargo indicado no existe." });
         if (!access.CanManageLodgeTreasury(context.User, charge.OrganizationId)) return Results.Forbid();
         if (request.Amount <= 0 || !TreasuryCodes.LodgePaymentMethod.IsValid(request.PaymentMethod))
@@ -167,13 +170,13 @@ public static class LodgeTreasuryEndpoints
             if (existing.Amount != request.Amount || existing.PaymentMethod != request.PaymentMethod ||
                 existing.PaymentDate != request.PaymentDate || !string.Equals(existing.Reference, reference, StringComparison.Ordinal))
                 return Results.Conflict(new { message = "La clave ya fue utilizada con datos de pago distintos." });
-            var alreadyPaid = charge.Payments.Where(x => x.Id != existing.Id).Sum(x => x.Amount) + existing.Amount;
+            var alreadyPaid = TotalPaid(charge);
             return Results.Ok(new { existing.Id, existing.ReceiptNumber, existing.Amount, existing.PaymentMethod, existing.PaymentDate,
                 paidAmount = alreadyPaid, balance = charge.MemberAmount - alreadyPaid, charge.Status });
         }
         if (await IsAccountingYearClosedAsync(db, charge.OrganizationId, request.PaymentDate.Year, charge.Currency, cancellationToken))
             return Results.Conflict(new { message = "La fecha de pago pertenece a un ejercicio cerrado. Registre el movimiento en un período abierto." });
-        var paid = charge.Payments.Sum(x => x.Amount);
+        var paid = TotalPaid(charge);
         if (paid + request.Amount > charge.MemberAmount)
             return Results.Conflict(new { message = "El abono supera el saldo pendiente del hermano." });
         if (reference is not null && charge.Payments.Any(x => x.Amount == request.Amount && x.PaymentDate == request.PaymentDate &&
@@ -192,6 +195,121 @@ public static class LodgeTreasuryEndpoints
         return Results.Created($"/api/gestion-logial/tesoreria/cargos/{chargeId}/pagos/{payment.Id}",
             new { payment.Id, payment.ReceiptNumber, payment.Amount, payment.Currency, payment.PaymentMethod, payment.PaymentDate,
                 paidAmount = paid + payment.Amount, balance = charge.MemberAmount - paid - payment.Amount, charge.Status });
+    }
+
+    private static async Task<IResult> RecordReceiptAsync(Guid organizationId, RecordLodgeMemberReceiptRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        var key = request.IdempotencyKey?.Trim();
+        var reference = Normalize(request.Reference);
+        var currency = TreasuryCurrency.Select(request.Currency, await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct));
+        if (currency is null || request.Amount <= 0 || !TreasuryCodes.LodgePaymentMethod.IsValid(request.PaymentMethod) ||
+            string.IsNullOrWhiteSpace(key) || key.Length > 100 || request.Allocations is null || request.Allocations.Any(x => x.Amount <= 0) ||
+            request.Allocations.Select(x => x.ChargeId).Distinct().Count() != request.Allocations.Count)
+            return Results.BadRequest(new { message = "La recepción, moneda, medio, clave y distribución deben ser válidos." });
+        var requestedAmount = request.Allocations.Sum(x => x.Amount);
+        if (requestedAmount > request.Amount)
+            return Results.BadRequest(new { message = "La suma imputada supera el dinero recibido." });
+
+        var existing = await db.LodgeMemberReceipts.Include(x => x.Allocations)
+            .SingleOrDefaultAsync(x => x.IdempotencyKey == key, ct);
+        if (existing is not null)
+        {
+            var samePayload = existing.OrganizationId == organizationId && existing.Amount == request.Amount && existing.Currency == currency &&
+                (request.MemberId is null || existing.MemberId == request.MemberId) &&
+                existing.PaymentMethod == request.PaymentMethod && existing.PaymentDate == request.PaymentDate && existing.Reference == reference &&
+                existing.Allocations.OrderBy(x => x.ChargeId).Select(x => new { x.ChargeId, x.Amount })
+                    .SequenceEqual(request.Allocations.OrderBy(x => x.ChargeId).Select(x => new { x.ChargeId, x.Amount }));
+            if (!samePayload) return Results.Conflict(new { message = "La clave ya fue utilizada con datos de recepción distintos." });
+            return Results.Ok(new { existing.Id, existing.ReceiptNumber, existing.Amount, existing.Currency, existing.PaymentDate,
+                allocatedAmount = existing.Allocations.Sum(x => x.Amount), unappliedBalance = existing.Amount - existing.Allocations.Sum(x => x.Amount) });
+        }
+        if (await IsAccountingYearClosedAsync(db, organizationId, request.PaymentDate.Year, currency, ct))
+            return Results.Conflict(new { message = "La fecha de recepción pertenece a un ejercicio cerrado." });
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        var chargeIds = request.Allocations.Select(x => x.ChargeId).ToArray();
+        var charges = await db.LodgeMemberCharges.Include(x => x.Payments).Include(x => x.Allocations)
+            .Where(x => chargeIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        var memberId = request.MemberId ?? Guid.Empty;
+        if (charges.Count != chargeIds.Length || (memberId != Guid.Empty && charges.Values.Any(x => x.MemberId != memberId)) ||
+            charges.Values.Any(x => x.OrganizationId != organizationId || x.Currency != currency))
+            return Results.BadRequest(new { message = "Todos los cargos imputados deben pertenecer al mismo hermano, Taller y moneda." });
+        if (memberId == Guid.Empty && charges.Count > 0) memberId = charges.Values.First().MemberId;
+        if (memberId == Guid.Empty)
+            return Results.BadRequest(new { message = "Indique el hermano cuando la recepción se registra sin imputar cuotas." });
+        if (!await db.Memberships.AnyAsync(x => x.MemberId == memberId && x.OrganizationId == organizationId, ct))
+            return Results.BadRequest(new { message = "El hermano no pertenece al Taller indicado." });
+
+        foreach (var allocation in request.Allocations)
+        {
+            var charge = charges[allocation.ChargeId];
+            var paid = charge.Payments.Sum(x => x.Amount) + charge.Allocations.Sum(x => x.Amount);
+            if (paid + allocation.Amount > charge.MemberAmount)
+                return Results.Conflict(new { message = "La imputación supera el saldo del período seleccionado.", chargeId = charge.Id });
+        }
+
+        var receipt = new LodgeMemberReceipt { OrganizationId = organizationId, MemberId = memberId, Amount = request.Amount, Currency = currency,
+            PaymentMethod = request.PaymentMethod, PaymentDate = request.PaymentDate, IdempotencyKey = key,
+            ReceiptNumber = $"REC-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Random.Shared.Next(1000, 9999)}",
+            Reference = reference, RecordedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
+        foreach (var item in request.Allocations)
+        {
+            var allocation = new LodgeMemberPaymentAllocation { Receipt = receipt, Charge = charges[item.ChargeId], Amount = item.Amount,
+                AllocatedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
+            receipt.Allocations.Add(allocation);
+        }
+        db.LodgeMemberReceipts.Add(receipt);
+        audit.Add(context, "lodge.treasury.member_receipt.recorded", nameof(LodgeMemberReceipt), receipt.Id.ToString(), organizationId,
+            AuditResults.Success, new { receipt.MemberId, receipt.Amount, receipt.Currency, receipt.PaymentDate, receipt.ReceiptNumber,
+                allocatedAmount = requestedAmount, unappliedBalance = receipt.Amount - requestedAmount });
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return Results.Created($"/api/gestion-logial/tesoreria/recibos/{receipt.Id}", new { receipt.Id, receipt.ReceiptNumber,
+            receipt.Amount, receipt.Currency, receipt.PaymentDate, allocatedAmount = requestedAmount, unappliedBalance = receipt.Amount - requestedAmount });
+    }
+
+    private static async Task<IResult> AllocateReceiptCreditAsync(Guid receiptId, AllocateLodgeReceiptRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var receipt = await db.LodgeMemberReceipts.Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Payments)
+            .Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Allocations)
+            .SingleOrDefaultAsync(x => x.Id == receiptId, ct);
+        if (receipt is null) return Results.NotFound(new { message = "La recepción no existe." });
+        if (!access.CanManageLodgeTreasury(context.User, receipt.OrganizationId)) return Results.Forbid();
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+        receipt = await db.LodgeMemberReceipts.Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Payments)
+            .Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Allocations)
+            .SingleAsync(x => x.Id == receiptId, ct);
+        if (request.Allocations is null || request.Allocations.Count == 0 || request.Allocations.Any(x => x.Amount <= 0) ||
+            request.Allocations.Select(x => x.ChargeId).Distinct().Count() != request.Allocations.Count)
+            return Results.BadRequest(new { message = "Indique períodos válidos y sin repeticiones." });
+        var currentAllocated = receipt.Allocations.Sum(x => x.Amount);
+        var addedAmount = request.Allocations.Sum(x => x.Amount);
+        if (currentAllocated + addedAmount > receipt.Amount)
+            return Results.Conflict(new { message = "La imputación supera el saldo a favor de esta recepción." });
+        var chargeIds = request.Allocations.Select(x => x.ChargeId).ToArray();
+        var charges = await db.LodgeMemberCharges.Include(x => x.Payments).Include(x => x.Allocations)
+            .Where(x => chargeIds.Contains(x.Id)).ToDictionaryAsync(x => x.Id, ct);
+        if (charges.Count != chargeIds.Length || charges.Values.Any(x => x.OrganizationId != receipt.OrganizationId || x.MemberId != receipt.MemberId || x.Currency != receipt.Currency))
+            return Results.BadRequest(new { message = "El período debe pertenecer al mismo hermano, Taller y moneda de la recepción." });
+        foreach (var item in request.Allocations)
+        {
+            var charge = charges[item.ChargeId];
+            var applied = charge.Payments.Sum(x => x.Amount) + charge.Allocations.Sum(x => x.Amount);
+            if (applied + item.Amount > charge.MemberAmount)
+                return Results.Conflict(new { message = "La imputación supera el saldo del período seleccionado.", chargeId = charge.Id });
+        }
+        foreach (var item in request.Allocations)
+            db.LodgeMemberPaymentAllocations.Add(new LodgeMemberPaymentAllocation { ReceiptId = receipt.Id, ChargeId = item.ChargeId,
+                Amount = item.Amount, AllocatedBySubject = context.User.FindFirstValue("sub") ?? "unknown" });
+        audit.Add(context, "lodge.treasury.member_receipt.allocated", nameof(LodgeMemberReceipt), receipt.Id.ToString(), receipt.OrganizationId,
+            AuditResults.Success, new { receipt.ReceiptNumber, addedAmount, remainingBalance = receipt.Amount - currentAllocated - addedAmount });
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return Results.Ok(new { receiptId = receipt.Id, receipt.ReceiptNumber, allocatedAmount = currentAllocated + addedAmount,
+            unappliedBalance = receipt.Amount - currentAllocated - addedAmount });
     }
 
     private static async Task<IResult> GetSummaryAsync(Guid organizationId, int year, int month, string? currencyCode, HttpContext context,
@@ -215,6 +333,7 @@ public static class LodgeTreasuryEndpoints
         if (currency is null) return Results.BadRequest(new { message = "La moneda debe ser CLP o USD." });
         var cutoff = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
         var rows = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments.Where(p => p.PaymentDate <= cutoff))
+            .Include(x => x.Allocations.Where(a => a.Receipt.PaymentDate <= cutoff)).ThenInclude(x => x.Receipt)
             .Where(x => x.OrganizationId == organizationId && x.Currency == currency && (x.PeriodYear < year || (x.PeriodYear == year && x.PeriodMonth <= month)))
             .Join(db.Members.AsNoTracking().Include(x => x.Person), charge => charge.MemberId, member => member.Id,
                 (charge, member) => new { charge, member })
@@ -224,20 +343,20 @@ public static class LodgeTreasuryEndpoints
             .Select(group =>
             {
                 var memberCharges = group.Select(x => x.charge).OrderBy(x => x.PeriodYear).ThenBy(x => x.PeriodMonth).ToList();
-                var totalPaid = memberCharges.Sum(x => x.Payments.Sum(p => p.Amount));
-                var totalBalance = memberCharges.Sum(x => x.MemberAmount - x.Payments.Sum(p => p.Amount));
-                var nextDueCharge = memberCharges.FirstOrDefault(x => x.MemberAmount > x.Payments.Sum(p => p.Amount)) ?? memberCharges[^1];
+                var totalPaid = memberCharges.Sum(TotalPaid);
+                var totalBalance = memberCharges.Sum(x => x.MemberAmount - TotalPaid(x));
+                var nextDueCharge = memberCharges.FirstOrDefault(x => x.MemberAmount > TotalPaid(x)) ?? memberCharges[^1];
                 var currentCharge = memberCharges[^1];
                 return new { id = nextDueCharge.Id, group.Key.MemberId,
                     memberDisplayName = group.Key.FirstNames + " " + group.Key.LastNames,
                     currency = group.Key.Currency,
                     memberAmount = memberCharges.Sum(x => x.MemberAmount), monthlyFeeAmount = currentCharge.MemberAmount,
                     paidAmount = totalPaid, balance = totalBalance,
-                    maxPaymentAmount = nextDueCharge.MemberAmount - nextDueCharge.Payments.Sum(p => p.Amount),
+                    maxPaymentAmount = nextDueCharge.MemberAmount - TotalPaid(nextDueCharge),
                     status = totalBalance <= 0 ? TreasuryCodes.LodgeChargeStatus.Paid : totalPaid > 0 ? TreasuryCodes.LodgeChargeStatus.Partial : TreasuryCodes.LodgeChargeStatus.Pending,
                     periods = memberCharges.Select(charge =>
                     {
-                        var paid = charge.Payments.Sum(payment => payment.Amount);
+                        var paid = TotalPaid(charge);
                         var periodRelation = charge.PeriodYear < year || (charge.PeriodYear == year && charge.PeriodMonth < month)
                             ? "past"
                             : charge.PeriodYear == year && charge.PeriodMonth == month ? "selected" : "future";
@@ -250,8 +369,11 @@ public static class LodgeTreasuryEndpoints
                             chargedAmount = charge.MemberAmount, paidAmount = paid,
                             balance = charge.MemberAmount - paid, status = periodStatus };
                     }),
-                    payments = memberCharges.SelectMany(x => x.Payments).OrderByDescending(p => p.PaymentDate).Select(p => new
-                        { p.Id, p.ReceiptNumber, p.Amount, currency = p.Currency, p.PaymentMethod, p.PaymentDate, p.Reference }) };
+                    payments = memberCharges.SelectMany(x => x.Payments.Select(p => new { id = p.Id, p.ReceiptNumber, amount = p.Amount,
+                            currency = p.Currency, p.PaymentMethod, p.PaymentDate, p.Reference })
+                        .Concat(x.Allocations.Select(a => new { id = a.ReceiptId, a.Receipt.ReceiptNumber, amount = a.Amount,
+                            currency = a.Receipt.Currency, a.Receipt.PaymentMethod, a.Receipt.PaymentDate, a.Receipt.Reference })))
+                        .OrderByDescending(p => p.PaymentDate).ToList() };
             }).ToList();
         return Results.Ok(new { total = items.Count, items });
     }
@@ -260,31 +382,35 @@ public static class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
-        var charges = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments)
+        var charges = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments).Include(x => x.Allocations).ThenInclude(a => a.Receipt)
             .Where(x => x.OrganizationId == organizationId && x.MemberId == memberId)
             .OrderByDescending(x => x.PeriodYear).ThenByDescending(x => x.PeriodMonth).ToListAsync(cancellationToken);
         var breakdown = charges.GroupBy(x => x.Currency).Select(group => new { currency = group.Key,
-            totalCharged = group.Sum(x => x.MemberAmount), totalPaid = group.Sum(x => x.Payments.Sum(p => p.Amount)),
-            balance = group.Sum(x => x.MemberAmount - x.Payments.Sum(p => p.Amount)) }).ToList();
+            totalCharged = group.Sum(x => x.MemberAmount), totalPaid = group.Sum(TotalPaid),
+            balance = group.Sum(x => x.MemberAmount - TotalPaid(x)) }).ToList();
         return Results.Ok(new { memberId, organizationId, currencies = breakdown,
             items = charges.Select(x => new { x.Id, x.PeriodYear, x.PeriodMonth, x.Currency, x.MemberAmount, x.GrandTreasuryAmount,
-                paidAmount = x.Payments.Sum(p => p.Amount), balance = x.MemberAmount - x.Payments.Sum(p => p.Amount), x.Status,
-                payments = x.Payments.OrderByDescending(p => p.PaymentDate).Select(p => new { p.Id, p.ReceiptNumber, p.Amount, p.PaymentMethod, p.PaymentDate, p.Reference }) }) });
+                paidAmount = TotalPaid(x), balance = x.MemberAmount - TotalPaid(x), x.Status,
+                payments = x.Payments.Select(p => new { id = p.Id, p.ReceiptNumber, amount = p.Amount, p.PaymentMethod, p.PaymentDate, p.Reference })
+                    .Concat(x.Allocations.Select(a => new { id = a.ReceiptId, a.Receipt.ReceiptNumber, amount = a.Amount,
+                        a.Receipt.PaymentMethod, a.Receipt.PaymentDate, a.Receipt.Reference })) }) });
     }
 
     private static async Task<object> BuildSummaryAsync(PmgmDbContext db, Guid organizationId, int year, int month, string currency, CancellationToken cancellationToken)
     {
-        var charges = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments)
+        var cutoff = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
+        var charges = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments.Where(p => p.PaymentDate <= cutoff))
+            .Include(x => x.Allocations.Where(a => a.Receipt.PaymentDate <= cutoff)).ThenInclude(x => x.Receipt)
             .Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.PeriodYear == year && x.PeriodMonth == month).ToListAsync(cancellationToken);
         var memberExpected = charges.Sum(x => x.MemberAmount);
-        var collected = charges.Sum(x => x.Payments.Sum(p => p.Amount));
+        var collected = charges.Sum(TotalPaid);
         var grandTreasuryExpected = charges.Sum(x => x.GrandTreasuryAmount);
         return new { organizationId, currency, periodYear = year, periodMonth = month, members = charges.Count,
             memberExpected, collected, receivable = memberExpected - collected, grandTreasuryExpected,
             workshopMarginProjected = memberExpected - grandTreasuryExpected,
-            paid = charges.Count(x => x.Status == TreasuryCodes.LodgeChargeStatus.Paid),
-            partial = charges.Count(x => x.Status == TreasuryCodes.LodgeChargeStatus.Partial),
-            overdue = charges.Count(x => x.Status == TreasuryCodes.LodgeChargeStatus.Pending),
+            paid = charges.Count(x => TotalPaid(x) >= x.MemberAmount),
+            partial = charges.Count(x => TotalPaid(x) > 0 && TotalPaid(x) < x.MemberAmount),
+            overdue = charges.Count(x => TotalPaid(x) < x.MemberAmount),
             trafficLight = charges.Count == 0 ? "no_data" : collected >= memberExpected ? "green" : collected >= memberExpected * .8m ? "amber" : "red" };
     }
 
@@ -322,16 +448,18 @@ public static class LodgeTreasuryEndpoints
         var openingDate = config?.OpeningBalanceDate ?? DateOnly.MinValue;
         var openingBalance = config is not null && config.OpeningBalanceDate <= cutoff ? config.OpeningBalance : 0m;
         var payments = await db.LodgeMemberPayments.AsNoTracking().Where(x => x.Charge.OrganizationId == organizationId && x.Currency == currency && x.PaymentDate >= openingDate && x.PaymentDate <= cutoff).ToListAsync(ct);
+        var receipts = await db.LodgeMemberReceipts.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.PaymentDate >= openingDate && x.PaymentDate <= cutoff).ToListAsync(ct);
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.IncomeDate >= openingDate && x.IncomeDate <= cutoff).ToListAsync(ct);
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.ExpenseDate >= openingDate && x.ExpenseDate <= cutoff && x.ApprovalStatus == "approved").ToListAsync(ct);
         var monthPayments = payments.Where(x => x.PaymentDate >= monthStart).Sum(x => x.Amount);
         var monthIncomes = incomes.Where(x => x.IncomeDate >= monthStart).Sum(x => x.Amount);
         var monthExpenses = expenses.Where(x => x.ExpenseDate >= monthStart).Sum(x => x.Amount);
-        var allIncome = payments.Sum(x => x.Amount) + incomes.Sum(x => x.Amount);
+        var allIncome = payments.Sum(x => x.Amount) + receipts.Sum(x => x.Amount) + incomes.Sum(x => x.Amount);
         var allExpense = expenses.Sum(x => x.Amount);
         return Results.Ok(new { organizationId, asOf = cutoff, openingBalance,
             cumulativeIncome = allIncome, cumulativeExpense = allExpense, cumulativeBalance = openingBalance + allIncome - allExpense,
-            monthIncome = monthPayments + monthIncomes, monthExpense = monthExpenses, monthBalance = monthPayments + monthIncomes - monthExpenses,
+            monthIncome = monthPayments + receipts.Where(x => x.PaymentDate >= monthStart).Sum(x => x.Amount) + monthIncomes, monthExpense = monthExpenses,
+            monthBalance = monthPayments + receipts.Where(x => x.PaymentDate >= monthStart).Sum(x => x.Amount) + monthIncomes - monthExpenses,
             currency, pendingExpenses = await db.LodgeTreasuryExpenses.CountAsync(x => x.OrganizationId == organizationId && x.Currency == currency && x.ApprovalStatus == "pending_approval", ct) });
     }
 
@@ -351,10 +479,14 @@ public static class LodgeTreasuryEndpoints
             : await GetBalanceAtStartOfYearAsync(db, organizationId, from, currency, ct);
         var payments = await db.LodgeMemberPayments.AsNoTracking().Include(x => x.Charge).ThenInclude(x => x.Member).ThenInclude(x => x.Person)
             .Where(x => x.Charge.OrganizationId == organizationId && x.Currency == currency && x.PaymentDate >= periodFrom && x.PaymentDate <= to).ToListAsync(ct);
+        var receipts = await db.LodgeMemberReceipts.AsNoTracking().Include(x => x.Member).ThenInclude(x => x.Person)
+            .Include(x => x.Allocations).ThenInclude(x => x.Charge)
+            .Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.PaymentDate >= periodFrom && x.PaymentDate <= to).ToListAsync(ct);
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.IncomeDate >= periodFrom && x.IncomeDate <= to).ToListAsync(ct);
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.ExpenseDate >= periodFrom && x.ExpenseDate <= to).ToListAsync(ct);
         var movements = payments.Select(x => new { date = x.PaymentDate, type = "ingreso", category = "Ingreso por pago de cuotas", description = $"Cuota {x.Charge.PeriodMonth:00}/{x.Charge.PeriodYear} · {x.Charge.Member.Person.FirstNames} {x.Charge.Member.Person.LastNames}", amount = x.Amount, status = "registrado", reference = (string?)x.ReceiptNumber, paymentMethod = (string?)x.PaymentMethod, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = (string?)null, approvedAtUtc = (DateTimeOffset?)null })
             .Concat(incomes.Select(x => new { date = x.IncomeDate, type = "ingreso", category = x.Category, description = x.Description, amount = x.Amount, status = "registrado", reference = x.EvidenceReference, paymentMethod = (string?)null, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = (string?)null, approvedAtUtc = (DateTimeOffset?)null }))
+            .Concat(receipts.Select(x => new { date = x.PaymentDate, type = "ingreso", category = "Ingreso por recepción de cuotas", description = $"Pago de cuotas · {x.Member.Person.FirstNames} {x.Member.Person.LastNames}", amount = x.Amount, status = "registrado", reference = (string?)(x.Reference ?? x.ReceiptNumber), paymentMethod = (string?)x.PaymentMethod, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = (string?)null, approvedAtUtc = (DateTimeOffset?)null }))
             .Concat(expenses.Select(x => new { date = x.ExpenseDate, type = "egreso", category = x.Category, description = x.Description, amount = x.Amount, status = x.ApprovalStatus == "approved" ? "autorizado" : "pendiente de autorización", reference = x.EvidenceReference, paymentMethod = (string?)null, transactionId = x.Id, recordedBySubject = x.RecordedBySubject, recordedAtUtc = x.RecordedAtUtc, approvedBySubject = x.ApprovedBySubject, approvedAtUtc = x.ApprovedAtUtc }))
             .OrderBy(x => x.date).ToList();
         var received = movements.Where(x => x.type == "ingreso").Sum(x => x.amount);
@@ -402,6 +534,8 @@ public static class LodgeTreasuryEndpoints
 
         var payments = await db.LodgeMemberPayments.AsNoTracking().Where(x => x.Charge.OrganizationId == organizationId && x.Currency == currency &&
             x.PaymentDate >= periodFrom && x.PaymentDate <= request.To).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
+        var receipts = await db.LodgeMemberReceipts.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
+            x.PaymentDate >= periodFrom && x.PaymentDate <= request.To).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
             x.IncomeDate >= periodFrom && x.IncomeDate <= request.To).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
@@ -410,14 +544,16 @@ public static class LodgeTreasuryEndpoints
         var pending = expenses.Where(x => x.ApprovalStatus != "approved").Sum(x => x.Amount);
         var movementCount = await db.LodgeMemberPayments.CountAsync(x => x.Charge.OrganizationId == organizationId && x.Currency == currency &&
                 x.PaymentDate >= periodFrom && x.PaymentDate <= request.To, ct)
+            + await db.LodgeMemberReceipts.CountAsync(x => x.OrganizationId == organizationId && x.Currency == currency &&
+                x.PaymentDate >= periodFrom && x.PaymentDate <= request.To, ct)
             + await db.LodgeTreasuryIncomes.CountAsync(x => x.OrganizationId == organizationId && x.Currency == currency &&
                 x.IncomeDate >= periodFrom && x.IncomeDate <= request.To, ct)
             + expenses.Count;
-        var closing = opening + payments + incomes - authorized;
+        var closing = opening + payments + receipts + incomes - authorized;
         var reconciliation = new LodgeTreasuryReconciliation
         {
             OrganizationId = organizationId, Currency = currency, From = request.From, To = request.To,
-            OpeningBalance = opening, Income = payments + incomes, AuthorizedExpenses = authorized,
+            OpeningBalance = opening, Income = payments + receipts + incomes, AuthorizedExpenses = authorized,
             PendingExpenses = pending, ClosingBalance = closing, ObservedBalance = request.ObservedBalance,
             Difference = request.ObservedBalance - closing, MovementCount = movementCount,
             EvidenceReference = Normalize(request.EvidenceReference), Notes = Normalize(request.Notes),
@@ -490,6 +626,8 @@ public static class LodgeTreasuryEndpoints
             x.EffectiveFrom, x.EffectiveUntil, x.IsActive };
     }
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    private static decimal TotalPaid(LodgeMemberCharge charge) =>
+        charge.Payments.Sum(payment => payment.Amount) + charge.Allocations.Sum(allocation => allocation.Amount);
 
     private static async Task<IResult> CreateExpenseAsync(Guid organizationId, CreateLodgeTreasuryExpenseRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
@@ -571,17 +709,20 @@ public static class LodgeTreasuryEndpoints
             ? config.OpeningBalanceDate : start;
         var payments = await db.LodgeMemberPayments.AsNoTracking().Where(x => x.Charge.OrganizationId == organizationId && x.Currency == currency &&
             x.PaymentDate >= activityStart && x.PaymentDate <= end).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
+        var receipts = await db.LodgeMemberReceipts.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
+            x.PaymentDate >= activityStart && x.PaymentDate <= end).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
             x.IncomeDate >= activityStart && x.IncomeDate <= end).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
             x.ExpenseDate >= activityStart && x.ExpenseDate <= end && x.ApprovalStatus == "approved").SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var movementCount = await db.LodgeMemberPayments.CountAsync(x => x.Charge.OrganizationId == organizationId && x.Currency == currency &&
             x.PaymentDate >= activityStart && x.PaymentDate <= end, ct) +
+            await db.LodgeMemberReceipts.CountAsync(x => x.OrganizationId == organizationId && x.Currency == currency && x.PaymentDate >= activityStart && x.PaymentDate <= end, ct) +
             await db.LodgeTreasuryIncomes.CountAsync(x => x.OrganizationId == organizationId && x.Currency == currency && x.IncomeDate >= activityStart && x.IncomeDate <= end, ct) +
             await db.LodgeTreasuryExpenses.CountAsync(x => x.OrganizationId == organizationId && x.Currency == currency && x.ExpenseDate >= activityStart &&
                 x.ExpenseDate <= end && x.ApprovalStatus == "approved", ct);
         var closure = new LodgeTreasuryYearClosure { OrganizationId = organizationId, AccountingYear = year, Currency = currency, OpeningBalance = opening,
-            Income = payments + incomes, AuthorizedExpenses = expenses, ClosingBalance = opening + payments + incomes - expenses,
+            Income = payments + receipts + incomes, AuthorizedExpenses = expenses, ClosingBalance = opening + payments + receipts + incomes - expenses,
             MovementCount = movementCount, ClosedBySubject = context.User.FindFirstValue("sub") ?? "unknown" };
         db.LodgeTreasuryYearClosures.Add(closure);
         audit.Add(context, "lodge.treasury.year.closed", nameof(LodgeTreasuryYearClosure), closure.Id.ToString(), organizationId,
@@ -608,12 +749,14 @@ public static class LodgeTreasuryEndpoints
         if (movementStart >= periodStart) return balance;
         var payments = await db.LodgeMemberPayments.AsNoTracking().Where(x => x.Charge.OrganizationId == organizationId && x.Currency == currency &&
             x.PaymentDate >= movementStart && x.PaymentDate < periodStart).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
+        var receipts = await db.LodgeMemberReceipts.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
+            x.PaymentDate >= movementStart && x.PaymentDate < periodStart).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var incomes = await db.LodgeTreasuryIncomes.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
             x.IncomeDate >= movementStart && x.IncomeDate < periodStart).SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
         var expenses = await db.LodgeTreasuryExpenses.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.Currency == currency &&
             x.ExpenseDate >= movementStart && x.ExpenseDate < periodStart && x.ApprovalStatus == "approved")
             .SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
-        return balance + payments + incomes - expenses;
+        return balance + payments + receipts + incomes - expenses;
     }
 }
 
@@ -622,6 +765,11 @@ public sealed record CreateLodgeFeePlanRequest(string FeeType, decimal MemberAmo
 public sealed record LodgeFeeAssignmentRequest(Guid MemberId, string FeeType);
 public sealed record GenerateLodgeChargesRequest(int PeriodYear, int PeriodMonth, IReadOnlyList<LodgeFeeAssignmentRequest>? Assignments);
 public sealed record AddLodgeMemberPaymentRequest(decimal Amount, string PaymentMethod, DateOnly PaymentDate, string? Reference, string? IdempotencyKey);
+public sealed record LodgeReceiptAllocationRequest(Guid ChargeId, decimal Amount);
+public sealed record RecordLodgeMemberReceiptRequest(decimal Amount, string PaymentMethod, DateOnly PaymentDate,
+    string? Reference, string? IdempotencyKey, IReadOnlyList<LodgeReceiptAllocationRequest> Allocations,
+    Guid? MemberId = null, string? Currency = null);
+public sealed record AllocateLodgeReceiptRequest(IReadOnlyList<LodgeReceiptAllocationRequest> Allocations);
 public sealed record CreateLodgeTreasuryExpenseRequest(string Category, decimal Amount, DateOnly ExpenseDate, string Description, string? EvidenceReference, string? Currency = null);
 public sealed record CreateLodgeTreasuryIncomeRequest(string Category, decimal Amount, DateOnly IncomeDate, string Description, string? EvidenceReference, string? Currency = null);
 public sealed record SaveLodgeTreasuryConfigurationRequest(decimal OpeningBalance, DateOnly OpeningBalanceDate, string IncomeCategories, string ExpenseCategories, string? Currency = null);
