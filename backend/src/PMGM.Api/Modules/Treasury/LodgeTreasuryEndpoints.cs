@@ -32,6 +32,7 @@ public static class LodgeTreasuryEndpoints
         group.MapPost("/talleres/{organizationId:guid}/cierres-anuales/{year:int}/cerrar", CloseAnnualPeriodAsync);
         group.MapPost("/cargos/{chargeId:guid}/pagos", AddPaymentAsync);
         group.MapPost("/talleres/{organizationId:guid}/pagos", RecordReceiptAsync);
+        group.MapGet("/talleres/{organizationId:guid}/recibos", GetMemberReceiptsAsync);
         group.MapPost("/recibos/{receiptId:guid}/imputaciones", AllocateReceiptCreditAsync);
         group.MapPost("/talleres/{organizationId:guid}/egresos", CreateExpenseAsync);
         group.MapGet("/talleres/{organizationId:guid}/egresos", GetExpensesAsync);
@@ -312,6 +313,24 @@ public static class LodgeTreasuryEndpoints
             unappliedBalance = receipt.Amount - currentAllocated - addedAmount });
     }
 
+    private static async Task<IResult> GetMemberReceiptsAsync(Guid organizationId, bool unappliedOnly, HttpContext context,
+        PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        var receipts = await db.LodgeMemberReceipts.AsNoTracking().Include(x => x.Member).ThenInclude(x => x.Person)
+            .Include(x => x.Allocations).ThenInclude(x => x.Charge)
+            .Where(x => x.OrganizationId == organizationId)
+            .OrderByDescending(x => x.PaymentDate).ThenByDescending(x => x.RecordedAtUtc).ToListAsync(ct);
+        var items = receipts.Select(x => new
+        {
+            x.Id, x.MemberId, memberDisplayName = x.Member.Person.FirstNames + " " + x.Member.Person.LastNames,
+            x.ReceiptNumber, x.Amount, x.Currency, x.PaymentMethod, x.PaymentDate, x.Reference,
+            allocatedAmount = x.Allocations.Sum(a => a.Amount), unappliedBalance = x.Amount - x.Allocations.Sum(a => a.Amount),
+            allocations = x.Allocations.Select(a => new { a.ChargeId, a.Charge.PeriodYear, a.Charge.PeriodMonth, a.Amount })
+        }).Where(x => !unappliedOnly || x.unappliedBalance > 0).ToList();
+        return Results.Ok(new { total = items.Count, items });
+    }
+
     private static async Task<IResult> GetSummaryAsync(Guid organizationId, int year, int month, string? currencyCode, HttpContext context,
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
@@ -334,7 +353,7 @@ public static class LodgeTreasuryEndpoints
         var cutoff = new DateOnly(year, month, DateTime.DaysInMonth(year, month));
         var rows = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments.Where(p => p.PaymentDate <= cutoff))
             .Include(x => x.Allocations.Where(a => a.Receipt.PaymentDate <= cutoff)).ThenInclude(x => x.Receipt)
-            .Where(x => x.OrganizationId == organizationId && x.Currency == currency && (x.PeriodYear < year || (x.PeriodYear == year && x.PeriodMonth <= month)))
+            .Where(x => x.OrganizationId == organizationId && x.Currency == currency)
             .Join(db.Members.AsNoTracking().Include(x => x.Person), charge => charge.MemberId, member => member.Id,
                 (charge, member) => new { charge, member })
             .OrderBy(x => x.member.Person.LastNames).ThenBy(x => x.member.Person.FirstNames)
