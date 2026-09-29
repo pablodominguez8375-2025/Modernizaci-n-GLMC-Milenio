@@ -14,6 +14,9 @@ public static class GrandTreasuryFeeSchedule
 
     public static bool IsValidTerritory(string value) => value is Santiago or OtherOriente or Peru;
 
+    public static bool HasOrdinaryDues(string membershipType)
+        => membershipType != PastActiveMembershipType;
+
     public static (decimal Amount, string Currency)? Resolve(string feeType, string territory, DateOnly asOf)
     {
         if (asOf < EffectiveFrom) return null;
