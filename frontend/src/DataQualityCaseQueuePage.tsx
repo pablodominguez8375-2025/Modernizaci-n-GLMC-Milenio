@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type DataQualityCase, type DataQualityCaseApiClient } from './api/dataQualityCaseApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './dataQualityCaseQueue.css'
+import { organizationDisplayName } from './displayFormat'
 
 const STATUS_LABEL: Record<string, string> = { open: 'Abierto', under_review: 'En revisión', resolved_confirmed: 'Confirmado', dismissed: 'Descartado' }
 
@@ -59,7 +60,7 @@ export default function DataQualityCaseQueuePage({ api, caseApi }: { api: PmgmAp
 
     <section className="panel case-queue-filters">
       <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Todos</option><option value="open">Abiertos</option><option value="under_review">En revisión</option><option value="resolved_confirmed">Confirmados</option><option value="dismissed">Descartados</option></select></label>
-      <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Toda la Orden</option>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}{item.number ? ` · Nº ${item.number}` : ''}</option>)}</select></label>
+      <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Toda la Orden</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationDisplayName(item.name, item.number)}</option>)}</select></label>
       <label className="case-checkbox"><input type="checkbox" checked={assignedToMe} onChange={event => setAssignedToMe(event.target.checked)} /><span>Asignados a mí</span></label>
     </section>
 

@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient, type RegimenInteriorSummary } from './api/pmgmApi'
 import type { OrderRejectionAlert } from './api/pmgmApi'
 import './regimen.css'
+import { organizationDisplayName } from './displayFormat'
 
 export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
   const today = chileDate(new Date())
@@ -42,7 +43,7 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
       <button className="primary-action" disabled={loading}>Actualizar reporte</button>
     </form></section>
     {loading && !summary ? <div className="panel"><p>Cargando reporte institucional…</p></div> : summary && <Report summary={summary} />}
-    <section className="panel report-wide"><div className="panel-heading"><div><p className="eyebrow">Antecedentes transversales · acceso restringido</p><h2>Alertas de candidatos rechazados en Cámara del Medio</h2><p>Consulta para detectar una ficha previa en otro Taller antes de autorizar una nueva presentación.</p></div><span className="count-badge">{rejectionAlerts.length} alertas</span></div>{rejectionAlerts.length === 0 ? <p className="muted">No hay rechazos registrados.</p> : <div className="table-wrap"><table><thead><tr><th>Candidato</th><th>Taller que rechazó</th><th>Fecha</th><th>Referencia</th></tr></thead><tbody>{rejectionAlerts.map((alert, index) => <tr key={`${alert.personId}-${alert.rejectionDate}-${index}`}><td><strong>{alert.firstNames} {alert.lastNames}</strong><small>ID transversal protegido</small></td><td>{alert.workshopName}{alert.workshopNumber ? ` · Nº ${alert.workshopNumber}` : ''}</td><td>{formatDateOnly(alert.rejectionDate)}</td><td>{alert.sourceReference ?? 'Sin referencia'}</td></tr>)}</tbody></table></div>}</section>
+    <section className="panel report-wide"><div className="panel-heading"><div><p className="eyebrow">Antecedentes transversales · acceso restringido</p><h2>Alertas de candidatos rechazados en Cámara del Medio</h2><p>Consulta para detectar una ficha previa en otro Taller antes de autorizar una nueva presentación.</p></div><span className="count-badge">{rejectionAlerts.length} alertas</span></div>{rejectionAlerts.length === 0 ? <p className="muted">No hay rechazos registrados.</p> : <div className="table-wrap"><table><thead><tr><th>Candidato</th><th>Taller que rechazó</th><th>Fecha</th><th>Referencia</th></tr></thead><tbody>{rejectionAlerts.map((alert, index) => <tr key={`${alert.personId}-${alert.rejectionDate}-${index}`}><td><strong>{alert.firstNames} {alert.lastNames}</strong><small>ID transversal protegido</small></td><td>{organizationDisplayName(alert.workshopName, alert.workshopNumber)}</td><td>{formatDateOnly(alert.rejectionDate)}</td><td>{alert.sourceReference ?? 'Sin referencia'}</td></tr>)}</tbody></table></div>}</section>
     {api.useMocks && <AssemblyRosterDemo />}
   </>
 }
@@ -121,7 +122,7 @@ function Report({ summary }: { summary: RegimenInteriorSummary }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function Metric({ label, value, detail }: { label: string; value: number; detail: string }) { return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></article> }
 function Stat({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'bad' }) { return <div className={`stat-row ${tone ?? ''}`}><span>{label}</span><strong>{value}</strong></div> }
-function organizationLabel(o: OrganizationOption) { return `${o.name}${o.number ? ` · Nº ${o.number}` : ''}` }
+function organizationLabel(o: OrganizationOption) { return `${organizationDisplayName(o.name, o.number)}` }
 function degreeLabel(value: string) { const normalized = value.toLowerCase(); if (normalized === 'apprentice') return 'Aprendiz'; if (normalized === 'fellowcraft') return 'Compañero'; if (normalized === 'master') return 'Maestro'; if (normalized === 'past_active') return 'PAS activo'; return value }
 function formatDateOnly(value: string) { const [y, m, d] = value.split('-').map(Number); return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(new Date(Date.UTC(y, m - 1, d, 12))) }
 function chileDate(date: Date) { const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date); const get = (type: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === type)?.value ?? ''; return `${get('year')}-${get('month')}-${get('day')}` }

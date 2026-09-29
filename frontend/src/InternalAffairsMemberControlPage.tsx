@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type HistoricalIntakeReviewItem, type InternalAffairsApiClient, type MemberControlRow } from './api/internalAffairsApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsControl.css'
+import { organizationDisplayName } from './displayFormat'
 
 export default function InternalAffairsMemberControlPage({ api, internalAffairsApi }: { api: PmgmApiClient; internalAffairsApi: InternalAffairsApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
@@ -149,7 +150,7 @@ function statusClass(value: string) { return value === 'active' || value === 're
 function degreeLabel(value: string | null) { return value === 'apprentice' ? 'Aprendiz' : value === 'fellowcraft' ? 'Compañero' : value === 'master' ? 'Maestro' : value || 'Sin grado registrado' }
 function financialLabel(value: string | null) { return value === 'up_to_date' ? 'Al día' : value === 'delinquent' ? 'Moroso' : value === 'pending' ? 'Pendiente' : value === 'exempt' ? 'Exento' : 'Sin estado' }
 function withdrawalLabel(value: string | null) { return value === 'forced_withdrawal' ? 'Retiro forzoso' : value === 'voluntary_withdrawal' ? 'Retiro voluntario' : 'Retiro' }
-function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
+function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }
 function formatDateOptional(value: string | null) { return value ? formatDate(value) : 'sin fecha exacta' }
 function todayInChile() { const parts = new Intl.DateTimeFormat('en', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()); const get = (type: string) => parts.find(item => item.type === type)?.value ?? ''; return `${get('year')}-${get('month')}-${get('day')}` }

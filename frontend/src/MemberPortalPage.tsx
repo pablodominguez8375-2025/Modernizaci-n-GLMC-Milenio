@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { organizationNumberOf } from './displayFormat'
 import InstitutionalIcon from './InstitutionalIcon'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
@@ -184,6 +185,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       : (profile?.displayName ?? 'Hermano')
   const memberId = useMocks ? memberPortalDemoData.memberId : (selfProfile?.member.institutionalNumber ?? 'Sin número institucional')
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
+  const lodgeSeal = organizationNumberOf(lodge) ?? (lodge.trim().charAt(0).toUpperCase() || '∴')
   const orient = useMocks ? memberPortalDemoData.institutional.orient : 'Según expediente institucional'
   const effectiveDegree = useMocks ? 3 : (selfProfile?.current.effectiveDegree ?? Number.parseInt(selfProfile?.current.degree?.degree ?? '', 10))
   const degree = useMocks ? memberPortalDemoData.institutional.degree : formatDegree(selfProfile?.current.effectiveDegree, selfProfile?.current.degree?.degree)
@@ -231,7 +233,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
 
       <article className="member-card member-institutional-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Datos masónicos</p><h2>Información institucional</h2></div><span className="member-lock-badge">Sólo lectura</span></div>
-        <div className="member-lodge-line"><span className="member-lodge-seal">C</span><div><small>Taller</small><strong>{lodge}</strong><span>{orient}</span></div></div>
+        <div className="member-lodge-line"><span className="member-lodge-seal" aria-hidden="true">{lodgeSeal}</span><div><small>Taller</small><strong>{lodge}</strong><span>{orient}</span></div></div>
         <div className="member-institutional-summary">
           <MemberDatum label="Grado" value={degree} />
           <MemberDatum label="Estado" value={status} success={status === 'Activo'} />

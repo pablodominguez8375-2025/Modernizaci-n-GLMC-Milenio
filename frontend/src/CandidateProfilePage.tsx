@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateReviewDecision, type CandidateReviewQueueItem } from './api/candidateIntakeApi'
 import './candidate-completeness.css'
+import { organizationDisplayName } from './displayFormat'
 
 export const candidateCoreFields = [
   'passportPhoto',
@@ -246,7 +247,7 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
 
         <article className="candidate-product-card candidate-lodge-card">
           <div className="candidate-section-title"><span>⌂</span><h2>Datos logiales y de presentación</h2></div>
-          <div className="candidate-lodge-hero"><span className="candidate-lodge-seal">C</span><div><small>Logia que presenta al insinuado</small><strong>{profile.workshopName}{profile.workshopNumber ? ` · Nº ${profile.workshopNumber}` : ''}</strong><span>{profile.orient ?? 'Oriente no informado'}</span></div></div>
+          <div className="candidate-lodge-hero"><span className="candidate-lodge-seal">C</span><div><small>Logia que presenta al insinuado</small><strong>{organizationDisplayName(profile.workshopName, profile.workshopNumber)}</strong><span>{profile.orient ?? 'Oriente no informado'}</span></div></div>
           <div className="candidate-lodge-fields">
             <CandidateField label="Oriente" value={profile.orient} />
             <CandidateField label="Fecha de insinuación" value={formatDateOnly(profile.insinuationDate)} />

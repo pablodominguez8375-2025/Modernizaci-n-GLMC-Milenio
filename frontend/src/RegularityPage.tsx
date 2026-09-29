@@ -6,6 +6,7 @@ import {
 } from './api/pmgmApi'
 import RegularityDashboard from './RegularityDashboard'
 import './regularity.css'
+import { organizationDisplayName } from './displayFormat'
 
 type RegularityKind = 'treasury' | 'hospitalaria'
 
@@ -156,7 +157,7 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="regularity-field"><span>{label}</span>{children}</label> }
-function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
+function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function statusLabel(kind: RegularityKind, status: string) { const match = configs[kind].statusOptions.find(([value]) => value === status); return match?.[1] ?? status }
 function statusClass(status: string) { return status === 'up_to_date' || status === 'exempt' ? 'regularity-status good' : status === 'pending' ? 'regularity-status pending' : 'regularity-status blocked' }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'No fue posible completar la operación.' }

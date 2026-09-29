@@ -14,6 +14,7 @@ import {
 } from './api/pmgmApi'
 import './regularity.css'
 import './treasuryStatement.css'
+import { organizationDisplayName } from './displayFormat'
 
 const money = new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0})
 
@@ -153,7 +154,7 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
       </section>
       <section className="panel">
         {grandItems.length===0?<div className="empty-state">No existen rendiciones enviadas para el filtro seleccionado.</div>:grandItems.map(item=><article className="hospitalaria-submission-card" key={item.id}>
-          <div><p className="eyebrow">{item.organizationName}{item.organizationNumber?` · Nº ${item.organizationNumber}`:''}</p><h2>{String(item.periodMonth).padStart(2,'0')}/{item.periodYear}</h2><p>Ingresos {money.format(item.incomeAmount)} · Egresos aprobados {money.format(item.approvedExpenseAmount)} · Reposición pendiente {money.format(item.differenceAmount)}</p></div>
+          <div><p className="eyebrow">{organizationDisplayName(item.organizationName, item.organizationNumber)}</p><h2>{String(item.periodMonth).padStart(2,'0')}/{item.periodYear}</h2><p>Ingresos {money.format(item.incomeAmount)} · Egresos aprobados {money.format(item.approvedExpenseAmount)} · Reposición pendiente {money.format(item.differenceAmount)}</p></div>
           <div><strong>{statusLabel(item.status)}</strong><small>Movimientos agregados: {item.movementCount} · Egresos pendientes: {item.pendingExpenseCount}</small><small>Revisión Consejo: {item.councilFinancialReviewId?'✅':'❌'} · Comprobante reposición: {item.paymentReference?'✅':'—'}</small></div>
           {item.status==='submitted'&&<div className="hospitalaria-review-actions"><input aria-label="Observación de Gran Hospitalaria" value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} placeholder="Observación institucional"/><button type="button" className="regularity-secondary" disabled={busy||!reviewNotes.trim()} onClick={()=>void execute(()=>api.reviewGrandHospitalariaSubmission(item.id,'observed',reviewNotes),'Rendición observada por Gran Hospitalaria.')}>Observar</button><button type="button" className="regularity-primary" disabled={busy||item.differenceAmount>0} onClick={()=>void execute(()=>api.reviewGrandHospitalariaSubmission(item.id,'reconciled',reviewNotes||null),'Rendición conciliada; regularidad institucional actualizada.')}>Conciliar</button></div>}
         </article>)}
