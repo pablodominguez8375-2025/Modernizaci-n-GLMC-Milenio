@@ -13,7 +13,9 @@ Modernización Digital de la Gran Logia Mixta de Chile
 
 Lema de proyecto:
 
-**100 años de historia · Un legado hacia el futuro**
+**Camino al centenario 1929-2029**
+
+> Actualización 29-09-2026 — decisión del Product Owner: el lema vigente es «Camino al centenario 1929-2029», conforme al formato oficial de papelería de la GLMCh. Reemplaza al lema anterior «100 años de historia · Un legado hacia el futuro», que queda sólo como antecedente histórico.
 
 ## Alcance del cambio
 El nuevo nombre debe reflejarse progresivamente en:

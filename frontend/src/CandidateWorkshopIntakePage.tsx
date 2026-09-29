@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import './CandidateWorkshopIntakePage.css'
+import { organizationDisplayName } from './displayFormat'
 
 interface CandidateWorkshopIntakePageProps {
   api: CandidateIntakeApiClient
@@ -255,7 +256,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
         : <form className="workshop-form-grid" onSubmit={event => void createNewRequest(event)}>
           <Field label="Taller autorizado *">
             <select required value={newCandidate.organizationId} onChange={event => setNewCandidate({ ...newCandidate, organizationId: event.target.value })}>
-              {organizations.map(item => <option key={item.id} value={item.id}>{item.name}{item.number ? ` · Nº ${item.number}` : ''}</option>)}
+              {organizations.map(item => <option key={item.id} value={item.id}>{organizationDisplayName(item.name, item.number)}</option>)}
             </select>
           </Field>
           <Field label="Nombres *"><input required maxLength={160} value={newCandidate.firstNames} onChange={event => setNewCandidate({ ...newCandidate, firstNames: event.target.value })} /></Field>
@@ -271,14 +272,14 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     <section className="workshop-intake-layout">
       <aside className="candidate-product-card workshop-intake-queue">
         <div className="candidate-section-title"><span>▤</span><h2>Solicitudes de iniciación</h2><em>{queue.length}</em></div>
-        {loading && queue.length === 0 ? <p>Cargando solicitudes…</p> : queue.length === 0 ? <p>No existen solicitudes de iniciación disponibles para este Taller.</p> : <div className="workshop-intake-list">{queue.map(item => <button key={item.ceremonyRequestId} type="button" className={item.ceremonyRequestId === selectedId ? 'active' : ''} onClick={() => setSelectedId(item.ceremonyRequestId)}><strong>{item.displayName || 'Insinuado sin nombre'}</strong><span>{item.workshopName}{item.workshopNumber ? ` · Nº ${item.workshopNumber}` : ''}</span><small>{statusLabel(item.reviewStatus)} · {item.profileAvailable ? 'Ficha registrada' : 'Ficha pendiente'}</small></button>)}</div>}
+        {loading && queue.length === 0 ? <p>Cargando solicitudes…</p> : queue.length === 0 ? <p>No existen solicitudes de iniciación disponibles para este Taller.</p> : <div className="workshop-intake-list">{queue.map(item => <button key={item.ceremonyRequestId} type="button" className={item.ceremonyRequestId === selectedId ? 'active' : ''} onClick={() => setSelectedId(item.ceremonyRequestId)}><strong>{item.displayName || 'Insinuado sin nombre'}</strong><span>{organizationDisplayName(item.workshopName, item.workshopNumber)}</span><small>{statusLabel(item.reviewStatus)} · {item.profileAvailable ? 'Ficha registrada' : 'Ficha pendiente'}</small></button>)}</div>}
       </aside>
 
       <main className="workshop-intake-main">
         {!selected ? <section className="candidate-product-card"><p>Seleccione una solicitud para comenzar.</p></section> : <>
           <section className="candidate-product-card workshop-intake-summary">
             <div><small>Insinuado base</small><strong>{selected.displayName}</strong></div>
-            <div><small>Logia/Taller presentante</small><strong>{selected.workshopName}{selected.workshopNumber ? ` · Nº ${selected.workshopNumber}` : ''}</strong></div>
+            <div><small>Logia/Taller presentante</small><strong>{organizationDisplayName(selected.workshopName, selected.workshopNumber)}</strong></div>
             <div><small>Estado de revisión</small><strong className={`workshop-status ${selected.reviewStatus}`}>{statusLabel(selected.reviewStatus)}</strong></div>
             <div><small>Fecha propuesta de ceremonia</small><strong>{selected.proposedDate ? formatDateOnly(selected.proposedDate) : 'Por definir'}</strong></div>
           </section>
@@ -327,7 +328,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
           <section className="candidate-product-card">
             <div className="candidate-section-title"><span>⌂</span><h2>Presentación logial y antecedentes</h2><em>Formulario auditable</em></div>
             <div className="workshop-form-grid">
-              <Field label="Logia/Taller que presenta"><input value={`${selected.workshopName}${selected.workshopNumber ? ` · Nº ${selected.workshopNumber}` : ''}`} disabled /></Field>
+              <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LodgeApiClient, LodgeGrade, OrderInstructionReport } from './api/lodgeApi'
 import './lodgeManagement.css'
+import { organizationDisplayName } from './displayFormat'
 
 type Grade = Exclude<LodgeGrade, 'all'>
 const labels: Record<Grade, string> = { apprentice: 'Aprendices', fellowcraft: 'Compañeros', master: 'Maestros' }
@@ -37,13 +38,13 @@ export default function OrderInstructionReportPage({ lodgeApi, allowedGrades, ca
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Reporte de Orden</p><h2>Actividad de docencia</h2><p>El reporte no incluye nombres ni datos personales de los hermanos.</p></div></div>
       <div className="lodge-instruction-form">
         <label><span>Grado</span><select value={grade} onChange={event => setGrade(event.target.value as Grade | 'all')} disabled={!canReadAll}><option value="all">Todos los grados</option>{grades.map(item => <option key={item} value={item}>{labels[item]}</option>)}</select></label>
-        <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Todos los Talleres</option>{report?.workshops.map(item => <option key={item.organizationId} value={item.organizationId}>{item.organizationName}{item.organizationNumber ? ` Nº ${item.organizationNumber}` : ''}</option>)}</select></label>
+        <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Todos los Talleres</option>{report?.workshops.map(item => <option key={item.organizationId} value={item.organizationId}>{organizationDisplayName(item.organizationName, item.organizationNumber)}</option>)}</select></label>
         <label><span>Desde</span><input type="date" value={from} onChange={event => setFrom(event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={to} onChange={event => setTo(event.target.value)} /></label>
       </div>
       <div className="lodge-instruction-heading"><h2>{report?.total ?? 0} instrucciones realizadas</h2></div>
-      <div className="table-scroll"><table><thead><tr><th>Taller</th><th>Grado</th><th>Sesiones</th><th>Presentes</th><th>Justificadas</th><th>Ausentes</th></tr></thead><tbody>{report?.summary.filter(row => grade === 'all' || row.grade === grade).map(row => <tr key={`${row.organizationId}-${row.grade}`}><td>{row.organizationName}{row.organizationNumber ? ` Nº ${row.organizationNumber}` : ''}</td><td>{labels[row.grade]}</td><td>{row.sessionCount}</td><td>{row.present}</td><td>{row.excused}</td><td>{row.absent}</td></tr>)}</tbody></table></div>
-      <div className="lodge-instruction-history">{report?.items.map(item => <article className="lodge-instruction-history-row" key={item.instructionId}><div><strong>{item.topic}</strong><span>{item.organizationName}{item.organizationNumber ? ` Nº ${item.organizationNumber}` : ''} · {labels[item.grade]} · {formatDate(item.instructionDate)}</span></div><div><small>{item.present} presentes · {item.excused} justificadas · {item.absent} ausentes</small></div></article>)}{report?.items.length === 0 && <p className="lodge-empty-copy">No hay instrucciones realizadas para los filtros seleccionados.</p>}</div>
+      <div className="table-scroll"><table><thead><tr><th>Taller</th><th>Grado</th><th>Sesiones</th><th>Presentes</th><th>Justificadas</th><th>Ausentes</th></tr></thead><tbody>{report?.summary.filter(row => grade === 'all' || row.grade === grade).map(row => <tr key={`${row.organizationId}-${row.grade}`}><td>{organizationDisplayName(row.organizationName, row.organizationNumber)}</td><td>{labels[row.grade]}</td><td>{row.sessionCount}</td><td>{row.present}</td><td>{row.excused}</td><td>{row.absent}</td></tr>)}</tbody></table></div>
+      <div className="lodge-instruction-history">{report?.items.map(item => <article className="lodge-instruction-history-row" key={item.instructionId}><div><strong>{item.topic}</strong><span>{organizationDisplayName(item.organizationName, item.organizationNumber)} · {labels[item.grade]} · {formatDate(item.instructionDate)}</span></div><div><small>{item.present} presentes · {item.excused} justificadas · {item.absent} ausentes</small></div></article>)}{report?.items.length === 0 && <p className="lodge-empty-copy">No hay instrucciones realizadas para los filtros seleccionados.</p>}</div>
     </section>
   </div>
 }

@@ -3,6 +3,7 @@ import { type DataQualityCaseApiClient } from './api/dataQualityCaseApi'
 import { type DataQualityIssue, type DataQualityResponse, type InternalAffairsApiClient } from './api/internalAffairsApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsDataQuality.css'
+import { organizationDisplayName } from './displayFormat'
 
 const RULE_LABELS: Record<string, string> = {
   invalid_membership_range: 'Rango de afiliación inválido', multiple_current_memberships: 'Más de una afiliación vigente', overlapping_workshop_memberships: 'Afiliaciones de Taller superpuestas', active_status_without_current_membership: 'Estado activo sin afiliación vigente',
@@ -77,7 +78,7 @@ function IssueCard({ item, busy, onOpen }: { item: DataQualityIssue; busy: boole
 
 function Metric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: 'error' | 'warning' }) { return <article className={`metric-card data-quality-metric ${tone ?? ''}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article> }
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
-function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
+function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function dateLabel(value: string | null) { return value ? new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) : '—' }
 function ruleLabel(value: string) { return RULE_LABELS[value] ?? value.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ') }
 function todayInSantiago() { const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()); const map = Object.fromEntries(parts.map(part => [part.type, part.value])); return `${map.year}-${map.month}-${map.day}` }

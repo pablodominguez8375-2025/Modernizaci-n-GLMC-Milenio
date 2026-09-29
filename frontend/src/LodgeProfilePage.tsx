@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type LodgeSummaryAccess, type OrganizationProfile, type OrganizationProfileApiClient } from './api/organizationProfileApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './lodgeProfile.css'
+import { organizationDisplayName } from './displayFormat'
 
 export default function LodgeProfilePage({ api, organizationProfileApi, canManageAccess = false, canEditWorkshopProfile = false }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient; canManageAccess?: boolean; canEditWorkshopProfile?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
@@ -205,7 +206,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
 function Kpi({ label, value, detail }: { label: string; value: string; detail: string }) { return <article className="metric-card"><span>{label}</span><strong className={value === 'Pendiente' ? 'kpi-warning' : undefined}>{value}</strong><small>{detail}</small></article> }
 function Empty({ text }: { text: string }) { return <div className="empty-state compact"><strong>{text}</strong></div> }
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
-function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
+function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(item => item[0]?.toUpperCase()).join('') }
 function officeLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase()) }
 function degreeLabel(value: string) { return value === 'master' || value === 'third' ? 'Maestro/a' : value === 'fellowcraft' || value === 'second' ? 'Compañero/a' : value === 'apprentice' || value === 'first' ? 'Aprendiz' : value.replaceAll('_', ' ') }
