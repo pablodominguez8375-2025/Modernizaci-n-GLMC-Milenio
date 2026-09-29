@@ -38,7 +38,7 @@ export default function LodgeTreasuryPanel({ api, organizationId, treasuryTerrit
   const reportMovements=report?.movements??[]
   const paymentTargets=charges.flatMap(member=>member.periods?.length
     ? member.periods.map(period=>({...period,memberId:member.memberId,memberDisplayName:member.memberDisplayName}))
-    : [{chargeId:member.id,periodYear:year,periodMonth:month,currency:member.currency??currency,chargedAmount:member.memberAmount,paidAmount:member.paidAmount,balance:member.balance,status:member.status==='paid'?'paid':member.status==='partial'?'partial':'due',memberId:member.memberId,memberDisplayName:member.memberDisplayName}])
+    : [{chargeId:member.id,periodYear:year,periodMonth:month,currency,chargedAmount:member.memberAmount,paidAmount:member.paidAmount,balance:member.balance,status:member.status==='paid'?'paid':member.status==='partial'?'partial':'due',memberId:member.memberId,memberDisplayName:member.memberDisplayName}])
   const openPaymentTargets=paymentTargets.filter(target=>target.balance>0&&target.currency===currency)
   const availableMemberTargets=openPaymentTargets.filter(target=>target.memberId===selectedMemberId)
   const memberOptions=[...new Map(charges.map(member=>[member.memberId,{id:member.memberId,name:member.memberDisplayName}])).values()]
