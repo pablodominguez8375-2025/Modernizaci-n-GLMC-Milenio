@@ -52,6 +52,11 @@ describe('lodge treasury panel — segregación de funciones', () => {
     expect(html).toContain('Historial por período')
   })
 
+  it('does not offer Past Active as an ordinary monthly fee', () => {
+    const html = renderToStaticMarkup(<LodgeTreasuryPanel api={api()} organizationId="org-1" canManage section="settings" />)
+    expect(html).not.toContain('Past Activo · aporte GT $0')
+  })
+
   it('shows separate cash income and configurable category fields to the local treasurer', () => {
     const html = renderToStaticMarkup(<LodgeTreasuryPanel api={api()} organizationId="org-1" canManage section="movements" />)
     expect(html).toContain('Registrar otro ingreso')
