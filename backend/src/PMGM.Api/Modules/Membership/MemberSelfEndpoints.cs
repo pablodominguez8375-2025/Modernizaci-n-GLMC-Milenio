@@ -186,7 +186,7 @@ public static class MemberSelfEndpoints
                         ? x.Payments.Any() || x.Allocations.Any() ? "advance_partial" : "future_due"
                         : x.Payments.Any() || x.Allocations.Any() ? "partial" : "due",
                 x.Status,
-                payments = x.Payments.Select(payment => new { id = payment.Id, payment.Currency, payment.ReceiptNumber,
+                payments = x.Payments.Select(payment => new { id = payment.Id, currency = payment.Currency, payment.ReceiptNumber,
                         amount = payment.Amount, payment.PaymentMethod, payment.PaymentDate, payment.Reference })
                     .Concat(x.Allocations.Select(a => new { id = a.ReceiptId, currency = a.Receipt.Currency,
                         a.Receipt.ReceiptNumber, amount = a.Amount, a.Receipt.PaymentMethod, a.Receipt.PaymentDate, a.Receipt.Reference }))
