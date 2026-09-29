@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type CalendarApiClient, type CalendarEvent } from './api/calendarApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
+import { organizationDisplayName } from './displayFormat'
 
 type CalendarMode = 'agenda' | 'month'
 
@@ -102,7 +103,7 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
         <button type="button" className="secondary-button" onClick={() => setAnchor(monthStart(new Date()))}>Hoy</button>
       </div>
       <div className="calendar-filters">
-        <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Todos los visibles</option>{organizations.map(org => <option key={org.id} value={org.id}>{org.name}{org.number ? ` Nº ${org.number}` : ''}</option>)}</select></label>
+        <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Todos los visibles</option>{organizations.map(org => <option key={org.id} value={org.id}>{organizationDisplayName(org.name, org.number)}</option>)}</select></label>
         <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="active">Vigentes</option><option value="">Todos</option><option value="confirmed">Confirmados</option><option value="tentative">Tentativos</option><option value="completed">Realizados</option><option value="cancelled">Cancelados</option></select></label>
         <label><span>Tipo</span><select value={eventType} onChange={event => setEventType(event.target.value)}><option value="">Todos</option>{eventTypes.map(type => <option key={type} value={type}>{eventTypeLabel(type)}</option>)}</select></label>
       </div>
@@ -143,7 +144,7 @@ function EventCard({ event, organization }: { event: CalendarEvent; organization
   return <article className={event.isMasked ? 'calendar-event-card masked' : 'calendar-event-card'}>
     <div className="event-time"><strong>{allDay ? 'Todo el día' : timeRange(event)}</strong><small>{event.locationDisplay ?? (event.spaceId ? 'Espacio institucional' : 'Sin espacio asignado')}</small></div>
     <div className="event-main"><div className="event-title-row"><div><span className={`event-kind kind-${eventKind(event.eventType)}`}>{eventTypeLabel(event.eventType)}</span><h3>{event.title}</h3></div><span className={`status-pill calendar-status ${statusClass(event.status)}`}>{statusLabel(event.status)}</span></div>
-      {!event.isMasked && <div className="event-meta"><span>{organization ? `${organization.name}${organization.number ? ` Nº ${organization.number}` : ''}` : 'Ámbito institucional'}</span>{event.sourceModule && <span>Fuente: {sourceLabel(event.sourceModule)}</span>}</div>}
+      {!event.isMasked && <div className="event-meta"><span>{organization ? `${organizationDisplayName(organization.name, organization.number)}` : 'Ámbito institucional'}</span>{event.sourceModule && <span>Fuente: {sourceLabel(event.sourceModule)}</span>}</div>}
       {event.isMasked && <p className="privacy-note">Detalle protegido. Sólo se expone la ocupación necesaria para coordinar agenda y espacios.</p>}
     </div>
   </article>

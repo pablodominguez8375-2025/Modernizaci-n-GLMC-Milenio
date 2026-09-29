@@ -2,6 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import type { PmgmApiClient, TreasuryCeremonyRightItem } from './api/pmgmApi'
 import { ceremonyTypeLabel } from './ceremonyTypes'
 import './ceremony-rights.css'
+import { organizationDisplayName } from './displayFormat'
 
 export default function CeremonyRightsPage({ api }: { api: PmgmApiClient }) {
   const [items, setItems] = useState<TreasuryCeremonyRightItem[]>([])
@@ -52,7 +53,7 @@ function CeremonyRightCard({ item, working, onRecord }: { item: TreasuryCeremony
       .then(success => { if (success) { setReference(''); renewKey() } })
   }
   return <article className="panel ceremony-right-card">
-    <div className="ceremony-right-card-heading"><div><p className="eyebrow">{ceremonyTypeLabel(item.ceremonyType)}</p><h3>{item.subjectDisplayName}</h3><p>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</p></div><span className="status-pill blocked">Saldo pendiente</span></div>
+    <div className="ceremony-right-card-heading"><div><p className="eyebrow">{ceremonyTypeLabel(item.ceremonyType)}</p><h3>{item.subjectDisplayName}</h3><p>{organizationDisplayName(item.organizationName, item.organizationNumber)}</p></div><span className="status-pill blocked">Saldo pendiente</span></div>
     <dl className="ceremony-right-values"><div><dt>Derecho oficial</dt><dd>{money(item.amount, item.currency)}</dd></div><div><dt>Pagado</dt><dd>{money(item.paid, item.currency)}</dd></div><div><dt>Saldo</dt><dd>{money(item.balance, item.currency)}</dd></div><div><dt>Fecha propuesta</dt><dd>{item.proposedDate ? dateLabel(item.proposedDate) : 'Sin fecha'}</dd></div></dl>
     <p className="ceremony-right-source">{item.source}</p>
     <details className="ceremony-right-payment"><summary>Registrar abono y emitir comprobante</summary><form onSubmit={submit}>

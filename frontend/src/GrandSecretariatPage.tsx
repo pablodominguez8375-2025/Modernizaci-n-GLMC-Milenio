@@ -10,6 +10,7 @@ import {
 } from './api/pmgmApi'
 import './secretariat.css'
 import { ceremonyTypeLabel } from './ceremonyTypes'
+import { countLabel, organizationDisplayName } from './displayFormat'
 
 const SANTIAGO = 'America/Santiago'
 
@@ -121,10 +122,10 @@ function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocum
     }, success)
   }
 
-  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Plancha de Autorización de Ceremonia</h2></div><span className="count-badge">{items.filter(item => !item.formalAuthorizationIssued).length} pendientes</span></div>
+  return <article className="panel secretariat-wide"><div className="panel-heading"><div><p className="eyebrow">Ceremonias autorizadas</p><h2>Plancha de Autorización de Ceremonia</h2></div><span className="count-badge">{countLabel(items.filter(item => !item.formalAuthorizationIssued).length, 'pendiente')}</span></div>
     <p className="form-note">Esta bandeja no expone nombres de hermanos o insinuados. La autorización formal sólo utiliza el Taller, tipo de ceremonia, fecha y reserva institucional cuando existe.</p>
     {items.length === 0 ? <p className="muted">No hay ceremonias autorizadas pendientes de gestión documental.</p> : <div className="ceremony-queue">{items.map(item => <div className="ceremony-row" key={item.id}>
-      <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Plancha emitida' : 'Pendiente de Plancha'}</span></div><span>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
+      <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Plancha emitida' : 'Pendiente de Plancha'}</span></div><span>{organizationDisplayName(item.organizationName, item.organizationNumber)}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
       {!item.formalAuthorizationIssued && <button className={item.spaceReservationId ? 'primary-action' : 'secondary-action'} type="button" disabled={working} onClick={() => issue(item)}>{item.spaceReservationId ? 'Emitir Plancha' : 'Emitir Plancha sin sala asignada'}</button>}
     </div>)}</div>}
   </article>
@@ -163,7 +164,7 @@ function SubmittedTenidasPanel({ api, items, working, execute, refresh }: {
       {items.map(item => <div className="ceremony-row" key={item.recordId}>
         <div className="ceremony-main">
           <div className="ceremony-title"><strong>{item.title || 'Tenida'}</strong><span className={item.submissionStatus === 'received' ? 'status-pill complete' : 'status-pill active'}>{submissionLabel(item.submissionStatus)}</span></div>
-          <span>{item.lodge.name}{item.lodge.number ? ` · Nº ${item.lodge.number}` : ''}</span>
+          <span>{organizationDisplayName(item.lodge.name, item.lodge.number)}</span>
           <small>{formatDateOnly(item.meetingDate)} · {meetingTypeLabel(item.meetingType)} · {degreeLabel(item.grade)} · {item.modality === 'virtual' ? 'Virtual' : 'Presencial'}</small>
           {item.ceremonyType && <small>Ceremonia: {ceremonyTypeLabel(item.ceremonyType)}</small>}
           {item.reviewNotes && <small className="reservation-warning">Observación: {item.reviewNotes}</small>}
@@ -246,7 +247,7 @@ function DocumentPanel({ api, organizations, working, execute, refreshDocuments 
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) { return <label className="field"><span>{label}</span>{children}</label> }
 function SpaceRow({ space }: { space: InstitutionalSpace }) { return <div className="space-row"><div><strong>{space.name}</strong><small>{space.code} · {spaceTypeLabel(space.spaceType)}{space.capacity ? ` · ${space.capacity} personas` : ''}</small></div><span className={space.isAvailable ? 'status-pill complete' : 'status-pill active'}>{space.isAvailable ? 'Disponible' : 'Ocupado'}</span></div> }
-function organizationLabel(o: OrganizationOption) { return `${o.name}${o.number ? ` · Nº ${o.number}` : ''}` }
+function organizationLabel(o: OrganizationOption) { return `${organizationDisplayName(o.name, o.number)}` }
 function spaceTypeLabel(type: InstitutionalSpace['spaceType']) { return type === 'temple' ? 'Templo' : 'Sala de Secretaría' }
 function documentTypeLabel(document: SecretariatDocument) { if (document.documentType === 'decree') return 'Decreto'; if (document.planchaKind === 'ceremony_authorization' || document.documentType === 'ceremony_authorization' || document.documentType === 'ceremony_authorization_plancha') return 'Plancha · autorización formal'; return 'Plancha · comunicado formal' }
 function submissionLabel(value: GrandSecretariatTenidaItem['submissionStatus']) { return value === 'received' ? 'Recibido' : value === 'observed' ? 'Observado' : 'Pendiente de recepción' }

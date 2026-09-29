@@ -259,7 +259,6 @@ textarea:focus-visible {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: stretch;
     gap: 6px;
-    max-height: 46vh;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-block: contain;
@@ -340,7 +339,6 @@ textarea:focus-visible {
   .sidebar {
     top: 64px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: 50vh;
   }
 
   .content {
@@ -458,4 +456,18 @@ textarea:focus-visible {
     animation-iteration-count: 1 !important;
     transition-duration: .001ms !important;
   }
+}
+
+/* PMGM-UI · Egresos del Taller como tarjetas en móvil: la acción «Autorizar» queda siempre visible. */
+@media (max-width: 720px) {
+  .treasury-cards-mobile { overflow-x: visible; }
+  .treasury-cards-mobile table,
+  .treasury-cards-mobile tbody,
+  .treasury-cards-mobile tr,
+  .treasury-cards-mobile td { display: block; width: 100%; min-width: 0; }
+  .treasury-cards-mobile thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .treasury-cards-mobile tr { margin: 0 0 10px; padding: 10px 12px; border: 1px solid #e1e6ed; border-left: 3px solid #FBAE17; border-radius: 10px; background: #fff; }
+  .treasury-cards-mobile td { display: grid; grid-template-columns: minmax(96px, 38%) 1fr; gap: 8px; padding: 5px 0; border: 0; font-size: 14px; text-align: left; }
+  .treasury-cards-mobile td::before { content: attr(data-label); color: #586680; font-size: 12px; font-weight: 600; }
+  .treasury-cards-mobile td[data-label="Acción"] button { width: 100%; min-height: 44px; }
 }

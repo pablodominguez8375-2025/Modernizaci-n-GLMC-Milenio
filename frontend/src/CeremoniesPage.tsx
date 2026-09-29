@@ -6,6 +6,7 @@ import {
 } from './api/pmgmApi'
 import './ceremonies.css'
 import { ceremonyTypeLabel } from './ceremonyTypes'
+import { organizationDisplayName } from './displayFormat'
 
 export default function CeremoniesPage({ api }: { api: PmgmApiClient }) {
   const [items, setItems] = useState<CeremonyReviewQueueItem[]>([])
@@ -90,7 +91,7 @@ function CeremonyCard({ item, api, working, execute }: {
       <div>
         <p className="eyebrow">{ceremonyTypeLabel(item.ceremonyType)}</p>
         <h2>{item.subjectDisplayName}</h2>
-        <p>{item.organizationName}{item.organizationNumber ? ` · Nº ${item.organizationNumber}` : ''}</p>
+        <p>{organizationDisplayName(item.organizationName, item.organizationNumber)}</p>
       </div>
       <div className="ceremony-state-stack">
         <span className={requestStatusClass(item.status)}>{requestStatusLabel(item.status)}</span>

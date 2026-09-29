@@ -131,7 +131,11 @@
   color: #596a82;
 }
 
-.member-quote-mark,
+.member-quote-mark {
+  color: var(--member-ppt-gold);
+  background: none;
+}
+
 .member-quote-rule {
   color: var(--member-ppt-gold);
   background-color: var(--member-ppt-gold);

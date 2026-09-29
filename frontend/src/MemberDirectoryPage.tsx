@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient } from './api/membershipApi'
 import './memberDirectory.css'
+import { organizationDisplayName } from './displayFormat'
 
 export default function MemberDirectoryPage({ api, membershipApi }: { api: PmgmApiClient; membershipApi: MembershipApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
@@ -139,7 +140,7 @@ function Profile({ profile }: { profile: MemberProfile }) {
 function Metric({ label, value, detail }: { label: string; value: number; detail: string }) { return <article className="metric-card"><span>{label}</span><strong>{value}</strong><small>{detail}</small></article> }
 function Summary({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="profile-summary"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div> }
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
-function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
+function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(item => item[0]?.toUpperCase()).join('') }
 export function officePeriod(startDate: string, endDate: string | null) { return `${formatDate(startDate)} → ${endDate ? formatDate(endDate) : 'vigente'}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }

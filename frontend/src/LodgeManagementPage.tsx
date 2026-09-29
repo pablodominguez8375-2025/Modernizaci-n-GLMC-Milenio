@@ -23,6 +23,7 @@ import LodgeWithdrawalsPanel from './LodgeWithdrawalsPanel'
 import LodgeCouncilPanel from './LodgeCouncilPanel'
 import LodgeSecretariatPanel from './LodgeSecretariatPanel'
 import { ceremonyTypeLabel } from './ceremonyTypes'
+import { organizationDisplayName } from './displayFormat'
 
 export const lodgeCockpitDemoData = {
   lodge: {
@@ -439,7 +440,7 @@ function LodgeCount({ label, value, tone }: { label: string; value: number; tone
 const meetingTypeOptions = [['regular', 'Regular'], ['solemn', 'Solemne'], ['instruction', 'Instrucción'], ['anniversary', 'Aniversario'], ['funeral', 'Fúnebre'], ['special', 'Especial']] as const
 const gradeOptions = [['all', 'Todos los grados'], ['apprentice', 'Aprendiz'], ['fellowcraft', 'Compañero'], ['master', 'Maestro']] as const
 const attendanceOptions = [['present', 'Presente'], ['excused', 'Justificado'], ['absent', 'Ausente']] as const
-function organizationLabel(item: OrganizationOption) { return `${item.name}${item.number ? ` · Nº ${item.number}` : ''}` }
+function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function meetingTypeLabel(value: LodgeMeetingType) { return meetingTypeOptions.find(([key]) => key === value)?.[1] ?? value }
 function gradeLabel(value: LodgeGrade) { return gradeOptions.find(([key]) => key === value)?.[1] ?? value }
 function instructionOfficeLabel(value: LodgeInstruction['responsibleOffice']) { return value === 'second_warden' ? 'Segundo Vigilante' : value === 'first_warden' ? 'Primer Vigilante' : 'Inmediato Ex-Venerable Maestro' }
