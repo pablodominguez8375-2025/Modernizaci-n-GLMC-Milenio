@@ -127,6 +127,7 @@ public sealed class LodgeMemberReceipt
     public string? Reference { get; set; }
     public required string RecordedBySubject { get; set; }
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public ICollection<LodgeReceiptAdjustment> Adjustments { get; set; } = new List<LodgeReceiptAdjustment>();
     public ICollection<LodgeMemberPaymentAllocation> Allocations { get; set; } = new List<LodgeMemberPaymentAllocation>();
 }
 
@@ -138,6 +139,10 @@ public sealed class LodgeMemberPaymentAllocation
     public Guid ChargeId { get; set; }
     public LodgeMemberCharge Charge { get; set; } = null!;
     public decimal Amount { get; set; }
+    public DateOnly? EffectiveDate { get; set; }
+    public Guid? AdjustmentId { get; set; }
+    public LodgeReceiptAdjustment? Adjustment { get; set; }
+    public Guid? ReversesAllocationId { get; set; }
     public required string AllocatedBySubject { get; set; }
     public DateTimeOffset AllocatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
@@ -261,5 +266,20 @@ public sealed class LodgeTreasuryReconciliation
     public string? EvidenceReference { get; init; }
     public string? Notes { get; init; }
     public required string RecordedBySubject { get; init; }
+    public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+}
+
+public sealed class LodgeReceiptAdjustment
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ReceiptId { get; set; }
+    public LodgeMemberReceipt Receipt { get; set; } = null!;
+    public required string Kind { get; set; }
+    public DateOnly EffectiveDate { get; set; }
+    public decimal CashAmount { get; set; }
+    public required string Reason { get; set; }
+    public required string IdempotencyKey { get; set; }
+    public required string RequestPayload { get; set; }
+    public required string RecordedBySubject { get; set; }
     public DateTimeOffset RecordedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }

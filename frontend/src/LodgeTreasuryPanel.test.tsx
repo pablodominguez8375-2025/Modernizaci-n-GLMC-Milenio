@@ -59,7 +59,7 @@ describe('lodge treasury panel — segregación de funciones', () => {
     const charges = await client.getLodgeTreasuryCharges('org-1', 2026, 9)
     const memberCharges = charges.items.filter(item => item.memberId === 'member-demo-002' || item.memberId === 'member-demo-003')
     const partiallyPaid = memberCharges.find(item => item.memberId === 'member-demo-002')!
-    const nextPeriod = memberCharges.find(item => item.memberId === 'member-demo-003')!
+    const nextPeriod = (await client.getLodgeTreasuryCharges('org-1',2026,10)).items.find(item => item.memberId === partiallyPaid.memberId)!
 
     const receipt = await client.recordLodgeMemberReceipt('org-1', {
       memberId: partiallyPaid.memberId,

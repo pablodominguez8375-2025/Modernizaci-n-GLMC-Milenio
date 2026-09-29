@@ -149,11 +149,11 @@ public static class MemberSelfEndpoints
                 .Sum(x => TreasuryPaid(x))
         }).ToList();
         var singleCurrency = treasuryCurrencies.Count == 1 ? treasuryCurrencies[0] : null;
-        var memberReceipts = await db.LodgeMemberReceipts.AsNoTracking().Include(x => x.Allocations)
+        var memberReceipts = await db.LodgeMemberReceipts.AsNoTracking().Include(x => x.Adjustments).Include(x => x.Allocations)
             .Where(x => x.MemberId == context.MemberId).OrderByDescending(x => x.PaymentDate).ThenByDescending(x => x.RecordedAtUtc)
             .ToListAsync(cancellationToken);
         var unappliedCredits = memberReceipts.Select(x => new { x.Currency, x.Id, x.ReceiptNumber, x.PaymentDate,
-            amount = x.Amount - x.Allocations.Sum(a => a.Amount), x.Reference })
+            amount = x.Amount + x.Adjustments.Sum(a => a.CashAmount) - x.Allocations.Sum(a => a.Amount), x.Reference })
             .Where(x => x.amount > 0).ToList();
 
         var treasuryAccount = new
@@ -189,7 +189,7 @@ public static class MemberSelfEndpoints
                 payments = x.Payments.Select(payment => new { id = payment.Id, currency = payment.Currency, payment.ReceiptNumber,
                         amount = payment.Amount, payment.PaymentMethod, payment.PaymentDate, payment.Reference })
                     .Concat(x.Allocations.Select(a => new { id = a.ReceiptId, currency = a.Receipt.Currency,
-                        a.Receipt.ReceiptNumber, amount = a.Amount, a.Receipt.PaymentMethod, a.Receipt.PaymentDate, a.Receipt.Reference }))
+                        a.Receipt.ReceiptNumber, amount = a.Amount, a.Receipt.PaymentMethod, PaymentDate = a.EffectiveDate ?? a.Receipt.PaymentDate, a.Receipt.Reference }))
                     .OrderByDescending(payment => payment.PaymentDate).ToList()
             })
         };

@@ -37,6 +37,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeFeePlan> LodgeFeePlans => Set<LodgeFeePlan>();
     public DbSet<LodgeMemberCharge> LodgeMemberCharges => Set<LodgeMemberCharge>();
     public DbSet<LodgeMemberPayment> LodgeMemberPayments => Set<LodgeMemberPayment>();
+    public DbSet<LodgeReceiptAdjustment> LodgeReceiptAdjustments => Set<LodgeReceiptAdjustment>();
     public DbSet<LodgeMemberReceipt> LodgeMemberReceipts => Set<LodgeMemberReceipt>();
     public DbSet<LodgeMemberPaymentAllocation> LodgeMemberPaymentAllocations => Set<LodgeMemberPaymentAllocation>();
     public DbSet<LodgeHospitalariaMovement> LodgeHospitalariaMovements => Set<LodgeHospitalariaMovement>();
@@ -458,6 +459,20 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.OrganizationId, x.PaymentDate, x.Currency });
         });
 
+        modelBuilder.Entity<LodgeReceiptAdjustment>(entity =>
+        {
+            entity.ToTable("lodge_receipt_adjustments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CashAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Receipt).WithMany(x => x.Adjustments).HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ReceiptId, x.IdempotencyKey }).IsUnique();
+            entity.HasIndex(x => x.ReceiptId).IsUnique().HasFilter("\"Kind\" = 'void'");
+        });
+
         modelBuilder.Entity<LodgeMemberPaymentAllocation>(entity =>
         {
             entity.ToTable("lodge_member_payment_allocations");
@@ -466,7 +481,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.AllocatedBySubject).HasMaxLength(320).IsRequired();
             entity.HasOne(x => x.Receipt).WithMany(x => x.Allocations).HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Charge).WithMany(x => x.Allocations).HasForeignKey(x => x.ChargeId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(x => new { x.ReceiptId, x.ChargeId }).IsUnique();
+            entity.HasOne(x => x.Adjustment).WithMany().HasForeignKey(x => x.AdjustmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LodgeMemberPaymentAllocation>().WithMany().HasForeignKey(x => x.ReversesAllocationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ReceiptId, x.ChargeId });
             entity.HasIndex(x => x.ChargeId);
         });
 
