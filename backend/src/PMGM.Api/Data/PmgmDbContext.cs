@@ -37,6 +37,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeFeePlan> LodgeFeePlans => Set<LodgeFeePlan>();
     public DbSet<LodgeMemberCharge> LodgeMemberCharges => Set<LodgeMemberCharge>();
     public DbSet<LodgeMemberPayment> LodgeMemberPayments => Set<LodgeMemberPayment>();
+    public DbSet<LodgeReceiptAdjustment> LodgeReceiptAdjustments => Set<LodgeReceiptAdjustment>();
+    public DbSet<LodgeMemberReceipt> LodgeMemberReceipts => Set<LodgeMemberReceipt>();
+    public DbSet<LodgeMemberPaymentAllocation> LodgeMemberPaymentAllocations => Set<LodgeMemberPaymentAllocation>();
     public DbSet<LodgeHospitalariaMovement> LodgeHospitalariaMovements => Set<LodgeHospitalariaMovement>();
     public DbSet<LodgeTreasuryExpense> LodgeTreasuryExpenses => Set<LodgeTreasuryExpense>();
     public DbSet<LodgeTreasuryIncome> LodgeTreasuryIncomes => Set<LodgeTreasuryIncome>();
@@ -436,6 +439,52 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne(x => x.Charge).WithMany(x => x.Payments).HasForeignKey(x => x.ChargeId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => x.ReceiptNumber).IsUnique();
             entity.HasIndex(x => new { x.ChargeId, x.IdempotencyKey }).IsUnique().HasFilter("\"IdempotencyKey\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<LodgeMemberReceipt>(entity =>
+        {
+            entity.ToTable("lodge_member_receipts");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ReceiptNumber).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Reference).HasMaxLength(500);
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.ReceiptNumber).IsUnique();
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.PaymentDate, x.Currency });
+        });
+
+        modelBuilder.Entity<LodgeReceiptAdjustment>(entity =>
+        {
+            entity.ToTable("lodge_receipt_adjustments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CashAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.IdempotencyKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Receipt).WithMany(x => x.Adjustments).HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ReceiptId, x.IdempotencyKey }).IsUnique();
+            entity.HasIndex(x => x.ReceiptId).IsUnique().HasFilter("\"Kind\" = 'void'");
+        });
+
+        modelBuilder.Entity<LodgeMemberPaymentAllocation>(entity =>
+        {
+            entity.ToTable("lodge_member_payment_allocations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.AllocatedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Receipt).WithMany(x => x.Allocations).HasForeignKey(x => x.ReceiptId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Charge).WithMany(x => x.Allocations).HasForeignKey(x => x.ChargeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.Adjustment).WithMany().HasForeignKey(x => x.AdjustmentId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LodgeMemberPaymentAllocation>().WithMany().HasForeignKey(x => x.ReversesAllocationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.ReceiptId, x.ChargeId });
+            entity.HasIndex(x => x.ChargeId);
         });
 
         modelBuilder.Entity<LodgeHospitalariaMovement>(entity =>

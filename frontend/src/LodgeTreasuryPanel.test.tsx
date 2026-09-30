@@ -37,19 +37,53 @@ describe('lodge treasury panel — segregación de funciones', () => {
     const html = renderToStaticMarkup(
       <LodgeTreasuryPanel api={api()} organizationId="org-1" canManage={false} canApproveExpenses section="collection" />
     )
-    expect(html).not.toContain('Registrar pago de cuota')
+    expect(html).not.toContain('Registrar recepción e imputaciones')
+    expect(html).not.toContain('Imputar saldo a favor')
   })
 
-  it('renders the requested collection row columns and its direct payment action', () => {
+  it('renders multi-period collection and credit-allocation tools', () => {
     const html = renderToStaticMarkup(<LodgeTreasuryPanel api={api()} organizationId="org-1" canManage section="collection" />)
     expect(html).toContain('Saldo adeudado')
     expect(html).toContain('Semáforo')
-    expect(html).toContain('Abre el registro desde la fila')
-    expect(html).toContain('Año de cuota')
-    expect(html).toContain('Mes aplicado')
+    expect(html).toContain('Registrar recepción e imputaciones')
+    expect(html).toContain('Imputar a períodos con saldo')
+    expect(html).toContain('Crédito disponible')
+    expect(html).toContain('Imputar saldo a favor')
     expect(html).toContain('Fecha de recepción del pago')
-    expect(html).toContain('período contable en que se recibió')
-    expect(html).toContain('Historial por período')
+    expect(html).toContain('La fecha registra cuándo se recibió el dinero')
+    expect(html).toContain('sin crear otro ingreso')
+  })
+
+  it('records one receipt across periods, exposes the remainder as credit, and does not duplicate cash when later allocated', async () => {
+    const client = api()
+    const charges = await client.getLodgeTreasuryCharges('org-1', 2026, 9)
+    const memberCharges = charges.items.filter(item => item.memberId === 'member-demo-002' || item.memberId === 'member-demo-003')
+    const partiallyPaid = memberCharges.find(item => item.memberId === 'member-demo-002')!
+    const nextPeriod = (await client.getLodgeTreasuryCharges('org-1',2026,10)).items.find(item => item.memberId === partiallyPaid.memberId)!
+
+    const receipt = await client.recordLodgeMemberReceipt('org-1', {
+      memberId: partiallyPaid.memberId,
+      amount: 20000,
+      paymentMethod: 'transfer',
+      paymentDate: '2026-09-29',
+      reference: 'TRX-MULTI-DEMO',
+      idempotencyKey: 'receipt-multiperiod-test',
+      currency: 'CLP',
+      allocations: [{ chargeId: partiallyPaid.id, amount: 7000 }],
+    })
+    expect(receipt.allocatedAmount).toBe(7000)
+    expect(receipt.unappliedBalance).toBe(13000)
+
+    const credit = await client.getLodgeMemberReceipts('org-1', true)
+    expect(credit.items.find(item => item.id === receipt.id)?.unappliedBalance).toBe(13000)
+    const incomeBeforeReallocation = (await client.getLodgeTreasuryReport('org-1', '2026-09-01', '2026-09-30')).income
+    await client.allocateLodgeMemberReceipt(receipt.id, [{ chargeId: nextPeriod.id, amount: 3000 }])
+
+    const after = await client.getLodgeTreasuryReport('org-1', '2026-09-01', '2026-09-30')
+    expect(after.income).toBe(incomeBeforeReallocation)
+    expect(after.movements.filter(item => item.transactionId === receipt.id)).toHaveLength(1)
+    expect(after.movements.find(item => item.transactionId === receipt.id)?.amount).toBe(20000)
+    expect((await client.getLodgeMemberReceipts('org-1', true)).items.find(item => item.id === receipt.id)?.unappliedBalance).toBe(10000)
   })
 
   it('does not offer Past Active as an ordinary monthly fee', () => {
