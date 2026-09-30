@@ -227,3 +227,5 @@ Copia este texto al iniciar un chat, Work o IA que no tenga aún el contexto del
 Los SHA escritos en conversaciones o documentos son checkpoints históricos. **El único punto técnico actual es el HEAD vivo de `dev` al comienzo de cada intervención.**
 
 - Continuidad de delegación Claude y consolidación de adendas: [handoff ChatGPT/Codex](docs/handoffs/2026-09-29-gpt-consolidacion-adendas-claude.md).
+
+- Continuidad de UI QA v0.63, encabezado móvil y SHA visible: [handoff ChatGPT](docs/handoffs/2026-09-30-chatgpt-cierre-mobile-v063.md).
