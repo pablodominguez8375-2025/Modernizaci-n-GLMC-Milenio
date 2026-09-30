@@ -229,3 +229,4 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 - Continuidad de delegación Claude y consolidación de adendas: [handoff ChatGPT/Codex](docs/handoffs/2026-09-29-gpt-consolidacion-adendas-claude.md).
 
 - Continuidad de UI QA v0.63, encabezado móvil y SHA visible: [handoff ChatGPT](docs/handoffs/2026-09-30-chatgpt-cierre-mobile-v063.md).
+- Continuidad de concurrencia e inmutabilidad de ajustes de recibos (#191, PR #228): [handoff ChatGPT](docs/handoffs/2026-09-30-chatgpt-cierre-treasury-concurrency.md).
