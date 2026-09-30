@@ -10,3 +10,9 @@
 - Pruebas Tesorería preparadas localmente en checkout centenario se conservan aparte; no forman parte de las PR documentales #224 ni esta entrega.
 - srv01 pausado bajo #97, despliegue QA pendiente; sin instalación, QA física ni UAT. Main intacta. No mostrar lema ni cambiar tipografía/escala institucional.
 - Al retomar: HEAD vivo dev/main, archivos de PR abiertos, etiquetas, START-HERE/AGENTS/GOV-003, este documento y Línea Base. Comprobar que el documento de delegación indique EJECUTADA PARCIAL con tarea 3 pendiente, en lugar de asumir entrega total.
+
+## Consolidación verificada
+
+- Ambas adendas Claude y delegación GOV-003 §13 incorporadas en Línea Base Maestra con fecha/chips de fuentes y lectura de retorno. Adendas renombradas Consolidada. Documento INSTRUCCIONES PARA CHATGPT renombrado EJECUTADA PARCIAL y con tarea 3 pendiente explícita.
+- Post-merge PR #224: PMGM CI 36655325240, Showcase/Pages 36655325223, QA Installable 36655325226 y Pre-UAT 36655325231 SUCCESS. Verificar manifiesto publicado al cerrar; no confundir los SHA históricos de #222/#221 con la publicación actual.
+- Gates locales privacidad (12), clasificación (99), migraciones (58) y diff --check PASS en corte GOV-003; no se escribieron pruebas para esta modificación documental.
