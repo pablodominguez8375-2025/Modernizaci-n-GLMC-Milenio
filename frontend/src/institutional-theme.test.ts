@@ -75,6 +75,34 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     expect(css).toMatch(/\.content button,[\s\S]*?min-height:\s*44px/)
   })
 
+  it('preserves the full mobile brand without truncation at narrower breakpoints', () => {
+    const mobileCss = css.slice(css.indexOf('@media (max-width: 720px)'))
+    const brandRules = [...mobileCss.matchAll(/\.brand strong\s*\{([^}]+)\}/g)].map(match => match[1])
+    expect(brandRules.length).toBeGreaterThan(0)
+    for (const rule of brandRules) {
+      expect(rule).toContain('white-space: normal')
+      expect(rule).toContain('line-height: 1.1')
+      expect(rule).toContain('max-width: none')
+      expect(rule).not.toMatch(/ellipsis|overflow:\s*hidden|white-space:\s*nowrap/)
+    }
+  })
+
+  it('keeps the mobile Demo SHA readable and visible below 480px', () => {
+    const mobileCss = css.slice(css.indexOf('@media (max-width: 720px)'))
+    const labelRules = [...mobileCss.matchAll(/\.demo-profile-switcher \.demo-public-label\s*\{([^}]+)\}/g)].map(match => match[1])
+    expect(labelRules.length).toBeGreaterThan(0)
+    for (const rule of labelRules) {
+      expect(rule).toContain('display: inline-flex')
+      expect(rule).toContain('font-size: 12px')
+      expect(rule).not.toContain('display: none')
+    }
+    const switcher = readFileSync(new URL('./DemoProfileSwitcher.tsx', import.meta.url), 'utf8')
+    expect(switcher).toContain('showcaseSha.slice(0, 7)')
+    expect(switcher).toContain('className="demo-public-sha"')
+    const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+    expect(app).toContain('UI QA v0.63')
+  })
+
   it('supports reduced motion preferences', () => {
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
   })
