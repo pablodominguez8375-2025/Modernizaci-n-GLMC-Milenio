@@ -225,3 +225,5 @@ Copia este texto al iniciar un chat, Work o IA que no tenga aún el contexto del
 **Si no puedes consultar `dev` y las fuentes oficiales necesarias, no reconstruyas ni continúes a ciegas: declara qué fuente no pudiste verificar.**
 
 Los SHA escritos en conversaciones o documentos son checkpoints históricos. **El único punto técnico actual es el HEAD vivo de `dev` al comienzo de cada intervención.**
+
+- Continuidad de delegación Claude y consolidación de adendas: [handoff ChatGPT/Codex](docs/handoffs/2026-09-29-gpt-consolidacion-adendas-claude.md).
