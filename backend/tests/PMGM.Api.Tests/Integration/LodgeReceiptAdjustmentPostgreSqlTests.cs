@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership.Entities;
@@ -89,5 +90,17 @@ public sealed class LodgeReceiptAdjustmentPostgreSqlTests
         Assert.Equal(20000,(await verifyDb.LodgeTreasuryReconciliations.SingleAsync(x=>x.OrganizationId==organizationId,ct)).ClosingBalance);
         original.Amount=1;
         await Assert.ThrowsAsync<DbUpdateException>(()=>verifyDb.SaveChangesAsync(ct));
+        // Exercise the database protections directly, beyond tracked-entity updates.
+        var allocationDelete = await Assert.ThrowsAsync<PostgresException>(() => verifyDb.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM core.lodge_member_payment_allocations WHERE \"Id\" = {allocationId}", ct));
+        Assert.Equal("P0001", allocationDelete.SqlState);
+        var adjustmentId = saved.GetProperty("id").GetGuid();
+        var adjustmentDelete = await Assert.ThrowsAsync<PostgresException>(() => verifyDb.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM core.lodge_receipt_adjustments WHERE \"Id\" = {adjustmentId}", ct));
+        Assert.Equal("P0001", adjustmentDelete.SqlState);
+        var receiptDelete = await Assert.ThrowsAsync<PostgresException>(() => verifyDb.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM core.lodge_member_receipts WHERE \"Id\" = {receiptId}", ct));
+        Assert.Equal("P0001", receiptDelete.SqlState);
+        Assert.Equal(2, await verifyDb.LodgeReceiptAdjustments.CountAsync(x => x.ReceiptId == receiptId, ct));
     }
 }
