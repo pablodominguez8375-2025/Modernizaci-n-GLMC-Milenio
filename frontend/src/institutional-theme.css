@@ -303,6 +303,7 @@ textarea:focus-visible {
 
   .brand {
     min-width: 0;
+    flex: 1 1 0;
   }
 
   .brand > span:last-child {
@@ -311,10 +312,11 @@ textarea:focus-visible {
 
   .brand strong {
     font-size: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 190px;
+    white-space: normal;
+    line-height: 1.1;
+    overflow: visible;
+    text-overflow: clip;
+    max-width: none;
   }
 
   .brand small,
@@ -326,6 +328,27 @@ textarea:focus-visible {
   .topbar-meta {
     margin-left: auto;
     min-width: 0;
+    max-width: 46%;
+  }
+
+  .demo-profile-switcher {
+    flex-direction: column;
+    align-items: stretch;
+    border-radius: 12px;
+  }
+
+  .demo-profile-switcher .demo-public-label {
+    display: inline-flex;
+    justify-content: center;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .demo-profile-switcher .demo-public-long { display: none; }
+  .demo-profile-switcher .demo-public-short { display: inline; }
+
+  .demo-profile-switcher select {
+    max-width: 100%;
   }
 
   .demo-badge {
@@ -397,12 +420,6 @@ textarea:focus-visible {
     padding: 10px;
   }
 
-  .brand strong {
-    max-width: 120px;
-  }
-
-  .demo-profile-switcher .demo-public-label { display: none; }
-
   .topbar-meta {
     gap: 5px;
   }
@@ -441,10 +458,6 @@ textarea:focus-visible {
   h1 {
     font-size: clamp(28px, 9vw, 34px);
   }
-}
-
-@media (max-width: 380px) {
-  .brand strong { max-width: 100px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
