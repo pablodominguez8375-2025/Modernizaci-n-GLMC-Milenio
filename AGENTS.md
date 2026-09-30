@@ -207,3 +207,8 @@ No existe una regla universal del proyecto que exija aprobación de un tercero o
 La protección efectiva de ramas y cualquier requisito técnico configurado en GitHub se verifica en vivo; si GitHub bloquea el merge, informa la regla concreta y no la presentes como política universal del proyecto. La promoción de `dev` a `main` conserva su autorización explícita y flujo de estabilidad separados. La pausa de `srv01` también se mantiene hasta instrucción explícita.
 
 Autorización permanente registrada el 29-09-2026: el Product Owner autoriza integrar a `dev`, sin consultarle por cada merge, las PR de alcances pedidos o aprobados por él cuando las pruebas y el CI exact-head estén en SUCCESS y GitHub lo permita. Esta autorización no alcanza la promoción a `main`, el despliegue en `srv01`, UAT, ni cambios de identidad visual o de reglas institucionales, que siguen requiriendo aprobación explícita.
+
+## 13. Trabajo en paralelo entre IA
+
+
+Cuando varias IA (Claude, ChatGPT/Codex) trabajan a la vez, es obligatorio `docs/PMGM-GOV-003-coordinacion-multi-ia.md` (aprobado por el PO el 29-09-2026). Sus reglas principales son: reclamar cada tarea con la etiqueta `agente:*` y un PR draft antes de programar, no tocar archivos calientes que otro agente tenga reclamados, dejar handoffs en `docs/handoffs/` y no en START-HERE, e integrar a `dev` de a un merge por vez.
