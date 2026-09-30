@@ -23,6 +23,11 @@ public static partial class LodgeTreasuryEndpoints
         { return Results.Conflict(new { message = "El recibo cambió durante el registro. Actualice y reintente con la misma clave." }); }
         catch (DbUpdateException e) when (e.InnerException is PostgresException { SqlState: "40001" or "23505" })
         { return Results.Conflict(new { message = "El recibo cambió durante el registro. Actualice y reintente con la misma clave." }); }
+        // Npgsql's non-retrying execution strategy wraps transient PostgreSQL failures.
+        catch (InvalidOperationException e) when (
+            e.InnerException is PostgresException { SqlState: "40001" or "23505" } or
+                DbUpdateException { InnerException: PostgresException { SqlState: "40001" or "23505" } })
+        { return Results.Conflict(new { message = "El recibo cambió durante el registro. Actualice y reintente con la misma clave." }); }
     }
 
     private static async Task<IResult> AdjustReceiptCoreAsync(Guid receiptId, AdjustLodgeReceiptRequest request,

@@ -13,3 +13,7 @@ Añadir pruebas PostgreSQL de dos ajustes serializables simultáneos (doble anul
 ## Pendientes que se conservan
 
 #191 sigue abierto por presentación contable institucional y validación operacional. Devolución efectiva fuera de este alcance. Main sin promoción; srv01 pausado por #97, despliegue QA pendiente, sin instalación, QA física ni UAT. El commit local original 430ee44 se preserva.
+
+## Hallazgo de CI y reparación
+
+CI 36714474824 ejecutó 351 pruebas: 349 correctas y 2 fallos reproducidos de doble anulación (misma clave y claves distintas): 201+500. Corrección concurrente y DELETE pasaron. Npgsql envuelve 40001 de SaveChanges en InvalidOperationException → DbUpdateException → PostgresException. Se amplía reserva a backend/src/PMGM.Api/Modules/Treasury/LodgeReceiptAdjustments.cs; anti-conflicto revisado y registrado antes de editar. Se reconoce exclusivamente la envoltura de 40001/23505 para retornar 409 y conservar reintento explícito, sin modificar reglas, permisos ni migraciones. Se mantienen las assertions originales; requiere nuevos gates exact-head. La declaración inicial sin cambio de producto queda sustituida por esta reparación acotada.
