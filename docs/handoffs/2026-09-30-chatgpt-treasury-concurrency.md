@@ -8,7 +8,7 @@ backend/tests/PMGM.Api.Tests/Integration/LodgeReceiptAdjustmentPostgreSqlTests.c
 
 ## Objetivo y estado
 
-Añadir pruebas PostgreSQL de dos ajustes serializables simultáneos (doble anulación, clave idempotente compartida, correcciones que excederían origen), auditoría única, reintento seguro, originales/saldos e inmutabilidad DELETE. Sin cambios de producto, permisos, contabilidad, migraciones o UI. Implementación/CI exact-head pendientes; resultados, publicación y paquete se registrarán antes del cierre.
+Añadir pruebas PostgreSQL de dos ajustes serializables simultáneos (doble anulación, clave idempotente compartida, correcciones que excederían origen), auditoría única, reintento seguro, originales/saldos e inmutabilidad DELETE. Sin cambios de producto, permisos, contabilidad, migraciones o UI. PR #228; pruebas adaptadas del commit local430ee44, matriz QA actualizada y changelog nuevo. Revisión del endpoint confirma transacciones Serializable y conflicto40001/23505 sin reintento automático; la barrera fuerza las dos lecturas antes de escribir. git diff --check correcto. No hay SDK .NET/PostgreSQL local: la ejecución de backend se verificará en CI con PMGM_TEST_POSTGRES configurado y evidencia TRX/logs; no se acredita ejecución PostgreSQL desde compilación ni retorno sin variable. Gates exact-head/publicación y paquete pendientes.
 
 ## Pendientes que se conservan
 
