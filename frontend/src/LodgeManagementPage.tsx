@@ -1,3 +1,4 @@
+import { SectionIndex } from './listing'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type DocumentApiClient } from './api/documentApi'
@@ -289,6 +290,8 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   const meetingFinalized = selectedMeeting?.status === 'held' || selectedMeeting?.status === 'closed' || selectedMeeting?.status === 'cancelled'
   const canRecordMeetingAttendance = selectedMeeting?.status === 'held' || selectedMeeting?.status === 'closed'
   const lodgeName = api.useMocks ? lodgeCockpitDemoData.lodge.name : selectedOrganization ? organizationLabel(selectedOrganization) : 'Taller autorizado'
+  /* PMGM-UX-003 (P3-5): el sello muestra el número del Taller, igual que en Mi ficha. */
+  const lodgeSealText = lodgeName.match(/(\d+)\s*$/)?.[1] || selectedOrganization?.number?.trim() || lodgeName.trim().charAt(0).toUpperCase() || 'T'
   const memberCount = api.useMocks ? lodgeCockpitDemoData.members.active : members.length
   const instructionResponsible = instructionResponsibilityByGrade[instructionGrade]
 
@@ -329,7 +332,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
         <p>Herramientas para la administración y operación del Taller en un solo lugar.</p>
       </div>
       <div className="lodge-heading-actions">
-        <label className="lodge-organization-select"><span>Taller</span><select value={organizationId} onChange={event => { setOrganizationId(event.target.value); setMessage(null) }}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
+        {organizations.length === 1 && selectedOrganization ? <div className="lodge-organization-select single-organization"><span>Taller</span><strong>{organizationLabel(selectedOrganization)}</strong></div> : <label className="lodge-organization-select"><span>Taller</span><select value={organizationId} onChange={event => { setOrganizationId(event.target.value); setMessage(null) }}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>}
         <button className="lodge-gold-button" type="button" onClick={() => { setShowOperations(true); document.getElementById('lodge-operations')?.scrollIntoView({ behavior: 'smooth' }) }}>Registrar tenida</button>
       </div>
     </section>
@@ -337,10 +340,19 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
     {error && <div className="error-banner" role="alert"><strong>Operación no completada.</strong><span>{error}</span></div>}
     {message && <div className="regularity-success" role="status">{message}</div>}
 
-    <section className="lodge-cockpit-grid">
+    <SectionIndex sections={[
+      { id: 'lodge-summary', label: 'Resumen' },
+      { id: 'lodge-areas', label: 'Áreas del Taller' },
+      { id: 'lodge-instruction-workspace', label: 'Docencia' },
+      { id: 'lodge-insights', label: 'Próxima tenida' },
+      { id: 'lodge-activity', label: 'Agenda y avisos' },
+      { id: 'lodge-operations', label: 'Tenidas y actas' },
+    ]} />
+
+    <section id="lodge-summary" className="lodge-cockpit-grid">
       <article className="lodge-product-card lodge-profile-summary">
         <div className="lodge-card-heading"><div><p className="lodge-kicker">Ficha del Taller</p><h2>{lodgeName}</h2></div><span className="lodge-live-chip">{api.useMocks ? 'Datos ficticios' : 'Ámbito activo'}</span></div>
-        <div className="lodge-profile-body"><span className="lodge-seal">M</span><div className="lodge-profile-fields"><LodgeDatum label="Oriente" value={api.useMocks ? lodgeCockpitDemoData.lodge.orient : 'Según ficha institucional'} /><LodgeDatum label="Rito" value={api.useMocks ? lodgeCockpitDemoData.lodge.rite : 'Según ficha institucional'} /><LodgeDatum label="Constitución" value={api.useMocks ? lodgeCockpitDemoData.lodge.constitution : 'Según ficha institucional'} /><LodgeDatum label="Reuniones" value={api.useMocks ? lodgeCockpitDemoData.lodge.meetings : 'Según calendario'} /><LodgeDatum label="Templo" value={api.useMocks ? lodgeCockpitDemoData.lodge.temple : 'Según reserva'} /><LodgeDatum label="Correo" value={api.useMocks ? lodgeCockpitDemoData.lodge.email : 'Según ficha institucional'} /></div></div>
+        <div className="lodge-profile-body"><span className="lodge-seal" aria-label={`Sello del Taller ${lodgeSealText}`}>{lodgeSealText}</span><div className="lodge-profile-fields"><LodgeDatum label="Oriente" value={api.useMocks ? lodgeCockpitDemoData.lodge.orient : 'Según ficha institucional'} /><LodgeDatum label="Rito" value={api.useMocks ? lodgeCockpitDemoData.lodge.rite : 'Según ficha institucional'} /><LodgeDatum label="Constitución" value={api.useMocks ? lodgeCockpitDemoData.lodge.constitution : 'Según ficha institucional'} /><LodgeDatum label="Reuniones" value={api.useMocks ? lodgeCockpitDemoData.lodge.meetings : 'Según calendario'} /><LodgeDatum label="Templo" value={api.useMocks ? lodgeCockpitDemoData.lodge.temple : 'Según reserva'} /><LodgeDatum label="Correo" value={api.useMocks ? lodgeCockpitDemoData.lodge.email : 'Según ficha institucional'} /></div></div>
       </article>
 
       <article className="lodge-product-card lodge-member-summary">
@@ -356,7 +368,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
       <aside className="lodge-inspiration-card"><span>“</span><p>El verdadero Taller se construye cada día, con trabajo, estudio y fraternidad.</p><i /><strong>Proyecto Centenario</strong><small>Gestión institucional integrada</small></aside>
     </section>
 
-    <section className="lodge-management-section">
+    <section id="lodge-areas" className="lodge-management-section">
       <div className="lodge-management-heading"><div><p className="lodge-kicker">Administración propia</p><h2>Gestión Logial de cada Taller</h2></div><p>Estas funciones pertenecen al Taller y se integran, sin confundirse, con los órganos correspondientes de la Gran Logia.</p></div>
       <div className="lodge-management-grid">{lodgeCockpitDemoData.managementAreas.map(([area, responsible, summary]) => <article className="lodge-management-area" key={area}><span>{area[0]}</span><div><h3>{area}</h3><strong>{responsible}</strong><p>{summary}</p></div></article>)}</div>
     </section>
@@ -383,7 +395,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
 
     <LodgeWithdrawalsPanel lodgeApi={lodgeApi} organizationId={organizationId} members={members} />
 
-    <section className="lodge-insight-grid">
+    <section id="lodge-insights" className="lodge-insight-grid">
       <article className="lodge-product-card lodge-next-meeting-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Próxima tenida</p><h2>{nextMeeting ? nextMeeting.title || meetingTypeLabel(nextMeeting.meetingType) : api.useMocks ? 'Tenida Ordinaria · demo' : 'Sin tenida programada'}</h2></div></div><strong className="lodge-next-date">{nextMeeting ? formatDateOnly(nextMeeting.meetingDate) : api.useMocks ? '26 de septiembre de 2026' : '—'}</strong><p>{nextMeeting ? `${meetingTypeLabel(nextMeeting.meetingType)} · ${gradeLabel(nextMeeting.grade)}` : api.useMocks ? '19:00 hrs. · Todos los grados' : 'Registre una tenida para comenzar.'}</p><button type="button" className="lodge-blue-button" onClick={() => setShowOperations(true)}>Preparar tenida</button></article>
 
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Asistencia última tenida</p><h2>{attendanceSummary.percentage}%</h2></div></div><div className="lodge-attendance-overview"><div className="lodge-attendance-ring" style={{ '--lodge-attendance': `${attendanceSummary.percentage}%` } as React.CSSProperties}><span>{attendanceSummary.percentage}%</span></div><div>{api.useMocks && attendanceSummary.total === 0 ? <><LodgeCount label="Presentes" value={33} tone="green" /><LodgeCount label="Ausentes" value={3} tone="red" /><LodgeCount label="Justificados" value={1} tone="blue" /></> : <><LodgeCount label="Presentes" value={attendanceSummary.present} tone="green" /><LodgeCount label="Ausentes" value={attendanceSummary.absent} tone="red" /><LodgeCount label="Justificados" value={attendanceSummary.excused} tone="blue" /></>}</div></div></article>
@@ -393,7 +405,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Tareas y pendientes</p><h2>Seguimiento operativo</h2></div></div><div className="lodge-task-list"><LodgeCount label="Por completar" value={lodgeCockpitDemoData.tasks.pending} tone="red" /><LodgeCount label="En proceso" value={lodgeCockpitDemoData.tasks.inProgress} tone="gold" /><LodgeCount label="Completadas" value={lodgeCockpitDemoData.tasks.completed} tone="green" /></div></article>
     </section>
 
-    <section className="lodge-activity-grid">
+    <section id="lodge-activity" className="lodge-activity-grid">
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Agenda del Taller</p><h2>Próximas tenidas y actividades</h2></div><span>{loading ? 'Cargando…' : `${meetings.length} registradas`}</span></div><div className="lodge-activity-table"><div className="lodge-activity-header"><span>Fecha</span><span>Tipo / actividad</span><span>Grado</span><span>Estado</span></div>{meetings.length ? meetings.slice(0, 5).map(meeting => <button type="button" key={meeting.id} onClick={() => { setSelectedMeetingId(meeting.id); setShowOperations(true) }}><span>{formatDateOnly(meeting.meetingDate)}</span><strong>{meeting.title || meetingTypeLabel(meeting.meetingType)}</strong><span>{gradeLabel(meeting.grade)}</span><em className={meeting.status === 'held' || meeting.status === 'closed' ? 'closed' : 'active'}>{meetingStatusLabel(meeting.status)}</em></button>) : api.useMocks ? demoMeetingRows.map(row => <div key={row[0]}><span>{row[0]}</span><strong>{row[1]}</strong><span>{row[2]}</span><em className="active">{row[3]}</em></div>) : <p className="lodge-empty-copy">No hay tenidas registradas para este Taller.</p>}</div></article>
       <article className="lodge-product-card"><div className="lodge-card-heading"><div><p className="lodge-kicker">Centro de avisos</p><h2>Últimas notificaciones</h2></div></div><div className="lodge-notification-list">{lodgeCockpitDemoData.notifications.map((notification, index) => <div key={notification}><span className={`lodge-notification-dot tone-${index}`} /><div><strong>{notification}</strong><small>{api.useMocks ? ['hace 2 días', 'hace 4 días', 'hace 6 días'][index] : 'Vista previa del panel transversal'}</small></div></div>)}</div></article>
     </section>

@@ -16,6 +16,7 @@ import './mobile-nav-compact.css'
 import './institutional-theme.css'
 import './role-navigation.css'
 import './header-p2.css'
+import './listing.css'
 
 const root = document.getElementById('root')
 

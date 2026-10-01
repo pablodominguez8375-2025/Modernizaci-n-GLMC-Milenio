@@ -1,3 +1,4 @@
+import { SectionIndex } from './listing'
 import { useEffect, useMemo, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
@@ -248,7 +249,18 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     {error && <div className="error-banner" role="alert"><strong>Ficha de insinuado</strong><span>{error}</span></div>}
     {message && <div className="candidate-protected-notice" role="status">{message}</div>}
 
-    <section className="candidate-product-card workshop-new-intake">
+    <SectionIndex sections={[
+      { id: 'intake-new', label: 'Nuevo postulante' },
+      { id: 'intake-requests', label: 'Solicitudes' },
+      ...(selected ? [
+        { id: 'intake-personal', label: 'Datos personales' },
+        { id: 'intake-work', label: 'Antecedentes laborales' },
+        { id: 'intake-lodge', label: 'Presentación logial' },
+        { id: 'intake-photo', label: 'Fotografía' },
+      ] : []),
+    ]} />
+
+    <section id="intake-new" className="candidate-product-card workshop-new-intake">
       <div className="candidate-section-title"><span>＋</span><h2>Nuevo postulante</h2><em>Apertura de expediente</em></div>
       <p>Inicie un expediente único para el Taller autorizado. La ficha completa se abrirá en el expediente y seguirá pendiente hasta la revisión de Gran Secretaría.</p>
       {!createOpen
@@ -269,7 +281,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
         </form>}
     </section>
 
-    <section className="workshop-intake-layout">
+    <section id="intake-requests" className="workshop-intake-layout">
       <aside className="candidate-product-card workshop-intake-queue">
         <div className="candidate-section-title"><span>▤</span><h2>Solicitudes de iniciación</h2><em>{queue.length}</em></div>
         {loading && queue.length === 0 ? <p>Cargando solicitudes…</p> : queue.length === 0 ? <p>No existen solicitudes de iniciación disponibles para este Taller.</p> : <div className="workshop-intake-list">{queue.map(item => <button key={item.ceremonyRequestId} type="button" className={item.ceremonyRequestId === selectedId ? 'active' : ''} onClick={() => setSelectedId(item.ceremonyRequestId)}><strong>{item.displayName || 'Insinuado sin nombre'}</strong><span>{organizationDisplayName(item.workshopName, item.workshopNumber)}</span><small>{statusLabel(item.reviewStatus)} · {item.profileAvailable ? 'Ficha registrada' : 'Ficha pendiente'}</small></button>)}</div>}
@@ -277,7 +289,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
 
       <main className="workshop-intake-main">
         {!selected ? <section className="candidate-product-card"><p>Seleccione una solicitud para comenzar.</p></section> : <>
-          <section className="candidate-product-card workshop-intake-summary">
+          <section id="intake-summary" className="candidate-product-card workshop-intake-summary">
             <div><small>Insinuado base</small><strong>{selected.displayName}</strong></div>
             <div><small>Logia/Taller presentante</small><strong>{organizationDisplayName(selected.workshopName, selected.workshopNumber)}</strong></div>
             <div><small>Estado de revisión</small><strong className={`workshop-status ${selected.reviewStatus}`}>{statusLabel(selected.reviewStatus)}</strong></div>
@@ -297,7 +309,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             requestStatus={selected.requestStatus}
           />}
 
-          <section className="candidate-product-card">
+          <section id="intake-personal" className="candidate-product-card">
             <div className="candidate-section-title"><span>▣</span><h2>Datos personales y de contacto</h2><em>Núcleo institucional protegido</em></div>
             <div className="workshop-form-grid">
               <Field label="Nombres *"><input value={form.firstNames} disabled={locked} onChange={event => setForm({ ...form, firstNames: event.target.value })} /></Field>
@@ -314,7 +326,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             </div>
           </section>
 
-          <section className="candidate-product-card">
+          <section id="intake-work" className="candidate-product-card">
             <div className="candidate-section-title"><span>▦</span><h2>Antecedentes laborales</h2><em>Formulario 2026</em></div>
             <div className="workshop-form-grid">
               <Field label="Actividad, profesión u oficio"><input value={form.occupation ?? ''} disabled={locked} onChange={event => setForm({ ...form, occupation: event.target.value || null })} /></Field>
@@ -325,7 +337,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             </div>
           </section>
 
-          <section className="candidate-product-card">
+          <section id="intake-lodge" className="candidate-product-card">
             <div className="candidate-section-title"><span>⌂</span><h2>Presentación logial y antecedentes</h2><em>Formulario auditable</em></div>
             <div className="workshop-form-grid">
               <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
@@ -343,7 +355,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             </div>
           </section>
 
-          <section className="candidate-product-card workshop-photo-section">
+          <section id="intake-photo" className="candidate-product-card workshop-photo-section">
             <div className="candidate-section-title"><span>◫</span><h2>Fotografía tipo pasaporte</h2><em>Almacenamiento privado</em></div>
             <div className="workshop-photo-layout">
               <div className="candidate-passport-photo">{photoPreview || photoSrc ? <img src={photoPreview ?? photoSrc ?? ''} alt="Vista previa de fotografía tipo pasaporte" /> : <div className="workshop-photo-placeholder">Sin foto</div>}<small>{photoFile ? 'Vista previa · aún no guardada' : profile?.photoAvailable ? 'Fotografía vinculada' : 'Pendiente'}</small></div>
