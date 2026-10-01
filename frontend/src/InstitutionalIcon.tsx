@@ -19,6 +19,8 @@ export type InstitutionalIconName =
   | 'lodge'
   | 'library'
   | 'documents'
+  | 'menu'
+  | 'tasks'
 
 interface InstitutionalIconProps {
   name: InstitutionalIconName
@@ -82,6 +84,10 @@ export default function InstitutionalIcon({ name, size = 20, className }: Instit
       return <svg {...common}><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22z"/><path d="M20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z"/></svg>
     case 'documents':
       return <svg {...common}><path d="M8 3h9l3 3v14H8z"/><path d="M17 3v4h4M4 7v14h12M11 11h6M11 15h6"/></svg>
+    case 'menu':
+      return <svg {...common}><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+    case 'tasks':
+      return <svg {...common}><path d="M9 6h11M9 12h11M9 18h11"/><path d="m3.5 6 1.5 1.5L7.5 5M3.5 12l1.5 1.5L7.5 11M3.5 18l1.5 1.5L7.5 17"/></svg>
     default:
       return null
   }

@@ -35,6 +35,8 @@
 .member-lock-badge, .member-demo-chip { border-radius: 999px; padding: 6px 9px; background: #f0f4fa; color: #60718d; font-size: 9px; font-weight: 800; white-space: nowrap; }
 .member-lodge-line { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 13px; padding: 16px 0; border-bottom: 1px solid #edf0f5; }
 .member-lodge-seal { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%; border: 2px solid #F3C609; background: #FFF8D6; color: #06148E; font-family: var(--font-display); font-size: 24px; font-weight: 800; }
+/* PMGM-UX-002 · `.member-lodge-line span` (0,1,1) pisaba el sello: el número quedaba fuera del círculo. */
+.member-lodge-line .member-lodge-seal { display: grid; place-items: center; flex: 0 0 auto; color: #06148E; font-family: var(--font-display); font-size: 22px; font-weight: 800; line-height: 1; }
 .member-lodge-line small, .member-lodge-line strong, .member-lodge-line span { display: block; }
 .member-lodge-line small, .member-lodge-line span { color: #7c889c; font-size: 10px; }
 .member-lodge-line strong { color: #06148E; font-size: 13px; margin: 2px 0; }

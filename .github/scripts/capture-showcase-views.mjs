@@ -358,7 +358,30 @@ const slugify = value => value
   .replace(/[^a-z0-9]+/g, '-')
   .replace(/^-|-$/g, '')
 
+async function setMobileMenu(open) {
+  // PMGM-UX-002: en ≤720 px el menú completo vive en una hoja que se abre desde la barra inferior.
+  const state = await evaluate(`(() => {
+    const tabbar = document.querySelector('.mobile-tabbar');
+    if (!tabbar || getComputedStyle(tabbar).display === 'none') return 'absent';
+    const nav = document.querySelector('nav.sidebar');
+    const isOpen = !!nav && nav.classList.contains('is-open');
+    if (isOpen === ${JSON.stringify(open)}) return 'ready';
+    tabbar.querySelector('[data-tab="menu"]')?.click();
+    return 'toggled';
+  })()`)
+  if (state === 'toggled') await waitForExpression(`document.querySelector('nav.sidebar')?.classList.contains('is-open') === ${JSON.stringify(open)}`, open ? 'mobile menu sheet open' : 'mobile menu sheet closed')
+}
+
 async function inspectAllVisibleMediaAndNavigation(profile) {
+  await setMobileMenu(true)
+  try {
+    return await inspectAllVisibleMediaAndNavigationWithMenuOpen(profile)
+  } finally {
+    await setMobileMenu(false)
+  }
+}
+
+async function inspectAllVisibleMediaAndNavigationWithMenuOpen(profile) {
   const result = await evaluate(`(() => {
     const nav = document.querySelector('nav.sidebar');
     const main = document.querySelector('main.content');
@@ -407,6 +430,7 @@ async function inspectAllVisibleMediaAndNavigation(profile) {
 }
 
 async function openModuleFromMobileNavigation(label) {
+  await setMobileMenu(true)
   const opened = await evaluate(`(() => {
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
     const nav = document.querySelector('nav.sidebar');
@@ -468,6 +492,7 @@ async function auditEveryMobileMenuView() {
     })()`)
     if (!menuLabels?.length) throw new Error(`No active menu items found for demo profile ${profile}.`)
     const navigation = await inspectAllVisibleMediaAndNavigation(profile)
+    await setMobileMenu(true)
     const canReachMenuEnd = await evaluate(`(() => {
       const nav = document.querySelector('nav.sidebar');
       if (!nav) return false;
@@ -479,6 +504,7 @@ async function auditEveryMobileMenuView() {
       nav.scrollTop = 0;
       return reachable;
     })()`)
+    await setMobileMenu(false)
     if (!canReachMenuEnd) throw new Error(`Last mobile menu item cannot be reached by vertical scrolling for ${profile}.`)
     console.log(`mobile navigation ${profile}: ${navigation.nav.buttons.length} items`)
 

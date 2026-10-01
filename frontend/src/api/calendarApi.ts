@@ -175,6 +175,24 @@ const demoEvents: CalendarEvent[] = [
   },
 ]
 
+/**
+ * PMGM-UX-002 · La demo pública debe mostrar siempre actividades próximas.
+ * Los eventos históricos de septiembre de 2026 se conservan; estos se calculan
+ * respecto de la fecha actual (solo modo demostración, sin datos reales).
+ */
+function rollingDemoEvents(now: Date = new Date()): CalendarEvent[] {
+  const at = (days: number, hourUtc: number, durationHours: number) => {
+    const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + days, hourUtc, 0, 0))
+    return { startsAtUtc: start.toISOString(), endsAtUtc: new Date(start.getTime() + durationHours * 3600_000).toISOString() }
+  }
+  const base = { timeZoneId: 'America/Santiago', spaceId: null, organizationId: demoOrganizations.libertad23, responsibleSubject: null, isMasked: false } as const
+  return [
+    { ...base, id: 'ca100001-0000-0000-0000-000000000001', title: 'Tenida Regular — Libertad Nº 23', eventType: 'lodge_meeting_day', ...at(4, 22, 3), locationDisplay: 'Templo Principal — Sede institucional', visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-meeting', sourceEntityId: 'demo-meeting-23-next' },
+    { ...base, id: 'ca100002-0000-0000-0000-000000000002', title: 'Docencia de Aprendices', eventType: 'lodge_instruction_day', ...at(9, 22, 2), locationDisplay: null, visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-instruction', sourceEntityId: 'demo-instruction-23-next' },
+    { ...base, id: 'ca100003-0000-0000-0000-000000000003', title: 'Tenida de Iniciación', eventType: 'ceremony_day', ...at(16, 22, 3), locationDisplay: 'Templo Principal — Sede institucional', visibility: 'restricted', status: 'tentative', sourceModule: 'ceremonies', sourceEntityType: 'ceremony-request', sourceEntityId: 'demo-ceremony-23-next' },
+  ]
+}
+
 export class CalendarApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
@@ -192,7 +210,7 @@ export class CalendarApiClient {
     if (this.useMocks) {
       const from = new Date(filters.fromUtc).getTime()
       const to = new Date(filters.toUtc).getTime()
-      const events = demoEvents.filter(event => {
+      const events = [...demoEvents, ...rollingDemoEvents()].filter(event => {
         const inWindow = new Date(event.endsAtUtc).getTime() > from && new Date(event.startsAtUtc).getTime() < to
         const inOrganization = !filters.organizationId || event.organizationId === filters.organizationId || event.organizationId === null
         return inWindow && inOrganization

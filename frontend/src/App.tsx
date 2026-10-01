@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import BootstrapPage from './BootstrapPage'
 import CalendarPage from './CalendarPage'
 import CandidateProfilePage from './CandidateProfilePage'
@@ -25,6 +25,7 @@ import LodgeProfilePage from './LodgeProfilePage'
 import LodgeTreasuryPage from './LodgeTreasuryPage'
 import MemberDirectoryPage from './MemberDirectoryPage'
 import MemberPortalPage from './MemberPortalPage'
+import MobileTabBar, { type MobileTabId } from './MobileTabBar'
 import NotificationsPage from './NotificationsPage'
 import PublishedCandidatePhoto from './PublishedCandidatePhoto'
 import RegimenInteriorPage from './RegimenInteriorPage'
@@ -46,6 +47,7 @@ import { type CandidatePublication, type CandidatePortalResponse, type PmgmApiCl
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
+import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
 type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
@@ -68,7 +70,10 @@ interface AppProps {
 }
 
 export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organizationProfileApi, reportingApi, internalAffairsApi, dataQualityCaseApi, documentApi, grandArchiveApi, calendarApi, notificationApi, candidateIntakeApi, onLogout }: AppProps) {
-  const [view, setView] = useState<View>('memberPortal')
+  const [view, setView] = useState<View>('dashboard')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [pendingCounts, setPendingCounts] = useState<PendingCounts>({})
+  const [unreadCount, setUnreadCount] = useState(0)
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [profile, setProfile] = useState<SessionProfile | null>(null)
@@ -154,9 +159,56 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   ]
   const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive || canManageAnyInstruction || canReadOrderInstructions
 
+  const pendingFlags: PendingTaskFlags = useMemo(() => ({ canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap }), [canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap])
+  const operational = isOperationalProfile(pendingFlags)
+  const pendingTasks = useMemo(() => buildPendingTasks(pendingFlags, pendingCounts), [pendingFlags, pendingCounts])
+  const badges = useMemo(() => navigationBadges(pendingTasks), [pendingTasks])
+  const pendingTotal = totalPending(pendingTasks)
+
+  useEffect(() => {
+    if (!effectiveProfile) return
+    let active = true
+    const today = new Date().toISOString().slice(0, 10)
+    const firstOrganization = (canApproveLodgeExpenses || canLodgeTreasury || canLodge || canManageLodgeSecretariat)
+      ? api.getOrganizationOptions().then(response => response.items[0]?.id ?? null)
+      : Promise.resolve(null)
+    Promise.allSettled([
+      notificationApi.getMine({ unreadOnly: true, limit: 50 }),
+      firstOrganization.then(id => id && (canApproveLodgeExpenses || canLodgeTreasury) ? api.getLodgeTreasuryExpenses(id, `${today.slice(0, 4)}-01-01`, today).then(response => response.items.filter(item => item.approvalStatus === 'pending_approval').length) : null),
+      canSecretariat ? candidateIntakeApi.getGrandSecretariatQueue('pending_grand_secretariat').then(response => response.total) : Promise.resolve(null),
+      canCeremonies ? api.getCeremonyReviewQueue().then(response => response.total) : Promise.resolve(null),
+      canLodge && !canSecretariat ? candidateIntakeApi.getWorkshopQueue().then(response => response.total) : Promise.resolve(null),
+      firstOrganization.then(id => id && (canLodge || canManageLodgeSecretariat) ? lodgeApi.getSecretariatTasks(id).then(response => response.items.filter(item => item.status === 'pending' || item.status === 'in_progress').length) : null),
+    ]).then(([unread, expenses, secretariat, ceremonies, workshop, tasks]) => {
+      if (!active) return
+      const value = <T,>(result: PromiseSettledResult<T>) => (result.status === 'fulfilled' ? result.value : null)
+      const unreadItems = value(unread)
+      setUnreadCount(Array.isArray(unreadItems) ? unreadItems.filter(item => item.readAtUtc === null).length : 0)
+      setPendingCounts({ expensesToApprove: value(expenses), secretariatReviews: value(secretariat), ceremonyReviews: value(ceremonies), workshopCandidates: value(workshop), secretariatTasks: value(tasks) })
+    })
+    return () => { active = false }
+  }, [api, candidateIntakeApi, lodgeApi, notificationApi, effectiveProfile, canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat])
+
+  useEffect(() => { setMenuOpen(false) }, [view])
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
+
+  const openPendingTarget = useCallback((target: PendingTarget) => { setView(target) }, [])
+  const openPendingInbox = () => {
+    setView('dashboard')
+    setMenuOpen(false)
+    window.setTimeout(() => document.getElementById('mis-pendientes')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
+  }
+  const activeTab: MobileTabId | null = view === 'dashboard' ? 'home' : view === 'calendar' ? 'calendar' : view === 'notifications' ? 'notifications' : view === 'memberPortal' && !operational ? 'second' : null
+
   const changeDemoProfile = (next: DemoProfileKey) => {
     setDemoProfileKey(next)
-    setView('memberPortal')
+    setPendingCounts({})
+    setView('dashboard')
   }
 
   const openNotificationAction = (actionUrl: string) => {
@@ -171,21 +223,21 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
 
   return <div className="app-shell">
     <header className="topbar">
-      <button className="brand" type="button" onClick={() => setView('memberPortal')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Mi ficha"><span className="brand-mark"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-gran-logia-mixta-chile.svg`} alt="" /></span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
+      <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Inicio"><span className="brand-mark"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-gran-logia-mixta-chile.svg`} alt="" /></span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
       <span className="product-motto">Camino al centenario 1929-2029</span>
-      <div className="topbar-meta">{api.useMocks && <><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /></>}{effectiveProfile && <span className="environment-badge">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.63' : `API v${systemInfo?.version ?? '—'}`}</span></div>
+      <div className="topbar-meta">{api.useMocks && <><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /></>}{effectiveProfile && <span className="environment-badge">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}<span className="environment-badge">{api.useMocks ? 'UI QA v0.64' : `API v${systemInfo?.version ?? '—'}`}</span></div>
     </header>
     <div className="workspace">
-      <nav className="sidebar" aria-label="Navegación principal">
+      <nav className={menuOpen ? 'sidebar is-open' : 'sidebar'} id="navegacion-principal" aria-label="Navegación principal" onClick={event => { if ((event.target as HTMLElement).closest('button')) setMenuOpen(false) }}>
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('dashboard')}><NavIcon name="home" /> Inicio</button>
         <div className="nav-section">Portal del Hermano</div>
         <ModuleAccess icon="member" label="Mi ficha" allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
         <ModuleAccess icon="calendar" label="Mi calendario" allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
-        <ModuleAccess icon="bell" label="Notificaciones" allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
+        <ModuleAccess icon="bell" label="Notificaciones" badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label="Parámetros del sistema" allowed={canConfigureSystem} active={view === 'system'} onOpen={() => setView('system')} /><ModuleAccess icon="settings" label="Configuración inicial" allowed={canBootstrap} active={view === 'bootstrap'} onOpen={() => setView('bootstrap')} /></>}
         <div className="nav-section">Procesos</div>
         <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" onClick={() => setView('candidates')}><NavIcon name="candidate" /> Insinuados publicados</button>
-        {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="candidate" label={canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados'} allowed={canCandidateProfile} active={view === 'candidateProfile'} onOpen={canCandidateProfile ? () => setView('candidateProfile') : undefined} />}
+        {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="candidate" label={canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados'} badge={badges.candidateProfile} allowed={canCandidateProfile} active={view === 'candidateProfile'} onOpen={canCandidateProfile ? () => setView('candidateProfile') : undefined} />}
         {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="ceremony" label="Circuito de Iniciación" allowed={canCandidateProfile || canCeremonies} active={view === 'initiationCircuit'} onOpen={canCandidateProfile || canCeremonies ? () => setView('initiationCircuit') : undefined} />}
         {hasInstitutionalManagement && <>
           <div className="nav-section">Gestión institucional</div>
@@ -194,7 +246,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="memberControl" label="Control de miembros" allowed={canMemberControl} active={view === 'memberControl'} onOpen={canMemberControl ? () => setView('memberControl') : undefined} />
           <ModuleAccess icon="dataQuality" label="Calidad de datos" allowed={canDataQuality} active={view === 'dataQuality'} onOpen={canDataQuality ? () => setView('dataQuality') : undefined} />
           <ModuleAccess icon="check" label="Cola de corroboración" allowed={canCaseQueue} active={view === 'caseQueue'} onOpen={canCaseQueue ? () => setView('caseQueue') : undefined} />
-          {!isGrandSecretaryWorkspace && <ModuleAccess icon="ceremony" label="Ceremonias" allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />}
+          {!isGrandSecretaryWorkspace && <ModuleAccess icon="ceremony" label="Ceremonias" badge={badges.ceremonies} allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />}
           <ModuleAccess icon="shield" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
           <ModuleAccess icon="treasury" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
@@ -205,9 +257,9 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {(canLodgeProfile || canLodge || canLodgeTreasury || canApproveLodgeExpenses || canReadLodgeHospitalaria || canManageAnyInstruction) && <>
           <div className="nav-section">Taller</div>
           <ModuleAccess icon="lodge" label="Ficha del Taller" allowed={canLodgeProfile} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
-          {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" allowed active={localSecretariatViews.includes(view)} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
+          {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" badge={badges.lodge} allowed active={localSecretariatViews.includes(view)} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" badge={badges.lodge} allowed={canLodge} active={view === 'lodge'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
           {!isLodgeSecretaryWorkspace && <ModuleAccess icon="library" label="Docencia" allowed={canManageAnyInstruction} active={view === 'lodgeInstruction'} onOpen={canManageAnyInstruction ? () => setView('lodgeInstruction') : undefined} />}
-          <ModuleAccess icon="treasury" label="Tesorería" allowed={canLodgeTreasury || canApproveLodgeExpenses} active={view === 'lodgeTreasury'} onOpen={canLodgeTreasury || canApproveLodgeExpenses ? () => setView('lodgeTreasury') : undefined} />
+          <ModuleAccess icon="treasury" label="Tesorería" badge={badges.lodgeTreasury} allowed={canLodgeTreasury || canApproveLodgeExpenses} active={view === 'lodgeTreasury'} onOpen={canLodgeTreasury || canApproveLodgeExpenses ? () => setView('lodgeTreasury') : undefined} />
           {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
         </>}
         {(canLibrary || canDocuments) && <>
@@ -221,7 +273,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {isLodgeSecretaryWorkspace && localSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Secretaría" sections={localSecretariatSections} active={view} onChange={id => setView(id as View)} />}
         {isGrandSecretaryWorkspace && grandSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Gran Secretaría" sections={grandSecretariatSections} active={view} onChange={id => setView(id as View)} />}
         {view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
-        {view === 'dashboard' && <DashboardPage portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
+        {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'bootstrap' && canBootstrap && <BootstrapPage bootstrapApi={bootstrapApi} />}
         {view === 'system' && canConfigureSystem && <SystemConfigurationPage api={api} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
@@ -249,6 +301,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
       </main>
     </div>
+    {effectiveProfile && <MobileTabBar active={activeTab} menuOpen={menuOpen} operational={operational} pendingCount={pendingTotal} unreadCount={unreadCount} onHome={() => setView('dashboard')} onSecond={operational ? openPendingInbox : () => setView('memberPortal')} onCalendar={() => setView('calendar')} onNotifications={() => setView('notifications')} onToggleMenu={() => setMenuOpen(open => !open)} />}
   </div>
 }
 
@@ -256,9 +309,10 @@ function NavIcon({ name }: { name: InstitutionalIconName }) {
   return <span className="nav-icon" aria-hidden="true"><InstitutionalIcon name={name} size={18} /></span>
 }
 
-function ModuleAccess({ icon, label, allowed, active = false, onOpen }: { icon: InstitutionalIconName; label: string; allowed: boolean; active?: boolean; onOpen?: () => void }) {
+function ModuleAccess({ icon, label, allowed, active = false, onOpen, badge }: { icon: InstitutionalIconName; label: string; allowed: boolean; active?: boolean; onOpen?: () => void; badge?: number }) {
   if (!allowed || !onOpen) return null
-  return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen}><NavIcon name={icon} /> {label}</button>
+  const count = badge && badge > 0 ? (badge > 99 ? '99+' : String(badge)) : undefined
+  return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen} data-badge={count} title={count ? `${label} · ${count} pendientes` : undefined}><NavIcon name={icon} /> {label}</button>
 }
 
 function CandidatePortal({ portal, loading, api }: { portal: CandidatePortalResponse | null; loading: boolean; api: CandidateIntakeApiClient }) {
