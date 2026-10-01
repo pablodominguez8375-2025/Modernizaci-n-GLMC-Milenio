@@ -95,7 +95,9 @@ public sealed class CandidatePublicationHttpWorkflowTests
         Assert.Equal(HttpStatusCode.OK, photo.StatusCode);
         Assert.Equal("image/png", photo.Content.Headers.ContentType?.MediaType);
         Assert.Equal(PhotoBytes, await photo.Content.ReadAsByteArrayAsync(ct));
-        Assert.Equal("private, no-store", photo.Headers.CacheControl?.ToString());
+        Assert.NotNull(photo.Headers.CacheControl);
+        Assert.True(photo.Headers.CacheControl.Private);
+        Assert.True(photo.Headers.CacheControl.NoStore);
         Assert.Equal("nosniff", Assert.Single(photo.Headers.GetValues("X-Content-Type-Options")));
         Assert.DoesNotContain("PRIVATE-", photo.Headers.ToString() + photo.Content.Headers, StringComparison.Ordinal);
 
