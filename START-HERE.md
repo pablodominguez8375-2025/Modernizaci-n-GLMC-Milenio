@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 9263)
+Total output lines: 236
+
 ## Handoff vigente — integración y publicación de PR #219 — 29-09-2026
 
 - HEAD observado al inicio: `dev@90988f1bb09d86eb017248ce02040ebe47e053a2`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`.
@@ -63,56 +66,7 @@
 - Decisión PO registrada en GitHub Issue #46 y Drive Línea Base: Presente = asistió; Ausente = faltó sin aviso; Justificada = faltó, pero avisó, tenía permiso o comunicó una razón.
 - Base de implementación: `dev@b252d1e2a1b1b5a2a111037f743b6e57823b6ef7`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` sin cambios. Rama `feature/instruction-attendance-status-20260928` creada desde ese SHA.
 - Brecha confirmada: el registro de instrucciones aceptaba sólo presente/ausente y la interfaz asignaba Presente silenciosamente a todos. Mi ficha ya representaba “Justificada”; el reporte de Orden agregaba sólo presentes/ausentes.
-- Este incremento añade selección obligatoria de los tres estados, conserva los registros de asistencia existentes, agrega el conteo de justificadas al reporte agregado, pruebas backend/frontend y criterios QA. No requiere migración: el estado se persiste en el campo existente.
-- Cambios en rama/PR hasta CI exact-head SUCCESS; no declarar integrado/publicado antes de verificarlo. `srv01` sigue pausado por Issue #97: no instalación ni QA física/UAT. No promover `main`.
-
-
-## Cierre integrado — Docencia por grado y consulta de Orden — 28-09-2026
-
-PR #206 se integró por squash. SHA exacto validado del PR: `8dc936301b597b1c2aeaf0b48ec309c8456c59bc`; integración de funcionalidad en `dev@7f2079b3c1d89564cc181f6efad5f231de6db081`. Inicio: `dev@1baf752c8be94e4d7b667d03ac0cad9f4b05fb31`. `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece sin cambios.
-
-El alcance implementa registro de instrucciones y asistencia por grado a cargo del Segundo Vigilante (Aprendices), Primer Vigilante (Compañeros) e Inmediato Ex-Venerable Maestro (Maestros); la actividad queda en Mi ficha. Docencia de la Orden da consulta de solo lectura por Taller o consolidada: Gran Segundo Vigilante (Aprendices), Gran Primer Vigilante (Compañeros), Inmediato Ex Gran Maestro (Maestros) y Jefatura del Departamento de Docencia (los tres grados). No concede mutaciones a cargos de Orden. Fuentes normativas/funcionales, permisos y límites están en GOV-001 §10.1 y `docs/PMGM-ARCH-018-docencia-de-la-orden-lectura.md`.
-
-Validación exact-head PR: PMGM CI #1651, Showcase #954 y QA Installable #592 SUCCESS; los jobs incluyeron backend/tests, smoke autenticado automatizado, piloto, infraestructura, frontend y paquete QA. Post-merge `dev@7f2079b…`: PMGM CI #1652, Showcase/Pages #955 con Deploy showcase SUCCESS, QA Installable #593 y Pre-UAT #393 SUCCESS. Demo Pages y paquetes identifican `sourceSha=7f2079b3c1d89564cc181f6efad5f231de6db081`.
-
-Artefactos post-merge: Pages artifact #10967675504 digest `sha256:f7ae60ac8f7af3c8a8aa051b8c2b19820626e571795f7a4c0f221395a0054053`; checksum local verificado del ZIP Pages igual a ese digest. `qa-current.json` confirma el SOURCE_SHA integrado y checksum del ZIP QA publicado `567b15253b585c7919ae90afe05dda43d5827112885b783b7f7172c874e14cc3`. QA Installable artifact #10966054591 digest `sha256:19cac46d170b79fe09d2f8be0814c78d2be0f14540e51e6eb63552feab965414`; el paquete QA incluido verifica `BUILD-INFO` con el mismo SOURCE_SHA, checksum `01eea675c476ec4e55c690c26101f27ec8aa5eee6c231397ee9c00fe0084b279` y MANIFEST 780/780. La copia empaquetada dentro de Pages y la copia del artifact de QA se construyeron en ejecuciones distintas y tienen checksums propios. Pre-UAT artifact #10966654846 digest `sha256:1a291bb7d38c7908c959fcf7f94b8629996895b7c7fde275960340420e5d1a7f`. Publicación/empaquetado no equivalen a instalación ni aceptación.
-
-Issue #97 sigue abierto y `srv01` continúa pausado por el Sponsor: no hubo instalación, smoke/regresión física ni UAT. No promover a `main`. Documentación de estado y handoff: ver PR #207 (si sigue pendiente, no tomar cifras anteriores como estado vivo); consultar nuevamente HEAD, Actions, Pages, PRs/issues y Drive al continuar.
-
-## Corte documental integrado — PR #204 — 28-09-2026
-
-**SHA integrado:** `dev@4f1396820846342f3bd5091b51c6a62857d3a39c`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`. PR #204 se fusionó por squash desde `docs/refresh-logial-crosswalk-20260928`, HEAD exacto `7b5fffa067154c5453ecfed20e84c7687780a29f`. SHA de inicio de dev: `c05fa74e4e481a481a4e5054512675b006c4c57a`. Árbol local limpio, detached en `origin/dev`.
-
-Archivos PR #204: `docs/reviews/PMGM-REV-LOGIAL-MENUS-2026-09-28.md` (nuevo) y `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`. Actualiza el cruce con la referencia Drive antigua y explica acceso a **Taller → Ficha del Taller** condicionado por capacidades. No hubo cambios de código, permisos, migraciones ni funciones. Mis planchas y Resumen del Taller constan ya integrados; se separa historial individual de cargos de una Oficialidad histórica por períodos. La API de instrucciones acepta filtros de fecha/grado; falta exponerlos en cliente/vista y requiere definición de alcance del Product Owner.
-
-Checks exact-head del PR #204: PMGM CI #1645, Showcase #946 y QA Installable #584 — SUCCESS; despliegue Pages omitido en el evento PR. Post-merge sobre el SHA integrado: PMGM CI #1646, Showcase/Pages #947 (incluido Deploy showcase SUCCESS), QA Installable #585 y Pre-UAT #391 — SUCCESS. Artefactos: Pages #10947342572 digest `sha256:c657c49f942ed48775cde2e9260cc1cb62d2027466241bc95f7966fc28d7d5b1`; evidencia visual #10947551850 digest `sha256:d9ee224ea735874c5590ad078b36517c16b924255e2bf06a7614df19f0ee6aeb`; QA Actions #10947382198 digest `sha256:78056dbe4c062b23f66718dbca0feafddc73c50479c001a0fdcc05a39fddbec0`; Pre-UAT #10947138143 digest `sha256:1979ab2b6d5bf4827a78e8f92fc4b02f6419312a47de5d359187104eb22f88b3`.
-
-Pages está publicado. El artefacto Pages contiene `qa-current.json` con `sourceSha=4f1396820846342f3bd5091b51c6a62857d3a39c`; el ZIP publicado `Proyecto-Centenario-QA-srv01-4f1396820846.zip` tiene SHA-256 verificado `c65cd218e7ca5b99943f31e9c364345bc99050c5a506a27b066d24ea6e83cf47`. El ZIP del artefacto QA, del mismo SOURCE_SHA, tiene SHA-256 `3b29c38beae40358b07d5c296bf2cded8ccbf9c304547aedaf9fc784f4c14116`; BUILD-INFO coincide y MANIFEST valida 776/776 archivos. Estos resultados representan publicación/empaquetado, no instalación ni aceptación.
-
-PR #182 fue cerrada sin merge y con enlace a PR #204 como sustitución. Issue #97 sigue abierto; `srv01` continúa pausado: no hubo instalación, smoke/regresión física ni UAT. No promover a `main`. Issues #190/#191 mantienen pendientes sus definiciones monetarias/contables. Antes de cualquier función nueva, esperar alcance aprobado del Product Owner. En un nuevo chat, leer START-HERE y volver a consultar HEAD, árbol, PRs/issues, Actions y Drive en vivo.
-
-
-## Verificación viva posterior al cierre de PR #201 — 27-09-2026
-
-- `dev`: `d9ce300511c735af28d3fc01497ecacf54d0a904`; `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111` (sin promoción). Árbol de trabajo local limpio al verificar.
-- PR #200 / Issue #199: Ficha del Taller integrada en `dev`; PR #201: cierre documental integrado. Este HEAD reemplaza los SHA antiguos indicados en el handoff histórico que sigue.
-- Para el SHA `d9ce300…`, PMGM CI #1637, Showcase #935, Pre-UAT #388 y QA Installable #573 finalizaron SUCCESS. El workflow Showcase/Pages post-merge #936 y QA Installable #574 también finalizaron SUCCESS. `qa-current.json` del artifact Pages #10944379382 informa `sourceSha=d9ce300…`; ZIP QA `Proyecto-Centenario-QA-srv01-d9ce300511c7.zip`, SHA-256 `a7a1ad89c175a9b7f7423dc8bbe153c4d641a2cc186318a7d1750cbbbca4dcbc`. Estos resultados prueban ejecución automatizada/publicación y empaquetado, no instalación ni UAT.
-- Issue #97 sigue abierto y `srv01` pausado por instrucción del Sponsor: no instalar, desplegar, hacer smoke físico, regresión física ni UAT. `main` no se modifica sin decisión explícita.
-- No se inicia otro incremento funcional sin alcance aprobado. Pendientes existentes: revisar decisiones de tarifa/contabilidad de #190/#191 y comparar PR #182 (base histórica) contra `dev` y Drive antes de decidir sobre ella.
-- El documento de estado más reciente es `docs/PMGM-BASE-001-estado-maestro.md`; la siguiente acción está en `docs/PMGM-NEXT-001-siguiente-corte-tecnico.md`. La sección de handoff inferior contiene antecedentes y checkpoints históricos: no usar sus cifras antiguas como estado vivo.
-
-## HANDOFF VIGENTE PARA CUALQUIER CHAT O IA — 27-09-2026
-
-Este resumen es un checkpoint, no reemplaza la verificación en vivo. GitHub y Drive prevalecen sobre mensajes, resúmenes o memoria. La fecha del checkpoint es 27-09-2026 (America/Santiago).
-
-### Estado vivo verificado
-
-- Repositorio: `pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio`.
-- HEAD de `dev`: `d455d454dff0e8cb135ca8d21c04bbd2242be38b` (PR #200, Ficha del Taller). `main`: `6dfb9546a4873baff15955cf86abfd7d47e3d111`, sin cambios.
-- PR #200 / Issue #199 integrados: menú directo **Taller → Ficha del Taller**, identidad y logo opcional. CI #1634, Showcase exact-head #931, QA Installable exact-head #569, Showcase/Pages post-merge #932 y QA Installable post-merge #570 — SUCCESS.
-- Pages artifact #10943798335, digest `sha256:56674bd800e26ebd53a77d621a67a03eefc44108e126146d2dfcf76040497023`; `qa-current.json` confirma el SHA integrado y ZIP QA SHA-256 `b189f06728348a78df999d7f48f1bb08898d58e9a046f5d12da3e85656c08080`. QA Actions artifact #10943758277, digest `sha256:fcc17f55691aa078ed3a8d32fbb056275b63f6c7a8be55e9a763491eaa734954`.
-- PR #197 es documental y está integrada. En el HEAD exacto de su rama: PMGM CI #1629 SUCCESS, Showcase #924 SUCCESS y QA Installable #562 SUCCESS. Tras integración, Showcase #925 y Deploy showcase SUCCESS; QA Installable #563 SUCCESS.
-- Pages artifact #10942713140: digest SHA-256 `745f49aa87c426f1eca2186cf1e3ad16fc55d753a2b0c6a7cfccd02288d7c58a`. Su `qa-current.json` confirma `sourceSha=bd311106f9418181ba8cc82164b7b02a47fcb0b2`; ZIP `Proyecto-Centenario-QA-srv01-bd311106f941.zip`, SHA-256 `29fee7dbc138f6dcd35eb7bead657e4d761c4a6d79bdaa405bf0204f7be8df0a`. QA Actions artifact #10943455063: digest `sha256:ed08c7ce2d3c17058f19be810814007bbe7fc4ea30da591fbb5b0e0ba169793a`.
+- Este incremento añade selección obligatoria de los tres estados, conserva los registros de asistencia existentes, agrega el conteo de justificadas al reporte agregado, pruebas backend/frontend y criterios QA. No requiere migración: el estado se persiste en el camp…2263 tokens truncated…aa405bf0204f7be8df0a`. QA Actions artifact #10943455063: digest `sha256:ed08c7ce2d3c17058f19be810814007bbe7fc4ea30da591fbb5b0e0ba169793a`.
 - Demo publicada: https://pablodominguez8375-2025.github.io/Modernizaci-n-GLMC-Milenio/
 - La mejora de cobranza PR #195 está integrada: la fecha real de recepción del pago se conserva para contabilidad/caja y el año/mes elegido determina la cuota abonada en historial/cartola; no duplica ingresos. Los artefactos son evidencia de publicación/paquete, no de instalación.
 - `srv01` está expresamente pausado por el Sponsor. Issue #97 sigue abierto. No instalar, desplegar manualmente, ejecutar smoke en servidor, regresión física ni UAT hasta que el Sponsor levante la pausa. No promover a `main`.
@@ -234,3 +188,4 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 - Continuidad de pruebas HTTP de insinuados (#44, PR #233): [implementación](docs/handoffs/2026-10-01-chatgpt-candidate-publication-http.md) y [cierre](docs/handoffs/2026-10-01-chatgpt-cierre-candidate-publication-http.md); 354/354, aislamiento por Taller y fecha institucional en fixture, con srv01 pausado.
 - Continuidad de sincronización REQ-025 (#235, PR #236): [trabajo](docs/handoffs/2026-10-01-chatgpt-req025-publicaciones.md) y [cierre](docs/handoffs/2026-10-01-chatgpt-cierre-req025-publicaciones.md); propuesta #45 preservada con derechos de ceremonia y remanente técnico #237.
 - Continuidad de evidencia histórica de publicación (#237, PR #239): [trabajo](docs/handoffs/2026-10-01-chatgpt-publication-evidence.md) y [cierre](docs/handoffs/2026-10-01-chatgpt-cierre-publication-evidence.md); 368/368, foto/política originales y legado explícito, con srv01 pausado.
+- Continuidad de revisión residual #245 / PR #246: [cierre ChatGPT](docs/handoffs/2026-10-01-chatgpt-cierre-gap131-revision-residual.md); GAP-001 corregido, cartola vigente reconocida, #116 restringido y main/srv01 preservados.
