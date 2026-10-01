@@ -45,3 +45,5 @@
 .library-pagination { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 18px; color: var(--muted); font-size: 11px; }
 @media (max-width: 1050px) { .document-library-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .document-version-form { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 760px) { .document-management-grid, .document-library-grid, .library-filters { grid-template-columns: 1fr; } .document-wide { grid-column: auto; } .document-version-form { grid-template-columns: 1fr; } .version-row { grid-template-columns: 1fr; } .document-info-strip { align-items: flex-start; flex-direction: column; } .library-pagination { justify-content: space-between; } }
+/* PMGM-UX-003 · Exportación del listado documental. */
+.document-heading-actions { display: inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }

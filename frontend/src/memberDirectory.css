@@ -82,3 +82,7 @@
   .member-avatar.large { width: 52px; height: 52px; }
   .profile-scope { grid-column: 1 / -1; justify-self: start; }
 }
+
+/* PMGM-UX-003 · Vista tabla: la tabla gana ancho frente a la ficha. */
+.member-layout.member-layout-table { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+@media (max-width: 1100px) { .member-layout.member-layout-table { grid-template-columns: 1fr; } }

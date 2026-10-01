@@ -3,8 +3,16 @@ import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient } from './api/membershipApi'
 import './memberDirectory.css'
 import { organizationDisplayName } from './displayFormat'
+import { exportCsv, ListingToolbar, LoadMore, useListing, type ActiveFilter, type SortOption } from './listing'
 
-export default function MemberDirectoryPage({ api, membershipApi, initialQuery = '' }: { api: PmgmApiClient; membershipApi: MembershipApiClient; initialQuery?: string }) {
+const memberSorts: SortOption<MemberDirectoryItem>[] = [
+  { id: 'name', label: 'Nombre (A-Z)', compare: (a, b) => a.displayName.localeCompare(b.displayName, 'es') },
+  { id: 'number', label: 'Nº institucional', compare: (a, b) => (a.institutionalNumber ?? '').localeCompare(b.institutionalNumber ?? '', 'es', { numeric: true }) },
+  { id: 'degree', label: 'Grado', compare: (a, b) => degreeRank(b.currentDegree) - degreeRank(a.currentDegree) || a.displayName.localeCompare(b.displayName, 'es') },
+  { id: 'status', label: 'Estado', compare: (a, b) => membershipLabel(a.membershipStatus).localeCompare(membershipLabel(b.membershipStatus), 'es') || a.displayName.localeCompare(b.displayName, 'es') },
+]
+
+export default function MemberDirectoryPage({ api, membershipApi, initialQuery = '', canExport = false, allowTableView = false }: { api: PmgmApiClient; membershipApi: MembershipApiClient; initialQuery?: string; canExport?: boolean; allowTableView?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [query, setQuery] = useState(initialQuery)
@@ -65,6 +73,19 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
   }), [members])
 
   const organization = organizations.find(item => item.id === organizationId)
+  const listing = useListing(members, memberSorts)
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+  const tableView = allowTableView && viewMode === 'table'
+  const activeFilters: ActiveFilter[] = [
+    ...(query ? [{ id: 'query', label: `Búsqueda: ${query}`, onClear: () => setQuery('') }] : []),
+    ...(status ? [{ id: 'status', label: `Estado: ${membershipLabel(status)}`, onClear: () => setStatus('') }] : []),
+  ]
+  const exportMembers = () => exportCsv(`fichas-${organization ? organizationLabel(organization).toLowerCase().replace(/[^a-z0-9]+/g, '-') : 'taller'}`, [
+    { header: 'Nombre', value: (row: MemberDirectoryItem) => row.displayName },
+    { header: 'Nº institucional', value: (row: MemberDirectoryItem) => row.institutionalNumber ?? '' },
+    { header: 'Grado', value: (row: MemberDirectoryItem) => degreeLabel(row.currentDegree) },
+    { header: 'Estado', value: (row: MemberDirectoryItem) => membershipLabel(row.membershipStatus) },
+  ], listing.sorted, `Fichas de miembros · ${organization ? organizationLabel(organization) : 'Taller'}`)
 
   return <>
     <section className="page-heading member-heading">
@@ -74,12 +95,13 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta.</strong><span>{error}</span></div>}
 
-    <section className="member-toolbar panel">
-      <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
+    <ListingToolbar filters={activeFilters} total={listing.total} shown={listing.visible.length} sorts={memberSorts} sortId={listing.sortId} onSort={listing.setSortId} onExport={canExport ? exportMembers : undefined} viewMode={allowTableView ? viewMode : undefined} onViewMode={allowTableView ? setViewMode : undefined}>
+      {organizations.length === 1 && organization
+        ? <div className="single-organization"><span>Taller</span><strong>{organizationLabel(organization)}</strong></div>
+        : <label><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>}
       <label><span>Buscar</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Nombre o número institucional" /></label>
       <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Todos</option><option value="active">Activo</option><option value="transferred">Trasladado</option><option value="closed">Cerrado</option></select></label>
-      <div className="member-context"><strong>{organization ? organizationLabel(organization) : 'Sin Taller'}</strong><small>La ficha conserva el historial del Taller de origen cuando existe un traslado.</small></div>
-    </section>
+    </ListingToolbar>
 
     <section className="member-metrics">
       <Metric label="Activos" value={metrics.active} detail="Membresía vigente" />
@@ -88,10 +110,11 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
       <Metric label="Eventos de estado" value={metrics.alerts} detail="Requieren lectura contextual" />
     </section>
 
-    <section className="member-layout">
+    <section className={tableView ? 'member-layout member-layout-table' : 'member-layout'}>
       <article className="panel member-roster">
         <div className="panel-heading"><div><p className="eyebrow">Taller seleccionado</p><h2>Fichas e historial</h2></div><span className="count-badge">{members.length}</span></div>
-        {loading || working ? <Loading /> : members.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong><span>Pruebe otro filtro o Taller.</span></div> : <div className="member-list">{members.map(item => <button key={item.memberId} type="button" className={item.memberId === selectedId ? 'member-row selected' : 'member-row'} onClick={() => setSelectedId(item.memberId)}><span className="member-avatar">{initials(item.displayName)}</span><span className="member-row-main"><strong>{item.displayName}</strong><small>{degreeLabel(item.currentDegree)} · {item.institutionalNumber ?? 'Sin Nº institucional'}</small></span><span className={statusClass(item.membershipStatus)}>{membershipLabel(item.membershipStatus)}</span></button>)}</div>}
+        {loading || working ? <Loading /> : members.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong><span>Pruebe otro filtro o Taller.</span></div> : tableView ? <MemberTable items={listing.visible} selectedId={selectedId} onSelect={setSelectedId} /> : <div className="member-list">{listing.visible.map(item => <button key={item.memberId} type="button" className={item.memberId === selectedId ? 'member-row selected' : 'member-row'} onClick={() => setSelectedId(item.memberId)}><span className="member-avatar">{initials(item.displayName)}</span><span className="member-row-main"><strong>{item.displayName}</strong><small>{degreeLabel(item.currentDegree)} · {item.institutionalNumber ?? 'Sin Nº institucional'}</small></span><span className={statusClass(item.membershipStatus)}>{membershipLabel(item.membershipStatus)}</span></button>)}</div>}
+        <LoadMore hasMore={listing.hasMore} onMore={listing.loadMore} remaining={listing.total - listing.visible.length} />
       </article>
 
       <article className="panel member-profile">
@@ -100,6 +123,17 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
     </section>
   </>
 }
+
+function MemberTable({ items, selectedId, onSelect }: { items: MemberDirectoryItem[]; selectedId: string; onSelect: (id: string) => void }) {
+  return <div className="listing-table-wrap"><table className="listing-table">
+    <thead><tr><th scope="col">Nombre</th><th scope="col">Nº institucional</th><th scope="col">Grado</th><th scope="col">Estado</th></tr></thead>
+    <tbody>{items.map(item => <tr key={item.memberId} className={item.memberId === selectedId ? 'selected' : undefined} onClick={() => onSelect(item.memberId)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter') onSelect(item.memberId) }} aria-selected={item.memberId === selectedId}>
+      <td>{item.displayName}</td><td>{item.institutionalNumber ?? '—'}</td><td>{degreeLabel(item.currentDegree)}</td><td><span className={statusClass(item.membershipStatus)}>{membershipLabel(item.membershipStatus)}</span></td>
+    </tr>)}</tbody>
+  </table></div>
+}
+
+function degreeRank(value: string | null | undefined) { return value === 'master' ? 3 : value === 'fellowcraft' ? 2 : value === 'apprentice' ? 1 : 0 }
 
 function Profile({ profile }: { profile: MemberProfile }) {
   const displayName = `${profile.member.firstNames} ${profile.member.lastNames}`.trim()
