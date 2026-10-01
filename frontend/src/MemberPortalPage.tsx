@@ -5,6 +5,7 @@ import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
+import MemberTreasuryCredits from './MemberTreasuryCredits'
 import './memberPortalInstruction.css'
 import './memberLibraryShortcut.css'
 
@@ -287,6 +288,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       </div>
 
       {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
+        <MemberTreasuryCredits credits={treasuryAccount.unappliedCredits} />
         <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
         {(treasuryAccount.currencies?.length?treasuryAccount.currencies:[{currency:treasuryAccount.currency??'CLP',totalCharged:treasuryAccount.totalCharged??0,totalPaid:treasuryAccount.totalPaid??0,balance:treasuryAccount.balance??0,overdueBalance:treasuryAccount.overdueBalance??0,currentPeriodBalance:treasuryAccount.currentPeriodBalance??0,futurePeriodBalance:treasuryAccount.futurePeriodBalance??0,futurePaidAmount:treasuryAccount.futurePaidAmount??0}]).map(book=><div className="member-institutional-summary" key={book.currency}><h3>Libro {book.currency}</h3><MemberDatum label="Cargado histórico" value={formatTreasuryMoney(book.totalCharged,book.currency)} /><MemberDatum label="Pagado histórico" value={formatTreasuryMoney(book.totalPaid,book.currency)} /><MemberDatum label="Morosidad anterior" value={formatTreasuryMoney(book.overdueBalance,book.currency)} /><MemberDatum label="Cuotas futuras pagadas" value={formatTreasuryMoney(book.futurePaidAmount,book.currency)} /><MemberDatum label="Saldo" value={formatTreasuryMoney(book.balance,book.currency)} success={book.balance === 0} /></div>)}
         <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Estado</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{memberTreasuryPeriodLabel(item.periodStatus)}</td><td>{item.organization}</td><td>{formatTreasuryMoney(item.chargedAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.paidAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.balance,item.currency??'CLP')}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {formatTreasuryMoney(payment.amount,payment.currency??item.currency??'CLP')}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>

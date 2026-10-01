@@ -65,7 +65,8 @@ export interface MemberSelfProfile {
 export interface MemberTreasuryPayment { id: string; receiptNumber: string; amount: number; currency?:'CLP'|'USD'; paymentMethod: string; paymentDate: string; reference: string | null }
 export interface MemberTreasuryCharge { chargeId: string; organizationId: string; organization: string; currency?:'CLP'|'USD'; periodYear: number; periodMonth: number; chargedAmount: number; paidAmount: number; balance: number; periodStatus: 'overdue'|'due'|'partial'|'paid'|'future_due'|'advance_partial'|'advance_paid'; status: string; payments: MemberTreasuryPayment[] }
 export interface MemberTreasuryCurrencyBalance { currency:'CLP'|'USD'; totalCharged:number; totalPaid:number; balance:number; overdueBalance:number; currentPeriodBalance:number; futurePeriodBalance:number; futurePaidAmount:number }
-export interface MemberTreasuryAccount { currency?:'CLP'|'USD'|null; currencies?:MemberTreasuryCurrencyBalance[]; totalCharged?: number|null; totalPaid?: number|null; balance?: number|null; overdueBalance?: number|null; currentPeriodBalance?: number|null; futurePeriodBalance?: number|null; futurePaidAmount?: number|null; items: MemberTreasuryCharge[] }
+export interface MemberTreasuryCredit { id: string; currency: 'CLP' | 'USD'; receiptNumber: string; paymentDate: string; amount: number; reference: string | null }
+export interface MemberTreasuryAccount { currency?:'CLP'|'USD'|null; currencies?:MemberTreasuryCurrencyBalance[]; totalCharged?: number|null; totalPaid?: number|null; balance?: number|null; overdueBalance?: number|null; currentPeriodBalance?: number|null; futurePeriodBalance?: number|null; futurePaidAmount?: number|null; unappliedCredits?: MemberTreasuryCredit[]; items: MemberTreasuryCharge[] }
 
 export interface UpdateMemberSelfContactRequest { email?: string | null; phone?: string | null; address?: string | null }
 export interface UpdateMemberSelfContactResponse { status: 'updated' | 'unchanged'; changedFields: string[] }
@@ -109,6 +110,10 @@ const demoSelfProfile: MemberSelfProfile = {
     currentPeriodBalance: 0,
     futurePeriodBalance: 0,
     futurePaidAmount: 25000,
+    unappliedCredits: [
+      { id: 'credit-demo-clp', currency: 'CLP', receiptNumber: 'REC-DEMO-CREDITO-CLP', paymentDate: '2026-09-28', amount: 5000, reference: null },
+      { id: 'credit-demo-usd', currency: 'USD', receiptNumber: 'REC-DEMO-CREDITO-USD', paymentDate: '2026-09-29', amount: 3.5, reference: null },
+    ],
     items: [
       { chargeId: 'charge-demo-2025-12', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2025, periodMonth: 12, chargedAmount: 25000, paidAmount: 0, balance: 25000, periodStatus: 'overdue', status: 'pending', payments: [] },
       { chargeId: 'charge-demo-2026-09', organizationId: org23, organization: 'Taller Demostrativo Nº 23', periodYear: 2026, periodMonth: 9, chargedAmount: 25000, paidAmount: 25000, balance: 0, periodStatus: 'paid', status: 'paid', payments: [{ id: 'payment-demo-2026-09', receiptNumber: 'REC-DEMO-003', amount: 25000, paymentMethod: 'transfer', paymentDate: '2026-09-10', reference: 'TRX-DEMO-003' }] },
