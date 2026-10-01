@@ -132,6 +132,8 @@ Una brecha se considera cerrada sólo cuando existe:
 6. caso UAT asociado;
 7. documentación actualizada.
 
+> **Lectura vigente:** la sección 6 sustituye los veredictos de la auditoría histórica de la sección 5. Esta última conserva errores documentados; no usarla para reimplementar funciones.
+
 ## 5. Auditoría de estado — 22-09-2026
 
 **Rama evaluada:** `dev@225db8d3b2243ac7b746583410289076082c8eb8` (HEAD vivo al momento de la auditoría).
@@ -164,3 +166,46 @@ Ninguno de los hallazgos de esta auditoría se cerró en este corte: es diagnós
 
 ### Siguiente paso recomendado
 No cerrar ningún gap en este documento sin las 7 condiciones de la sección 4 (Criterio de cierre). Priorizar P0 según la sección 3 ya existente: de los P0, **GAP-002, GAP-004 y GAP-006 siguen completamente abiertos** y **GAP-001/GAP-003 son parciales** — ninguno de los P0 está resuelto todavía. De los P1, únicamente GAP-011 está resuelto. Del P2, únicamente GAP-014 está resuelto.
+
+
+## 6. Revisión vigente — 01-10-2026 (#245 / PR #246)
+
+Base inspeccionada: `dev@a1f9b8c8782a59d3d7843326f6753cadc278cf6e`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` permanece congelado. Se contrastaron código, políticas, endpoints, pruebas, diferencias y comentarios de #131/#116/#60/#58/#1, Línea Base y adendas de Claude #242/#244. Los veredictos siguientes describen presencia técnica; no acreditan QA física/UAT, pendientes en #97.
+
+### Corrección de la auditoría histórica y residual actual
+
+La sección 5 subestimó funciones existentes: GAP-002/004 no carecen de implementación; GAP-003 tiene controles temporales; GAP-007/008 sí tienen contratos explícitos; GAP-012 tiene eventos históricos. #131 propuso corregirlo sobre un corte antiguo. Esta revisión conserva ese antecedente y actualiza su evidencia sin fusionar ni modificar la rama histórica. No se trasladan automáticamente sus conteos o cierres.
+
+| Gap | Evidencia técnica vigente | Brecha real / aceptación pendiente |
+| --- | --- | --- |
+| GAP-001 Tipos de ceremonia | `CeremonyCodes.Type` y `frontend/src/ceremonyTypes.ts` reconocen cinco tipos; `ceremonyTypes.test.ts` verifica paridad y el código desconocido no se rotula Exaltación. | Los cinco tipos están implementados. «Otra» no existe en contrato backend; requiere definición normativa antes de añadirla. No reconstruir las etiquetas corregidas por #130. |
+| GAP-002 Gran Maestría | `CeremonyEligibilityPolicy.EvaluateGrandMaster`, `GrandMasterCeremonyEndpoints` y `GrandMasterCeremonyAuthorizationPolicyTests` contienen requisito bloqueante y autorización por rol. | Implementado técnicamente; aceptación operacional pendiente. La búsqueda exclusiva en MapRequirementCodeToValidationType no demuestra ausencia. |
+| GAP-003 Insinuación | `CandidateIntakeWorkflowPolicy` y `CandidateWorkflowEndpoints`: espera inicial de 7 días, publicación configurable de 20 días, entrevistas, tercer grado y balotaje; `CandidateIntakeWorkflowPolicyTests`. | Implementado técnicamente. Preservar pruebas HTTP #233 y evidencia histórica/política #239/#240; aceptación operacional pendiente. |
+| GAP-004 Re-presentación tras rechazo | `CandidateIntakeWorkflowPolicy` usa `rejectionDate.AddYears(1)`; `CandidateRejectionPolicy.IsOrderBlocking` y `CandidateRejectionPolicyTests` controlan antecedente transversal. | Implementado técnicamente; no reemplazar por 365 días ni reabrir el rechazo ya controlado. |
+| GAP-005 Dispensación | `AdvancementEligibilityPolicy` mantiene `CouncilApproved` y mensajes «Consejo de Maestros». | Abierto: terminología y circuito persistido de Cámara del Medio. #48 y #116 conservan alcances; esta revisión no cambia autoridad ni reglas. |
+| GAP-006 Matriz financiera | Cuadro mensual por hermano, `CeremonyRightPayment` y `CeremonyEndpoints` registran pagos, monto/moneda/saldo por expediente; `CeremonyEligibilityService` consume `CeremonyRightPaid`. | Parcial: Gran Tesorería/Hospitalaria aún aportan snapshots agregados. No afirmar ausencia total de derechos ceremoniales ni desagregación completa del Fondo de Defunción/Hospitalidad. Preservar #190 y REQ-025. |
+| GAP-007 Firma manuscrita | `AdmissionEndpoints` expone verificación de carta; `AdmissionEligibilityPolicy` exige `withdrawal_letter_handwritten_signature`; auditoría `admission.withdrawal_letter.handwritten_signature_verified`. | El control de verificación existe; no equivale al circuito completo de afiliación de #116 ni a las cuatro firmas de CRV/CRF. |
+| GAP-008 Otra Obediencia | `AdmissionEligibilityPolicy.AddIncorporationRequirements` exige antecedentes legalizados y aceptación especial Gran Maestría cuando no hay pacto; `AdmissionEligibilityPolicyTests`. | Requisitos base implementados; comisión, cronología, materialización y UI integral de #116 no están integrados. |
+| GAP-009 Gran Templo | `GrandSecretariatEndpoints` valida disponibilidad/conflictos y reserva vinculada. | Abierto: no existe validación de siete días hábiles ni calendario hábil parametrizado. No inventar feriados o excepciones. |
+| GAP-010 Plancha y cierre | `GrandSecretariatEndpoints.IssueCeremonyAuthorizationAsync` registra autorización desde expediente aprobado; documentos y numeración existentes. | Parcial respecto de la decisión posterior: adjuntar Plancha firmada físicamente y cierre de Tenida con Plancha + Extracto de #116 siguen en candidato. No declarar esa decisión integrada ni crear un generador paralelo. |
+| GAP-011 Confidencialidad | Gestor Documental clasifica y controla acceso; `DocumentManagementPage.test.tsx`. Portal minimizado/foto protegida probados por #233; #239 conserva evidencia original. | Controles técnicos presentes; validación operacional de identidad/objetos reales pendiente. El legado sin evidencia conserva `legacy_not_recorded`, sin reconstruir historia. |
+| GAP-012 CRV/CRF | `WithdrawalEndpoints` agrega `InstitutionalStatusEvent`, termina pertenencia y conserva solicitud de retiro; firma Orador existente. | Parcial: CRF→CRV como nuevo acto y cuatro firmantes completos no están acreditados en dev; `WithdrawalSignaturePolicy` y migración específica siguen en #116. |
+| GAP-013 Voluntad testamentaria | Hospitalaria registra reposiciones por fallecimiento y mantiene fondo separado. | Abierto: no existe módulo versionado de beneficiario principal/subsidiario. No confundir reposición con voluntad testamentaria. |
+| GAP-014 Cuadro Gran Tesorería | `TreasuryMonthlyStatementLine`, categorías y tarifas oficiales/locales, respaldos y reportes por Taller. Perú ordinario USD 6 integrado por #213. | Implementación técnica presente; tarifario/aceptación restante #190. Past Activos no pagan cuota regular; reposición anual corresponde a Hospitalaria. No reabrir USD 6. |
+
+### PR e issues históricos: decisión de continuidad
+
+| Caso | Ya integrado / diferencia comprobada | Continuidad |
+| --- | --- | --- |
+| #131 | La corrección propuesta no estaba en dev. Esta sección corrige los falsos negativos y contempla avances posteriores. Las filas históricas de #126–#130 se conservan en PROJECT-CONTINUITY-MASTER. | Sustituir #131 sin merge solo después de integrar esta revisión y comprobar publicación/Drive. No editar su rama. |
+| #116 / #66 | Alta de insinuado, Secretarías, navegación por rol, planchas personales, publicación y políticas avanzaron en dev. Siguen ausentes `AdmissionsPage`, `AdmissionNormativeEndpoints`, `WithdrawalSignaturePolicy` y `CompleteAdmissions2026`. | Mantener draft y «NO FUSIONAR TODAVÍA». Las aprobaciones de insinuación/Secretarías no aceptan Afiliación/Incorporación completa. No existe decisión posterior que levante ese límite en los comentarios consultados. Recuperar residual en rama nueva y revisar su aceptación específica antes de integrar. |
+| #60 / #59 | Hay códigos de estado, eventos de retiro/traslado y exclusión tarifaria Past Activo; no están `InstitutionalStatusEndpoints/Policy`, `TreasuryOrdinaryDuesEligibilityService` ni movimiento de reincorporación del candidato. | Mantener abierto; no confundir categoría de cuota con transición institucional. Preservar Hospitalaria anual separada y coordinar con Admisiones. |
+| #58 / #36 | `MemberSelfEndpoints` ya proyecta `treasuryAccount` desde `LodgeMemberCharges`, pagos, recibos/imputaciones/ajustes; `MemberPortalPage` muestra cartola, períodos y monedas separadas. `MemberSelfServicePostgreSqlTests` cubre consulta propia y datos operacionales. | La cartola ya existe: se corrige el diagnóstico del 30-09 que la daba totalmente pendiente. El candidato agrega un ledger paralelo CLP (`TreasuryLedgerDbContext`, `AddMemberTreasuryLedger`), cargos genéricos/vencimientos y comprobante documental. Conciliar esas diferencias con el modelo vigente, privacidad/no-cache, crédito visible y #191 antes de reemplazar/cerrar. No fusionar el ledger histórico ni declarar todo #58 cubierto. |
+| #191 | Recepción/caja separada del período de cuota, múltiples períodos, anticipos, crédito, correcciones/anulación append-only y concurrencia ajuste/ajuste integradas (#221/#228). | Abierto: presentación financiera institucional de anticipos/recuperaciones, validación operacional y carreras ajuste/cierre o imputación como cobertura adicional. No inventar cuentas, tarifas ni devolución efectiva. |
+| #1 | Comparador vivo dev→main. | Abierto, no fusionar: main congelado; promoción requiere autorización separada y UAT institucional. |
+
+### Fuentes y límites
+
+START-HERE, AGENTS, GOV-001/002/003, Estado Maestro, NEXT, ARCH-004/012, ADR de expediente/snapshot, REQ-025 y handoffs de cierre #237/#240 y Claude P1/P2 consultados. Drive: Línea Base Maestra, instrucciones del 29-09 EJECUTADA y adendas UX. P3 sigue pendiente de aprobación; no se toca identidad/UI. Las instrucciones ejecutadas no se repiten.
+
+Los resultados de 368 backend / 233 frontend y 823 checksums pertenecen a `d8bf696d`; no certifican esta revisión. Gates/publicación/paquete del nuevo SHA se registrarán en el recibo final #245/#246 y handoff posterior, con lectura de retorno GitHub/Drive. Sin instalación, QA física ni UAT; srv01 permanece pausado.
