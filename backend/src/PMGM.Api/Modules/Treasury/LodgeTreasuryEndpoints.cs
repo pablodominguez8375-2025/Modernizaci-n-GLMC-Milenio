@@ -275,6 +275,21 @@ public static partial class LodgeTreasuryEndpoints
     private static async Task<IResult> AllocateReceiptCreditAsync(Guid receiptId, AllocateLodgeReceiptRequest request,
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
+        try { return await AllocateReceiptCreditCoreAsync(receiptId, request, context, db, access, audit, ct); }
+        catch (Npgsql.PostgresException e) when (e.SqlState is "40001" or "23505")
+        { return Results.Conflict(new { message = "La imputación cambió durante el registro. Actualice los saldos y reintente." }); }
+        catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "40001" or "23505" })
+        { return Results.Conflict(new { message = "La imputación cambió durante el registro. Actualice los saldos y reintente." }); }
+        // Npgsql may wrap a serialization failure in its non-retrying execution strategy.
+        catch (InvalidOperationException e) when (
+            e.InnerException is Npgsql.PostgresException { SqlState: "40001" or "23505" } or
+                DbUpdateException { InnerException: Npgsql.PostgresException { SqlState: "40001" or "23505" } })
+        { return Results.Conflict(new { message = "La imputación cambió durante el registro. Actualice los saldos y reintente." }); }
+    }
+
+    private static async Task<IResult> AllocateReceiptCreditCoreAsync(Guid receiptId, AllocateLodgeReceiptRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
         var receipt = await db.LodgeMemberReceipts.Include(x => x.Adjustments).Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Payments)
             .Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Allocations)
             .SingleOrDefaultAsync(x => x.Id == receiptId, ct);
