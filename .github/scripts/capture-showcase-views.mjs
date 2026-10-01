@@ -451,7 +451,7 @@ async function openModuleFromMobileNavigation(label) {
   await delay(500)
 }
 
-async function openMobileSubview(label) {
+async function openMobileSubview(label, { optional = false } = {}) {
   const clicked = await evaluate(`(() => {
     const selectors = 'main [role="tab"], main .secretariat-role-tabs button, main .system-tabs button, main .library-category-rail button, main .segmented button, main .segmented-control button';
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
@@ -460,8 +460,12 @@ async function openMobileSubview(label) {
     button.click();
     return true;
   })()`)
-  if (!clicked) throw new Error(`Mobile subview control disappeared: ${label}`)
+  if (!clicked) {
+    if (optional) return false
+    throw new Error(`Mobile subview control disappeared: ${label}`)
+  }
   await delay(250)
+  return true
 }
 
 async function selectMobileFilter(fieldLabel, value) {
@@ -518,7 +522,12 @@ async function auditEveryMobileMenuView() {
       auditedViews += 1
 
       for (const { label, index } of defaults.tabs) {
-        await openMobileSubview(label)
+        // PMGM-UX-003: las pestañas de un espacio (p. ej. Gestión Logial) desaparecen al cambiar de función por cargo;
+        // si el control ya no está, se vuelve al estado inicial del módulo y se reintenta una vez.
+        if (!(await openMobileSubview(label, { optional: true }))) {
+          await openModuleFromMobileNavigation(menuLabel)
+          await openMobileSubview(label)
+        }
         await assertNoGlobalHorizontalOverflow(`${profile}/${menuLabel}/${label}`, mobileViewport.suffix)
         await inspectAllVisibleMediaAndNavigation(`${profile}/${menuLabel}/${label}`)
         await capture(path.join(outputDir, `${baseSlug}-${String(index + 1).padStart(2, '0')}-${slugify(label)}-${mobileViewport.suffix}.png`))
