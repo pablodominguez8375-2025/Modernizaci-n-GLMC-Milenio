@@ -41,14 +41,16 @@ describe('system configuration demo contract', () => {
   it('keeps the current publication policy when future versions are scheduled', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const code = 'system.publication.candidate.visible_fields'
+    expect((await api.getSystemSettingVersions(code)).total).toBe(0)
     await api.createSystemSettingVersion(code, { value: 'Taller|nombre completo|fotografía', effectiveFrom: '2099-01-01', sourceReference: 'QA primera versión futura' })
     await api.createSystemSettingVersion(code, { value: 'Fotografía|Nombre completo|Taller', effectiveFrom: '2099-02-01', sourceReference: 'QA segunda versión futura' })
     const current = (await api.getSystemSettings()).items.find(item => item.code === code)!
     expect(current.value).toBe('Fotografía|Nombre completo|Taller')
     expect(current.sourceReference).toBe('Decisión aprobada REQ-025')
+    expect(current.status).toBe('default')
     const history = (await api.getSystemSettingVersions(code)).items
     expect(history[1].effectiveTo).toBe('2099-01-31')
-    expect(history[2].effectiveTo).toBe('2098-12-31')
+    expect(history).toHaveLength(2)
     await expect(api.createSystemSettingVersion(code, { value: current.value, effectiveFrom: '2099-01-15', sourceReference: 'QA retroactividad' })).rejects.toThrow('posterior')
   })
 
