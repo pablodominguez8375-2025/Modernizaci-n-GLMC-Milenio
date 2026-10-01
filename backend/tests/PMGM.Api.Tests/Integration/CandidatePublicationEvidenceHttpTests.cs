@@ -150,7 +150,7 @@ public sealed class CandidatePublicationEvidenceHttpTests
             profile.PhotoVersionId = null; await intake.SaveChangesAsync(ct);
             Assert.Equal(PhotoA, await client.GetByteArrayAsync(photoUrl, ct));
             var publication = await db.CandidatePublications.SingleAsync(x => x.Id == publicationId, ct);
-            publication.PublishedFromUtc = DateTimeOffset.UtcNow.AddDays(-25);
+            publication.PublishedFromUtc = DateTimeOffset.UtcNow.AddDays(-(publication.RequiredDays + 5));
             foreach (var type in new[] { CeremonyCodes.ValidationType.InternalAffairs, CeremonyCodes.ValidationType.GrandMaster })
                 db.Add(new CeremonyValidation { CeremonyRequestId = ceremony.Id, ValidationType = type,
                     Status = CeremonyCodes.ValidationStatus.Approved, AsOfDate = Today });
@@ -163,8 +163,14 @@ public sealed class CandidatePublicationEvidenceHttpTests
                 PaymentMethod = "transfer", PaymentDate = Today, ReceiptNumber = suffix, IdempotencyKey = suffix, RecordedBySubject = "ci-evidence" });
             await db.SaveChangesAsync(ct);
             Authenticate(client, workshop.Id, InstitutionalRoles.GranSecretaria);
+            var authorizeUrl = $"/api/ceremonias/solicitudes/{ceremony.Id}/autorizar";
+            Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync(authorizeUrl, null, ct)).StatusCode);
+            db.Add(new CeremonyValidation { CeremonyRequestId = ceremony.Id,
+                ValidationType = CeremonyCodes.ValidationType.CandidateFinalBallot,
+                Status = CeremonyCodes.ValidationStatus.Approved, AsOfDate = Today });
+            await db.SaveChangesAsync(ct);
             var authorization = await client.PostAsync($"/api/ceremonias/solicitudes/{ceremony.Id}/autorizar", null, ct);
-            Assert.Equal(HttpStatusCode.OK, authorization.StatusCode);
+            Assert.True(authorization.StatusCode == HttpStatusCode.OK, await authorization.Content.ReadAsStringAsync(ct));
             var authorized = await db.AuditEvents.AsNoTracking().SingleAsync(x => x.Action == "ceremony.authorization.approved" && x.EntityId == ceremony.Id.ToString(), ct);
             var retained = Assert.IsType<CandidatePublicationFrozenEvidence>(CandidatePublicationEvidenceStore.ReadMetadata(authorized.MetadataJson));
             Assert.Equal(snapshot.PhotoVersionId, retained.PhotoVersionId); Assert.Equal(initial.VersionId, retained.Policy.VersionId);
@@ -178,7 +184,7 @@ public sealed class CandidatePublicationEvidenceHttpTests
             ceremony.Status = CeremonyCodes.RequestStatus.UnderReview;
             profile.PhotoVersionId = photos[1].Id;
             var legacy = new CandidatePublication { CeremonyRequestId = ceremony.Id, PersonId = person.Id,
-                OrganizationId = workshop.Id, PublishedFromUtc = DateTimeOffset.UtcNow.AddDays(-24), RequiredDays = 20,
+                OrganizationId = workshop.Id, PublishedFromUtc = DateTimeOffset.UtcNow.AddDays(-(publication.RequiredDays + 4)), RequiredDays = publication.RequiredDays,
                 RuleCode = CeremonyCodes.Rules.InitiationPublicationMinimumDays, Status = CeremonyCodes.PublicationStatus.Published };
             db.Add(legacy); await db.SaveChangesAsync(ct); await intake.SaveChangesAsync(ct);
             var legacyUrl = $"/api/candidate-publications/{legacy.Id}/photo";

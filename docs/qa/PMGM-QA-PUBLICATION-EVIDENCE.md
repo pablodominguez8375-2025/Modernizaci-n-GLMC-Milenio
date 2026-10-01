@@ -14,7 +14,7 @@ La vigencia de la política se resuelve por intervalos en fecha `America/Santiag
 
 ## Verificación automatizada
 
-- HTTP PostgreSQL: aprobación real con expediente completo; foto A publicada, expediente pasa a B y luego sin foto, portal mantiene A; repetición idempotente; políticas futuras no reemplazan la actual; autorización con pago y regularidades conserva foto/política iniciales; expiración revoca foto.
+- HTTP PostgreSQL: aprobación real con expediente completo; foto A publicada, expediente pasa a B y luego sin foto, portal mantiene A; repetición idempotente; políticas futuras no reemplazan la actual; rechazo sin balotaje y autorización con balotaje aprobado, pago y regularidades conserva foto/política iniciales; expiración revoca foto.
 - HTTP PostgreSQL: configuración por miembro rechazada; PII, omisiones, retroactividad y vigencia intermedia rechazadas; legado conserva compatibilidad y estado sin evidencia; evidencia inválida devuelve 404 y PhotoUrl nulo.
 - Unitarias: round-trip por sanitizador de auditoría, allowlist, metadatos ausentes e inválidos.
 - Frontend: catálogo y adaptador QA preservan política vigente al programar sucesoras y rechazan PII/retroactividad. No simulan la persistencia real del backend; esta se verifica mediante HTTP PostgreSQL.

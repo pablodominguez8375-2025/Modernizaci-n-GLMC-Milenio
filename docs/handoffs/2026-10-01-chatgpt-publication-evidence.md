@@ -26,7 +26,9 @@ Compatibilidad explícita: publicaciones históricas sin evidencia siguen con su
 
 ## Verificación antes de integración
 
-Local: SystemConfigurationPage 6/6 PASS; build TypeScript/Vite PASS; lint PASS; diff --check PASS. Backend se acredita en CI con PostgreSQL, no por ausencia de entorno local. HTTP cubre aprobación, cambio de ficha, idempotencia, políticas, autorización, expiración, legado y evidencia inválida. Transporte de notificaciones sustituido únicamente en esta prueba, sin certificación de entrega.
+Local: frontend completo 233/233 PASS; SystemConfigurationPage 6/6 PASS; build TypeScript/Vite PASS; lint PASS; diff --check PASS. Backend se acredita en CI con PostgreSQL, no por ausencia de entorno local. HTTP cubre aprobación, cambio de ficha, idempotencia, políticas, autorización, expiración, legado y evidencia inválida. Transporte de notificaciones sustituido únicamente en esta prueba, sin certificación de entrega.
+
+Correcciones de fixture detectadas por CI: importación del contexto de ficha, recarga del estado autorizado antes del escenario legado y balotaje aprobado exigido por el middleware vigente. No se modifica ni omite dicho guard.
 
 Estado de este commit: implementación en rama; gates exact-head y squash todavía pendientes. Pages y paquete vigentes al inicio corresponden a dev `8fd41253f9bb25acc4b8df1c7389873f12a34279`: paquete `Proyecto-Centenario-QA-srv01-8fd41253f9bb.zip`, SHA-256 `86fb95ba9a7cf64668fc2e91214eaba8c5301b01f2ab28672ae376a5d9d40976`. No atribuir este paquete al PR #239. SHA final, runs, paquete nuevo y lectura de retorno Drive se consignarán en un handoff documental posterior al squash.
 
