@@ -172,6 +172,7 @@ public sealed class CandidatePublicationEvidenceHttpTests
             publication.PublishedUntilUtc = DateTimeOffset.UtcNow.AddDays(-1); await db.SaveChangesAsync(ct);
             Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync(photoUrl, ct)).StatusCode);
             // Historical fixtures have no approval snapshot. Do not invent past evidence.
+            await db.Entry(ceremony).ReloadAsync(ct);
             publication.Status = CeremonyCodes.PublicationStatus.Cancelled;
             ceremony.Status = CeremonyCodes.RequestStatus.UnderReview;
             profile.PhotoVersionId = photos[1].Id;
