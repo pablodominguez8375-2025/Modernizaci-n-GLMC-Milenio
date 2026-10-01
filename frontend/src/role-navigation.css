@@ -1,0 +1,282 @@
+/* PMGM-UX-002 · Navegación por rol (Issue #241).
+   Capa cargada después de institutional-theme.css: no redefine paleta ni tipografía,
+   solo usa los tokens institucionales existentes. */
+
+.mobile-tabbar {
+  display: none;
+}
+
+/* Contadores del menú lateral: se pintan con CSS para no alterar el texto accesible de la opción. */
+.sidebar .nav-item[data-badge]::after {
+  content: attr(data-badge);
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--brand-gold-strong);
+  color: var(--brand-navy);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sidebar .nav-item.active[data-badge]::after {
+  background: var(--brand-navy);
+  color: #fff;
+}
+
+/* Inicio por rol: saludo compacto en lugar del bloque de presentación. */
+.hero-panel.role-greeting {
+  padding-block: 22px;
+  min-height: 0;
+}
+
+.hero-panel.role-greeting h1 {
+  font-size: clamp(24px, 3vw, 34px);
+  margin-bottom: 6px;
+}
+
+.hero-panel.role-greeting .lead {
+  margin-bottom: 0;
+}
+
+/* Bandeja «Mis pendientes». */
+.pending-inbox {
+  border-top: 3px solid var(--brand-gold);
+  scroll-margin-top: 96px;
+}
+
+.pending-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pending-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto 16px;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  border: 1px solid #e1e6ef;
+  border-radius: 12px;
+  background: #fff;
+  color: var(--brand-navy);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pending-row:hover,
+.pending-row:focus-visible {
+  border-color: var(--brand-gold);
+  background: #fffcf0;
+}
+
+.pending-row.has-count {
+  border-left: 4px solid var(--brand-gold-strong);
+}
+
+.pending-row-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--brand-navy);
+  color: var(--brand-gold);
+}
+
+.pending-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.pending-row-text strong {
+  font-size: 15px;
+  color: var(--brand-navy);
+}
+
+.pending-row-text small {
+  font-size: 12px;
+  color: #5c6b82;
+}
+
+.pending-count {
+  min-width: 28px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #eef2f7;
+  color: #4b5b73;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.pending-count.attention {
+  background: #fff3cc;
+  color: #7a5600;
+}
+
+.pending-row-chevron {
+  color: #9aa6b8;
+  font-size: 20px;
+  line-height: 1;
+}
+
+@media (max-width: 720px) {
+  /* Menú completo como hoja a pantalla completa, abierto desde la barra inferior. */
+  .sidebar {
+    display: none;
+  }
+
+  .sidebar.is-open {
+    position: fixed;
+    inset: 0 0 calc(64px + env(safe-area-inset-bottom, 0px)) 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: calc(16px + env(safe-area-inset-top, 0px)) 14px 24px;
+    border-bottom: 0;
+  }
+
+  .sidebar.is-open::before {
+    content: 'Menú';
+    display: block;
+    margin: 0 6px 4px;
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 800;
+  }
+
+  .sidebar.is-open .nav-section {
+    display: block;
+    margin: 14px 6px 4px;
+    color: #b8c6dc;
+    font-size: 12px;
+  }
+
+  .sidebar.is-open .nav-item {
+    width: 100%;
+    min-height: 48px;
+    padding-inline: 12px;
+    font-size: 15px;
+  }
+
+  .mobile-tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 70;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 2px;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+    background: var(--brand-navy);
+    border-top: 1px solid rgba(251, 174, 23, .45);
+    box-shadow: 0 -6px 20px rgba(8, 26, 52, .18);
+  }
+
+  .mobile-tab {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    min-width: 0;
+    min-height: 56px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #dbe4f0;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .mobile-tab span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobile-tab.active {
+    color: var(--brand-gold);
+    background: rgba(255, 255, 255, .08);
+  }
+
+  .mobile-tab em {
+    position: absolute;
+    top: 3px;
+    left: calc(50% + 6px);
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--brand-gold-strong);
+    color: var(--brand-navy);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .content {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .pending-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    padding-inline: 12px;
+  }
+
+  .pending-row-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .pending-row-chevron {
+    display: none;
+  }
+}
+
+/* PMGM-UX-002 · Inicio móvil compacto: indicadores en 2 columnas y sin campana duplicada (ya está en «Avisos»). */
+@media (max-width: 720px) {
+  .dashboard-page .executive-metrics.metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .dashboard-page .executive-metrics .metric-card {
+    min-width: 0;
+    padding: 12px;
+  }
+
+  .dashboard-page .executive-metrics .metric-card small {
+    overflow-wrap: anywhere;
+  }
+
+  .topbar .topbar-icon-button {
+    display: none;
+  }
+}

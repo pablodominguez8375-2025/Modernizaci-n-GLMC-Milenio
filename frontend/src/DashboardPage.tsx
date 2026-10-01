@@ -3,6 +3,7 @@ import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIc
 import { type CalendarApiClient, type CalendarEvent } from './api/calendarApi'
 import { type NotificationApiClient, type NotificationInboxItem } from './api/notificationApi'
 import { type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
+import { greetingFor, totalPending, type PendingTarget, type PendingTask } from './rolePendingTasks'
 
 interface DashboardPageProps {
   portal: CandidatePortalResponse | null
@@ -16,10 +17,19 @@ interface DashboardPageProps {
   onOpenNotifications: () => void
   onOpenSecretariat?: () => void
   onOpenLodge?: () => void
+  pendingTasks?: PendingTask[]
+  operational?: boolean
+  administrator?: boolean
+  onOpenPending?: (target: PendingTarget) => void
 }
 
 export default function DashboardPage(props: DashboardPageProps) {
   const { portal, systemInfo, profile, loading, calendarApi, notificationApi } = props
+  const pendingTasks = props.pendingTasks ?? []
+  const operational = props.operational ?? false
+  const administrator = props.administrator ?? false
+  const showPendingInbox = (operational || administrator) && pendingTasks.length > 0
+  const pendingTotal = totalPending(pendingTasks)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [notifications, setNotifications] = useState<NotificationInboxItem[]>([])
   const [pulseLoading, setPulseLoading] = useState(true)
@@ -46,43 +56,63 @@ export default function DashboardPage(props: DashboardPageProps) {
   const unread = notifications.filter(item => item.readAtUtc === null).length
   const upcoming = useMemo(() => [...events].filter(event => event.status !== 'cancelled').sort((a, b) => a.startsAtUtc.localeCompare(b.startsAtUtc)).slice(0, 5), [events])
   const pending = notifications.filter(item => item.readAtUtc === null).slice(0, 4)
-  const capabilities = profile ? Object.values(profile.capabilities).filter(Boolean).length : 0
+  const nextEvent = upcoming.find(event => !event.isMasked) ?? null
+  const greeting = `${greetingFor(new Date())}${profile?.displayName ? `, ${profile.displayName}` : ''}`
+  const summary = showPendingInbox
+    ? pendingTotal > 0 ? `Tienes ${pendingTotal} ${pendingTotal === 1 ? 'pendiente que requiere' : 'pendientes que requieren'} tu atención.` : 'No tienes pendientes por ahora. Revisa tu agenda y avisos.'
+    : 'Tu agenda, avisos e insinuados publicados en un solo lugar.'
 
-  return <div className="dashboard-page">
-    <section className="hero-panel executive-hero">
-      <div>
-        <p className="eyebrow">Centro de mando · Proyecto Centenario</p>
-        <h1>Visión institucional en una sola plataforma</h1>
-        <p className="lead">Seguimiento de personas, Talleres, ceremonias, agenda, comunicaciones y documentos con trazabilidad y control de acceso.</p>
-        <div className="hero-assurance" aria-label="Controles activos">
-          <Assurance label="Ley 21.719 incorporada" />
-          <Assurance label="Auditoría persistente" />
-          <Assurance label="Acceso por rol y ámbito" />
-        </div>
-      </div>
-      <div className="executive-status-card">
-        <span className="status-dot" aria-hidden="true" />
-        <div><strong>{systemInfo ? 'Plataforma operativa' : loading ? 'Consultando plataforma' : 'Modo demostración'}</strong><small>{systemInfo?.runtime ?? '.NET 10'} · PostgreSQL · React</small></div>
-      </div>
-    </section>
-
+  /* PMGM-UX-002 · Para perfiles operativos, «Mis pendientes» va antes de los indicadores. */
+  const metricsBlock = <>
     <section className="metric-grid executive-metrics">
       <MetricCard label="Avisos pendientes" value={pulseLoading ? '—' : String(unread)} detail="Bandeja personal institucional" tone={unread > 0 ? 'attention' : 'success'} />
       <MetricCard label="Próximos hitos" value={pulseLoading ? '—' : String(upcoming.length)} detail="Ventana de 21 días" />
       <MetricCard label="Insinuados publicados" value={loading ? '—' : String(portal?.total ?? 0)} detail={`${completed} con plazo cumplido`} />
-      <MetricCard label="Ámbito de acceso" value={loading ? '—' : accessScopeLabel(profile?.accessScope)} detail={`${capabilities} capacidades habilitadas`} />
+      {showPendingInbox
+        ? <MetricCard label="Mis pendientes" value={String(pendingTotal)} detail={`${pendingTasks.length} ${pendingTasks.length === 1 ? 'bandeja' : 'bandejas'} por rol`} tone={pendingTotal > 0 ? 'attention' : 'success'} />
+        : <MetricCard label="Próxima actividad" value={pulseLoading ? '—' : nextEvent ? shortDate(nextEvent.startsAtUtc) : 'Sin fecha'} detail={nextEvent ? nextEvent.title : 'Sin actividades en 21 días'} />}
+    </section>
+  </>
+
+  return <div className="dashboard-page">
+    <section className="hero-panel executive-hero role-greeting">
+      <div>
+        <p className="eyebrow">Proyecto Centenario · {accessScopeLabel(profile?.accessScope)}</p>
+        <h1>{greeting}</h1>
+        <p className="lead">{summary}</p>
+      </div>
+      {administrator && <div className="executive-status-card">
+        <span className="status-dot" aria-hidden="true" />
+        <div><strong>{systemInfo ? 'Plataforma operativa' : loading ? 'Consultando plataforma' : 'Modo demostración'}</strong><small>{systemInfo?.runtime ?? '.NET 10'} · PostgreSQL · React</small></div>
+      </div>}
     </section>
 
-    <section className="quick-actions panel">
-      <div className="panel-heading"><div><p className="eyebrow">Acciones rápidas</p><h2>Operación diaria</h2></div><span className="count-badge">QA ejecutivo</span></div>
-      <div className="quick-action-grid">
-        <QuickAction icon="calendar" title="Revisar agenda" detail="Tenidas, ceremonias y reservas" onClick={props.onOpenCalendar} />
-        <QuickAction icon="bell" title="Ver notificaciones" detail={`${unread} avisos pendientes`} onClick={props.onOpenNotifications} badge={unread > 0 ? String(unread) : undefined} />
-        <QuickAction icon="candidate" title="Portal de insinuados" detail="Plazos y publicaciones vigentes" onClick={props.onOpenCandidates} />
-        {props.onOpenSecretariat && <QuickAction icon="secretariat" title="Gran Secretaría" detail="Reservas y autorizaciones" onClick={props.onOpenSecretariat} />}
-        {props.onOpenLodge && <QuickAction icon="lodge" title="Gestión Logial" detail="Tenidas, asistencia y actas" onClick={props.onOpenLodge} />}
-      </div>
-    </section>
+    {!showPendingInbox && metricsBlock}
+
+    {showPendingInbox
+      ? <section className="panel pending-inbox" id="mis-pendientes" aria-labelledby="mis-pendientes-titulo">
+        <div className="panel-heading"><div><p className="eyebrow">Bandeja por rol</p><h2 id="mis-pendientes-titulo">Mis pendientes</h2></div>{pendingTotal > 0 && <span className="count-badge">{pendingTotal} por atender</span>}</div>
+        <ul className="pending-list">
+          {pendingTasks.map(task => <li key={task.id}><button type="button" className={task.count ? 'pending-row has-count' : 'pending-row'} onClick={() => props.onOpenPending?.(task.target)}>
+            <span className="pending-row-icon" aria-hidden="true"><InstitutionalIcon name={task.icon} size={20} /></span>
+            <span className="pending-row-text"><strong>{task.title}</strong><small>{task.detail}</small></span>
+            {task.count !== null && <em className={task.count > 0 ? 'pending-count attention' : 'pending-count'}>{task.count > 0 ? task.count : 'Al día'}</em>}
+            <span className="pending-row-chevron" aria-hidden="true">›</span>
+          </button></li>)}
+        </ul>
+      </section>
+      : <section className="quick-actions panel">
+        <div className="panel-heading"><div><p className="eyebrow">Accesos rápidos</p><h2>Tu día en la Orden</h2></div></div>
+        <div className="quick-action-grid">
+          <QuickAction icon="calendar" title="Revisar agenda" detail="Tenidas, ceremonias y reservas" onClick={props.onOpenCalendar} />
+          <QuickAction icon="bell" title="Ver notificaciones" detail={`${unread} avisos pendientes`} onClick={props.onOpenNotifications} badge={unread > 0 ? String(unread) : undefined} />
+          <QuickAction icon="candidate" title="Portal de insinuados" detail="Plazos y publicaciones vigentes" onClick={props.onOpenCandidates} />
+          {props.onOpenSecretariat && <QuickAction icon="secretariat" title="Gran Secretaría" detail="Reservas y autorizaciones" onClick={props.onOpenSecretariat} />}
+          {props.onOpenLodge && <QuickAction icon="lodge" title="Gestión Logial" detail="Tenidas, asistencia y actas" onClick={props.onOpenLodge} />}
+        </div>
+      </section>}
+
+    {showPendingInbox && metricsBlock}
 
     <section className="dashboard-grid enriched-dashboard-grid">
       <article className="panel command-panel">
@@ -96,7 +126,7 @@ export default function DashboardPage(props: DashboardPageProps) {
       </article>
     </section>
 
-    <section className="dashboard-grid platform-grid">
+    {administrator && <section className="dashboard-grid platform-grid">
       <article className="panel platform-health">
         <p className="eyebrow">Gobierno y seguridad</p>
         <h2>Controles incorporados al núcleo</h2>
@@ -116,12 +146,13 @@ export default function DashboardPage(props: DashboardPageProps) {
         <p>El QA ya permite recorrer los procesos institucionales principales y demostrar integración transversal.</p>
         <div className="maturity-tags"><span>Miembros</span><span>Ceremonias</span><span>Secretaría</span><span>Gestión Logial</span><span>Calendario</span><span>Notificaciones</span><span>Documentos</span><span>Biblioteca</span></div>
       </article>
-    </section>
+    </section>}
   </div>
 }
 
-function Assurance({ label }: { label: string }) {
-  return <span><InstitutionalIcon name="check" size={14} />{label}</span>
+function shortDate(value: string) {
+  const date = new Date(value)
+  return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', timeZone: 'America/Santiago' }).format(date).replace('.', '')
 }
 
 function MetricCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: 'attention' | 'success' }) {
