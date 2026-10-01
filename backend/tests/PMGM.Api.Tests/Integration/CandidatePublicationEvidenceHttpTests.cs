@@ -14,6 +14,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Audit.Entities;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.CandidateIntake;
 using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
