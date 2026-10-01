@@ -51,6 +51,14 @@ El documento se actualiza junto con cada avance relevante y se versiona en GitHu
 | 22-09-2026 | El Product Owner aclara que el Tesorero no posee atribuciones de Secretaría y no puede ver sus mismos menús o vistas. | Se corrige la herencia visual: `canManageLodgeTreasury` deja de habilitar Gestión Logial; el perfil Tesorero pierde acceso a Tenidas, actas, correspondencia, insinuados privados, Circuito, fichas y documentos generales. Conserva su menú Tesorería y vistas transversales mínimas. Se añade QA-031 y UI QA v0.59. |
 | 22-09-2026 | El Product Owner solicita integrar el logo oficial de la Gran Logia Mixta de Chile en la plataforma junto a la identidad corporativa. | PR #137 integrada por squash en `dev@e0dd6e6`. SVG original, soporte blanco, proporciones y protección visual; Showcase prueba viewports y cabecera móvil. CI #1436, Showcase/Pages #676, QA #314 y Pre-UAT #329 SUCCESS. Demo e instalable corresponden al mismo SHA. QA-062 guarda digests y verificación live. `main` intacta; srv01 físico sigue pendiente en Issue #97. |
 
+## Actualización documental — 01-10-2026 (#245 / PR #246)
+
+- Corrección del diagnóstico histórico GAP-001 sobre dev `a1f9b8c8782a59d3d7843326f6753cadc278cf6e`: se conserva la auditoría original y se añade una matriz vigente con evidencia y remanentes. No usar los falsos negativos históricos para reimplementar funciones.
+- PR #126/#127/#128/#130 integraron pruebas de módulos y fuente única de tipos de ceremonia el 22-09-2026 (`3ae5ecb5`). PR #129 dejó una auditoría con errores; #131 propuso corregirla sin integrarse. La sección 6 de GAP-001 actualiza esa corrección con avances posteriores, incluidos derechos de ceremonia, cartola personal y evidencia original de publicaciones.
+- #237/#239/#240 completados, legado `legacy_not_recorded` preservado; #44/#235 y sustitución #45 ya cerrados. Claude #242/#244 y UI v0.65 preservados; P3 pendiente de aprobación.
+- #116 conserva restricción específica; #60 aún tiene transiciones institucionales pendientes; #58 necesita conciliar residual del ledger histórico con cartola existente; #191 mantiene definición financiera institucional, cobertura concurrente adicional y aceptación operacional. #1 no se fusiona.
+- Handoff: `docs/handoffs/2026-10-01-chatgpt-gap131-revision-residual.md`. Gates, SHA publicado, paquete e integración final se registran en #245/#246. Main y srv01 no cambian.
+
 ## Última conversación recuperada
 
 La última conversación documental solicitó revisar la carpeta de Google Drive **Proyecto Centenario** y comprobar que los cargos y firmantes de los documentos oficiales estuvieran incorporados al sistema.
