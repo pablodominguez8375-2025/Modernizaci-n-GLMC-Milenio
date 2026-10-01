@@ -4,10 +4,10 @@ import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient 
 import './memberDirectory.css'
 import { organizationDisplayName } from './displayFormat'
 
-export default function MemberDirectoryPage({ api, membershipApi }: { api: PmgmApiClient; membershipApi: MembershipApiClient }) {
+export default function MemberDirectoryPage({ api, membershipApi, initialQuery = '' }: { api: PmgmApiClient; membershipApi: MembershipApiClient; initialQuery?: string }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
   const [status, setStatus] = useState('')
   const [members, setMembers] = useState<MemberDirectoryItem[]>([])
   const [selectedId, setSelectedId] = useState('')
