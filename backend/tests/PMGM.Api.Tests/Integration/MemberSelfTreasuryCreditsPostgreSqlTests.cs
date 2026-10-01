@@ -37,9 +37,10 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
             var member = new Member { Person = new Person { FirstNames = "Hermano", LastNames = "Crédito ficticio" }, InstitutionalNumber = $"CREDIT-{Guid.NewGuid():N}" };
             var other = new Member { Person = new Person { FirstNames = "Otro", LastNames = "Hermano ficticio" }, InstitutionalNumber = $"OTHER-{Guid.NewGuid():N}" };
             var membership = new Membership { Member = member, Organization = org, MembershipType = "regular", Status = "active", StartDate = today.AddYears(-1) };
+            var degree = new DegreeEvent { Member = member, Organization = org, Degree = "3", EventType = "exaltation", EffectiveDate = today.AddYears(-1) };
             var plan = new LodgeFeePlan { Organization = org, FeeType = "normal", Currency = currency, MemberAmount = 100, GrandTreasuryAmount = 50, EffectiveFrom = new DateOnly(today.Year, 1, 1) };
             LodgeMemberCharge Charge(int month) => new() { Organization = org, Member = member, FeePlan = plan, Currency = currency, PeriodYear = today.Year, PeriodMonth = month, MemberAmount = 100, GrandTreasuryAmount = 50, Status = "pending" };
-            LodgeMemberReceipt Receipt(Member owner, string code, string book, Guid workshop) => new() { OrganizationId = workshop, Member = owner, MemberId = owner.Id, Currency = book, Amount = 100, PaymentMethod = "transfer", PaymentDate = today, ReceiptNumber = code, IdempotencyKey = Guid.NewGuid().ToString(), RecordedBySubject = "ci-seed", Reference = "fictitious-bank-reference" };
+            LodgeMemberReceipt Receipt(Member owner, string code, string book, Guid workshop) => new() { OrganizationId = workshop, Member = owner, MemberId = owner.Id, Currency = book, Amount = 100, PaymentMethod = "transfer", PaymentDate = today, ReceiptNumber = $"{code}-{Guid.NewGuid():N}", IdempotencyKey = Guid.NewGuid().ToString(), RecordedBySubject = "ci-seed", Reference = "fictitious-bank-reference" };
             var corrected = Receipt(member, "OWN-CORRECTED", currency, org.Id);
             var annulled = Receipt(member, "OWN-VOID", currency, org.Id);
             var full = Receipt(member, "OWN-FULL", currency, org.Id);
@@ -49,7 +50,7 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
             var correctionAllocation = new LodgeMemberPaymentAllocation { Receipt = corrected, Charge = Charge(1), Amount = 40, AllocatedBySubject = "ci-seed" };
             var voidAllocation = new LodgeMemberPaymentAllocation { Receipt = annulled, Charge = Charge(2), Amount = 40, AllocatedBySubject = "ci-seed" };
             var fullAllocation = new LodgeMemberPaymentAllocation { Receipt = full, Charge = Charge(3), Amount = 100, AllocatedBySubject = "ci-seed" };
-            db.AddRange(org, historicalOrg, member, other, membership, plan, corrected, annulled, full, otherReceipt, receiptOnly, correctionAllocation, voidAllocation, fullAllocation);
+            db.AddRange(org, historicalOrg, member, other, membership, degree, plan, corrected, annulled, full, otherReceipt, receiptOnly, correctionAllocation, voidAllocation, fullAllocation);
             await db.SaveChangesAsync(ct);
             var linkId = Guid.NewGuid(); var createdAt = DateTimeOffset.UtcNow;
             await db.Database.ExecuteSqlInterpolatedAsync($"""
