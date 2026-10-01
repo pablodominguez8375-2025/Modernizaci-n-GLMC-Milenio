@@ -7,3 +7,7 @@ Reserva previa a programación: prueba HTTP PostgreSQL nueva `backend/tests/PMGM
 Alcance: reproducir anulación/corrección versus cierre anual con lecturas PostgreSQL serializables sincronizadas en CLP y USD; exigir caja, crédito, cierre inmutable y auditoría coherentes, rollback/conflicto/reintento seguro. No inventar cuentas ni tarifas, ni alterar política de anticipos o devoluciones. Nuevos gates, integración y publicación pendientes.
 
 #131 ya cerrada/sustituida; #116 NO FUSIONAR TODAVÍA, #60/#58 remanentes preservados. UI v0.65 de Claude intacta/P3 sin aprobación. Main congelado; srv01 pausado, despliegue QA pendiente, sin instalación ni QA física/UAT. START-HERE sólo una línea en PR documental posterior al merge.
+
+PR #250 reclamada antes de programar. Primer corte de reproducción: ocho escenarios (anulación/corrección, CLP/USD, ambos órdenes de commit), reteniendo la primera lectura de cierre dentro de su transacción serializable. Una corrección sin efecto en caja puede confirmar junto al cierre si existe un orden serializable válido; la anulación obliga al competidor con snapshot obsoleto a abortar. Se comprueban originales, caja/crédito, cierre/auditoría, reintento e idempotencia y ajuste posterior fechado en ejercicio abierto.
+
+Sin SDK .NET local; CI PostgreSQL del nuevo HEAD debe aportar ejecución real. No se afirma reparación, gates, integración ni publicación antes de resultados. #191 mantiene presentación contable institucional y operación pendientes.
