@@ -6,4 +6,6 @@ Se agregan seis casos HTTP PostgreSQL: anulación/imputación, corrección a des
 
 Primer corte: solo pruebas y este handoff, para reproducir el comportamiento real antes de reparar. No existe SDK .NET local; requiere CI con PMGM_TEST_POSTGRES y evidencia de los seis casos ejecutados. No confundir retornos sin conexión con ejecución. Gates, integración, publicación y paquete pendientes.
 
+CI inicial `36897829717`, head `a3cc57baa4cdc855a8618e2d17dd6d7b1ae4d55f`: 374 ejecutadas, 371 PASS, 3 FAIL, 0 omitidas. Reprodujo 500+200 en doble imputación CLP/USD y 201+500 en anulación/imputación CLP; 40001 envuelto en InvalidOperationException/DbUpdateException de Npgsql. Se repara LodgeTreasuryEndpoints.cs (archivo previsto/reclamado) con un wrapper que reconoce sólo 40001/23505 y las mismas envolturas conocidas, retornando 409 tras rollback. No modifica el core ni agrega reintento automático. Pruebas sin relajar; matriz QA y changelog actualizados. Nuevos gates del head reparado y publicación pendientes.
+
 Presentación financiera institucional, concurrencia ajuste/cierre anual y operación permanecen pendientes en #191. Sin normas contables nuevas, UI, permisos o migraciones. Main congelado; srv01 pausado, despliegue QA pendiente, sin instalación ni QA física/UAT. Se preservan los cierres anteriores y la UI de Claude.
