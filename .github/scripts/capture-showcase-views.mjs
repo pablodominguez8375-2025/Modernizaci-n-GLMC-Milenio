@@ -345,7 +345,8 @@ async function assertDashboardMetricLayout(viewport) {
       cardCount: grid.children.length,
     };
   })()`)
-  const expectedColumns = viewport.width <= 480 ? 1 : viewport.width <= 1100 ? 2 : 4
+  // PMGM-UX-002: en móvil los 4 indicadores de Inicio se muestran en 2 columnas (decisión aprobada por el PO, 01-10-2026).
+  const expectedColumns = viewport.width <= 1100 ? 2 : 4
   if (!result || result.cardCount !== 4 || result.columns !== expectedColumns) {
     throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 4 cards, got ${JSON.stringify(result)}.`)
   }
