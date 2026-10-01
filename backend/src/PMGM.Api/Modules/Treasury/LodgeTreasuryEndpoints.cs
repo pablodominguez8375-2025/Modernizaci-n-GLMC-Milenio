@@ -731,6 +731,21 @@ public static partial class LodgeTreasuryEndpoints
     private static async Task<IResult> CloseAnnualPeriodAsync(Guid organizationId, int year, string? currencyCode, HttpContext context,
         PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
+        try { return await CloseAnnualPeriodCoreAsync(organizationId, year, currencyCode, context, db, access, audit, ct); }
+        catch (Npgsql.PostgresException e) when (e.SqlState is "40001" or "23505")
+        { return Results.Conflict(new { message = "El ejercicio cambió durante el cierre. Actualice los saldos y reintente." }); }
+        catch (DbUpdateException e) when (e.InnerException is Npgsql.PostgresException { SqlState: "40001" or "23505" })
+        { return Results.Conflict(new { message = "El ejercicio cambió durante el cierre. Actualice los saldos y reintente." }); }
+        // The core disposes its failed transaction before translating known PostgreSQL conflicts.
+        catch (InvalidOperationException e) when (
+            e.InnerException is Npgsql.PostgresException { SqlState: "40001" or "23505" } or
+                DbUpdateException { InnerException: Npgsql.PostgresException { SqlState: "40001" or "23505" } })
+        { return Results.Conflict(new { message = "El ejercicio cambió durante el cierre. Actualice los saldos y reintente." }); }
+    }
+
+    private static async Task<IResult> CloseAnnualPeriodCoreAsync(Guid organizationId, int year, string? currencyCode, HttpContext context,
+        PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         var chileYear = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
             TimeZoneInfo.FindSystemTimeZoneById("America/Santiago")).DateTime).Year;
