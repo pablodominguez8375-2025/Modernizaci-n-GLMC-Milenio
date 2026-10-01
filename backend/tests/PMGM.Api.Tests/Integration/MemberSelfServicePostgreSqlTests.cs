@@ -34,7 +34,9 @@ public sealed class MemberSelfServicePostgreSqlTests
         Guid memberId;
         Guid organizationId;
         string institutionalNumber;
-        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        // Match the institutional accounting period, including UTC/local month boundaries.
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(
+            DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("America/Santiago")).DateTime);
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
