@@ -522,6 +522,10 @@ public static class CeremonyEndpoints
 
         var today = ChileToday();
         var requiredDays = await GetMinimumPublicationDaysAsync(db, today, cancellationToken);
+        CandidatePublicationFieldPolicy fieldPolicy;
+        try { fieldPolicy = await CandidatePublicationEvidenceStore.ResolvePolicyAsync(db, today, cancellationToken); }
+        catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
+        var publicationEvidence = new CandidatePublicationFrozenEvidence(1, intakeProfile.PhotoVersionId, fieldPolicy);
 
         var publication = new CandidatePublication
         {
@@ -560,7 +564,8 @@ public static class CeremonyEndpoints
                 publication.RequiredDays,
                 publication.RuleCode,
                 publication.Status,
-                reviewId = review.Id
+                reviewId = review.Id,
+                publicationEvidence
             });
 
         await db.SaveChangesAsync(cancellationToken);
@@ -785,6 +790,10 @@ public static class CeremonyEndpoints
 
         ceremony.Status = CeremonyCodes.RequestStatus.Authorized;
         var authorizedAtUtc = DateTimeOffset.UtcNow;
+        var frozenReferences = await CandidatePublicationEvidenceStore.ReadAsync(db,
+            context.Publication is null ? Array.Empty<Guid>() : new[] { context.Publication.Id }, cancellationToken);
+        var publicationEvidence = context.Publication is not null && frozenReferences.TryGetValue(context.Publication.Id, out var frozen)
+            ? frozen : null;
 
         audit.Add(
             httpContext,
@@ -800,7 +809,12 @@ public static class CeremonyEndpoints
                 authorizedAtUtc,
                 evaluatedAsOf = context.AsOfDate,
                 publicationRequiredDays = context.Publication?.RequiredDays,
-                publicationCompletedDays = context.Publication?.CompletedDays
+                publicationCompletedDays = context.Publication?.CompletedDays,
+                publicationId = context.Publication?.Id,
+                publicationEvidence,
+                publicationEvidenceStatus = context.Publication is null ? "not_applicable" :
+                    publicationEvidence is null ? "legacy_not_recorded" :
+                    publicationEvidence.SchemaVersion == 1 ? "frozen" : "invalid"
             });
 
         await db.SaveChangesAsync(cancellationToken);

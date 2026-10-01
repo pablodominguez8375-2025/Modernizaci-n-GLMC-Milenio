@@ -234,7 +234,11 @@ const mockSession: SessionProfile = {
     canConfigureSystem: true,
   },
 }
+const publicationFieldsCode = 'system.publication.candidate.visible_fields'
+const approvedPublicationFields = 'Fotografía|Nombre completo|Taller'
+const chileToday = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago' }).format(new Date())
 const defaultMockSystemSettings: SystemSetting[] = [
+  { code:publicationFieldsCode,category:'Publicaciones',label:'Campos de publicación aprobados',valueType:'list',value:approvedPublicationFields,effectiveFrom:'2026-01-01',sourceReference:'Decisión aprobada REQ-025',status:'default' },
   { code:'system.workflow.initiation.approval_steps',category:'Flujos',label:'Aprobaciones de iniciación',valueType:'list',value:'Régimen Interior|Gran Tesorería|Gran Hospitalaria|Gran Secretaría|Gran Maestría',effectiveFrom:'2026-01-01',sourceReference:'Protocolo 2026',status:'default' },
   { code:'system.publication.candidate.minimum_days',category:'Publicaciones',label:'Días mínimos de publicación',valueType:'integer',value:'20',effectiveFrom:'2026-01-01',sourceReference:'Protocolo 2026',status:'default' },
   { code:'system.interviews.minimum_count',category:'Procesos',label:'Entrevistas mínimas',valueType:'integer',value:'3',effectiveFrom:'2026-01-01',sourceReference:'Protocolo 2026',status:'default' },
@@ -361,7 +365,7 @@ export class PmgmApiClient {
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
-  constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized; for (const item of this.mockSystemSettings) this.mockSystemSettingVersions.set(item.code,[{id:`base-${item.code}`,value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status:item.status,createdAtUtc:'2026-01-01T00:00:00Z'}]) }
+  constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized; for (const item of this.mockSystemSettings) if (item.code !== publicationFieldsCode) this.mockSystemSettingVersions.set(item.code,[{id:`base-${item.code}`,value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status:item.status,createdAtUtc:'2026-01-01T00:00:00Z'}]) }
 
   async getCandidatePortal(): Promise<CandidatePortalResponse> { if (this.useMocks) { await sleep(120); return { culture: 'es-CL', portal: 'Insinuados en período de publicación', total: mockCandidates.length, items: mockCandidates } } return this.request<CandidatePortalResponse>('/api/ceremonias/portal-insinuados') }
   async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
@@ -370,8 +374,49 @@ export class PmgmApiClient {
   async getTreasuryTerritories(): Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks)return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,treasuryTerritory:item.treasuryTerritory??null}))};return this.request('/api/tesoreria/talleres/orientes')}
   async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:item.treasuryTerritory??null}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
   async setTreasuryTerritory(organizationId:string,territory:TreasuryTerritory):Promise<{organizationId:string;territory:TreasuryTerritory}>{if(this.useMocks){const organization=this.mockOrganizations.find(item=>item.id===organizationId);if(!organization)throw new Error('El Taller no existe.');organization.treasuryTerritory=territory;return{organizationId,territory}}return this.postJson(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`,{territory})}
-  async getSystemSettings(): Promise<SystemSettingsResponse> { if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => ({ ...item })) }; return this.request<SystemSettingsResponse>('/api/system/settings/') }
-  async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> { if (this.useMocks) { const item=this.mockSystemSettings.find(value=>value.code===code); if(!item) throw new Error('El parámetro no pertenece al catálogo administrable.'); if(!payload.value.trim()||!payload.sourceReference.trim()) throw new Error('Valor y fundamento son obligatorios.'); const status=payload.effectiveFrom>new Date().toISOString().slice(0,10)?'scheduled':'active'; Object.assign(item,{value:payload.value.trim(),effectiveFrom:payload.effectiveFrom,sourceReference:payload.sourceReference.trim(),status}); const versions=this.mockSystemSettingVersions.get(code)??[]; versions.unshift({id:crypto.randomUUID(),value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status,createdAtUtc:new Date().toISOString()}); this.mockSystemSettingVersions.set(code,versions); return {...item}; } return this.postJson<SystemSetting>(`/api/system/settings/${encodeURIComponent(code)}`,payload) }
+  async getSystemSettings(): Promise<SystemSettingsResponse> {
+    if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => {
+      if (item.code !== publicationFieldsCode) return { ...item }
+      const today = chileToday()
+      const current = (this.mockSystemSettingVersions.get(item.code) ?? []).find(version =>
+        version.effectiveFrom <= today && (!version.effectiveTo || version.effectiveTo >= today))
+      const baseline = defaultMockSystemSettings.find(value => value.code === publicationFieldsCode)!
+      return current ? { ...baseline, value: current.value, effectiveFrom: current.effectiveFrom, sourceReference: current.sourceReference, status: 'active' } : { ...baseline }
+    }) }
+    return this.request<SystemSettingsResponse>('/api/system/settings/')
+  }
+  async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> {
+    if (this.useMocks) {
+      const item = this.mockSystemSettings.find(value => value.code === code)
+      if (!item) throw new Error('El parámetro no pertenece al catálogo administrable.')
+      if (!payload.value.trim() || !payload.sourceReference.trim()) throw new Error('Valor y fundamento son obligatorios.')
+      const versions = this.mockSystemSettingVersions.get(code) ?? []
+      let value = payload.value.trim()
+      const publicationPolicy = code === publicationFieldsCode
+      if (publicationPolicy) {
+        const fields = value.split('|').map(field => field.trim()).filter(Boolean)
+        const approved = approvedPublicationFields.toLocaleLowerCase('es-CL').split('|')
+        const normalized = fields.map(field => field.toLocaleLowerCase('es-CL'))
+        if (fields.length !== 3 || new Set(normalized).size !== 3 || normalized.some(field => !approved.includes(field)))
+          throw new Error('La publicación requiere exclusivamente Fotografía, Nombre completo y Taller.')
+        if (payload.effectiveFrom < chileToday()) throw new Error('La política debe aplicar hacia adelante.')
+        if (versions.some(version => version.effectiveFrom >= payload.effectiveFrom))
+          throw new Error('La nueva vigencia debe ser posterior a las versiones ya registradas.')
+        value = approvedPublicationFields
+        const previous = versions.find(version => !version.effectiveTo || version.effectiveTo >= payload.effectiveFrom)
+        if (previous) {
+          previous.effectiveTo = new Date(Date.parse(payload.effectiveFrom + 'T12:00:00Z') - 86400000).toISOString().slice(0, 10)
+          previous.status = 'retired'
+        }
+      }
+      const status = payload.effectiveFrom > (publicationPolicy ? chileToday() : new Date().toISOString().slice(0, 10)) ? 'scheduled' : 'active'
+      Object.assign(item, { value, effectiveFrom: payload.effectiveFrom, sourceReference: payload.sourceReference.trim(), status })
+      versions.unshift({ id: crypto.randomUUID(), value: item.value, effectiveFrom: item.effectiveFrom, effectiveTo: null, sourceReference: item.sourceReference, status, createdAtUtc: new Date().toISOString() })
+      this.mockSystemSettingVersions.set(code, versions)
+      return { ...item }
+    }
+    return this.postJson<SystemSetting>(`/api/system/settings/${encodeURIComponent(code)}`, payload)
+  }
   async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
   async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'Asignó perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'Probó configuración SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesión',summary:'Intento de autenticación rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
 

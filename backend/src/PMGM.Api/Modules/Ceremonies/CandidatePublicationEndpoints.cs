@@ -53,6 +53,7 @@ public static class CandidatePublicationEndpoints
             .Select(x => x.CeremonyRequestId)
             .ToListAsync(cancellationToken);
         var hasPhotoByRequestId = requestIdsWithPhoto.ToHashSet();
+        var frozen = await CandidatePublicationEvidenceStore.ReadAsync(db, rows.Select(x => x.Id), cancellationToken);
 
         var items = rows.Select(x => new CandidatePublicationPublicDto(
                 DisplayName: $"{x.FirstNames} {x.LastNames}".Trim(),
@@ -65,7 +66,8 @@ public static class CandidatePublicationEndpoints
                 ComplianceDateUtc: x.PublishedFromUtc.AddDays(x.RequiredDays),
                 RuleCode: x.RuleCode,
                 Status: x.Status,
-                PhotoUrl: hasPhotoByRequestId.Contains(x.CeremonyRequestId)
+                PhotoUrl: (frozen.TryGetValue(x.Id, out var evidence)
+                    ? evidence.PhotoVersionId is not null : hasPhotoByRequestId.Contains(x.CeremonyRequestId))
                     ? $"/api/candidate-publications/{x.Id:D}/photo"
                     : null))
             .ToList();
