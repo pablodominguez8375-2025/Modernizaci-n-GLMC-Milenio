@@ -11,8 +11,11 @@ import {
 import './secretariat.css'
 import { ceremonyTypeLabel } from './ceremonyTypes'
 import { countLabel, organizationDisplayName } from './displayFormat'
+import { ActionBar, ActionDrawer, ConfirmAction, HelpNote, RowMenu, WorkspaceTabs, type WorkspaceTab } from './actionKit'
 
 const SANTIAGO = 'America/Santiago'
+
+type GrandSecretariatTab = 'bandeja' | 'templos' | 'documentos'
 
 export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   const initial = useMemo(() => defaultWindow(), [])
@@ -61,6 +64,13 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   }
 
   const pendingAuthorizations = ceremonies.filter(item => !item.formalAuthorizationIssued).length
+  const pendingExtracts = submittedTenidas.filter(item => item.submissionStatus !== 'received').length
+  const [tab, setTab] = useState<GrandSecretariatTab>('bandeja')
+  const tabs: WorkspaceTab<GrandSecretariatTab>[] = [
+    { id: 'bandeja', label: 'Bandeja de trabajo', badge: pendingAuthorizations + pendingExtracts },
+    { id: 'templos', label: 'Templos y salas' },
+    { id: 'documentos', label: 'Documentos emitidos' },
+  ]
 
   return (
     <>
@@ -76,15 +86,28 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
       {error && <div className="error-banner" role="alert"><strong>Operación no completada.</strong><span>{error}</span></div>}
       {message && <div className="success-banner" role="status">{message}</div>}
 
-      <section className="secretariat-grid">
+      <WorkspaceTabs label="Secciones de Gran Secretaría" tabs={tabs} active={tab} onChange={setTab} />
+
+      <section className="secretariat-grid workspace-panel" hidden={tab !== 'bandeja'}>
+        <div className="secretariat-wide"><HelpNote><p>Aquí llegan las ceremonias autorizadas que necesitan su Plancha y los extractos de Tenidas que envían los Talleres.</p><p>Revise cada fila y use su botón principal. Las demás opciones están en el botón «⋯».</p></HelpNote></div>
         <CeremonyAuthorizationPanel api={api} items={ceremonies} working={working} execute={execute} refreshDocuments={refreshDocuments} refreshCeremonies={refreshCeremonies} />
         <SubmittedTenidasPanel api={api} items={submittedTenidas} working={working} execute={execute} refresh={refreshSubmittedTenidas} />
+      </section>
 
+      <section className="secretariat-grid workspace-panel" hidden={tab !== 'templos'}>
         <article className="panel secretariat-wide">
           <div className="panel-heading">
             <div><p className="eyebrow">Calendario</p><h2>Disponibilidad de templos y salas</h2></div>
             <span className="count-badge">{availability ? `${availability.available}/${availability.total} disponibles` : '—'}</span>
           </div>
+          <ActionBar>
+            <ActionDrawer label="Reservar espacio" description="Reserva un templo o sala para el período consultado." confirmMessage="La reserva quedará registrada y auditada para el período consultado.">
+              <ReservationPanel api={api} organizations={organizations} ceremonies={ceremonies} availability={availability} working={working} execute={execute} refreshAvailability={refreshAvailability} refreshCeremonies={refreshCeremonies} fromLocal={fromLocal} toLocal={toLocal} />
+            </ActionDrawer>
+            <ActionDrawer label="Nuevo templo o sala" tone="secondary" description="Agrega un espacio al catálogo institucional.">
+              <SpacePanel api={api} working={working} execute={execute} refreshAvailability={refreshAvailability} />
+            </ActionDrawer>
+          </ActionBar>
           <form className="inline-form" onSubmit={(event) => { event.preventDefault(); void execute(refreshAvailability, 'Disponibilidad actualizada.') }}>
             <Field label="Desde · hora Chile"><input type="datetime-local" required value={fromLocal} onChange={e => setFromLocal(e.target.value)} /></Field>
             <Field label="Hasta · hora Chile"><input type="datetime-local" required value={toLocal} onChange={e => setToLocal(e.target.value)} /></Field>
@@ -94,13 +117,16 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
             {loading ? <p>Cargando espacios…</p> : availability?.items.length ? availability.items.map(space => <SpaceRow key={space.id} space={space} />) : <p className="muted">No hay espacios institucionales activos.</p>}
           </div>
         </article>
+      </section>
 
-        <ReservationPanel api={api} organizations={organizations} ceremonies={ceremonies} availability={availability} working={working} execute={execute} refreshAvailability={refreshAvailability} refreshCeremonies={refreshCeremonies} fromLocal={fromLocal} toLocal={toLocal} />
-        <SpacePanel api={api} working={working} execute={execute} refreshAvailability={refreshAvailability} />
-        <DocumentPanel api={api} organizations={organizations} working={working} execute={execute} refreshDocuments={refreshDocuments} />
-
+      <section className="secretariat-grid workspace-panel" hidden={tab !== 'documentos'}>
         <article className="panel secretariat-wide">
           <div className="panel-heading"><div><p className="eyebrow">Registro oficial</p><h2>Documentos recientes</h2></div><span className="count-badge">{documents.length} registros</span></div>
+          <ActionBar>
+            <ActionDrawer label="Emitir documento oficial" description="Plancha de comunicado formal o Decreto." confirmMessage="El documento se emitirá con número oficial y quedará auditado. No se puede deshacer.">
+              <DocumentPanel api={api} organizations={organizations} working={working} execute={execute} refreshDocuments={refreshDocuments} />
+            </ActionDrawer>
+          </ActionBar>
           {documents.length === 0 ? <p className="muted">Aún no hay documentos emitidos.</p> : (
             <div className="document-list">{documents.slice(0, 12).map(document => <div key={document.id}><strong>{document.documentCode}</strong><span>{document.title}</span><small>{documentTypeLabel(document)} · {formatChile(document.issuedAtUtc)}</small></div>)}</div>
           )}
@@ -126,7 +152,7 @@ function CeremonyAuthorizationPanel({ api, items, working, execute, refreshDocum
     <p className="form-note">Esta bandeja no expone nombres de hermanos o insinuados. La autorización formal sólo utiliza el Taller, tipo de ceremonia, fecha y reserva institucional cuando existe.</p>
     {items.length === 0 ? <p className="muted">No hay ceremonias autorizadas pendientes de gestión documental.</p> : <div className="ceremony-queue">{items.map(item => <div className="ceremony-row" key={item.id}>
       <div className="ceremony-main"><div className="ceremony-title"><strong>{ceremonyTypeLabel(item.ceremonyType)}</strong><span className={item.formalAuthorizationIssued ? 'status-pill complete' : 'status-pill active'}>{item.formalAuthorizationIssued ? 'Plancha emitida' : 'Pendiente de Plancha'}</span></div><span>{organizationDisplayName(item.organizationName, item.organizationNumber)}</span><small>{item.proposedDate ? `Fecha propuesta: ${formatDateOnly(item.proposedDate)}` : 'Fecha por confirmar'}</small>{item.spaceReservationId ? <small className="reservation-evidence">Reserva: {item.spaceName ?? 'Espacio institucional'} · {formatChileRange(item.reservationStartsAtUtc, item.reservationEndsAtUtc)}</small> : <small className="reservation-warning">Sin reserva de templo o sala asociada.</small>}</div>
-      {!item.formalAuthorizationIssued && <button className={item.spaceReservationId ? 'primary-action' : 'secondary-action'} type="button" disabled={working} onClick={() => issue(item)}>{item.spaceReservationId ? 'Emitir Plancha' : 'Emitir Plancha sin sala asignada'}</button>}
+      {!item.formalAuthorizationIssued && <ConfirmAction tone={item.spaceReservationId ? 'primary' : 'secondary'} label={item.spaceReservationId ? 'Emitir Plancha' : 'Emitir Plancha sin sala asignada'} message={item.spaceReservationId ? 'Se emitirá la Plancha de Autorización con la reserva asociada. Queda registrada y no se puede deshacer.' : 'No hay sala asignada: la Plancha dejará constancia de ello. Queda registrada y no se puede deshacer.'} confirmLabel="Sí, emitir Plancha" disabled={working} onConfirm={() => issue(item)} />}
     </div>)}</div>}
   </article>
 }
@@ -170,9 +196,11 @@ function SubmittedTenidasPanel({ api, items, working, execute, refresh }: {
           {item.reviewNotes && <small className="reservation-warning">Observación: {item.reviewNotes}</small>}
         </div>
         <div className="secretariat-actions">
-          <button className="secondary-action" type="button" disabled={working} onClick={() => void execute(() => download(item), 'Extracto PDF descargado.')}>Descargar extracto</button>
           {item.submissionStatus !== 'received' && <button className="primary-action" type="button" disabled={working} onClick={() => void execute(async () => { await api.reviewSubmittedTenida(item.recordId, 'received'); await refresh() }, 'Extracto recibido por Gran Secretaría.')}>Marcar recibido</button>}
-          <button className="secondary-action" type="button" disabled={working} onClick={() => observe(item)}>Observar</button>
+          <RowMenu label="Más acciones del extracto" items={[
+            { label: 'Descargar extracto PDF', disabled: working, onSelect: () => void execute(() => download(item), 'Extracto PDF descargado.') },
+            { label: 'Observar y devolver al Taller', disabled: working, onSelect: () => observe(item) },
+          ]} />
         </div>
       </div>)}
     </div>}

@@ -10,6 +10,7 @@ import {
   type LodgeCouncilSession,
 } from './api/lodgeCouncilApi'
 import { type LodgeMemberOption } from './api/lodgeApi'
+import { ActionDrawer } from './actionKit'
 
 const roleOptions = [
   ['lodge_venerable', 'Venerable Maestro'],
@@ -155,11 +156,11 @@ export default function LodgeCouncilPanel({ organizationId, members }: { organiz
     <div className="lodge-layout">
       <article className="panel lodge-operation-panel">
         <p className="eyebrow">Sesiones</p><h3>Registro mensual</h3>
-        <form className="regularity-form" onSubmit={createSession}>
+        <ActionDrawer label="Registrar sesión del Consejo" description="Sesión mensual del Consejo de Administración."><form className="regularity-form" onSubmit={createSession}>
           <label className="regularity-field"><span>Fecha</span><input type="date" value={sessionDate} onChange={event => setSessionDate(event.target.value)} required /></label>
           <label className="regularity-field"><span>Título</span><input value={sessionTitle} maxLength={300} onChange={event => setSessionTitle(event.target.value)} /></label>
           <button className="regularity-primary" type="submit" disabled={working || !organizationId}>Crear sesión</button>
-        </form>
+        </form></ActionDrawer>
         <div className="lodge-meeting-list">{sessions.map(session => <button key={session.id} type="button" className={session.id === selectedSessionId ? 'lodge-meeting selected' : 'lodge-meeting'} onClick={() => setSelectedSessionId(session.id)}><div><strong>{session.title || 'Consejo de Administración'}</strong><small>{formatDateOnly(session.sessionDate)}</small></div><span className={session.qualifiedQuorumConfirmed ? 'regularity-status good' : 'regularity-status pending'}>{session.qualifiedQuorumConfirmed ? 'Quórum confirmado' : 'Quórum pendiente'}</span></button>)}</div>
       </article>
 
@@ -169,12 +170,12 @@ export default function LodgeCouncilPanel({ organizationId, members }: { organiz
           <p><strong>{presentVotingMembers}</strong> integrantes presentes con voto registrados. El Reglamento vigente consultado exige quórum calificado, pero este módulo no inventa un número: la confirmación institucional queda auditada.</p>
           {!selectedSession.qualifiedQuorumConfirmed && <button className="regularity-primary" type="button" disabled={working || presentVotingMembers === 0} onClick={confirmQuorum}>Confirmar quórum calificado</button>}
 
-          <form className="regularity-form" onSubmit={recordMember}>
+          <ActionDrawer keepOpen label="Registrar asistencia de consejero"><form className="regularity-form" onSubmit={recordMember}>
             <h4>Integrantes del Consejo</h4>
             <label className="regularity-field"><span>Hermano/a</span><select value={memberId} onChange={event => setMemberId(event.target.value)}><option value="">Seleccione…</option>{members.map(member => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></label>
             <label className="regularity-field"><span>Cargo</span><select value={institutionalRole} onChange={event => setInstitutionalRole(event.target.value)}>{roleOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
             <button className="regularity-secondary" type="submit" disabled={working || !memberId}>Registrar presente</button>
-          </form>
+          </form></ActionDrawer>
           <div className="lodge-attendance-list">{attendance.map(item => <div key={item.id}><div><strong>{item.displayName}</strong><small>{roleLabel(item.institutionalRole)} · {item.hasVote ? 'voz y voto' : item.hasVoice ? 'solo voz' : 'invitado'}</small></div><span className={item.status === 'present' ? 'regularity-status good' : 'regularity-status pending'}>{item.status === 'present' ? 'Presente' : item.status === 'excused' ? 'Excusado' : 'Ausente'}</span></div>)}</div>
         </>}
       </article>
@@ -183,24 +184,24 @@ export default function LodgeCouncilPanel({ organizationId, members }: { organiz
     {selectedSession && <div className="lodge-layout">
       <article className="panel lodge-operation-panel">
         <p className="eyebrow">Acuerdos y propuestas</p><h3>Competencia normativa</h3>
-        <form className="regularity-form" onSubmit={recordDecision}>
+        <ActionDrawer label="Registrar acuerdo o propuesta" description="Acuerdo dentro de la competencia normativa del Consejo." confirmMessage="El acuerdo quedará registrado y auditado en la sesión."><form className="regularity-form" onSubmit={recordDecision}>
           <label className="regularity-field"><span>Materia</span><select value={decisionCategory} onChange={event => setDecisionCategory(event.target.value as CouncilDecisionCategory)}>{decisionOptions.map(([value, label, chamber]) => <option key={value} value={value}>{label}{chamber ? ' · Cámara del Medio' : ''}</option>)}</select></label>
           <label className="regularity-field"><span>Asunto</span><input value={decisionSubject} onChange={event => setDecisionSubject(event.target.value)} required /></label>
           <label className="regularity-field"><span>Resolución / propuesta</span><textarea rows={4} value={decisionResolution} onChange={event => setDecisionResolution(event.target.value)} required /></label>
           {categoryRequiresChamber && <div className="regularity-warning"><strong>Requiere Cámara del Medio.</strong><span>El Consejo sólo registra la propuesta aprobada para remisión; no se presenta como resolución final.</span></div>}
           <button className="regularity-primary" type="submit" disabled={working || !selectedSession.qualifiedQuorumConfirmed}>Registrar {categoryRequiresChamber ? 'propuesta' : 'acuerdo'}</button>
-        </form>
+        </form></ActionDrawer>
         <div className="lodge-minute-list">{decisions.map(item => <article key={item.id}><div className="lodge-minute-heading"><strong>{decisionLabel(item.category)}</strong><span className={item.requiresChamberReview ? 'regularity-status pending' : 'regularity-status good'}>{item.requiresChamberReview ? 'A Cámara del Medio' : 'Consejo'}</span></div><p><strong>{item.subject}</strong></p><p>{item.resolution}</p></article>)}</div>
       </article>
 
       <article className="panel lodge-operation-panel">
         <p className="eyebrow">Control Art. 10.2</p><h3>Revisiones del Consejo</h3>
-        <form className="regularity-form" onSubmit={recordReview}>
+        <ActionDrawer label="Registrar revisión (Art. 10.2)"><form className="regularity-form" onSubmit={recordReview}>
           <label className="regularity-field"><span>Área</span><select value={reviewArea} onChange={event => setReviewArea(event.target.value as CouncilControlArea)}><option value="treasury">Tesorería</option><option value="hospitalaria">Hospitalaria</option><option value="instruction_columns">Columnas / instrucción</option></select></label>
           <label className="regularity-field"><span>Período</span><input value={reviewPeriod} onChange={event => setReviewPeriod(event.target.value)} placeholder="Ej.: Agosto 2026" required /></label>
           <label className="regularity-field"><span>Conclusión</span><textarea rows={4} value={reviewConclusion} onChange={event => setReviewConclusion(event.target.value)} required /></label>
           <button className="regularity-secondary" type="submit" disabled={working}>Registrar revisión</button>
-        </form>
+        </form></ActionDrawer>
         <div className="lodge-minute-list">{reviews.map(item => <article key={item.id}><div className="lodge-minute-heading"><strong>{controlAreaLabel(item.controlArea)}</strong><span>{item.periodLabel}</span></div><p>{item.conclusion}</p>{item.observations && <small>{item.observations}</small>}</article>)}</div>
       </article>
     </div>}

@@ -1,0 +1,67 @@
+/* PMGM-UX-004 · Lista primero, acción bajo demanda. Usa los tokens institucionales existentes. */
+.action-trigger { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 10px 18px; border-radius: 10px; font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; border: 1px solid transparent; }
+.action-trigger.primary { background: var(--navy, #06148E); color: #fff; }
+.action-trigger.primary:hover:not(:disabled) { background: var(--brand-navy-dark, #040d5e); }
+.action-trigger.secondary { background: #fff; color: var(--navy, #06148E); border-color: var(--line, #d7dcea); }
+.action-trigger.secondary:hover:not(:disabled) { border-color: var(--navy, #06148E); }
+.action-trigger:disabled { opacity: .55; cursor: not-allowed; }
+.action-trigger:focus-visible, .row-menu-trigger:focus-visible, .workspace-tabs [role="tab"]:focus-visible { outline: 3px solid var(--gold, #F3C609); outline-offset: 2px; }
+
+.action-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 4px 0 16px; }
+.action-bar > .action-hint { margin: 0; font-size: 14px; color: var(--muted, #586680); }
+
+.action-drawer-layer[hidden] { display: none; }
+.action-drawer-layer { position: fixed; inset: 0; z-index: 1200; display: flex; justify-content: flex-end; }
+.action-drawer-backdrop { position: absolute; inset: 0; border: 0; background: rgba(4, 13, 70, .42); cursor: pointer; }
+.action-drawer { position: relative; display: flex; flex-direction: column; width: min(560px, 100%); height: 100%; background: #fff; box-shadow: -12px 0 40px rgba(4, 13, 70, .25); }
+.action-drawer-header { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px; padding-top: calc(18px + env(safe-area-inset-top, 0px)); border-bottom: 1px solid var(--line, #e3e7f0); border-top: 4px solid var(--gold, #F3C609); }
+.action-drawer-header > div { flex: 1; min-width: 0; }
+.action-drawer-header h2 { margin: 0; font-size: 20px; color: var(--navy, #06148E); }
+.action-drawer-header h2:focus { outline: none; }
+.action-drawer-header p { margin: 4px 0 0; font-size: 14px; color: var(--muted, #586680); }
+.action-drawer-close { width: 44px; height: 44px; border: 1px solid var(--line, #d7dcea); border-radius: 10px; background: #fff; color: var(--navy, #06148E); font-size: 24px; line-height: 1; cursor: pointer; }
+.action-drawer-body { flex: 1; overflow-y: auto; padding: 18px 20px; }
+.action-drawer-body > .panel, .action-drawer-body > article { border: 0 !important; box-shadow: none !important; padding: 0 !important; margin: 0 !important; background: transparent !important; }
+.action-drawer-body > .panel > .eyebrow, .action-drawer-body > .panel > h2:first-of-type, .action-drawer-body > article > .eyebrow, .action-drawer-body > article > h2:first-of-type { display: none; }
+.action-drawer-body form { display: grid; gap: 14px; }
+.action-drawer-body input, .action-drawer-body select, .action-drawer-body textarea { min-height: 44px; font-size: 16px; }
+.action-drawer-footer { padding: 12px 20px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line, #e3e7f0); }
+.action-link { min-height: 44px; border: 0; background: none; color: var(--navy, #06148E); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
+
+.action-confirm, .action-inline-confirm { display: grid; gap: 10px; padding: 14px 16px; border-radius: 12px; background: #fff8dc; border: 1px solid var(--brand-gold-strong, #FBAE17); }
+.action-confirm { margin: 0 20px 12px; }
+.action-confirm p, .action-inline-confirm p { margin: 0; font-size: 15px; color: var(--ink, #1c2333); }
+.action-confirm > div, .action-inline-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+
+.row-menu { position: relative; display: inline-flex; }
+.row-menu-trigger { width: 44px; height: 44px; border: 1px solid var(--line, #d7dcea); border-radius: 10px; background: #fff; color: var(--navy, #06148E); font-size: 22px; line-height: 1; cursor: pointer; }
+.row-menu-list { position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; display: grid; min-width: 220px; padding: 6px; border-radius: 12px; border: 1px solid var(--line, #d7dcea); background: #fff; box-shadow: 0 12px 30px rgba(4, 13, 70, .18); }
+.row-menu-list button { min-height: 44px; padding: 10px 12px; border: 0; border-radius: 8px; background: none; color: var(--ink, #1c2333); font: inherit; font-size: 15px; text-align: left; cursor: pointer; }
+.row-menu-list button:hover:not(:disabled), .row-menu-list button:focus-visible { background: var(--surface-soft, #f4f6fb); outline: none; }
+
+.workspace-tabs { margin: 0 0 18px; border-bottom: 2px solid var(--line, #e3e7f0); overflow-x: auto; scrollbar-width: thin; }
+.workspace-tabs [role="tablist"] { display: flex; gap: 4px; min-width: max-content; }
+.workspace-tabs [role="tab"] { display: inline-flex; align-items: center; gap: 8px; min-height: 46px; padding: 10px 16px; margin-bottom: -2px; border: 0; border-bottom: 3px solid transparent; background: none; color: var(--muted, #586680); font: inherit; font-size: 15px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.workspace-tabs [role="tab"].active { color: var(--navy, #06148E); border-bottom-color: var(--gold, #F3C609); }
+.workspace-tabs [role="tab"]:hover:not(.active) { color: var(--navy, #06148E); }
+.workspace-tab-badge { display: inline-grid; place-items: center; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--brand-gold-strong, #FBAE17); color: var(--navy, #06148E); font-size: 12px; font-weight: 800; }
+.workspace-panel[hidden] { display: none; }
+
+.help-note { margin: 0 0 16px; border: 1px solid var(--line, #e3e7f0); border-radius: 12px; background: var(--surface-soft, #f4f6fb); }
+.help-note summary { min-height: 44px; display: flex; align-items: center; padding: 0 14px; color: var(--navy, #06148E); font-weight: 700; cursor: pointer; }
+.help-note > div { padding: 0 14px 14px; font-size: 15px; color: var(--ink, #1c2333); }
+.help-note > div p { margin: 6px 0 0; }
+
+@media (max-width: 720px) {
+  .action-drawer { width: 100%; }
+  .action-bar { flex-direction: column; align-items: stretch; }
+  .action-bar .action-trigger { width: 100%; }
+  .workspace-tabs [role="tab"] { padding: 10px 12px; font-size: 14px; }
+}
+
+/* Gestión Logial › Docencia: el botón de acción ocupa la fila completa y el historial queda a lo ancho. */
+.lodge-instruction-workspace-grid:has(> .lodge-instruction-actions) { grid-template-columns: 1fr; }
+.lodge-instruction-actions { grid-column: 1 / -1; }
+
+/* Las pestañas ocultan secciones con el atributo hidden; algunas hojas antiguas fijan display y lo anularían. */
+.lodge-product-page [hidden], .secretariat-grid[hidden], .workspace-panel[hidden] { display: none !important; }

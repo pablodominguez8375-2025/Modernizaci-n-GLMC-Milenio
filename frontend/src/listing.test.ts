@@ -36,8 +36,8 @@ describe('PMGM-UX-003 · listados y vistas operativas', () => {
     expect(page.match(/role="tabpanel"/g)?.length).toBe(3)
   })
 
-  it('Gestión Logial y Carga de insinuados ofrecen índice de secciones', () => {
-    expect(read('./LodgeManagementPage.tsx')).toContain('<SectionIndex')
+  it('Gestión Logial usa pestañas (PMGM-UX-004) y Carga de insinuados ofrece índice de secciones', () => {
+    expect(read('./LodgeManagementPage.tsx')).toContain('<WorkspaceTabs')
     expect(read('./CandidateWorkshopIntakePage.tsx')).toContain('<SectionIndex')
   })
 
