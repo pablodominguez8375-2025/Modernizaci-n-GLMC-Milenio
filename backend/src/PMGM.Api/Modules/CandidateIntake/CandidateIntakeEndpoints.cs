@@ -404,6 +404,13 @@ public static class CandidateIntakeEndpoints
                                        (x.PublishedUntilUtc == null || x.PublishedUntilUtc >= now), cancellationToken);
         if (publication is null) return Results.NotFound();
 
+        var frozen = await CandidatePublicationEvidenceStore.ReadAsync(coreDb, new[] { publicationId }, cancellationToken);
+        if (frozen.TryGetValue(publicationId, out var evidence))
+        {
+            if (evidence.PhotoVersionId is null) return Results.NotFound();
+            return await StreamPhotoAsync(evidence.PhotoVersionId.Value, httpContext, documentDb, objectStore, cancellationToken);
+        }
+
         var profile = await intakeDb.CandidateIntakeProfiles.AsNoTracking()
             .SingleOrDefaultAsync(x => x.CeremonyRequestId == publication.CeremonyRequestId, cancellationToken);
         if (profile?.PhotoVersionId is null) return Results.NotFound();
