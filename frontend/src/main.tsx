@@ -20,6 +20,7 @@ import './listing.css'
 import './action-kit.css'
 import './accessibility.css'
 import './home-consistency.css'
+import './common-views.css'
 import { applyTextSize, readTextSize } from './textSize'
 
 const root = document.getElementById('root')

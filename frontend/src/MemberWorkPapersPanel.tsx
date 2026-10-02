@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { DocumentApiClient, MemberWorkPaper } from './api/documentApi'
 import './member-work-papers.css'
+import { ActionDrawer } from './actionKit'
 
 export default function MemberWorkPapersPanel({ api, organizationId, enabled }: { api: DocumentApiClient; organizationId: string; enabled: boolean }) {
   const [items, setItems] = useState<MemberWorkPaper[]>([])
   const [loading, setLoading] = useState(enabled)
   const [title, setTitle] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [replacing, setReplacing] = useState<string | null>(null)
@@ -34,21 +36,22 @@ export default function MemberWorkPapersPanel({ api, organizationId, enabled }: 
       setTitle(''); setDescription(''); setFile(null); setReplacing(null)
       const input = document.getElementById('member-work-paper-file') as HTMLInputElement | null
       if (input) input.value = ''
+      setFormOpen(false)
     } catch (reason) { setError(toMessage(reason)) } finally { setBusy(false) }
   }
 
-  const startReplace = (item: MemberWorkPaper) => { setReplacing(item.id); setTitle(item.title); setDescription(item.shortDescription); setFile(null); setError(null); setMessage(null) }
+  const startReplace = (item: MemberWorkPaper) => { setFormOpen(true); setReplacing(item.id); setTitle(item.title); setDescription(item.shortDescription); setFile(null); setError(null); setMessage(null) }
 
   return <section className="member-card member-work-papers" aria-labelledby="member-work-papers-title">
     <div className="member-card-title-row"><div><p className="member-card-kicker">Biblioteca Virtual · Planchas de Trabajo</p><h2 id="member-work-papers-title">Mis planchas</h2><p>Consulta tus trabajos y reemplaza una versión propia sin borrar su historial.</p></div><span className="member-lock-badge">Sólo tus planchas</span></div>
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="member-live-notice" role="status">{message}</div>}
-    {enabled && <div className="member-work-paper-form">
+    {enabled && <div className="action-bar member-work-paper-actions"><ActionDrawer label="Subir una plancha" title={replacing ? 'Cargar nueva versión' : 'Subir una plancha de trabajo'} description="Título, una descripción breve y el archivo PDF o DOCX." keepOpen open={formOpen} onOpenChange={open => { setFormOpen(open); if (!open) setReplacing(null) }}><div className="member-work-paper-form">
       <strong>{replacing ? 'Cargar nueva versión' : 'Subir una plancha de trabajo'}</strong>
       <label><span>Título</span><input maxLength={240} value={title} onChange={event => setTitle(event.target.value)} /></label>
       <label><span>Descripción breve de referencia</span><textarea maxLength={300} rows={3} value={description} onChange={event => setDescription(event.target.value)} placeholder="En pocas palabras, ¿de qué trata este trabajo?" /></label>
       <label><span>Archivo PDF o DOCX</span><input id="member-work-paper-file" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
       <div className="member-edit-actions"><button type="button" disabled={busy} onClick={() => void submit()}>{busy ? 'Validando archivo…' : replacing ? 'Enviar nueva versión' : 'Subir plancha'}</button>{replacing && <button type="button" className="document-secondary" disabled={busy} onClick={() => { setReplacing(null); setTitle(''); setDescription(''); setFile(null) }}>Cancelar</button>}<small>Se publica en Biblioteca Virtual según tu grado efectivo después de verificar integridad y antivirus. Si el control falla, la versión anterior sigue vigente.</small></div>
-    </div>}
+    </div></ActionDrawer></div>}
     {!enabled ? <div className="empty-state"><strong>El autoservicio requiere una membresía activa en un Taller.</strong></div> : loading ? <div className="loading-rows"><span /><span /></div> : items.length === 0 ? <div className="empty-state"><strong>Aún no tienes planchas cargadas.</strong><p>También pueden ser cargadas por Secretaría del Taller a tu nombre.</p></div> : <div className="member-work-paper-list">{items.map(item => <article key={item.id} className="member-work-paper-item"><div><span className="document-chip">{item.status === 'published' ? 'En Biblioteca Virtual' : 'Pendiente de análisis'}</span><h3>{item.title}</h3><p>{item.shortDescription}</p><small>Grado mínimo de acceso: {item.minimumDegreeRequired}° · {item.versions.length} {item.versions.length === 1 ? 'versión' : 'versiones'}</small>{item.versions.map(version => <small key={version.id} className="member-work-paper-version">v{version.versionNumber} · {version.originalFileName} · {version.isCurrent ? 'vigente' : version.processingStatus}</small>)}</div><button type="button" className="document-secondary" disabled={busy} onClick={() => startReplace(item)}>Reemplazar mi plancha</button></article>)}</div>}
   </section>
 }

@@ -1,0 +1,162 @@
+/* PMGM-UX Vistas comunes (Mi ficha, Agenda, Avisos, Biblioteca) — 02-10-2026.
+   Regla del PO: vistas simples, sin espacios perdidos ni duplicados, para personas mayores y sin experiencia en informática.
+   Solo presentación; colores, logo y tipografía institucional sin cambios. Unidades rem. */
+
+/* ---------- Mi ficha ---------- */
+.member-insight-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.member-insight-grid > .member-card,
+.member-insight-grid > .member-status-stack { min-width: 0; }
+
+.member-insight-grid > .member-treasury-account,
+.member-insight-grid > .member-quick-links { grid-column: 1 / -1; }
+
+.member-status-stack { align-content: stretch; }
+.member-status-stack > .member-card { height: 100%; }
+
+.member-quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.member-quick-links button {
+  min-height: 3rem;
+  padding: 0.5rem 1.25rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: var(--brand-navy);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.member-quick-links button:hover { border-color: var(--brand-gold); }
+
+.member-instruction-details > summary {
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--brand-navy);
+}
+
+.member-instruction-details[open] > summary { margin-bottom: 0.5rem; }
+
+.member-work-paper-actions { margin: 0.75rem 0; }
+
+.action-drawer-body .member-work-paper-form {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.action-drawer-body .member-work-paper-form > strong { display: none; }
+
+/* ---------- Agenda (Calendario) ---------- */
+.calendar-metrics.metric-grid { gap: 0.75rem; }
+
+.calendar-metrics .metric-card {
+  padding: 0.75rem 1rem;
+  min-height: 0;
+}
+
+.calendar-metrics .metric-card strong {
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+.calendar-metrics .metric-card small { font-size: 0.875rem; }
+
+/* ---------- Avisos ---------- */
+.notification-list { gap: 0.75rem; }
+
+.notification-list > * { padding: 0.875rem 1rem; }
+
+.notification-badges { gap: 0.375rem; }
+
+.notification-actions { gap: 0.5rem; flex-wrap: wrap; }
+
+/* ---------- Biblioteca ---------- */
+.library-page .library-heading,
+.library-page .library-heading > div {
+  min-height: 0;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+/* Etiquetas de tarjeta en letra normal legible (misma regla que las eyebrow). */
+.member-card-kicker,
+.member-breadcrumb {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.875rem;
+}
+
+@media (max-width: 1100px) {
+  .member-insight-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .member-insight-grid > .member-instruction-card { grid-column: 1 / -1; }
+}
+
+@media (max-width: 720px) {
+  .member-insight-grid { grid-template-columns: minmax(0, 1fr); }
+  .member-quick-links button { flex: 1 1 100%; }
+  .calendar-metrics.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .notification-list > * { padding: 0.75rem; }
+  /* Biblioteca en celular: portada de tarjeta compacta (el tipo ya se indica en la etiqueta). */
+  .library-page .library-card-cover { min-height: 0; padding-top: 0.5rem; padding-bottom: 0.5rem; }
+  .library-page .library-heading p { display: none; }
+}
+
+/* ---------- Avisos: una acción visible por aviso (02-10-2026) ---------- */
+.notification-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.notification-icon {
+  display: grid;
+  place-items: center;
+  /* Fondo dorado suave: ícono en azul institucional para contraste (PMGM-UI-001 §1). */
+  color: var(--brand-navy);
+}
+
+.notification-actions { align-items: center; }
+
+.read-confirmation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.member-status-icon {
+  display: grid;
+  place-items: center;
+  color: var(--brand-gold);
+}
+
+@media (max-width: 720px) {
+  .notification-card .classification-badge,
+  .notification-footer > span:first-child { display: none; }
+  .notification-body > p {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .notification-toolbar { flex-wrap: wrap; gap: 0.5rem; }
+  /* Encabezado compacto: los contadores ya aparecen en los filtros «Pendientes (n)» y «Obligatorias (n)». */
+  .notification-heading > div > p:not(.eyebrow),
+  .notification-heading .notification-summary { display: none; }
+}
