@@ -32,6 +32,8 @@ public static class AdmissionWorkflowCodes
         public const string Article23Review = "article_2_3_review";
         public const string GrandMasterPardon = "grand_master_pardon";
         public const string GrandMasterRegularityRecognition = "grand_master_regularity_recognition";
+        public const string InformationCommissionAppointed = "information_commission_appointed";
+        public const string InformationCommissionCompleted = "information_commission_completed";
         public const string CeremonyRequestCreated = "ceremony_request_created";
         public const string EvidenceReviewPrefix = "evidence_review:";
 
