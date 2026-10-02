@@ -7,6 +7,7 @@ const css = readFileSync(new URL('./role-navigation.css', import.meta.url), 'utf
 const memberPortalCss = readFileSync(new URL('./member-portal.css', import.meta.url), 'utf8')
 const main = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+const homeCss = readFileSync(new URL('./home-consistency.css', import.meta.url), 'utf8')
 
 describe('PMGM-UX-002 contrato de navegación por rol', () => {
   it('se carga después de la capa institucional', () => {
@@ -48,12 +49,13 @@ describe('PMGM-UX-002 contrato de navegación por rol', () => {
   })
   it('en perfiles operativos «Mis pendientes» va antes de los indicadores', () => {
     const dashboard = readFileSync(new URL('./DashboardPage.tsx', import.meta.url), 'utf8')
-    expect(dashboard.indexOf('{!showPendingInbox && metricsBlock}')).toBeLessThan(dashboard.indexOf('id="mis-pendientes"'))
-    expect(dashboard.indexOf('{showPendingInbox && metricsBlock}')).toBeGreaterThan(dashboard.indexOf('id="mis-pendientes"'))
+    // PMGM-UX-C: accesos compactos arriba y «Mis pendientes» como primer bloque de la grilla.
+    expect(dashboard.indexOf('home-shortcuts')).toBeLessThan(dashboard.indexOf('id="mis-pendientes"'))
+    expect(dashboard.indexOf('id="mis-pendientes"')).toBeLessThan(dashboard.indexOf('home-agenda-titulo'))
   })
 
   it('en móvil no duplica la campana de la cabecera y compacta los indicadores', () => {
     expect(css).toMatch(/\.topbar \.topbar-icon-button\s*\{[^}]*display:\s*none/s)
-    expect(css).toMatch(/\.executive-metrics\.metric-grid\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
+    expect(homeCss).toMatch(/\.home-shortcuts\.metric-grid\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
   })
 })

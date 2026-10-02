@@ -19,6 +19,7 @@ import './header-p2.css'
 import './listing.css'
 import './action-kit.css'
 import './accessibility.css'
+import './home-consistency.css'
 import { applyTextSize, readTextSize } from './textSize'
 
 const root = document.getElementById('root')

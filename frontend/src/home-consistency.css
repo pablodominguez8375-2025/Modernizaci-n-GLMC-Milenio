@@ -1,0 +1,208 @@
+/* PMGM-UX-C+D · Inicio uniforme y compacto + consistencia general (aprobado por el PO 02-10-2026).
+   Solo presentación; mismos colores, logo y familias tipográficas. Unidades rem para respetar el tamaño de letra. */
+
+/* ---------- C. Inicio ---------- */
+.dashboard-page.home-compact {
+  display: grid;
+  gap: 1rem;
+}
+
+.dashboard-page.home-compact > * { margin: 0; }
+
+.home-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 0.875rem;
+  background: linear-gradient(120deg, var(--brand-navy), var(--brand-blue));
+  color: #fff;
+}
+
+.home-strip-text { flex: 1 1 22rem; min-width: 0; }
+
+.home-strip h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  color: #fff;
+  overflow-wrap: anywhere;
+}
+
+.home-strip-text p {
+  margin: 0.25rem 0 0;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.home-strip-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  margin: 0;
+  font-size: 0.9375rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.home-strip-date::first-letter { text-transform: uppercase; }
+
+.home-strip .home-strip-status { flex: 0 1 auto; }
+
+/* Accesos de igual tamaño: ícono + número + texto en una línea. */
+.dashboard-page .home-shortcuts.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 4.5rem;
+  min-width: 0;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top-width: 3px;
+  border-radius: 0.75rem;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut::before { display: none; }
+
+.dashboard-page .home-shortcuts .home-shortcut:hover { border-color: var(--brand-gold); }
+
+.home-shortcut-icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.625rem;
+  background: var(--brand-navy);
+  color: var(--brand-gold);
+}
+
+.dashboard-page .home-shortcuts .home-shortcut strong {
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--brand-navy);
+  white-space: nowrap;
+}
+
+.home-shortcut-label {
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.25;
+  color: var(--brand-ink);
+  overflow-wrap: anywhere;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut.metric-attention { border-top-color: var(--brand-gold); }
+
+/* Bloques de igual altura que aprovechan el ancho. */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.home-grid.has-inbox { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.home-grid > .home-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  margin: 0;
+}
+
+.home-panel .panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.home-panel .panel-heading h2 { margin: 0; font-size: 1.25rem; }
+
+.home-panel .maturity-value { font-size: 1.25rem; }
+
+@media (max-width: 1280px) {
+  .home-grid.has-inbox { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-grid.has-inbox > .pending-inbox { grid-column: 1 / -1; }
+}
+
+@media (max-width: 1100px) {
+  .dashboard-page .home-shortcuts.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .home-grid,
+  .home-grid.has-inbox { grid-template-columns: minmax(0, 1fr); }
+  .home-strip { padding: 0.875rem 1rem; }
+  .home-strip h1 { font-size: 1.25rem; }
+  .home-strip-meta { align-items: flex-start; }
+  .dashboard-page .home-shortcuts .home-shortcut {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    padding: 0.625rem 0.75rem;
+  }
+  .dashboard-page .home-shortcuts .home-shortcut .home-shortcut-icon { grid-row: 1 / 3; width: 2.25rem; height: 2.25rem; }
+  .dashboard-page .home-shortcuts .home-shortcut strong { font-size: 1.25rem; }
+  .home-shortcut-label { font-size: 0.875rem; }
+}
+
+/* ---------- D. Consistencia general ---------- */
+/* Etiquetas superiores («eyebrow») en letra normal legible, sin mayúsculas diminutas ni espaciado. */
+.eyebrow,
+.panel .eyebrow,
+.dashboard-page .eyebrow,
+.archive-page .eyebrow,
+.library-heading .eyebrow,
+.regularity-page .eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* Encabezados de tarjeta iguales en todos los módulos. */
+.panel > .panel-heading h2,
+.panel-heading > div > h2 {
+  font-size: 1.25rem;
+  line-height: 1.25;
+}
+
+/* Estados vacíos que explican qué hacer. */
+.empty-state.compact {
+  display: grid;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px dashed var(--line);
+  border-radius: 0.75rem;
+  text-align: left;
+}
+
+.empty-state.compact strong { font-size: 1rem; }
+.empty-state.compact span { font-size: 0.9375rem; line-height: 1.4; }
+
+/* Textos de avisos y actividades en máximo 2 líneas para mantener bloques compactos. */
+.home-panel .dashboard-alert small,
+.home-panel .upcoming-event small,
+.home-panel .pending-row-text small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (max-width: 720px) {
+  .home-strip-meta { flex-direction: row; flex-wrap: wrap; gap: 0 0.75rem; }
+  .home-strip-meta span + span::before { content: "· "; }
+}
