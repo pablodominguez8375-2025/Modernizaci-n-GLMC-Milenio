@@ -43,3 +43,20 @@ describe('PMGM-UX-C · íconos de los accesos de Inicio', () => {
     expect(css).toMatch(/\.dashboard-page \.home-shortcuts \.home-shortcut > \.home-shortcut-icon\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*color:\s*var\(--brand-gold\)/s)
   })
 })
+
+describe('Logo de cabecera según la Guía de uso del logotipo (opción A)', () => {
+  const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+  it('usa la versión reducida V2 oficial sobre placa blanca con 1/4 X y sin subtítulo duplicado', () => {
+    expect(app).toContain('brand/logo-glmch-reducido-v2-azul.svg')
+    expect(app).not.toContain('<small>Gran Logia Mixta de Chile</small>')
+    expect(css).toMatch(/\.brand-mark\.brand-mark-reduced\s*\{[^}]*padding:\s*calc\(var\(--logo-h\) \/ 4\)[^}]*background:\s*#fff/s)
+  })
+})
+
+describe('Logo de cabecera · mismo formato en todas las pantallas', () => {
+  it('no reduce la altura del logotipo en tablet ni en celular', () => {
+    const logoRules = css.slice(css.indexOf('.brand .brand-mark.brand-mark-reduced {'))
+    expect(logoRules).toMatch(/--logo-h:\s*2\.75rem/)
+    expect(logoRules.match(/--logo-h:/g)?.length).toBe(1)
+  })
+})
