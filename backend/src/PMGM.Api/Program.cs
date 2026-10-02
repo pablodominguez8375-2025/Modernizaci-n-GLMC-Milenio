@@ -215,6 +215,7 @@ app.MapPrivacyProcessorLifecycleEndpoints();
 app.MapPrivacyLegalRuleEndpoints();
 app.MapPrivacyWorkflowEndpoints();
 app.MapSystemConfigurationEndpoints();
+app.MapDynamicAccessEndpoints();
 app.MapAuditLogEndpoints();
 
 app.Run();

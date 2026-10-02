@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
-using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 
 namespace PMGM.Api.Modules.SystemConfiguration;
@@ -13,7 +12,6 @@ public static class SystemConfigurationEndpoints
     {
         ["system.workflow.initiation.approval_steps"] = new("Flujos", "Aprobaciones de iniciación", "text", "Régimen Interior|Gran Tesorería|Gran Hospitalaria|Gran Secretaría|Gran Maestría"),
         ["system.publication.candidate.minimum_days"] = new("Publicaciones", "Días mínimos de publicación", "integer", "20"),
-        [CandidatePublicationEvidenceStore.FieldsCode] = new("Publicaciones", "Campos de publicación aprobados", "list", CandidatePublicationEvidenceStore.DefaultFields),
         ["system.interviews.minimum_count"] = new("Procesos", "Entrevistas mínimas", "integer", "3"),
         ["system.rejection.block_months"] = new("Procesos", "Meses de bloqueo tras rechazo", "integer", "12"),
         ["system.library.document_types"] = new("Biblioteca", "Tipos de publicación", "list", "Plancha|Libro|Revista|Ritual|Historia|Circular"),
@@ -54,6 +52,7 @@ public static class SystemConfigurationEndpoints
         ["system.identity.require_mfa_admins"] = new("Usuarios", "MFA obligatorio para administradores", "text", "Sí"),
         ["system.access.profile_definitions"] = new("Usuarios", "Definiciones independientes de perfiles", "text", "[]"),
         ["system.access.user_assignments"] = new("Usuarios", "Asignaciones de perfiles a usuarios", "text", "[]"),
+        ["system.access.dynamic_catalog"] = new("Usuarios", "Catálogo dinámico de menús, vistas y acciones", "text", "{\"version\":1,\"menus\":[],\"profiles\":[],\"assignments\":[]}"),
         ["system.access.review_frequency_days"] = new("Auditoría de accesos", "Frecuencia de certificación (días)", "integer", "90")
     };
 
@@ -72,16 +71,8 @@ public static class SystemConfigurationEndpoints
         var stored = await db.InstitutionalRuleSettings.AsNoTracking()
             .Where(x => x.Code.StartsWith("system.") && x.Status == "active" && x.EffectiveFrom <= DateOnly.FromDateTime(DateTime.UtcNow))
             .OrderByDescending(x => x.EffectiveFrom).ToListAsync(cancellationToken);
-        var chileToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
-        CandidatePublicationFieldPolicy publicationPolicy;
-        try { publicationPolicy = await CandidatePublicationEvidenceStore.ResolvePolicyAsync(db, chileToday, cancellationToken); }
-        catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
         var items = Definitions.Select(pair =>
         {
-            if (pair.Key == CandidatePublicationEvidenceStore.FieldsCode)
-                return new SystemSettingResponse(pair.Key, pair.Value.Category, pair.Value.Label, pair.Value.ValueType,
-                    string.Join('|', publicationPolicy.VisibleFields), publicationPolicy.EffectiveFrom ?? new DateOnly(2026, 1, 1),
-                    publicationPolicy.SourceReference, publicationPolicy.VersionId is null ? "default" : "active");
             var active = stored.FirstOrDefault(x => x.Code == pair.Key);
             return new SystemSettingResponse(pair.Key, pair.Value.Category, pair.Value.Label, pair.Value.ValueType,
                 active?.Value ?? pair.Value.DefaultValue, active?.EffectiveFrom ?? new DateOnly(2026, 1, 1),
@@ -108,25 +99,11 @@ public static class SystemConfigurationEndpoints
         var value = request.Value.Trim();
         if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(request.SourceReference)) return Results.BadRequest(new { message = "Valor y fundamento son obligatorios." });
         if (definition.ValueType == "integer" && (!int.TryParse(value, out var number) || number < 0 || number > 3650)) return Results.BadRequest(new { message = "El valor numérico configurado no es válido." });
-        var isPublicationPolicy = string.Equals(code, CandidatePublicationEvidenceStore.FieldsCode, StringComparison.OrdinalIgnoreCase);
-        if (isPublicationPolicy) code = CandidatePublicationEvidenceStore.FieldsCode;
-        var chileToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
-        if (isPublicationPolicy)
-        {
-            var normalized = CandidatePublicationEvidenceStore.NormalizeFields(value);
-            if (normalized is null) return Results.BadRequest(new { message = "La publicación requiere exclusivamente Fotografía, Nombre completo y Taller; no se pueden agregar datos privados ni quitar campos aprobados." });
-            if (request.EffectiveFrom < chileToday) return Results.BadRequest(new { message = "La política debe aplicar hacia adelante; no se puede cambiar evidencia histórica." });
-            if (await db.InstitutionalRuleSettings.AnyAsync(x => x.Code == code && x.EffectiveFrom >= request.EffectiveFrom, cancellationToken))
-                return Results.Conflict(new { message = "La nueva vigencia debe ser posterior a las versiones ya registradas." });
-            value = normalized;
-        }
         var duplicate = await db.InstitutionalRuleSettings.AnyAsync(x => x.Code == code && x.EffectiveFrom == request.EffectiveFrom, cancellationToken);
         if (duplicate) return Results.Conflict(new { message = "Ya existe una versión del parámetro con esa fecha de vigencia." });
-        var previous = await db.InstitutionalRuleSettings.Where(x => x.Code == code &&
-            (isPublicationPolicy ? x.Status == "active" || x.Status == "scheduled" || x.Status == "retired" : x.Status == "active") &&
-            (x.EffectiveTo == null || x.EffectiveTo >= request.EffectiveFrom)).OrderByDescending(x => x.EffectiveFrom).FirstOrDefaultAsync(cancellationToken);
+        var previous = await db.InstitutionalRuleSettings.Where(x => x.Code == code && x.Status == "active" && (x.EffectiveTo == null || x.EffectiveTo >= request.EffectiveFrom)).OrderByDescending(x => x.EffectiveFrom).FirstOrDefaultAsync(cancellationToken);
         if (previous is not null) { previous.EffectiveTo = request.EffectiveFrom.AddDays(-1); previous.Status = "retired"; }
-        var status = request.EffectiveFrom > (isPublicationPolicy ? chileToday : DateOnly.FromDateTime(DateTime.UtcNow)) ? "scheduled" : "active";
+        var status = request.EffectiveFrom > DateOnly.FromDateTime(DateTime.UtcNow) ? "scheduled" : "active";
         var entity = new InstitutionalRuleSetting { Code = code, Value = value, EffectiveFrom = request.EffectiveFrom, Status = status, SourceReference = request.SourceReference.Trim() };
         db.InstitutionalRuleSettings.Add(entity);
         audit.Add(context, "system.setting.version_created", nameof(InstitutionalRuleSetting), entity.Id.ToString(), null, AuditResults.Success, new { entity.Code, entity.Value, entity.EffectiveFrom, entity.SourceReference, previousId = previous?.Id });
