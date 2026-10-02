@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
+import TextSizeControl from './TextSizeControl'
 
 /** PMGM-UX-003 · Menú de usuario de la cabecera (Issue #243). */
 interface UserMenuProps {
@@ -36,6 +37,7 @@ export default function UserMenu({ displayName, versionLabel, onOpenProfile, onO
       {onOpenProfile && <button type="button" role="menuitem" onClick={run(onOpenProfile)}><InstitutionalIcon name="member" size={16} /> Mi ficha</button>}
       {onOpenCalendar && <button type="button" role="menuitem" onClick={run(onOpenCalendar)}><InstitutionalIcon name="calendar" size={16} /> Mi calendario</button>}
       {onLogout && <button type="button" role="menuitem" onClick={run(onLogout)}><InstitutionalIcon name="logout" size={16} /> Cerrar sesión</button>}
+      <TextSizeControl className="in-user-menu" />
       <p className="user-menu-version">{versionLabel}</p>
     </div>}
   </div>

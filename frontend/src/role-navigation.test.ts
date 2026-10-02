@@ -14,7 +14,7 @@ describe('PMGM-UX-002 contrato de navegación por rol', () => {
   })
 
   it('en móvil oculta el panel de 158 px y abre el menú completo como hoja con secciones', () => {
-    const mobile = css.slice(css.indexOf('@media (max-width: 720px)'))
+    const mobile = css.slice(css.indexOf('@media (max-width: 980px)'))
     expect(mobile).toMatch(/\.sidebar\s*\{\s*display:\s*none/)
     expect(mobile).toMatch(/\.sidebar\.is-open\s*\{[^}]*position:\s*fixed[^}]*overflow-y:\s*auto/s)
     expect(mobile).toMatch(/\.sidebar\.is-open \.nav-section\s*\{[^}]*display:\s*block/s)
@@ -44,7 +44,7 @@ describe('PMGM-UX-002 contrato de navegación por rol', () => {
   })
 
   it('el número del Taller queda dentro del sello en Mi ficha', () => {
-    expect(memberPortalCss).toMatch(/\.member-lodge-line \.member-lodge-seal\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*font-size:\s*22px/s)
+    expect(memberPortalCss).toMatch(/\.member-lodge-line \.member-lodge-seal\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*font-size:\s*1\.375rem/s) // PMGM-UX-004: rem (22 px)
   })
   it('en perfiles operativos «Mis pendientes» va antes de los indicadores', () => {
     const dashboard = readFileSync(new URL('./DashboardPage.tsx', import.meta.url), 'utf8')

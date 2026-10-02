@@ -18,12 +18,16 @@ import './role-navigation.css'
 import './header-p2.css'
 import './listing.css'
 import './action-kit.css'
+import './accessibility.css'
+import { applyTextSize, readTextSize } from './textSize'
 
 const root = document.getElementById('root')
 
 if (!root) {
   throw new Error('No se encontró el elemento raíz de la aplicación.')
 }
+
+applyTextSize(readTextSize())
 
 createRoot(root).render(
   <StrictMode>

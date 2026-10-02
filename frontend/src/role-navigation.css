@@ -18,7 +18,7 @@
   border-radius: 11px;
   background: var(--brand-gold-strong);
   color: var(--brand-navy);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 800;
   line-height: 1;
 }
@@ -35,7 +35,7 @@
 }
 
 .hero-panel.role-greeting h1 {
-  font-size: clamp(24px, 3vw, 34px);
+  font-size: clamp(1.5rem, 3vw, 2.125rem);
   margin-bottom: 6px;
 }
 
@@ -100,12 +100,12 @@
 }
 
 .pending-row-text strong {
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--brand-navy);
 }
 
 .pending-row-text small {
-  font-size: 12px;
+  font-size: 0.875rem;
   color: #5c6b82;
 }
 
@@ -115,7 +115,7 @@
   border-radius: 999px;
   background: #eef2f7;
   color: #4b5b73;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-style: normal;
   font-weight: 800;
   text-align: center;
@@ -129,11 +129,11 @@
 
 .pending-row-chevron {
   color: #9aa6b8;
-  font-size: 20px;
+  font-size: 1.25rem;
   line-height: 1;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   /* Menú completo como hoja a pantalla completa, abierto desde la barra inferior. */
   .sidebar {
     display: none;
@@ -160,7 +160,7 @@
     margin: 0 6px 4px;
     color: #fff;
     font-family: var(--font-display);
-    font-size: 22px;
+    font-size: 1.375rem;
     font-weight: 800;
   }
 
@@ -168,14 +168,14 @@
     display: block;
     margin: 14px 6px 4px;
     color: #b8c6dc;
-    font-size: 12px;
+    font-size: 0.875rem;
   }
 
   .sidebar.is-open .nav-item {
     width: 100%;
     min-height: 48px;
     padding-inline: 12px;
-    font-size: 15px;
+    font-size: 0.9375rem;
   }
 
   .mobile-tabbar {
@@ -207,7 +207,7 @@
     border-radius: 10px;
     background: transparent;
     color: #dbe4f0;
-    font-size: 12px;
+    font-size: 0.875rem;
     font-weight: 700;
     line-height: 1.1;
   }
@@ -234,7 +234,7 @@
     border-radius: 9px;
     background: var(--brand-gold-strong);
     color: var(--brand-navy);
-    font-size: 12px;
+    font-size: 0.875rem;
     font-style: normal;
     font-weight: 800;
     line-height: 18px;
@@ -261,7 +261,7 @@
 }
 
 /* PMGM-UX-002 · Inicio móvil compacto: indicadores en 2 columnas y sin campana duplicada (ya está en «Avisos»). */
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .dashboard-page .executive-metrics.metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;

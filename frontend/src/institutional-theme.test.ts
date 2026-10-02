@@ -93,14 +93,14 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     expect(labelRules.length).toBeGreaterThan(0)
     for (const rule of labelRules) {
       expect(rule).toContain('display: inline-flex')
-      expect(rule).toContain('font-size: 12px')
+      expect(rule).toMatch(/font-size: 0\.(75|875)rem/) // PMGM-UX-004: rem, mínimo 12 px
       expect(rule).not.toContain('display: none')
     }
     const switcher = readFileSync(new URL('./DemoProfileSwitcher.tsx', import.meta.url), 'utf8')
     expect(switcher).toContain('showcaseSha.slice(0, 7)')
     expect(switcher).toContain('className="demo-public-sha"')
     const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
-    expect(app).toContain('UI QA v0.67')
+    expect(app).toContain('UI QA v0.68')
   })
 
   it('supports reduced motion preferences', () => {

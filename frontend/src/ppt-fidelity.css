@@ -21,7 +21,7 @@
 
 .member-portal-heading h1 {
   margin-bottom: 3px;
-  font-size: clamp(25px, 3vw, 32px);
+  font-size: clamp(1.5625rem, 3vw, 2rem);
   letter-spacing: -.015em;
 }
 
@@ -29,7 +29,7 @@
   color: #687790;
   text-transform: uppercase;
   letter-spacing: .06em;
-  font-size: 9px;
+  font-size: 0.875rem;
 }
 
 .member-primary-action {
@@ -81,7 +81,7 @@
 .member-display-name {
   color: #69778d;
   font-family: var(--font-display);
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 
 .member-data-grid,
@@ -96,7 +96,7 @@
 
 .member-datum small {
   color: #7b8797;
-  font-size: 9px;
+  font-size: 0.875rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .035em;
@@ -352,7 +352,7 @@
 .library-page .library-card h3 {
   color: var(--library-navy);
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.28;
 }
 
