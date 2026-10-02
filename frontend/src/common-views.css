@@ -116,3 +116,47 @@
   .library-page .library-card-cover { min-height: 0; padding-top: 0.5rem; padding-bottom: 0.5rem; }
   .library-page .library-heading p { display: none; }
 }
+
+/* ---------- Avisos: una acción visible por aviso (02-10-2026) ---------- */
+.notification-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.notification-icon {
+  display: grid;
+  place-items: center;
+  /* Fondo dorado suave: ícono en azul institucional para contraste (PMGM-UI-001 §1). */
+  color: var(--brand-navy);
+}
+
+.notification-actions { align-items: center; }
+
+.read-confirmation {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.member-status-icon {
+  display: grid;
+  place-items: center;
+  color: var(--brand-gold);
+}
+
+@media (max-width: 720px) {
+  .notification-card .classification-badge,
+  .notification-footer > span:first-child { display: none; }
+  .notification-body > p {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .notification-toolbar { flex-wrap: wrap; gap: 0.5rem; }
+  /* Encabezado compacto: los contadores ya aparecen en los filtros «Pendientes (n)» y «Obligatorias (n)». */
+  .notification-heading > div > p:not(.eyebrow),
+  .notification-heading .notification-summary { display: none; }
+}

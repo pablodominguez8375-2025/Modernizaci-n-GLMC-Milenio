@@ -23,3 +23,18 @@ describe('PMGM-UX vistas comunes · Mi ficha sin duplicados y acciones bajo dema
     expect(css).not.toMatch(/font-size:\s*\d+px/)
   })
 })
+
+describe('PMGM-UX vistas comunes · Avisos con una acción visible e íconos SVG', () => {
+  const notifications = readFileSync(new URL('./NotificationsPage.tsx', import.meta.url), 'utf8')
+
+  it('cada aviso muestra una sola acción principal y el resto va al menú', () => {
+    expect(notifications).toContain("{onAction && unread && <RowMenu items={[{ label: 'Marcar como leído'")
+    expect(notifications).toContain('label={markingAll ? \'Marcando…\' : \'Marcar todos como leídos\'}')
+  })
+
+  it('no usa glifos de texto como íconos (PMGM-UI-001 §3)', () => {
+    expect(notifications).not.toMatch(/return '[◉◎▣◇□✦]'/)
+    expect(portal).not.toContain('member-status-icon">$<')
+    expect(portal).not.toContain('♥')
+  })
+})
