@@ -7,7 +7,7 @@
   border-radius: 999px;
   background: rgba(255, 255, 255, .06);
   color: #d6dbea;
-  font-size: 10px;
+  font-size: 0.875rem;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -36,7 +36,7 @@
   padding: 6px 24px 6px 10px;
   color: #17223b;
   background: #ffffff;
-  font-size: 11px;
+  font-size: 0.875rem;
   font-weight: 750;
   outline: none;
   cursor: pointer;
@@ -51,7 +51,7 @@
 }
 
 @media (max-width: 760px) {
-  .demo-profile-switcher .demo-public-label { font-size: 8px; }
+  .demo-profile-switcher .demo-public-label { font-size: 0.875rem; }
   .demo-profile-switcher select { min-width: 118px; max-width: 132px; }
 }
 
@@ -73,14 +73,14 @@
   }
 
   .demo-profile-switcher .demo-public-label {
-    font-size: 7px;
+    font-size: 0.875rem;
     letter-spacing: .02em;
   }
 
   .demo-profile-switcher select {
     min-width: 82px;
     max-width: 90px;
-    font-size: 10px;
+    font-size: 0.875rem;
     padding: 5px 16px 5px 8px;
   }
 }

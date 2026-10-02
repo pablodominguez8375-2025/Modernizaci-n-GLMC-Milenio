@@ -1,0 +1,101 @@
+/* PMGM-UX-004 · Legibilidad y menú claro (Issue #261, aprobado por el PO el 02-10-2026).
+   Capa cargada al final: no cambia paleta, logo ni familias tipográficas; solo escala y claridad.
+   Todas las fuentes están en rem: respetan el tamaño de letra del navegador/sistema
+   y el control «Tamaño de letra» (Normal 100 %, Grande 112,5 %, Muy grande 125 %). */
+
+html { font-size: 100%; }
+html[data-text-size='large'] { font-size: 112.5%; }
+html[data-text-size='xlarge'] { font-size: 125%; }
+
+body { font-size: 1rem; line-height: 1.5; }
+
+/* Foco visible y grueso para teclado. */
+:where(button, a, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--brand-gold-strong, #FBAE17);
+  outline-offset: 2px;
+}
+
+/* Menú: opciones de 16 px y 48 px de alto; grupos en letra normal, sin mayúsculas diminutas. */
+.sidebar .nav-item {
+  min-height: 48px;
+  font-size: 1rem;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.sidebar .nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar .nav-section {
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+/* La ayuda se ve en tablet y celular (hoja de menú); en escritorio queda como tooltip. */
+.sidebar .nav-text[data-hint]::after {
+  content: none;
+}
+
+@media (max-width: 980px) {
+  .sidebar.is-open .nav-item { font-size: 1rem; align-items: center; padding-block: 8px; }
+  .sidebar.is-open .nav-text[data-hint]::after {
+    content: attr(data-hint);
+    display: block;
+    margin-top: 2px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: rgba(255, 255, 255, .78);
+  }
+  .sidebar.is-open .nav-item.active .nav-text[data-hint]::after { color: var(--brand-navy, #06148E); }
+}
+
+/* Control «Tamaño de letra». */
+.text-size-control { display: grid; gap: 8px; }
+.text-size-title { font-size: 0.875rem; font-weight: 700; }
+.text-size-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.text-size-options button {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  line-height: 1.2;
+}
+.text-size-options button[aria-pressed='true'] { box-shadow: inset 0 0 0 2px var(--brand-gold-strong, #FBAE17); font-weight: 800; }
+.text-size-sample { font-family: var(--font-display); font-weight: 800; line-height: 1; }
+.text-size-sample.is-normal { font-size: 1rem; }
+.text-size-sample.is-large { font-size: 1.25rem; }
+.text-size-sample.is-xlarge { font-size: 1.5rem; }
+.text-size-label { overflow-wrap: anywhere; }
+
+.text-size-control.in-sidebar {
+  margin: 18px 6px 8px;
+  padding: 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .06);
+  color: #fff;
+}
+.text-size-control.in-sidebar .text-size-options button { background: rgba(255, 255, 255, .08); color: #fff; border: 1px solid rgba(255, 255, 255, .18); }
+.text-size-control.in-sidebar .text-size-options button[aria-pressed='true'] { background: var(--brand-gold-strong, #FBAE17); color: var(--brand-navy, #06148E); }
+.workspace.is-sidebar-collapsed .text-size-control.in-sidebar { display: none; }
+
+.text-size-control.in-user-menu { margin: 8px 0; padding-top: 8px; border-top: 1px solid rgba(6, 20, 142, .12); }
+.text-size-control.in-user-menu .text-size-options button { background: #fff; color: var(--brand-navy, #06148E); border: 1px solid rgba(6, 20, 142, .2); }
+
+/* Barra inferior: la etiqueta se adapta al ancho para no cortarse con letra «Muy grande». */
+@media (max-width: 980px) {
+  .mobile-tab > span { font-size: min(0.875rem, 3.4vw); }
+}
+
+/* Barra lateral algo más ancha (16rem) para que las opciones de 16 px quepan en una o dos líneas cortas. */
+@media (min-width: 981px) {
+  .workspace:not(.is-sidebar-collapsed) { grid-template-columns: minmax(230px, 16rem) minmax(0, 1fr); }
+}

@@ -104,7 +104,7 @@ textarea {
   color: #e3c575;
   background: rgba(255, 255, 255, .055);
   border: 1px solid rgba(255, 255, 255, .08);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1;
 }
 
@@ -311,7 +311,7 @@ textarea:focus-visible {
   }
 
   .brand strong {
-    font-size: 14px;
+    font-size: 0.875rem;
     white-space: normal;
     line-height: 1.1;
     overflow: visible;
@@ -340,7 +340,7 @@ textarea:focus-visible {
   .demo-profile-switcher .demo-public-label {
     display: inline-flex;
     justify-content: center;
-    font-size: 12px;
+    font-size: 0.875rem;
     white-space: nowrap;
   }
 
@@ -432,7 +432,7 @@ textarea:focus-visible {
   .sidebar .nav-item {
     min-height: 44px;
     padding-inline: 9px;
-    font-size: 12px;
+    font-size: 0.875rem;
   }
 
   .sidebar .nav-item > span:first-child {
@@ -456,7 +456,7 @@ textarea:focus-visible {
   }
 
   h1 {
-    font-size: clamp(28px, 9vw, 34px);
+    font-size: clamp(1.75rem, 9vw, 2.125rem);
   }
 }
 
@@ -480,7 +480,7 @@ textarea:focus-visible {
   .treasury-cards-mobile td { display: block; width: 100%; min-width: 0; }
   .treasury-cards-mobile thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .treasury-cards-mobile tr { margin: 0 0 10px; padding: 10px 12px; border: 1px solid #e1e6ed; border-left: 3px solid #FBAE17; border-radius: 10px; background: #fff; }
-  .treasury-cards-mobile td { display: grid; grid-template-columns: minmax(96px, 38%) 1fr; gap: 8px; padding: 5px 0; border: 0; font-size: 14px; text-align: left; }
-  .treasury-cards-mobile td::before { content: attr(data-label); color: #586680; font-size: 12px; font-weight: 600; }
+  .treasury-cards-mobile td { display: grid; grid-template-columns: minmax(96px, 38%) 1fr; gap: 8px; padding: 5px 0; border: 0; font-size: 0.875rem; text-align: left; }
+  .treasury-cards-mobile td::before { content: attr(data-label); color: #586680; font-size: 0.875rem; font-weight: 600; }
   .treasury-cards-mobile td[data-label="Acción"] button { width: 100%; min-height: 44px; }
 }

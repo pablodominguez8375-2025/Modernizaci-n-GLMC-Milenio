@@ -1,6 +1,6 @@
 import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 
-/** PMGM-UX-002 · Barra inferior móvil (≤720 px). En pantallas mayores se oculta por CSS. */
+/** PMGM-UX-002 · Barra inferior en móvil y tablet (≤980 px, PMGM-UX-004). En pantallas mayores se oculta por CSS. */
 export type MobileTabId = 'home' | 'second' | 'calendar' | 'notifications' | 'menu'
 
 export interface MobileTabBarProps {

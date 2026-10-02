@@ -12,11 +12,11 @@
 }
 
 .member-instruction-summary strong {
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 
 .member-instruction-summary span {
-  font-size: 11px;
+  font-size: 0.875rem;
   color: #74613a;
 }
 
@@ -35,7 +35,7 @@
   gap: 10px;
   padding: 12px 14px;
   border-top: 1px solid #edf0f5;
-  font-size: 11px;
+  font-size: 0.875rem;
   color: #59647b;
 }
 
@@ -46,7 +46,7 @@
 .member-instruction-header {
   background: #f8f9fc;
   color: #7d879a;
-  font-size: 9px;
+  font-size: 0.875rem;
   font-weight: 800;
   letter-spacing: .06em;
   text-transform: uppercase;
@@ -54,7 +54,7 @@
 
 .member-instruction-row strong {
   color: #17223b;
-  font-size: 11px;
+  font-size: 0.875rem;
 }
 
 .member-instruction-status {
@@ -64,7 +64,7 @@
   justify-content: center;
   border-radius: 999px;
   padding: 5px 9px;
-  font-size: 9px;
+  font-size: 0.875rem;
   font-weight: 800;
 }
 
@@ -106,7 +106,7 @@
   .member-instruction-row:not(.member-instruction-header) > strong::before {
     content: attr(data-label);
     color: #8b94a4;
-    font-size: 9px;
+    font-size: 0.875rem;
     font-weight: 800;
     letter-spacing: .04em;
     text-transform: uppercase;

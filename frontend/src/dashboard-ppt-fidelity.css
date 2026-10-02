@@ -38,7 +38,7 @@
 .dashboard-page .executive-hero h1 {
   max-width: 720px;
   font-family: var(--font-display);
-  font-size: clamp(30px, 4vw, 48px);
+  font-size: clamp(1.875rem, 4vw, 3rem);
   line-height: 1.08;
 }
 
@@ -185,7 +185,7 @@
   }
 
   .dashboard-page .executive-hero h1 {
-    font-size: clamp(29px, 9vw, 38px);
+    font-size: clamp(1.8125rem, 9vw, 2.375rem);
   }
 
   .dashboard-page .quick-action {

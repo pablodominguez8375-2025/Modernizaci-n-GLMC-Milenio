@@ -386,7 +386,7 @@ async function inspectAllVisibleMediaAndNavigationWithMenuOpen(profile) {
   const result = await evaluate(`(() => {
     const nav = document.querySelector('nav.sidebar');
     const main = document.querySelector('main.content');
-    const buttons = [...(nav?.querySelectorAll('button') || [])].filter(button => !button.disabled && getComputedStyle(button).display !== 'none');
+    const buttons = [...(nav?.querySelectorAll('button:not(.text-size-control button)') || [])].filter(button => !button.disabled && getComputedStyle(button).display !== 'none'); // PMGM-UX-004: el control «Tamaño de letra» no es un módulo
     const navRect = nav?.getBoundingClientRect();
     const media = [...document.querySelectorAll('img, video, canvas, svg')].filter(element => {
       const style = getComputedStyle(element);
@@ -492,7 +492,7 @@ async function auditEveryMobileMenuView() {
     await resetPage(mobileViewport.width, mobileViewport.height)
     await selectProfile(profile)
     const menuLabels = await evaluate(`(() => {
-      const buttons = [...document.querySelectorAll('nav.sidebar button')].filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
+      const buttons = [...document.querySelectorAll('nav.sidebar button:not(.text-size-control button)')].filter(button => !button.disabled && getComputedStyle(button).display !== 'none')
       return [...new Set(buttons.map(button => (button.innerText || button.textContent || '').replace(/\\s+/g, ' ').trim()).filter(Boolean))]
     })()`)
     if (!menuLabels?.length) throw new Error(`No active menu items found for demo profile ${profile}.`)

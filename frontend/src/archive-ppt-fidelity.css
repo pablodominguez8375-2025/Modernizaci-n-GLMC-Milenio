@@ -106,7 +106,7 @@
 
 .archive-page .archive-filters label > span {
   color: #c6d1df;
-  font-size: 10px;
+  font-size: 0.875rem;
   text-transform: uppercase;
   letter-spacing: .045em;
 }
@@ -198,13 +198,13 @@
   border-radius: 4px;
   background: #edf2f7;
   color: var(--archive-navy);
-  font-size: 10px;
+  font-size: 0.875rem;
   font-weight: 800;
 }
 
 .archive-page .archive-card-top > span {
   color: #75591f;
-  font-size: 10px;
+  font-size: 0.875rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .04em;
@@ -213,7 +213,7 @@
 .archive-page .archive-card h3 {
   color: var(--archive-navy);
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 1rem;
 }
 
 .archive-page .archive-card > p {
@@ -233,14 +233,14 @@
 
 .archive-page .archive-meta dt {
   color: #738094;
-  font-size: 9px;
+  font-size: 0.875rem;
   font-weight: 750;
   letter-spacing: .035em;
 }
 
 .archive-page .archive-meta dd {
   color: #263a55;
-  font-size: 11px;
+  font-size: 0.875rem;
 }
 
 .archive-page .archive-actions {

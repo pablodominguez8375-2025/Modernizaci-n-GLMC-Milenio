@@ -20,13 +20,13 @@
   background: var(--brand-navy-dark);
   border-bottom: 1px solid rgba(251, 174, 23, .35);
   color: #cbd6e6;
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 
 .demo-strip .demo-version {
   margin-left: auto;
   color: #b8c6dc;
-  font-size: 12px;
+  font-size: 0.875rem;
   font-weight: 700;
   letter-spacing: .02em;
 }
@@ -65,7 +65,7 @@
   outline: 0;
   background: transparent;
   color: #fff;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .global-search-field input::placeholder {
@@ -78,7 +78,7 @@
   border-radius: 6px;
   color: #b8c6dc;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 0.75rem;
   white-space: nowrap;
 }
 
@@ -114,18 +114,18 @@
 
 .global-search-results strong {
   display: block;
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .global-search-results small {
   display: block;
   color: #5b6b85;
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 
 .global-search-results .global-search-empty {
   color: #5b6b85;
-  font-size: 13px;
+  font-size: 0.875rem;
   cursor: default;
 }
 
@@ -157,7 +157,7 @@
   border-radius: 9px;
   background: var(--brand-gold-strong);
   color: var(--brand-navy);
-  font-size: 11px;
+  font-size: 0.75rem;
   font-weight: 800;
 }
 
@@ -192,7 +192,7 @@
   border-radius: 50%;
   background: var(--brand-gold-strong);
   color: var(--brand-navy);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 800;
 }
 
@@ -213,7 +213,7 @@
   padding: 8px 10px;
   border-bottom: 1px solid #edf0f5;
   color: var(--brand-navy);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 
@@ -227,7 +227,7 @@
   border-radius: 8px;
   background: transparent;
   color: var(--brand-navy);
-  font-size: 14px;
+  font-size: 0.875rem;
   text-align: left;
   cursor: pointer;
 }
@@ -242,7 +242,7 @@
   padding: 6px 10px 2px;
   border-top: 1px solid #edf0f5;
   color: #5b6b85;
-  font-size: 12px;
+  font-size: 0.875rem;
 }
 
 /* Barra lateral colapsable (solo escritorio) */
@@ -257,7 +257,7 @@
   border-radius: 8px;
   background: transparent;
   color: #b8c6dc;
-  font-size: 12px;
+  font-size: 0.875rem;
   cursor: pointer;
 }
 
@@ -299,7 +299,7 @@
     min-width: 18px;
     height: 18px;
     padding: 0 4px;
-    font-size: 11px;
+    font-size: 0.75rem;
   }
 }
 
@@ -328,7 +328,7 @@
   }
 
   .demo-strip .demo-version {
-    font-size: 11px;
+    font-size: 0.875rem;
   }
 
   .global-search {
