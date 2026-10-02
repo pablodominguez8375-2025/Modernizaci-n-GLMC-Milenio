@@ -5,7 +5,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } fr
 
 type ButtonTone = 'primary' | 'secondary'
 
-export function ActionDrawer({ label, title, description, confirmMessage, tone = 'primary', disabled = false, keepOpen = false, children }: {
+export function ActionDrawer({ label, title, description, confirmMessage, tone = 'primary', disabled = false, keepOpen = false, open: controlledOpen, onOpenChange, children }: {
   label: string
   title?: string
   description?: string
@@ -15,9 +15,14 @@ export function ActionDrawer({ label, title, description, confirmMessage, tone =
   disabled?: boolean
   /** Para registros repetidos (p. ej. asistencia hermano por hermano): el panel sigue abierto después de guardar. */
   keepOpen?: boolean
+  /** Apertura controlada opcional (p. ej. abrir el panel desde la acción de una fila). */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   children: ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen ?? internalOpen
+  const setOpen = (value: boolean) => { setInternalOpen(value); onOpenChange?.(value) }
   const [pendingForm, setPendingForm] = useState<HTMLFormElement | null>(null)
   const confirmedRef = useRef(false)
   const headingId = useId()

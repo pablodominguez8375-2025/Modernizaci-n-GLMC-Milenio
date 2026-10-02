@@ -46,3 +46,43 @@
 .treasury-period-help{margin:0;color:#52687d;font-size:0.875rem;line-height:1.5}
 .treasury-period-history{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .treasury-period-history>span{display:inline-flex;gap:4px;align-items:center;padding:4px 8px;border:1px solid #dbe4ee;border-radius:999px;background:#f7f9fc;color:#52687d;font-size:0.875rem;line-height:1.25}
+
+/* PMGM-UX Tesorería · lista primero y acciones bajo demanda (02-10-2026). Solo presentación. */
+.treasury-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin: 0.75rem 0 1rem;
+}
+
+/* Dentro del panel el título ya lo da el encabezado del panel. */
+.action-drawer-body .regularity-form > .lodge-kicker,
+.action-drawer-body .regularity-form > h3 { display: none; }
+
+.action-drawer-body .regularity-form,
+.action-drawer-body .treasury-toolbar-drawer {
+  display: grid;
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.action-drawer-body .lodge-form-row { grid-template-columns: minmax(0, 1fr); }
+
+.treasury-filters-toggle > summary {
+  cursor: pointer;
+  min-height: 3rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 1rem;
+  color: var(--brand-navy);
+}
+
+.treasury-filters-toggle > summary small { font-weight: 400; color: var(--brand-muted); }
+.treasury-filters-toggle[open] > summary { margin-bottom: 0.75rem; }
