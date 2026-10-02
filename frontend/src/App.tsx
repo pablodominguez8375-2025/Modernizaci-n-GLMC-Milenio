@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import AdmissionsPage from './AdmissionsPage'
 import BootstrapPage from './BootstrapPage'
 import CalendarPage from './CalendarPage'
 import CandidateProfilePage from './CandidateProfilePage'
@@ -52,7 +53,7 @@ import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
+type View = 'admissions' | 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
@@ -146,12 +147,13 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canGrandArchive = capabilities?.canManageGrandArchive ?? false
   const isLodgeSecretaryWorkspace = canManageLodgeSecretariat && !canSecretariat
   const isGrandSecretaryWorkspace = canSecretariat
-  const localSecretariatViews: View[] = ['lodge', 'candidateProfile', 'initiationCircuit', 'members', 'documents']
-  const grandSecretariatViews: View[] = ['secretariat', 'candidateProfile', 'initiationCircuit', 'ceremonies', 'members', 'documents']
+  const localSecretariatViews: View[] = ['lodge', 'candidateProfile', 'initiationCircuit', 'admissions', 'members', 'documents']
+  const grandSecretariatViews: View[] = ['secretariat', 'candidateProfile', 'initiationCircuit', 'admissions', 'ceremonies', 'members', 'documents']
   const localSecretariatSections: SecretariatSection[] = [
     { id: 'lodge', label: 'Tenidas y actas', description: 'Agenda, asistencia, extractos, correspondencia y pendientes' },
     { id: 'candidateProfile', label: 'Insinuados', description: 'Nuevo insinuado y seguimiento del expediente privado' },
     { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Entrevistas, balotaje y solicitud de Plancha' },
+    { id: 'admissions', label: 'Afiliación e incorporación', description: 'Expedientes de hermanos ya iniciados, separados de la iniciación' },
     { id: 'members', label: 'Cuadro del Taller', description: 'Fichas e historial de los hermanos del Taller' },
     { id: 'documents', label: 'Documentos', description: 'Carga y consulta de respaldos firmados' },
   ]
@@ -159,6 +161,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     { id: 'secretariat', label: 'Bandeja institucional', description: 'Planchas PDF firmadas, extractos, templos y salas' },
     { id: 'candidateProfile', label: 'Revisión de insinuados', description: 'Control previo a publicación institucional' },
     { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Control administrativo y Plancha de autorización' },
+    { id: 'admissions', label: 'Afiliación e incorporación', description: 'Expedientes de hermanos ya iniciados, separados de la iniciación' },
     { id: 'ceremonies', label: 'Ceremonias', description: 'Solicitudes, requisitos y autorizaciones' },
     { id: 'members', label: 'Cuadro General', description: 'Consulta mínima de fichas institucionales' },
     { id: 'documents', label: 'Documentos', description: 'Carga y consulta de PDF oficiales firmados' },
@@ -325,7 +328,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'system' && canConfigureSystem && <SystemConfigurationPage api={api} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
-        {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
+        {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined />} />
+        {view === 'admissions' && (canManageLodgeSecretariat || canSecretariat) && <AdmissionsPage api={api} membershipApi={membershipApi} />}
         {view === 'members' && canMembers && <MemberDirectoryPage key={memberQueryRevision} api={api} membershipApi={membershipApi} initialQuery={memberQuery} canExport={canSecretariat || canManageLodgeSecretariat || canConfigureSystem} allowTableView={canSecretariat || canConfigureSystem} />}
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
