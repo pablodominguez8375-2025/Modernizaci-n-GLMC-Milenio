@@ -264,11 +264,11 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.71' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.72' : `API v${systemInfo?.version ?? '—'}`
   return <div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
-      <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Inicio"><span className="brand-mark"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-gran-logia-mixta-chile.svg`} alt="" /></span><span><strong>Proyecto Centenario</strong><small>Gran Logia Mixta de Chile</small></span></button>
+      <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Inicio"><span className="brand-mark brand-mark-reduced"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-glmch-reducido-v2-azul.svg`} alt="Gran Logia Mixta de Chile" /></span><span><strong>Proyecto Centenario</strong></span></button>
       <span className="product-motto">Camino al centenario 1929-2029</span>
       <div className="topbar-meta">{effectiveProfile && <GlobalSearch entries={searchEntries} onSearchMembers={canMembers ? openMembersSearch : undefined} />}{effectiveProfile && <span className="environment-badge role-chip">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" data-badge={unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined} onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{effectiveProfile ? <UserMenu displayName={effectiveProfile.displayName} versionLabel={versionLabel} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onLogout={onLogout} /> : onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}</div>
     </header>

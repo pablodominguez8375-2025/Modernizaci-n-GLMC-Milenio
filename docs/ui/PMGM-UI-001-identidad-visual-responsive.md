@@ -21,6 +21,7 @@ Referencias principales:
    - Sobre superficies sólidas azul marino o azul corporativo, la iconografía inserta (símbolos e iconos) debe ser dorada `#F3C609` / `#FBAE17`. Esta regla es independiente de la anterior: texto e iconos usan azul oscuro cuando el fondo es dorado.
    - Aplicación verificada: el mosaico azul de acceso a Biblioteca Virtual por grado en `Mi ficha` lleva el libro en dorado institucional.
    - Blanco y neutros suaves forman las superficies de lectura. Verde, rojo y otros colores quedan reservados para estados semánticos y no reemplazan la paleta institucional.
+   - En la cabecera se usa la versión para tamaños reducidos V2 (azul oficial) sobre placa blanca con 1/4 X de protección (PMGM-QA-V072). El original a color se reserva para usos grandes.
    - El nombre institucional en Arial Narrow y rojo `#C42E00` es parte del logotipo autorizado. La aplicación utiliza el archivo oficial sin modificar; no se recompone el logotipo con texto, no se recolorea y se conserva su proporción, versión autorizada y área de protección.
 
 2. **Tipografía**
@@ -37,8 +38,7 @@ Referencias principales:
 4. **Navegación**
    - Escritorio: navegación lateral azul oscuro, activa en dorado.
    - En todos los tamaños, el acceso activo del menú mantiene fondo dorado institucional (`#F3C609` / `#FBAE17`) con texto e iconos azul oscuro (`#06148E`); los demás accesos conservan la navegación azul.
-   - Tablet: navegación compacta en rejilla de tres columnas, sin desplazamiento horizontal de la página.
-   - Móvil: navegación táctil en rejilla de dos columnas dentro de una zona de altura acotada y desplazamiento vertical propio cuando la cantidad de módulos lo requiera.
+   - Tablet y móvil (≤ 980 px): barra inferior fija (Inicio, Pendientes/Mi ficha, Agenda, Avisos, Menú) y hoja de menú a pantalla completa con los grupos del escritorio (PR #242 y #263). Reemplaza la rejilla de tres o dos columnas usada antes.
    - El contenido principal debe ser visible inmediatamente debajo de la navegación en pantallas pequeñas, incluso para perfiles con muchos módulos como Gran Logia.
    - Ningún módulo debe quedar inaccesible por depender de arrastre horizontal.
 
