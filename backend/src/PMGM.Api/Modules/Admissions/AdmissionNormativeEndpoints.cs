@@ -5,6 +5,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Admissions.Entities;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Ceremonies;
 
 namespace PMGM.Api.Modules.Admissions;
@@ -25,6 +26,8 @@ public static class AdmissionNormativeEndpoints
         group.MapPost("/expedientes/{caseId:guid}/revision-articulo-2-3", RecordArticle23ReviewAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/indulto-gran-maestria", RecordGrandMasterPardonAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/reconocimiento-regularidad", RecordGrandMasterRegularityRecognitionAsync);
+        group.MapPost("/expedientes/{caseId:guid}/comision-informacion", AppointInformationCommissionAsync);
+        group.MapPost("/expedientes/{caseId:guid}/comision-informacion/conclusion", CompleteInformationCommissionAsync);
         return endpoints;
     }
 
@@ -88,6 +91,69 @@ public static class AdmissionNormativeEndpoints
         return Results.Ok(ToDto(decision));
     }
 
+    private static async Task<IResult> AppointInformationCommissionAsync(Guid caseId, AppointAdmissionCommissionRequest request,
+        HttpContext context, AdmissionsDbContext admissionsDb, PmgmDbContext coreDb,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking().SingleOrDefaultAsync(x => x.Id == caseId, ct);
+        if (admissionCase is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId)) return Results.Forbid();
+        if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved) return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.AppointmentDate > ChileToday()) return Results.BadRequest(new { message = "El nombramiento no puede registrarse con fecha futura." });
+        if (string.IsNullOrWhiteSpace(request.SourceReference)) return Results.BadRequest(new { message = "Debe indicar el acta o fuente del nombramiento." });
+        var memberIds = request.MemberIds?.Distinct().ToArray() ?? Array.Empty<Guid>();
+        if (memberIds.Length != 3) return Results.BadRequest(new { message = "La comisión debe estar integrada exactamente por tres Maestros distintos." });
+
+        var validMembers = await coreDb.Memberships.AsNoTracking()
+            .Where(x => memberIds.Contains(x.MemberId) &&
+                        x.OrganizationId == admissionCase.OrganizationId &&
+                        x.Status == MembershipCodes.MembershipStatus.Active &&
+                        x.StartDate <= request.AppointmentDate &&
+                        (x.EndDate == null || x.EndDate >= request.AppointmentDate) &&
+                        x.Member.CurrentDegree == "master")
+            .Select(x => x.MemberId).Distinct().ToListAsync(ct);
+        if (validMembers.Count != 3)
+            return Results.BadRequest(new { message = "Los tres integrantes deben ser Maestros con pertenencia activa al Taller en la fecha del nombramiento." });
+
+        var decision = NewDecision(caseId, AdmissionWorkflowCodes.DecisionType.InformationCommissionAppointed,
+            CeremonyCodes.ValidationStatus.Approved, request.AppointmentDate, request.SourceReference,
+            JsonSerializer.Serialize(new { memberIds }), Subject(context.User));
+        admissionsDb.AdmissionDecisions.Add(decision);
+        await admissionsDb.SaveChangesAsync(ct);
+        audit.Add(context, "admission.information_commission.appointed", nameof(AdmissionDecision), decision.Id.ToString(),
+            admissionCase.OrganizationId, AuditResults.Success, new { memberIds, request.AppointmentDate });
+        await coreDb.SaveChangesAsync(ct);
+        return Results.Created($"/api/admisiones/expedientes/{caseId}/comision-informacion/{decision.Id}", ToDto(decision));
+    }
+
+    private static async Task<IResult> CompleteInformationCommissionAsync(Guid caseId, CompleteAdmissionCommissionRequest request,
+        HttpContext context, AdmissionsDbContext admissionsDb, PmgmDbContext coreDb,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking().SingleOrDefaultAsync(x => x.Id == caseId, ct);
+        if (admissionCase is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId)) return Results.Forbid();
+        if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved) return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.AsOfDate > ChileToday()) return Results.BadRequest(new { message = "La conclusión no puede registrarse con fecha futura." });
+        if (string.IsNullOrWhiteSpace(request.SourceReference)) return Results.BadRequest(new { message = "Debe indicar el informe o acta de la comisión." });
+        var appointment = await admissionsDb.AdmissionDecisions.AsNoTracking()
+            .Where(x => x.AdmissionCaseId == caseId && x.DecisionType == AdmissionWorkflowCodes.DecisionType.InformationCommissionAppointed)
+            .OrderByDescending(x => x.RecordedAtUtc).FirstOrDefaultAsync(ct);
+        if (appointment is null) return Results.Conflict(new { message = "Debe existir un nombramiento vigente de comisión antes de registrar su conclusión." });
+        if (request.AsOfDate < appointment.AsOfDate) return Results.BadRequest(new { message = "La conclusión no puede ser anterior al nombramiento vigente." });
+
+        var decision = NewDecision(caseId, AdmissionWorkflowCodes.DecisionType.InformationCommissionCompleted,
+            request.Completed ? CeremonyCodes.ValidationStatus.Approved : CeremonyCodes.ValidationStatus.Rejected,
+            request.AsOfDate, request.SourceReference, request.Notes, Subject(context.User));
+        admissionsDb.AdmissionDecisions.Add(decision);
+        await admissionsDb.SaveChangesAsync(ct);
+        audit.Add(context, "admission.information_commission.completed", nameof(AdmissionDecision), decision.Id.ToString(),
+            admissionCase.OrganizationId, request.Completed ? AuditResults.Success : AuditResults.Rejected,
+            new { request.Completed, appointmentDecisionId = appointment.Id });
+        await coreDb.SaveChangesAsync(ct);
+        return Results.Ok(ToDto(decision));
+    }
+
     private static AdmissionDecision NewDecision(Guid caseId, string type, string status, DateOnly asOfDate, string source, string? notes, string subject)
         => new() { AdmissionCaseId = caseId, DecisionType = type, Status = status, AsOfDate = asOfDate,
             SourceReference = source.Trim(), Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(), RecordedBySubject = subject };
@@ -101,3 +167,5 @@ public static class AdmissionNormativeEndpoints
 
 public sealed record Article23ReviewRequest(bool HasRayamiento, bool HasTribunalForcedWithdrawal, DateOnly AsOfDate, string SourceReference, string? Notes);
 public sealed record AdmissionAuthorityDecisionRequest(bool Approved, DateOnly AsOfDate, string SourceReference, string? Notes);
+public sealed record AppointAdmissionCommissionRequest(IReadOnlyCollection<Guid>? MemberIds, DateOnly AppointmentDate, string SourceReference);
+public sealed record CompleteAdmissionCommissionRequest(bool Completed, DateOnly AsOfDate, string SourceReference, string? Notes);
