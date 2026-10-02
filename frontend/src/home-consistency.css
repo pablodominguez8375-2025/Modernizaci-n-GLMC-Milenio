@@ -165,7 +165,9 @@
 .dashboard-page .eyebrow,
 .archive-page .eyebrow,
 .library-heading .eyebrow,
-.regularity-page .eyebrow {
+.regularity-page .eyebrow,
+.lodge-kicker,
+.lodge-management-heading .lodge-kicker {
   text-transform: none;
   letter-spacing: 0;
   font-size: 0.875rem;
