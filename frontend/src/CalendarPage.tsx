@@ -88,13 +88,8 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
       </div>
     </section>
 
-    <section className="metric-grid calendar-metrics">
-      <Metric label="Eventos visibles" value={String(filtered.length)} detail={monthLabel(anchor)} />
-      <Metric label="Confirmados" value={String(confirmedCount)} detail="Incluye reservas y actividades vigentes" />
-      <Metric label="Uso de espacios" value={String(reservationCount)} detail="Eventos con templo o sala asignada" />
-      <Metric label="Protegidos" value={String(maskedCount)} detail="Se muestran sólo como Ocupado" />
-    </section>
-
+    <div className="workspace-split">
+    <aside className="workspace-side" aria-label="Período, filtros y resumen">
     <section className="panel calendar-toolbar">
       <div className="calendar-period-nav">
         <button type="button" aria-label="Mes anterior" onClick={() => setAnchor(addMonths(anchor, -1))}>‹</button>
@@ -109,6 +104,15 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
       </div>
       {canManage && <div className="calendar-admin-actions"><button type="button" className="secondary-button" onClick={() => void inspectConflicts()}>Revisar conflictos{conflictCount !== null ? ` (${conflictCount})` : ''}</button><button type="button" onClick={() => void reconcile()}>Reconciliar fuentes</button></div>}
     </section>
+    <section className="metric-grid calendar-metrics">
+      <Metric label="Eventos visibles" value={String(filtered.length)} detail={monthLabel(anchor)} />
+      <Metric label="Confirmados" value={String(confirmedCount)} detail="Incluye reservas y actividades vigentes" />
+      <Metric label="Uso de espacios" value={String(reservationCount)} detail="Eventos con templo o sala asignada" />
+      <Metric label="Protegidos" value={String(maskedCount)} detail="Se muestran sólo como Ocupado" />
+    </section>
+
+    </aside>
+    <div className="workspace-main">
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible cargar el calendario.</strong><span>{error}</span></div>}
     {operationMessage && <div className="calendar-operation-message" role="status">{operationMessage}</div>}
@@ -116,6 +120,8 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
     {loading ? <section className="panel"><LoadingRows /></section> : mode === 'agenda'
       ? <Agenda events={filtered} organizations={organizations} />
       : <MonthView anchor={anchor} events={filtered} />}
+    </div>
+    </div>
   </>
 }
 
