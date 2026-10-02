@@ -37,3 +37,9 @@ describe('PMGM-UX-C+D · Inicio uniforme y consistencia', () => {
     expect(css).not.toMatch(/font-size:\s*\d+px/)
   })
 })
+
+describe('PMGM-UX-C · íconos de los accesos de Inicio', () => {
+  it('el ícono queda dorado y centrado con más especificidad que «.metric-card > span»', () => {
+    expect(css).toMatch(/\.dashboard-page \.home-shortcuts \.home-shortcut > \.home-shortcut-icon\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*color:\s*var\(--brand-gold\)/s)
+  })
+})
