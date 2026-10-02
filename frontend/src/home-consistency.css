@@ -208,3 +208,36 @@
   .home-strip-meta { flex-direction: row; flex-wrap: wrap; gap: 0 0.75rem; }
   .home-strip-meta span + span::before { content: "· "; }
 }
+
+/* Corrección 02-10-2026: la regla antigua «.metric-card > span» (styles.css) dejaba el ícono sin centrar y en gris.
+   Se fija con mayor especificidad: ícono dorado y centrado en su cuadro azul. */
+.dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-icon {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  justify-self: center;
+  color: var(--brand-gold);
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-icon svg {
+  display: block;
+  margin: 0;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-label {
+  display: block;
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  /* Número y texto juntos y centrados verticalmente, aunque el texto ocupe más líneas. */
+  .dashboard-page .home-shortcuts .home-shortcut {
+    align-content: center;
+    row-gap: 0.125rem;
+  }
+  .dashboard-page .home-shortcuts .home-shortcut > strong { align-self: end; }
+  .dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-label { align-self: start; }
+}
