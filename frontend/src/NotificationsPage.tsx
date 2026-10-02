@@ -81,6 +81,9 @@ export default function NotificationsPage({ notificationApi, onAction }: Notific
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible actualizar la bandeja.</strong><span>{error}</span></div>}
 
+
+    <div className="workspace-split">
+    <aside className="workspace-side" aria-label="Filtros de avisos">
     <section className="panel notification-toolbar">
       <div className="segmented-control" role="group" aria-label="Filtrar notificaciones">
         <button type="button" className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>Todas</button>
@@ -92,10 +95,13 @@ export default function NotificationsPage({ notificationApi, onAction }: Notific
         <button className="secondary-button" type="button" onClick={load} disabled={loading}>Actualizar</button>
       </div>
     </section>
-
+    </aside>
+    <div className="workspace-main">
     <section className="notification-list" aria-live="polite">
       {loading ? <div className="panel"><div className="loading-rows"><span /><span /><span /></div></div> : filtered.length === 0 ? <div className="panel empty-state"><strong>No hay avisos para este filtro.</strong><span>La bandeja está al día.</span></div> : filtered.map(item => <NotificationCard key={item.id} item={item} busy={busyId === item.id} onRead={() => { void markRead(item) }} onAction={item.actionUrl && onAction ? () => { void openAction(item) } : undefined} />)}
     </section>
+    </div>
+    </div>
   </>
 }
 
