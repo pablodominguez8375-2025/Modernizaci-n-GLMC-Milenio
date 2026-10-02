@@ -87,6 +87,24 @@ export interface CreateSpaceRequest { code: string; name: string; spaceType: 'te
 export interface CreateReservationRequest { spaceId: string; organizationId: string; ceremonyRequestId?: string | null; purpose: string; startsAtUtc: string; endsAtUtc: string; notes?: string | null }
 export interface IssueDocumentRequest { documentType: 'decree' | 'plancha'; planchaKind?: 'formal_communication' | null; title: string; content: string; organizationId?: string | null }
 export type CeremonyType = 'initiation' | 'affiliation' | 'wage_increase' | 'exaltation' | 'incorporation'
+export interface CreateAdmissionCaseRequest {
+  organizationId: string
+  admissionType: 'affiliation' | 'incorporation'
+  affiliationMode?: 'simple' | 'activation' | null
+  memberId?: string | null
+  personId: string
+  originOrganizationId?: string | null
+  originLodgeName?: string | null
+  originLodgeNumber?: string | null
+  originObedience?: string | null
+  degree?: string | null
+  wageIncreaseEvidenceApplies?: boolean
+  exaltationEvidenceApplies?: boolean
+  hasPeaceAndFriendshipPact?: boolean | null
+  previousRejectionDate?: string | null
+  rejectionCausesRemedied?: boolean | null
+}
+export interface AdmissionCaseResponse { id: string; organizationId: string; admissionType: string; affiliationMode: string | null; memberId: string | null; personId: string; status: string; createdAtUtc: string }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -914,6 +932,11 @@ export class PmgmApiClient {
   private requireMockHospitalariaSubmission(id:string):HospitalariaMonthlySubmission{const item=[...this.mockHospitalariaSubmissions.values()].find(x=>x.id===id);if(!item)throw new Error('La rendición de Hospitalaria no existe.');return item}
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
+  async createAdmissionCase(payload: CreateAdmissionCaseRequest): Promise<AdmissionCaseResponse> {
+    if (this.useMocks) return { id: crypto.randomUUID(), organizationId: payload.organizationId, admissionType: payload.admissionType, affiliationMode: payload.affiliationMode ?? null, memberId: payload.memberId ?? null, personId: payload.personId, status: 'under_review', createdAtUtc: new Date().toISOString() }
+    return this.postJson<AdmissionCaseResponse>('/api/admisiones/expedientes', payload)
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers); headers.set('Accept', 'application/json')
     const token = await this.getAccessToken?.(); if (!token) throw new Error('Debe ingresar para consultar la información institucional.'); headers.set('Authorization', `Bearer ${token}`)
