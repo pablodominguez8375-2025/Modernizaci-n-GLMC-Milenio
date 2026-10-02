@@ -220,6 +220,9 @@ Cuando un trabajo cruza dominios, lo lleva el agente dueño del dominio principa
 4. Revisar la Línea Base y las adendas de Drive sin consolidar.
 
 
+4.1. **Regla general del PO (02-10-2026): revisar archivos nuevos o modificados en Drive** desde la última revisión, en la carpeta Proyecto Centenario y en los documentos compartidos del proyecto. Para cada uno, evaluar si tiene consecuencias para el proyecto: identidad gráfica, reglas, alcance, datos o pendientes. Esa evaluación se informa al PO y se registra en el handoff o en una adenda antes de comenzar el trabajo pedido. Si un archivo contiene datos personales reales, se evalúan sus implicancias sin copiar esos datos (Ley 21.719).
+
+
 5. No tomar Issues ni archivos calientes reclamados por otro agente.
 
 
@@ -272,3 +275,7 @@ Si un agente no puede ejecutar algo, por ejemplo cuando Claude en claude.ai no t
 
 
 3. **Límites de lo que se puede delegar.** Solo se delega lo que ya está aprobado. Si una tarea cae en el dominio del agente que delega, esa tarea se transfiere mientras dura la delegación, y el agente que delega revisa el resultado en su siguiente sesión.
+
+## 14. Revisión de Drive al iniciar (instrucción del PO, 02-10-2026)
+
+Antes de comenzar cualquier trabajo, todo agente revisa si hay archivos nuevos o modificados en Drive y evalúa sus consecuencias para el proyecto, como se indica en §11, paso 4.1. El resultado se informa al PO y queda registrado, aunque no se encuentren novedades.
