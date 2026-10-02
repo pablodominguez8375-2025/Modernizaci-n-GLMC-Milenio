@@ -52,3 +52,11 @@ describe('Logo de cabecera según la Guía de uso del logotipo (opción A)', () 
     expect(css).toMatch(/\.brand-mark\.brand-mark-reduced\s*\{[^}]*padding:\s*calc\(var\(--logo-h\) \/ 4\)[^}]*background:\s*#fff/s)
   })
 })
+
+describe('Logo de cabecera · mismo formato en todas las pantallas', () => {
+  it('no reduce la altura del logotipo en tablet ni en celular', () => {
+    const logoRules = css.slice(css.indexOf('.brand .brand-mark.brand-mark-reduced {'))
+    expect(logoRules).toMatch(/--logo-h:\s*2\.75rem/)
+    expect(logoRules.match(/--logo-h:/g)?.length).toBe(1)
+  })
+})

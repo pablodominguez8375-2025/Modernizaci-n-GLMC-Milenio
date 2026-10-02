@@ -263,10 +263,9 @@
   object-fit: contain;
 }
 
+/* Mismo logo y mismo formato en escritorio, tablet y celular (instrucción del PO 02-10-2026):
+   no se reduce la altura del logotipo en pantallas pequeñas; el nombre del sistema puede pasar a dos líneas. */
 @media (max-width: 720px) {
-  .brand .brand-mark.brand-mark-reduced { --logo-h: 2.375rem; }
-}
-
-@media (max-width: 380px) {
-  .brand .brand-mark.brand-mark-reduced { --logo-h: 2.125rem; }
+  .brand { min-width: 0; gap: 0.625rem; }
+  .brand strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.15; }
 }
