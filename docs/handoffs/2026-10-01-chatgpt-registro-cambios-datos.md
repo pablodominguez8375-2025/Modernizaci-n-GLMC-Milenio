@@ -7,3 +7,7 @@ Reserva GOV-003: docs/PMGM-GOV-004-registro-cambios-datos.md, docs/modelo-datos/
 Alcance: definir salida obligatoria para todo cambio al modelo físico/lógico, contrato de datos, catálogo/regla/clasificación relevante; diccionario del alcance cambiado, estructura/relaciones y registro antes/después con migración, impacto, pruebas y SHA. Registros operacionales individuales conservan su auditoría: no son disparadores de un nuevo diccionario.
 
 No cambios de aplicación, schema o datos; no se certifica diccionario físico exhaustivo ni base instalada. Modelos conceptuales existentes preservados con sus estados. Main/srv01/QA física/UAT excluidos. Implementación/gates/integración pendientes; el recibo final GitHub/Drive completará SHA/estado/evidencias. START-HERE exactamente una línea en PR documental posterior al merge.
+
+## Implementación documental
+
+PR #260: GOV-004 obligatorio para cualquier IA/colaborador; DB-004 indexa fuentes existentes y limita cobertura; plantilla incluye diccionario, relaciones y antes/después; checklist PR añade declaración de impacto. Sin generador ni nuevo gate automático. No certificar un diccionario exhaustivo desde modelos propuestos. Tres gates exact-head y registros finales pendientes.
