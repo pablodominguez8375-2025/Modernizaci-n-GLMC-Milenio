@@ -23,6 +23,7 @@ Referencias principales:
    - Blanco y neutros suaves forman las superficies de lectura. Verde, rojo y otros colores quedan reservados para estados semánticos y no reemplazan la paleta institucional.
    - En la cabecera se usa la versión para tamaños reducidos V2 (azul oficial) sobre placa blanca con 1/4 X de protección (PMGM-QA-V072). El original a color se reserva para usos grandes.
    - El nombre institucional en Arial Narrow y rojo `#C42E00` es parte del logotipo autorizado. La aplicación utiliza el archivo oficial sin modificar; no se recompone el logotipo con texto, no se recolorea y se conserva su proporción, versión autorizada y área de protección.
+   - **Ícono de pestaña y de app (favicon), decisión del PO del 03-10-2026.** La guía no incluye una versión «solo símbolo», así que el PO instruyó crearla. Se usa el símbolo del vector oficial «Tamaño reducido V2 azul», tomado sin modificar, sin el nombre y sobre una placa blanca redondeada (`frontend/public/brand/favicon-glmch.svg`, `favicon-32.png` y `apple-touch-icon.png`). No reemplaza al logotipo y solo se usa como ícono del navegador o del dispositivo. Si Publicaciones entrega una versión oficial de solo símbolo, debe reemplazarse por esa.
 
 2. **Tipografía**
    - La guía institucional identifica Arial Narrow para el nombre oficial dentro del logotipo. La plataforma usa el SVG oficial y no intenta reconstruir ese nombre tipográficamente.
