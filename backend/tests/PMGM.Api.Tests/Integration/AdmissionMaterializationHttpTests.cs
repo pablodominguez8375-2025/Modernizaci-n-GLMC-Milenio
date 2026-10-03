@@ -13,6 +13,7 @@ using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.GrandSecretariat.Entities;
 using PMGM.Api.Modules.LodgeManagement.Entities;
+using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.SecretariatOperations.Entities;
 using Xunit;
@@ -39,6 +40,12 @@ public sealed class AdmissionMaterializationHttpTests
         using var client = factory.CreateClient(); var today = AdmissionWithdrawalEvidencePolicy.ChileDate(DateTimeOffset.UtcNow); var created = DateTimeOffset.UtcNow.AddDays(-5);
         var org = new Organization { Name = "Materialization synthetic", Type = "workshop" };
         var person = new Person { FirstNames = "Synthetic", LastNames = "Materialization" }; var member = new Member { PersonId = person.Id, CurrentDegree = "master" };
+        var origin = new Organization { Name = "CRV origin synthetic", Type = "workshop" };
+        var segment = new PMGM.Api.Modules.Membership.Entities.Membership { MemberId = member.Id, OrganizationId = origin.Id,
+            MembershipType = "regular", StartDate = today.AddYears(-1), EndDate = today.AddMonths(-1), Status = "closed", EndReason = "Retiro voluntario — sueño" };
+        var withdrawal = new MemberWithdrawalRequest { MemberId = member.Id, OriginOrganizationId = origin.Id, WithdrawalType = "voluntary",
+            RequestedEffectiveDate = today.AddMonths(-1), Reason = "Synthetic CRV", EvidenceReference = "Synthetic CRV", Status = "approved",
+            OratorSignatureSubject = "synthetic-orator", OratorSignedAtUtc = created };
         var c = new AdmissionCase { OrganizationId = org.Id, PersonId = person.Id, MemberId = type == "affiliation" ? member.Id : null,
             AdmissionType = type, AffiliationMode = type == "affiliation" ? "simple" : null, WithdrawalLetterGrantedDate = today.AddMonths(-1),
             Degree = "master", HasPeaceAndFriendshipPact = true, Status = "eligible", CreatedBySubject = "synthetic", CreatedAtUtc = created };
@@ -59,8 +66,8 @@ public sealed class AdmissionMaterializationHttpTests
             FullMinuteDocumentVersionId = Guid.NewGuid(), ExtractDocumentVersionId = Guid.NewGuid(), CeremonyAuthorizationDocumentId = plancha.Id };
         await using (var seed = factory.Services.CreateAsyncScope())
         {
-            var core = seed.ServiceProvider.GetRequiredService<PmgmDbContext>(); await core.Database.MigrateAsync(ct); core.AddRange(org, person); if (type == "affiliation") core.Add(member); core.AddRange(ceremony, record); await core.SaveChangesAsync(ct);
-            var db = seed.ServiceProvider.GetRequiredService<AdmissionsDbContext>(); await db.Database.MigrateAsync(ct); db.Add(c); await db.SaveChangesAsync(ct);
+            var core = seed.ServiceProvider.GetRequiredService<PmgmDbContext>(); await core.Database.MigrateAsync(ct); core.AddRange(org, person); if (type == "affiliation") core.AddRange(member, origin, segment, withdrawal); await core.SaveChangesAsync(ct);
+            var db = seed.ServiceProvider.GetRequiredService<AdmissionsDbContext>(); await db.Database.MigrateAsync(ct); db.Add(c); await db.SaveChangesAsync(ct); core.AddRange(ceremony, record); await core.SaveChangesAsync(ct);
             var gs = seed.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>(); await gs.Database.MigrateAsync(ct); gs.Add(plancha); await gs.SaveChangesAsync(ct);
             var lodge = seed.ServiceProvider.GetRequiredService<LodgeManagementDbContext>(); await lodge.Database.MigrateAsync(ct); lodge.Add(meeting); await lodge.SaveChangesAsync(ct);
         }
@@ -78,6 +85,16 @@ public sealed class AdmissionMaterializationHttpTests
             Assert.Equal("eligible", (await check.ServiceProvider.GetRequiredService<AdmissionsDbContext>().AdmissionCases.SingleAsync(x => x.Id == c.Id, ct)).Status);
             Assert.Equal("authorized", (await core.CeremonyRequests.SingleAsync(x => x.Id == ceremony.Id, ct)).Status);
         }
+        Guid? transferId = null;
+        if (type == "affiliation")
+        {
+            var transferInput = new RequestTransferRequest(segment.Id, org.Id, today, "SYNTHETIC", "UNTRUSTED PAYLOAD", withdrawal.Id);
+            var requested = await client.PostAsJsonAsync($"/api/members/{member.Id}/transfers/", transferInput, ct);
+            Assert.Equal(HttpStatusCode.Created, requested.StatusCode);
+            transferId = (await requested.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct)).GetProperty("id").GetGuid();
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync($"/api/members/{member.Id}/transfers/{transferId}/approve", new ApproveTransferRequest(today, "SYNTHETIC"), ct)).StatusCode);
+            Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsync($"/api/members/{member.Id}/transfers/{transferId}/execute", null, ct)).StatusCode);
+        }
         var first = await Post(payload); Assert.Equal(HttpStatusCode.OK, first.StatusCode); Assert.True(first.Headers.CacheControl?.NoStore);
         var receipt = await first.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var replay = await Post(payload); Assert.Equal(HttpStatusCode.OK, replay.StatusCode); var replayReceipt = await replay.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
@@ -88,6 +105,23 @@ public sealed class AdmissionMaterializationHttpTests
         Assert.Equal(1, await savedCore.InstitutionalStatusEvents.CountAsync(x => x.OrganizationId == org.Id, ct)); Assert.Equal(1, await savedCore.AuditEvents.CountAsync(x => x.OrganizationId == org.Id && x.Action == "admission.membership.materialized", ct));
         var saved = await final.ServiceProvider.GetRequiredService<AdmissionsDbContext>().AdmissionCases.Include(x => x.Decisions).SingleAsync(x => x.Id == c.Id, ct);
         Assert.Equal("resolved", saved.Status); Assert.Single(saved.Decisions, x => x.DecisionType == "membership_materialized"); Assert.Equal(receipt.GetProperty("memberId").GetGuid(), saved.MemberId);
+        if (transferId is not null)
+        {
+            var path = $"/api/members/{member.Id}/transfers/{transferId}/execute";
+            var executed = await client.PostAsync(path, null, ct); Assert.Equal(HttpStatusCode.OK, executed.StatusCode);
+            var execution = await executed.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal(receipt.GetProperty("membershipId").GetGuid(), execution.GetProperty("targetMembershipId").GetGuid());
+            Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(path, null, ct)).StatusCode);
+            await using var transferCheck = factory.Services.CreateAsyncScope(); var transferDb = transferCheck.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            Assert.Equal(1, await transferDb.Memberships.CountAsync(x => x.OrganizationId == org.Id, ct));
+            var preserved = await transferDb.Memberships.SingleAsync(x => x.Id == segment.Id, ct);
+            Assert.Equal(segment.EndDate, preserved.EndDate); Assert.Equal(segment.EndReason, preserved.EndReason); Assert.Equal("closed", preserved.Status);
+            Assert.Equal(1, await transferDb.InstitutionalStatusEvents.CountAsync(x => x.OrganizationId == org.Id && x.EventType == MembershipCodes.InstitutionalStatus.WorkshopTransfer, ct));
+            Assert.Equal(1, await transferDb.AuditEvents.CountAsync(x => x.Action == "membership.transfer.executed" && x.OrganizationId == origin.Id, ct));
+            var transfer = await transferDb.MemberTransfers.SingleAsync(x => x.Id == transferId, ct);
+            Assert.Equal(withdrawal.EvidenceReference, transfer.EvidenceReference);
+        }
+
     }
     private sealed class FailFinalWrite : SaveChangesInterceptor
     {
