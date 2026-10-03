@@ -20,7 +20,7 @@ Fuente: protocolo 2026 de Drive, obligatorio original de CRV firmado de puño y 
 | admission_evidence.EvidenceDate | date nullable existente | Para acreditar CRV debe constar fecha de otorgamiento no futura; para afiliación coincide con WithdrawalLetterGrantedDate |
 | admission_evidence.DocumentVersionId | UUID nullable, referencia lógica existente | No se acredita carta sin versión trazable; no nueva FK física |
 | admission_evidence.ReviewStatus/ReviewedAtUtc | varchar(40)/timestamptz nullable existentes | Carta aprobada con revisión registrada; una revisión posterior exige nueva verificación de firma |
-| admission_decisions.DecisionType | varchar(120) requerido existente | Familia withdrawal_letter_handwritten_signature:{EvidenceId:D}; 75 caracteres. Vinculación lógica, mismo patrón que evidence_review:{UUID}; sin nueva FK física |
+| admission_decisions.DecisionType | varchar(120) requerido existente | Familia withdrawal_letter_handwritten_signature:{EvidenceId:D}; 76 caracteres. Vinculación lógica, mismo patrón que evidence_review:{UUID}; sin nueva FK física |
 | admission_decisions.AsOfDate/RecordedAtUtc | date/timestamptz existentes | Última decisión de esa carta; rechazo/observación posterior no recupera aprobación anterior |
 | core.audit_events metadata | JSON existente | evidenceId/documentVersionId/status/fecha, sin nombres/RUT/contactos |
 
