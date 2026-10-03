@@ -45,3 +45,12 @@ describe('PMGM-UX revisión transversal · sin microtexto ni mayúsculas diminut
     expect(css).toMatch(/main\.content :is\(small, time, th[^)]*\)\s*\{[^}]*font-size:\s*0\.875rem/s)
   })
 })
+
+describe('PMGM-UX Tesorería · menú operativo como pestañas, igual que Secretaría', () => {
+  it('bajo 1440 px el menú pasa a pestañas horizontales sin mosaicos ni descripciones', () => {
+    const block = css.slice(css.indexOf('Tesorería: menú de secciones como pestañas compactas'))
+    expect(block).toMatch(/@media \(max-width: 89\.99rem\)/)
+    expect(block).toMatch(/\.treasury-role-tabs\s*\{[^}]*display:\s*flex[^}]*overflow-x:\s*auto/s)
+    expect(block).toMatch(/\.treasury-role-tabs button small\s*\{\s*display:\s*none/)
+  })
+})
