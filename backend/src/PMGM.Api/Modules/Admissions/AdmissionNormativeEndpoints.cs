@@ -6,6 +6,8 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Admissions.Entities;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
+using MembershipEntity = PMGM.Api.Modules.Membership.Entities.Membership;
 using PMGM.Api.Modules.Ceremonies;
 
 namespace PMGM.Api.Modules.Admissions;
@@ -28,7 +30,75 @@ public static class AdmissionNormativeEndpoints
         group.MapPost("/expedientes/{caseId:guid}/decisiones/reconocimiento-regularidad", RecordGrandMasterRegularityRecognitionAsync);
         group.MapPost("/expedientes/{caseId:guid}/comision-informacion", AppointInformationCommissionAsync);
         group.MapPost("/expedientes/{caseId:guid}/comision-informacion/conclusion", CompleteInformationCommissionAsync);
+        group.MapPost("/expedientes/{caseId:guid}/materializar", MaterializeMembershipAsync);
         return endpoints;
+    }
+
+    private static async Task<IResult> MaterializeMembershipAsync(Guid caseId, MaterializeAdmissionRequest request,
+        HttpContext context, AdmissionsDbContext admissionsDb, PmgmDbContext coreDb,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var admissionCase = await admissionsDb.AdmissionCases
+            .Include(x => x.Evidence).Include(x => x.Decisions)
+            .SingleOrDefaultAsync(x => x.Id == caseId, ct);
+        if (admissionCase is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(context.User, admissionCase.OrganizationId)) return Results.Forbid();
+        if (admissionCase.MemberId is null)
+            return Results.BadRequest(new { message = "El expediente debe estar vinculado a un hermano antes de materializarse." });
+        if (request.EffectiveDate > ChileToday())
+            return Results.BadRequest(new { message = "La fecha efectiva no puede ser futura." });
+        if (request.EffectiveDate < DateOnly.FromDateTime(admissionCase.CreatedAtUtc.Date))
+            return Results.BadRequest(new { message = "La fecha efectiva no puede ser anterior a la creación del expediente." });
+        if (string.IsNullOrWhiteSpace(request.EvidenceReference))
+            return Results.BadRequest(new { message = "Debe indicar la resolución o evidencia que autoriza la materialización." });
+
+        var projection = AdmissionCaseEligibilityProjector.Evaluate(admissionCase);
+        if (!projection.Decision.CanProceed)
+            return Results.Conflict(new { message = "El expediente aún no cumple los requisitos normativos.", projection.Decision.Status, projection.Decision.Requirements });
+
+        await using var transaction = await coreDb.Database.BeginTransactionAsync(ct);
+        var existing = await coreDb.Memberships
+            .AsNoTracking()
+            .Where(x => x.MemberId == admissionCase.MemberId.Value && x.OrganizationId == admissionCase.OrganizationId &&
+                        x.Status == MembershipCodes.MembershipStatus.Active && x.StartDate == request.EffectiveDate)
+            .Select(x => new { x.Id, x.MemberId, x.OrganizationId, x.StartDate, x.Status })
+            .SingleOrDefaultAsync(ct);
+        if (existing is not null)
+        {
+            await transaction.CommitAsync(ct);
+            return Results.Ok(new { idempotent = true, membership = existing });
+        }
+
+        var membership = new MembershipEntity
+        {
+            MemberId = admissionCase.MemberId.Value,
+            OrganizationId = admissionCase.OrganizationId,
+            MembershipType = admissionCase.AdmissionType,
+            StartDate = request.EffectiveDate,
+            Status = MembershipCodes.MembershipStatus.Active,
+            EvidenceReference = request.EvidenceReference.Trim()
+        };
+        coreDb.Memberships.Add(membership);
+        coreDb.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
+        {
+            MemberId = membership.MemberId,
+            OrganizationId = membership.OrganizationId,
+            EventType = MembershipCodes.InstitutionalStatus.Active,
+            EffectiveDate = request.EffectiveDate,
+            EvidenceReference = membership.EvidenceReference,
+            Reason = $"Materialización de expediente de {admissionCase.AdmissionType}."
+        });
+        audit.Add(context, "admission.membership.materialized", nameof(AdmissionCase), caseId.ToString(), admissionCase.OrganizationId,
+            AuditResults.Success, new { caseId, membershipId = membership.Id, request.EffectiveDate });
+        await coreDb.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+
+        admissionCase.Status = AdmissionWorkflowCodes.CaseStatus.Resolved;
+        admissionsDb.AdmissionDecisions.Add(NewDecision(caseId, AdmissionWorkflowCodes.DecisionType.MembershipMaterialized,
+            CeremonyCodes.ValidationStatus.Approved, request.EffectiveDate, request.EvidenceReference,
+            $"membershipId={membership.Id:D}", Subject(context.User)));
+        await admissionsDb.SaveChangesAsync(ct);
+        return Results.Ok(new { idempotent = false, membershipId = membership.Id, admissionCaseId = caseId, membership.StartDate, membership.Status });
     }
 
     private static Task<IResult> RecordGrandMasterPardonAsync(Guid caseId, AdmissionAuthorityDecisionRequest request,
@@ -169,3 +239,4 @@ public sealed record Article23ReviewRequest(bool HasRayamiento, bool HasTribunal
 public sealed record AdmissionAuthorityDecisionRequest(bool Approved, DateOnly AsOfDate, string SourceReference, string? Notes);
 public sealed record AppointAdmissionCommissionRequest(IReadOnlyCollection<Guid>? MemberIds, DateOnly AppointmentDate, string SourceReference);
 public sealed record CompleteAdmissionCommissionRequest(bool Completed, DateOnly AsOfDate, string SourceReference, string? Notes);
+public sealed record MaterializeAdmissionRequest(DateOnly EffectiveDate, string EvidenceReference);
