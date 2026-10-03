@@ -102,12 +102,14 @@ export default function AdmissionsPage({ api, documentApi }: { api: PmgmApiClien
       </div></fieldset>}
       <div className="form-actions"><button className="primary-button" type="submit" disabled={working || searching || !selected}>{working ? 'Registrando…' : 'Crear expediente de admisión'}</button><small>La iniciación normal continúa en Secretaría → Insinuados → Circuito de iniciación.</small></div>
     </form>
-    <AdmissionDocumentPanel api={api} documentApi={documentApi} caseId={activeCaseId} caseDetail={activeCase} onCaseChange={setActiveCase} onCaseIdChange={setActiveCaseId} />
+    <AdmissionDocumentPanel api={api} documentApi={documentApi} organizationId={organizationId} caseId={activeCaseId} caseDetail={activeCase} onCaseChange={setActiveCase} onCaseIdChange={setActiveCaseId} />
   </div>
 }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'La API no respondió.' }
 
-function AdmissionDocumentPanel({ api, documentApi, caseId, caseDetail, onCaseChange, onCaseIdChange }: { api: PmgmApiClient; documentApi: DocumentApiClient; caseId: string; caseDetail: AdmissionCaseDetail | null; onCaseChange: (value: AdmissionCaseDetail | null) => void; onCaseIdChange: (value: string) => void }) {
+function AdmissionDocumentPanel({ api, documentApi, organizationId, caseId, caseDetail, onCaseChange, onCaseIdChange }: { api: PmgmApiClient; documentApi: DocumentApiClient; organizationId: string; caseId: string; caseDetail: AdmissionCaseDetail | null; onCaseChange: (value: AdmissionCaseDetail | null) => void; onCaseIdChange: (value: string) => void }) {
+  const [cases, setCases] = useState<Array<{ id: string; admissionType: string; status: string; createdAtUtc: string; evidenceCount: number; latestEvidenceStatus: string | null }>>([])
+  const [caseStatus, setCaseStatus] = useState('')
   const [file, setFile] = useState<File | null>(null)
   const [evidenceType, setEvidenceType] = useState('withdrawal_letter')
   const [evidenceDate, setEvidenceDate] = useState('')
@@ -125,6 +127,12 @@ function AdmissionDocumentPanel({ api, documentApi, caseId, caseDetail, onCaseCh
     try { onCaseChange(await api.getAdmissionCase(caseId.trim())); setMessage('Expediente cargado con sus evidencias y decisiones.') }
     catch (reason) { onCaseChange(null); setError(toMessage(reason)) } finally { setWorking(false) }
   }
+  useEffect(() => {
+    let active = true
+    if (!caseId) return
+    api.listAdmissionCases(organizationId || undefined, caseStatus || undefined).then(result => { if (active) setCases(result.items) }).catch(() => { if (active) setCases([]) })
+    return () => { active = false }
+  }, [api, organizationId, caseId, caseStatus])
   const ensureCollection = async (organizationId: string) => {
     const collections = await documentApi.getCollections(organizationId)
     const existing = collections.items.find(item => item.name === 'Admisiones · evidencias')
@@ -152,7 +160,7 @@ function AdmissionDocumentPanel({ api, documentApi, caseId, caseDetail, onCaseCh
   }
   return <section className="panel admissions-documents" aria-labelledby="admission-documents-title">
     <div className="page-heading"><div><p className="eyebrow">Secretaría · gestión documental</p><h2 id="admission-documents-title">Evidencias del expediente</h2><p>Carga privada, análisis de seguridad, versión trazable y revisión institucional. La API conserva la autoridad final.</p></div><span className="count-badge">{caseDetail ? caseDetail.evidence.length + ' evidencia(s)' : 'Sin expediente cargado'}</span></div>
-    <div className="form-grid"><label>Expediente<input value={caseId} onChange={event => onCaseIdChange(event.target.value)} placeholder="ID del expediente" /></label><button className="secondary-button" type="button" disabled={working || !caseId.trim()} onClick={() => void loadCase()}>Cargar expediente</button></div>
+    <div className="form-grid"><label>Estado<select value={caseStatus} onChange={event => setCaseStatus(event.target.value)}><option value="">Todos</option><option value="under_review">En revisión</option><option value="observed">Observado</option><option value="eligible">Elegible</option></select></label><label>Expediente<select value={caseId} onChange={event => onCaseIdChange(event.target.value)}><option value="">Seleccione…</option>{cases.map(item => <option key={item.id} value={item.id}>{item.admissionType === 'affiliation' ? 'Afiliación' : 'Incorporación'} · {item.status} · {item.evidenceCount} evidencia(s)</option>)}</select></label><button className="secondary-button" type="button" disabled={working || !caseId.trim()} onClick={() => void loadCase()}>Cargar expediente</button></div>
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success-banner" role="status">{message}</div>}
     {caseDetail && <><form className="admissions-evidence-form" onSubmit={event => void addEvidence(event)}>
       <label>Tipo<select value={evidenceType} onChange={event => setEvidenceType(event.target.value)}><option value="withdrawal_letter">Carta de Retiro Voluntario</option><option value="legalized_initiation_evidence">Iniciación legalizada</option><option value="legalized_wage_increase_evidence">Aumento de salario legalizado</option><option value="legalized_exaltation_evidence">Exaltación legalizada</option><option value="degree_evidence">Grado declarado</option></select></label>

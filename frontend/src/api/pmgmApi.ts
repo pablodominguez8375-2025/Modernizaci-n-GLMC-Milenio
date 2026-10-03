@@ -115,6 +115,7 @@ export interface AdmissionCaseResponse { id: string; organizationId: string; adm
 export interface AdmissionEvidenceItem { id: string; admissionCaseId: string; evidenceType: string; documentVersionId: string | null; evidenceDate: string | null; sourceReference: string | null; reviewStatus: string; reviewedAtUtc: string | null; notes: string | null; createdAtUtc: string }
 export interface AdmissionDecisionItem { id: string; admissionCaseId: string; decisionType: string; status: string; asOfDate: string; sourceReference: string | null; notes: string | null; recordedAtUtc: string }
 export interface AdmissionCaseDetail extends AdmissionCaseResponse { evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }
+export interface AdmissionCaseListItem extends AdmissionCaseResponse { evidenceCount: number; latestEvidenceStatus: string | null }
 export interface AddAdmissionEvidenceRequest { evidenceType: string; documentVersionId: string; evidenceDate?: string | null; sourceReference?: string | null; notes?: string | null }
 export interface AdmissionEvidenceReviewRequest { status: 'approved' | 'observed' | 'rejected'; asOfDate: string; sourceReference: string; notes?: string | null }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
@@ -977,6 +978,16 @@ export class PmgmApiClient {
     }
     const response = await this.request<{ admissionCase: AdmissionCaseResponse; evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}`)
     return { ...response.admissionCase, evidence: response.evidence, decisions: response.decisions }
+  }
+
+  async listAdmissionCases(organizationId?: string, status?: string): Promise<{ total: number; items: AdmissionCaseListItem[] }> {
+    if (this.useMocks) {
+      return { total: 1, items: [{ id: this.withdrawalReviewDemo.id, organizationId: 'demo-org-23', admissionType: this.withdrawalReviewDemo.admissionType, affiliationMode: this.withdrawalReviewDemo.affiliationMode, withdrawalLetterGrantedDate: this.withdrawalReviewDemo.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: this.withdrawalReviewDemo.status, createdAtUtc: this.withdrawalReviewDemo.createdAtUtc, evidenceCount: this.withdrawalReviewDemo.letters.length, latestEvidenceStatus: this.withdrawalReviewDemo.letters[0]?.reviewStatus ?? null }] }
+    }
+    const query = new URLSearchParams()
+    if (organizationId) query.set('organizationId', organizationId)
+    if (status) query.set('status', status)
+    return this.request<{ total: number; items: AdmissionCaseListItem[] }>('/api/admisiones/expedientes' + (query.size ? '?' + query.toString() : ''))
   }
 
   async addAdmissionEvidence(caseId: string, payload: AddAdmissionEvidenceRequest): Promise<AdmissionEvidenceItem> {

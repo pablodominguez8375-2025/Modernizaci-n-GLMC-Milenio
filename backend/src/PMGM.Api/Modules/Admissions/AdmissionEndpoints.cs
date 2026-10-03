@@ -20,6 +20,7 @@ public static class AdmissionEndpoints
         group.MapPost("/expedientes", CreateCaseAsync);
         group.MapPost("/incorporaciones/persona-nueva", AdmissionExternalIntake.CreateAsync);
         group.MapGet("/personas-busqueda", AdmissionPersonLookup.SearchAsync);
+        group.MapGet("/expedientes", ListCasesAsync);
         group.MapGet("/expedientes/{caseId:guid}", GetCaseAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias", AddEvidenceAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias/{evidenceId:guid}/revision", ReviewEvidenceAsync);
@@ -29,6 +30,33 @@ public static class AdmissionEndpoints
         group.MapGet("/expedientes/{caseId:guid}/elegibilidad", GetEligibilityAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListCasesAsync(
+        Guid? organizationId,
+        string? status,
+        HttpContext httpContext,
+        AdmissionsDbContext admissionsDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (organizationId is null && !access.CanManageGrandSecretariat(httpContext.User))
+            return Results.BadRequest(new { message = "Debe indicar el Taller para consultar expedientes." });
+        if (organizationId is { } scopedOrganization && !access.CanManageOrganization(httpContext.User, scopedOrganization) &&
+            !access.CanManageGrandSecretariat(httpContext.User))
+            return Results.Forbid();
+        var query = admissionsDb.AdmissionCases.AsNoTracking();
+        if (organizationId is { } organization) query = query.Where(x => x.OrganizationId == organization);
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status.Trim());
+        var items = await query.OrderByDescending(x => x.CreatedAtUtc).Take(200)
+            .Select(x => new
+            {
+                x.Id, x.OrganizationId, x.AdmissionType, x.AffiliationMode,
+                x.WithdrawalLetterGrantedDate, x.Status, x.CreatedAtUtc,
+                EvidenceCount = x.Evidence.Count(),
+                LatestEvidenceStatus = x.Evidence.OrderByDescending(e => e.CreatedAtUtc).Select(e => e.ReviewStatus).FirstOrDefault()
+            }).ToListAsync(cancellationToken);
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> CreateCaseAsync(
