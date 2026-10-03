@@ -118,6 +118,8 @@ export interface AdmissionCaseDetail extends AdmissionCaseResponse { evidence: A
 export interface AdmissionCaseListItem extends AdmissionCaseResponse { evidenceCount: number; latestEvidenceStatus: string | null }
 export interface AddAdmissionEvidenceRequest { evidenceType: string; documentVersionId: string; evidenceDate?: string | null; sourceReference?: string | null; notes?: string | null }
 export interface AdmissionEvidenceReviewRequest { status: 'approved' | 'observed' | 'rejected'; asOfDate: string; sourceReference: string; notes?: string | null }
+export interface MaterializeAdmissionRequest { effectiveDate: string; evidenceReference: string }
+export interface MaterializeAdmissionResponse { idempotent: boolean; membershipId?: string; admissionCaseId?: string; membership?: { id: string; memberId: string; organizationId: string; startDate: string | null; status: string } }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -998,6 +1000,18 @@ export class PmgmApiClient {
   async reviewAdmissionEvidence(caseId: string, evidenceId: string, payload: AdmissionEvidenceReviewRequest): Promise<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }> {
     if (this.useMocks) throw new Error('La revisión operativa requiere una API institucional; la demo sólo muestra evidencia sintética.')
     return this.postJson<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias/${encodeURIComponent(evidenceId)}/revision`, payload)
+  }
+
+  async materializeAdmissionCase(caseId: string, payload: MaterializeAdmissionRequest): Promise<MaterializeAdmissionResponse> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La demo de materialización usa el expediente sintético demo-crv-review.')
+      const existing = this.withdrawalReviewDemo.decisions.find(x => x.decisionType === 'membership_materialized')
+      if (existing) return { idempotent: true, membership: { id: 'demo-membership-materialized', memberId: 'demo-member-1', organizationId: 'demo-org-23', startDate: payload.effectiveDate, status: 'active' } }
+      this.withdrawalReviewDemo.status = 'resolved'
+      this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference, notes: 'Materialización sintética de demostración.', recordedAtUtc: new Date().toISOString() })
+      return { idempotent: false, membershipId: 'demo-membership-materialized', admissionCaseId: caseId }
+    }
+    return this.postJson<MaterializeAdmissionResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/materializar`, payload)
   }
 
   async reviewWithdrawalLetterSignature(caseId: string, payload: WithdrawalSignatureReviewRequest): Promise<WithdrawalSignatureDecision> {
