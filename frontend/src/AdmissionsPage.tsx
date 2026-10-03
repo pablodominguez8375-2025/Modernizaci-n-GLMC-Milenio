@@ -3,6 +3,7 @@ import { type AdmissionPersonOption, type OrganizationOption, type PmgmApiClient
 import { type MembershipApiClient } from './api/membershipApi'
 import { affiliationModeForDate, chileCivilDate } from './admissionDates'
 import './admissions.css'
+import ExternalIncorporationDrawer from './ExternalIncorporationDrawer'
 
 type AdmissionType = 'affiliation' | 'incorporation'
 export default function AdmissionsPage({ api }: { api: PmgmApiClient; membershipApi: MembershipApiClient }) {
@@ -72,6 +73,7 @@ export default function AdmissionsPage({ api }: { api: PmgmApiClient; membership
     <section className="page-heading"><div><p className="eyebrow">Secretaría · admisiones especiales</p><h1>Afiliación e Incorporación</h1><p>Camino separado de Insinuados e iniciación. Reutilice la identidad existente.</p></div><span className="count-badge">Expediente trazable</span></section>
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{error}</span></div>}
     {message && <div className="success-banner" role="status">{message}</div>}
+    {type === 'incorporation' && <ExternalIncorporationDrawer key={organizationId} api={api} organizationId={organizationId} onCreated={result => { setMessage('Incorporación registrada para revisión. Expediente ' + result.id); setError(null); setQuery(''); setPeople([]); setPersonId('') }} />}
     <form className="panel admissions-form" onSubmit={submit}>
       <div className="admissions-switch" role="group" aria-label="Tipo de admisión">
         <button type="button" disabled={working} aria-pressed={type === 'affiliation'} className={type === 'affiliation' ? 'active' : ''} onClick={() => { resetSearch(); setType('affiliation') }}>Afiliación</button>
@@ -83,7 +85,7 @@ export default function AdmissionsPage({ api }: { api: PmgmApiClient; membership
         <label>Buscar identidad<input type="search" maxLength={80} disabled={working} value={query} onChange={e => { resetSearch(); setQuery(e.target.value) }} placeholder="Nombre o número institucional exacto" aria-describedby="admission-search-help" /></label>
         <label>Persona seleccionada<select required disabled={working || searching} value={personId} onChange={e => setPersonId(e.target.value)}><option value="">Seleccione…</option>{people.map(x => <option key={x.personId} value={x.personId}>{x.displayName}{x.institutionalNumber ? ' · ' + x.institutionalNumber : ''}</option>)}</select></label>
       </div>
-      <p id="admission-search-help">{type === 'affiliation' ? 'Ingrese al menos tres caracteres. Incluye la historia del Taller; para otro Taller use el número institucional exacto.' : 'Busque una persona de expedientes de incorporación autorizados. El alta de una persona externa nueva aún está pendiente.'}</p>
+      <p id="admission-search-help">{type === 'affiliation' ? 'Ingrese al menos tres caracteres. Incluye la historia del Taller; para otro Taller use el número institucional exacto.' : 'Busque una persona de expedientes autorizados. Para una identidad nueva use el botón Nueva persona de otra Obediencia.'}</p>
       {searching && <p role="status">Buscando…</p>}
       {searched && !searching && people.length === 0 && <p role="status">No hay coincidencias autorizadas. No cree una identidad duplicada.</p>}
       {selected && <div className="admission-identity"><strong>{selected.displayName}</strong><span>{selected.institutionalNumber ?? 'Persona externa, sin membresía GLMCh'}</span></div>}

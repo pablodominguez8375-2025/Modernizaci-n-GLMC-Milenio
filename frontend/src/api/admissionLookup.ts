@@ -12,9 +12,9 @@ export function validateDemoAdmissionIdentity(input: {
   organizationId: string; admissionType: string; personId: string; memberId?: string | null;
   withdrawalLetterGrantedDate?: string | null; affiliationMode?: string | null;
   originObedience?: string | null; degree?: string | null;
-}): void {
+}, extra: (AdmissionPersonOption & { organizationId: string; admissionType: string })[] = []): void {
   if (![workshop23, workshop1].includes(input.organizationId)) throw new Error('El Taller destino no existe en esta demostración.')
-  const person = records.find(x => x.personId === input.personId)
+  const person = [...records, ...extra].find(x => x.personId === input.personId)
   if (input.admissionType === 'affiliation') {
     if (!input.memberId || !person?.memberId || person.memberId !== input.memberId) throw new Error('El hermano y la persona deben corresponder al mismo registro maestro.')
   } else if (input.admissionType === 'incorporation') {
@@ -26,11 +26,11 @@ export function validateDemoAdmissionIdentity(input: {
     if (!input.originObedience?.trim() || !input.degree?.trim()) throw new Error('Registre Obediencia de origen y grado declarado para su posterior acreditación documental.')
   } else throw new Error('El tipo de expediente debe ser afiliación o incorporación.')
 }
-export function lookupDemoAdmissionPeople(input: AdmissionPersonSearch): AdmissionPersonSearchResponse {
+export function lookupDemoAdmissionPeople(input: AdmissionPersonSearch, extra: (AdmissionPersonOption & { organizationId: string; admissionType: string })[] = []): AdmissionPersonSearchResponse {
   const query = input.query.trim()
   if (query.length < 3 || query.length > 80) throw new Error('Ingrese entre 3 y 80 caracteres para buscar.')
   const term = query.toLocaleUpperCase('es-CL')
-  const items = records.filter(x => x.admissionType === input.admissionType && (
+  const items = [...records, ...extra].filter(x => x.admissionType === input.admissionType && (
     (input.admissionType === 'affiliation' && x.institutionalNumber === term) ||
     (x.organizationId === input.organizationId && x.displayName.toLocaleUpperCase('es-CL').includes(term))
   )).slice(0, 20).map(({ personId, memberId, displayName, institutionalNumber }) => ({ personId, memberId, displayName, institutionalNumber }))

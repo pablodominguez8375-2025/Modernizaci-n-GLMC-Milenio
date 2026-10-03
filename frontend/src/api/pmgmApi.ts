@@ -1,5 +1,7 @@
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
 import { affiliationModeForDate } from '../admissionDates'
+import { ExternalIncorporationDemo, type ExternalIncorporationRequest } from './externalIncorporation'
+export type { ExternalIncorporationRequest } from './externalIncorporation'
 import { lookupDemoAdmissionPeople, validateDemoAdmissionIdentity, type AdmissionPersonSearch, type AdmissionPersonSearchResponse } from './admissionLookup'
 export type { AdmissionPersonOption } from './admissionLookup'
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
@@ -347,6 +349,7 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
 ]
 
 export class PmgmApiClient {
+  private readonly externalIncorporationDemo = new ExternalIncorporationDemo()
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
@@ -938,7 +941,7 @@ export class PmgmApiClient {
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
   async createAdmissionCase(payload: CreateAdmissionCaseRequest): Promise<AdmissionCaseResponse> {
     if (this.useMocks) {
-      validateDemoAdmissionIdentity(payload)
+      validateDemoAdmissionIdentity(payload, this.externalIncorporationDemo.people)
       if (payload.admissionType === 'affiliation') {
         const expected = affiliationModeForDate(payload.withdrawalLetterGrantedDate ?? '')
         if (!expected) throw new Error('Indique una fecha válida de otorgamiento de la Carta de Retiro Voluntario, sin fecha futura.')
@@ -950,8 +953,13 @@ export class PmgmApiClient {
   }
 
   async searchAdmissionPeople(input: AdmissionPersonSearch): Promise<AdmissionPersonSearchResponse> {
-    if (this.useMocks) return lookupDemoAdmissionPeople(input)
+    if (this.useMocks) return lookupDemoAdmissionPeople(input, this.externalIncorporationDemo.people)
     return this.request<AdmissionPersonSearchResponse>(`/api/admisiones/personas-busqueda?${new URLSearchParams({ ...input, query: input.query.trim() })}`)
+  }
+
+  async createExternalIncorporation(payload: ExternalIncorporationRequest): Promise<AdmissionCaseResponse> {
+    if (this.useMocks) return this.externalIncorporationDemo.create(payload)
+    return this.postJson<AdmissionCaseResponse>('/api/admisiones/incorporaciones/persona-nueva', payload)
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {

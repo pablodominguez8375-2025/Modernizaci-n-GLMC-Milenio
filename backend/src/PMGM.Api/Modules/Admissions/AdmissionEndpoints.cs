@@ -18,6 +18,7 @@ public static class AdmissionEndpoints
             .RequireAuthorization();
 
         group.MapPost("/expedientes", CreateCaseAsync);
+        group.MapPost("/incorporaciones/persona-nueva", AdmissionExternalIntake.CreateAsync);
         group.MapGet("/personas-busqueda", AdmissionPersonLookup.SearchAsync);
         group.MapGet("/expedientes/{caseId:guid}", GetCaseAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias", AddEvidenceAsync);

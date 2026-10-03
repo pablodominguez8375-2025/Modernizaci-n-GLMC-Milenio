@@ -38,3 +38,10 @@ describe('PMGM-UX vistas comunes · Avisos con una acción visible e íconos SVG
     expect(portal).not.toContain('♥')
   })
 })
+
+describe('PMGM-UX revisión transversal · sin microtexto ni mayúsculas diminutas', () => {
+  it('quita las mayúsculas y fija 14 px mínimos para etiquetas, tablas e insignias en todas las vistas', () => {
+    expect(css).toMatch(/main\.content :where\(\*\):not\(code\):not\(kbd\)\s*\{[^}]*text-transform:\s*none !important/s)
+    expect(css).toMatch(/main\.content :is\(small, time, th[^)]*\)\s*\{[^}]*font-size:\s*0\.875rem/s)
+  })
+})
