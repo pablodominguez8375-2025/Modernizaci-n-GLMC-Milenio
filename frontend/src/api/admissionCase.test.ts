@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PmgmApiClient } from './pmgmApi'
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
-const identity = { organizationId: 'org-synthetic', memberId: 'member-synthetic', personId: 'person-synthetic', admissionType: 'affiliation' as const }
+const identity = { organizationId: '23232323-2323-2323-2323-232323232323', memberId: 'dddddddd-1111-1111-1111-111111111111', personId: 'cccccccc-1111-1111-1111-111111111111', admissionType: 'affiliation' as const }
 describe('contrato CRV del adaptador de demo y API', () => {
   it.each([
     ['2026-07-03', 'simple'], ['2026-07-02', 'activation'],

@@ -1,6 +1,6 @@
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
 import { affiliationModeForDate } from '../admissionDates'
-import { lookupDemoAdmissionPeople, type AdmissionPersonSearch, type AdmissionPersonSearchResponse } from './admissionLookup'
+import { lookupDemoAdmissionPeople, validateDemoAdmissionIdentity, type AdmissionPersonSearch, type AdmissionPersonSearchResponse } from './admissionLookup'
 export type { AdmissionPersonOption } from './admissionLookup'
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
@@ -938,6 +938,7 @@ export class PmgmApiClient {
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
   async createAdmissionCase(payload: CreateAdmissionCaseRequest): Promise<AdmissionCaseResponse> {
     if (this.useMocks) {
+      validateDemoAdmissionIdentity(payload)
       if (payload.admissionType === 'affiliation') {
         const expected = affiliationModeForDate(payload.withdrawalLetterGrantedDate ?? '')
         if (!expected) throw new Error('Indique una fecha válida de otorgamiento de la Carta de Retiro Voluntario, sin fecha futura.')

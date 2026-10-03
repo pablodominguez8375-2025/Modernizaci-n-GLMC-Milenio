@@ -45,15 +45,9 @@ public static class AdmissionEndpoints
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var organizationExists = await coreDb.Organizations.AsNoTracking()
-            .AnyAsync(x => x.Id == request.OrganizationId, cancellationToken);
-        if (!organizationExists)
-            return Results.NotFound(new { message = "El Taller destino no existe." });
-
-        var personExists = await coreDb.People.AsNoTracking()
-            .AnyAsync(x => x.Id == request.PersonId, cancellationToken);
-        if (!personExists)
-            return Results.NotFound(new { message = "La persona no existe en la base maestra." });
+        var identityFailure = await AdmissionIdentityGuard.ValidateAsync(request,
+            access.CanEvaluateCeremonies(httpContext.User), coreDb, admissionsDb, cancellationToken);
+        if (identityFailure is not null) return identityFailure;
 
         var today = ChileToday();
         if (request.PreviousRejectionDate > today)
