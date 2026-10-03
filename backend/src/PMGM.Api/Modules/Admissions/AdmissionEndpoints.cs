@@ -522,7 +522,8 @@ public sealed record CreateAdmissionCaseRequest(
     bool ExaltationEvidenceApplies,
     bool? HasPeaceAndFriendshipPact,
     DateOnly? PreviousRejectionDate,
-    bool? RejectionCausesRemedied);
+    bool? RejectionCausesRemedied,
+    DateOnly? WithdrawalLetterGrantedDate = null);
 
 public sealed record AddAdmissionEvidenceRequest(
     string EvidenceType,
