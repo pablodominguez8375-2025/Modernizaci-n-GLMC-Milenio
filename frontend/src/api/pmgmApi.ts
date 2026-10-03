@@ -91,6 +91,7 @@ export interface CreateAdmissionCaseRequest {
   organizationId: string
   admissionType: 'affiliation' | 'incorporation'
   affiliationMode?: 'simple' | 'activation' | null
+  withdrawalLetterGrantedDate?: string | null
   memberId?: string | null
   personId: string
   originOrganizationId?: string | null
