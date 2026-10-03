@@ -43,3 +43,30 @@ it('transporta referencia sin cache y no simula expedientes ajenos', async () =>
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(input); expect(fetch.mock.calls[0][1].cache).toBe('no-store')
   await expect(new PmgmApiClient({ useMocks: true }).reviewWithdrawalLetterSignature('other-case', input)).rejects.toThrow('sintético')
 })
+
+it('corrige desde evidencia y exige nueva firma sin alterar creación', async () => {
+  const { correctWithdrawalDateDemo } = await import('./admissionWithdrawalEvidence')
+  const c = fixture(); const created = c.createdAtUtc
+  reviewWithdrawalSignatureDemo(c, input, new Date(now.getTime() - 1000)); c.withdrawalLetterGrantedDate = '2026-09-30'
+  const r = correctWithdrawalDateDemo(c, { evidenceId: 'letter', asOfDate: '2026-10-03', sourceReference: 'SYNTHETIC', reason: 'Error de transcripción' }, now)
+  expect(r.withdrawalLetterGrantedDate).toBe('2026-10-01'); expect(r.signatureReviewRequired).toBe(true)
+  expect(c.createdAtUtc).toBe(created); expect(c.decisions).toHaveLength(2); expect(verifiedWithdrawalSignature(c, '2026-10-03')).toBeNull()
+  reviewWithdrawalSignatureDemo(c, input, new Date(now.getTime() + 1000)); expect(verifiedWithdrawalSignature(c, '2026-10-03')).not.toBeNull()
+})
+it.each(['pending', 'later', 'procedure', 'resolved', 'no_change'])('corrección demo bloquea %s sin cambiar datos', async scenario => {
+  const { correctWithdrawalDateDemo } = await import('./admissionWithdrawalEvidence')
+  const c = fixture(); c.withdrawalLetterGrantedDate = '2026-09-30'
+  if (scenario === 'pending') c.letters[0].reviewStatus = 'pending'
+  if (scenario === 'later') c.letters[0].evidenceDate = '2026-10-04'
+  if (scenario === 'procedure') c.decisions.push({ id: 'd', admissionCaseId: c.id, decisionType: 'lodge_third_degree_approval', status: 'observed', asOfDate: '2026-10-03', sourceReference: 'SYNTHETIC', notes: null, recordedBySubject: 'synthetic', recordedAtUtc: now.toISOString() })
+  if (scenario === 'resolved') c.status = 'resolved'
+  if (scenario === 'no_change') c.withdrawalLetterGrantedDate = '2026-10-01'
+  const snapshot = JSON.stringify(c)
+  expect(() => correctWithdrawalDateDemo(c, { evidenceId: 'letter', asOfDate: '2026-10-03', sourceReference: 'SYNTHETIC', reason: 'Corrección' }, now)).toThrow(); expect(JSON.stringify(c)).toBe(snapshot)
+})
+it('transporta corrección sin aceptar fecha manual', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response('{}')); vi.stubGlobal('fetch', fetch)
+  const payload = { evidenceId: 'letter', asOfDate: '2026-10-03', sourceReference: 'SYNTHETIC', reason: 'Corrección' }
+  await new PmgmApiClient({ getAccessToken: async () => 'synthetic' }).correctWithdrawalLetterDate('case', payload)
+  expect(fetch.mock.calls[0][0]).toBe('/api/admisiones/expedientes/case/carta-retiro/correccion-fecha'); expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(payload)
+})

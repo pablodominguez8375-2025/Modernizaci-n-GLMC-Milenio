@@ -1,4 +1,4 @@
-import { reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
+import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
 import { affiliationModeForDate } from '../admissionDates'
 import { ExternalIncorporationDemo, type ExternalIncorporationRequest } from './externalIncorporation'
@@ -970,6 +970,14 @@ export class PmgmApiClient {
       return reviewWithdrawalSignatureDemo(this.withdrawalReviewDemo, payload)
     }
     return this.postJson<WithdrawalSignatureDecision>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/verificaciones/carta-retiro-firma-manuscrita`, payload)
+  }
+
+  async correctWithdrawalLetterDate(caseId: string, payload: WithdrawalDateCorrectionRequest): Promise<WithdrawalDateCorrectionResponse> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La corrección demo usa únicamente el expediente sintético demo-crv-review; el panel operativo sigue pendiente.')
+      return correctWithdrawalDateDemo(this.withdrawalReviewDemo, payload)
+    }
+    return this.postJson<WithdrawalDateCorrectionResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/carta-retiro/correccion-fecha`, payload)
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {

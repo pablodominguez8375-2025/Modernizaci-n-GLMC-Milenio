@@ -25,6 +25,7 @@ public static class AdmissionEndpoints
         group.MapPost("/expedientes/{caseId:guid}/evidencias/{evidenceId:guid}/revision", ReviewEvidenceAsync);
         group.MapPost("/expedientes/{caseId:guid}/verificaciones/carta-retiro-firma-manuscrita", VerifyWithdrawalLetterSignatureAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/gran-maestria-aceptacion-especial", RecordGrandMasterSpecialAcceptanceAsync);
+        group.MapPost("/expedientes/{caseId:guid}/carta-retiro/correccion-fecha", AdmissionWithdrawalDateCorrection.CorrectAsync);
         group.MapGet("/expedientes/{caseId:guid}/elegibilidad", GetEligibilityAsync);
 
         return endpoints;

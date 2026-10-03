@@ -25,8 +25,11 @@ public static class AdmissionWithdrawalEvidencePolicy
         var signature = admissionCase.Decisions
             .Where(x => x.DecisionType == AdmissionWorkflowCodes.DecisionType.WithdrawalSignature(letter.Id))
             .OrderByDescending(x => x.RecordedAtUtc).ThenByDescending(x => x.Id).FirstOrDefault();
+        var correction = admissionCase.Decisions.Where(x => x.DecisionType.StartsWith(AdmissionWithdrawalDateCorrection.DecisionPrefix, StringComparison.Ordinal))
+            .OrderByDescending(x => x.RecordedAtUtc).FirstOrDefault();
         return signature is not null && signature.Status == CeremonyCodes.ValidationStatus.Approved &&
                signature.AsOfDate >= letter.EvidenceDate!.Value && signature.AsOfDate <= today &&
+               (correction is null || signature.RecordedAtUtc > correction.RecordedAtUtc) &&
                signature.RecordedAtUtc >= letter.ReviewedAtUtc && !string.IsNullOrWhiteSpace(signature.SourceReference)
             ? signature : null;
     }
