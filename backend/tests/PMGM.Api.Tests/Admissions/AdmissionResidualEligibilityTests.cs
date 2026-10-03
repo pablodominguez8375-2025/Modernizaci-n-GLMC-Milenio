@@ -23,6 +23,12 @@ public sealed class AdmissionResidualEligibilityTests
     [InlineData("missing_source")]
     [InlineData("late_commission")]
     [InlineData("new_appointment")]
+    [InlineData("missing_reading")]
+    [InlineData("regular_unknown")]
+    [InlineData("regular_unrecognized")]
+    [InlineData("regular_accepted")]
+    [InlineData("regular_known")]
+    [InlineData("replaced_legal_doc")]
     [InlineData("valid")]
     [InlineData("pardoned")]
     public void Residual_controls_are_consumed_by_the_common_projection(string scenario)
@@ -44,10 +50,22 @@ public sealed class AdmissionResidualEligibilityTests
         Add("information_commission_appointed", date.AddDays(-4));
         Add("information_commission_completed", scenario == "late_commission" ? date : date.AddDays(-3), recorded: created.AddHours(2));
         if (scenario == "new_appointment") Add("information_commission_appointed", date.AddDays(-2), recorded: created.AddHours(3));
-        Add("lodge_first_degree_presentation", date.AddDays(-4));
+        if (scenario != "missing_reading") Add("lodge_first_degree_presentation", date.AddDays(-4));
         Add("lodge_third_degree_approval", date.AddDays(-2), source: scenario == "missing_source" ? null : "synthetic");
         Add("lodge_first_degree_ballot", scenario == "same_day_ballot" ? date.AddDays(-2) : scenario == "earlier_ballot" ? date.AddDays(-3) : date.AddDays(-1));
-        Assert.Equal(scenario is "valid" or "pardoned", AdmissionCaseEligibilityProjector.Evaluate(c).Decision.CanProceed);
+        if (scenario.StartsWith("regular_", StringComparison.Ordinal) || scenario == "replaced_legal_doc")
+        {
+            c.AdmissionType = "incorporation"; c.HasPeaceAndFriendshipPact = true;
+            foreach (var code in new[] { "legalized_initiation_evidence", "degree_evidence" })
+                c.Evidence.Add(new AdmissionEvidence { EvidenceType = code, ReviewStatus = "approved", DocumentVersionId = Guid.NewGuid(),
+                    ReviewedAtUtc = created.AddHours(1), CreatedAtUtc = created, CreatedBySubject = "synthetic" });
+            c.Decisions.Single(x => x.DecisionType == "article_2_3_review").Notes = scenario == "regular_unknown" ? null :
+                scenario is "regular_known" or "replaced_legal_doc" ? "{\"OriginObedienceRecognized\":true}" : "{\"OriginObedienceRecognized\":false}";
+            if (scenario == "regular_accepted") Add("grand_master_regularity_recognition", date.AddDays(-3));
+            if (scenario == "replaced_legal_doc") c.Evidence.Add(new AdmissionEvidence { EvidenceType = "legalized_initiation_evidence", ReviewStatus = "pending",
+                CreatedAtUtc = created.AddHours(1), CreatedBySubject = "synthetic" });
+        }
+        Assert.Equal(scenario is "valid" or "pardoned" or "regular_known" or "regular_accepted", AdmissionCaseEligibilityProjector.Evaluate(c).Decision.CanProceed);
     }
 
     [Fact]

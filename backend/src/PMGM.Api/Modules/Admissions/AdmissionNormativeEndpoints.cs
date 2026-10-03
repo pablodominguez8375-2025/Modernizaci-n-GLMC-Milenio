@@ -59,7 +59,7 @@ public static class AdmissionNormativeEndpoints
         var blocked = request.HasRayamiento || request.HasTribunalForcedWithdrawal;
         var decision = NewDecision(caseId, AdmissionWorkflowCodes.DecisionType.Article23Review,
             blocked ? CeremonyCodes.ValidationStatus.Rejected : CeremonyCodes.ValidationStatus.Approved,
-            request.AsOfDate, request.SourceReference, JsonSerializer.Serialize(new { request.HasRayamiento, request.HasTribunalForcedWithdrawal, request.Notes }),
+            request.AsOfDate, request.SourceReference, JsonSerializer.Serialize(new { request.HasRayamiento, request.HasTribunalForcedWithdrawal, request.OriginObedienceRecognized, request.Notes }),
             Subject(context.User));
         admissionsDb.AdmissionDecisions.Add(decision);
         await admissionsDb.SaveChangesAsync(ct);
@@ -166,7 +166,7 @@ public static class AdmissionNormativeEndpoints
     private static DateOnly ChileToday() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
 }
 
-public sealed record Article23ReviewRequest(bool HasRayamiento, bool HasTribunalForcedWithdrawal, DateOnly AsOfDate, string SourceReference, string? Notes);
+public sealed record Article23ReviewRequest(bool HasRayamiento, bool HasTribunalForcedWithdrawal, DateOnly AsOfDate, string SourceReference, string? Notes, bool? OriginObedienceRecognized = null);
 public sealed record AdmissionAuthorityDecisionRequest(bool Approved, DateOnly AsOfDate, string SourceReference, string? Notes);
 public sealed record AppointAdmissionCommissionRequest(IReadOnlyCollection<Guid>? MemberIds, DateOnly AppointmentDate, string SourceReference);
 public sealed record CompleteAdmissionCommissionRequest(bool Completed, DateOnly AsOfDate, string SourceReference, string? Notes);

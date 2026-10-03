@@ -1,3 +1,4 @@
+using System.Text.Json;
 using PMGM.Api.Modules.Admissions.Entities;
 using PMGM.Api.Modules.Ceremonies;
 
@@ -33,9 +34,9 @@ public static class AdmissionCaseEligibilityProjector
             LodgeThirdDegreeApproved: ToDecisionState(thirdDegree),
             LodgeFirstDegreeBallotApproved: ToDecisionState(firstDegree),
             LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
-            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
+            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies || admissionCase.Degree is "fellowcraft" or "master",
             LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
-            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
+            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies || admissionCase.Degree == "master",
             LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
             DegreeEvidenceAttached: degreeEvidence is not null,
             HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
@@ -64,6 +65,22 @@ public static class AdmissionCaseEligibilityProjector
              (article23.Status == CeremonyCodes.ValidationStatus.Rejected && Recorded(pardon) &&
               pardon!.Status == CeremonyCodes.ValidationStatus.Approved && pardon.AsOfDate >= article23.AsOfDate)),
             "Revisión de Régimen Interior del art. 2.3; si existe impedimento, indulto de Gran Maestría documentado posterior.");
+        if (admissionCase.AdmissionType == CeremonyCodes.Type.Incorporation)
+        {
+            bool? recognized = null;
+            try
+            {
+                using var review = JsonDocument.Parse(article23?.Notes ?? "{}");
+                if (review.RootElement.TryGetProperty("OriginObedienceRecognized", out var value) &&
+                    value.ValueKind is JsonValueKind.True or JsonValueKind.False) recognized = value.GetBoolean();
+            }
+            catch (JsonException) { /* No inferir reconocimiento desde una nota legado no estructurada. */ }
+            var recognition = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterRegularityRecognition);
+            Require("origin_regularity", recognized == true ||
+                (recognized == false && Recorded(recognition) && recognition!.Status == CeremonyCodes.ValidationStatus.Approved &&
+                 article23 is not null && recognition.AsOfDate >= article23.AsOfDate),
+                "Régimen Interior debe acreditar si la Obediencia de origen es reconocida como regular; en caso negativo se exige reconocimiento o regularización expresa de Gran Maestría (art. 2.1).");
+        }
         Require("lodge_ballot_chronology", Recorded(thirdDegree) && Recorded(firstDegree) &&
             firstDegree!.AsOfDate > thirdDegree!.AsOfDate,
             "El balotaje de primer grado debe celebrarse en una fecha posterior a la aprobación de tercer grado (art. 2.4).");
@@ -92,13 +109,12 @@ public static class AdmissionCaseEligibilityProjector
     }
 
     private static AdmissionEvidence? LatestEvidence(AdmissionCase admissionCase, string evidenceType, bool approvedOnly)
-        => admissionCase.Evidence
-            .Where(x => x.EvidenceType == evidenceType &&
-                        (!approvedOnly
-                            ? x.ReviewStatus != CeremonyCodes.ValidationStatus.Rejected
-                            : x.ReviewStatus == CeremonyCodes.ValidationStatus.Approved))
-            .OrderByDescending(x => x.ReviewedAtUtc ?? x.CreatedAtUtc)
-            .FirstOrDefault();
+    {
+        var current = admissionCase.Evidence.Where(x => x.EvidenceType == evidenceType)
+            .OrderByDescending(x => x.CreatedAtUtc).ThenByDescending(x => x.Id).FirstOrDefault();
+        return current is not null && (approvedOnly ? current.ReviewStatus == CeremonyCodes.ValidationStatus.Approved :
+            current.ReviewStatus != CeremonyCodes.ValidationStatus.Rejected) ? current : null;
+    }
 
     private static AdmissionDecision? LatestDecision(AdmissionCase admissionCase, string decisionType)
         => admissionCase.Decisions

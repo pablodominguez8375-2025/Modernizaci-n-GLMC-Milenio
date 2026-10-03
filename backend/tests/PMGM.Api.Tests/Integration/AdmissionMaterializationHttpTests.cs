@@ -51,10 +51,10 @@ public sealed class AdmissionMaterializationHttpTests
             Degree = "master", HasPeaceAndFriendshipPact = true, Status = "eligible", CreatedBySubject = "synthetic", CreatedAtUtc = created };
         var letter = new AdmissionEvidence { AdmissionCaseId = c.Id, EvidenceType = "withdrawal_letter", DocumentVersionId = Guid.NewGuid(), EvidenceDate = c.WithdrawalLetterGrantedDate,
             ReviewStatus = "approved", ReviewedAtUtc = created.AddMinutes(1), CreatedBySubject = "synthetic" }; c.Evidence.Add(letter);
-        if (type == "incorporation") foreach (var code in new[] { "legalized_initiation_evidence", "degree_evidence" })
+        if (type == "incorporation") foreach (var code in new[] { "legalized_initiation_evidence", "degree_evidence", "legalized_wage_increase_evidence", "legalized_exaltation_evidence" })
             c.Evidence.Add(new AdmissionEvidence { AdmissionCaseId = c.Id, EvidenceType = code, DocumentVersionId = Guid.NewGuid(), ReviewStatus = "approved", ReviewedAtUtc = created.AddMinutes(1), CreatedBySubject = "synthetic" });
         void Add(string code, int days, int hour) => c.Decisions.Add(new AdmissionDecision { AdmissionCaseId = c.Id, DecisionType = code, Status = "approved", AsOfDate = today.AddDays(days),
-            SourceReference = "SYNTHETIC ACTA", RecordedBySubject = "synthetic", RecordedAtUtc = created.AddHours(hour) });
+            SourceReference = "SYNTHETIC ACTA", RecordedBySubject = "synthetic", RecordedAtUtc = created.AddHours(hour), Notes = code == "article_2_3_review" ? "{\"OriginObedienceRecognized\":true}" : null });
         Add(AdmissionWorkflowCodes.DecisionType.WithdrawalSignature(letter.Id), -4, 1); Add("article_2_3_review", -4, 1);
         Add("information_commission_appointed", -4, 1); Add("information_commission_completed", -3, 2); Add("lodge_first_degree_presentation", -4, 1); Add("lodge_third_degree_approval", -2, 3); Add("lodge_first_degree_ballot", -1, 4);
         Assert.True(AdmissionCaseEligibilityProjector.Evaluate(c).Decision.CanProceed);

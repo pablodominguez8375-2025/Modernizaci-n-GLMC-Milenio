@@ -20,7 +20,7 @@ Base dev revisada: `6083248ff8c8abade4e9fb79676439c1eca8ebf2`. Rama: `feature/ad
 | `core.member_transfers` | PK `Id`; FK SourceMembershipId/TargetMembershipId | `TargetMembershipId`, `Status`, `ExecutedAtUtc`, EvidenceReference | Enlaza el destino ya materializado por afiliación resuelta. No crea segunda pertenencia ni cambia EndDate/EndReason del origen |
 | `core.member_withdrawal_requests` | PK `Id`; FK Member/OriginOrganization | Lectura WithdrawalType/Status/RequestedEffectiveDate/OratorSignatureSubject/OratorSignedAtUtc/EvidenceReference | CRV voluntaria aprobada y firmada, mismo origen/hermano/cierre y fecha destino posterior |
 
-Los vínculos descritos como lógicos no afirman una FK física adicional. Este registro cubre propiedades afectadas por el incremento, no el diccionario completo del proyecto. No se incorpora migración, backfill ni datos reales.
+Los vínculos descritos como lógicos no afirman una FK física adicional. Este registro cubre propiedades afectadas por el incremento, no el diccionario completo del proyecto. No se incorpora migración, backfill ni datos reales. La exigencia de antecedentes de aumento/exaltación se deriva también del grado declarado (Compañero/Maestro), por lo que una bandera omitida o falsa no elimina los documentos aplicables. Reemplazar un antecedente legalizado aprobado por uno pendiente/rechazado bloquea el trámite; no vuelve al documento antiguo.
 
 ## Antes / después
 
@@ -28,7 +28,7 @@ Los vínculos descritos como lógicos no afirman una FK física adicional. Este 
 - Antes: la fecha se usaba para inferir un reintento. Después: recibo por expediente con IDs y carga exacta; otra fecha/referencia devuelve conflicto.
 - Antes: incorporación no materializaba una identidad externa. Después: crea Member a partir de Person/grado acreditados, sin inventar número institucional ni fecha histórica de iniciación.
 - Antes: traslado rechazaba el origen ya cerrado por CRV y podía crear destino sin afiliación. Después: preserva ese cierre y exige/enlaza el destino materializado normativamente.
-- Antes: revisión art. 2.3, comisión y cronología estaban almacenadas pero no condicionaban la autorización. Después: proyector común consumido por elegibilidad, habilitación, solicitud, guard de autorización y materialización. Añade lectura de primer grado previa, balotaje en fecha posterior y comisión vigente para activación/incorporación.
+- Antes: revisión art. 2.3, comisión y cronología estaban almacenadas pero no condicionaban la autorización. Después: proyector común consumido por elegibilidad, habilitación, solicitud, guard de autorización y materialización. La nota JSON de revisión RI incorpora OriginObedienceRecognized (bool nullable): no consta bloquea; falso exige decisión expresa de regularización/reconocimiento por Gran Maestría, independientemente del Pacto de Paz y Amistad. Añade lectura de primer grado previa, balotaje en fecha posterior y comisión vigente para activación/incorporación.
 - Antes: CreatedAt disparaba re-presentación aun sin rechazo previo. Después: sólo rechazo previo/remediación activa esa regla.
 - Antes: pantalla fabricaba decisión/actor local tras materializar. Después: relee expediente desde API; capacidades institucionales gobiernan las acciones del panel.
 
