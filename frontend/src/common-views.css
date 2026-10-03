@@ -216,3 +216,36 @@
 .action-drawer-body form input,
 .action-drawer-body form select,
 .action-drawer-body form textarea { width: 100%; }
+
+/* ---------- Calidad de datos: selección múltiple y acción en lote (03-10-2026) ---------- */
+.data-quality-bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.data-quality-bulk-count { color: var(--brand-muted); font-size: 0.9375rem; }
+
+.data-quality-bulk-bar input[type="checkbox"],
+.issue-select input[type="checkbox"] {
+  width: 1.25rem;
+  height: 1.25rem;
+  accent-color: var(--brand-navy);
+}
+
+.issue-select {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+}
