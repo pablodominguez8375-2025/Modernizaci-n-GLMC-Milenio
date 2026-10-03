@@ -1,3 +1,4 @@
+import { ActionDrawer } from './actionKit'
 import { type FormEvent, useState } from 'react'
 import type { OrganizationOption, PmgmApiClient, WorkshopRegularitySnapshot } from './api/pmgmApi'
 import { regularityStatusClass, regularityStatusLabel, type RegularityKind } from './regularityDashboardModel'
@@ -33,10 +34,10 @@ export default function RegularityManagement({ api, kind, organizations }: { api
       <Field label="Fecha de corte · Chile"><input type="date" value={date} onChange={e => setDate(e.target.value)} /></Field><button className="regularity-secondary" type="button" onClick={() => void read()}>Consultar estado</button></div>
       <div className="regularity-current">{current ? <><span className={regularityStatusClass(current.status)}>{regularityStatusLabel(kind,current.status)}</span><strong>{organizations.find(x => x.id === organizationId)?.name}</strong><small>Vigente al {current.asOfDate}</small></> : <><strong>Sin estado cargado</strong><small>Consulta el Taller para revisar su registro vigente.</small></>}</div>
     </article>
-    <article className="panel regularity-update-panel"><p className="eyebrow">Nuevo registro</p><h2>Actualizar regularidad</h2><form className="regularity-form" onSubmit={save}>
+    <article className="panel regularity-update-panel"><p className="eyebrow">Nuevo registro</p><h2>Actualizar regularidad</h2><div className="action-bar"><ActionDrawer label="Actualizar regularidad" description="Estado, fecha efectiva, referencia y observaciones." confirmMessage="Se registrará el cambio de regularidad y quedará auditado."><form className="regularity-form" onSubmit={save}>
       <Field label="Estado"><select value={status} onChange={e => setStatus(e.target.value)}>{options.map(([value,label]) => <option value={value} key={value}>{label}</option>)}</select></Field>
       <Field label="Fecha efectiva · Chile"><input type="date" value={date} onChange={e => setDate(e.target.value)} /></Field>
-      <Field label="Referencia"><input value={reference} onChange={e => setReference(e.target.value)} /></Field><Field label="Observaciones"><textarea rows={4} value={notes} onChange={e => setNotes(e.target.value)} /></Field><button className="regularity-primary">Registrar estado</button></form>
+      <Field label="Referencia"><input value={reference} onChange={e => setReference(e.target.value)} /></Field><Field label="Observaciones"><textarea rows={4} value={notes} onChange={e => setNotes(e.target.value)} /></Field><button className="regularity-primary">Registrar estado</button></form></ActionDrawer></div>
     </article>
   </section>
 }

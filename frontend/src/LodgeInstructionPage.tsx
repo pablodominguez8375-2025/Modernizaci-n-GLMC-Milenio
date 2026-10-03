@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import type { PmgmApiClient } from './api/pmgmApi'
 import type { LodgeApiClient, LodgeGrade, LodgeInstruction, LodgeInstructionAttendanceStatus, LodgeMemberOption } from './api/lodgeApi'
 import './lodgeManagement.css'
+import { ActionDrawer } from './actionKit'
 
 type TeachingGrade = Exclude<LodgeGrade, 'all'>
 
@@ -122,13 +123,13 @@ export default function LodgeInstructionPage({ api, lodgeApi, allowedGrades }: {
     <section className="lodge-instruction-workspace">
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Docencia del Taller</p><h2>Registrar instrucción realizada</h2><p>Responsable del grado seleccionado: {officeLabel}. Los asistentes se determinan según su grado a la fecha registrada.</p></div><span className="lodge-live-chip">{api.useMocks ? 'Demostración con datos ficticios' : 'Operativo'}</span></div>
       <div className="lodge-instruction-workspace-grid">
-        <form className="lodge-instruction-form" onSubmit={register}>
+        <div className="action-bar lodge-instruction-actions"><ActionDrawer label="Registrar sesión" title="Registrar instrucción realizada" description="Fecha, grado y tema de la instrucción. Luego podrás marcar la asistencia." confirmMessage="Se registrará la sesión de instrucción."><form className="lodge-instruction-form" onSubmit={register}>
           <label><span>Fecha de la instrucción</span><input type="date" value={instructionDate} onChange={event => setInstructionDate(event.target.value)} required /></label>
           <label><span>Grado</span><select value={grade} onChange={event => setGrade(event.target.value as TeachingGrade)} disabled={allowedGrades.length === 1}>{allowedGrades.map(item => <option key={item} value={item}>{gradeLabels[item]}</option>)}</select></label>
           <label className="lodge-instruction-topic"><span>Tema tratado</span><input maxLength={500} value={topic} onChange={event => setTopic(event.target.value)} placeholder="Tema de la instrucción" required /></label>
           <div className="lodge-instruction-responsible"><small>Cargo responsable</small><strong>{officeLabel}</strong><span>{members.length} hermanos del grado para registrar asistencia</span></div>
           <button className="lodge-blue-button" type="submit" disabled={working || !organizationId || !topic.trim()}>{working ? 'Guardando…' : 'Registrar sesión'}</button>
-        </form>
+        </form></ActionDrawer></div>
         <article className="lodge-instruction-history"><div className="lodge-card-heading"><div><p className="lodge-kicker">Historial del Taller</p><h2>Sesiones de {gradeLabels[grade]}</h2></div></div>
           {instructions.filter(item => allowed.has(item.grade)).map(item => <div className="lodge-instruction-history-row" key={item.id}><div><strong>{item.topic}</strong><span>{formatDate(item.instructionDate)} · {gradeLabels[item.grade]}</span></div><div><small>{officeLabels[item.responsibleOffice]}</small><em>{item.status === 'scheduled' ? 'Pendiente de asistencia' : item.status === 'held' ? 'Realizada' : 'Cancelada'}</em>{item.status === 'scheduled' && <button className="lodge-secondary-button" type="button" onClick={() => { setSelectedId(item.id); setAttendance({}) }}>Registrar asistencia</button>}</div></div>)}
           {instructions.filter(item => allowed.has(item.grade)).length === 0 && <p className="lodge-empty-copy">No hay instrucciones registradas para este grado.</p>}

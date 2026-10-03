@@ -178,3 +178,41 @@
 .action-drawer-body .hospitalaria-drawer-form .regularity-field,
 .action-drawer-body .replenishment-inline-form input,
 .action-drawer-body .replenishment-inline-form select { width: 100%; }
+
+/* ---------- Vista operativa (entrega 2): Control de miembros y formularios en panel ---------- */
+.internal-control-more {
+  grid-column: 1 / -1;
+}
+
+.internal-control-more > summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--brand-navy);
+}
+
+.internal-control-more-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.historical-review-drawer { display: grid; gap: 0.875rem; }
+.historical-review-drawer textarea { width: 100%; min-height: 6rem; }
+
+.action-drawer-body .ceremony-right-payment-form,
+.action-drawer-body .lodge-instruction-form,
+.action-drawer-body .system-console-grid form,
+.action-drawer-body form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+}
+
+.action-drawer-body form label { display: grid; gap: 0.25rem; }
+.action-drawer-body form input,
+.action-drawer-body form select,
+.action-drawer-body form textarea { width: 100%; }
