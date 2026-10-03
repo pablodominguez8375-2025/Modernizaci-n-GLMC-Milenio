@@ -14,6 +14,7 @@ if (!browser || !baseUrl || !outputDir) {
 
 const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
+  { slug: 'afiliacion-incorporacion-tramitacion', profile: 'lodgeSecretary', label: 'Secretaría', admissions: true },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
   { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
   {
@@ -183,6 +184,27 @@ async function openModule(label) {
     return [...document.querySelectorAll('nav.sidebar button.active')].some(button => normalize(button.textContent) === ${JSON.stringify(label)});
   })()`, `active module ${label}`)
   await delay(650)
+}
+
+async function openAdmissionProcedure() {
+  const clicked = await evaluate(`(() => {
+    const button = [...document.querySelectorAll('.secretariat-role-tabs button')]
+      .find(candidate => candidate.querySelector('strong')?.textContent.trim() === 'Afiliación e incorporación');
+    if (!button) return false;
+    button.click(); return true;
+  })()`)
+  if (!clicked) throw new Error('Admission tab not found for Lodge Secretary.')
+  await waitForExpression(`!!document.querySelector('.admissions-documents')`, 'admission evidence list')
+  await evaluate(`(() => { const button = [...document.querySelectorAll('.admissions-documents button')].find(x => x.textContent.trim() === 'Cargar expediente'); if (!button || button.disabled) throw new Error('No synthetic admission case selected.'); button.click(); })()`)
+  await waitForExpression(`!!document.querySelector('[aria-labelledby="admission-procedure-title"] li')`, 'admission procedure requirements')
+  const result = await evaluate(`(() => {
+    const panel = document.querySelector('[aria-labelledby="admission-procedure-title"]');
+    const visibleForms = [...document.querySelectorAll('.admissions-page form')].filter(x => x.getClientRects().length);
+    const ceremony = [...panel.querySelectorAll('button')].find(x => x.textContent.trim() === 'Solicitar ceremonia' && x.type === 'button');
+    const forbidden = [...panel.querySelectorAll('option')].some(x => /Gran Maestría|art. 2.3/.test(x.textContent));
+    return { visibleForms: visibleForms.length, ceremonyDisabled: ceremony?.disabled === true, forbidden, alert: !!panel.querySelector('[role="alert"]') };
+  })()`)
+  if (result.visibleForms || !result.ceremonyDisabled || result.forbidden || result.alert) throw new Error(`Admission procedure check failed: ${JSON.stringify(result)}`)
 }
 
 async function assertNavigation(scenario) {
@@ -648,6 +670,7 @@ try {
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
       await assertNavigation(scenario)
+      if (scenario.admissions) await openAdmissionProcedure()
       if (scenario.slug === 'inicio') await assertDashboardMetricLayout(viewport)
       if (scenario.treasuryCollection) {
         await openTreasuryCollection()
@@ -664,7 +687,9 @@ try {
         ? '.treasury-collection-table tbody tr:has(button)'
         : scenario.grandTreasuryRights
           ? '.ceremony-right-card' // PMGM-UX: el formulario vive en el panel; se encuadra la tarjeta con su botón «Registrar abono»
-          : null
+          : scenario.admissions
+            ? '[aria-labelledby="admission-procedure-title"]'
+            : null
       await capture(filePath, evidenceTarget)
       console.log(`captured ${path.basename(filePath)}`)
     }

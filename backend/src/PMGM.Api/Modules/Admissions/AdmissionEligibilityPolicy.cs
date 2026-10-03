@@ -182,7 +182,6 @@ public static class AdmissionEligibilityPolicy
         ICollection<AdmissionRequirementResult> requirements)
     {
         var anyData = input.PreviousRejectionDate is not null ||
-                      input.NewPresentationDate is not null ||
                       input.RejectionCausesRemedied is not null;
         if (!anyData) return;
 

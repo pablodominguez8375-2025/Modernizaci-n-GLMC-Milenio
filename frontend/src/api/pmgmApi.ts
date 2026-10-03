@@ -1,4 +1,12 @@
+import { getDemoProfile, type DemoProfileKey } from '../demoProfiles'
+import { chileCivilDate } from '../admissionDates'
+import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
+import { affiliationModeForDate } from '../admissionDates'
+import { ExternalIncorporationDemo, type ExternalIncorporationRequest } from './externalIncorporation'
+export type { ExternalIncorporationRequest } from './externalIncorporation'
+import { lookupDemoAdmissionPeople, validateDemoAdmissionIdentity, type AdmissionPersonSearch, type AdmissionPersonSearchResponse } from './admissionLookup'
+export type { AdmissionPersonOption } from './admissionLookup'
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
 export interface SystemInfo { project: string; api: string; version: string; runtime: string; culture: string; institutionalTimeZone: string; defaultCurrency: string }
@@ -87,6 +95,36 @@ export interface CreateSpaceRequest { code: string; name: string; spaceType: 'te
 export interface CreateReservationRequest { spaceId: string; organizationId: string; ceremonyRequestId?: string | null; purpose: string; startsAtUtc: string; endsAtUtc: string; notes?: string | null }
 export interface IssueDocumentRequest { documentType: 'decree' | 'plancha'; planchaKind?: 'formal_communication' | null; title: string; content: string; organizationId?: string | null }
 export type CeremonyType = 'initiation' | 'affiliation' | 'wage_increase' | 'exaltation' | 'incorporation'
+export interface CreateAdmissionCaseRequest {
+  organizationId: string
+  admissionType: 'affiliation' | 'incorporation'
+  affiliationMode?: 'simple' | 'activation' | null
+  withdrawalLetterGrantedDate?: string | null
+  memberId?: string | null
+  personId: string
+  originOrganizationId?: string | null
+  originLodgeName?: string | null
+  originLodgeNumber?: string | null
+  originObedience?: string | null
+  degree?: string | null
+  wageIncreaseEvidenceApplies?: boolean
+  exaltationEvidenceApplies?: boolean
+  hasPeaceAndFriendshipPact?: boolean | null
+  previousRejectionDate?: string | null
+  rejectionCausesRemedied?: boolean | null
+}
+export interface AdmissionCaseResponse { id: string; organizationId: string; admissionType: string; affiliationMode: string | null; withdrawalLetterGrantedDate: string | null; memberId: string | null; personId: string; status: string; createdAtUtc: string }
+export interface AdmissionEvidenceItem { id: string; admissionCaseId: string; evidenceType: string; documentVersionId: string | null; evidenceDate: string | null; sourceReference: string | null; reviewStatus: string; reviewedAtUtc: string | null; notes: string | null; createdAtUtc: string }
+export interface AdmissionDecisionItem { id: string; admissionCaseId: string; decisionType: string; status: string; asOfDate: string; sourceReference: string | null; notes: string | null; recordedBySubject?: string; recordedAtUtc: string }
+export interface AdmissionCaseDetail extends AdmissionCaseResponse { evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }
+export interface AdmissionCaseListItem extends AdmissionCaseResponse { evidenceCount: number; latestEvidenceStatus: string | null }
+export interface AddAdmissionEvidenceRequest { evidenceType: string; documentVersionId: string; evidenceDate?: string | null; sourceReference?: string | null; notes?: string | null }
+export interface AdmissionEvidenceReviewRequest { status: 'approved' | 'observed' | 'rejected'; asOfDate: string; sourceReference: string; notes?: string | null }
+export interface AdmissionProcedureResponse { caseId: string; status: string; canProceedToCeremonyRequest: boolean; requirements: Array<{code:string;status:string;reason:string}>; actions: {canManageLodge:boolean;canReviewSignature:boolean;canReviewArticle23:boolean;canProvideGrandMasterDecision:boolean} }
+export type AdmissionProcedureAction = 'decisiones/presentacion-primer-grado' | 'decisiones/tercer-grado' | 'decisiones/balotaje-primer-grado' | 'comision-informacion' | 'comision-informacion/conclusion' | 'revision-articulo-2-3' | 'decisiones/indulto-gran-maestria' | 'decisiones/reconocimiento-regularidad' | 'decisiones/gran-maestria-aceptacion-especial'
+export interface AdmissionProcedurePayload { status?: 'approved' | 'rejected'; asOfDate?: string; sourceReference: string; notes?: string | null; memberIds?: string[]; appointmentDate?: string; completed?: boolean; approved?: boolean; hasRayamiento?: boolean; hasTribunalForcedWithdrawal?: boolean; originObedienceRecognized?: boolean | null }
+export interface MaterializeAdmissionRequest { effectiveDate: string; evidenceReference: string }
+export interface MaterializeAdmissionResponse { idempotent: boolean; membershipId?: string; admissionCaseId?: string; memberId?: string; effectiveDate?: string | null; membership?: { id: string; memberId: string; organizationId: string; startDate: string | null; status: string } }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -325,6 +363,8 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
 ]
 
 export class PmgmApiClient {
+  private readonly withdrawalReviewDemo = withdrawalReviewFixture()
+  private readonly externalIncorporationDemo = new ExternalIncorporationDemo()
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
@@ -914,6 +954,116 @@ export class PmgmApiClient {
   private requireMockHospitalariaSubmission(id:string):HospitalariaMonthlySubmission{const item=[...this.mockHospitalariaSubmissions.values()].find(x=>x.id===id);if(!item)throw new Error('La rendición de Hospitalaria no existe.');return item}
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
+  async createAdmissionCase(payload: CreateAdmissionCaseRequest): Promise<AdmissionCaseResponse> {
+    if (this.useMocks) {
+      validateDemoAdmissionIdentity(payload, this.externalIncorporationDemo.people)
+      if (payload.admissionType === 'affiliation') {
+        const expected = affiliationModeForDate(payload.withdrawalLetterGrantedDate ?? '')
+        if (!expected) throw new Error('Indique una fecha válida de otorgamiento de la Carta de Retiro Voluntario, sin fecha futura.')
+        if (payload.affiliationMode !== expected) throw new Error('La modalidad no corresponde a la antigüedad de la Carta de Retiro Voluntario.')
+      }
+      return { id: crypto.randomUUID(), organizationId: payload.organizationId, admissionType: payload.admissionType, affiliationMode: payload.affiliationMode ?? null, withdrawalLetterGrantedDate: payload.withdrawalLetterGrantedDate ?? null, memberId: payload.memberId ?? null, personId: payload.personId, status: 'under_review', createdAtUtc: new Date().toISOString() }
+    }
+    return this.postJson<AdmissionCaseResponse>('/api/admisiones/expedientes', payload)
+  }
+
+  async searchAdmissionPeople(input: AdmissionPersonSearch): Promise<AdmissionPersonSearchResponse> {
+    if (this.useMocks) return lookupDemoAdmissionPeople(input, this.externalIncorporationDemo.people)
+    return this.request<AdmissionPersonSearchResponse>(`/api/admisiones/personas-busqueda?${new URLSearchParams({ ...input, query: input.query.trim() })}`)
+  }
+
+  async createExternalIncorporation(payload: ExternalIncorporationRequest): Promise<AdmissionCaseResponse> {
+    if (this.useMocks) return this.externalIncorporationDemo.create(payload)
+    return this.postJson<AdmissionCaseResponse>('/api/admisiones/incorporaciones/persona-nueva', payload)
+  }
+
+  async getAdmissionCase(caseId: string): Promise<AdmissionCaseDetail> {
+    if (this.useMocks) {
+      const item = this.withdrawalReviewDemo
+      if (caseId !== item.id) throw new Error('La demo sólo expone el expediente sintético demo-crv-review.')
+      return { id: item.id, organizationId: defaultMockOrganizations.find(x => x.number === '23')!.id, admissionType: item.admissionType, affiliationMode: item.affiliationMode, withdrawalLetterGrantedDate: item.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: item.status, createdAtUtc: item.createdAtUtc, evidence: item.letters.map(letter => ({ id: letter.id, admissionCaseId: item.id, evidenceType: 'withdrawal_letter', documentVersionId: letter.documentVersionId, evidenceDate: letter.evidenceDate, sourceReference: 'SYNTHETIC', reviewStatus: letter.reviewStatus, reviewedAtUtc: letter.reviewedAtUtc, notes: null, createdAtUtc: letter.createdAtUtc })), decisions: item.decisions }
+    }
+    const response = await this.request<{ admissionCase: AdmissionCaseResponse; evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}`)
+    return { ...response.admissionCase, evidence: response.evidence, decisions: response.decisions }
+  }
+
+  async listAdmissionCases(organizationId?: string, status?: string): Promise<{ total: number; items: AdmissionCaseListItem[] }> {
+    if (this.useMocks) {
+      return { total: 1, items: [{ id: this.withdrawalReviewDemo.id, organizationId: defaultMockOrganizations.find(x => x.number === '23')!.id, admissionType: this.withdrawalReviewDemo.admissionType, affiliationMode: this.withdrawalReviewDemo.affiliationMode, withdrawalLetterGrantedDate: this.withdrawalReviewDemo.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: this.withdrawalReviewDemo.status, createdAtUtc: this.withdrawalReviewDemo.createdAtUtc, evidenceCount: this.withdrawalReviewDemo.letters.length, latestEvidenceStatus: this.withdrawalReviewDemo.letters[0]?.reviewStatus ?? null }] }
+    }
+    const query = new URLSearchParams()
+    if (organizationId) query.set('organizationId', organizationId)
+    if (status) query.set('status', status)
+    return this.request<{ total: number; items: AdmissionCaseListItem[] }>('/api/admisiones/expedientes' + (query.size ? '?' + query.toString() : ''))
+  }
+
+  async addAdmissionEvidence(caseId: string, payload: AddAdmissionEvidenceRequest): Promise<AdmissionEvidenceItem> {
+    if (this.useMocks) throw new Error('La carga operativa requiere una API institucional; la demo sólo muestra evidencia sintética.')
+    return this.postJson<AdmissionEvidenceItem>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias`, payload)
+  }
+
+  async reviewAdmissionEvidence(caseId: string, evidenceId: string, payload: AdmissionEvidenceReviewRequest): Promise<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }> {
+    if (this.useMocks) throw new Error('La revisión operativa requiere una API institucional; la demo sólo muestra evidencia sintética.')
+    return this.postJson<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias/${encodeURIComponent(evidenceId)}/revision`, payload)
+  }
+
+  async getAdmissionProcedure(caseId: string, demoProfileKey: DemoProfileKey = 'brother'): Promise<AdmissionProcedureResponse> {
+    if (this.useMocks) {
+      const c = await this.getAdmissionCase(caseId)
+      const capabilities = getDemoProfile(demoProfileKey).capabilities
+      const required = ['article_2_3_review', 'lodge_first_degree_presentation', 'lodge_third_degree_approval', 'lodge_first_degree_ballot']
+      const requirements = required.map(code => ({ code, status: c.decisions.find(x => x.decisionType === code)?.status ?? 'observed', reason: 'Registro sintético de demostración; la autorización institucional se realiza en la API instalada.' }))
+      return { caseId, status: 'observed', canProceedToCeremonyRequest: false, requirements, actions: { canManageLodge: capabilities.canManageLodgeSecretariat === true, canReviewSignature: capabilities.canManageGrandSecretariat, canReviewArticle23: capabilities.canValidateCeremonyInternalAffairs, canProvideGrandMasterDecision: demoProfileKey === 'grandMaster' || demoProfileKey === 'grandLodge' } }
+    }
+    return this.request<AdmissionProcedureResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/habilitacion-procedimiento`)
+  }
+
+  async recordAdmissionProcedure(caseId: string, action: AdmissionProcedureAction, payload: AdmissionProcedurePayload): Promise<AdmissionDecisionItem> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id || this.withdrawalReviewDemo.status === 'resolved') throw new Error('Seleccione el expediente sintético abierto de demostración.')
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia institucional.')
+      const types: Record<AdmissionProcedureAction, string> = { 'decisiones/presentacion-primer-grado':'lodge_first_degree_presentation', 'decisiones/tercer-grado':'lodge_third_degree_approval', 'decisiones/balotaje-primer-grado':'lodge_first_degree_ballot', 'comision-informacion':'information_commission_appointed', 'comision-informacion/conclusion':'information_commission_completed', 'revision-articulo-2-3':'article_2_3_review', 'decisiones/indulto-gran-maestria':'grand_master_pardon', 'decisiones/reconocimiento-regularidad':'grand_master_regularity_recognition', 'decisiones/gran-maestria-aceptacion-especial':'grand_master_special_acceptance' }
+      const decision = { id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: types[action], status: payload.status ?? ((payload.completed === false || payload.approved === false || payload.hasRayamiento || payload.hasTribunalForcedWithdrawal) ? 'rejected' : 'approved'), asOfDate: payload.asOfDate ?? payload.appointmentDate ?? chileCivilDate(), sourceReference: payload.sourceReference.trim(), notes: payload.notes ?? null, recordedBySubject: 'synthetic-demo', recordedAtUtc: new Date().toISOString() }
+      this.withdrawalReviewDemo.decisions.unshift(decision)
+      return decision
+    }
+    return this.postJson<AdmissionDecisionItem>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/${action}`, payload)
+  }
+
+  async createAdmissionCeremony(caseId: string, payload: { proposedDate: string; notes?: string | null }): Promise<{id:string;status:string;alreadyCreated:boolean}> {
+    if (this.useMocks) throw new Error('La solicitud formal requiere la API institucional y sus requisitos completos. La demo conserva únicamente registros sintéticos.')
+    return this.postJson(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/solicitud-ceremonia`, payload)
+  }
+
+  async materializeAdmissionCase(caseId: string, payload: MaterializeAdmissionRequest): Promise<MaterializeAdmissionResponse> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La demo de materialización usa el expediente sintético demo-crv-review.')
+      const existing = this.withdrawalReviewDemo.decisions.find(x => x.decisionType === 'membership_materialized')
+      if (existing && (existing.asOfDate !== payload.effectiveDate || existing.sourceReference !== payload.evidenceReference.trim())) throw new Error('El expediente ya fue materializado con otros antecedentes.')
+      if (existing) return { idempotent: true, membership: { id: 'demo-membership-materialized', memberId: 'demo-member-1', organizationId: defaultMockOrganizations.find(x => x.number === '23')!.id, startDate: payload.effectiveDate, status: 'active' } }
+      this.withdrawalReviewDemo.status = 'resolved'
+      this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference.trim(), notes: 'Materialización sintética de demostración.', recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() })
+      return { idempotent: false, membershipId: 'demo-membership-materialized', admissionCaseId: caseId }
+    }
+    return this.postJson<MaterializeAdmissionResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/materializar`, payload)
+  }
+
+  async reviewWithdrawalLetterSignature(caseId: string, payload: WithdrawalSignatureReviewRequest): Promise<WithdrawalSignatureDecision> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La demo de revisión usa únicamente el expediente sintético demo-crv-review; la vista operativa sigue pendiente.')
+      return reviewWithdrawalSignatureDemo(this.withdrawalReviewDemo, payload)
+    }
+    return this.postJson<WithdrawalSignatureDecision>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/verificaciones/carta-retiro-firma-manuscrita`, payload)
+  }
+
+  async correctWithdrawalLetterDate(caseId: string, payload: WithdrawalDateCorrectionRequest): Promise<WithdrawalDateCorrectionResponse> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La corrección demo usa únicamente el expediente sintético demo-crv-review; el panel operativo sigue pendiente.')
+      return correctWithdrawalDateDemo(this.withdrawalReviewDemo, payload)
+    }
+    return this.postJson<WithdrawalDateCorrectionResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/carta-retiro/correccion-fecha`, payload)
+  }
+
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers); headers.set('Accept', 'application/json')
     const token = await this.getAccessToken?.(); if (!token) throw new Error('Debe ingresar para consultar la información institucional.'); headers.set('Authorization', `Bearer ${token}`)
