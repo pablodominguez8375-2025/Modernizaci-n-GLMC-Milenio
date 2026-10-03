@@ -44,7 +44,7 @@ public sealed class AdmissionExternalIntakeHttpTests
         using var client = factory.CreateClient();
         var own = new Organization { Name = "Incorporación sintética", Type = "workshop" };
         var other = new Organization { Name = "Taller ajeno sintético", Type = "workshop" };
-        var id = "EXT" + Guid.NewGuid().ToString("N")[..10];
+        var id = "EXT" + Guid.NewGuid().ToString("N")[..10].ToUpperInvariant();
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>(); await core.Database.MigrateAsync(ct);
@@ -71,7 +71,7 @@ public sealed class AdmissionExternalIntakeHttpTests
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.DoesNotContain(personId.ToString(), await duplicate.Content.ReadAsStringAsync(ct));
         // A failure after core.SaveChanges must roll back both the identity and the audit.
-        var failId = "FAIL" + Guid.NewGuid().ToString("N")[..9];
+        var failId = "FAIL" + Guid.NewGuid().ToString("N")[..9].ToUpperInvariant();
         Assert.Equal(HttpStatusCode.Conflict, (await Post(input with { RutOrInstitutionalId = failId, OriginObedience = "FAIL-SYNTHETIC" })).StatusCode);
         await using var check = factory.Services.CreateAsyncScope();
         var coreCheck = check.ServiceProvider.GetRequiredService<PmgmDbContext>();
@@ -87,7 +87,7 @@ public sealed class AdmissionExternalIntakeHttpTests
         Assert.Null(admission.WithdrawalLetterGrantedDate); Assert.Equal("under_review", admission.Status);
         Assert.Equal(1, await coreCheck.AuditEvents.CountAsync(x => x.OrganizationId == own.Id && x.Action == "admission.external.intake.created", ct));
         // Concurrent submissions of the same new identifier create one identity/case only.
-        var concurrentId = "RACE" + Guid.NewGuid().ToString("N")[..9];
+        var concurrentId = "RACE" + Guid.NewGuid().ToString("N")[..9].ToUpperInvariant();
         var race = await Task.WhenAll(Post(input with { RutOrInstitutionalId = concurrentId }), Post(input with { RutOrInstitutionalId = concurrentId }));
         Assert.Single(race, x => x.StatusCode == HttpStatusCode.Created);
         Assert.Single(race, x => x.StatusCode == HttpStatusCode.Conflict);

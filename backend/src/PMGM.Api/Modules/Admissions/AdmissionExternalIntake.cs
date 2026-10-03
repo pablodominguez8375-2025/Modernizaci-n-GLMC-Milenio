@@ -64,9 +64,14 @@ public static class AdmissionExternalIntake
                 entity.AffiliationMode, entity.WithdrawalLetterGrantedDate, entity.Status, entity.CreatedAtUtc
             });
         }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException pg && pg.SqlState is "23505" or "40001")
-        { return Conflict(); }
-        catch (PostgresException ex) when (ex.SqlState == "40001") { return Conflict(); }
+        catch (Exception ex) when (IsIdentityConflict(ex)) { return Conflict(); }
+    }
+    // Npgsql may wrap a serialization failure in an EF transient-failure exception.
+    private static bool IsIdentityConflict(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+            if (current is PostgresException { SqlState: "23505" or "40001" }) return true;
+        return false;
     }
     private static IResult Conflict() => Results.Conflict(new { message = "No fue posible registrar esta identidad. Revise el expediente existente con el área autorizada antes de repetir el alta." });
 }
