@@ -20,7 +20,7 @@ const scenarios = [
     slug: 'tesoreria-taller',
     profile: 'lodgeTreasurer',
     label: 'Tesorería',
-    requiredSidebar: ['Mi ficha', 'Mi calendario', 'Notificaciones', 'Insinuados publicados', 'Tesorería', 'Biblioteca Virtual'],
+    requiredSidebar: ['Mi ficha', 'Agenda', 'Avisos', 'Insinuados publicados', 'Tesorería', 'Biblioteca Virtual'],
     forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Carga de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
     requiredTabs: ['Resumen', 'Cuotas y Cobranzas', 'Ingresos y Egresos', 'Cuadro mensual', 'Configuraciones', 'Reportes'],
     treasuryCollection: true,
@@ -358,9 +358,10 @@ async function assertDashboardMetricLayout(viewport) {
     };
   })()`)
   // PMGM-UX-002: en móvil los 4 indicadores de Inicio se muestran en 2 columnas (decisión aprobada por el PO, 01-10-2026).
-  const expectedColumns = viewport.width <= 1100 ? 2 : 4
-  if (!result || result.cardCount !== 4 || result.columns !== expectedColumns) {
-    throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 4 cards, got ${JSON.stringify(result)}.`)
+  // PMGM-UX menús sin repetir (03-10-2026): 3 accesos en Inicio; 1 columna en celular, 3 desde 721 px.
+  const expectedColumns = viewport.width <= 720 ? 1 : 3
+  if (!result || result.cardCount !== 3 || result.columns !== expectedColumns) {
+    throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 3 cards, got ${JSON.stringify(result)}.`)
   }
 }
 

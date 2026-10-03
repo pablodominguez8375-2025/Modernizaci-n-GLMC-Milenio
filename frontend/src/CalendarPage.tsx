@@ -77,7 +77,7 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
     <section className="page-heading calendar-heading">
       <div>
         <p className="eyebrow">Agenda institucional unificada</p>
-        <h1>Calendario Institucional</h1>
+        <h1>Agenda</h1>
         <p>Tenidas, ceremonias, docencia y reservas de espacios, con visibilidad controlada por ámbito y permisos.</p>
       </div>
       <div className="calendar-heading-actions">
