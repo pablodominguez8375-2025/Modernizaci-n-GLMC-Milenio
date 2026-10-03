@@ -1,3 +1,4 @@
+import { reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
 import { affiliationModeForDate } from '../admissionDates'
 import { ExternalIncorporationDemo, type ExternalIncorporationRequest } from './externalIncorporation'
@@ -349,6 +350,7 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
 ]
 
 export class PmgmApiClient {
+  private readonly withdrawalReviewDemo = withdrawalReviewFixture()
   private readonly externalIncorporationDemo = new ExternalIncorporationDemo()
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
@@ -960,6 +962,14 @@ export class PmgmApiClient {
   async createExternalIncorporation(payload: ExternalIncorporationRequest): Promise<AdmissionCaseResponse> {
     if (this.useMocks) return this.externalIncorporationDemo.create(payload)
     return this.postJson<AdmissionCaseResponse>('/api/admisiones/incorporaciones/persona-nueva', payload)
+  }
+
+  async reviewWithdrawalLetterSignature(caseId: string, payload: WithdrawalSignatureReviewRequest): Promise<WithdrawalSignatureDecision> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La demo de revisión usa únicamente el expediente sintético demo-crv-review; la vista operativa sigue pendiente.')
+      return reviewWithdrawalSignatureDemo(this.withdrawalReviewDemo, payload)
+    }
+    return this.postJson<WithdrawalSignatureDecision>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/verificaciones/carta-retiro-firma-manuscrita`, payload)
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {

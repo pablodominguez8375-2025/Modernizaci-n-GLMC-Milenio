@@ -37,6 +37,8 @@ public static class AdmissionWorkflowCodes
         public const string CeremonyRequestCreated = "ceremony_request_created";
         public const string EvidenceReviewPrefix = "evidence_review:";
 
+        public static string WithdrawalSignature(Guid evidenceId) => $"{WithdrawalLetterHandwrittenSignature}:{evidenceId:D}";
+
         public static string EvidenceReview(Guid evidenceId) => $"{EvidenceReviewPrefix}{evidenceId:D}";
     }
 }

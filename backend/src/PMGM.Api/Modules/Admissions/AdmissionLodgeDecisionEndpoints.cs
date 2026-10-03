@@ -144,13 +144,13 @@ public static class AdmissionLodgeDecisionEndpoints
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var withdrawalLetter = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.WithdrawalLetter, approvedOnly: false);
+        var withdrawalLetter = AdmissionWithdrawalEvidencePolicy.CurrentLetter(admissionCase);
         var initiationEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedInitiation, approvedOnly: true);
         var wageEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedWageIncrease, approvedOnly: true);
         var exaltationEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedExaltation, approvedOnly: true);
         var degreeEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.Degree, approvedOnly: true);
 
-        var signature = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.WithdrawalLetterHandwrittenSignature);
+        var signature = AdmissionWithdrawalEvidencePolicy.VerifiedSignature(admissionCase, AdmissionWithdrawalEvidencePolicy.ChileDate(DateTimeOffset.UtcNow));
         var thirdDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeThirdDegreeApproval);
         var firstDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreeBallot);
         var grandMasterSpecial = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
@@ -158,7 +158,7 @@ public static class AdmissionLodgeDecisionEndpoints
         var eligibility = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
             AdmissionType: admissionCase.AdmissionType,
             AffiliationMode: admissionCase.AffiliationMode,
-            WithdrawalLetterAttached: withdrawalLetter is not null,
+            WithdrawalLetterAttached: withdrawalLetter?.ReviewStatus == CeremonyCodes.ValidationStatus.Approved,
             WithdrawalLetterHandwrittenSignatureVerified: signature?.Status == CeremonyCodes.ValidationStatus.Approved,
             LodgeThirdDegreeApproved: ToDecisionState(thirdDegree),
             LodgeFirstDegreeBallotApproved: ToDecisionState(firstDegree),
