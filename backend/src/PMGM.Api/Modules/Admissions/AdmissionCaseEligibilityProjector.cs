@@ -44,6 +44,45 @@ public static class AdmissionCaseEligibilityProjector
             NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
             RejectionCausesRemedied: admissionCase.RejectionCausesRemedied));
 
+        var requirements = decision.Requirements.ToList();
+        var today = AdmissionWithdrawalEvidencePolicy.ChileDate(DateTimeOffset.UtcNow);
+        bool Recorded(AdmissionDecision? value) => value is not null &&
+            value.AsOfDate >= ChileDate(admissionCase.CreatedAtUtc) && value.AsOfDate <= today &&
+            !string.IsNullOrWhiteSpace(value.SourceReference);
+        void Require(string code, bool approved, string reason)
+            => requirements.Add(new AdmissionRequirementResult(code,
+                approved ? CeremonyCodes.ValidationStatus.Approved : CeremonyCodes.ValidationStatus.Observed, reason));
+
+        var presentation = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreePresentation);
+        Require("lodge_first_degree_presentation", Recorded(presentation) && presentation!.Status == CeremonyCodes.ValidationStatus.Approved &&
+            thirdDegree is not null && presentation.AsOfDate <= thirdDegree.AsOfDate,
+            "La solicitud escrita y sus antecedentes deben constar como leídos en primer grado antes de la decisión de tercer grado (art. 2.4).");
+        var article23 = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.Article23Review);
+        var pardon = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterPardon);
+        Require("article_2_3_review", Recorded(article23) &&
+            (article23!.Status == CeremonyCodes.ValidationStatus.Approved ||
+             (article23.Status == CeremonyCodes.ValidationStatus.Rejected && Recorded(pardon) &&
+              pardon!.Status == CeremonyCodes.ValidationStatus.Approved && pardon.AsOfDate >= article23.AsOfDate)),
+            "Revisión de Régimen Interior del art. 2.3; si existe impedimento, indulto de Gran Maestría documentado posterior.");
+        Require("lodge_ballot_chronology", Recorded(thirdDegree) && Recorded(firstDegree) &&
+            firstDegree!.AsOfDate > thirdDegree!.AsOfDate,
+            "El balotaje de primer grado debe celebrarse en una fecha posterior a la aprobación de tercer grado (art. 2.4).");
+        if (admissionCase.AdmissionType == CeremonyCodes.Type.Incorporation ||
+            admissionCase.AffiliationMode == AdmissionCodes.AffiliationMode.Activation)
+        {
+            var appointment = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionAppointed);
+            var conclusion = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.InformationCommissionCompleted);
+            Require("information_commission", Recorded(appointment) && Recorded(conclusion) &&
+                appointment!.Status == CeremonyCodes.ValidationStatus.Approved && conclusion!.Status == CeremonyCodes.ValidationStatus.Approved &&
+                conclusion.RecordedAtUtc >= appointment.RecordedAtUtc && conclusion.AsOfDate >= appointment.AsOfDate &&
+                thirdDegree is not null && conclusion.AsOfDate <= thirdDegree.AsOfDate,
+                "Comisión de tres Maestros concluida tras el último nombramiento y antes de la decisión de tercer grado (art. 2.5).");
+        }
+        var rejected = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Rejected);
+        var observed = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Observed);
+        var status = rejected ? "does_not_comply" : observed ? "observed" : "complies";
+        decision = new AdmissionEligibilityDecision(status == "complies", status, requirements);
+
         return new AdmissionCaseEligibilityProjection(
             decision,
             withdrawalLetter?.Id,

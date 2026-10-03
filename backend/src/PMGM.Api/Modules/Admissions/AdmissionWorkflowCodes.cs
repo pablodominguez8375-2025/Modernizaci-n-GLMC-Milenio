@@ -26,6 +26,7 @@ public static class AdmissionWorkflowCodes
     public static class DecisionType
     {
         public const string WithdrawalLetterHandwrittenSignature = "withdrawal_letter_handwritten_signature";
+        public const string LodgeFirstDegreePresentation = "lodge_first_degree_presentation";
         public const string LodgeThirdDegreeApproval = "lodge_third_degree_approval";
         public const string LodgeFirstDegreeBallot = "lodge_first_degree_ballot";
         public const string GrandMasterSpecialAcceptance = "grand_master_special_acceptance";

@@ -16,12 +16,19 @@ public static class AdmissionLodgeDecisionEndpoints
             .WithTags("Afiliaciones e incorporaciones - decisiones del Taller")
             .RequireAuthorization();
 
+        group.MapPost("/expedientes/{caseId:guid}/decisiones/presentacion-primer-grado", RecordFirstDegreePresentationAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/tercer-grado", RecordThirdDegreeDecisionAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/balotaje-primer-grado", RecordFirstDegreeBallotAsync);
         group.MapGet("/expedientes/{caseId:guid}/habilitacion-procedimiento", GetProcedureEligibilityAsync);
 
         return endpoints;
     }
+
+    private static Task<IResult> RecordFirstDegreePresentationAsync(Guid caseId, AdmissionLodgeDecisionRequest request,
+        HttpContext context, AdmissionsDbContext admissionsDb, PmgmDbContext coreDb,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+        => RecordLodgeDecisionAsync(caseId, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreePresentation,
+            "admission.lodge.first_degree_presentation.recorded", request, context, admissionsDb, coreDb, access, audit, ct);
 
     private static Task<IResult> RecordThirdDegreeDecisionAsync(
         Guid caseId,
@@ -144,35 +151,8 @@ public static class AdmissionLodgeDecisionEndpoints
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var withdrawalLetter = AdmissionWithdrawalEvidencePolicy.CurrentLetter(admissionCase);
-        var initiationEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedInitiation, approvedOnly: true);
-        var wageEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedWageIncrease, approvedOnly: true);
-        var exaltationEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedExaltation, approvedOnly: true);
-        var degreeEvidence = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.Degree, approvedOnly: true);
-
-        var signature = AdmissionWithdrawalEvidencePolicy.VerifiedSignature(admissionCase, AdmissionWithdrawalEvidencePolicy.ChileDate(DateTimeOffset.UtcNow));
-        var thirdDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeThirdDegreeApproval);
-        var firstDegree = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.LodgeFirstDegreeBallot);
-        var grandMasterSpecial = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
-
-        var eligibility = AdmissionEligibilityPolicy.Evaluate(new AdmissionEligibilityInput(
-            AdmissionType: admissionCase.AdmissionType,
-            AffiliationMode: admissionCase.AffiliationMode,
-            WithdrawalLetterAttached: withdrawalLetter?.ReviewStatus == CeremonyCodes.ValidationStatus.Approved,
-            WithdrawalLetterHandwrittenSignatureVerified: signature?.Status == CeremonyCodes.ValidationStatus.Approved,
-            LodgeThirdDegreeApproved: ToDecisionState(thirdDegree),
-            LodgeFirstDegreeBallotApproved: ToDecisionState(firstDegree),
-            LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
-            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
-            LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
-            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
-            LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
-            DegreeEvidenceAttached: degreeEvidence is not null,
-            HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
-            GrandMasterSpecialAcceptanceApproved: grandMasterSpecial?.Status == CeremonyCodes.ValidationStatus.Approved,
-            PreviousRejectionDate: admissionCase.PreviousRejectionDate,
-            NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
-            RejectionCausesRemedied: admissionCase.RejectionCausesRemedied));
+        var projection = AdmissionCaseEligibilityProjector.Evaluate(admissionCase);
+        var eligibility = projection.Decision;
 
         return Results.Ok(new
         {
@@ -181,12 +161,19 @@ public static class AdmissionLodgeDecisionEndpoints
             status = eligibility.Status,
             canProceedToCeremonyRequest = eligibility.CanProceed,
             eligibility.Requirements,
+            actions = new
+            {
+                canManageLodge = access.CanManageLodgeSecretariat(httpContext.User, admissionCase.OrganizationId),
+                canReviewSignature = access.CanManageGrandSecretariat(httpContext.User),
+                canReviewArticle23 = access.CanValidateCeremonyInternalAffairs(httpContext.User),
+                canProvideGrandMasterDecision = access.CanProvideGrandMasterApproval(httpContext.User)
+            },
             evidence = new
             {
-                withdrawalLetterId = withdrawalLetter?.Id,
-                thirdDegreeDecisionId = thirdDegree?.Id,
-                firstDegreeBallotDecisionId = firstDegree?.Id,
-                grandMasterSpecialAcceptanceDecisionId = grandMasterSpecial?.Id
+                withdrawalLetterId = projection.WithdrawalLetterId,
+                thirdDegreeDecisionId = projection.ThirdDegreeDecisionId,
+                firstDegreeBallotDecisionId = projection.FirstDegreeBallotDecisionId,
+                grandMasterSpecialAcceptanceDecisionId = projection.GrandMasterSpecialAcceptanceDecisionId
             }
         });
     }

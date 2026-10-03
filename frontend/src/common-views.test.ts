@@ -46,11 +46,13 @@ describe('PMGM-UX revisión transversal · sin microtexto ni mayúsculas diminut
   })
 })
 
-describe('PMGM-UX Tesorería · menú operativo como pestañas, igual que Secretaría', () => {
-  it('bajo 1440 px el menú pasa a pestañas horizontales sin mosaicos ni descripciones', () => {
-    const block = css.slice(css.indexOf('Tesorería: menú de secciones como pestañas compactas'))
+describe('PMGM-UX menús de secciones horizontales en tarjetas grandes (decisión del PO 03-10-2026)', () => {
+  it('todos los menús de secciones bajo 1440 px son tarjetas que se deslizan hacia el lado', () => {
+    const block = css.slice(css.indexOf('Menús de secciones horizontales en tarjetas grandes'))
     expect(block).toMatch(/@media \(max-width: 89\.99rem\)/)
-    expect(block).toMatch(/\.treasury-role-tabs\s*\{[^}]*display:\s*flex[^}]*overflow-x:\s*auto/s)
-    expect(block).toMatch(/\.treasury-role-tabs button small\s*\{\s*display:\s*none/)
+    for (const selector of ['.treasury-role-tabs', '.secretariat-role-tabs', '.workspace-tabs [role="tablist"]', '.system-page-tabs']) expect(block).toContain(selector)
+    expect(block).toMatch(/\{[^}]*display:\s*flex[^}]*overflow-x:\s*auto/s)
+    expect(block).toMatch(/> button \{[^}]*min-height:\s*4\.5rem[^}]*border-radius:\s*0\.875rem/s)
+    expect(block).not.toMatch(/button small \{\s*display:\s*none/)
   })
 })

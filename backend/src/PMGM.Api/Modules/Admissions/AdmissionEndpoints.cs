@@ -356,6 +356,11 @@ public static class AdmissionEndpoints
         if (admissionCase.HasPeaceAndFriendshipPact != false)
             return Results.Conflict(new { message = "Esta decisión especial se registra cuando consta que no existe Pacto de Paz y Amistad con la Obediencia de origen." });
 
+        if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
+            return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.AsOfDate is null || request.AsOfDate > ChileToday() || string.IsNullOrWhiteSpace(request.SourceReference) || request.SourceReference.Length > 500)
+            return Results.BadRequest(new { message = "Indique fecha no futura y resolución institucional de Gran Maestría." });
+
         var decision = CreateDecision(caseId,
             AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance,
             request,
@@ -398,24 +403,7 @@ public static class AdmissionEndpoints
         var signatureDecision = AdmissionWithdrawalEvidencePolicy.VerifiedSignature(admissionCase, ChileToday());
         var gmSpecialDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
 
-        var input = new AdmissionEligibilityInput(
-            AdmissionType: admissionCase.AdmissionType,
-            AffiliationMode: admissionCase.AffiliationMode,
-            WithdrawalLetterAttached: withdrawalLetter?.ReviewStatus == CeremonyCodes.ValidationStatus.Approved,
-            WithdrawalLetterHandwrittenSignatureVerified: signatureDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
-            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
-            LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
-            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
-            LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
-            DegreeEvidenceAttached: degreeEvidence is not null,
-            HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
-            GrandMasterSpecialAcceptanceApproved: gmSpecialDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            PreviousRejectionDate: admissionCase.PreviousRejectionDate,
-            NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
-            RejectionCausesRemedied: admissionCase.RejectionCausesRemedied);
-
-        var decision = AdmissionEligibilityPolicy.Evaluate(input);
+        var decision = AdmissionCaseEligibilityProjector.Evaluate(admissionCase).Decision;
 
         return Results.Ok(new
         {

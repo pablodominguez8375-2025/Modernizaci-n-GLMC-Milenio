@@ -1,3 +1,4 @@
+import { chileCivilDate } from '../admissionDates'
 import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
 import { affiliationModeForDate } from '../admissionDates'
@@ -118,8 +119,11 @@ export interface AdmissionCaseDetail extends AdmissionCaseResponse { evidence: A
 export interface AdmissionCaseListItem extends AdmissionCaseResponse { evidenceCount: number; latestEvidenceStatus: string | null }
 export interface AddAdmissionEvidenceRequest { evidenceType: string; documentVersionId: string; evidenceDate?: string | null; sourceReference?: string | null; notes?: string | null }
 export interface AdmissionEvidenceReviewRequest { status: 'approved' | 'observed' | 'rejected'; asOfDate: string; sourceReference: string; notes?: string | null }
+export interface AdmissionProcedureResponse { caseId: string; status: string; canProceedToCeremonyRequest: boolean; requirements: Array<{code:string;status:string;reason:string}>; actions: {canManageLodge:boolean;canReviewSignature:boolean;canReviewArticle23:boolean;canProvideGrandMasterDecision:boolean} }
+export type AdmissionProcedureAction = 'decisiones/presentacion-primer-grado' | 'decisiones/tercer-grado' | 'decisiones/balotaje-primer-grado' | 'comision-informacion' | 'comision-informacion/conclusion' | 'revision-articulo-2-3' | 'decisiones/indulto-gran-maestria' | 'decisiones/reconocimiento-regularidad' | 'decisiones/gran-maestria-aceptacion-especial'
+export interface AdmissionProcedurePayload { status?: 'approved' | 'rejected'; asOfDate?: string; sourceReference: string; notes?: string | null; memberIds?: string[]; appointmentDate?: string; completed?: boolean; approved?: boolean; hasRayamiento?: boolean; hasTribunalForcedWithdrawal?: boolean }
 export interface MaterializeAdmissionRequest { effectiveDate: string; evidenceReference: string }
-export interface MaterializeAdmissionResponse { idempotent: boolean; membershipId?: string; admissionCaseId?: string; membership?: { id: string; memberId: string; organizationId: string; startDate: string | null; status: string } }
+export interface MaterializeAdmissionResponse { idempotent: boolean; membershipId?: string; admissionCaseId?: string; memberId?: string; effectiveDate?: string | null; membership?: { id: string; memberId: string; organizationId: string; startDate: string | null; status: string } }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -1002,13 +1006,41 @@ export class PmgmApiClient {
     return this.postJson<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias/${encodeURIComponent(evidenceId)}/revision`, payload)
   }
 
+  async getAdmissionProcedure(caseId: string): Promise<AdmissionProcedureResponse> {
+    if (this.useMocks) {
+      const c = await this.getAdmissionCase(caseId)
+      const required = ['article_2_3_review', 'lodge_first_degree_presentation', 'lodge_third_degree_approval', 'lodge_first_degree_ballot']
+      const requirements = required.map(code => ({ code, status: c.decisions.find(x => x.decisionType === code)?.status ?? 'observed', reason: 'Registro sintético de demostración; la autorización institucional se realiza en la API instalada.' }))
+      return { caseId, status: 'observed', canProceedToCeremonyRequest: false, requirements, actions: { canManageLodge: true, canReviewSignature: true, canReviewArticle23: true, canProvideGrandMasterDecision: true } }
+    }
+    return this.request<AdmissionProcedureResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/habilitacion-procedimiento`)
+  }
+
+  async recordAdmissionProcedure(caseId: string, action: AdmissionProcedureAction, payload: AdmissionProcedurePayload): Promise<AdmissionDecisionItem> {
+    if (this.useMocks) {
+      if (caseId !== this.withdrawalReviewDemo.id || this.withdrawalReviewDemo.status === 'resolved') throw new Error('Seleccione el expediente sintético abierto de demostración.')
+      if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia institucional.')
+      const types: Record<AdmissionProcedureAction, string> = { 'decisiones/presentacion-primer-grado':'lodge_first_degree_presentation', 'decisiones/tercer-grado':'lodge_third_degree_approval', 'decisiones/balotaje-primer-grado':'lodge_first_degree_ballot', 'comision-informacion':'information_commission_appointed', 'comision-informacion/conclusion':'information_commission_completed', 'revision-articulo-2-3':'article_2_3_review', 'decisiones/indulto-gran-maestria':'grand_master_pardon', 'decisiones/reconocimiento-regularidad':'grand_master_regularity_recognition', 'decisiones/gran-maestria-aceptacion-especial':'grand_master_special_acceptance' }
+      const decision = { id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: types[action], status: payload.status ?? ((payload.completed === false || payload.approved === false || payload.hasRayamiento || payload.hasTribunalForcedWithdrawal) ? 'rejected' : 'approved'), asOfDate: payload.asOfDate ?? payload.appointmentDate ?? chileCivilDate(), sourceReference: payload.sourceReference.trim(), notes: payload.notes ?? null, recordedBySubject: 'synthetic-demo', recordedAtUtc: new Date().toISOString() }
+      this.withdrawalReviewDemo.decisions.unshift(decision)
+      return decision
+    }
+    return this.postJson<AdmissionDecisionItem>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/${action}`, payload)
+  }
+
+  async createAdmissionCeremony(caseId: string, payload: { proposedDate: string; notes?: string | null }): Promise<{id:string;status:string;alreadyCreated:boolean}> {
+    if (this.useMocks) throw new Error('La solicitud formal requiere la API institucional y sus requisitos completos. La demo conserva únicamente registros sintéticos.')
+    return this.postJson(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/solicitud-ceremonia`, payload)
+  }
+
   async materializeAdmissionCase(caseId: string, payload: MaterializeAdmissionRequest): Promise<MaterializeAdmissionResponse> {
     if (this.useMocks) {
       if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La demo de materialización usa el expediente sintético demo-crv-review.')
       const existing = this.withdrawalReviewDemo.decisions.find(x => x.decisionType === 'membership_materialized')
+      if (existing && (existing.asOfDate !== payload.effectiveDate || existing.sourceReference !== payload.evidenceReference.trim())) throw new Error('El expediente ya fue materializado con otros antecedentes.')
       if (existing) return { idempotent: true, membership: { id: 'demo-membership-materialized', memberId: 'demo-member-1', organizationId: 'demo-org-23', startDate: payload.effectiveDate, status: 'active' } }
       this.withdrawalReviewDemo.status = 'resolved'
-      this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference, notes: 'Materialización sintética de demostración.', recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() })
+      this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference.trim(), notes: 'Materialización sintética de demostración.', recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() })
       return { idempotent: false, membershipId: 'demo-membership-materialized', admissionCaseId: caseId }
     }
     return this.postJson<MaterializeAdmissionResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/materializar`, payload)

@@ -4,10 +4,11 @@ import { type MembershipApiClient } from './api/membershipApi'
 import { type DocumentApiClient } from './api/documentApi'
 import { affiliationModeForDate, chileCivilDate } from './admissionDates'
 import './admissions.css'
+import AdmissionProcedurePanel from './AdmissionProcedurePanel'
 import ExternalIncorporationDrawer from './ExternalIncorporationDrawer'
 
 type AdmissionType = 'affiliation' | 'incorporation'
-export default function AdmissionsPage({ api, documentApi }: { api: PmgmApiClient; membershipApi: MembershipApiClient; documentApi: DocumentApiClient }) {
+export default function AdmissionsPage({ api, membershipApi, documentApi }: { api: PmgmApiClient; membershipApi: MembershipApiClient; documentApi: DocumentApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [type, setType] = useState<AdmissionType>('affiliation')
@@ -77,7 +78,7 @@ export default function AdmissionsPage({ api, documentApi }: { api: PmgmApiClien
     <section className="page-heading"><div><p className="eyebrow">Secretaría · admisiones especiales</p><h1>Afiliación e Incorporación</h1><p>Camino separado de Insinuados e iniciación. Reutilice la identidad existente.</p></div><span className="count-badge">Expediente trazable</span></section>
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{error}</span></div>}
     {message && <div className="success-banner" role="status">{message}</div>}
-    {type === 'incorporation' && <ExternalIncorporationDrawer key={organizationId} api={api} organizationId={organizationId} onCreated={result => { setMessage('Incorporación registrada para revisión. Expediente ' + result.id); setError(null); setQuery(''); setPeople([]); setPersonId('') }} />}
+    {type === 'incorporation' && <ExternalIncorporationDrawer key={organizationId} api={api} organizationId={organizationId} onCreated={result => { setActiveCaseId(result.id); setMessage('Incorporación registrada para revisión. Expediente ' + result.id); setError(null); setQuery(''); setPeople([]); setPersonId('') }} />}
     <form className="panel admissions-form" onSubmit={submit}>
       <div className="admissions-switch" role="group" aria-label="Tipo de admisión">
         <button type="button" disabled={working} aria-pressed={type === 'affiliation'} className={type === 'affiliation' ? 'active' : ''} onClick={() => { resetSearch(); setType('affiliation') }}>Afiliación</button>
@@ -102,12 +103,12 @@ export default function AdmissionsPage({ api, documentApi }: { api: PmgmApiClien
       </div></fieldset>}
       <div className="form-actions"><button className="primary-button" type="submit" disabled={working || searching || !selected}>{working ? 'Registrando…' : 'Crear expediente de admisión'}</button><small>La iniciación normal continúa en Secretaría → Insinuados → Circuito de iniciación.</small></div>
     </form>
-    <AdmissionDocumentPanel api={api} documentApi={documentApi} organizationId={organizationId} caseId={activeCaseId} caseDetail={activeCase} onCaseChange={setActiveCase} onCaseIdChange={setActiveCaseId} />
+    <AdmissionDocumentPanel api={api} membershipApi={membershipApi} documentApi={documentApi} organizationId={organizationId} caseId={activeCaseId} caseDetail={activeCase} onCaseChange={setActiveCase} onCaseIdChange={setActiveCaseId} />
   </div>
 }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'La API no respondió.' }
 
-function AdmissionDocumentPanel({ api, documentApi, organizationId, caseId, caseDetail, onCaseChange, onCaseIdChange }: { api: PmgmApiClient; documentApi: DocumentApiClient; organizationId: string; caseId: string; caseDetail: AdmissionCaseDetail | null; onCaseChange: (value: AdmissionCaseDetail | null) => void; onCaseIdChange: (value: string) => void }) {
+function AdmissionDocumentPanel({ api, membershipApi, documentApi, organizationId, caseId, caseDetail, onCaseChange, onCaseIdChange }: { api: PmgmApiClient; membershipApi: MembershipApiClient; documentApi: DocumentApiClient; organizationId: string; caseId: string; caseDetail: AdmissionCaseDetail | null; onCaseChange: (value: AdmissionCaseDetail | null) => void; onCaseIdChange: (value: string) => void }) {
   const [cases, setCases] = useState<Array<{ id: string; admissionType: string; status: string; createdAtUtc: string; evidenceCount: number; latestEvidenceStatus: string | null }>>([])
   const [caseStatus, setCaseStatus] = useState('')
   const [file, setFile] = useState<File | null>(null)
@@ -131,7 +132,6 @@ function AdmissionDocumentPanel({ api, documentApi, organizationId, caseId, case
   }
   useEffect(() => {
     let active = true
-    if (!caseId) return
     api.listAdmissionCases(organizationId || undefined, caseStatus || undefined).then(result => { if (active) setCases(result.items) }).catch(() => { if (active) setCases([]) })
     return () => { active = false }
   }, [api, organizationId, caseId, caseStatus])
@@ -165,7 +165,7 @@ function AdmissionDocumentPanel({ api, documentApi, organizationId, caseId, case
     setWorking(true); setError(null); setMessage(null)
     try {
       const result = await api.materializeAdmissionCase(caseDetail.id, { effectiveDate: materializeDate, evidenceReference: materializeSource.trim() })
-      onCaseChange({ ...caseDetail, status: 'resolved', decisions: [{ id: crypto.randomUUID(), admissionCaseId: caseDetail.id, decisionType: 'membership_materialized', status: 'approved', asOfDate: materializeDate, sourceReference: materializeSource.trim(), notes: result.idempotent ? 'Reintento idempotente.' : null, recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() }, ...caseDetail.decisions] })
+      onCaseChange(await api.getAdmissionCase(caseDetail.id))
       setMessage(result.idempotent ? 'La materialización ya existía; no se creó una segunda pertenencia.' : 'Pertenencia materializada y expediente cerrado con auditoría.')
     } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
   }
@@ -179,6 +179,7 @@ function AdmissionDocumentPanel({ api, documentApi, organizationId, caseId, case
       <label>Fecha del documento<input type="date" value={evidenceDate} onChange={event => setEvidenceDate(event.target.value)} /></label><label>Fuente institucional<input required maxLength={500} value={sourceReference} onChange={event => setSourceReference(event.target.value)} /></label><label>Notas<input maxLength={4000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
       <button className="primary-button" disabled={working || !file} type="submit">{working ? 'Procesando…' : 'Cargar y vincular evidencia'}</button>
     </form><div className="admission-evidence-list">{caseDetail.evidence.map(item => <article className="admission-evidence-row" key={item.id}><div><strong>{evidenceLabel(item.evidenceType)}</strong><small>{item.documentVersionId ? 'Versión documental vinculada' : 'Sin versión documental'} · {item.evidenceDate ?? 'Sin fecha'}</small></div><span className={'document-state ' + item.reviewStatus}>{item.reviewStatus}</span>{item.reviewStatus === 'pending' && <button className="secondary-button compact" type="button" onClick={() => { setReviewTarget(item); setReviewDate(chileCivilDate()); setReviewSource('') }}>Revisar</button>}</article>)}</div>
+    <AdmissionProcedurePanel key={caseDetail.id} api={api} membershipApi={membershipApi} admission={caseDetail} onRefresh={async () => onCaseChange(await api.getAdmissionCase(caseDetail.id))} />
     {caseDetail.status !== 'resolved' && <form className="panel admissions-materialization-form" onSubmit={event => void materialize(event)}><h3>Materializar pertenencia</h3><p>Disponible sólo cuando la API confirma todos los requisitos normativos del expediente.</p><label>Fecha efectiva<input required type="date" max={chileCivilDate()} value={materializeDate} onChange={event => setMaterializeDate(event.target.value)} /></label><label>Resolución o referencia institucional<input required maxLength={500} value={materializeSource} onChange={event => setMaterializeSource(event.target.value)} /></label><button className="primary-button" disabled={working || !materializeSource.trim()} type="submit">Materializar y cerrar expediente</button></form>}</>}
     {reviewTarget && <form className="panel admissions-review-form" onSubmit={event => void reviewEvidence(event)}><h3>Revisar {evidenceLabel(reviewTarget.evidenceType)}</h3><label>Resultado<select value={reviewStatus} onChange={event => setReviewStatus(event.target.value as typeof reviewStatus)}><option value="approved">Aprobar</option><option value="observed">Observar</option><option value="rejected">Rechazar</option></select></label><label>Fecha de revisión<input required type="date" value={reviewDate} max={chileCivilDate()} onChange={event => setReviewDate(event.target.value)} /></label><label>Fuente institucional<input required maxLength={500} value={reviewSource} onChange={event => setReviewSource(event.target.value)} /></label><button className="primary-button" disabled={working} type="submit">Registrar revisión</button><button className="secondary-button" type="button" onClick={() => setReviewTarget(null)}>Cancelar</button></form>}
   </section>
