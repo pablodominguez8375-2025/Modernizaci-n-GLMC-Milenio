@@ -68,6 +68,18 @@ public static class TransferEndpoints
             return Results.BadRequest(new { message = "El Taller de destino no existe." });
         }
 
+        if (request.WithdrawalRequestId is null)
+            return Results.BadRequest(new { message = "El traslado sólo puede iniciarse con una Carta de Retiro Voluntario aprobada y firmada." });
+
+        var withdrawal = await db.MemberWithdrawalRequests.SingleOrDefaultAsync(
+            x => x.Id == request.WithdrawalRequestId.Value && x.MemberId == memberId &&
+                 x.OriginOrganizationId == sourceMembership.OrganizationId, cancellationToken);
+        if (withdrawal is null || withdrawal.WithdrawalType != MembershipCodes.WithdrawalType.Voluntary ||
+            withdrawal.Status != MembershipCodes.WithdrawalRequestStatus.Approved || withdrawal.OratorSignatureSubject is null)
+            return Results.Conflict(new { message = "La Carta de Retiro Voluntario debe estar aprobada y firmada por el Orador del Taller de origen." });
+        if (withdrawal.RequestedEffectiveDate > request.ProposedEffectiveDate)
+            return Results.BadRequest(new { message = "La fecha propuesta del traslado no puede preceder al cierre efectivo del Taller de origen." });
+
         var hasOpenTransfer = await db.MemberTransfers.AnyAsync(
             x => x.MemberId == memberId &&
                  (x.Status == MembershipCodes.TransferStatus.Requested ||
@@ -280,7 +292,8 @@ public sealed record RequestTransferRequest(
     Guid TargetOrganizationId,
     DateOnly ProposedEffectiveDate,
     string? Reason,
-    string? EvidenceReference);
+    string? EvidenceReference,
+    Guid? WithdrawalRequestId = null);
 
 public sealed record ApproveTransferRequest(
     DateOnly ApprovedEffectiveDate,
