@@ -279,3 +279,8 @@ Si un agente no puede ejecutar algo, por ejemplo cuando Claude en claude.ai no t
 ## 14. Revisión de Drive al iniciar (instrucción del PO, 02-10-2026)
 
 Antes de comenzar cualquier trabajo, todo agente revisa si hay archivos nuevos o modificados en Drive y evalúa sus consecuencias para el proyecto, como se indica en §11, paso 4.1. El resultado se informa al PO y queda registrado, aunque no se encuentren novedades.
+
+## 15. Alcance de la revisión de Drive (instrucción del PO, 03-10-2026)
+
+Solo se revisa y se toma en cuenta lo que está **dentro de la carpeta de Drive «Proyecto Centenario»** (id `1P74Q8lhNPu6lHZ5zZR9ZD3AJFr_EtZyO`) y sus subcarpetas. Los archivos que están fuera de esa carpeta no se consideran para el proyecto, aunque estén compartidos con el PO o hayan sido modificados recientemente. Esto incluye planillas administrativas de terceros y archivos de claves. Esta regla acota el paso 4.1 de §11 y la §14.
+
