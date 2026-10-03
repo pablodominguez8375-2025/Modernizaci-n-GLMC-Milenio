@@ -267,7 +267,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.84' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.85' : `API v${systemInfo?.version ?? '—'}`
   return <div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -329,7 +329,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
-        {view === 'admissions' && (canManageLodgeSecretariat || canSecretariat) && <AdmissionsPage api={api} membershipApi={membershipApi} documentApi={documentApi} />}
+        {view === 'admissions' && (canManageLodgeSecretariat || canSecretariat) && <AdmissionsPage demoProfileKey={api.useMocks ? demoProfileKey : undefined} api={api} membershipApi={membershipApi} documentApi={documentApi} />}
         {view === 'members' && canMembers && <MemberDirectoryPage key={memberQueryRevision} api={api} membershipApi={membershipApi} initialQuery={memberQuery} canExport={canSecretariat || canManageLodgeSecretariat || canConfigureSystem} allowTableView={canSecretariat || canConfigureSystem} />}
         {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
@@ -342,7 +342,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
         {view === 'treasury' && canTreasury && <GrandTreasuryPage api={api} />}
         {view === 'lodgeTreasury' && (canLodgeTreasury || canApproveLodgeExpenses) && <LodgeTreasuryPage api={api} canManage={canLodgeTreasury} canApproveExpenses={canApproveLodgeExpenses} />}
-        {view === 'hospitalaria' && canHospitalariaWorkspace && <><HospitalariaPage api={api} canReadLocal={canReadLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canHospitalaria} />{canHospitalaria && <RegularityPage api={api} kind="hospitalaria" />}</>}
+        {view === 'hospitalaria' && canHospitalariaWorkspace && <HospitalariaPage api={api} canReadLocal={canReadLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canHospitalaria} regularitySlot={canHospitalaria ? <RegularityPage api={api} kind="hospitalaria" /> : undefined} />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
         {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat} instructionGrades={instructionGrades} />}

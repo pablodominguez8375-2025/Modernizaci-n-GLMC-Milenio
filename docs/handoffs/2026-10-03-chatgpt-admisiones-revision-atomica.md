@@ -21,3 +21,11 @@ Compilación local .NET sin errores/advertencias y frontend pruebas/lint/build v
 Pendientes antes del cierre: Actions del nuevo SHA, revisión visual/funcional, ZIP/checksum/MANIFEST/SOURCE_SHA/BUILD_RUN_ID exactos, verificación GitHub/Drive y revisión final de solapamientos. Si dev cambia, actualizar y repetir gates. UAT institucional/srv01 permanecen pendientes por decisión Sponsor y no son nueva solicitud de autorización para dev. #116 histórico permanece NO FUSIONAR TODAVÍA.
 
 START-HERE sólo se actualizará con una línea en PR documental posterior al merge funcional. No alterarlo en esta rama funcional.
+
+## Sincronización y verificación adicional
+
+Se incorporó dev `c6810dabc976281e919abfc00265cc159f79309b` (Claude #305, Hospitalaria v0.85), conservando sus pestañas. Admisiones reutiliza ActionDrawer: alta, evidencia, actuación, ceremonia y materialización permanecen cerradas hasta pulsar su botón. El perfil sintético sólo determina las acciones de demostración; en modo institucional se conservan intactas las capacidades devueltas por la API. Secretaría del Taller no muestra decisiones de Gran Maestría ni revisión art. 2.3. El expediente sintético usa el UUID del Taller 23, permitiendo consultar su comisión de Maestros.
+
+Frontend: 389 pruebas, lint y build locales aprobados en esta sincronización. El script de Showcase añade una comprobación específica de tramitación de afiliación en ocho tamaños: requisitos cargados, formularios cerrados, ceremonia bloqueada y ausencia de facultades ajenas al cargo. Su resultado se comprobará en Actions del nuevo SHA; no está certificado por la compilación local.
+
+El corte anterior `17b0678d30192eb9f84d796d89f5f7aeccfa1f08` tiene CI #1881, Showcase #1250 y QA #888 SUCCESS. Es antecedente del corte anterior, no evidencia del incremento siguiente. La demo mantiene solicitudes de ceremonia y revisión documental operativa reservadas a la API instalada: no constituye UAT institucional ni autorización ceremonial.

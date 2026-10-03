@@ -2,8 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { type AdmissionCaseDetail, type AdmissionProcedureAction, type AdmissionProcedureResponse, type PmgmApiClient } from './api/pmgmApi'
 import { type MemberDirectoryItem, type MembershipApiClient } from './api/membershipApi'
 import { chileCivilDate } from './admissionDates'
+import { ActionDrawer } from './actionKit'
+import { type DemoProfileKey } from './demoProfiles'
 
-export default function AdmissionProcedurePanel({ api, membershipApi, admission, onRefresh }: { api: PmgmApiClient; membershipApi: MembershipApiClient; admission: AdmissionCaseDetail; onRefresh: () => Promise<void> }) {
+export default function AdmissionProcedurePanel({ api, membershipApi, admission, onRefresh, demoProfileKey }: { api: PmgmApiClient; membershipApi: MembershipApiClient; admission: AdmissionCaseDetail; onRefresh: () => Promise<void>; demoProfileKey?: DemoProfileKey }) {
   const [procedure, setProcedure] = useState<AdmissionProcedureResponse | null>(null)
   const [members, setMembers] = useState<MemberDirectoryItem[]>([])
   const [selectedMembers, setSelectedMembers] = useState<string[]>([])
@@ -22,7 +24,7 @@ export default function AdmissionProcedurePanel({ api, membershipApi, admission,
   useEffect(() => {
     let active = true
     setProcedure(null); setError(null)
-    api.getAdmissionProcedure(admission.id).then(async value => {
+    api.getAdmissionProcedure(admission.id, demoProfileKey).then(async value => {
       if (!active) return
       setProcedure(value)
       if (value.actions.canManageLodge) {
@@ -31,7 +33,7 @@ export default function AdmissionProcedurePanel({ api, membershipApi, admission,
       }
     }).catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible consultar los requisitos.') })
     return () => { active = false }
-  }, [api, membershipApi, admission])
+  }, [api, membershipApi, admission, demoProfileKey])
   const actions: Array<{ value: AdmissionProcedureAction | 'signature'; label: string }> = []
   if (procedure?.actions.canManageLodge) actions.push(
     { value: 'decisiones/presentacion-primer-grado', label: 'Lectura de solicitud en primer grado' },
@@ -72,15 +74,15 @@ export default function AdmissionProcedurePanel({ api, membershipApi, admission,
     <p>La lectura de primer grado precede a la decisión de tercer grado. El balotaje debe ser en una fecha posterior. Registre actas y resultados; nunca votos individuales.</p>
     {error && <div role="alert" className="error-banner">{error}</div>}{message && <div role="status" className="success-banner">{message}</div>}
     {procedure && <ul>{procedure.requirements.map(item => <li key={item.code}><strong>{item.status === 'approved' ? 'Cumple' : item.status === 'rejected' ? 'No cumple' : 'Pendiente'}</strong> · {item.reason}</li>)}</ul>}
-    {admission.status !== 'resolved' && currentAction && <form onSubmit={event => void submit(event)} className="form-grid">
+    {admission.status !== 'resolved' && currentAction && <ActionDrawer label="Registrar actuación" keepOpen><form onSubmit={event => void submit(event)} className="form-grid">
       <label>Actuación<select value={currentAction} disabled={working} onChange={event => setAction(event.target.value as typeof action)}>{actions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
       <label>Fecha de actuación<input required type="date" max={chileCivilDate()} value={date} onChange={event => setDate(event.target.value)} /></label>
       <label>Acta o resolución<input required maxLength={500} value={source} onChange={event => setSource(event.target.value)} /></label>
       <label>Observaciones<input maxLength={2000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
       {currentAction === 'comision-informacion' ? <fieldset><legend>Tres Maestros del Taller</legend><p>El servidor comprobará su pertenencia y grado en la fecha del nombramiento.</p>{members.map(member => <label key={member.memberId}><input type="checkbox" checked={selectedMembers.includes(member.memberId)} onChange={event => setSelectedMembers(event.target.checked ? [...selectedMembers, member.memberId] : selectedMembers.filter(id => id !== member.memberId))} />{member.displayName}</label>)}<span>{selectedMembers.length} de 3 seleccionados</span></fieldset> : currentAction === 'revision-articulo-2-3' ? <fieldset><legend>Impedimentos comprobados</legend><label><input type="checkbox" checked={rayamiento} onChange={event => setRayamiento(event.target.checked)} />Pena de rayamiento</label><label><input type="checkbox" checked={forced} onChange={event => setForced(event.target.checked)} />Retiro forzoso impuesto por Tribunal</label>{admission.admissionType === 'incorporation' && <label>Obediencia de origen reconocida como regular<select value={recognized} onChange={event => setRecognized(event.target.value)}><option value="unknown">Sin verificar</option><option value="true">Sí, acreditado en la fuente</option><option value="false">No, requiere Gran Maestría</option></select></label>}</fieldset> : <label>Resultado<select value={String(approved)} onChange={event => setApproved(event.target.value === 'true')}><option value="true">Aprobado / verificado</option><option value="false">Rechazado / no verificado</option></select></label>}
       <button type="submit" className="primary-button" disabled={working || !source.trim() || (currentAction === 'comision-informacion' && selectedMembers.length !== 3)}>Registrar actuación</button>
-    </form>}
-    {admission.status !== 'resolved' && procedure?.actions.canManageLodge && <form onSubmit={event => void requestCeremony(event)} className="form-grid"><label>Fecha propuesta de ceremonia<input required type="date" value={ceremonyDate} onChange={event => setCeremonyDate(event.target.value)} /></label><button className="primary-button" type="submit" disabled={working || !ceremonyDate || !procedure.canProceedToCeremonyRequest}>Solicitar ceremonia</button><small>Se habilita al cumplir los requisitos. La materialización requiere autorización, Plancha y Tenida cerrada con acta y extracto.</small></form>}
+    </form></ActionDrawer>}
+    {admission.status !== 'resolved' && procedure?.actions.canManageLodge && <ActionDrawer label="Solicitar ceremonia" disabled={!procedure.canProceedToCeremonyRequest} keepOpen><form onSubmit={event => void requestCeremony(event)} className="form-grid"><label>Fecha propuesta de ceremonia<input required type="date" value={ceremonyDate} onChange={event => setCeremonyDate(event.target.value)} /></label><button className="primary-button" type="submit" disabled={working || !ceremonyDate || !procedure.canProceedToCeremonyRequest}>Solicitar ceremonia</button><small>Se habilita al cumplir los requisitos. La materialización requiere autorización, Plancha y Tenida cerrada con acta y extracto.</small></form></ActionDrawer>}
     <details><summary>Historial de actuaciones</summary><ul>{admission.decisions.map(item => <li key={item.id}>{item.asOfDate} · {historyLabel(item.decisionType)} · {item.status} · {item.sourceReference ?? 'Sin referencia'}</li>)}</ul></details>
   </section>
 }

@@ -23,3 +23,21 @@ describe('materialización y relectura institucional', () => {
     expect(saved.decisions.find(x => x.decisionType === 'membership_materialized')?.sourceReference).toBe(payload.evidenceReference)
   })
 })
+
+ describe('permisos de la tramitación sintética', () => {
+  it('Secretaría del Taller no recibe decisiones de Gran Maestría ni RI', async () => {
+    const api = new PmgmApiClient({ useMocks: true })
+    expect((await api.getAdmissionProcedure('demo-crv-review', 'lodgeSecretary')).actions).toEqual({ canManageLodge: true, canReviewSignature: false, canReviewArticle23: false, canProvideGrandMasterDecision: false })
+    expect((await api.getAdmissionProcedure('demo-crv-review', 'regimen')).actions.canReviewArticle23).toBe(true)
+    expect((await api.getAdmissionProcedure('demo-crv-review', 'grandMaster')).actions.canProvideGrandMasterDecision).toBe(true)
+    expect((await api.getAdmissionProcedure('demo-crv-review', 'brother')).actions.canManageLodge).toBe(false)
+  })
+  it('un perfil sintético no sustituye los permisos de la API institucional', async () => {
+    const response = { caseId: 'case-server', status: 'observed', canProceedToCeremonyRequest: false, requirements: [], actions: { canManageLodge: true, canReviewSignature: false, canReviewArticle23: false, canProvideGrandMasterDecision: false } }
+    const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify(response)))
+    vi.stubGlobal('fetch', fetch)
+    const api = new PmgmApiClient({ getAccessToken: async () => 'synthetic-token' })
+    expect(await api.getAdmissionProcedure('case-server', 'grandMaster')).toEqual(response)
+    expect(fetch.mock.calls[0][0]).toBe('/api/admisiones/expedientes/case-server/habilitacion-procedimiento')
+  })
+})

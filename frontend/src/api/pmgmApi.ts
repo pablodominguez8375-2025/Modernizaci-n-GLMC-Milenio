@@ -1,3 +1,4 @@
+import { getDemoProfile, type DemoProfileKey } from '../demoProfiles'
 import { chileCivilDate } from '../admissionDates'
 import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
@@ -980,7 +981,7 @@ export class PmgmApiClient {
     if (this.useMocks) {
       const item = this.withdrawalReviewDemo
       if (caseId !== item.id) throw new Error('La demo sólo expone el expediente sintético demo-crv-review.')
-      return { id: item.id, organizationId: 'demo-org-23', admissionType: item.admissionType, affiliationMode: item.affiliationMode, withdrawalLetterGrantedDate: item.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: item.status, createdAtUtc: item.createdAtUtc, evidence: item.letters.map(letter => ({ id: letter.id, admissionCaseId: item.id, evidenceType: 'withdrawal_letter', documentVersionId: letter.documentVersionId, evidenceDate: letter.evidenceDate, sourceReference: 'SYNTHETIC', reviewStatus: letter.reviewStatus, reviewedAtUtc: letter.reviewedAtUtc, notes: null, createdAtUtc: letter.createdAtUtc })), decisions: item.decisions }
+      return { id: item.id, organizationId: defaultMockOrganizations.find(x => x.number === '23')!.id, admissionType: item.admissionType, affiliationMode: item.affiliationMode, withdrawalLetterGrantedDate: item.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: item.status, createdAtUtc: item.createdAtUtc, evidence: item.letters.map(letter => ({ id: letter.id, admissionCaseId: item.id, evidenceType: 'withdrawal_letter', documentVersionId: letter.documentVersionId, evidenceDate: letter.evidenceDate, sourceReference: 'SYNTHETIC', reviewStatus: letter.reviewStatus, reviewedAtUtc: letter.reviewedAtUtc, notes: null, createdAtUtc: letter.createdAtUtc })), decisions: item.decisions }
     }
     const response = await this.request<{ admissionCase: AdmissionCaseResponse; evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}`)
     return { ...response.admissionCase, evidence: response.evidence, decisions: response.decisions }
@@ -988,7 +989,7 @@ export class PmgmApiClient {
 
   async listAdmissionCases(organizationId?: string, status?: string): Promise<{ total: number; items: AdmissionCaseListItem[] }> {
     if (this.useMocks) {
-      return { total: 1, items: [{ id: this.withdrawalReviewDemo.id, organizationId: 'demo-org-23', admissionType: this.withdrawalReviewDemo.admissionType, affiliationMode: this.withdrawalReviewDemo.affiliationMode, withdrawalLetterGrantedDate: this.withdrawalReviewDemo.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: this.withdrawalReviewDemo.status, createdAtUtc: this.withdrawalReviewDemo.createdAtUtc, evidenceCount: this.withdrawalReviewDemo.letters.length, latestEvidenceStatus: this.withdrawalReviewDemo.letters[0]?.reviewStatus ?? null }] }
+      return { total: 1, items: [{ id: this.withdrawalReviewDemo.id, organizationId: defaultMockOrganizations.find(x => x.number === '23')!.id, admissionType: this.withdrawalReviewDemo.admissionType, affiliationMode: this.withdrawalReviewDemo.affiliationMode, withdrawalLetterGrantedDate: this.withdrawalReviewDemo.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: this.withdrawalReviewDemo.status, createdAtUtc: this.withdrawalReviewDemo.createdAtUtc, evidenceCount: this.withdrawalReviewDemo.letters.length, latestEvidenceStatus: this.withdrawalReviewDemo.letters[0]?.reviewStatus ?? null }] }
     }
     const query = new URLSearchParams()
     if (organizationId) query.set('organizationId', organizationId)
@@ -1006,12 +1007,13 @@ export class PmgmApiClient {
     return this.postJson<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias/${encodeURIComponent(evidenceId)}/revision`, payload)
   }
 
-  async getAdmissionProcedure(caseId: string): Promise<AdmissionProcedureResponse> {
+  async getAdmissionProcedure(caseId: string, demoProfileKey: DemoProfileKey = 'brother'): Promise<AdmissionProcedureResponse> {
     if (this.useMocks) {
       const c = await this.getAdmissionCase(caseId)
+      const capabilities = getDemoProfile(demoProfileKey).capabilities
       const required = ['article_2_3_review', 'lodge_first_degree_presentation', 'lodge_third_degree_approval', 'lodge_first_degree_ballot']
       const requirements = required.map(code => ({ code, status: c.decisions.find(x => x.decisionType === code)?.status ?? 'observed', reason: 'Registro sintético de demostración; la autorización institucional se realiza en la API instalada.' }))
-      return { caseId, status: 'observed', canProceedToCeremonyRequest: false, requirements, actions: { canManageLodge: true, canReviewSignature: true, canReviewArticle23: true, canProvideGrandMasterDecision: true } }
+      return { caseId, status: 'observed', canProceedToCeremonyRequest: false, requirements, actions: { canManageLodge: capabilities.canManageLodgeSecretariat === true, canReviewSignature: capabilities.canManageGrandSecretariat, canReviewArticle23: capabilities.canValidateCeremonyInternalAffairs, canProvideGrandMasterDecision: demoProfileKey === 'grandMaster' || demoProfileKey === 'grandLodge' } }
     }
     return this.request<AdmissionProcedureResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/habilitacion-procedimiento`)
   }
@@ -1038,7 +1040,7 @@ export class PmgmApiClient {
       if (caseId !== this.withdrawalReviewDemo.id) throw new Error('La demo de materialización usa el expediente sintético demo-crv-review.')
       const existing = this.withdrawalReviewDemo.decisions.find(x => x.decisionType === 'membership_materialized')
       if (existing && (existing.asOfDate !== payload.effectiveDate || existing.sourceReference !== payload.evidenceReference.trim())) throw new Error('El expediente ya fue materializado con otros antecedentes.')
-      if (existing) return { idempotent: true, membership: { id: 'demo-membership-materialized', memberId: 'demo-member-1', organizationId: 'demo-org-23', startDate: payload.effectiveDate, status: 'active' } }
+      if (existing) return { idempotent: true, membership: { id: 'demo-membership-materialized', memberId: 'demo-member-1', organizationId: defaultMockOrganizations.find(x => x.number === '23')!.id, startDate: payload.effectiveDate, status: 'active' } }
       this.withdrawalReviewDemo.status = 'resolved'
       this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference.trim(), notes: 'Materialización sintética de demostración.', recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() })
       return { idempotent: false, membershipId: 'demo-membership-materialized', admissionCaseId: caseId }
