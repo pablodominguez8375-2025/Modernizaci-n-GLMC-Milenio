@@ -292,19 +292,31 @@ async function openGrandTreasuryRights() {
 }
 
 async function assertCeremonyRightPaymentAction(viewport) {
+  // PMGM-UX vista operativa (03-10-2026): «Registrar abono» se abre en panel (ActionDrawer) desde la tarjeta.
+  await evaluate(`(() => {
+    const card = document.querySelector('.ceremony-right-card');
+    const trigger = card?.querySelector('.action-trigger');
+    if (trigger && trigger.getAttribute('aria-expanded') !== 'true') trigger.click();
+    return true;
+  })()`)
+  await new Promise(resolve => setTimeout(resolve, 350))
   const result = await evaluate(`(() => {
     const card = document.querySelector('.ceremony-right-card');
-    const details = card?.querySelector('details');
-    const summary = details?.querySelector('summary');
-    if (details && summary && !details.open) summary.click();
-    const button = card?.querySelector('form button');
+    const trigger = card?.querySelector('.action-trigger');
+    const drawer = card?.querySelector('.action-drawer');
+    const button = drawer?.querySelector('form button[type="submit"], form button:not([type])');
     const rect = card?.getBoundingClientRect();
-    return { card: !!card, button: !!button, touchSize: button?.getBoundingClientRect().height ?? 0,
-      cardRight: rect?.right ?? 0, viewportWidth: innerWidth, labels: card ? [...card.querySelectorAll('form label span')].map(x => (x.textContent || '').trim()) : [] };
+    const drawerRect = drawer?.getBoundingClientRect();
+    const labels = drawer ? [...drawer.querySelectorAll('form label span')].map(x => (x.textContent || '').trim()) : [];
+    const close = drawer?.querySelector('.action-drawer-close, button[aria-label^="Cerrar"]');
+    if (close) close.click();
+    return { card: !!card, button: !!button, triggerSize: trigger?.getBoundingClientRect().height ?? 0, touchSize: button?.getBoundingClientRect().height ?? 0,
+      cardRight: rect?.right ?? 0, drawerRight: drawerRect?.right ?? 0, viewportWidth: innerWidth, labels };
   })()`)
+  await new Promise(resolve => setTimeout(resolve, 200))
   if (!result?.card || !result.button) throw new Error(`Ceremony right payment action is missing at ${viewport}.`)
-  if (result.touchSize < 44) throw new Error(`Ceremony right payment action is below 44px at ${viewport}.`)
-  if (result.cardRight > result.viewportWidth + 1) throw new Error(`Ceremony right card is clipped at ${viewport}.`)
+  if (result.touchSize < 44 || result.triggerSize < 44) throw new Error(`Ceremony right payment action is below 44px at ${viewport}: ${JSON.stringify(result)}.`)
+  if (result.cardRight > result.viewportWidth + 1 || result.drawerRight > result.viewportWidth + 1) throw new Error(`Ceremony right card or drawer is clipped at ${viewport}.`)
   if (result.labels.length !== 4) throw new Error(`Ceremony right form is incomplete at ${viewport}: ${JSON.stringify(result.labels)}.`)
 }
 
@@ -650,7 +662,7 @@ try {
       const evidenceTarget = scenario.treasuryCollection
         ? '.treasury-collection-table tbody tr:has(button)'
         : scenario.grandTreasuryRights
-          ? '.ceremony-right-card form'
+          ? '.ceremony-right-card' // PMGM-UX: el formulario vive en el panel; se encuadra la tarjeta con su botón «Registrar abono»
           : null
       await capture(filePath, evidenceTarget)
       console.log(`captured ${path.basename(filePath)}`)

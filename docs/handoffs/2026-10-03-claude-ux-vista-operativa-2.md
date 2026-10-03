@@ -27,3 +27,14 @@
 
 - **Calidad de datos:** acciones en lote.
 - **Carga de insinuados y balotaje** (`LodgeBallotPanel`): son del dominio de Admisiones y se coordinarán con ChatGPT.
+
+## Corrección de la auditoría visual
+
+- **Fallo en el gate Showcase:** la primera ejecución falló en `capture-showcase-views.mjs`. La auditoría buscaba el formulario de abono dentro de un `<details>` (`.ceremony-right-card form`), pero ahora ese formulario está dentro del panel cerrado.
+- **Ajuste:** la auditoría abre el panel «Registrar abono» y verifica lo mismo que antes:
+  - 4 campos;
+  - botones de 44 px como mínimo;
+  - que nada quede recortado.
+
+  La evidencia visual ahora encuadra la tarjeta `.ceremony-right-card`.
+- **Resultado local:** «MOBILE ALL-MENU VIEW AUDIT OK», 21 perfiles y 554 vistas.
