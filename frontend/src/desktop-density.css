@@ -153,3 +153,71 @@
 
   .workspace-main .notification-body h2 { font-size: 1.0625rem; margin: 0.125rem 0 0; }
 }
+
+/* ---------- Fase 3 · Secretarías y Tesorerías en dos zonas (03-10-2026) ----------
+   ≥ 90rem (1440 px): el menú de secciones pasa a una columna fija a la izquierda y el trabajo ocupa el resto.
+   Por debajo de 1440 px (y en tablet/celular) se mantienen las pestañas horizontales actuales. */
+@media (min-width: 90rem) {
+  .lodge-product-page:has(> .treasury-role-navigation),
+  :is(div, section, main):has(> nav.workspace-tabs) {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    column-gap: 1.25rem;
+    row-gap: 1rem;
+    align-items: start;
+  }
+
+  .lodge-product-page:has(> .treasury-role-navigation) > *,
+  :is(div, section, main):has(> nav.workspace-tabs) > * {
+    grid-column: 2;
+    min-width: 0;
+    margin-top: 0;
+  }
+
+  .lodge-product-page:has(> .treasury-role-navigation) > .lodge-product-heading,
+  :is(div, section, main):has(> nav.workspace-tabs) > :is(.lodge-product-heading, .page-heading, .lodge-management-heading, .secretariat-heading) {
+    grid-column: 1 / -1;
+  }
+
+  .lodge-product-page > .treasury-role-navigation,
+  :is(div, section, main) > nav.workspace-tabs {
+    grid-column: 1;
+    grid-row: 2 / span 40;
+    position: sticky;
+    top: 1rem;
+    margin: 0;
+  }
+
+  /* Menú de secciones vertical: nombre y descripción breve, área táctil cómoda. */
+  .lodge-product-page > .treasury-role-navigation .treasury-role-tabs,
+  nav.workspace-tabs > [role="tablist"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.375rem;
+    overflow: visible;
+  }
+
+  .lodge-product-page > .treasury-role-navigation { padding: 0.875rem; }
+  .lodge-product-page > .treasury-role-navigation .treasury-role-navigation-heading h2 { font-size: 1.125rem; }
+
+  .lodge-product-page > .treasury-role-navigation .treasury-role-tabs button,
+  nav.workspace-tabs > [role="tablist"] > button {
+    width: 100%;
+    min-height: 3rem;
+    text-align: left;
+    justify-content: flex-start;
+  }
+}
+
+@media (min-width: 90rem) {
+  /* Con el menú a la izquierda, el resumen del Taller usa 2 columnas para que las tarjetas no se aprieten. */
+  :is(div, section, main):has(> nav.workspace-tabs) > .lodge-cockpit-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 110rem) {
+  :is(div, section, main):has(> nav.workspace-tabs) > .lodge-cockpit-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
