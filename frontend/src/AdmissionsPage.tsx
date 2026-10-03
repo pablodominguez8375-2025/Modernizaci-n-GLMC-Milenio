@@ -165,7 +165,7 @@ function AdmissionDocumentPanel({ api, documentApi, organizationId, caseId, case
     setWorking(true); setError(null); setMessage(null)
     try {
       const result = await api.materializeAdmissionCase(caseDetail.id, { effectiveDate: materializeDate, evidenceReference: materializeSource.trim() })
-      onCaseChange({ ...caseDetail, status: 'resolved', decisions: [{ id: crypto.randomUUID(), admissionCaseId: caseDetail.id, decisionType: 'membership_materialized', status: 'approved', asOfDate: materializeDate, sourceReference: materializeSource.trim(), notes: result.idempotent ? 'Reintento idempotente.' : null, recordedAtUtc: new Date().toISOString() }, ...caseDetail.decisions] })
+      onCaseChange({ ...caseDetail, status: 'resolved', decisions: [{ id: crypto.randomUUID(), admissionCaseId: caseDetail.id, decisionType: 'membership_materialized', status: 'approved', asOfDate: materializeDate, sourceReference: materializeSource.trim(), notes: result.idempotent ? 'Reintento idempotente.' : null, recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() }, ...caseDetail.decisions] })
       setMessage(result.idempotent ? 'La materialización ya existía; no se creó una segunda pertenencia.' : 'Pertenencia materializada y expediente cerrado con auditoría.')
     } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
   }
