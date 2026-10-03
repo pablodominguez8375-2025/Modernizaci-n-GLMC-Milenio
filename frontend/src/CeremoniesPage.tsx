@@ -5,6 +5,7 @@ import {
   type PmgmApiClient,
 } from './api/pmgmApi'
 import './ceremonies.css'
+import { ActionDrawer } from './actionKit'
 import { ceremonyTypeLabel } from './ceremonyTypes'
 import { organizationDisplayName } from './displayFormat'
 
@@ -145,15 +146,14 @@ function InternalAffairsForm({ item, api, working, execute }: {
       `Validación de Régimen Interior ${label} y auditada.`)
   }
 
-  return <details className="validation-details">
-    <summary>Validar Régimen Interior</summary>
+  return <ActionDrawer label="Validar Régimen Interior" tone="secondary" title={`Validación de Régimen Interior — ${item.subjectDisplayName}`} description="Decisión, referencia del acta o acuerdo y observaciones internas." confirmMessage="Se registrará la validación de Régimen Interior y quedará auditada.">
     <form className="validation-form" onSubmit={submit}>
       <label className="field"><span>Decisión</span><select value={status} onChange={event => setStatus(event.target.value as CeremonyInternalAffairsValidationRequest['status'])}><option value="approved">Aprobar</option><option value="observed">Observar</option><option value="rejected">Rechazar</option><option value="exception_approved">Aprobar por excepción</option></select></label>
       <label className="field"><span>Referencia</span><input maxLength={160} value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="Acta, acuerdo o antecedente" /></label>
       <label className="field validation-notes"><span>Observaciones internas</span><textarea rows={2} maxLength={1000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
       <button className="secondary-action" disabled={working}>Registrar validación</button>
     </form>
-  </details>
+  </ActionDrawer>
 }
 
 function PublicationProgress({ item }: { item: CeremonyReviewQueueItem }) {

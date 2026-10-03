@@ -100,7 +100,7 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     expect(switcher).toContain('showcaseSha.slice(0, 7)')
     expect(switcher).toContain('className="demo-public-sha"')
     const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
-    expect(app).toContain('UI QA v0.76')
+    expect(app).toContain('UI QA v0.77')
   })
 
   it('supports reduced motion preferences', () => {

@@ -6,6 +6,7 @@ import {
 } from './api/pmgmApi'
 import RegularityDashboard from './RegularityDashboard'
 import './regularity.css'
+import { ActionDrawer } from './actionKit'
 import { organizationDisplayName } from './displayFormat'
 
 type RegularityKind = 'treasury' | 'hospitalaria'
@@ -139,13 +140,13 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
 
       <article className="panel regularity-update-panel">
         <p className="eyebrow">Nuevo registro</p><h2>Actualizar regularidad</h2>
-        <form className="regularity-form" onSubmit={submit}>
+        <div className="action-bar treasury-action-bar"><ActionDrawer label="Actualizar regularidad" description="Estado de regularidad, fecha efectiva, referencia y observaciones." confirmMessage="Se registrará el cambio de regularidad y quedará auditado."><form className="regularity-form" onSubmit={submit}>
           <Field label="Estado"><select value={status} onChange={event => setStatus(event.target.value)}>{config.statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
           <Field label="Fecha efectiva · Chile"><input type="date" required value={asOfDate} onChange={event => setAsOfDate(event.target.value)} /></Field>
           <Field label={config.sourceLabel}><input maxLength={500} value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="Documento, comprobante o referencia interna" /></Field>
           <Field label="Observaciones administrativas"><textarea rows={4} maxLength={2000} value={notes} onChange={event => setNotes(event.target.value)} /></Field>
           <button className="regularity-primary" type="submit" disabled={working || !organizationId}>Registrar estado</button>
-        </form>
+        </form></ActionDrawer></div>
       </article>
 
       <article className="panel regularity-wide regularity-integration-panel">

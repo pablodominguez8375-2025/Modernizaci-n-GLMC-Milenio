@@ -160,3 +160,21 @@
   .notification-heading > div > p:not(.eyebrow),
   .notification-heading .notification-summary { display: none; }
 }
+
+/* ---------- Patrón «vista operativa»: formularios dentro del panel ---------- */
+.action-drawer-body .hospitalaria-drawer-form,
+.action-drawer-body .replenishment-inline-form,
+.action-drawer-body .document-form,
+.action-drawer-body .validation-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.action-drawer-body .hospitalaria-drawer-form .regularity-field,
+.action-drawer-body .replenishment-inline-form input,
+.action-drawer-body .replenishment-inline-form select { width: 100%; }
