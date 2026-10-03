@@ -10,9 +10,9 @@ describe('PMGM-UX-C+D · Inicio uniforme y consistencia', () => {
     expect(main.indexOf("./home-consistency.css")).toBeGreaterThan(main.indexOf("./accessibility.css"))
   })
 
-  it('Inicio usa franja de saludo, 4 accesos de igual tamaño y bloques de igual altura', () => {
+  it('Inicio usa franja de saludo, 3 accesos de igual tamaño y bloques de igual altura', () => {
     expect(dashboard).toContain('className="home-strip"')
-    expect(dashboard.match(/<Shortcut /g)?.length).toBe(4)
+    expect(dashboard.match(/<Shortcut /g)?.length).toBe(3)
     expect(css).toMatch(/\.home-grid\s*\{[^}]*align-items:\s*stretch/s)
     expect(css).toMatch(/\.home-grid\.has-inbox\s*\{[^}]*repeat\(3, minmax\(0, 1fr\)\)/s)
   })

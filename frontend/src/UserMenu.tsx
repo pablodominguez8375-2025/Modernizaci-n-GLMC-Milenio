@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
-import TextSizeControl from './TextSizeControl'
 
 /** PMGM-UX-003 · Menú de usuario de la cabecera (Issue #243). */
 interface UserMenuProps {
@@ -16,7 +15,7 @@ export function initialsFor(name: string) {
   return (words.slice(0, 2).map(word => word[0]).join('') || '?').toUpperCase()
 }
 
-export default function UserMenu({ displayName, versionLabel, onOpenProfile, onOpenCalendar, onLogout }: UserMenuProps) {
+export default function UserMenu({ displayName, versionLabel, onOpenProfile, onLogout }: UserMenuProps) {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -35,9 +34,7 @@ export default function UserMenu({ displayName, versionLabel, onOpenProfile, onO
     {open && <div className="user-menu-panel" role="menu">
       <p className="user-menu-name">{displayName}</p>
       {onOpenProfile && <button type="button" role="menuitem" onClick={run(onOpenProfile)}><InstitutionalIcon name="member" size={16} /> Mi ficha</button>}
-      {onOpenCalendar && <button type="button" role="menuitem" onClick={run(onOpenCalendar)}><InstitutionalIcon name="calendar" size={16} /> Mi calendario</button>}
       {onLogout && <button type="button" role="menuitem" onClick={run(onLogout)}><InstitutionalIcon name="logout" size={16} /> Cerrar sesión</button>}
-      <TextSizeControl className="in-user-menu" />
       <p className="user-menu-version">{versionLabel}</p>
     </div>}
   </div>

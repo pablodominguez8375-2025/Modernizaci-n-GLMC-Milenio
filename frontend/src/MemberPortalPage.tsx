@@ -121,7 +121,7 @@ export const memberPortalDemoData = {
   ],
 } as const
 
-export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenCalendar, onOpenNotifications, onOpenLibrary, onOpenLodge }: MemberPortalPageProps) {
+export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
@@ -286,11 +286,6 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
         <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="treasury" size={22} /></span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
         <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="hospitalaria" size={22} /></span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
       </div>
-      <nav className="member-quick-links" aria-label="Accesos de Mi ficha">
-        {onOpenCalendar && <button type="button" onClick={onOpenCalendar}>Ver mi agenda</button>}
-        {onOpenNotifications && <button type="button" onClick={onOpenNotifications}>Ver mis avisos</button>}
-        {onOpenLodge && <button type="button" onClick={onOpenLodge}>Tenidas de mi Taller</button>}
-      </nav>
 
       {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
         <MemberTreasuryCredits credits={treasuryAccount.unappliedCredits} />

@@ -79,10 +79,9 @@ export default function DashboardPage(props: DashboardPageProps) {
     </section>
 
     <section className="metric-grid home-shortcuts" aria-label="Accesos rápidos">
-      <Shortcut icon="calendar" value={pulseLoading ? '—' : String(upcoming.length)} label="Actividades en 21 días" onClick={props.onOpenCalendar} />
+      <Shortcut icon="calendar" value={pulseLoading ? '—' : String(upcoming.length)} label={nextEvent ? `Agenda · próxima ${shortDate(nextEvent.startsAtUtc)}` : 'Agenda · sin actividades próximas'} onClick={props.onOpenCalendar} />
       <Shortcut icon="bell" value={pulseLoading ? '—' : String(unread)} label={unread === 1 ? 'Aviso sin leer' : 'Avisos sin leer'} onClick={props.onOpenNotifications} tone={unread > 0 ? 'attention' : undefined} />
       <Shortcut icon="candidate" value={loading ? '—' : String(portal?.total ?? 0)} label="Insinuados publicados" onClick={props.onOpenCandidates} />
-      <Shortcut icon="ceremony" value={pulseLoading ? '—' : nextEvent ? shortDate(nextEvent.startsAtUtc) : '—'} label={nextEvent ? `Próxima: ${truncate(nextEvent.title, 30)}` : 'Sin actividades próximas'} onClick={props.onOpenCalendar} />
     </section>
 
     <section className={showPendingInbox ? 'home-grid has-inbox' : 'home-grid'}>

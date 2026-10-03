@@ -70,7 +70,7 @@ export default function NotificationsPage({ notificationApi, onAction }: Notific
     <section className="page-heading notification-heading">
       <div>
         <p className="eyebrow">Centro de comunicaciones</p>
-        <h1>Notificaciones institucionales</h1>
+        <h1>Avisos</h1>
         <p>Avisos trazables generados por ceremonias, calendario, documentos y gestión logial.</p>
       </div>
       <div className="notification-summary">
