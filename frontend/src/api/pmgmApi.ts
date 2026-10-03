@@ -1,4 +1,5 @@
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
+import { affiliationModeForDate } from '../admissionDates'
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
 export interface SystemInfo { project: string; api: string; version: string; runtime: string; culture: string; institutionalTimeZone: string; defaultCurrency: string }
@@ -105,7 +106,7 @@ export interface CreateAdmissionCaseRequest {
   previousRejectionDate?: string | null
   rejectionCausesRemedied?: boolean | null
 }
-export interface AdmissionCaseResponse { id: string; organizationId: string; admissionType: string; affiliationMode: string | null; memberId: string | null; personId: string; status: string; createdAtUtc: string }
+export interface AdmissionCaseResponse { id: string; organizationId: string; admissionType: string; affiliationMode: string | null; withdrawalLetterGrantedDate: string | null; memberId: string | null; personId: string; status: string; createdAtUtc: string }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -934,7 +935,14 @@ export class PmgmApiClient {
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
   async createAdmissionCase(payload: CreateAdmissionCaseRequest): Promise<AdmissionCaseResponse> {
-    if (this.useMocks) return { id: crypto.randomUUID(), organizationId: payload.organizationId, admissionType: payload.admissionType, affiliationMode: payload.affiliationMode ?? null, memberId: payload.memberId ?? null, personId: payload.personId, status: 'under_review', createdAtUtc: new Date().toISOString() }
+    if (this.useMocks) {
+      if (payload.admissionType === 'affiliation') {
+        const expected = affiliationModeForDate(payload.withdrawalLetterGrantedDate ?? '')
+        if (!expected) throw new Error('Indique una fecha válida de otorgamiento de la Carta de Retiro Voluntario, sin fecha futura.')
+        if (payload.affiliationMode !== expected) throw new Error('La modalidad no corresponde a la antigüedad de la Carta de Retiro Voluntario.')
+      }
+      return { id: crypto.randomUUID(), organizationId: payload.organizationId, admissionType: payload.admissionType, affiliationMode: payload.affiliationMode ?? null, withdrawalLetterGrantedDate: payload.withdrawalLetterGrantedDate ?? null, memberId: payload.memberId ?? null, personId: payload.personId, status: 'under_review', createdAtUtc: new Date().toISOString() }
+    }
     return this.postJson<AdmissionCaseResponse>('/api/admisiones/expedientes', payload)
   }
 

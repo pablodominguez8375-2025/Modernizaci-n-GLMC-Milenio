@@ -54,7 +54,8 @@ public static class AdmissionEndpoints
         if (!personExists)
             return Results.NotFound(new { message = "La persona no existe en la base maestra." });
 
-        if (request.PreviousRejectionDate > ChileToday())
+        var today = ChileToday();
+        if (request.PreviousRejectionDate > today)
             return Results.BadRequest(new { message = "La fecha de rechazo anterior no puede estar en el futuro." });
 
         if (request.AdmissionType == CeremonyCodes.Type.Affiliation)
@@ -63,10 +64,9 @@ public static class AdmissionEndpoints
                 return Results.BadRequest(new { message = "La afiliación debe indicar modalidad simple o con activación." });
             if (request.WithdrawalLetterGrantedDate is null)
                 return Results.BadRequest(new { message = "La afiliación debe indicar la fecha de otorgamiento de la Carta de Retiro Voluntario." });
-            if (request.WithdrawalLetterGrantedDate > ChileToday())
+            if (request.WithdrawalLetterGrantedDate > today)
                 return Results.BadRequest(new { message = "La fecha de la Carta de Retiro Voluntario no puede estar en el futuro." });
-            var simpleCutoff = request.WithdrawalLetterGrantedDate.Value.AddMonths(3);
-            var expectedMode = ChileToday() <= simpleCutoff ? AdmissionCodes.AffiliationMode.Simple : AdmissionCodes.AffiliationMode.Activation;
+            var expectedMode = WithdrawalLetterPolicy.ModeAtCreation(request.WithdrawalLetterGrantedDate, today);
             if (!string.Equals(request.AffiliationMode, expectedMode, StringComparison.OrdinalIgnoreCase))
                 return Results.BadRequest(new { message = $"La antigüedad de la Carta de Retiro exige afiliación {expectedMode}." });
             if (request.MemberId is null)
