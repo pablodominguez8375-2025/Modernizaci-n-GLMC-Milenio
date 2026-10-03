@@ -44,3 +44,13 @@ describe('PMGM-UX vista operativa · formularios solo en panel', () => {
     expect(source).toContain('<ActionDrawer label="Observar o rechazar"')
   })
 })
+
+describe('PMGM-UX vista operativa · Calidad de datos con acción en lote', () => {
+  const source = read('InternalAffairsDataQualityPage.tsx')
+  it('permite seleccionar hallazgos y abrir casos en lote con confirmación', () => {
+    expect(source).toContain('className="data-quality-bulk-bar"')
+    expect(source).toContain('openSelectedCases')
+    expect(source).toMatch(/<ConfirmAction label=\{bulkBusy \? 'Abriendo casos…'/)
+    expect(source).toContain('caseApi.openCase({ detectionAsOf: asOf, issue: item })')
+  })
+})
