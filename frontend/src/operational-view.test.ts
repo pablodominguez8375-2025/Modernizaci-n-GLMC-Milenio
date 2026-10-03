@@ -18,7 +18,7 @@ function formsOutsideDrawer(source: string) {
 }
 
 describe('PMGM-UX vista operativa · formularios solo en panel', () => {
-  for (const file of ['HospitalariaPage.tsx', 'CeremoniesPage.tsx', 'LodgeTreasuryPanel.tsx', 'LodgeReceiptAdjustmentsPanel.tsx', 'MemberWorkPapersPanel.tsx', 'RegularityPage.tsx']) {
+  for (const file of ['HospitalariaPage.tsx', 'CeremoniesPage.tsx', 'LodgeTreasuryPanel.tsx', 'LodgeReceiptAdjustmentsPanel.tsx', 'MemberWorkPapersPanel.tsx', 'RegularityPage.tsx', 'RegularityManagement.tsx', 'CeremonyRightsPage.tsx', 'LodgeInstructionPage.tsx', 'SystemOperationsPanel.tsx']) {
     it(`${file} no deja formularios abiertos`, () => {
       expect(formsOutsideDrawer(read(file))).toBe(0)
     })
@@ -35,5 +35,12 @@ describe('PMGM-UX vista operativa · formularios solo en panel', () => {
     expect(source).toContain('<ActionDrawer label="Registrar movimiento"')
     expect(source).toContain('<ActionDrawer label="Preparar rendición"')
     expect(source).toContain('<ActionDrawer label="Cambiar tarifa"')
+  })
+
+  it('Control de miembros: filtros secundarios plegados y observar/rechazar en panel', () => {
+    const source = read('InternalAffairsMemberControlPage.tsx')
+    expect(source).toContain('<details className="internal-control-more"><summary>Más filtros')
+    expect(source).toContain('<ConfirmAction label="Aprobar y actualizar Cuadro"')
+    expect(source).toContain('<ActionDrawer label="Observar o rechazar"')
   })
 })
