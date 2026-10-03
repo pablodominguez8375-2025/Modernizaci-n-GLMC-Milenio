@@ -89,8 +89,8 @@ public sealed class AdmissionExternalIntakeHttpTests
         // Concurrent submissions of the same new identifier create one identity/case only.
         var concurrentId = "RACE" + Guid.NewGuid().ToString("N")[..9];
         var race = await Task.WhenAll(Post(input with { RutOrInstitutionalId = concurrentId }), Post(input with { RutOrInstitutionalId = concurrentId }));
-        Assert.Single(race.Where(x => x.StatusCode == HttpStatusCode.Created));
-        Assert.Single(race.Where(x => x.StatusCode == HttpStatusCode.Conflict));
+        Assert.Single(race, x => x.StatusCode == HttpStatusCode.Created);
+        Assert.Single(race, x => x.StatusCode == HttpStatusCode.Conflict);
         Assert.Equal(1, await coreCheck.People.CountAsync(x => x.Rut == concurrentId, ct));
     }
 
