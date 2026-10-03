@@ -249,3 +249,23 @@
   min-height: 2.75rem;
   cursor: pointer;
 }
+
+/* ---------- Revisión transversal 03-10-2026 (regla del PO: sin microtexto ni mayúsculas diminutas) ----------
+   Aplica a todo el contenido de las vistas (main). Las etiquetas, encabezados de tabla, insignias y textos
+   secundarios quedan en letra normal y con un mínimo de 14 px, para personas mayores. */
+main.content :where(*):not(code):not(kbd) {
+  /* !important: regla transversal del PO; prevalece sobre estilos heredados de cada módulo. */
+  text-transform: none !important;
+  letter-spacing: normal !important;
+}
+
+main.content :is(.member-avatar, .authority-avatar, .lodge-count span, .lodge-count strong) { font-size: 0.875rem; }
+
+main.content :is(small, time, th, dt, label > span, legend, caption,
+  .status-pill, .classification-badge, .count-badge, .issue-severity, .eyebrow, .lodge-kicker,
+  .member-card-kicker, .document-state, .badge, [class*="-badge"], [class*="-pill"], [class*="-tag"]) {
+  font-size: 0.875rem;
+}
+
+main.content th { font-weight: 700; }
+main.content label > span { font-weight: 600; }

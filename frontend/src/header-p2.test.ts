@@ -29,7 +29,7 @@ describe('PMGM-UX-003 cabecera P2', () => {
 
   it('separa los controles de demo en una franja que solo existe con datos ficticios', () => {
     expect(app).toContain('{api.useMocks && <div className="demo-strip"')
-    expect(app).toContain("'UI QA v0.80'")
+    expect(app).toContain("'UI QA v0.81'")
     expect(app).not.toMatch(/<span className="demo-badge">QA demostración<\/span><DemoProfileSwitcher[^\n]*<\/div>\s*<\/header>/)
   })
 
