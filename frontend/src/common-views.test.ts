@@ -7,10 +7,10 @@ const css = readFileSync(new URL('./common-views.css', import.meta.url), 'utf8')
 const main = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 
 describe('PMGM-UX vistas comunes · Mi ficha sin duplicados y acciones bajo demanda', () => {
-  it('Mi ficha no repite agenda ni avisos (ya están en Inicio, Agenda y Avisos) y ofrece accesos directos', () => {
+  it('Mi ficha no repite agenda ni avisos ni accesos que ya están en el menú (decisión del PO 03-10-2026)', () => {
     expect(portal).not.toContain('member-calendar-card')
     expect(portal).not.toContain('member-lower-grid')
-    expect(portal).toContain('className="member-quick-links"')
+    expect(portal).not.toContain('className="member-quick-links"')
   })
 
   it('el historial de instrucciones queda plegado y la subida de planchas se abre en panel', () => {
