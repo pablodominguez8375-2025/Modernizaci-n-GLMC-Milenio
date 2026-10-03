@@ -61,6 +61,14 @@ public static class AdmissionEndpoints
         {
             if (!AdmissionCodes.AffiliationMode.IsValid(request.AffiliationMode))
                 return Results.BadRequest(new { message = "La afiliación debe indicar modalidad simple o con activación." });
+            if (request.WithdrawalLetterGrantedDate is null)
+                return Results.BadRequest(new { message = "La afiliación debe indicar la fecha de otorgamiento de la Carta de Retiro Voluntario." });
+            if (request.WithdrawalLetterGrantedDate > ChileToday())
+                return Results.BadRequest(new { message = "La fecha de la Carta de Retiro Voluntario no puede estar en el futuro." });
+            var simpleCutoff = request.WithdrawalLetterGrantedDate.Value.AddMonths(3);
+            var expectedMode = ChileToday() <= simpleCutoff ? AdmissionCodes.AffiliationMode.Simple : AdmissionCodes.AffiliationMode.Activation;
+            if (!string.Equals(request.AffiliationMode, expectedMode, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { message = $"La antigüedad de la Carta de Retiro exige afiliación {expectedMode}." });
             if (request.MemberId is null)
                 return Results.BadRequest(new { message = "Una afiliación requiere un hermano ya registrado en la base maestra." });
 
@@ -88,6 +96,7 @@ public static class AdmissionEndpoints
             OrganizationId = request.OrganizationId,
             AdmissionType = request.AdmissionType,
             AffiliationMode = Normalize(request.AffiliationMode),
+            WithdrawalLetterGrantedDate = request.WithdrawalLetterGrantedDate,
             MemberId = request.MemberId,
             PersonId = request.PersonId,
             OriginOrganizationId = request.OriginOrganizationId,
@@ -454,6 +463,7 @@ public static class AdmissionEndpoints
         entity.OrganizationId,
         entity.AdmissionType,
         entity.AffiliationMode,
+        entity.WithdrawalLetterGrantedDate,
         entity.MemberId,
         entity.PersonId,
         entity.OriginOrganizationId,
