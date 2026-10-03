@@ -4,8 +4,11 @@ const page = readFileSync(new URL('./AdmissionsPage.tsx', import.meta.url), 'utf
 const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
 describe('PMGM-ADM-001 · afiliación e incorporación separadas de iniciación', () => {
   it('reutiliza Person/Member y publica ambas modalidades', () => {
-    expect(page).toContain('profile.member.personId')
-    expect(page).toContain('admissionType:type')
+    expect(page).toContain('personId: selected.personId')
+    expect(page).toContain('admissionType: type')
+    expect(page).toContain('searchAdmissionPeople')
+    expect(page).not.toContain('getProfile(')
+    expect(page).not.toContain('getMembers(')
     expect(page).toContain('Afiliación')
     expect(page).toContain('Incorporación')
     expect(page).toContain('withdrawalLetterGrantedDate')

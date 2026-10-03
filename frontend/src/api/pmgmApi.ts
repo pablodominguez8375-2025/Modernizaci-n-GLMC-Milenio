@@ -1,5 +1,7 @@
 import { adjustMockReceipt } from './lodgeReceiptAdjustments'
 import { affiliationModeForDate } from '../admissionDates'
+import { lookupDemoAdmissionPeople, type AdmissionPersonSearch, type AdmissionPersonSearchResponse } from './admissionLookup'
+export type { AdmissionPersonOption } from './admissionLookup'
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
 export interface SystemInfo { project: string; api: string; version: string; runtime: string; culture: string; institutionalTimeZone: string; defaultCurrency: string }
@@ -944,6 +946,11 @@ export class PmgmApiClient {
       return { id: crypto.randomUUID(), organizationId: payload.organizationId, admissionType: payload.admissionType, affiliationMode: payload.affiliationMode ?? null, withdrawalLetterGrantedDate: payload.withdrawalLetterGrantedDate ?? null, memberId: payload.memberId ?? null, personId: payload.personId, status: 'under_review', createdAtUtc: new Date().toISOString() }
     }
     return this.postJson<AdmissionCaseResponse>('/api/admisiones/expedientes', payload)
+  }
+
+  async searchAdmissionPeople(input: AdmissionPersonSearch): Promise<AdmissionPersonSearchResponse> {
+    if (this.useMocks) return lookupDemoAdmissionPeople(input)
+    return this.request<AdmissionPersonSearchResponse>(`/api/admisiones/personas-busqueda?${new URLSearchParams({ ...input, query: input.query.trim() })}`)
   }
 
   private async request<T>(path: string, init: RequestInit = {}): Promise<T> {
