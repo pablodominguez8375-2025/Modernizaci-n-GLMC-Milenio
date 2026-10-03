@@ -269,3 +269,59 @@ main.content :is(small, time, th, dt, label > span, legend, caption,
 
 main.content th { font-weight: 700; }
 main.content label > span { font-weight: 600; }
+
+/* ---------- Tesorería: menú de secciones como pestañas compactas, igual que Secretaría (03-10-2026) ----------
+   Bajo 1440 px (celular, tablet y computador mediano) el «Menú operativo» deja de ser una pila de mosaicos
+   y pasa a una franja de pestañas horizontales con desplazamiento, como WorkspaceTabs en Secretaría.
+   Desde 1440 px se mantiene la columna lateral fija (desktop-density.css, PR #293). */
+@media (max-width: 89.99rem) {
+  .treasury-role-navigation {
+    gap: 0.5rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .treasury-role-navigation-heading .eyebrow,
+  .treasury-role-navigation-heading h2 { display: none; }
+
+  .treasury-role-navigation-heading:not(:has(> :not(div))) { display: none; }
+
+  .treasury-role-tabs {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    border-bottom: 2px solid var(--line);
+    scrollbar-width: thin;
+  }
+
+  .treasury-role-tabs button {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 3rem;
+    padding: 0.625rem 1rem;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+    white-space: nowrap;
+  }
+
+  .treasury-role-tabs button small { display: none; }
+
+  .treasury-role-tabs button span { color: var(--brand-muted); font-weight: 700; }
+
+  .treasury-role-tabs button.active {
+    border-bottom-color: var(--brand-gold);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .treasury-role-tabs button.active span,
+  .treasury-role-tabs button:hover span { color: var(--brand-navy); }
+}
