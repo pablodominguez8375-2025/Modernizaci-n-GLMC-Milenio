@@ -3,6 +3,7 @@ import { type DataQualityCaseApiClient } from './api/dataQualityCaseApi'
 import { type DataQualityIssue, type DataQualityResponse, type InternalAffairsApiClient } from './api/internalAffairsApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsDataQuality.css'
+import { ConfirmAction } from './actionKit'
 import { organizationDisplayName } from './displayFormat'
 
 const RULE_LABELS: Record<string, string> = {
@@ -24,6 +25,8 @@ export default function InternalAffairsDataQualityPage({ api, internalAffairsApi
   const [error, setError] = useState<string | null>(null)
   const [openingKey, setOpeningKey] = useState<string | null>(null)
   const [caseNotice, setCaseNotice] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -42,6 +45,26 @@ export default function InternalAffairsDataQualityPage({ api, internalAffairsApi
   }, [asOf, organizationId, severity, code, search, internalAffairsApi])
 
   const codes = useMemo(() => Object.entries(response?.summary.byCode ?? {}).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])), [response])
+  const issueKey = (item: DataQualityIssue) => `${item.memberId}-${item.code}-${item.organizationId ?? 'order'}`
+  const visibleKeys = useMemo(() => (response?.items ?? []).map(issueKey), [response])
+  useEffect(() => { setSelected(new Set()) }, [response])
+  const toggle = (key: string) => setSelected(current => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next })
+  const allSelected = visibleKeys.length > 0 && visibleKeys.every(key => selected.has(key))
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(visibleKeys))
+  /* PMGM-UX vista operativa: acción en lote. Usa la misma operación caseApi.openCase por hallazgo. */
+  const openSelectedCases = async () => {
+    const items = (response?.items ?? []).filter(item => selected.has(issueKey(item)))
+    setBulkBusy(true); setCaseNotice(null); setError(null)
+    let opened = 0; let already = 0
+    try {
+      for (const item of items) {
+        const result = await caseApi.openCase({ detectionAsOf: asOf, issue: item })
+        if (result.status === 'under_review') already += 1; else opened += 1
+      }
+      setCaseNotice(`${opened} ${opened === 1 ? 'caso quedó disponible' : 'casos quedaron disponibles'} en la cola${already ? `; ${already} ya ${already === 1 ? 'estaba' : 'estaban'} en revisión` : ''}.`)
+      setSelected(new Set())
+    } catch (reason) { setError(toMessage(reason)) } finally { setBulkBusy(false) }
+  }
   const openCase = async (item: DataQualityIssue) => {
     const key = `${item.memberId}-${item.code}-${item.organizationId ?? 'order'}`
     setOpeningKey(key); setCaseNotice(null); setError(null)
@@ -52,7 +75,7 @@ export default function InternalAffairsDataQualityPage({ api, internalAffairsApi
   }
 
   return <>
-    <section className="page-heading data-quality-heading"><div><p className="eyebrow">Régimen Interior · control preventivo</p><h1>Calidad de datos institucionales</h1><p>Detecta secuencias y fechas que requieren corroboración. El motor no modifica el historial; un hallazgo puede transformarse explícitamente en un caso de revisión.</p></div><span className="data-quality-readonly">Detección read-only</span></section>
+    <section className="page-heading data-quality-heading"><div><p className="eyebrow">Régimen Interior · control preventivo</p><h1>Calidad de datos institucionales</h1><p>Detecta secuencias y fechas que requieren corroboración. El motor no modifica el historial; un hallazgo puede transformarse explícitamente en un caso de revisión.</p></div><span className="data-quality-readonly">Solo consulta</span></section>
     <section className="panel data-quality-filters" aria-label="Filtros de calidad de datos">
       <label><span>Fecha de corte</span><input type="date" value={asOf} onChange={event => setAsOf(event.target.value)} /></label>
       <label><span>Taller relacionado</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Toda la Orden</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
@@ -66,14 +89,14 @@ export default function InternalAffairsDataQualityPage({ api, internalAffairsApi
       <Metric label="Errores" value={loading ? '…' : String(response?.summary.errors ?? 0)} detail="Inconsistencias de alta prioridad" tone="error" /><Metric label="Advertencias" value={loading ? '…' : String(response?.summary.warnings ?? 0)} detail="Casos que requieren corroboración" tone="warning" /><Metric label="Miembros afectados" value={loading ? '…' : String(response?.summary.affectedMembers ?? 0)} detail="Personas con al menos una observación" /><Metric label="Resultados visibles" value={loading ? '…' : String(response?.returned ?? 0)} detail={`${response?.total ?? 0} coincidencias con los filtros`} />
     </section>
     <section className="data-quality-layout">
-      <article className="panel data-quality-results"><div className="panel-heading"><div><p className="eyebrow">Observaciones detectadas</p><h2>Casos para corroborar</h2></div><span className="count-badge">{loading ? '…' : response?.total ?? 0}</span></div>{loading ? <Loading /> : !response || response.items.length === 0 ? <div className="empty-state"><strong>No se detectaron observaciones con estos filtros.</strong><p>Esto no certifica por sí solo la integridad del Cuadro General de la Orden; indica que las reglas automáticas no encontraron inconsistencias en el alcance consultado.</p></div> : <div className="data-quality-list">{response.items.map((item, index) => { const key = `${item.memberId}-${item.code}-${item.organizationId ?? 'order'}`; return <IssueCard key={`${key}-${item.primaryDate ?? 'none'}-${index}`} item={item} busy={openingKey === key} onOpen={() => void openCase(item)} /> })}</div>}</article>
+      <article className="panel data-quality-results"><div className="panel-heading"><div><p className="eyebrow">Observaciones detectadas</p><h2>Casos para corroborar</h2></div><span className="count-badge">{loading ? '…' : response?.total ?? 0}</span></div>{loading ? <Loading /> : !response || response.items.length === 0 ? <div className="empty-state"><strong>No se detectaron observaciones con estos filtros.</strong><p>Esto no certifica por sí solo la integridad del Cuadro General de la Orden; indica que las reglas automáticas no encontraron inconsistencias en el alcance consultado.</p></div> : <><div className="data-quality-bulk-bar" role="group" aria-label="Acciones en lote"><label className="case-checkbox"><input type="checkbox" checked={allSelected} onChange={toggleAll} /><span>Seleccionar los {visibleKeys.length} visibles</span></label><span className="data-quality-bulk-count">{selected.size} {selected.size === 1 ? 'seleccionado' : 'seleccionados'}</span><ConfirmAction label={bulkBusy ? 'Abriendo casos…' : `Abrir ${selected.size || ''} ${selected.size === 1 ? 'caso' : 'casos'} para corroborar`} message={`Se abrirá un caso de corroboración por cada hallazgo seleccionado (${selected.size}). El motor no modifica el historial.`} confirmLabel="Sí, abrir casos" disabled={bulkBusy || selected.size === 0} onConfirm={() => { void openSelectedCases() }} /></div><div className="data-quality-list">{response.items.map((item, index) => { const key = `${item.memberId}-${item.code}-${item.organizationId ?? 'order'}`; return <IssueCard key={`${key}-${item.primaryDate ?? 'none'}-${index}`} item={item} checked={selected.has(key)} onToggle={() => toggle(key)} busy={openingKey === key} onOpen={() => void openCase(item)} /> })}</div></>}</article>
       <aside className="panel data-quality-rules"><div className="panel-heading"><div><p className="eyebrow">Cobertura</p><h2>Reglas activas</h2></div></div>{codes.length === 0 ? <div className="empty-state compact"><strong>Sin reglas activadas por los datos del alcance.</strong></div> : <div className="rule-list">{codes.slice(0, 12).map(([item, count]) => <button key={item} type="button" className={code === item ? 'active' : ''} onClick={() => setCode(code === item ? '' : item)}><span>{ruleLabel(item)}</span><strong>{count}</strong></button>)}</div>}<p className="data-quality-note"><strong>Principio de control:</strong> detectar no equivale a corregir. La modificación de la fuente requiere revisión humana y respaldo institucional.</p></aside>
     </section>
   </>
 }
 
-function IssueCard({ item, busy, onOpen }: { item: DataQualityIssue; busy: boolean; onOpen: () => void }) {
-  return <article className={`data-quality-issue ${item.severity === 'error' ? 'error' : 'warning'}`}><div className="issue-topline"><span className={`issue-severity ${item.severity}`}>{item.severity === 'error' ? 'Error' : 'Advertencia'}</span><code>{item.code}</code></div><div className="issue-main"><div><h3>{item.title}</h3><p>{item.description}</p></div><div className="issue-person"><strong>{item.displayName}</strong><span>{item.institutionalNumber ?? 'Sin número institucional'}</span><small>{item.organizationName ?? 'Ámbito Orden'}</small></div></div><div className="issue-dates"><span>Fecha observada <strong>{dateLabel(item.primaryDate)}</strong></span>{item.relatedDate && <span>Fecha relacionada <strong>{dateLabel(item.relatedDate)}</strong></span>}</div><div className="issue-action"><span aria-hidden="true">✓</span><div><small>Acción sugerida</small><strong>{item.suggestedAction}</strong></div></div><div className="issue-case-action"><button type="button" onClick={onOpen} disabled={busy}>{busy ? 'Abriendo caso…' : 'Abrir caso de corroboración'}</button><span>Se validará que el hallazgo siga vigente antes de crear el caso.</span></div></article>
+function IssueCard({ item, busy, onOpen, checked, onToggle }: { item: DataQualityIssue; busy: boolean; onOpen: () => void; checked: boolean; onToggle: () => void }) {
+  return <article className={`data-quality-issue ${item.severity === 'error' ? 'error' : 'warning'}`}><div className="issue-topline"><label className="issue-select"><input type="checkbox" checked={checked} onChange={onToggle} aria-label={`Seleccionar hallazgo de ${item.displayName}`} /></label><span className={`issue-severity ${item.severity}`}>{item.severity === 'error' ? 'Error' : 'Advertencia'}</span><span className="issue-rule" title={item.code}>{ruleLabel(item.code)}</span></div><div className="issue-main"><div><h3>{item.title}</h3><p>{item.description}</p></div><div className="issue-person"><strong>{item.displayName}</strong><span>{item.institutionalNumber ?? 'Sin número institucional'}</span><small>{item.organizationName ?? 'Ámbito Orden'}</small></div></div><div className="issue-dates"><span>Fecha observada <strong>{dateLabel(item.primaryDate)}</strong></span>{item.relatedDate && <span>Fecha relacionada <strong>{dateLabel(item.relatedDate)}</strong></span>}</div><div className="issue-action"><span aria-hidden="true">✓</span><div><small>Acción sugerida</small><strong>{item.suggestedAction}</strong></div></div><div className="issue-case-action"><button type="button" onClick={onOpen} disabled={busy}>{busy ? 'Abriendo caso…' : 'Abrir caso de corroboración'}</button><span>Se validará que el hallazgo siga vigente antes de crear el caso.</span></div></article>
 }
 
 function Metric({ label, value, detail, tone }: { label: string; value: string; detail: string; tone?: 'error' | 'warning' }) { return <article className={`metric-card data-quality-metric ${tone ?? ''}`}><span>{label}</span><strong>{value}</strong><small>{detail}</small></article> }
