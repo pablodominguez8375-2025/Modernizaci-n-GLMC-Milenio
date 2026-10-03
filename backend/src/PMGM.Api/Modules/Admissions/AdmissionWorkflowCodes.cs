@@ -34,6 +34,7 @@ public static class AdmissionWorkflowCodes
         public const string GrandMasterRegularityRecognition = "grand_master_regularity_recognition";
         public const string InformationCommissionAppointed = "information_commission_appointed";
         public const string InformationCommissionCompleted = "information_commission_completed";
+        public const string MembershipMaterialized = "membership_materialized";
         public const string CeremonyRequestCreated = "ceremony_request_created";
         public const string EvidenceReviewPrefix = "evidence_review:";
 
