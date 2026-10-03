@@ -8,6 +8,8 @@ describe('PMGM-ADM-001 · afiliación e incorporación separadas de iniciación'
     expect(page).toContain('admissionType:type')
     expect(page).toContain('Afiliación')
     expect(page).toContain('Incorporación')
+    expect(page).toContain('withdrawalLetterGrantedDate')
+    expect(page).toContain('derivedMode')
     expect(page).not.toContain('CandidateWorkshopIntakePage')
   })
   it('queda disponible en las vistas de Secretaría', () => {
