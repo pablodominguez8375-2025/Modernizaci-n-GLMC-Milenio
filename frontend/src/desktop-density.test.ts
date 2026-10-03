@@ -30,3 +30,14 @@ describe('PMGM-UX densidad cómoda en escritorio', () => {
     expect(css).not.toMatch(/font-size:\s*\d+px/)
   })
 })
+
+describe('PMGM-UX densidad · Secretarías y Tesorerías en dos zonas (≥ 90rem)', () => {
+  const density = readFileSync(new URL('./desktop-density.css', import.meta.url), 'utf8')
+  it('el menú de secciones pasa a una columna fija a la izquierda solo desde 1440 px', () => {
+    const block = density.slice(density.indexOf('Fase 3'))
+    expect(block).toMatch(/@media \(min-width: 90rem\)/)
+    expect(block).toMatch(/grid-template-columns: 15rem minmax\(0, 1fr\)/)
+    expect(block).toMatch(/nav\.workspace-tabs \{[^}]*grid-column: 1;[^}]*position: sticky/s)
+    expect(block).toMatch(/\.treasury-role-navigation,/)
+  })
+})
