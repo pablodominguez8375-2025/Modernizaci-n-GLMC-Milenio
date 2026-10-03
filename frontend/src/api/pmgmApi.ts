@@ -113,7 +113,7 @@ export interface CreateAdmissionCaseRequest {
 }
 export interface AdmissionCaseResponse { id: string; organizationId: string; admissionType: string; affiliationMode: string | null; withdrawalLetterGrantedDate: string | null; memberId: string | null; personId: string; status: string; createdAtUtc: string }
 export interface AdmissionEvidenceItem { id: string; admissionCaseId: string; evidenceType: string; documentVersionId: string | null; evidenceDate: string | null; sourceReference: string | null; reviewStatus: string; reviewedAtUtc: string | null; notes: string | null; createdAtUtc: string }
-export interface AdmissionDecisionItem { id: string; admissionCaseId: string; decisionType: string; status: string; asOfDate: string; sourceReference: string | null; notes: string | null; recordedAtUtc: string }
+export interface AdmissionDecisionItem { id: string; admissionCaseId: string; decisionType: string; status: string; asOfDate: string; sourceReference: string | null; notes: string | null; recordedBySubject?: string; recordedAtUtc: string }
 export interface AdmissionCaseDetail extends AdmissionCaseResponse { evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }
 export interface AdmissionCaseListItem extends AdmissionCaseResponse { evidenceCount: number; latestEvidenceStatus: string | null }
 export interface AddAdmissionEvidenceRequest { evidenceType: string; documentVersionId: string; evidenceDate?: string | null; sourceReference?: string | null; notes?: string | null }
@@ -1008,7 +1008,7 @@ export class PmgmApiClient {
       const existing = this.withdrawalReviewDemo.decisions.find(x => x.decisionType === 'membership_materialized')
       if (existing) return { idempotent: true, membership: { id: 'demo-membership-materialized', memberId: 'demo-member-1', organizationId: 'demo-org-23', startDate: payload.effectiveDate, status: 'active' } }
       this.withdrawalReviewDemo.status = 'resolved'
-      this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference, notes: 'Materialización sintética de demostración.', recordedAtUtc: new Date().toISOString() })
+      this.withdrawalReviewDemo.decisions.unshift({ id: crypto.randomUUID(), admissionCaseId: caseId, decisionType: 'membership_materialized', status: 'approved', asOfDate: payload.effectiveDate, sourceReference: payload.evidenceReference, notes: 'Materialización sintética de demostración.', recordedBySubject: 'secretaria-demo', recordedAtUtc: new Date().toISOString() })
       return { idempotent: false, membershipId: 'demo-membership-materialized', admissionCaseId: caseId }
     }
     return this.postJson<MaterializeAdmissionResponse>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/materializar`, payload)
