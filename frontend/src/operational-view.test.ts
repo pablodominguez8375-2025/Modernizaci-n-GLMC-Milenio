@@ -54,3 +54,15 @@ describe('PMGM-UX vista operativa · Calidad de datos con acción en lote', () =
     expect(source).toContain('caseApi.openCase({ detectionAsOf: asOf, issue: item })')
   })
 })
+
+describe('PMGM-UX vista limpia · Hospitalaria en pestañas', () => {
+  const source = read('HospitalariaPage.tsx')
+  const app = read('App.tsx')
+  it('separa Hospitalaria en pestañas y la regularidad queda en su propia pestaña', () => {
+    expect(source).toContain('label="Secciones de Hospitalaria"')
+    expect(source).toContain('label="Secciones de Gran Hospitalaria"')
+    expect(source.match(/<WorkspacePanel id="regularidad"/g)?.length).toBe(2)
+    expect(app).toContain('regularitySlot={canHospitalaria ? <RegularityPage')
+    expect(app).not.toMatch(/<HospitalariaPage[^>]*\/>\{canHospitalaria && <RegularityPage/)
+  })
+})
