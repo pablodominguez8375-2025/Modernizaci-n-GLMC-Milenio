@@ -16,6 +16,10 @@ Issue #275 / PR #276. Matriz de aceptación para recuperar el residual de PR #11
 | UAT-017-10 | Privacidad | Borrador privado no es visible para Gran Secretaría antes del envío | prueba de acceso |
 | UAT-017-11 | Permisos | Secretaría, Régimen Interior y Venerable sólo ejecutan acciones autorizadas | matriz de claims |
 | UAT-017-12 | Voto secreto | Sólo se conservan totales agregados, nunca votos individuales | payload/auditoría |
+| UAT-017-13 | Materialización autorizada | Expediente elegible crea una sola pertenencia activa, evento institucional y decisión de cierre | respuesta/filas sintéticas/auditoría |
+| UAT-017-14 | Reintento de materialización | Repetir la misma operación devuelve la pertenencia existente sin segunda alta ni segundo evento | respuesta/conteo sintético |
+| UAT-017-15 | Traslado sin CRV | La solicitud se rechaza si falta retiro voluntario aprobado y firmado por el Orador | HTTP/auditoría |
+| UAT-017-16 | Traslado con CRV | Cierra origen en la fecha efectiva anterior, crea destino con el mismo `MemberId` y conserva evidencia | origen/destino/historial |
 
 ## Criterio de aceptación
 
