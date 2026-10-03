@@ -112,6 +112,11 @@ export interface CreateAdmissionCaseRequest {
   rejectionCausesRemedied?: boolean | null
 }
 export interface AdmissionCaseResponse { id: string; organizationId: string; admissionType: string; affiliationMode: string | null; withdrawalLetterGrantedDate: string | null; memberId: string | null; personId: string; status: string; createdAtUtc: string }
+export interface AdmissionEvidenceItem { id: string; admissionCaseId: string; evidenceType: string; documentVersionId: string | null; evidenceDate: string | null; sourceReference: string | null; reviewStatus: string; reviewedAtUtc: string | null; notes: string | null; createdAtUtc: string }
+export interface AdmissionDecisionItem { id: string; admissionCaseId: string; decisionType: string; status: string; asOfDate: string; sourceReference: string | null; notes: string | null; recordedAtUtc: string }
+export interface AdmissionCaseDetail extends AdmissionCaseResponse { evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }
+export interface AddAdmissionEvidenceRequest { evidenceType: string; documentVersionId: string; evidenceDate?: string | null; sourceReference?: string | null; notes?: string | null }
+export interface AdmissionEvidenceReviewRequest { status: 'approved' | 'observed' | 'rejected'; asOfDate: string; sourceReference: string; notes?: string | null }
 export type CeremonyRequestStatus = 'draft' | 'under_review' | 'eligible' | 'observed' | 'rejected' | 'authorized'
 export type CeremonyValidationStatus = 'pending' | 'approved' | 'observed' | 'rejected' | 'not_applicable' | 'exception_approved'
 export interface GrandSecretariatCeremonyQueueItem {
@@ -962,6 +967,26 @@ export class PmgmApiClient {
   async createExternalIncorporation(payload: ExternalIncorporationRequest): Promise<AdmissionCaseResponse> {
     if (this.useMocks) return this.externalIncorporationDemo.create(payload)
     return this.postJson<AdmissionCaseResponse>('/api/admisiones/incorporaciones/persona-nueva', payload)
+  }
+
+  async getAdmissionCase(caseId: string): Promise<AdmissionCaseDetail> {
+    if (this.useMocks) {
+      const item = this.withdrawalReviewDemo
+      if (caseId !== item.id) throw new Error('La demo sólo expone el expediente sintético demo-crv-review.')
+      return { id: item.id, organizationId: 'demo-org-23', admissionType: item.admissionType, affiliationMode: item.affiliationMode, withdrawalLetterGrantedDate: item.withdrawalLetterGrantedDate, memberId: 'demo-member-1', personId: 'demo-person-1', status: item.status, createdAtUtc: item.createdAtUtc, evidence: item.letters.map(letter => ({ id: letter.id, admissionCaseId: item.id, evidenceType: 'withdrawal_letter', documentVersionId: letter.documentVersionId, evidenceDate: letter.evidenceDate, sourceReference: 'SYNTHETIC', reviewStatus: letter.reviewStatus, reviewedAtUtc: letter.reviewedAtUtc, notes: null, createdAtUtc: letter.createdAtUtc })), decisions: item.decisions }
+    }
+    const response = await this.request<{ admissionCase: AdmissionCaseResponse; evidence: AdmissionEvidenceItem[]; decisions: AdmissionDecisionItem[] }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}`)
+    return { ...response.admissionCase, evidence: response.evidence, decisions: response.decisions }
+  }
+
+  async addAdmissionEvidence(caseId: string, payload: AddAdmissionEvidenceRequest): Promise<AdmissionEvidenceItem> {
+    if (this.useMocks) throw new Error('La carga operativa requiere una API institucional; la demo sólo muestra evidencia sintética.')
+    return this.postJson<AdmissionEvidenceItem>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias`, payload)
+  }
+
+  async reviewAdmissionEvidence(caseId: string, evidenceId: string, payload: AdmissionEvidenceReviewRequest): Promise<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }> {
+    if (this.useMocks) throw new Error('La revisión operativa requiere una API institucional; la demo sólo muestra evidencia sintética.')
+    return this.postJson<{ evidence: AdmissionEvidenceItem; decision: AdmissionDecisionItem }>(`/api/admisiones/expedientes/${encodeURIComponent(caseId)}/evidencias/${encodeURIComponent(evidenceId)}/revision`, payload)
   }
 
   async reviewWithdrawalLetterSignature(caseId: string, payload: WithdrawalSignatureReviewRequest): Promise<WithdrawalSignatureDecision> {

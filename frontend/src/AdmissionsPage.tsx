@@ -1,12 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { type AdmissionPersonOption, type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
+import { type AdmissionCaseDetail, type AdmissionEvidenceItem, type AdmissionPersonOption, type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type MembershipApiClient } from './api/membershipApi'
+import { type DocumentApiClient } from './api/documentApi'
 import { affiliationModeForDate, chileCivilDate } from './admissionDates'
 import './admissions.css'
 import ExternalIncorporationDrawer from './ExternalIncorporationDrawer'
 
 type AdmissionType = 'affiliation' | 'incorporation'
-export default function AdmissionsPage({ api }: { api: PmgmApiClient; membershipApi: MembershipApiClient }) {
+export default function AdmissionsPage({ api, documentApi }: { api: PmgmApiClient; membershipApi: MembershipApiClient; documentApi: DocumentApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [type, setType] = useState<AdmissionType>('affiliation')
@@ -24,6 +25,8 @@ export default function AdmissionsPage({ api }: { api: PmgmApiClient; membership
   const [working, setWorking] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [activeCaseId, setActiveCaseId] = useState(api.useMocks ? 'demo-crv-review' : '')
+  const [activeCase, setActiveCase] = useState<AdmissionCaseDetail | null>(null)
   useEffect(() => {
     let cancelled = false
     api.getOrganizationOptions().then(r => {
@@ -66,6 +69,7 @@ export default function AdmissionsPage({ api }: { api: PmgmApiClient; membership
         degree: type === 'incorporation' ? degree : null,
         hasPeaceAndFriendshipPact: type === 'incorporation' ? (hasPact === 'unknown' ? null : hasPact === 'true') : null,
       })
+      setActiveCaseId(result.id)
       setMessage('Expediente ' + result.id + ' creado y enviado a revisión.')
     } catch (e) { setError(toMessage(e)) } finally { setWorking(false) }
   }
@@ -98,6 +102,65 @@ export default function AdmissionsPage({ api }: { api: PmgmApiClient; membership
       </div></fieldset>}
       <div className="form-actions"><button className="primary-button" type="submit" disabled={working || searching || !selected}>{working ? 'Registrando…' : 'Crear expediente de admisión'}</button><small>La iniciación normal continúa en Secretaría → Insinuados → Circuito de iniciación.</small></div>
     </form>
+    <AdmissionDocumentPanel api={api} documentApi={documentApi} caseId={activeCaseId} caseDetail={activeCase} onCaseChange={setActiveCase} onCaseIdChange={setActiveCaseId} />
   </div>
 }
 function toMessage(reason: unknown) { return reason instanceof Error ? reason.message : 'La API no respondió.' }
+
+function AdmissionDocumentPanel({ api, documentApi, caseId, caseDetail, onCaseChange, onCaseIdChange }: { api: PmgmApiClient; documentApi: DocumentApiClient; caseId: string; caseDetail: AdmissionCaseDetail | null; onCaseChange: (value: AdmissionCaseDetail | null) => void; onCaseIdChange: (value: string) => void }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [evidenceType, setEvidenceType] = useState('withdrawal_letter')
+  const [evidenceDate, setEvidenceDate] = useState('')
+  const [sourceReference, setSourceReference] = useState('')
+  const [notes, setNotes] = useState('')
+  const [reviewTarget, setReviewTarget] = useState<AdmissionEvidenceItem | null>(null)
+  const [reviewStatus, setReviewStatus] = useState<'approved' | 'observed' | 'rejected'>('approved')
+  const [reviewDate, setReviewDate] = useState(chileCivilDate())
+  const [reviewSource, setReviewSource] = useState('')
+  const [working, setWorking] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const loadCase = async () => {
+    setWorking(true); setError(null)
+    try { onCaseChange(await api.getAdmissionCase(caseId.trim())); setMessage('Expediente cargado con sus evidencias y decisiones.') }
+    catch (reason) { onCaseChange(null); setError(toMessage(reason)) } finally { setWorking(false) }
+  }
+  const ensureCollection = async (organizationId: string) => {
+    const collections = await documentApi.getCollections(organizationId)
+    const existing = collections.items.find(item => item.name === 'Admisiones · evidencias')
+    if (existing) return existing.id
+    return (await documentApi.createCollection({ code: 'ADM-' + organizationId.replaceAll('-', '').slice(0, 10).toUpperCase(), name: 'Admisiones · evidencias', description: 'Documentos privados vinculados a expedientes de afiliación e incorporación.', scope: 'organization', organizationId })).id
+  }
+  const addEvidence = async (event: FormEvent) => {
+    event.preventDefault(); if (!caseDetail || !file) return
+    setWorking(true); setError(null); setMessage(null)
+    try {
+      if (file.size <= 0 || file.size > 20 * 1024 * 1024) throw new Error('El archivo debe pesar entre 1 byte y 20 MB.')
+      if (evidenceType === 'withdrawal_letter' && file.type !== 'application/pdf') throw new Error('La Carta de Retiro Voluntario debe cargarse en PDF.')
+      const uploaded = await documentApi.uploadManagedFile(await ensureCollection(caseDetail.organizationId), { title: 'Evidencia de admisión · ' + caseDetail.id, documentType: evidenceType, classification: 'restricted', accessPolicy: 'management_only' }, file)
+      const saved = await api.addAdmissionEvidence(caseDetail.id, { evidenceType, documentVersionId: uploaded.version.id, evidenceDate: evidenceDate || null, sourceReference: sourceReference.trim() || null, notes: notes.trim() || null })
+      onCaseChange({ ...caseDetail, evidence: [saved, ...caseDetail.evidence] }); setFile(null); setEvidenceDate(''); setSourceReference(''); setNotes(''); setMessage('Evidencia cargada, escaneada y vinculada al expediente.')
+    } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
+  }
+  const reviewEvidence = async (event: FormEvent) => {
+    event.preventDefault(); if (!caseDetail || !reviewTarget) return
+    setWorking(true); setError(null); setMessage(null)
+    try {
+      const result = await api.reviewAdmissionEvidence(caseDetail.id, reviewTarget.id, { status: reviewStatus, asOfDate: reviewDate, sourceReference: reviewSource.trim(), notes: null })
+      onCaseChange({ ...caseDetail, evidence: caseDetail.evidence.map(item => item.id === result.evidence.id ? result.evidence : item), decisions: [result.decision, ...caseDetail.decisions] }); setReviewTarget(null); setMessage('Revisión registrada y auditada.')
+    } catch (reason) { setError(toMessage(reason)) } finally { setWorking(false) }
+  }
+  return <section className="panel admissions-documents" aria-labelledby="admission-documents-title">
+    <div className="page-heading"><div><p className="eyebrow">Secretaría · gestión documental</p><h2 id="admission-documents-title">Evidencias del expediente</h2><p>Carga privada, análisis de seguridad, versión trazable y revisión institucional. La API conserva la autoridad final.</p></div><span className="count-badge">{caseDetail ? caseDetail.evidence.length + ' evidencia(s)' : 'Sin expediente cargado'}</span></div>
+    <div className="form-grid"><label>Expediente<input value={caseId} onChange={event => onCaseIdChange(event.target.value)} placeholder="ID del expediente" /></label><button className="secondary-button" type="button" disabled={working || !caseId.trim()} onClick={() => void loadCase()}>Cargar expediente</button></div>
+    {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success-banner" role="status">{message}</div>}
+    {caseDetail && <><form className="admissions-evidence-form" onSubmit={event => void addEvidence(event)}>
+      <label>Tipo<select value={evidenceType} onChange={event => setEvidenceType(event.target.value)}><option value="withdrawal_letter">Carta de Retiro Voluntario</option><option value="legalized_initiation_evidence">Iniciación legalizada</option><option value="legalized_wage_increase_evidence">Aumento de salario legalizado</option><option value="legalized_exaltation_evidence">Exaltación legalizada</option><option value="degree_evidence">Grado declarado</option></select></label>
+      <label>Archivo<input required type="file" accept={evidenceType === 'withdrawal_letter' ? 'application/pdf' : '.pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document'} onChange={event => setFile(event.target.files?.[0] ?? null)} /></label>
+      <label>Fecha del documento<input type="date" value={evidenceDate} onChange={event => setEvidenceDate(event.target.value)} /></label><label>Fuente institucional<input required maxLength={500} value={sourceReference} onChange={event => setSourceReference(event.target.value)} /></label><label>Notas<input maxLength={4000} value={notes} onChange={event => setNotes(event.target.value)} /></label>
+      <button className="primary-button" disabled={working || !file} type="submit">{working ? 'Procesando…' : 'Cargar y vincular evidencia'}</button>
+    </form><div className="admission-evidence-list">{caseDetail.evidence.map(item => <article className="admission-evidence-row" key={item.id}><div><strong>{evidenceLabel(item.evidenceType)}</strong><small>{item.documentVersionId ? 'Versión documental vinculada' : 'Sin versión documental'} · {item.evidenceDate ?? 'Sin fecha'}</small></div><span className={'document-state ' + item.reviewStatus}>{item.reviewStatus}</span>{item.reviewStatus === 'pending' && <button className="secondary-button compact" type="button" onClick={() => { setReviewTarget(item); setReviewDate(chileCivilDate()); setReviewSource('') }}>Revisar</button>}</article>)}</div></>}
+    {reviewTarget && <form className="panel admissions-review-form" onSubmit={event => void reviewEvidence(event)}><h3>Revisar {evidenceLabel(reviewTarget.evidenceType)}</h3><label>Resultado<select value={reviewStatus} onChange={event => setReviewStatus(event.target.value as typeof reviewStatus)}><option value="approved">Aprobar</option><option value="observed">Observar</option><option value="rejected">Rechazar</option></select></label><label>Fecha de revisión<input required type="date" value={reviewDate} max={chileCivilDate()} onChange={event => setReviewDate(event.target.value)} /></label><label>Fuente institucional<input required maxLength={500} value={reviewSource} onChange={event => setReviewSource(event.target.value)} /></label><button className="primary-button" disabled={working} type="submit">Registrar revisión</button><button className="secondary-button" type="button" onClick={() => setReviewTarget(null)}>Cancelar</button></form>}
+  </section>
+}
+function evidenceLabel(value: string) { return value === 'withdrawal_letter' ? 'Carta de Retiro Voluntario' : value === 'legalized_initiation_evidence' ? 'Iniciación legalizada' : value === 'legalized_wage_increase_evidence' ? 'Aumento de salario legalizado' : value === 'legalized_exaltation_evidence' ? 'Exaltación legalizada' : 'Grado declarado' }

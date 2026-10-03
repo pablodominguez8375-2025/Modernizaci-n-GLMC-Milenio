@@ -19,4 +19,11 @@ describe('PMGM-ADM-001 · afiliación e incorporación separadas de iniciación'
     expect(app).toContain("label: 'Afiliación e incorporación'")
     expect(app).toContain("view === 'admissions'")
   })
+  it('incluye panel documental vinculado al expediente y no bypass del pipeline', () => {
+    expect(page).toContain('Evidencias del expediente')
+    expect(page).toContain('uploadManagedFile')
+    expect(page).toContain('addAdmissionEvidence')
+    expect(page).toContain('reviewAdmissionEvidence')
+    expect(page).toContain('management_only')
+  })
 })
