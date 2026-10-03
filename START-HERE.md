@@ -239,3 +239,5 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 - Continuidad de ajustes frente al cierre anual (#191, PR #250): [cierre ChatGPT](docs/handoffs/2026-10-01-chatgpt-cierre-receipt-year-close-concurrency.md); 382/382, ocho carreras PostgreSQL CLP/USD y conflictos 409, con srv01 pausado.
 - ChatGPT: crédito propio no imputado #254/#255 integrado en dev; cierre técnico en docs/handoffs/2026-10-01-chatgpt-cierre-member-treasury-credits.md; #58/#191 conservan otros remanentes, srv01/QA física/UAT pendientes.
 - ChatGPT: GOV-004/DB-004 establecen diccionario y estructuras como salida obligatoria de cambios de datos; handoff docs/handoffs/2026-10-02-chatgpt-cierre-registro-cambios-datos.md; Issue #259/#260.
+
+- Cierre técnico PR #276 — Afiliación/Incorporación: [handoff y verificaciones](docs/handoffs/2026-10-03-chatgpt-cierre-admisiones-276.md); UAT institucional y despliegue QA pendientes.
