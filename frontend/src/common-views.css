@@ -270,58 +270,65 @@ main.content :is(small, time, th, dt, label > span, legend, caption,
 main.content th { font-weight: 700; }
 main.content label > span { font-weight: 600; }
 
-/* ---------- Tesorería: menú de secciones como pestañas compactas, igual que Secretaría (03-10-2026) ----------
-   Bajo 1440 px (celular, tablet y computador mediano) el «Menú operativo» deja de ser una pila de mosaicos
-   y pasa a una franja de pestañas horizontales con desplazamiento, como WorkspaceTabs en Secretaría.
-   Desde 1440 px se mantiene la columna lateral fija (desktop-density.css, PR #293). */
+/* ---------- Menús de secciones horizontales en tarjetas grandes (decisión del PO 03-10-2026) ----------
+   Regla del PO: menús operativos, sin tener que bajar para encontrar las opciones.
+   Bajo 1440 px (celular, tablet y PC mediano) TODOS los menús de secciones se muestran como una fila de
+   tarjetas grandes que se desliza hacia el lado, igual que «Espacio operativo por cargo» de Secretaría.
+   Desde 1440 px los menús de Secretaría y Tesorería pasan a la columna lateral fija (desktop-density.css). */
 @media (max-width: 89.99rem) {
-  .treasury-role-navigation {
-    gap: 0.5rem;
-    margin: 0 0 1rem;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .treasury-role-navigation-heading .eyebrow,
-  .treasury-role-navigation-heading h2 { display: none; }
-
-  .treasury-role-navigation-heading:not(:has(> :not(div))) { display: none; }
-
-  .treasury-role-tabs {
+  :is(.treasury-role-tabs, .secretariat-role-tabs, .workspace-tabs [role="tablist"], .system-page-tabs) {
     display: flex;
-    gap: 0.25rem;
+    grid-template-columns: none;
+    gap: 0.75rem;
     overflow-x: auto;
-    border-bottom: 2px solid var(--line);
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    padding: 0.25rem 0.125rem 0.5rem;
+    border-bottom: 0;
     scrollbar-width: thin;
   }
 
-  .treasury-role-tabs button {
-    display: inline-flex;
+  :is(.treasury-role-tabs, .secretariat-role-tabs, .workspace-tabs [role="tablist"], .system-page-tabs) > button {
     flex: 0 0 auto;
-    align-items: center;
-    min-height: 3rem;
-    padding: 0.625rem 1rem;
-    border: 0;
-    border-bottom: 3px solid transparent;
-    border-radius: 0;
-    background: transparent;
+    width: min(15rem, 72vw);
+    min-height: 4.5rem;
+    display: grid;
+    align-content: start;
+    gap: 0.25rem;
+    padding: 0.875rem 1rem;
+    border: 1px solid var(--line);
+    border-radius: 0.875rem;
+    background: #f8fafc;
     box-shadow: none;
-    white-space: nowrap;
+    color: var(--brand-blue);
+    font-weight: 700;
+    text-align: left;
+    white-space: normal;
+    scroll-snap-align: start;
   }
 
-  .treasury-role-tabs button small { display: none; }
-
-  .treasury-role-tabs button span { color: var(--brand-muted); font-weight: 700; }
-
-  .treasury-role-tabs button.active {
-    border-bottom-color: var(--brand-gold);
-    background: transparent;
-    box-shadow: none;
+  :is(.treasury-role-tabs, .secretariat-role-tabs, .workspace-tabs [role="tablist"], .system-page-tabs) > button small {
+    display: block;
+    color: var(--brand-muted);
+    font-weight: 400;
+    line-height: 1.35;
   }
 
-  .treasury-role-tabs button.active span,
-  .treasury-role-tabs button:hover span { color: var(--brand-navy); }
+  :is(.treasury-role-tabs, .secretariat-role-tabs, .workspace-tabs [role="tablist"], .system-page-tabs) > button:is(.active, [aria-selected="true"], [aria-current="page"]) {
+    border-color: var(--brand-blue);
+    background: #edf4fb;
+    box-shadow: inset 0 0 0 1px var(--brand-blue);
+    color: var(--brand-navy);
+  }
+
+  /* Tesorería con el mismo contenedor que Secretaría. */
+  .treasury-role-navigation {
+    display: grid;
+    gap: 0.875rem;
+    margin: 0 0 1.25rem;
+    padding: 1rem;
+    border: 1px solid var(--line);
+    border-radius: 1.125rem;
+    background: var(--surface);
+  }
 }
