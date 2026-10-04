@@ -245,3 +245,5 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 - ChatGPT: GOV-004/DB-004 establecen diccionario y estructuras como salida obligatoria de cambios de datos; handoff docs/handoffs/2026-10-02-chatgpt-cierre-registro-cambios-datos.md; Issue #259/#260.
 
 - Cierre técnico PR #276 — Afiliación/Incorporación: [handoff y verificaciones](docs/handoffs/2026-10-03-chatgpt-cierre-admisiones-276.md); UAT institucional y despliegue QA pendientes.
+
+- Continuidad de permisos del tarifario (#266 / #320): [handoff de cierre](docs/handoffs/2026-10-04-chatgpt-tariff-access-postmerge.md).
