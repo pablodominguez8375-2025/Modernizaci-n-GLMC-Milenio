@@ -38,7 +38,7 @@ const scenarios = [
     requiredTabs: ['Egresos por autorizar'],
     forbiddenTabs: ['Resumen', 'Cuotas y Cobranzas', 'Cuadro mensual', 'Configuraciones', 'Reportes'],
   },
-  { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería', requiredTabs: ['Cuadros mensuales', 'Estado de Talleres', 'Tarifas y Orientes', 'Derechos ceremoniales'], grandTreasuryRights: true },
+  { slug: 'gran-tesoreria', profile: 'grandLodge', label: 'Gran Tesorería', requiredTabs: ['Cuadros mensuales', 'Estado de Talleres', 'Tarifario por decreto', 'Derechos ceremoniales'], grandTreasuryRights: true },
   { slug: 'gran-hospitalaria', profile: 'grandLodge', label: 'Gran Hospitalaria' },
   { slug: 'gran-secretaria', profile: 'grandLodge', label: 'Gran Secretaría' },
   { slug: 'gran-archivero', profile: 'grandArchivist', label: 'Gran Archivero', requiredSidebar: ['Gran Archivero'], forbiddenSidebar: ['Parámetros del sistema', 'Configuración inicial', 'Gran Secretaría', 'Gran Tesorería', 'Gran Hospitalaria', 'Gestión Logial'] },
@@ -337,6 +337,37 @@ async function assertTreasuryPaymentAction(viewport) {
   if (result.cardRight > result.viewportWidth + 1) throw new Error(`Treasury collection card is clipped at the right edge at ${viewport}: right=${result.cardRight}, width=${result.viewportWidth}.`)
   if (result.touchSize < 44) throw new Error(`Registrar pago is below 44px touch height at ${viewport}: ${result.touchSize}px.`)
   if (result.pageScrollWidth > result.viewportWidth + 1) throw new Error(`Treasury collection causes global horizontal overflow at ${viewport}: ${JSON.stringify(result.overflowElements)}`)
+}
+
+async function captureTariffWizard(viewport) {
+  await openMobileSubview('Tarifario por decreto')
+  await waitForExpression(`!!document.querySelector('.tariff-decree-panel .action-trigger:not(:disabled)')`, 'tariff decree list')
+  await assertNoGlobalHorizontalOverflow('Tarifario por decreto', viewport.suffix)
+  await capture(path.join(outputDir, `tarifario-decretos-${viewport.suffix}.png`), '.tariff-decree-panel')
+  await evaluate(`document.querySelector('.tariff-decree-panel .action-trigger').click()`)
+  await waitForExpression(`document.querySelector('.tariff-decree-panel .action-drawer-layer')?.hidden === false`, 'decree wizard')
+  for (let step = 1; step <= 4; step++) {
+    await waitForExpression(`document.querySelector('.tariff-decree-panel .action-drawer form')?.textContent.includes('Paso ${step} de 4')`, 'tariff wizard step ' + step)
+    await assertNoGlobalHorizontalOverflow('Decreto paso ' + step, viewport.suffix)
+    await capture(path.join(outputDir, `tarifario-decreto-paso-${step}-${viewport.suffix}.png`), '.tariff-decree-panel .action-drawer')
+    if (step === 1) {
+      await evaluate(`(() => {
+        const form = document.querySelector('.tariff-decree-panel .action-drawer form');
+        for (const [label, value] of [['Número de decreto','QA-VISUAL'],['PDF o referencia de respaldo','Documento sintético de captura']]) {
+          const input = [...form.querySelectorAll('label')].find(x => x.textContent.startsWith(label))?.querySelector('input');
+          if (!input) throw new Error('Missing decree field: ' + label);
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);
+          input.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+        return true;
+      })()`)
+      await delay(150)
+    }
+    if (step < 4) await evaluate(`(() => { const form=document.querySelector('.tariff-decree-panel .action-drawer form'); if (!form.reportValidity()) throw new Error('Invalid wizard step'); form.requestSubmit(); return true; })()`)
+  }
+  // The visual journey reviews every step but does not register a synthetic decree.
+  await evaluate(`document.querySelector('.tariff-decree-panel .action-drawer-close').click()`)
+  await delay(150)
 }
 
 async function openGrandTreasuryRights() {
@@ -717,6 +748,7 @@ try {
         await assertTreasuryPaymentAction(viewport.suffix)
       }
       if (scenario.grandTreasuryRights) {
+        await captureTariffWizard(viewport)
         await openGrandTreasuryRights()
         await assertCeremonyRightPaymentAction(viewport.suffix)
       }

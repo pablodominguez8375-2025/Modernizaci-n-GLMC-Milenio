@@ -105,6 +105,7 @@ public static class TreasuryStatementEndpoints
                 return Results.Conflict(new { message = "No hay tarifa oficial para esta categoría, zona, moneda y período.", memberId = membership.MemberId, contributionType });
             // Existing charges retain their financial snapshot, irrespective of later decrees or Ficha changes.
             decimal? baseAmount = charge?.GrandTreasuryAmount ?? official?.Amount;
+            if (baseAmount is null) return Results.Conflict(new { message = "No existe una cuota oficial aplicable para esta línea." });
             var memberOffices = offices.Where(x => x.MemberId == membership.MemberId)
                 .Select(x => x.OfficeType).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var adjustment = adjustments.FirstOrDefault(x => x.MemberId == membership.MemberId);

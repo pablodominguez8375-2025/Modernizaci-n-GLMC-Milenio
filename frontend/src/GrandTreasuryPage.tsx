@@ -19,7 +19,7 @@ export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
       sections={[
         { id:'statements', label:'Cuadros mensuales', description:'Montos por línea de cuota y conciliación' },
         { id:'regularity', label:'Estado de Talleres', description:'Consulta y regularidad institucional' },
-        { id:'territories', label:'Tarifas y Orientes', description:'Tarifario por decreto y ubicación desde la Ficha' },
+        { id:'territories', label:'Tarifario por decreto', description:'Tarifario por decreto y ubicación desde la Ficha' },
         { id:'rights', label:'Derechos ceremoniales', description:'Pagos y saldos por expediente' },
       ]}
       active={section}
