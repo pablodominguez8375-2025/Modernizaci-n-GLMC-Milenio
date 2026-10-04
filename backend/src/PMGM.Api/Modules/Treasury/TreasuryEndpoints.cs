@@ -58,13 +58,14 @@ public static class TreasuryEndpoints
             .GroupBy(x => x.CeremonyRequestId).Select(x => new { Id = x.Key, Paid = x.Sum(y => y.Amount) }).ToListAsync(cancellationToken);
         var paidById = paidRows.ToDictionary(x => x.Id, x => x.Paid);
         var items = new List<TreasuryCeremonyRightItem>();
+        var unpriced = new List<object>();
         foreach (var ceremony in ceremonies)
         {
             paidById.TryGetValue(ceremony.Id, out var paid);
             var right = await GrandTreasuryTariff.ResolveCeremonyAsync(db, ceremony.Id, ceremony.OrganizationId, ceremony.CeremonyType, today, cancellationToken);
             if (right is null)
             {
-                if (GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType)) return Results.Conflict(new { message = "Complete la Ficha y el tarifario vigente para calcular este derecho.", requestId = ceremony.Id });
+                if (GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType)) unpriced.Add(new { ceremony.Id, ceremony.OrganizationId, organizationName = ceremony.organizationName, ceremony.CeremonyType, reason = "Complete la Ficha y el tarifario vigente para calcular este derecho; no admite pagos sin tarifa." });
                 continue;
             }
             var balance = Math.Max(0m, right.Value.Amount - paid);
@@ -74,7 +75,7 @@ public static class TreasuryEndpoints
                 right.Value.Amount, right.Value.Currency, paid, balance, right.Value.SourceReference));
         }
         context.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new { total = items.Count, items });
+        return Results.Ok(new { total = items.Count, items, unpriced });
     }
 
     private static async Task<IResult> GetOfficialFeeScheduleAsync(DateOnly? asOf, Guid? organizationId,
@@ -109,7 +110,7 @@ public static class TreasuryEndpoints
             .OrderBy(x => x.Name).ThenBy(x => x.Number).ToListAsync(cancellationToken);
         var items = rows.Select(x => new { x.Id, x.Name, x.Number, x.Type, x.City, x.Country, x.OrienteCode,
             treasuryTerritory = WorkshopOriente.Territory(x) }).ToList();
-        return Results.Ok(new { total = items.Count, items });
+        return Results.Ok(new { total = items.Count, items, unpriced });
     }
 
     private static async Task<IResult> GetTreasuryTerritoryAsync(Guid organizationId, HttpContext context,

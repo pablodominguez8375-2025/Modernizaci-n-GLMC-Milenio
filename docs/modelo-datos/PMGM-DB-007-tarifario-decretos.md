@@ -57,3 +57,5 @@ erDiagram
 ```
 
 Cada entidad financiera tiene cero o una versión vinculada: nulo preserva antecedentes legacy sin atribuirles un decreto no demostrado. Una versión admite múltiples planes/cargos/pagos y no puede borrarse con referencias. Los FK corresponden a Id UUID y TariffVersionId UUID nullable, con índices convencionales EF.
+
+La consulta institucional de derechos incluye `unpriced` (ID de solicitud, Taller, tipo y motivo) para expedientes con Ficha/tarifa incompleta. No les atribuye monto cero ni permite cobrar; conserva acceso a los expedientes calculables. Cada registro de pago vuelve a resolver y bloquea individualmente si falta tarifa. UI muestra pendientes de tarifa separados de los saldos conocidos y respeta centavos USD en derechos futuros explícitos.

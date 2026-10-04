@@ -138,7 +138,7 @@ export interface CeremonyQueueRequirement { code: string; name: string; status: 
 export interface CeremonyQueuePublication { status: string; requiredDays: number; completedDays: number; publishedFromUtc: string; publishedUntilUtc: string | null }
 export interface CeremonyRightSummary { amount: number; currency: string; paid: number; balance: number; source: string }
 export interface TreasuryCeremonyRightItem extends CeremonyRightSummary { id: string; organizationId: string; organizationName: string; organizationNumber: string | null; ceremonyType: CeremonyType; proposedDate: string | null; subjectDisplayName: string }
-export interface TreasuryCeremonyRightsResponse { total: number; items: TreasuryCeremonyRightItem[] }
+export interface TreasuryCeremonyRightsResponse { total: number; items: TreasuryCeremonyRightItem[]; unpriced?:{id:string;organizationId:string;organizationName:string;ceremonyType:string;reason:string}[] }
 export interface CeremonyQueueEligibility { status: string; canAuthorize: boolean; requirements: CeremonyQueueRequirement[]; publication: CeremonyQueuePublication | null; ceremonyRight?: CeremonyRightSummary | null }
 export interface CeremonyQueueActions { canValidateInternalAffairs: boolean; canPublishCandidate: boolean; canAuthorize: boolean }
 export interface CeremonyReviewQueueItem {

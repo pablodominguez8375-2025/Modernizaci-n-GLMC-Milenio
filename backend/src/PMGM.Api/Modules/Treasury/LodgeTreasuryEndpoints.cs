@@ -70,6 +70,8 @@ public static partial class LodgeTreasuryEndpoints
         var officialAmount = await GrandTreasuryTariff.ResolveAsync(db, request.FeeType, WorkshopOriente.Territory(organization)!, request.EffectiveFrom, cancellationToken);
         if (officialAmount is null)
             return Results.Conflict(new { message = "No existe una tarifa institucional aplicable. Verifique vigencia, Oriente y moneda del decreto." });
+        if (decimal.Round(request.MemberAmount, officialAmount.Value.Currency == "CLP" ? 0 : 2) != request.MemberAmount)
+            return Results.BadRequest(new { message = "El total no respeta la precisión de la moneda del decreto." });
         if (request.MemberAmount < officialAmount.Value.Amount)
             return Results.BadRequest(new { message = "El total cobrado al Hermano no puede ser inferior al aporte decretado a Gran Tesorería." });
         if (request.GrandTreasuryAmount != officialAmount.Value.Amount)
