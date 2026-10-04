@@ -110,7 +110,7 @@ public static class TreasuryEndpoints
             .OrderBy(x => x.Name).ThenBy(x => x.Number).ToListAsync(cancellationToken);
         var items = rows.Select(x => new { x.Id, x.Name, x.Number, x.Type, x.City, x.Country, x.OrienteCode,
             treasuryTerritory = WorkshopOriente.Territory(x) }).ToList();
-        return Results.Ok(new { total = items.Count, items, unpriced });
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> GetTreasuryTerritoryAsync(Guid organizationId, HttpContext context,

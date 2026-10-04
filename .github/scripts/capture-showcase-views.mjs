@@ -353,8 +353,8 @@ async function captureTariffWizard(viewport) {
   for (let step = 1; step <= 4; step++) {
     await waitForExpression(`document.querySelector('.tariff-decree-panel .action-drawer form')?.textContent.includes('Paso ${step} de 4')`, 'tariff wizard step ' + step)
     await assertNoGlobalHorizontalOverflow('Decreto paso ' + step, viewport.suffix)
-    const dialog = await evaluate(`(() => {const rect=document.querySelector('.tariff-decree-panel .action-drawer').getBoundingClientRect();return {left:rect.left,right:rect.right,width:innerWidth};})()`)
-    if (dialog.width !== viewport.width || dialog.left < -1 || dialog.right > viewport.width + 1) throw new Error('Decree wizard expands or clips viewport: ' + JSON.stringify(dialog))
+    const dialog = await evaluate(`(() => {const rect=document.querySelector('.tariff-decree-panel .action-drawer').getBoundingClientRect();return {left:rect.left,right:rect.right,width:innerWidth,formRight:document.querySelector('.tariff-decree-panel .action-drawer form').getBoundingClientRect().right};})()`)
+    if (dialog.width !== viewport.width || dialog.left < -1 || dialog.right > viewport.width + 1 || dialog.formRight > viewport.width + 1) throw new Error('Decree wizard expands or clips viewport: ' + JSON.stringify(dialog))
     // Fixed dialogs overlay the topbar; the ordinary card/scroll target check is inapplicable.
     await capture(path.join(outputDir, `tarifario-decreto-paso-${step}-${viewport.suffix}.png`))
     console.log(`captured tarifario-decreto-paso-${step}-${viewport.suffix}.png`)
