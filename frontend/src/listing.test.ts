@@ -29,11 +29,11 @@ describe('PMGM-UX-003 · listados y vistas operativas', () => {
     expect(css).toMatch(/\.listing-table-wrap\s*\{[^}]*overflow-x:\s*auto/s)
   })
 
-  it('Parámetros del sistema se divide en pestañas accesibles', () => {
+  it('Parámetros del sistema usa un solo menú de secciones accesible (WorkspaceTabs, 04-10-2026)', () => {
     const page = read('./SystemConfigurationPage.tsx')
-    expect(page).toContain('role="tablist"')
-    expect(page).toContain('role="tab"')
-    expect(page.match(/role="tabpanel"/g)?.length).toBe(3)
+    expect(page).toContain('<WorkspaceTabs label="Secciones de Sistema"')
+    expect(page).toContain('<WorkspacePanel id="settings"')
+    expect(page).not.toContain('system-page-tabs')
   })
 
   it('Gestión Logial usa pestañas (PMGM-UX-004) y Carga de insinuados ofrece índice de secciones', () => {

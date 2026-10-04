@@ -271,7 +271,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.87' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.88' : `API v${systemInfo?.version ?? '—'}`
   return <div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -326,9 +326,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
-        {(view === 'system' || view === 'bootstrap') && canConfigureSystem && canBootstrap && <WorkspaceTabs label="Secciones de Sistema" active={view} onChange={setView} tabs={[{ id: 'system' as View, label: 'Parámetros del sistema' }, { id: 'bootstrap' as View, label: 'Configuración inicial' }]} />}
-        {view === 'bootstrap' && canBootstrap && <BootstrapPage bootstrapApi={bootstrapApi} />}
-        {view === 'system' && canConfigureSystem && <SystemConfigurationPage api={api} />}
+        {(view === 'system' || view === 'bootstrap') && canConfigureSystem && <SystemConfigurationPage api={api} bootstrapSlot={canBootstrap ? <BootstrapPage bootstrapApi={bootstrapApi} /> : undefined} />}
+        {view === 'bootstrap' && canBootstrap && !canConfigureSystem && <BootstrapPage bootstrapApi={bootstrapApi} />}
         {isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs label="Secciones de Insinuaciones e Iniciación" active={view} onChange={setView} tabs={[
           { id: 'candidates' as View, label: 'Publicados' },
           ...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga', badge: badges.candidateProfile }] : []),

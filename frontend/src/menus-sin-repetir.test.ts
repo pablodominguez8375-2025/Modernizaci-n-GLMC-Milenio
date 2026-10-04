@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+const read = (file: string) => readFileSync(new URL(file, import.meta.url), 'utf8')
 const userMenu = readFileSync(new URL('./UserMenu.tsx', import.meta.url), 'utf8')
 
 describe('PMGM-UX menús sin funciones repetidas (aprobado por el PO 03-10-2026)', () => {
@@ -17,7 +18,8 @@ describe('PMGM-UX menús sin funciones repetidas (aprobado por el PO 03-10-2026)
   })
 
   it('agrupa módulos relacionados como pestañas de una sola opción', () => {
-    expect(app).toContain('label="Secciones de Sistema"')
+    expect(read('./SystemConfigurationPage.tsx')).toContain('label="Secciones de Sistema"')
+    expect(app).toContain('bootstrapSlot={canBootstrap ? <BootstrapPage')
     expect(app).toContain('label="Secciones de Calidad de datos"')
     expect(app).toContain('label="Secciones del Taller"')
     expect(app).not.toContain('<ModuleAccess icon="check" label="Cola de corroboración"')
