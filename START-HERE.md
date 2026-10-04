@@ -1,3 +1,5 @@
+- Cierre del tarifario por decreto v2 (PR #318, Issue #190): [handoff postmerge](docs/handoffs/2026-10-04-chatgpt-tariff-decree-v2-postmerge.md); SHA publicado y recibo final en Issue/Drive, main y srv01/UAT pausados.
+
 - Continuidad de PR #316 / permisos efectivos de Tesorería: [handoff postmerge](docs/handoffs/2026-10-04-chatgpt-dynamic-access-postmerge.md); #266 mantiene pendientes los demás módulos.
 
 ## Handoff vigente — integración y publicación de PR #219 — 29-09-2026
