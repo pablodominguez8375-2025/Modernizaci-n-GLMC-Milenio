@@ -1,3 +1,4 @@
+import { DynamicAccessClient } from './dynamicAccess'
 import { getDemoProfile, type DemoProfileKey } from '../demoProfiles'
 import { chileCivilDate } from '../admissionDates'
 import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
@@ -405,7 +406,8 @@ export class PmgmApiClient {
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
-  constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized; for (const item of this.mockSystemSettings) if (item.code !== publicationFieldsCode) this.mockSystemSettingVersions.set(item.code,[{id:`base-${item.code}`,value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status:item.status,createdAtUtc:'2026-01-01T00:00:00Z'}]) }
+  readonly dynamicAccess: DynamicAccessClient
+  constructor(options: PmgmApiClientOptions = {}) { this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, ''); this.getAccessToken = options.getAccessToken; this.useMocks = options.useMocks ?? false; this.onUnauthorized = options.onUnauthorized; this.dynamicAccess = new DynamicAccessClient((path, init) => this.request(path, init), this.useMocks, id => this.mockOrganizations.some(o => o.id === id && o.type === 'workshop')); for (const item of this.mockSystemSettings) if (item.code !== publicationFieldsCode) this.mockSystemSettingVersions.set(item.code,[{id:`base-${item.code}`,value:item.value,effectiveFrom:item.effectiveFrom,effectiveTo:null,sourceReference:item.sourceReference,status:item.status,createdAtUtc:'2026-01-01T00:00:00Z'}]) }
 
   async getCandidatePortal(): Promise<CandidatePortalResponse> { if (this.useMocks) { await sleep(120); return { culture: 'es-CL', portal: 'Insinuados en período de publicación', total: mockCandidates.length, items: mockCandidates } } return this.request<CandidatePortalResponse>('/api/ceremonias/portal-insinuados') }
   async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
