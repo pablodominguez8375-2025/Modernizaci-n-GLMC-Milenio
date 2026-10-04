@@ -14,9 +14,16 @@ public static class GrandTreasuryTariffEndpoints
     public static IEndpointRouteBuilder MapGrandTreasuryTariffEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup("/api/tesoreria/tarifarios/decretos").RequireAuthorization().WithTags("Gran Tesorería");
+        group.MapGet("/acceso", async (HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
+        {
+            if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+            context.Response.Headers.CacheControl = "private, no-store";
+            return Results.Ok(await DynamicTariffAccess.ProjectAsync(db, context.User, ct));
+        });
         group.MapGet("", async (HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
         {
             if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+            if (!await DynamicTariffAccess.AllowsAsync(db, context.User, "view", ct)) return Results.Forbid();
             var items = await GrandTreasuryTariff.LoadAsync(db, ct);
             context.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(new { version = items.Select(x => x.Version).DefaultIfEmpty().Max(), total = items.Count, items });
@@ -29,6 +36,7 @@ public static class GrandTreasuryTariffEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicTariffAccess.AllowsAsync(db, context.User, "create", ct)) return Results.Forbid();
         var error = GrandTreasuryTariff.Validate(request, GrandTreasuryTariff.Today());
         if (error is not null) return Results.BadRequest(new { message = error });
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);

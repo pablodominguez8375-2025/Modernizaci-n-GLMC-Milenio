@@ -61,3 +61,9 @@ export function treasuryAccess(c:DynamicCatalog,subject:string,organizationId:st
  const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===organizationId)
  return {version:c.version,organizationId,managed,actions:actions.filter(action=>!managed||technicalGrant(c,subject,'lodgetreasury',action,organizationId,today))}
 }
+
+export interface TariffAccess { version:number; managed:boolean; actions:AccessAction[] }
+export function tariffAccess(c:DynamicCatalog,subject:string,today:string):TariffAccess {
+ const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===null)
+ return {version:c.version,managed,actions:(['view','create'] as AccessAction[]).filter(action=>!managed||technicalGrant(c,subject,'treasury',action,null,today))}
+}
