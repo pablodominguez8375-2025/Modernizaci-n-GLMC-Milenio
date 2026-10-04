@@ -1,3 +1,4 @@
+import type { AccessAction } from './api/dynamicAccess'
 import { useEffect, useState } from 'react'
 import { ActionDrawer, ConfirmAction } from './actionKit'
 import { type OrganizationOption, type PmgmApiClient, type TreasuryStatement, type TreasuryTerritory } from './api/pmgmApi'
@@ -21,10 +22,11 @@ interface Props {
   api: PmgmApiClient
   canPrepare: boolean
   canReview: boolean
+  actions?:AccessAction[]
   organizationId?: string
 }
 
-export default function TreasuryStatementPage({ api, canPrepare, canReview, organizationId: fixedOrganizationId }: Props) {
+export default function TreasuryStatementPage({ api, canPrepare, canReview, organizationId: fixedOrganizationId, actions=['view','create','write','edit','delete','print'] }: Props) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [territory,setTerritory]=useState<TreasuryTerritory|null>(null)
@@ -169,12 +171,12 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
     <section className="panel treasury-toolbar">
       <label className="regularity-field"><span>Taller</span><select value={organizationId} disabled={!!fixedOrganizationId || busy || loadingStatement} onChange={event => setOrganizationId(event.target.value)}>{organizations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
       <label className="regularity-field"><span>Período</span><input type="month" value={period} disabled={busy || loadingStatement} onChange={event => setPeriod(event.target.value)} /></label>
-      {canPrepare && !statement && <button className="regularity-primary" type="button" disabled={!organizationId || !period || busy || loadingStatement} onClick={create}>Crear Cuadro</button>}
-      {canPrepare && statement?.status === 'draft' && statement.lines.length === 0 && <>
+      {canPrepare && actions.includes('create') && !statement && <button className="regularity-primary" type="button" disabled={!organizationId || !period || busy || loadingStatement} onClick={create}>Crear Cuadro</button>}
+      {canPrepare && actions.includes('create') && statement?.status === 'draft' && statement.lines.length === 0 && <>
         <label className="regularity-field"><span>Cuota base Gran Tesorería · {currency}</span><input type="number" min="0" step={currency==='USD'?'0.01':'1000'} value={baseAmount} disabled={busy||territory==='peru'} onChange={event => setBaseAmount(Number(event.target.value))} /></label>
         <button className="regularity-primary" type="button" disabled={busy || baseAmount < 0} onClick={generate}>Generar nómina</button>
       </>}
-      {canPrepare && statement?.status === 'draft' && statement.lines.length > 0 && <ConfirmAction label="Enviar a Gran Tesorería" message="El Cuadro mensual se enviará a Gran Tesorería y ya no podrá editarse mientras esté en revisión." confirmLabel="Sí, enviar" disabled={busy || !canSubmit} onConfirm={submit} />}
+      {canPrepare && actions.includes('write') && statement?.status === 'draft' && statement.lines.length > 0 && <ConfirmAction label="Enviar a Gran Tesorería" message="El Cuadro mensual se enviará a Gran Tesorería y ya no podrá editarse mientras esté en revisión." confirmLabel="Sí, enviar" disabled={busy || !canSubmit} onConfirm={submit} />}
       {canReview && (statement?.status === 'submitted' || statement?.status === 'observed') && <><p>Al confirmar, Gran Tesorería declara que verificó el abono en la cuenta bancaria. Esa conformidad en {currency} actualiza la regularidad financiera del Taller.</p><ConfirmAction label="Confirmar recepción bancaria y conciliar" message="Declaras que verificaste el abono en la cuenta bancaria. Esto actualiza la regularidad financiera del Taller." confirmLabel="Sí, conciliar" disabled={busy || statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0} onConfirm={() => { void reconcile() }} /></>}
     </section>
 
@@ -215,7 +217,7 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
 
         <section className="panel treasury-payments">
           <div><p className="eyebrow">Forma de pago</p><h2>Transferencias y depósitos</h2></div>
-          {canPrepare && statement.status === 'draft' && <div className="action-bar treasury-action-bar"><ActionDrawer label="Registrar transferencia o depósito" description="Registra cada pago enviado a Gran Tesorería con su comprobante." confirmMessage="Se registrará el pago con la fecha, monto y referencia indicados."><form className="treasury-toolbar treasury-toolbar-drawer" onSubmit={event => { event.preventDefault(); registerPayment() }}>
+          {canPrepare && actions.includes('write') && statement.status === 'draft' && <div className="action-bar treasury-action-bar"><ActionDrawer label="Registrar transferencia o depósito" description="Registra cada pago enviado a Gran Tesorería con su comprobante." confirmMessage="Se registrará el pago con la fecha, monto y referencia indicados."><form className="treasury-toolbar treasury-toolbar-drawer" onSubmit={event => { event.preventDefault(); registerPayment() }}>
             <label className="regularity-field"><span>Medio</span><select value={paymentMethod} disabled={busy} onChange={event => setPaymentMethod(event.target.value as 'transfer' | 'deposit')}><option value="transfer">Transferencia</option><option value="deposit">Depósito</option></select></label>
             <label className="regularity-field"><span>Fecha</span><input type="date" value={paymentDate} disabled={busy} onChange={event => setPaymentDate(event.target.value)} /></label>
             <label className="regularity-field"><span>Monto</span><input type="number" min="1" step="1" value={paymentAmount || ''} disabled={busy} onChange={event => setPaymentAmount(Number(event.target.value))} /></label>

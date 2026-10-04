@@ -14,6 +14,13 @@ public static class SessionEndpoints
             .WithTags("Sesión institucional")
             .RequireAuthorization();
 
+        endpoints.MapGet("/api/session/treasury-access", async (Guid organizationId, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            if (!access.CanReadOrganization(ctx.User, organizationId)) return Results.Forbid();
+            return Results.Ok(await DynamicTreasuryAccess.ProjectAsync(db, ctx.User, organizationId, access, ct));
+        }).WithTags("Sesión institucional").RequireAuthorization();
+
         return endpoints;
     }
 

@@ -39,6 +39,14 @@ public static partial class LodgeTreasuryEndpoints
         group.MapGet("/talleres/{organizationId:guid}/egresos", GetExpensesAsync);
         group.MapPost("/egresos/{expenseId:guid}/aprobar", ApproveExpenseAsync);
         group.MapGet("/hermanos/{memberId:guid}/cartola", GetMemberStatementAsync);
+        group.MapPost("/talleres/{organizationId:guid}/imprimir", async (Guid organizationId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
+        {
+            if (!access.CanManageLodgeTreasury(context.User, organizationId) && !access.CanApproveLodgeExpenses(context.User, organizationId)) return Results.Forbid();
+            if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "print", ct)) return Results.Forbid();
+            audit.Add(context, "lodge.treasury.print_requested", "LodgeTreasury", organizationId.ToString(), organizationId, AuditResults.Success);
+            await db.SaveChangesAsync(ct);
+            return Results.Ok(new { allowed = true });
+        });
         return endpoints;
     }
 
@@ -47,6 +55,7 @@ public static partial class LodgeTreasuryEndpoints
         CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "create", cancellationToken)) return Results.Forbid();
         if (!TreasuryCodes.LodgeFeeType.IsValid(request.FeeType) || request.MemberAmount < 0 || request.GrandTreasuryAmount < 0)
             return Results.BadRequest(new { message = "El tipo y los montos de cuota deben ser válidos." });
         if (!GrandTreasuryFeeSchedule.IsOrdinaryFeeType(request.FeeType))
@@ -87,6 +96,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
         var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var rows = await db.LodgeFeePlans.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.IsActive &&
             x.EffectiveFrom <= date && (x.EffectiveUntil == null || x.EffectiveUntil >= date))
@@ -102,6 +112,7 @@ public static partial class LodgeTreasuryEndpoints
         CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "create", cancellationToken)) return Results.Forbid();
         if (request.PeriodMonth is < 1 or > 12 || request.PeriodYear is < 2000 or > 2200)
             return Results.BadRequest(new { message = "El período indicado no es válido." });
         var currency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, cancellationToken);
@@ -160,6 +171,7 @@ public static partial class LodgeTreasuryEndpoints
             .FirstOrDefaultAsync(x => x.Id == chargeId, cancellationToken);
         if (charge is null) return Results.NotFound(new { message = "El cargo indicado no existe." });
         if (!access.CanManageLodgeTreasury(context.User, charge.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, charge.OrganizationId, "write", cancellationToken)) return Results.Forbid();
         if (request.Amount <= 0 || !TreasuryCodes.LodgePaymentMethod.IsValid(request.PaymentMethod))
             return Results.BadRequest(new { message = "El monto y medio de pago deben ser válidos." });
         var key = request.IdempotencyKey?.Trim();
@@ -203,6 +215,7 @@ public static partial class LodgeTreasuryEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         var key = request.IdempotencyKey?.Trim();
         var reference = Normalize(request.Reference);
         var currency = TreasuryCurrency.Select(request.Currency, await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct));
@@ -295,6 +308,7 @@ public static partial class LodgeTreasuryEndpoints
             .SingleOrDefaultAsync(x => x.Id == receiptId, ct);
         if (receipt is null) return Results.NotFound(new { message = "La recepción no existe." });
         if (!access.CanManageLodgeTreasury(context.User, receipt.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, receipt.OrganizationId, "write", ct)) return Results.Forbid();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         receipt = await db.LodgeMemberReceipts.Include(x => x.Adjustments).Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Payments)
             .Include(x => x.Allocations).ThenInclude(x => x.Charge).ThenInclude(x => x.Allocations)
@@ -339,6 +353,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         var receipts = await db.LodgeMemberReceipts.AsNoTracking().Include(x => x.Member).ThenInclude(x => x.Person)
             .Include(x => x.Allocations).ThenInclude(x => x.Charge).Include(x => x.Adjustments)
             .Where(x => x.OrganizationId == organizationId)
@@ -358,6 +373,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, cancellationToken);
         var currency = TreasuryCurrency.Select(currencyCode, activeCurrency);
         if (currency is null) return Results.BadRequest(new { message = "La moneda debe ser CLP o USD." });
@@ -368,6 +384,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
         if (month is < 1 or > 12 || year is < 2000 or > 2200)
             return Results.BadRequest(new { message = "El período indicado no es válido." });
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, cancellationToken);
@@ -424,6 +441,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
         var charges = await db.LodgeMemberCharges.AsNoTracking().Include(x => x.Payments).Include(x => x.Allocations).ThenInclude(a => a.Receipt)
             .Where(x => x.OrganizationId == organizationId && x.MemberId == memberId)
             .OrderByDescending(x => x.PeriodYear).ThenByDescending(x => x.PeriodMonth).ToListAsync(cancellationToken);
@@ -460,6 +478,7 @@ public static partial class LodgeTreasuryEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         if (request.Amount <= 0 || string.IsNullOrWhiteSpace(request.Category) || string.IsNullOrWhiteSpace(request.Description))
             return Results.BadRequest(new { message = "Categoría, descripción y monto son obligatorios." });
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct);
@@ -481,6 +500,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         var cutoff = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
         var monthStart = new DateOnly(cutoff.Year, cutoff.Month, 1);
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct);
@@ -510,6 +530,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         if (to < from) return Results.BadRequest(new { message = "El rango de fechas no es válido." });
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct);
         var currency = TreasuryCurrency.Select(currencyCode, activeCurrency);
@@ -562,6 +583,7 @@ public static partial class LodgeTreasuryEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         if (request.To < request.From || request.ObservedBalance < 0 ||
             request.EvidenceReference?.Length > 300 || request.Notes?.Length > 1000)
             return Results.BadRequest(new { message = "El rango, saldo observado y referencias de conciliación deben ser válidos." });
@@ -629,6 +651,7 @@ public static partial class LodgeTreasuryEndpoints
         IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct);
         var currency = TreasuryCurrency.Select(currencyCode, activeCurrency);
         if (currency is null) return Results.BadRequest(new { message = "La moneda debe ser CLP o USD." });
@@ -640,6 +663,7 @@ public static partial class LodgeTreasuryEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "edit", ct)) return Results.Forbid();
         if (request.OpeningBalance < 0 || string.IsNullOrWhiteSpace(request.IncomeCategories) || string.IsNullOrWhiteSpace(request.ExpenseCategories) ||
             request.IncomeCategories.Length > 2000 || request.ExpenseCategories.Length > 2000)
             return Results.BadRequest(new { message = "El saldo inicial y las listas de categorías deben ser válidos." });
@@ -680,6 +704,7 @@ public static partial class LodgeTreasuryEndpoints
     private static async Task<IResult> CreateExpenseAsync(Guid organizationId, CreateLodgeTreasuryExpenseRequest request, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         if (request.Amount <= 0 || string.IsNullOrWhiteSpace(request.Category) || string.IsNullOrWhiteSpace(request.Description)) return Results.BadRequest(new { message = "Categoría, descripción y monto son obligatorios." });
         var activeCurrency = await TreasuryCurrency.ForOrganizationAsync(db, organizationId, ct);
         var currency = TreasuryCurrency.Select(request.Currency, activeCurrency);
@@ -696,6 +721,7 @@ public static partial class LodgeTreasuryEndpoints
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId) &&
             !access.CanApproveLodgeExpenses(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         var start = from ?? new DateOnly(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1);
         var end = to ?? start.AddMonths(1).AddDays(-1);
         if (end < start) return Results.BadRequest(new { message = "El rango de fechas no es válido." });
@@ -712,6 +738,7 @@ public static partial class LodgeTreasuryEndpoints
     {
         var expense = await db.LodgeTreasuryExpenses.SingleOrDefaultAsync(x => x.Id == expenseId, ct); if (expense is null) return Results.NotFound();
         if (!access.CanApproveLodgeExpenses(context.User, expense.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, expense.OrganizationId, "write", ct)) return Results.Forbid();
         if (expense.ApprovalStatus != "pending_approval") return Results.Conflict(new { message = "El egreso ya fue resuelto." });
         if (await IsAccountingYearClosedAsync(db, expense.OrganizationId, expense.ExpenseDate.Year, expense.Currency, ct))
             return Results.Conflict(new { message = "El ejercicio del egreso está cerrado y no admite autorizaciones posteriores." });
@@ -723,6 +750,7 @@ public static partial class LodgeTreasuryEndpoints
         IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         var items = await db.LodgeTreasuryYearClosures.AsNoTracking().Where(x => x.OrganizationId == organizationId)
             .OrderByDescending(x => x.AccountingYear).ToListAsync(ct);
         return Results.Ok(new { total = items.Count, items });
@@ -747,6 +775,7 @@ public static partial class LodgeTreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         var chileYear = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow,
             TimeZoneInfo.FindSystemTimeZoneById("America/Santiago")).DateTime).Year;
         if (year is < 2000 or > 2200 || year >= chileYear)
