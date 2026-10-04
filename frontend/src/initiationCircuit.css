@@ -3,3 +3,13 @@
 /* Las columnas usan el ancho disponible del espacio de trabajo, incluido el menú lateral. */
 .initiation-circuit > *, .initiation-detail, .initiation-fields > * { min-width: 0; }
 .initiation-detail dd { overflow-wrap: anywhere; }
+.initiation-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.initiation-fields input { width: 100%; min-width: 0; }
+.initiation-circuit { container-type: inline-size; }
+@container (max-width: 900px) {
+  .initiation-hero { display: grid; }
+  .initiation-case { min-width: 0; }
+  .initiation-layout, .initiation-fields { grid-template-columns: minmax(0, 1fr); }
+}
+nav.workspace-tabs[aria-label="Secciones de Insinuaciones e Iniciación"] { min-width: 0; max-width: 100%; }
+nav.workspace-tabs[aria-label="Secciones de Insinuaciones e Iniciación"] > [role="tablist"] { min-width: 0; }
