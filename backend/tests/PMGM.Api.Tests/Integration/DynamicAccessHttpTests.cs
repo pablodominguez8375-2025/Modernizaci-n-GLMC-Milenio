@@ -105,13 +105,15 @@ public sealed class DynamicAccessHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(root + "/configuracion", new { openingBalance = 0, openingBalanceDate = "2026-01-01", incomeCategories = "QA", expenseCategories = "QA" }, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync($"/api/tesoreria/talleres/{org.Id}/cuadros", new { periodYear = 2026, periodMonth = 10, cutoffDate = "2026-10-31", sourceReference = "QA" }, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.PostAsync(root + "/imprimir", null, ct)).StatusCode);
-        // Revoke through a separate administrator request; the already-authenticated Treasurer must lose access immediately.
         using var admin = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.OK, (await admin.PutAsJsonAsync($"/api/system/access/profiles/{code}/grants", new { grants = new[] { new { viewCode = "lodgetreasury", actions = new[] { "view", "write", "print" } } }, expectedVersion = version++ }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created, (await client.PostAsJsonAsync(root + "/ingresos", new { category = "QA", amount = 1000, incomeDate = "2026-10-04", description = "Ingreso sintético autorizado" }, ct)).StatusCode);
+        // Revoke through a separate administrator request; the already-authenticated Treasurer must lose access immediately.
         Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/system/access/assignments/{assignment}?expectedVersion={version}", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(root + "/resumen?year=2026&month=10", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsync(root + "/imprimir", null, ct)).StatusCode);
         await using var check = factory.Services.CreateAsyncScope(); var dbCheck = check.ServiceProvider.GetRequiredService<PmgmDbContext>();
-        Assert.False(await dbCheck.LodgeTreasuryIncomes.AnyAsync(i => i.OrganizationId == org.Id, ct));
+        Assert.Equal(1, await dbCheck.LodgeTreasuryIncomes.CountAsync(i => i.OrganizationId == org.Id, ct));
         Assert.True(await dbCheck.AuditEvents.AnyAsync(a => a.Action == "lodge.treasury.print_requested" && a.OrganizationId == org.Id, ct));
     }
 
@@ -126,7 +128,7 @@ public sealed class DynamicAccessHttpTests
         var other = new Organization { Name = "Otro QA", Type = "workshop", TreasuryTerritory = "santiago" };
         var member = new Member { Person = new Person { FirstNames = "Hermano", LastNames = "Ficticio" }, InstitutionalNumber = "ACCESS-" + Guid.NewGuid().ToString("N") };
         var receipt = new LodgeMemberReceipt { OrganizationId = org.Id, Member = member, Amount = 1000, Currency = "CLP", PaymentMethod = "transfer", PaymentDate = new DateOnly(2026, 10, 1), ReceiptNumber = "QA-" + Guid.NewGuid().ToString("N"), IdempotencyKey = Guid.NewGuid().ToString(), RecordedBySubject = "qa" };
-        var expense = new LodgeTreasuryExpense { OrganizationId = org.Id, Category = "QA", Amount = 1000, ExpenseDate = new DateOnly(2026, 10, 1), Description = "Egreso sintético", RecordedBySubject = "qa" };
+        var expense = new LodgeTreasuryExpense { OrganizationId = org.Id, Category = "QA", Amount = 1000, ExpenseDate = new DateOnly(2026, 10, 1), Description = "Egreso sintético", ApprovalStatus = "pending_approval", RecordedBySubject = "qa" };
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>(); await db.Database.MigrateAsync(ct);
