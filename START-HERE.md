@@ -1,3 +1,5 @@
+- Continuidad de PR #316 / permisos efectivos de Tesorería: [handoff postmerge](docs/handoffs/2026-10-04-chatgpt-dynamic-access-postmerge.md); #266 mantiene pendientes los demás módulos.
+
 ## Handoff vigente — integración y publicación de PR #219 — 29-09-2026
 
 - HEAD observado al inicio: `dev@90988f1bb09d86eb017248ce02040ebe47e053a2`; `main@6dfb9546a4873baff15955cf86abfd7d47e3d111`.
