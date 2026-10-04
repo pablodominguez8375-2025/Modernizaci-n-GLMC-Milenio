@@ -45,7 +45,8 @@ public sealed class DynamicAccessHttpTests
         Assert.Equal(HttpStatusCode.OK, (await client.DeleteAsync($"/api/system/access/profiles/{code}?expectedVersion={version}", ct)).StatusCode);
         await using var check = factory.Services.CreateAsyncScope(); var dbCheck = check.ServiceProvider.GetRequiredService<PmgmDbContext>();
         Assert.True(await dbCheck.AuditEvents.AnyAsync(a => a.Action == "system.access.review_print_requested", ct));
-        Assert.True(await dbCheck.DynamicAccessSnapshots.AnyAsync(s => s.Version == version + 1 && s.Payload.Contains(code), ct));
+        var persisted = await dbCheck.DynamicAccessSnapshots.AsNoTracking().SingleAsync(s => s.Version == version + 1, ct);
+        Assert.Contains(code, persisted.Payload);
     }
     [Fact]
     public async Task Parallel_stale_writers_preserve_one_committed_snapshot_and_protected_profiles()
