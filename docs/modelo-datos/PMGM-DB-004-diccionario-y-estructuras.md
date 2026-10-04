@@ -31,3 +31,5 @@
 #259 / PR #260 establece regla, índice, plantilla y checklist. **Sin cambios de modelo, schema, contratos o datos operacionales**; no agrega una migración ni un dump. Este inicio no reconstruye retrospectivamente un diccionario completo del proyecto. Los próximos cambios de datos deben dejar su salida; una consolidación completa inicial requiere inspección específica de todos los dominios y cobertura declarada.
 
 El uso de “dato” comprende campos persistidos, contratos y proyecciones/calculados. La modificación de un pago o una ficha individual sigue su auditoría funcional, sin producir una nueva versión del diccionario.
+
+- 04-10, #190 / PR #318: [registro tarifario v2](cambios/2026-10-04-issue-190-tarifario.md), [DB-007](PMGM-DB-007-tarifario-decretos.md). Catálogo persistido y Ficha; implementación de rama, sin instalación.

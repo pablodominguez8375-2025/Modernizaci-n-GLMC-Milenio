@@ -65,9 +65,9 @@ public static partial class LodgeTreasuryEndpoints
 
         var organization = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
         if (organization is null) return Results.NotFound(new { message = "El Taller no existe." });
-        if (organization.TreasuryTerritory is null)
-            return Results.Conflict(new { message = "Gran Tesorería debe clasificar el Oriente del Taller antes de configurar cuotas." });
-        var officialAmount = GrandTreasuryFeeSchedule.Resolve(request.FeeType, organization.TreasuryTerritory, request.EffectiveFrom);
+        if (WorkshopOriente.Territory(organization) is null)
+            return Results.Conflict(new { message = "Complete el Oriente y país en la Ficha del Taller antes de configurar cuotas." });
+        var officialAmount = await GrandTreasuryTariff.ResolveAsync(db, request.FeeType, WorkshopOriente.Territory(organization)!, request.EffectiveFrom, cancellationToken);
         if (officialAmount is null)
             return Results.Conflict(new { message = "No existe una tarifa institucional aplicable. Verifique vigencia, Oriente y moneda del decreto." });
         if (request.MemberAmount < officialAmount.Value.Amount)
@@ -82,6 +82,7 @@ public static partial class LodgeTreasuryEndpoints
 
         var plan = new LodgeFeePlan { OrganizationId = organizationId, FeeType = request.FeeType,
             MemberAmount = request.MemberAmount, GrandTreasuryAmount = request.GrandTreasuryAmount,
+            TariffVersionId = officialAmount.Value.TariffVersionId,
             Currency = officialAmount.Value.Currency,
             EffectiveFrom = request.EffectiveFrom, EffectiveUntil = request.EffectiveUntil };
         db.LodgeFeePlans.Add(plan);
@@ -89,7 +90,7 @@ public static partial class LodgeTreasuryEndpoints
             organizationId, AuditResults.Success,
             new { plan.FeeType, plan.MemberAmount, plan.GrandTreasuryAmount, plan.Currency, plan.EffectiveFrom, plan.EffectiveUntil });
         await db.SaveChangesAsync(cancellationToken);
-        return Results.Created($"/api/gestion-logial/tesoreria/talleres/{organizationId}/planes-cuota/{plan.Id}", ToFeePlan(plan));
+        return Results.Created($"/api/gestion-logial/tesoreria/talleres/{organizationId}/planes-cuota/{plan.Id}", ToFeePlan(plan, officialAmount));
     }
 
     private static async Task<IResult> GetFeePlansAsync(Guid organizationId, DateOnly? asOf, HttpContext context,
@@ -97,13 +98,13 @@ public static partial class LodgeTreasuryEndpoints
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
-        var date = asOf ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var date = asOf ?? GrandTreasuryTariff.Today();
         var rows = await db.LodgeFeePlans.AsNoTracking().Where(x => x.OrganizationId == organizationId && x.IsActive &&
             x.EffectiveFrom <= date && (x.EffectiveUntil == null || x.EffectiveUntil >= date))
             .OrderBy(x => x.FeeType).ToListAsync(cancellationToken);
-        var territory = await db.Organizations.AsNoTracking().Where(x => x.Id == organizationId)
-            .Select(x => x.TreasuryTerritory).SingleOrDefaultAsync(cancellationToken);
-        var items = rows.Select(x => ToFeePlan(x, territory)).ToList();
+        var territory = await WorkshopOriente.TerritoryAsync(db, organizationId, cancellationToken);
+        var catalog = await GrandTreasuryTariff.LoadAsync(db, cancellationToken);
+        var items = rows.Select(x => ToFeePlan(x, territory is null ? null : GrandTreasuryTariff.Resolve(catalog, x.FeeType, territory, date))).ToList();
         return Results.Ok(new { total = items.Count, items });
     }
 
@@ -119,9 +120,8 @@ public static partial class LodgeTreasuryEndpoints
         if (await IsAccountingYearClosedAsync(db, organizationId, request.PeriodYear, currency, cancellationToken))
             return Results.Conflict(new { message = "El ejercicio contable está cerrado y no admite nuevos cargos." });
         var cutoff = new DateOnly(request.PeriodYear, request.PeriodMonth, DateTime.DaysInMonth(request.PeriodYear, request.PeriodMonth));
-        var territory = await db.Organizations.AsNoTracking().Where(x => x.Id == organizationId)
-            .Select(x => x.TreasuryTerritory).SingleOrDefaultAsync(cancellationToken);
-        if (territory is null) return Results.Conflict(new { message = "Gran Tesorería debe clasificar el Oriente del Taller antes de generar cargos." });
+        var territory = await WorkshopOriente.TerritoryAsync(db, organizationId, cancellationToken);
+        if (territory is null) return Results.Conflict(new { message = "Complete el Oriente y país en la Ficha del Taller antes de generar cargos." });
         var plans = await db.LodgeFeePlans.Where(x => x.OrganizationId == organizationId && x.IsActive && x.EffectiveFrom <= cutoff &&
             (x.EffectiveUntil == null || x.EffectiveUntil >= new DateOnly(request.PeriodYear, request.PeriodMonth, 1)))
             .ToDictionaryAsync(x => x.FeeType, cancellationToken);
@@ -143,17 +143,17 @@ public static partial class LodgeTreasuryEndpoints
                 return Results.BadRequest(new { message = $"El tipo de cuota '{feeType}' no corresponde a una cuota ordinaria válida.", memberId = membership.MemberId });
             if (!plans.TryGetValue(feeType, out var plan))
                 return Results.BadRequest(new { message = $"No existe una cuota vigente para el tipo '{feeType}'.", memberId = membership.MemberId });
-            var officialAmount = GrandTreasuryFeeSchedule.Resolve(feeType, territory, cutoff);
+            var officialAmount = await GrandTreasuryTariff.ResolveAsync(db, feeType, territory, cutoff, cancellationToken);
             if (officialAmount is null)
                 return Results.Conflict(new { message = "No existe una tarifa institucional aplicable para esta moneda, categoría y vigencia.", memberId = membership.MemberId, feeType, territory });
             if (plan.Currency != officialAmount.Value.Currency)
                 return Results.Conflict(new { message = "La moneda del plan de cuota no coincide con la tarifa institucional; actualice el plan antes de generar cargos.", memberId = membership.MemberId, feeType, planCurrency = plan.Currency, officialCurrency = officialAmount.Value.Currency });
-            if (plan.MemberAmount < officialAmount.Value.Amount)
+            if (plan.MemberAmount < plan.GrandTreasuryAmount)
                 return Results.Conflict(new { message = "El total de cuota vigente quedó bajo el aporte decretado a Gran Tesorería.", memberId = membership.MemberId, feeType });
             db.LodgeMemberCharges.Add(new LodgeMemberCharge { OrganizationId = organizationId, MemberId = membership.MemberId,
                 FeePlanId = plan.Id, PeriodYear = request.PeriodYear, PeriodMonth = request.PeriodMonth,
-                MemberAmount = plan.MemberAmount, GrandTreasuryAmount = officialAmount.Value.Amount,
-                Currency = officialAmount.Value.Currency,
+                MemberAmount = officialAmount.Value.Amount + plan.MemberAmount - plan.GrandTreasuryAmount, GrandTreasuryAmount = officialAmount.Value.Amount,
+                Currency = officialAmount.Value.Currency, TariffVersionId = officialAmount.Value.TariffVersionId,
                 Status = TreasuryCodes.LodgeChargeStatus.Pending });
             created++;
         }
@@ -684,17 +684,15 @@ public static partial class LodgeTreasuryEndpoints
 
     private static object ToConfiguration(LodgeTreasuryConfiguration x) => new { organizationId = x.OrganizationId, x.Currency, x.OpeningBalance, x.OpeningBalanceDate, x.IncomeCategories, x.ExpenseCategories };
 
-    private static object ToFeePlan(LodgeFeePlan x, string? territory = null)
+    private static object ToFeePlan(LodgeFeePlan x, TariffResolution? official = null)
     {
-        (decimal Amount, string Currency)? official = territory is null
-            ? null
-            : GrandTreasuryFeeSchedule.Resolve(x.FeeType, territory, x.EffectiveFrom);
         var grandTreasuryAmount = official?.Amount;
-        return new { x.Id, x.OrganizationId, x.FeeType, x.MemberAmount,
-            grandTreasuryAmount,
-            currency = official?.Currency ?? x.Currency,
-            workshopAmount = grandTreasuryAmount is null ? (decimal?)null : x.MemberAmount - grandTreasuryAmount,
-            rateAvailable = grandTreasuryAmount is not null,
+        var localAmount = x.MemberAmount - x.GrandTreasuryAmount;
+        return new { x.Id, x.OrganizationId, x.FeeType,
+            memberAmount = grandTreasuryAmount is null ? x.MemberAmount : grandTreasuryAmount.Value + localAmount,
+            grandTreasuryAmount, currency = official?.Currency ?? x.Currency,
+            workshopAmount = localAmount, rateAvailable = grandTreasuryAmount is not null,
+            tariffVersionId = official?.TariffVersionId, sourceReference = official?.SourceReference,
             x.EffectiveFrom, x.EffectiveUntil, x.IsActive };
     }
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

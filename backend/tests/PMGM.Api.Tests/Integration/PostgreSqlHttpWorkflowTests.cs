@@ -52,7 +52,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             {
                 Name = $"Taller HTTP CI {Guid.NewGuid():N}",
                 Number = "HTTP-CI",
-                Type = "workshop"
+                Type = "workshop", City = "Santiago", Country = "Chile", OrienteCode = "santiago"
             };
             var person = new Person
             {

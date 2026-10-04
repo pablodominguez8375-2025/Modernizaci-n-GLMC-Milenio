@@ -5,6 +5,7 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.Treasury;
 using System.Security.Cryptography;
 
 namespace PMGM.Api.Modules.Core;
@@ -92,6 +93,7 @@ public static class OrganizationEndpoints
                 x.EstablishedOn,
                 x.City,
                 x.Country,
+                x.OrienteCode,
                 x.TreasuryTerritory,
                 hasLogo = x.LogoObjectKey != null
             })
@@ -276,17 +278,29 @@ public static class OrganizationEndpoints
                 ["metadata"] = ["Revise la fecha de fundación (no puede ser futura) y los campos de ubicación (máximo 120 caracteres)."]
             });
 
-        var previous = new { organization.Name, organization.EstablishedOn, organization.City, organization.Country };
+        if (request.OrienteCode is not null && (!WorkshopOriente.IsValid(request.OrienteCode) ||
+            (request.OrienteCode != "santiago" && string.IsNullOrWhiteSpace(request.City))))
+            return Results.BadRequest(new { message = "Seleccione un Oriente válido e indique la ciudad para Regiones o Perú." });
+        var previous = new { organization.Name, organization.EstablishedOn, organization.City, organization.Country, organization.OrienteCode, organization.TreasuryTerritory };
         organization.Name = name;
         organization.EstablishedOn = request.EstablishedOn;
         organization.City = NormalizeOptional(request.City);
         organization.Country = NormalizeOptional(request.Country);
+        organization.OrienteCode = request.OrienteCode ?? WorkshopOriente.FromLocation(organization.City, organization.Country);
+        if (request.OrienteCode is not null)
+        {
+            organization.Country = request.OrienteCode == "peru" ? "Perú" : "Chile";
+            if (request.OrienteCode == "santiago") organization.City = "Santiago";
+            if (WorkshopOriente.FromLocation(organization.City, organization.Country) != request.OrienteCode)
+                return Results.BadRequest(new { message = "La ciudad no coincide con el Oriente seleccionado." });
+        }
+        organization.TreasuryTerritory = WorkshopOriente.Territory(organization);
 
         audit.Add(httpContext, "organization.workshop_profile.metadata_updated", nameof(Organization), id.ToString(), id,
             AuditResults.Success, new
             {
                 previous,
-                current = new { organization.Name, organization.EstablishedOn, organization.City, organization.Country }
+                current = new { organization.Name, organization.EstablishedOn, organization.City, organization.Country, organization.OrienteCode, organization.TreasuryTerritory }
             });
         await db.SaveChangesAsync(cancellationToken);
         return Results.NoContent();
@@ -357,7 +371,7 @@ public static class OrganizationEndpoints
     }
 }
 
-public sealed record UpdateOrganizationMetadataRequest(string? Name, DateOnly? EstablishedOn, string? City, string? Country);
+public sealed record UpdateOrganizationMetadataRequest(string? Name, DateOnly? EstablishedOn, string? City, string? Country, string? OrienteCode = null);
 
 public sealed record OrganizationOptionDto(
     Guid Id,

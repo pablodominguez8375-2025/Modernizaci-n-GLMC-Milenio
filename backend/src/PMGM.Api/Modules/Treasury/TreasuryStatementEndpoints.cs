@@ -37,9 +37,8 @@ public static class TreasuryStatementEndpoints
         if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count != 0)
             return Results.Conflict(new { message = "La generación automática requiere un cuadro vacío en borrador." });
 
-        var territory = await db.Organizations.AsNoTracking().Where(x => x.Id == statement.OrganizationId)
-            .Select(x => x.TreasuryTerritory).SingleOrDefaultAsync(cancellationToken);
-        if (territory is null) return Results.Conflict(new { message = "Gran Tesorería debe clasificar el Oriente antes de generar el Cuadro." });
+        var territory = await WorkshopOriente.TerritoryAsync(db, statement.OrganizationId, cancellationToken);
+        if (territory is null) return Results.Conflict(new { message = "Complete el Oriente y país en la Ficha del Taller antes de generar el Cuadro." });
 
         var cutoff = statement.CutoffDate;
         var monthlyCharges = await db.LodgeMemberCharges.AsNoTracking()
@@ -101,18 +100,11 @@ public static class TreasuryStatementEndpoints
             var charge = monthlyCharges.FirstOrDefault(x => x.MemberId == membership.MemberId);
             var degree = degreeEvents.First(x => x.MemberId == membership.MemberId).Degree;
             var contributionType = charge?.FeePlan.FeeType ?? TreasuryCodes.LodgeFeeType.Normal;
-            var peruOfficialAmount = territory == GrandTreasuryFeeSchedule.Peru
-                ? GrandTreasuryFeeSchedule.Resolve(contributionType, territory, cutoff)?.Amount
-                : null;
-            if (territory == GrandTreasuryFeeSchedule.Peru && peruOfficialAmount is null)
-                return Results.Conflict(new { message = "No hay una tarifa institucional vigente en USD para esta categoría de cuota en Perú.", memberId = membership.MemberId, contributionType });
-            if (territory == GrandTreasuryFeeSchedule.Peru && charge is not null && charge.GrandTreasuryAmount != peruOfficialAmount)
-                return Results.Conflict(new { message = "El cargo registrado no coincide con la tarifa oficial en USD del período; regularice el plan antes de generar el Cuadro.", memberId = membership.MemberId });
-            var baseAmount = territory == GrandTreasuryFeeSchedule.Peru
-                ? peruOfficialAmount
-                : charge?.GrandTreasuryAmount ?? request.AmountFor(degree);
-            if (baseAmount is null)
-                return Results.BadRequest(new { message = $"El grado '{degree}' no tiene una cuota base configurada." });
+            var official = charge is null ? await GrandTreasuryTariff.ResolveAsync(db, contributionType, territory, cutoff, cancellationToken) : null;
+            if (charge is null && (official is null || official.Value.Currency != statement.Currency))
+                return Results.Conflict(new { message = "No hay tarifa oficial para esta categoría, zona, moneda y período.", memberId = membership.MemberId, contributionType });
+            // Existing charges retain their financial snapshot, irrespective of later decrees or Ficha changes.
+            decimal? baseAmount = charge?.GrandTreasuryAmount ?? official?.Amount;
             var memberOffices = offices.Where(x => x.MemberId == membership.MemberId)
                 .Select(x => x.OfficeType).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             var adjustment = adjustments.FirstOrDefault(x => x.MemberId == membership.MemberId);

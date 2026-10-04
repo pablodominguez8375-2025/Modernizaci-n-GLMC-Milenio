@@ -36,6 +36,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<TreasuryPayment> TreasuryPayments => Set<TreasuryPayment>();
     public DbSet<TreasuryAdjustment> TreasuryAdjustments => Set<TreasuryAdjustment>();
     public DbSet<LodgeFeePlan> LodgeFeePlans => Set<LodgeFeePlan>();
+    public DbSet<GrandTreasuryTariffVersion> GrandTreasuryTariffVersions => Set<GrandTreasuryTariffVersion>();
     public DbSet<LodgeMemberCharge> LodgeMemberCharges => Set<LodgeMemberCharge>();
     public DbSet<LodgeMemberPayment> LodgeMemberPayments => Set<LodgeMemberPayment>();
     public DbSet<LodgeReceiptAdjustment> LodgeReceiptAdjustments => Set<LodgeReceiptAdjustment>();
@@ -81,6 +82,18 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Payload).HasColumnType("jsonb").IsRequired();
         });
 
+        modelBuilder.Entity<GrandTreasuryTariffVersion>(entity =>
+        {
+            entity.ToTable("grand_treasury_tariff_versions");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Version).IsUnique();
+            entity.HasIndex(x => new { x.EffectiveFrom, x.Version });
+            entity.Property(x => x.Number).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(1200).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Payload).HasColumnType("jsonb").IsRequired();
+        });
+
         modelBuilder.Entity<Person>(entity =>
         {
             entity.ToTable("people");
@@ -103,6 +116,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Number).HasMaxLength(40);
             entity.Property(x => x.Type).HasMaxLength(80).IsRequired();
             entity.Property(x => x.TreasuryTerritory).HasMaxLength(40);
+            entity.Property(x => x.OrienteCode).HasMaxLength(40);
             entity.Property(x => x.City).HasMaxLength(120);
             entity.Property(x => x.Country).HasMaxLength(120);
             entity.Property(x => x.LogoObjectKey).HasMaxLength(240);
@@ -413,6 +427,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
         {
             entity.ToTable("lodge_fee_plans");
             entity.HasKey(x => x.Id);
+            entity.HasOne<GrandTreasuryTariffVersion>().WithMany().HasForeignKey(x => x.TariffVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.FeeType).HasMaxLength(40).IsRequired();
             entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             entity.Property(x => x.MemberAmount).HasPrecision(18, 2);
@@ -425,6 +440,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
         {
             entity.ToTable("lodge_member_charges");
             entity.HasKey(x => x.Id);
+            entity.HasOne<GrandTreasuryTariffVersion>().WithMany().HasForeignKey(x => x.TariffVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.MemberAmount).HasPrecision(18, 2);
             entity.Property(x => x.GrandTreasuryAmount).HasPrecision(18, 2);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
@@ -711,7 +727,9 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
         modelBuilder.Entity<CeremonyRightPayment>(entity =>
         {
             entity.ToTable("ceremony_right_payments");
+            entity.Property(x => x.RightAmount).HasPrecision(18, 2);
             entity.HasKey(x => x.Id);
+            entity.HasOne<GrandTreasuryTariffVersion>().WithMany().HasForeignKey(x => x.TariffVersionId).OnDelete(DeleteBehavior.Restrict);
             entity.Property(x => x.Amount).HasPrecision(18, 2).IsRequired();
             entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
             entity.Property(x => x.PaymentMethod).HasMaxLength(40).IsRequired();

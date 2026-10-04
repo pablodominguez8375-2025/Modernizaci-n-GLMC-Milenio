@@ -30,7 +30,7 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(cancellationToken);
-            var organization = new Organization { Name = $"Taller Tesorería {Guid.NewGuid():N}", Number = "TES-CI", Type = "workshop", TreasuryTerritory = GrandTreasuryFeeSchedule.Santiago };
+            var organization = new Organization { Name = $"Taller Tesorería {Guid.NewGuid():N}", Number = "TES-CI", Type = "workshop", City = "Santiago", Country = "Chile", OrienteCode = "santiago", TreasuryTerritory = GrandTreasuryFeeSchedule.Santiago };
             var person = new Person { FirstNames = "Hermano", LastNames = "Tesorería", Rut = "RUT-DEMO-TEST" };
             var member = new Member { Person = person, PersonId = person.Id, InstitutionalNumber = $"TES-{Guid.NewGuid():N}" };
             var membership = new Membership

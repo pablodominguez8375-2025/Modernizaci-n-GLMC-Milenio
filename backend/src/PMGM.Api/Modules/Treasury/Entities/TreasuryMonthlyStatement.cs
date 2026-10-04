@@ -85,6 +85,7 @@ public sealed class LodgeFeePlan
     public required string FeeType { get; set; }
     public decimal MemberAmount { get; set; }
     public decimal GrandTreasuryAmount { get; set; }
+    public Guid? TariffVersionId { get; set; }
     public string Currency { get; set; } = "CLP";
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveUntil { get; set; }
@@ -105,6 +106,7 @@ public sealed class LodgeMemberCharge
     public int PeriodMonth { get; set; }
     public decimal MemberAmount { get; set; }
     public decimal GrandTreasuryAmount { get; set; }
+    public Guid? TariffVersionId { get; set; }
     public string Currency { get; set; } = "CLP";
     public required string Status { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;

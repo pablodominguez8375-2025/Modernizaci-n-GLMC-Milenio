@@ -26,6 +26,7 @@ public static class TreasuryEndpoints
         group.MapPost("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", SetMemberRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", GetMemberRegularityAsync);
         group.MapTreasuryStatementEndpoints();
+        endpoints.MapGrandTreasuryTariffEndpoints();
 
         return endpoints;
     }
@@ -60,34 +61,54 @@ public static class TreasuryEndpoints
         foreach (var ceremony in ceremonies)
         {
             paidById.TryGetValue(ceremony.Id, out var paid);
-            var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, today);
-            if (right is null) continue;
+            var right = await GrandTreasuryTariff.ResolveCeremonyAsync(db, ceremony.Id, ceremony.OrganizationId, ceremony.CeremonyType, today, cancellationToken);
+            if (right is null)
+            {
+                if (GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType)) return Results.Conflict(new { message = "Complete la Ficha y el tarifario vigente para calcular este derecho.", requestId = ceremony.Id });
+                continue;
+            }
             var balance = Math.Max(0m, right.Value.Amount - paid);
             if (balance <= 0m) continue;
             items.Add(new TreasuryCeremonyRightItem(ceremony.Id, ceremony.OrganizationId, ceremony.organizationName,
                 ceremony.organizationNumber, ceremony.CeremonyType, ceremony.ProposedDate, ceremony.subjectDisplayName,
-                right.Value.Amount, right.Value.Currency, paid, balance, GrandTreasuryFeeSchedule.SourceReference));
+                right.Value.Amount, right.Value.Currency, paid, balance, right.Value.SourceReference));
         }
         context.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { total = items.Count, items });
     }
 
-    private static IResult GetOfficialFeeScheduleAsync(DateOnly? asOf, IInstitutionalAccessService access, HttpContext context)
+    private static async Task<IResult> GetOfficialFeeScheduleAsync(DateOnly? asOf, Guid? organizationId,
+        IInstitutionalAccessService access, HttpContext context, PmgmDbContext db, CancellationToken cancellationToken)
     {
-        if (!access.CanManageTreasuryRegularity(context.User) && !access.CanReadInstitutionalRegularity(context.User)) return Results.Forbid();
+        var institution = access.CanManageTreasuryRegularity(context.User) || access.CanReadInstitutionalRegularity(context.User);
+        if (!institution && (organizationId is null ||
+            (!access.CanManageLodgeTreasury(context.User, organizationId.Value) && !access.CanApproveLodgeExpenses(context.User, organizationId.Value)))) return Results.Forbid();
+        if (!institution && !await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId!.Value, "view", cancellationToken)) return Results.Forbid();
         var date = asOf ?? TodayInChile();
-        return Results.Ok(new { sourceReference = GrandTreasuryFeeSchedule.SourceReference, effectiveFrom = GrandTreasuryFeeSchedule.EffectiveFrom,
-            asOf = date, items = GrandTreasuryFeeSchedule.Rates, ceremonyRights = GrandTreasuryFeeSchedule.CeremonyRights });
+        var tariff = GrandTreasuryTariff.At(await GrandTreasuryTariff.LoadAsync(db, cancellationToken), date);
+        if (tariff is null) return Results.Conflict(new { message = "No existe un decreto publicado vigente para la fecha indicada." });
+        string? territory = null;
+        if (organizationId is not null)
+        {
+            territory = await WorkshopOriente.TerritoryAsync(db, organizationId.Value, cancellationToken);
+            if (territory is null) return Results.Conflict(new { message = "Complete el Oriente y país en la Ficha del Taller." });
+        }
+        context.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { tariff.Id, tariff.Version, tariff.Number, tariff.SourceReference, tariff.DecreeDate,
+            tariff.EffectiveFrom, tariff.EffectiveUntil, asOf = date, territory,
+            items = tariff.Rates.Where(x => territory is null || x.Territory == territory),
+            ceremonyRights = tariff.CeremonyRights.Where(x => territory is null || x.Territory == territory),
+            unemployment = tariff.Unemployment.Where(x => territory is null || x.Territory == territory) });
     }
 
     private static async Task<IResult> GetTreasuryTerritoriesAsync(HttpContext context, PmgmDbContext db,
         IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
-        var items = await db.Organizations.AsNoTracking().Where(x => x.Type != "order")
-            .OrderBy(x => x.Name).ThenBy(x => x.Number)
-            .Select(x => new { x.Id, x.Name, x.Number, x.Type, x.TreasuryTerritory })
-            .ToListAsync(cancellationToken);
+        var rows = await db.Organizations.AsNoTracking().Where(x => x.Type != "order")
+            .OrderBy(x => x.Name).ThenBy(x => x.Number).ToListAsync(cancellationToken);
+        var items = rows.Select(x => new { x.Id, x.Name, x.Number, x.Type, x.City, x.Country, x.OrienteCode,
+            treasuryTerritory = WorkshopOriente.Territory(x) }).ToList();
         return Results.Ok(new { total = items.Count, items });
     }
 
@@ -95,26 +116,18 @@ public static class TreasuryEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(context.User) &&
-            !access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
-        var item = await db.Organizations.AsNoTracking().Where(x => x.Id == organizationId)
-            .Select(x => new { organizationId = x.Id, territory = x.TreasuryTerritory })
-            .SingleOrDefaultAsync(cancellationToken);
-        return item is null ? Results.NotFound() : Results.Ok(item);
+            !access.CanManageLodgeTreasury(context.User, organizationId) && !access.CanApproveLodgeExpenses(context.User, organizationId)) return Results.Forbid();
+        var item = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
+        return item is null ? Results.NotFound() : Results.Ok(new { organizationId = item.Id,
+            territory = WorkshopOriente.Territory(item), item.City, item.Country, item.OrienteCode });
     }
 
     private static async Task<IResult> SetTreasuryTerritoryAsync(Guid organizationId, SetTreasuryTerritoryRequest request,
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
-        if (!GrandTreasuryFeeSchedule.IsValidTerritory(request.Territory))
-            return Results.BadRequest(new { message = "Seleccione Santiago, otro Oriente de Chile o Perú." });
-        var organization = await db.Organizations.FirstOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
-        if (organization is null) return Results.NotFound();
-        organization.TreasuryTerritory = request.Territory;
-        audit.Add(context, "treasury.organization_territory.updated", nameof(Organization), organization.Id.ToString(), organization.Id,
-            AuditResults.Success, new { organization.TreasuryTerritory });
-        await db.SaveChangesAsync(cancellationToken);
-        return Results.Ok(new { organizationId, territory = organization.TreasuryTerritory });
+        if (!await db.Organizations.AnyAsync(x => x.Id == organizationId, cancellationToken)) return Results.NotFound();
+        return Results.Conflict(new { message = "El Oriente se administra exclusivamente en la Ficha del Taller; esta consulta es de solo lectura." });
     }
 
     private static async Task<IResult> SetWorkshopRegularityAsync(

@@ -13,14 +13,15 @@ public sealed class GrandTreasuryFeeScheduleTests
     [InlineData("incorporation", 31000)]
     public void Resolves_decree_1759_ceremony_rights(string ceremonyType, decimal expected)
     {
-        var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremonyType, new DateOnly(2026, 9, 24));
-        Assert.Equal((expected, "CLP"), right);
+        var right = GrandTreasuryTariff.ResolveCeremonyRight([GrandTreasuryTariffSeed.Load()], ceremonyType, "santiago", new DateOnly(2026, 9, 24));
+        Assert.Equal(expected, right?.Amount);
+        Assert.Equal("CLP", right?.Currency);
     }
 
     [Fact]
     public void Does_not_apply_ceremony_right_before_decree_effective_date()
     {
-        Assert.Null(GrandTreasuryFeeSchedule.ResolveCeremonyRight("initiation", new DateOnly(2025, 12, 31)));
+        Assert.Null(GrandTreasuryTariff.ResolveCeremonyRight([GrandTreasuryTariffSeed.Load()], "initiation", "santiago", new DateOnly(2025, 12, 31)));
     }
 
     [Theory]
@@ -34,7 +35,7 @@ public sealed class GrandTreasuryFeeScheduleTests
     [InlineData(TreasuryCodes.LodgeFeeType.Student, GrandTreasuryFeeSchedule.OtherOriente, 8000)]
     public void Resolves_decree_1759_rates_by_fee_type_and_territory(string feeType, string territory, decimal expected)
     {
-        var rate = GrandTreasuryFeeSchedule.Resolve(feeType, territory, new DateOnly(2026, 1, 1));
+        var rate = GrandTreasuryTariff.Resolve([GrandTreasuryTariffSeed.Load()], feeType, territory, new DateOnly(2026, 1, 1));
 
         Assert.Equal(expected, rate?.Amount);
         Assert.Equal("CLP", rate?.Currency);
@@ -53,7 +54,7 @@ public sealed class GrandTreasuryFeeScheduleTests
     {
         Assert.False(GrandTreasuryFeeSchedule.HasOrdinaryDues(GrandTreasuryFeeSchedule.PastActiveMembershipType));
         Assert.True(GrandTreasuryFeeSchedule.HasOrdinaryDues("active"));
-        var rate = GrandTreasuryFeeSchedule.Resolve(
+        var rate = GrandTreasuryTariff.Resolve([GrandTreasuryTariffSeed.Load()],
             TreasuryCodes.LodgeFeeType.PastActive, GrandTreasuryFeeSchedule.Santiago, new DateOnly(2026, 9, 1));
         Assert.Equal(0m, rate?.Amount);
         Assert.Equal("CLP", rate?.Currency);
@@ -62,16 +63,18 @@ public sealed class GrandTreasuryFeeScheduleTests
     [Fact]
     public void Peru_normal_fee_is_recorded_in_usd_without_conversion()
     {
-        Assert.Equal((6m, "USD"), GrandTreasuryFeeSchedule.Resolve(
-            TreasuryCodes.LodgeFeeType.Normal, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1)));
-        Assert.Null(GrandTreasuryFeeSchedule.Resolve(
+        var rate = GrandTreasuryTariff.Resolve([GrandTreasuryTariffSeed.Load()], TreasuryCodes.LodgeFeeType.Normal, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1));
+        Assert.Equal(6m, rate?.Amount);
+        Assert.Equal("USD", rate?.Currency);
+        Assert.Null(GrandTreasuryTariff.Resolve([GrandTreasuryTariffSeed.Load()],
             TreasuryCodes.LodgeFeeType.Spouse, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1)));
     }
 
     [Fact]
     public void Peru_past_active_component_is_zero_usd()
     {
-        Assert.Equal((0m, "USD"), GrandTreasuryFeeSchedule.Resolve(
-            TreasuryCodes.LodgeFeeType.PastActive, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1)));
+        var rate = GrandTreasuryTariff.Resolve([GrandTreasuryTariffSeed.Load()], TreasuryCodes.LodgeFeeType.PastActive, GrandTreasuryFeeSchedule.Peru, new DateOnly(2026, 9, 1));
+        Assert.Equal(0m, rate?.Amount);
+        Assert.Equal("USD", rate?.Currency);
     }
 }
