@@ -1,3 +1,4 @@
+import { setDemoWorkshopLocation, zoneFromLocation } from './treasuryTariffs'
 export interface OrganizationAuthority {
   id: string
   officeType: string
@@ -42,7 +43,7 @@ export interface OrganizationTransfer {
 }
 
 export interface OrganizationProfile {
-  organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string; establishedOn: string | null; city: string | null; country: string | null; treasuryTerritory: string | null; hasLogo?: boolean }
+  organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string; establishedOn: string | null; city: string | null; country: string | null; orienteCode?:string|null; treasuryTerritory: string | null; hasLogo?: boolean }
   members: { active: number; degreeDistribution: Record<string, number> }
   authorities: OrganizationAuthority[]
   regularity: {
@@ -87,8 +88,11 @@ export class OrganizationProfileApiClient {
     return this.request<OrganizationProfile>(organizationId, 'profile')
   }
 
-  async updateWorkshopMetadata(organizationId: string, metadata: { name: string; establishedOn: string | null; city: string | null; country: string | null }): Promise<void> {
+  async updateWorkshopMetadata(organizationId: string, metadata: { name: string; establishedOn: string | null; city: string | null; country: string | null; orienteCode?:string|null }): Promise<void> {
     if (this.useMocks) {
+      const code=metadata.orienteCode;
+      if(code){metadata={...metadata,country:code==='peru'?'Perú':'Chile',city:code==='santiago'?'Santiago':metadata.city};if(!metadata.city?.trim()||zoneFromLocation(metadata.city,metadata.country)!==(code==='other_chile'?'other_oriente':code))throw new Error('Revise Oriente y ciudad del Taller.')}
+      setDemoWorkshopLocation(organizationId,metadata.city,metadata.country)
       demoWorkshopMetadata.set(organizationId, metadata)
       return
     }
@@ -185,7 +189,7 @@ function demoProfile(organizationId: string): OrganizationProfile {
   const other = second ? 'Taller Demostrativo Nº 1' : 'Taller Demostrativo Nº 23'
   const otherId = second ? ORG_1 : ORG_23
   return {
-    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: metadata ? metadata.establishedOn : (second ? '1984-03-10' : '1967-08-21'), city: metadata ? metadata.city : (second ? 'Valparaíso' : 'Santiago'), country: metadata ? metadata.country : 'Chile', treasuryTerritory: second ? 'other_oriente' : 'santiago', hasLogo: demoWorkshopLogos.has(id) },
+    organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: metadata ? metadata.establishedOn : (second ? '1984-03-10' : '1967-08-21'), city: metadata ? metadata.city : (second ? 'Valparaíso' : 'Santiago'), country: metadata ? metadata.country : 'Chile', treasuryTerritory: metadata?zoneFromLocation(metadata.city,metadata.country):second?'other_oriente':'santiago', hasLogo: demoWorkshopLogos.has(id) },
     members: { active: second ? 19 : 27, degreeDistribution: second ? { apprentice: 6, fellowcraft: 5, master: 8 } : { apprentice: 8, fellowcraft: 7, master: 12 } },
     authorities: [
       { id: `${id}-vm`, officeType: 'venerable_master', period: '2026', memberId: 'demo-vm', displayName: second ? 'Valentina Torres' : 'Alejandra Rojas', startDate: '2026-01-01', endDate: '2026-12-31' },

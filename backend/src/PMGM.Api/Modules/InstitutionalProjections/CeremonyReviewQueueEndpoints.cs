@@ -163,6 +163,10 @@ public static class CeremonyReviewQueueEndpoints
             .ToListAsync(cancellationToken);
         var rightPaidByRequest = rightPaymentRows.ToDictionary(x => x.CeremonyRequestId, x => x.Paid);
 
+        var rights = new Dictionary<Guid, TariffResolution?>();
+        foreach (var ceremony in ceremonies)
+            rights[ceremony.Id] = await GrandTreasuryTariff.ResolveCeremonyAsync(db, ceremony.Id, ceremony.OrganizationId, ceremony.CeremonyType, today, cancellationToken);
+
         var items = ceremonies.Select(ceremony =>
         {
             internalAffairsByRequest.TryGetValue(ceremony.Id, out var regimenStatus);
@@ -171,7 +175,7 @@ public static class CeremonyReviewQueueEndpoints
             hospitalariaByOrganization.TryGetValue(ceremony.OrganizationId, out var hospitalariaStatus);
             publicationByRequest.TryGetValue(ceremony.Id, out var publication);
             rightPaidByRequest.TryGetValue(ceremony.Id, out var rightPaid);
-            var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, today);
+            var right = rights[ceremony.Id];
             var rightBalance = right is null ? 0m : Math.Max(0m, right.Value.Amount - rightPaid);
 
             CandidatePublicationEvidence? publicationEvidence = null;
@@ -207,7 +211,7 @@ public static class CeremonyReviewQueueEndpoints
                 hospitalariaStatus,
                 grandMasterStatus,
                 publicationEvidence,
-                ceremonyRightPaid: right is null || rightBalance == 0m);
+                ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m));
 
             var isFinal = ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected;
             var activePublication = publication is not null &&
@@ -231,7 +235,7 @@ public static class CeremonyReviewQueueEndpoints
                     .ToList(),
                 publicationProjection,
                 right is null ? null : new CeremonyRightDto(right.Value.Amount, right.Value.Currency, rightPaid, rightBalance,
-                    GrandTreasuryFeeSchedule.SourceReference));
+                    right.Value.SourceReference));
 
             return new CeremonyReviewQueueItemDto(
                 ceremony.Id,

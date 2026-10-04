@@ -1,3 +1,4 @@
+import { initialTariff, tariffAt, tariffRate, demoWorkshopLocation, zoneFromLocation, nextTariffPeriod, type TariffVersion, type RegisterTariff, type OfficialSchedule } from './treasuryTariffs'
 import { DynamicAccessClient, treasuryAccess, type TreasuryAccess, type AccessAction } from './dynamicAccess'
 import { getDemoProfile, type DemoProfileKey } from '../demoProfiles'
 import { chileCivilDate } from '../admissionDates'
@@ -43,7 +44,7 @@ export interface SessionCapabilities {
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'
 export interface OrganizationOption { id: string; name: string; number: string | null; type: string }
-export interface TreasuryTerritoryOption extends OrganizationOption { treasuryTerritory: TreasuryTerritory | null }
+export interface TreasuryTerritoryOption extends OrganizationOption { treasuryTerritory: TreasuryTerritory | null; city?:string|null; country?:string|null; orienteCode?:string|null }
 export interface OrganizationOptionsResponse { total: number; items: OrganizationOption[] }
 export interface SystemSetting { code: string; category: string; label: string; valueType: 'integer' | 'text' | 'list'; value: string; effectiveFrom: string; sourceReference: string; status: string }
 export interface SystemSettingsResponse { total: number; items: SystemSetting[] }
@@ -60,7 +61,7 @@ export interface LodgeReceiptAdjustment { id:string;kind:'void'|'correction';eff
 export interface LodgeReceiptAdjustmentRequest { kind:'void'|'correction';effectiveDate:string;reason:string;idempotencyKey:string;allocations:{chargeId:string;amount:number}[];allocationId?:string|null;amount?:number|null }
 export interface LodgeMemberReceipt { id:string; idempotencyKey?:string; memberId:string; memberDisplayName:string; receiptNumber:string; amount:number; currency:'CLP'|'USD'; paymentMethod:LodgeTreasuryPayment['paymentMethod']; paymentDate:string; reference:string|null; allocatedAmount:number; unappliedBalance:number; adjustments?:LodgeReceiptAdjustment[]; allocations:{id:string;chargeId:string;periodYear:number;periodMonth:number;amount:number;effectiveDate?:string|null;reversesAllocationId?:string|null;adjustmentId?:string|null}[] }
 export interface LodgeTreasuryChargePeriod { chargeId:string; periodYear:number; periodMonth:number; currency?:'CLP'|'USD'; chargedAmount:number; paidAmount:number; balance:number; status:'overdue'|'due'|'partial'|'paid'|'future_due'|'advance_partial'|'advance_paid' }
-export interface LodgeTreasuryCharge { id:string; memberId:string; memberDisplayName:string; memberAmount:number; feeType?:LodgeFeeType; monthlyFeeAmount?:number; maxPaymentAmount?:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; periods?:LodgeTreasuryChargePeriod[]; payments:LodgeTreasuryPayment[] }
+export interface LodgeTreasuryCharge { grandTreasuryAmount?:number; id:string; memberId:string; memberDisplayName:string; memberAmount:number; feeType?:LodgeFeeType; monthlyFeeAmount?:number; maxPaymentAmount?:number; paidAmount:number; balance:number; status:'pending'|'partial'|'paid'; periods?:LodgeTreasuryChargePeriod[]; payments:LodgeTreasuryPayment[] }
 export interface LodgeTreasuryExpense { id:string; organizationId:string; currency?:'CLP'|'USD'; category:string; amount:number; expenseDate:string; description:string; evidenceReference:string|null; approvalStatus:'pending_approval'|'approved'; recordedBySubject:string; approvedBySubject:string|null; approvedAtUtc:string|null; recordedAtUtc:string }
 export interface LodgeTreasuryIncome { id:string; organizationId:string; category:string; amount:number; incomeDate:string; description:string; evidenceReference:string|null; recordedBySubject:string; recordedAtUtc:string }
 export interface LodgeCashSummary { organizationId:string; currency?:'CLP'|'USD'; asOf:string; openingBalance:number; cumulativeIncome:number; cumulativeExpense:number; cumulativeBalance:number; monthIncome:number; monthExpense:number; monthBalance:number; pendingExpenses:number }
@@ -137,7 +138,7 @@ export interface CeremonyQueueRequirement { code: string; name: string; status: 
 export interface CeremonyQueuePublication { status: string; requiredDays: number; completedDays: number; publishedFromUtc: string; publishedUntilUtc: string | null }
 export interface CeremonyRightSummary { amount: number; currency: string; paid: number; balance: number; source: string }
 export interface TreasuryCeremonyRightItem extends CeremonyRightSummary { id: string; organizationId: string; organizationName: string; organizationNumber: string | null; ceremonyType: CeremonyType; proposedDate: string | null; subjectDisplayName: string }
-export interface TreasuryCeremonyRightsResponse { total: number; items: TreasuryCeremonyRightItem[] }
+export interface TreasuryCeremonyRightsResponse { total: number; items: TreasuryCeremonyRightItem[]; unpriced?:{id:string;organizationId:string;organizationName:string;ceremonyType:string;reason:string}[] }
 export interface CeremonyQueueEligibility { status: string; canAuthorize: boolean; requirements: CeremonyQueueRequirement[]; publication: CeremonyQueuePublication | null; ceremonyRight?: CeremonyRightSummary | null }
 export interface CeremonyQueueActions { canValidateInternalAffairs: boolean; canPublishCandidate: boolean; canAuthorize: boolean }
 export interface CeremonyReviewQueueItem {
@@ -370,6 +371,7 @@ export class PmgmApiClient {
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
+  private readonly mockTariffs:TariffVersion[] = [structuredClone(initialTariff)]
   private readonly mockOrganizations: MockOrganizationOption[] = [...defaultMockOrganizations]
   private readonly mockSpaces = [...defaultMockSpaces]
   private readonly mockBusySpaces = new Set<string>([defaultMockSpaces[0].id])
@@ -425,9 +427,14 @@ export class PmgmApiClient {
   async getSystemInfo(): Promise<SystemInfo> { if (this.useMocks) return { project: 'Proyecto Milenio — Modernización Gran Logia Mixta de Chile', api: 'PMGM.Api', version: '0.12.1', runtime: '.NET 10', culture: 'es-CL', institutionalTimeZone: 'America/Santiago', defaultCurrency: 'CLP' }; return this.request<SystemInfo>('/api/system/info') }
   async getSessionProfile(): Promise<SessionProfile> { if (this.useMocks) return mockSession; return this.request<SessionProfile>('/api/session/me') }
   async getOrganizationOptions(): Promise<OrganizationOptionsResponse> { if (this.useMocks) return { total: this.mockOrganizations.length, items: this.mockOrganizations.map(({id,name,number,type})=>({id,name,number,type})) }; return this.request<OrganizationOptionsResponse>('/api/institutional/organizations/options') }
-  async getTreasuryTerritories(): Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks)return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,treasuryTerritory:item.treasuryTerritory??null}))};return this.request('/api/tesoreria/talleres/orientes')}
-  async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:item.treasuryTerritory??null}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
-  async setTreasuryTerritory(organizationId:string,territory:TreasuryTerritory):Promise<{organizationId:string;territory:TreasuryTerritory}>{if(this.useMocks){const organization=this.mockOrganizations.find(item=>item.id===organizationId);if(!organization)throw new Error('El Taller no existe.');organization.treasuryTerritory=territory;return{organizationId,territory}}return this.postJson(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`,{territory})}
+  private mockZone(id:string):TreasuryTerritory|null{const org=this.mockOrganizations.find(x=>x.id===id);const geo=demoWorkshopLocation(id,org?.treasuryTerritory??null);return zoneFromLocation(geo.city,geo.country)}
+  async getTariffVersions():Promise<{version:number;total:number;items:TariffVersion[]}>{if(this.useMocks){if(!getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity)throw new Error('Sin permiso para administrar decretos.');return{version:Math.max(...this.mockTariffs.map(x=>x.version)),total:this.mockTariffs.length,items:structuredClone(this.mockTariffs)}}return this.request('/api/tesoreria/tarifarios/decretos')}
+  async registerTariff(payload:RegisterTariff):Promise<TariffVersion>{if(this.useMocks){await this.getTariffVersions();const max=Math.max(...this.mockTariffs.map(x=>x.version));if(payload.expectedVersion!==max)throw new Error('El tarifario cambió. Recargue antes de confirmar.');if(!payload.number.trim()||!payload.sourceReference.trim()||payload.effectiveFrom<nextTariffPeriod(chileToday())||payload.decreeDate>payload.effectiveFrom||(payload.effectiveUntil&&payload.effectiveUntil<payload.effectiveFrom))throw new Error('Revise decreto, respaldo y vigencia futura.');const entries=[...payload.rates.map(x=>({...x,key:`cuota:${x.territory}:${x.feeType}`})),...payload.ceremonyRights.map(x=>({...x,key:`ceremonia:${x.territory}:${x.ceremonyType}`})),...payload.unemployment.map(x=>({...x,key:`cesantia:${x.territory}:${x.quarter}`}))];if(new Set(entries.map(x=>x.key)).size!==entries.length||entries.some(x=>x.amount<0||!Number.isFinite(x.amount)||Number(x.amount.toFixed(x.currency==='CLP'?0:2))!==x.amount)||payload.rates.some(x=>x.feeType==='past_active'&&x.amount!==0))throw new Error('Revise montos, duplicados, moneda y exención Past Activo.');const row:TariffVersion={...structuredClone(payload),id:crypto.randomUUID(),version:max+1};this.mockTariffs.push(row);return structuredClone(row)}return this.postJson('/api/tesoreria/tarifarios/decretos',payload)}
+  async getOfficialFeeSchedule(organizationId?:string,asOf=chileToday()):Promise<OfficialSchedule>{if(this.useMocks){if(organizationId)this.assertMockTreasuryAccess(organizationId,'view');const row=tariffAt(this.mockTariffs,asOf);if(!row)throw new Error('No existe un decreto publicado vigente para esta fecha.');const territory=organizationId?this.mockZone(organizationId):null;if(organizationId&&!territory)throw new Error('Complete el Oriente y país en la Ficha del Taller.');return{...structuredClone(row),asOf,territory,items:row.rates.filter(x=>!territory||x.territory===territory)}}return this.request(`/api/tesoreria/tarifario-cuotas?asOf=${asOf}${organizationId?`&organizationId=${encodeURIComponent(organizationId)}`:''}`)}
+  async getTreasuryTerritories():Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks)return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,...demoWorkshopLocation(item.id,item.treasuryTerritory),treasuryTerritory:this.mockZone(item.id)}))};return this.request('/api/tesoreria/talleres/orientes')}
+  async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:this.mockZone(organizationId)}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
+  async setTreasuryTerritory(organizationId:string,territory:TreasuryTerritory):Promise<{organizationId:string;territory:TreasuryTerritory}>{if(this.useMocks)throw new Error('El Oriente se administra exclusivamente en la Ficha del Taller.');return this.postJson(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`,{territory})}
+
   async getSystemSettings(): Promise<SystemSettingsResponse> {
     if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => {
       if (item.code !== publicationFieldsCode) return { ...item }
@@ -477,8 +484,8 @@ export class PmgmApiClient {
   async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
     this.assertMockTreasuryAccess(organizationId,'create')
     if (this.useMocks) {
-      const territory=this.mockOrganizations.find(item=>item.id===organizationId)?.treasuryTerritory
-      const official=mockGrandTreasuryRate(payload.feeType,territory,payload.effectiveFrom)
+      const territory=this.mockZone(organizationId)
+      const official=tariffRate(this.mockTariffs,payload.feeType,territory,payload.effectiveFrom)?.amount??null
       if(official===null)throw new Error('No existe una tarifa institucional CLP aplicable para esta categoría, Oriente y vigencia.')
       if(payload.memberAmount<official)throw new Error('La cuota local no puede ser inferior al aporte decretado a Gran Tesorería.')
       const plans = this.mockLodgeFeePlans.get(organizationId) ?? []
@@ -488,22 +495,24 @@ export class PmgmApiClient {
     }
     return this.postJson<LodgeFeePlan>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`, payload)
   }
-  async getLodgeFeePlans(organizationId: string): Promise<{ total: number; items: LodgeFeePlan[] }> {
+  async getLodgeFeePlans(organizationId: string, asOf=chileToday()): Promise<{ total: number; items: LodgeFeePlan[] }> {
     this.assertMockTreasuryAccess(organizationId,'view')
     if (this.useMocks) {
       let plans = this.mockLodgeFeePlans.get(organizationId)
       if (!plans) { plans = defaultLodgeFeePlans(organizationId); this.mockLodgeFeePlans.set(organizationId, plans) }
-      const territory=this.mockOrganizations.find(item=>item.id===organizationId)?.treasuryTerritory
-      return { total: plans.length, items: plans.map(item => {const official=mockGrandTreasuryRate(item.feeType,territory,item.effectiveFrom);return{...item,grandTreasuryAmount:official,workshopAmount:official===null?null:item.memberAmount-official,rateAvailable:official!==null}}) }
+      const territory=this.mockZone(organizationId)
+      return { total: plans.length, items: plans.map(item => {const official=tariffRate(this.mockTariffs,item.feeType,territory,asOf)?.amount??null;return{...item,grandTreasuryAmount:official,memberAmount:official===null?item.memberAmount:official+(item.workshopAmount??0),workshopAmount:item.workshopAmount,rateAvailable:official!==null}}) }
     }
-    return this.request<{ total: number; items: LodgeFeePlan[] }>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota`)
+    return this.request<{ total: number; items: LodgeFeePlan[] }>(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/planes-cuota?asOf=${asOf}`)
   }
   async generateLodgeCharges(organizationId: string, periodYear: number, periodMonth: number): Promise<LodgeTreasurySummary> {
     this.assertMockTreasuryAccess(organizationId,'create')
     if (this.useMocks) {
       const key = `${organizationId}:${periodYear}-${periodMonth}`
+      if(this.mockLodgeTreasuryCharges.has(key))return this.getLodgeTreasurySummary(organizationId,periodYear,periodMonth)
       const current = await this.getLodgeTreasuryCharges(organizationId, periodYear, periodMonth)
-      const plans = (await this.getLodgeFeePlans(organizationId)).items
+      const cutoff=`${periodYear}-${String(periodMonth).padStart(2,'0')}-01`
+      const plans = (await this.getLodgeFeePlans(organizationId,cutoff)).items
       const charges = current.items.map(charge => {
         if (!charge.feeType) throw new Error(`El cargo ficticio de ${charge.memberDisplayName} no tiene categoría de cuota.`)
         const plan = mockEffectiveLodgeFeePlan(plans, charge.feeType, periodYear, periodMonth)
@@ -529,7 +538,7 @@ export class PmgmApiClient {
   }
   async getLodgeTreasuryCharges(organizationId:string,periodYear:number,periodMonth:number,currency='CLP'):Promise<{total:number;items:LodgeTreasuryCharge[]}>{
     this.assertMockTreasuryAccess(organizationId,'view')
-    if(this.useMocks){const key=`${organizationId}:${periodYear}-${periodMonth}`;let items=this.mockLodgeTreasuryCharges.get(key);if(!items){items=mockTreasuryCharges(organizationId).map(c=>({...c,id:`${c.id}:${periodYear}-${String(periodMonth).padStart(2,'0')}`,periods:[{chargeId:`${c.id}:${periodYear}-${String(periodMonth).padStart(2,'0')}`,periodYear,periodMonth,currency:currency as 'CLP'|'USD',chargedAmount:c.memberAmount,paidAmount:c.paidAmount,balance:c.balance,status:c.status==='paid'?'paid':c.status==='partial'?'partial':'due'}]}));this.mockLodgeTreasuryCharges.set(key,items)}return{total:items.length,items:items.map(c=>{const cutoff=`${periodYear}-${String(periodMonth).padStart(2,'0')}-${String(new Date(Date.UTC(periodYear,periodMonth,0)).getUTCDate()).padStart(2,'0')}`;const projected=cloneTreasuryCharge(c);projected.payments=projected.payments.filter(p=>p.paymentDate<=cutoff);projected.paidAmount=projected.payments.reduce((sum,p)=>sum+p.amount,0);projected.balance=projected.memberAmount-projected.paidAmount;projected.status=projected.balance<=0?'paid':projected.paidAmount>0?'partial':'pending';projected.periods=projected.periods?.map(p=>({...p,paidAmount:projected.paidAmount,balance:projected.balance,status:projected.status==='paid'?'paid':projected.status==='partial'?'partial':'due'}));return projected})}}
+    if(this.useMocks){const key=`${organizationId}:${periodYear}-${periodMonth}`;let items=this.mockLodgeTreasuryCharges.get(key);if(!items){items=mockTreasuryCharges(organizationId).map(c=>({...c,grandTreasuryAmount:tariffRate([initialTariff],c.feeType??'normal','santiago','2026-01-01')?.amount??0,id:`${c.id}:${periodYear}-${String(periodMonth).padStart(2,'0')}`,periods:[{chargeId:`${c.id}:${periodYear}-${String(periodMonth).padStart(2,'0')}`,periodYear,periodMonth,currency:currency as 'CLP'|'USD',chargedAmount:c.memberAmount,paidAmount:c.paidAmount,balance:c.balance,status:c.status==='paid'?'paid':c.status==='partial'?'partial':'due'}]}));this.mockLodgeTreasuryCharges.set(key,items)}return{total:items.length,items:items.map(c=>{const cutoff=`${periodYear}-${String(periodMonth).padStart(2,'0')}-${String(new Date(Date.UTC(periodYear,periodMonth,0)).getUTCDate()).padStart(2,'0')}`;const projected=cloneTreasuryCharge(c);projected.payments=projected.payments.filter(p=>p.paymentDate<=cutoff);projected.paidAmount=projected.payments.reduce((sum,p)=>sum+p.amount,0);projected.balance=projected.memberAmount-projected.paidAmount;projected.status=projected.balance<=0?'paid':projected.paidAmount>0?'partial':'pending';projected.periods=projected.periods?.map(p=>({...p,paidAmount:projected.paidAmount,balance:projected.balance,status:projected.status==='paid'?'paid':projected.status==='partial'?'partial':'due'}));return projected})}}
     return this.request(`/api/gestion-logial/tesoreria/talleres/${encodeURIComponent(organizationId)}/cargos?year=${periodYear}&month=${periodMonth}&currencyCode=${currency}`)
   }
   async addLodgeTreasuryPayment(chargeId:string,payload:{amount:number;paymentMethod:LodgeTreasuryPayment['paymentMethod'];paymentDate:string;reference?:string|null;idempotencyKey:string}):Promise<LodgeTreasuryPayment&{paidAmount:number;balance:number;status:LodgeTreasuryCharge['status']}>{
@@ -631,12 +640,17 @@ export class PmgmApiClient {
     return this.request<OrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
   }
 
+  private refreshMockCeremonyRights(date=chileToday()){
+    for(const item of this.mockReviewCeremonies){const previous=item.eligibility.ceremonyRight;if(previous&&(previous.paid>0))continue;const row=tariffAt(this.mockTariffs,date);const rate=row?.ceremonyRights.find(x=>x.ceremonyType===item.ceremonyType&&x.territory===this.mockZone(item.organizationId));if(!row||!rate)throw new Error('No hay tarifa vigente para el derecho; complete Ficha y decreto.');item.eligibility.ceremonyRight={amount:rate.amount,currency:rate.currency,paid:0,balance:rate.amount,source:row.sourceReference};}
+  }
   async getCeremonyReviewQueue(): Promise<CeremonyReviewQueueResponse> {
+    if(this.useMocks)this.refreshMockCeremonyRights()
     if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
     return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
   }
   async getTreasuryCeremonyRights(): Promise<TreasuryCeremonyRightsResponse> {
     if (this.useMocks) {
+      this.refreshMockCeremonyRights()
       const items = this.mockReviewCeremonies.filter(item => (item.eligibility.ceremonyRight?.balance ?? 0) > 0).map(item => ({
         id: item.id, organizationId: item.organizationId, organizationName: item.organizationName, organizationNumber: item.organizationNumber,
         ceremonyType: item.ceremonyType, proposedDate: item.proposedDate, subjectDisplayName: item.subjectDisplayName,
@@ -656,6 +670,7 @@ export class PmgmApiClient {
         if (existing.payload !== payloadFingerprint) throw new Error('El identificador de reintento ya se usó con datos distintos.')
         return { receiptNumber: existing.receiptNumber, paidTotal: existing.paidTotal, balance: existing.balance }
       }
+      this.refreshMockCeremonyRights(payload.paymentDate)
       const right = item.eligibility.ceremonyRight
       if (!right || payload.amount <= 0 || payload.amount > right.balance) throw new Error('El monto supera el saldo del derecho de ceremonia.')
       right.paid += payload.amount; right.balance = Math.max(0, right.amount - right.paid)
@@ -793,7 +808,7 @@ export class PmgmApiClient {
   async createTreasuryStatement(organizationId: string, payload: CreateTreasuryStatementRequest): Promise<TreasuryStatement> {
     this.assertMockTreasuryAccess(organizationId,'create')
     if (this.useMocks) {
-      const statement = mockTreasuryStatement(organizationId, payload, this.mockOrganizations.find(item=>item.id===organizationId)?.treasuryTerritory==='peru'?'USD':'CLP')
+      const statement = mockTreasuryStatement(organizationId, payload, this.mockZone(organizationId)==='peru'?'USD':'CLP')
       this.mockTreasuryStatements.set(statement.id, statement)
       return cloneTreasuryStatement(statement)
     }
@@ -1140,7 +1155,7 @@ function currentMonthEnd(){const p=currentMonthStart().slice(0,7).split('-').map
 function monthEnd(year:number,month:number){return `${year}-${String(month).padStart(2,'0')}-${String(new Date(Date.UTC(year,month,0)).getUTCDate()).padStart(2,'0')}`}
 function cloneHospitalariaSubmission(item:HospitalariaMonthlySubmission):HospitalariaMonthlySubmission{return{...item}}
 function mockSnapshotAsOf(snapshot: WorkshopRegularitySnapshot | undefined, asOf?: string): WorkshopRegularitySnapshot | null { if (!snapshot) return null; if (asOf && snapshot.asOfDate > asOf) return null; return { ...snapshot } }
-function mockGrandTreasuryRate(feeType:LodgeFeeType,territory:TreasuryTerritory|null|undefined,asOf:string):number|null{if(asOf<'2026-01-01')return null;if(feeType==='past_active')return 0;if(territory==='peru')return feeType==='normal'?6:null;if(territory==='santiago')return feeType==='normal'?21000:feeType==='spouse'?13000:feeType==='senior'?10000:feeType==='student'?8000:null;if(territory==='other_oriente')return feeType==='normal'?15000:feeType==='spouse'?10000:feeType==='senior'?8000:feeType==='student'?8000:null;return null}
+
 function defaultLodgeFeePlans(organizationId: string): LodgeFeePlan[] { return [
   { id: `fee-normal-${organizationId}`, organizationId, feeType: 'normal', memberAmount: 26000, grandTreasuryAmount: 21000, workshopAmount: 5000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
   { id: `fee-student-${organizationId}`, organizationId, feeType: 'student', memberAmount: 10000, grandTreasuryAmount: 8000, workshopAmount: 2000, effectiveFrom: '2026-01-01', effectiveUntil: null, isActive: true },
@@ -1157,6 +1172,7 @@ function summarizeMockLodgeTreasury(organizationId:string,periodYear:number,peri
   const receivable=charges.reduce((sum,charge)=>sum+charge.balance,0)
   const grandTreasuryExpected=charges.reduce((sum,charge)=>{
     if(charge.feeType==='past_active')return sum
+    if(charge.grandTreasuryAmount!==undefined)return sum+charge.grandTreasuryAmount
     if(!charge.feeType)throw new Error(`El cargo ficticio de ${charge.memberDisplayName} no tiene categoría de cuota.`)
     const plan=mockEffectiveLodgeFeePlan(plans,charge.feeType,periodYear,periodMonth)
     if(!plan||plan.grandTreasuryAmount===null)throw new Error(`No hay aporte institucional vigente para ${charge.feeType} en ${periodYear}-${String(periodMonth).padStart(2, '0')}.`)

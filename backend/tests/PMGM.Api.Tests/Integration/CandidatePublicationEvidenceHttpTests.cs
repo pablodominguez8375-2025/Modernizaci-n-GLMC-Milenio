@@ -68,7 +68,7 @@ public sealed class CandidatePublicationEvidenceHttpTests
         try
         {
             var suffix = Guid.NewGuid().ToString("N")[..8];
-            var workshop = new Organization { Name = $"Taller evidencia {suffix}", Number = suffix, Type = "workshop" };
+            var workshop = new Organization { Name = $"Taller evidencia {suffix}", Number = suffix, Type = "workshop", City = "Santiago", Country = "Chile", OrienteCode = "santiago" };
             var person = new Person { FirstNames = $"Persona sintética {suffix}", LastNames = "Evidencia",
                 Phone = "PRIVATE-PHONE", Email = "PRIVATE-EMAIL", Address = "PRIVATE-ADDRESS" };
             var ceremony = new CeremonyRequest { Organization = workshop, CandidatePerson = person,
@@ -158,7 +158,7 @@ public sealed class CandidatePublicationEvidenceHttpTests
                 Status = TreasuryCodes.RegularityStatus.UpToDate, AsOfDate = Today });
             db.Add(new HospitalariaRegularitySnapshot { OrganizationId = workshop.Id,
                 Status = HospitalariaCodes.RegularityStatus.UpToDate, AsOfDate = Today });
-            var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(CeremonyCodes.Type.Initiation, Today)!.Value;
+            var right = GrandTreasuryTariff.ResolveCeremonyRight([GrandTreasuryTariffSeed.Load()], CeremonyCodes.Type.Initiation, "santiago", Today)!.Value;
             db.Add(new CeremonyRightPayment { CeremonyRequestId = ceremony.Id, Amount = right.Amount, Currency = right.Currency,
                 PaymentMethod = "transfer", PaymentDate = Today, ReceiptNumber = suffix, IdempotencyKey = suffix, RecordedBySubject = "ci-evidence" });
             await db.SaveChangesAsync(ct);

@@ -35,6 +35,8 @@ public sealed class CeremonyValidation
 
 public sealed class CeremonyRightPayment
 {
+    public Guid? TariffVersionId { get; set; }
+    public decimal? RightAmount { get; set; }
     public Guid Id { get; init; } = Guid.NewGuid();
     public Guid CeremonyRequestId { get; set; }
     public CeremonyRequest CeremonyRequest { get; set; } = null!;

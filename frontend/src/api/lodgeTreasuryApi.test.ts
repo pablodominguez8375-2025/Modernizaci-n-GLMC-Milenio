@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { PmgmApiClient } from './pmgmApi'
+import { OrganizationProfileApiClient } from './organizationProfileApi'
 
 describe('Tesorería del Taller en demostración', () => {
   it('alinea resumen, cargos ficticios, decreto y cuota de cónyuge configurable', async () => {
@@ -8,8 +9,8 @@ describe('Tesorería del Taller en demostración', () => {
     const plans = await api.getLodgeFeePlans(organizationId)
     expect(plans.items.map(item => item.feeType)).toEqual(['normal', 'student', 'senior', 'spouse'])
     expect(plans.items.find(item=>item.feeType==='student')?.grandTreasuryAmount).toBe(8000)
-    expect(plans.items.find(item=>item.feeType==='spouse')?.grandTreasuryAmount).toBe(13000)
-    expect(plans.items.find(item=>item.feeType==='spouse')?.memberAmount).toBe(15000)
+    expect(plans.items.find(item=>item.feeType==='spouse')?.grandTreasuryAmount).toBe(10000)
+    expect(plans.items.find(item=>item.feeType==='spouse')?.memberAmount).toBe(12000)
 
     const initial = await api.getLodgeTreasurySummary(organizationId, 2026, 9)
     expect(initial).toMatchObject({ members: 3, memberExpected: 67000, collected: 39000, receivable: 28000, grandTreasuryExpected: 55000, workshopMarginProjected: 12000, paid: 1, partial: 1, overdue: 1 })
@@ -55,8 +56,8 @@ describe('Tesorería del Taller en demostración', () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
     const plan = (await api.getLodgeFeePlans(organizationId)).items.find(item=>item.feeType==='spouse')!
-    expect(plan.memberAmount).toBe(15000)
-    expect(plan.grandTreasuryAmount).toBe(13000)
+    expect(plan.memberAmount).toBe(12000)
+    expect(plan.grandTreasuryAmount).toBe(10000)
     expect(plan.workshopAmount).toBe(2000)
     expect(plan.effectiveFrom).toBe('2026-01-01')
   })
@@ -64,12 +65,15 @@ describe('Tesorería del Taller en demostración', () => {
   it('recalcula el aporte institucional por Oriente sin cambiar la cuota local del Taller', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
-    await api.setTreasuryTerritory(organizationId,'other_oriente')
+    await expect(api.setTreasuryTerritory(organizationId,'other_oriente')).rejects.toThrow('Ficha')
+    const profileApi=new OrganizationProfileApiClient({useMocks:true})
+    await profileApi.updateWorkshopMetadata(organizationId,{name:'Taller QA',establishedOn:null,city:'Valparaíso',country:'Chile',orienteCode:'other_chile'})
     const plans=(await api.getLodgeFeePlans(organizationId)).items
     expect(plans.find(item=>item.feeType==='normal')?.grandTreasuryAmount).toBe(15000)
     expect(plans.find(item=>item.feeType==='spouse')?.grandTreasuryAmount).toBe(10000)
-    expect(plans.find(item=>item.feeType==='spouse')?.memberAmount).toBe(15000)
-    expect(plans.find(item=>item.feeType==='spouse')?.workshopAmount).toBe(5000)
+    expect(plans.find(item=>item.feeType==='spouse')?.memberAmount).toBe(12000)
+    expect(plans.find(item=>item.feeType==='spouse')?.workshopAmount).toBe(2000)
+    await profileApi.updateWorkshopMetadata(organizationId,{name:'Taller QA',establishedOn:null,city:'Valparaíso',country:'Chile',orienteCode:'other_chile'})
   })
 
   it('cierra un ejercicio, conserva el arrastre y bloquea movimientos retroactivos', async () => {

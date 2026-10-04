@@ -211,7 +211,7 @@ public static class CeremonyEndpoints
         var key = request.IdempotencyKey?.Trim();
         var reference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
         if (string.IsNullOrWhiteSpace(key) || key.Length > 100 || request.Amount <= 0 ||
-            decimal.Truncate(request.Amount) != request.Amount || reference?.Length > 500 ||
+            decimal.Round(request.Amount, 2) != request.Amount || reference?.Length > 500 ||
             !TreasuryCodes.LodgePaymentMethod.IsValid(request.PaymentMethod) || request.PaymentDate > ChileToday())
             return Results.BadRequest(new { message = "Indique monto positivo, medio y fecha válidos e identificador de reintento." });
 
@@ -224,7 +224,7 @@ public static class CeremonyEndpoints
                 return Results.Conflict(new { message = "El identificador de reintento ya se usó con datos distintos." });
             var priorTotal = await db.CeremonyRightPayments.Where(x => x.CeremonyRequestId == requestId)
                 .SumAsync(x => x.Amount, cancellationToken);
-            var priorDue = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, request.PaymentDate);
+            var priorDue = await GrandTreasuryTariff.ResolveCeremonyAsync(db, requestId, ceremony.OrganizationId, ceremony.CeremonyType, request.PaymentDate, cancellationToken);
             return Results.Ok(new { prior.Id, prior.ReceiptNumber, prior.Amount, prior.Currency, prior.PaymentMethod,
                 prior.PaymentDate, prior.Reference, paidTotal = priorTotal, balance = Math.Max(0m, (priorDue?.Amount ?? 0m) - priorTotal), replayed = true });
         }
@@ -234,8 +234,10 @@ public static class CeremonyEndpoints
                 x.Reference != null && x.Reference.ToUpper() == reference.ToUpper(), cancellationToken))
             return Results.Conflict(new { message = "Este pago ya existe con el mismo monto, medio, fecha y referencia." });
 
-        var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, request.PaymentDate);
+        var right = await GrandTreasuryTariff.ResolveCeremonyAsync(db, requestId, ceremony.OrganizationId, ceremony.CeremonyType, request.PaymentDate, cancellationToken);
         if (right is null) return Results.Conflict(new { message = "No existe un derecho de ceremonia vigente para esta fecha." });
+        if (decimal.Round(request.Amount, right.Value.Currency == "CLP" ? 0 : 2) != request.Amount)
+            return Results.BadRequest(new { message = "El monto no respeta la precisión de la moneda del derecho." });
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var paid = await db.CeremonyRightPayments.Where(x => x.CeremonyRequestId == requestId)
             .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
@@ -246,7 +248,7 @@ public static class CeremonyEndpoints
         {
             CeremonyRequestId = requestId,
             Amount = request.Amount,
-            Currency = right.Value.Currency,
+            Currency = right.Value.Currency, TariffVersionId = right.Value.TariffVersionId, RightAmount = right.Value.Amount,
             PaymentMethod = request.PaymentMethod,
             PaymentDate = request.PaymentDate,
             ReceiptNumber = $"CER-{request.PaymentDate:yyyy}-{Guid.NewGuid():N}"[..20].ToUpperInvariant(),
@@ -1034,7 +1036,7 @@ public static class CeremonyEndpoints
             .ThenByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
-        var right = GrandTreasuryFeeSchedule.ResolveCeremonyRight(ceremony.CeremonyType, today);
+        var right = await GrandTreasuryTariff.ResolveCeremonyAsync(db, requestId, ceremony.OrganizationId, ceremony.CeremonyType, today, cancellationToken);
         var rightPaid = await db.CeremonyRightPayments.AsNoTracking()
             .Where(x => x.CeremonyRequestId == requestId && x.PaymentDate <= today)
             .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
@@ -1086,10 +1088,10 @@ public static class CeremonyEndpoints
             hospitalaria?.Status,
             grandMaster?.Status,
             evidence,
-            ceremonyRightPaid: right is null || rightBalance == 0m);
+            ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m));
 
         return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
-            right?.Amount, right?.Currency, rightPaid, rightBalance, decision, today);
+            right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today);
     }
 
     private static object ToEligibilityResponse(EligibilityContext context) => new
@@ -1107,7 +1109,7 @@ public static class CeremonyEndpoints
             currency = context.CeremonyRightCurrency,
             paid = context.CeremonyRightPaid,
             balance = context.CeremonyRightBalance,
-            source = GrandTreasuryFeeSchedule.SourceReference
+            source = context.CeremonyRightSourceReference
         },
         evidence = new
         {
@@ -1183,6 +1185,7 @@ public static class CeremonyEndpoints
         CandidatePublicationSnapshot? Publication,
         decimal? CeremonyRightAmount,
         string? CeremonyRightCurrency,
+        string? CeremonyRightSourceReference,
         decimal CeremonyRightPaid,
         decimal CeremonyRightBalance,
         CeremonyEligibilityDecision Decision,

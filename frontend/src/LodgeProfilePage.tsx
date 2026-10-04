@@ -15,7 +15,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
   const [grantReason, setGrantReason] = useState('')
   const [savingGrant, setSavingGrant] = useState(false)
   const [savingWorkshopProfile, setSavingWorkshopProfile] = useState(false)
-  const [workshopProfileDraft, setWorkshopProfileDraft] = useState({ name: '', establishedOn: '', city: '', country: '' })
+  const [workshopProfileDraft, setWorkshopProfileDraft] = useState({ name: '', establishedOn: '', city: '', country: '', orienteCode:'' })
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [savingLogo, setSavingLogo] = useState(false)
@@ -43,7 +43,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
       .then(response => {
         if (!active) return
         setProfile(response)
-        setWorkshopProfileDraft({ name: response.organization.name, establishedOn: response.organization.establishedOn ?? '', city: response.organization.city ?? '', country: response.organization.country ?? '' })
+        setWorkshopProfileDraft({ name: response.organization.name, establishedOn: response.organization.establishedOn ?? '', city: response.organization.city ?? '', country: response.organization.country ?? '', orienteCode: response.organization.orienteCode??(response.organization.country?.toLocaleLowerCase('es')==='chile'?(response.organization.city?.toLocaleLowerCase('es')==='santiago'?'santiago':'other_chile'):['peru','perú'].includes(response.organization.country?.toLocaleLowerCase('es')??'')?'peru':'') })
       })
       .catch(reason => { if (active) setError(toMessage(reason)) })
       .finally(() => { if (active) setLoading(false) })
@@ -96,6 +96,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
         establishedOn: workshopProfileDraft.establishedOn || null,
         city: workshopProfileDraft.city.trim() || null,
         country: workshopProfileDraft.country.trim() || null,
+        orienteCode:workshopProfileDraft.orienteCode||null,
       })
       const updated = await organizationProfileApi.getProfile(organizationId)
       setProfile(updated)
@@ -143,10 +144,10 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
         {canEditWorkshopProfile ? <div className="workshop-origin-form">
           <label className="workshop-name-field"><span>Nombre del Taller</span><input required maxLength={200} value={workshopProfileDraft.name} onChange={event => setWorkshopProfileDraft(value => ({ ...value, name: event.target.value }))} /></label>
           <label><span>Fecha de iniciación</span><input type="date" value={workshopProfileDraft.establishedOn} onChange={event => setWorkshopProfileDraft(value => ({ ...value, establishedOn: event.target.value }))} /></label>
-          <label><span>Ciudad / Oriente</span><input maxLength={120} value={workshopProfileDraft.city} onChange={event => setWorkshopProfileDraft(value => ({ ...value, city: event.target.value }))} /></label>
-          <label><span>País</span><input maxLength={120} value={workshopProfileDraft.country} onChange={event => setWorkshopProfileDraft(value => ({ ...value, country: event.target.value }))} /></label>
+          <label><span>Oriente</span><select required value={workshopProfileDraft.orienteCode} onChange={event=>{const code=event.target.value;setWorkshopProfileDraft(value=>({...value,orienteCode:code,country:code==='peru'?'Perú':code?'Chile':'',city:code==='santiago'?'Santiago':value.city==='Santiago'?'':value.city}))}}><option value="">Seleccione…</option><option value="santiago">Santiago</option><option value="other_chile">Otra ciudad de Chile</option><option value="peru">Perú</option></select></label><label><span>Ciudad / Oriente</span><input required readOnly={workshopProfileDraft.orienteCode==='santiago'} maxLength={120} value={workshopProfileDraft.city} onChange={event => setWorkshopProfileDraft(value => ({ ...value, city: event.target.value }))} /></label>
+          <label><span>País</span><input readOnly maxLength={120} value={workshopProfileDraft.country} onChange={event => setWorkshopProfileDraft(value => ({ ...value, country: event.target.value }))} /></label>
           <label className="workshop-logo-field"><span>Logo personalizado (opcional, PNG/JPEG hasta 2 MiB)</span><input type="file" accept="image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0] ?? null; setLogoFile(file); if (file) { const url = URL.createObjectURL(file); setLogoUrl(current => { if (current) URL.revokeObjectURL(current); return url }) } }} /></label>
-          <div className="workshop-profile-actions"><button type="button" className="primary-action" disabled={savingWorkshopProfile || !workshopProfileDraft.name.trim()} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>{logoFile && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void saveWorkshopLogo()}>{savingLogo ? 'Subiendo…' : 'Guardar logo'}</button>}{profile.organization.hasLogo && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void removeWorkshopLogo()}>Quitar logo</button>}</div>
+          <div className="workshop-profile-actions"><button type="button" className="primary-action" disabled={savingWorkshopProfile || !workshopProfileDraft.name.trim() || !workshopProfileDraft.orienteCode || !workshopProfileDraft.city.trim()} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>{logoFile && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void saveWorkshopLogo()}>{savingLogo ? 'Subiendo…' : 'Guardar logo'}</button>}{profile.organization.hasLogo && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void removeWorkshopLogo()}>Quitar logo</button>}</div>
         </div> : <dl className="workshop-origin-readonly"><div><dt>Nombre del Taller</dt><dd>{profile.organization.name}</dd></div><div><dt>Fecha de iniciación</dt><dd>{profile.organization.establishedOn ? formatDate(profile.organization.establishedOn) : 'Sin registrar'}</dd></div><div><dt>Ciudad / Oriente</dt><dd>{profile.organization.city ?? 'Sin registrar'}</dd></div><div><dt>País</dt><dd>{profile.organization.country ?? 'Sin registrar'}</dd></div></dl>}
         <p className="workshop-origin-note">La clasificación de cuotas se administra aparte por Gran Tesorería: {treasuryTerritoryLabel(profile.organization.treasuryTerritory)}. No se deduce de la ciudad ni del país.</p>
       </section>

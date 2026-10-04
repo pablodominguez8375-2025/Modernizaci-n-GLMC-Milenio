@@ -20,6 +20,5 @@ public static class TreasuryCurrency
     }
 
     public static async Task<string> ForOrganizationAsync(PmgmDbContext db, Guid organizationId, CancellationToken ct) =>
-        ForTerritory(await db.Organizations.AsNoTracking().Where(x => x.Id == organizationId)
-            .Select(x => x.TreasuryTerritory).SingleOrDefaultAsync(ct));
+        ForTerritory(await WorkshopOriente.TerritoryAsync(db, organizationId, ct));
 }

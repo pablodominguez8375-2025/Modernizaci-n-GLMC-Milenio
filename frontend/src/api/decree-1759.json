@@ -1,0 +1,234 @@
+{
+  "id": "17590000-2026-4000-8000-000000000001",
+  "version": 1,
+  "number": "1.759",
+  "decreeDate": "2025-12-15",
+  "effectiveFrom": "2026-01-01",
+  "effectiveUntil": null,
+  "sourceReference": "Decreto N.º 1.759 — cuotas 2026; https://drive.google.com/file/d/1qsXM3CPAJw9jW1EHk3YjbNinHnexRub2/view",
+  "status": "published",
+  "rates": [
+    {
+      "feeType": "normal",
+      "territory": "santiago",
+      "amount": 21000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "normal",
+      "territory": "other_oriente",
+      "amount": 15000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "normal",
+      "territory": "peru",
+      "amount": 6,
+      "currency": "USD"
+    },
+    {
+      "feeType": "spouse",
+      "territory": "santiago",
+      "amount": 13000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "spouse",
+      "territory": "other_oriente",
+      "amount": 10000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "senior",
+      "territory": "santiago",
+      "amount": 10000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "senior",
+      "territory": "other_oriente",
+      "amount": 8000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "student",
+      "territory": "santiago",
+      "amount": 8000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "student",
+      "territory": "other_oriente",
+      "amount": 8000,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "past_active",
+      "territory": "santiago",
+      "amount": 0,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "past_active",
+      "territory": "other_oriente",
+      "amount": 0,
+      "currency": "CLP"
+    },
+    {
+      "feeType": "past_active",
+      "territory": "peru",
+      "amount": 0,
+      "currency": "USD"
+    }
+  ],
+  "ceremonyRights": [
+    {
+      "territory": "santiago",
+      "ceremonyType": "initiation",
+      "amount": 41000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "ceremonyType": "wage_increase",
+      "amount": 31000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "ceremonyType": "exaltation",
+      "amount": 41000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "ceremonyType": "affiliation",
+      "amount": 26000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "ceremonyType": "incorporation",
+      "amount": 31000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "ceremonyType": "initiation",
+      "amount": 41000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "ceremonyType": "wage_increase",
+      "amount": 31000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "ceremonyType": "exaltation",
+      "amount": 41000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "ceremonyType": "affiliation",
+      "amount": 26000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "ceremonyType": "incorporation",
+      "amount": 31000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "peru",
+      "ceremonyType": "initiation",
+      "amount": 41000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "peru",
+      "ceremonyType": "wage_increase",
+      "amount": 31000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "peru",
+      "ceremonyType": "exaltation",
+      "amount": 41000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "peru",
+      "ceremonyType": "affiliation",
+      "amount": 26000,
+      "currency": "CLP"
+    },
+    {
+      "territory": "peru",
+      "ceremonyType": "incorporation",
+      "amount": 31000,
+      "currency": "CLP"
+    }
+  ],
+  "unemployment": [
+    {
+      "territory": "santiago",
+      "quarter": 1,
+      "discountPercent": 100,
+      "amount": 0,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "quarter": 2,
+      "discountPercent": 75,
+      "amount": 5250,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "quarter": 3,
+      "discountPercent": 50,
+      "amount": 10500,
+      "currency": "CLP"
+    },
+    {
+      "territory": "santiago",
+      "quarter": 4,
+      "discountPercent": 25,
+      "amount": 15750,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "quarter": 1,
+      "discountPercent": 100,
+      "amount": 0,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "quarter": 2,
+      "discountPercent": 75,
+      "amount": 3750,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "quarter": 3,
+      "discountPercent": 50,
+      "amount": 7500,
+      "currency": "CLP"
+    },
+    {
+      "territory": "other_oriente",
+      "quarter": 4,
+      "discountPercent": 25,
+      "amount": 11250,
+      "currency": "CLP"
+    }
+  ]
+}

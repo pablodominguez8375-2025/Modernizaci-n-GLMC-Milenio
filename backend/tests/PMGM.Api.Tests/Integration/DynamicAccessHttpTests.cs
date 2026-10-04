@@ -79,7 +79,7 @@ public sealed class DynamicAccessHttpTests
         if (string.IsNullOrWhiteSpace(Connection)) return;
         var ct = TestContext.Current.CancellationToken;
         using var factory = Factory(Connection); using var client = factory.CreateClient();
-        var org = new Organization { Name = "Tesorería permisos QA", Type = "workshop", TreasuryTerritory = "santiago" };
+        var org = new Organization { Name = "Tesorería permisos QA", Type = "workshop", City = "Santiago", Country = "Chile", OrienteCode = "santiago", TreasuryTerritory = "santiago" };
         var subject = "treasury-" + Guid.NewGuid().ToString("N"); var code = "qa-" + Guid.NewGuid().ToString("N");
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -124,8 +124,8 @@ public sealed class DynamicAccessHttpTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = Factory(Connection); using var client = factory.CreateClient();
         var subject = "record-" + Guid.NewGuid().ToString("N");
-        var org = new Organization { Name = "Origen QA", Type = "workshop", TreasuryTerritory = "santiago" };
-        var other = new Organization { Name = "Otro QA", Type = "workshop", TreasuryTerritory = "santiago" };
+        var org = new Organization { Name = "Origen QA", Type = "workshop", City = "Santiago", Country = "Chile", OrienteCode = "santiago", TreasuryTerritory = "santiago" };
+        var other = new Organization { Name = "Otro QA", Type = "workshop", City = "Santiago", Country = "Chile", OrienteCode = "santiago", TreasuryTerritory = "santiago" };
         var member = new Member { Person = new Person { FirstNames = "Hermano", LastNames = "Ficticio" }, InstitutionalNumber = "ACCESS-" + Guid.NewGuid().ToString("N") };
         var receipt = new LodgeMemberReceipt { OrganizationId = org.Id, Member = member, Amount = 1000, Currency = "CLP", PaymentMethod = "transfer", PaymentDate = new DateOnly(2026, 10, 1), ReceiptNumber = "QA-" + Guid.NewGuid().ToString("N"), IdempotencyKey = Guid.NewGuid().ToString(), RecordedBySubject = "qa" };
         var expense = new LodgeTreasuryExpense { OrganizationId = org.Id, Category = "QA", Amount = 1000, ExpenseDate = new DateOnly(2026, 10, 1), Description = "Egreso sintético", ApprovalStatus = "pending_approval", RecordedBySubject = "qa" };

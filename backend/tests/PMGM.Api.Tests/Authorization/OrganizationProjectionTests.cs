@@ -14,7 +14,7 @@ public sealed class OrganizationProjectionTests
             .Order()
             .ToArray();
 
-        Assert.Equal(new[] { "City", "Country", "EstablishedOn", "Name" }, properties);
+        Assert.Equal(new[] { "City", "Country", "EstablishedOn", "Name", "OrienteCode" }, properties);
     }
 
     [Fact]
