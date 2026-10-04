@@ -340,7 +340,11 @@ async function assertTreasuryPaymentAction(viewport) {
 }
 
 async function captureTariffWizard(viewport) {
-  await openMobileSubview('Tarifario por decreto')
+  const opened = await evaluate(`(() => {
+    const tab=[...document.querySelectorAll('main [role="tab"]')].find(x=>(x.textContent||'').includes('Tarifario por decreto'));
+    if (!tab) return false; tab.click(); return true;
+  })()`)
+  if (!opened) throw new Error('Tariff decree tab not found')
   await waitForExpression(`!!document.querySelector('.tariff-decree-panel .action-trigger:not(:disabled)')`, 'tariff decree list')
   await assertNoGlobalHorizontalOverflow('Tarifario por decreto', viewport.suffix)
   await capture(path.join(outputDir, `tarifario-decretos-${viewport.suffix}.png`), '.tariff-decree-panel')
