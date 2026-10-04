@@ -1,4 +1,7 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using PMGM.Api.Modules.Admissions;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
@@ -45,11 +48,6 @@ public static class TransferEndpoints
             return Results.Forbid();
         }
 
-        if (sourceMembership.EndDate is not null)
-        {
-            return Results.Conflict(new { message = "La pertenencia de origen ya está cerrada." });
-        }
-
         if (sourceMembership.OrganizationId == request.TargetOrganizationId)
         {
             return Results.BadRequest(new { message = "El Taller de destino debe ser distinto del Taller de origen." });
@@ -61,12 +59,21 @@ public static class TransferEndpoints
         }
 
         var targetExists = await db.Organizations
-            .AnyAsync(x => x.Id == request.TargetOrganizationId, cancellationToken);
+            .AnyAsync(x => x.Id == request.TargetOrganizationId && x.Type == "workshop", cancellationToken);
 
         if (!targetExists)
         {
             return Results.BadRequest(new { message = "El Taller de destino no existe." });
         }
+
+        if (request.WithdrawalRequestId is null)
+            return Results.BadRequest(new { message = "El traslado sólo puede iniciarse con una Carta de Retiro Voluntario aprobada y firmada." });
+
+        var withdrawal = await db.MemberWithdrawalRequests.SingleOrDefaultAsync(
+            x => x.Id == request.WithdrawalRequestId.Value && x.MemberId == memberId &&
+                 x.OriginOrganizationId == sourceMembership.OrganizationId, cancellationToken);
+        if (!TransferWithdrawalPolicy.Allows(sourceMembership, withdrawal, request.ProposedEffectiveDate))
+            return Results.Conflict(new { message = "La Carta de Retiro Voluntario debe estar aprobada y firmada por el Orador del Taller de origen." });
 
         var hasOpenTransfer = await db.MemberTransfers.AnyAsync(
             x => x.MemberId == memberId &&
@@ -89,7 +96,7 @@ public static class TransferEndpoints
             ProposedEffectiveDate = request.ProposedEffectiveDate,
             Status = MembershipCodes.TransferStatus.Requested,
             Reason = request.Reason,
-            EvidenceReference = request.EvidenceReference
+            EvidenceReference = withdrawal!.EvidenceReference
         };
 
         db.MemberTransfers.Add(transfer);
@@ -163,6 +170,7 @@ public static class TransferEndpoints
         Guid transferId,
         HttpContext httpContext,
         PmgmDbContext db,
+        AdmissionsDbContext admissionsDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -172,7 +180,10 @@ public static class TransferEndpoints
             return Results.Forbid();
         }
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        admissionsDb.Database.SetDbConnection(db.Database.GetDbConnection());
+        await using var transaction = await db.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable, cancellationToken);
+
+        await admissionsDb.Database.UseTransactionAsync(transaction.GetDbTransaction(), cancellationToken);
 
         var transfer = await db.MemberTransfers
             .Include(x => x.SourceMembership)
@@ -182,6 +193,10 @@ public static class TransferEndpoints
         {
             return Results.NotFound();
         }
+
+        if (transfer.Status == MembershipCodes.TransferStatus.Executed && transfer.TargetMembershipId is not null && transfer.ExecutedAtUtc is not null)
+            return Results.Ok(new { transfer.Id, transfer.Status, transfer.SourceMembershipId,
+                targetMembershipId = transfer.TargetMembershipId, transfer.ExecutedAtUtc, idempotent = true });
 
         if (transfer.Status != MembershipCodes.TransferStatus.Approved ||
             transfer.ApprovedEffectiveDate is null)
@@ -195,48 +210,46 @@ public static class TransferEndpoints
         }
 
         var sourceMembership = transfer.SourceMembership;
-        if (sourceMembership.EndDate is not null)
-        {
-            return Results.Conflict(new { message = "La pertenencia de origen ya se encuentra cerrada." });
-        }
-
         var effectiveDate = transfer.ApprovedEffectiveDate.Value;
+        var withdrawal = await db.MemberWithdrawalRequests.AsNoTracking().Where(x => x.MemberId == memberId &&
+            x.OriginOrganizationId == transfer.SourceOrganizationId && x.EvidenceReference == transfer.EvidenceReference &&
+            x.RequestedEffectiveDate == sourceMembership.EndDate).OrderByDescending(x => x.CreatedAtUtc).FirstOrDefaultAsync(cancellationToken);
+        if (!TransferWithdrawalPolicy.Allows(sourceMembership, withdrawal, effectiveDate))
+            return Results.Conflict(new { message = "El origen debe conservar el cierre por retiro voluntario aprobado y firmado, anterior al destino." });
         if (effectiveDate <= sourceMembership.StartDate)
         {
             return Results.BadRequest(new { message = "La transferencia debe ser posterior al inicio de la pertenencia de origen." });
         }
 
-        var targetMembershipExists = await db.Memberships.AnyAsync(
-            x => x.MemberId == memberId &&
-                 x.OrganizationId == transfer.TargetOrganizationId &&
-                 x.StartDate <= effectiveDate &&
-                 (x.EndDate == null || x.EndDate >= effectiveDate),
-            cancellationToken);
-
-        if (targetMembershipExists)
-        {
-            return Results.Conflict(new { message = "El hermano ya posee una pertenencia vigente en el Taller de destino para esa fecha." });
-        }
-
-        sourceMembership.EndDate = effectiveDate.AddDays(-1);
-        sourceMembership.Status = MembershipCodes.MembershipStatus.Transferred;
-        sourceMembership.EndReason = "Transferencia a otro Taller";
-
-        var targetMembership = new MembershipEntity
-        {
-            MemberId = memberId,
-            OrganizationId = transfer.TargetOrganizationId,
-            MembershipType = sourceMembership.MembershipType,
-            StartDate = effectiveDate,
-            Status = MembershipCodes.MembershipStatus.Active,
-            EvidenceReference = transfer.EvidenceReference
-        };
+        var resolvedCases = await admissionsDb.AdmissionCases.AsNoTracking().Include(x => x.Decisions)
+            .Where(x => x.MemberId == memberId && x.OrganizationId == transfer.TargetOrganizationId &&
+                x.AdmissionType == "affiliation" && x.Status == "resolved").ToListAsync(cancellationToken);
+        var receipts = new List<AdmissionMaterialization.Receipt>();
+        foreach (var admission in resolvedCases)
+            foreach (var decision in admission.Decisions.Where(x => x.DecisionType == AdmissionWorkflowCodes.DecisionType.MembershipMaterialized))
+            {
+                try
+                {
+                    var receipt = JsonSerializer.Deserialize<AdmissionMaterialization.Receipt>(decision.Notes ?? "null");
+                    if (receipt is not null && receipt.MemberId == memberId && receipt.EffectiveDate == effectiveDate) receipts.Add(receipt);
+                }
+                catch (JsonException) { /* Recibo legado no verificable: no crea ni infiere una pertenencia. */ }
+            }
+        if (receipts.Count != 1)
+            return Results.Conflict(new { message = "El destino requiere un único expediente de afiliación resuelto y materializado con ceremonia autorizada y Tenida cerrada." });
+        var targetMembership = await db.Memberships.SingleOrDefaultAsync(x => x.Id == receipts[0].MembershipId &&
+            x.MemberId == memberId && x.OrganizationId == transfer.TargetOrganizationId && x.StartDate == effectiveDate &&
+            x.Status == MembershipCodes.MembershipStatus.Active && x.EndDate == null, cancellationToken);
+        if (targetMembership is null)
+            return Results.Conflict(new { message = "No existe una pertenencia vigente que coincida con el recibo de afiliación del destino." });
+        if (await db.MemberTransfers.AnyAsync(x => x.Id != transferId && x.TargetMembershipId == targetMembership.Id, cancellationToken))
+            return Results.Conflict(new { message = "La pertenencia de destino ya está vinculada a otro traslado." });
+        // El retiro conserva su cierre; la afiliación creó el destino. El traslado enlaza ambos segmentos.
 
         transfer.TargetMembership = targetMembership;
         transfer.Status = MembershipCodes.TransferStatus.Executed;
         transfer.ExecutedAtUtc = DateTimeOffset.UtcNow;
 
-        db.Memberships.Add(targetMembership);
         db.InstitutionalStatusEvents.Add(new InstitutionalStatusEvent
         {
             MemberId = memberId,
@@ -280,7 +293,8 @@ public sealed record RequestTransferRequest(
     Guid TargetOrganizationId,
     DateOnly ProposedEffectiveDate,
     string? Reason,
-    string? EvidenceReference);
+    string? EvidenceReference,
+    Guid? WithdrawalRequestId = null);
 
 public sealed record ApproveTransferRequest(
     DateOnly ApprovedEffectiveDate,

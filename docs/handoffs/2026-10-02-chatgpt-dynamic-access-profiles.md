@@ -19,3 +19,4 @@ Se añadió `/api/system/access` sobre el almacén versionado existente: catálo
 ## Pendiente técnico
 
 Agregar pruebas backend/frontend de contrato y ejecutar CI/Showcase/QA Installable sobre el SHA exacto. Mantener srv01/UAT física pausados y main congelada.
+

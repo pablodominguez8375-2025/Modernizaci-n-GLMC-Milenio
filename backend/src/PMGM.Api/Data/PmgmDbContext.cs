@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Audit.Entities;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
@@ -58,6 +59,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<CeremonyRightPayment> CeremonyRightPayments => Set<CeremonyRightPayment>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
     public DbSet<InstitutionalRuleSetting> InstitutionalRuleSettings => Set<InstitutionalRuleSetting>();
+    public DbSet<DynamicAccessSnapshot> DynamicAccessSnapshots => Set<DynamicAccessSnapshot>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<DataProcessingActivity> DataProcessingActivities => Set<DataProcessingActivity>();
     public DbSet<DataRetentionPolicy> DataRetentionPolicies => Set<DataRetentionPolicy>();
@@ -70,6 +72,14 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("core");
+
+        modelBuilder.Entity<DynamicAccessSnapshot>(entity =>
+        {
+            entity.ToTable("dynamic_access_snapshots");
+            entity.HasKey(x => x.Id);
+            entity.HasIndex(x => x.Version).IsUnique();
+            entity.Property(x => x.Payload).HasColumnType("jsonb").IsRequired();
+        });
 
         modelBuilder.Entity<Person>(entity =>
         {

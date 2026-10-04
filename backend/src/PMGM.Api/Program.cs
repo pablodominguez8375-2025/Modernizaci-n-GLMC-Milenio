@@ -183,6 +183,7 @@ app.MapCandidateWorkshopIntakeEndpoints();
 app.MapCandidateWorkflowEndpoints();
 app.MapAdmissionEndpoints();
 app.MapAdmissionLodgeDecisionEndpoints();
+app.MapAdmissionNormativeEndpoints();
 app.MapAdmissionCeremonyEndpoints();
 app.MapCeremonyEndpoints();
 app.MapGrandMasterCeremonyEndpoints();

@@ -10,9 +10,9 @@ describe('PMGM-UX-C+D · Inicio uniforme y consistencia', () => {
     expect(main.indexOf("./home-consistency.css")).toBeGreaterThan(main.indexOf("./accessibility.css"))
   })
 
-  it('Inicio usa franja de saludo, 4 accesos de igual tamaño y bloques de igual altura', () => {
+  it('Inicio usa franja de saludo, 3 accesos de igual tamaño y bloques de igual altura', () => {
     expect(dashboard).toContain('className="home-strip"')
-    expect(dashboard.match(/<Shortcut /g)?.length).toBe(4)
+    expect(dashboard.match(/<Shortcut /g)?.length).toBe(3)
     expect(css).toMatch(/\.home-grid\s*\{[^}]*align-items:\s*stretch/s)
     expect(css).toMatch(/\.home-grid\.has-inbox\s*\{[^}]*repeat\(3, minmax\(0, 1fr\)\)/s)
   })
@@ -35,5 +35,28 @@ describe('PMGM-UX-C+D · Inicio uniforme y consistencia', () => {
 
   it('usa solo unidades relativas en tamaños de letra', () => {
     expect(css).not.toMatch(/font-size:\s*\d+px/)
+  })
+})
+
+describe('PMGM-UX-C · íconos de los accesos de Inicio', () => {
+  it('el ícono queda dorado y centrado con más especificidad que «.metric-card > span»', () => {
+    expect(css).toMatch(/\.dashboard-page \.home-shortcuts \.home-shortcut > \.home-shortcut-icon\s*\{[^}]*display:\s*grid[^}]*place-items:\s*center[^}]*color:\s*var\(--brand-gold\)/s)
+  })
+})
+
+describe('Logo de cabecera según la Guía de uso del logotipo (opción A)', () => {
+  const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+  it('usa la versión reducida V2 oficial sobre placa blanca con 1/4 X y sin subtítulo duplicado', () => {
+    expect(app).toContain('brand/logo-glmch-reducido-v2-azul.svg')
+    expect(app).not.toContain('<small>Gran Logia Mixta de Chile</small>')
+    expect(css).toMatch(/\.brand-mark\.brand-mark-reduced\s*\{[^}]*padding:\s*calc\(var\(--logo-h\) \/ 4\)[^}]*background:\s*#fff/s)
+  })
+})
+
+describe('Logo de cabecera · mismo formato en todas las pantallas', () => {
+  it('no reduce la altura del logotipo en tablet ni en celular', () => {
+    const logoRules = css.slice(css.indexOf('.brand .brand-mark.brand-mark-reduced {'))
+    expect(logoRules).toMatch(/--logo-h:\s*2\.75rem/)
+    expect(logoRules.match(/--logo-h:/g)?.length).toBe(1)
   })
 })

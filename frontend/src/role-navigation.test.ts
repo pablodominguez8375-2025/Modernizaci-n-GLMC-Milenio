@@ -56,6 +56,6 @@ describe('PMGM-UX-002 contrato de navegación por rol', () => {
 
   it('en móvil no duplica la campana de la cabecera y compacta los indicadores', () => {
     expect(css).toMatch(/\.topbar \.topbar-icon-button\s*\{[^}]*display:\s*none/s)
-    expect(homeCss).toMatch(/\.home-shortcuts\.metric-grid\s*\{[^}]*repeat\(2, minmax\(0, 1fr\)\)/s)
+    expect(homeCss).toMatch(/\.home-shortcuts\.metric-grid\s*\{[^}]*repeat\(3, minmax\(0, 1fr\)\)/s)
   })
 })

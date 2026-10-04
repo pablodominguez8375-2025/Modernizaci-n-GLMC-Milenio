@@ -121,7 +121,7 @@ export const memberPortalDemoData = {
   ],
 } as const
 
-export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenCalendar, onOpenNotifications, onOpenLibrary, onOpenLodge }: MemberPortalPageProps) {
+export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
@@ -276,15 +276,15 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       <article className="member-card member-instruction-card">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Historial de instrucciones</h2><p>Sesiones y asistencia registradas por los encargados de instrucción del Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
         {useMocks
-          ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></>
+          ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><details className="member-instruction-details"><summary>Ver historial de sesiones</summary><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></details></>
           : activity?.instruction && activity.instruction.history.length > 0
-            ? <><div className="member-instruction-summary"><strong>{activity.instruction.total} sesiones registradas</strong><span>Historial real proveniente de Docencia / Gestión Logial</span></div><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{activity.instruction.history.map(item => <div className="member-instruction-row" role="row" key={item.instructionSessionId}><span data-label="Fecha">{formatShortDate(item.instructionDate)}</span><span data-label="Grado">{formatLodgeGrade(item.grade)}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={`member-instruction-status ${attendanceStatusClass(item.attendanceStatus)}`}>{formatAttendanceStatus(item.attendanceStatus)}</span><span data-label="Encargado">{formatResponsibleOffice(item.responsibleOffice)}</span></div>)}</div></>
+            ? <><div className="member-instruction-summary"><strong>{activity.instruction.total} sesiones registradas</strong><span>Historial real proveniente de Docencia / Gestión Logial</span></div><details className="member-instruction-details"><summary>Ver historial de sesiones</summary><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{activity.instruction.history.map(item => <div className="member-instruction-row" role="row" key={item.instructionSessionId}><span data-label="Fecha">{formatShortDate(item.instructionDate)}</span><span data-label="Grado">{formatLodgeGrade(item.grade)}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={`member-instruction-status ${attendanceStatusClass(item.attendanceStatus)}`}>{formatAttendanceStatus(item.attendanceStatus)}</span><span data-label="Encargado">{formatResponsibleOffice(item.responsibleOffice)}</span></div>)}</div></details></>
             : <PortalPendingData text="Aún no existen sesiones de instrucción registradas para tu ficha." />}
       </article>
 
       <div className="member-status-stack">
-        <article className="member-card member-status-card"><span className="member-status-icon">$</span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
-        <article className="member-card member-status-card"><span className="member-status-icon">♥</span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
+        <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="treasury" size={22} /></span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
+        <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="hospitalaria" size={22} /></span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
       </div>
 
       {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
@@ -294,26 +294,8 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
         <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Estado</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{memberTreasuryPeriodLabel(item.periodStatus)}</td><td>{item.organization}</td><td>{formatTreasuryMoney(item.chargedAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.paidAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.balance,item.currency??'CLP')}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {formatTreasuryMoney(payment.amount,payment.currency??item.currency??'CLP')}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
       </article>}
 
-      <article className="member-card member-calendar-card">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda</p><h2>{useMocks ? 'Septiembre 2026' : 'Calendario institucional'}</h2></div><button className="member-inline-button" type="button" onClick={onOpenCalendar}>Ver calendario</button></div>
-        {useMocks ? <><div className="member-calendar-week"><span>Lu</span><span>Ma</span><span>Mi</span><span>Ju</span><span>Vi</span><span>Sá</span><span>Do</span></div><div className="member-calendar-days">{Array.from({ length: 30 }, (_, index) => index + 1).map(day => <span key={day} className={day === 12 ? 'meeting' : day === 26 ? 'instruction' : ''}>{day}</span>)}</div><div className="member-calendar-legend"><span><i className="meeting" />Tenida</span><span><i className="instruction" />Instrucción</span></div></> : <PortalPendingData text="Abre Mi calendario para consultar únicamente los eventos autorizados por grado, rol y ámbito." />}
-      </article>
     </section>
 
-    <section className="member-lower-grid">
-      <article className="member-card">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Agenda personal</p><h2>Próximas tenidas</h2></div>{onOpenLodge && <button className="member-inline-button" type="button" onClick={onOpenLodge}>Ver Taller</button>}</div>
-        {useMocks
-          ? <div className="member-meeting-list">{memberPortalDemoData.meetings.map(meeting => <div key={`${meeting.date}-${meeting.title}`}><div className="member-date-block"><strong>{meeting.date}</strong><small>{meeting.time}</small></div><div><strong>{meeting.title}</strong><span>{meeting.lodge}</span></div><span className="member-state-pill">{meeting.status}</span></div>)}</div>
-          : activity?.upcomingMeetings && activity.upcomingMeetings.length > 0
-            ? <div className="member-meeting-list">{activity.upcomingMeetings.map(meeting => <div key={meeting.id}><div className="member-date-block"><strong>{formatShortDate(meeting.meetingDate)}</strong><small>{formatLodgeGrade(meeting.grade)}</small></div><div><strong>{meeting.title || formatMeetingType(meeting.meetingType)}</strong><span>{lodge} · {formatMeetingType(meeting.meetingType)}</span></div><span className="member-state-pill">{formatMeetingStatus(meeting.status)}</span></div>)}</div>
-            : <PortalPendingData text="No hay próximas tenidas registradas para tu Taller y grado en este momento." />}
-      </article>
-      <article className="member-card">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Centro de avisos</p><h2>Notificaciones recientes</h2></div><button className="member-inline-button" type="button" onClick={onOpenNotifications}>Ver todas</button></div>
-        {useMocks ? <div className="member-notification-list">{memberPortalDemoData.notifications.map(item => <div key={item.title}><span className="member-notification-dot" /><div><strong>{item.title}</strong><p>{item.detail}</p></div><small>{item.age}</small></div>)}</div> : <PortalPendingData text="Abre Notificaciones para consultar avisos institucionales dirigidos a tu identidad autenticada." />}
-      </article>
-    </section>
     <MemberWorkPapersPanel api={documentApi} organizationId={useMocks ? 'demo-org-23' : selfProfile?.current.membership?.organizationId ?? ''} enabled={useMocks || selfProfile?.current.membership?.status === 'active'} />
   </div>
 }
@@ -401,19 +383,3 @@ function formatResponsibleOffice(value: string) {
   return labels[value] ?? value
 }
 
-function formatMeetingType(value: string) {
-  const labels: Record<string, string> = {
-    regular: 'Tenida Ordinaria',
-    solemn: 'Tenida Solemne',
-    instruction: 'Tenida de Instrucción',
-    anniversary: 'Tenida de Aniversario',
-    funeral: 'Tenida Fúnebre',
-    special: 'Tenida Especial',
-  }
-  return labels[value] ?? value
-}
-
-function formatMeetingStatus(value: string) {
-  const labels: Record<string, string> = { scheduled: 'Programada', open: 'En curso', closed: 'Cerrada', cancelled: 'Cancelada' }
-  return labels[value] ?? value
-}

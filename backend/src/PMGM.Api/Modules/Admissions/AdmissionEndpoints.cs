@@ -18,14 +18,45 @@ public static class AdmissionEndpoints
             .RequireAuthorization();
 
         group.MapPost("/expedientes", CreateCaseAsync);
+        group.MapPost("/incorporaciones/persona-nueva", AdmissionExternalIntake.CreateAsync);
+        group.MapGet("/personas-busqueda", AdmissionPersonLookup.SearchAsync);
+        group.MapGet("/expedientes", ListCasesAsync);
         group.MapGet("/expedientes/{caseId:guid}", GetCaseAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias", AddEvidenceAsync);
         group.MapPost("/expedientes/{caseId:guid}/evidencias/{evidenceId:guid}/revision", ReviewEvidenceAsync);
         group.MapPost("/expedientes/{caseId:guid}/verificaciones/carta-retiro-firma-manuscrita", VerifyWithdrawalLetterSignatureAsync);
         group.MapPost("/expedientes/{caseId:guid}/decisiones/gran-maestria-aceptacion-especial", RecordGrandMasterSpecialAcceptanceAsync);
+        group.MapPost("/expedientes/{caseId:guid}/carta-retiro/correccion-fecha", AdmissionWithdrawalDateCorrection.CorrectAsync);
         group.MapGet("/expedientes/{caseId:guid}/elegibilidad", GetEligibilityAsync);
 
         return endpoints;
+    }
+
+    private static async Task<IResult> ListCasesAsync(
+        Guid? organizationId,
+        string? status,
+        HttpContext httpContext,
+        AdmissionsDbContext admissionsDb,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (organizationId is null && !access.CanManageGrandSecretariat(httpContext.User))
+            return Results.BadRequest(new { message = "Debe indicar el Taller para consultar expedientes." });
+        if (organizationId is { } scopedOrganization && !access.CanManageOrganization(httpContext.User, scopedOrganization) &&
+            !access.CanManageGrandSecretariat(httpContext.User))
+            return Results.Forbid();
+        var query = admissionsDb.AdmissionCases.AsNoTracking();
+        if (organizationId is { } organization) query = query.Where(x => x.OrganizationId == organization);
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status.Trim());
+        var items = await query.OrderByDescending(x => x.CreatedAtUtc).Take(200)
+            .Select(x => new
+            {
+                x.Id, x.OrganizationId, x.AdmissionType, x.AffiliationMode,
+                x.WithdrawalLetterGrantedDate, x.Status, x.CreatedAtUtc,
+                EvidenceCount = x.Evidence.Count(),
+                LatestEvidenceStatus = x.Evidence.OrderByDescending(e => e.CreatedAtUtc).Select(e => e.ReviewStatus).FirstOrDefault()
+            }).ToListAsync(cancellationToken);
+        return Results.Ok(new { total = items.Count, items });
     }
 
     private static async Task<IResult> CreateCaseAsync(
@@ -44,23 +75,25 @@ public static class AdmissionEndpoints
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var organizationExists = await coreDb.Organizations.AsNoTracking()
-            .AnyAsync(x => x.Id == request.OrganizationId, cancellationToken);
-        if (!organizationExists)
-            return Results.NotFound(new { message = "El Taller destino no existe." });
+        var identityFailure = await AdmissionIdentityGuard.ValidateAsync(request,
+            access.CanEvaluateCeremonies(httpContext.User), coreDb, admissionsDb, cancellationToken);
+        if (identityFailure is not null) return identityFailure;
 
-        var personExists = await coreDb.People.AsNoTracking()
-            .AnyAsync(x => x.Id == request.PersonId, cancellationToken);
-        if (!personExists)
-            return Results.NotFound(new { message = "La persona no existe en la base maestra." });
-
-        if (request.PreviousRejectionDate > ChileToday())
+        var today = ChileToday();
+        if (request.PreviousRejectionDate > today)
             return Results.BadRequest(new { message = "La fecha de rechazo anterior no puede estar en el futuro." });
 
         if (request.AdmissionType == CeremonyCodes.Type.Affiliation)
         {
             if (!AdmissionCodes.AffiliationMode.IsValid(request.AffiliationMode))
                 return Results.BadRequest(new { message = "La afiliación debe indicar modalidad simple o con activación." });
+            if (request.WithdrawalLetterGrantedDate is null)
+                return Results.BadRequest(new { message = "La afiliación debe indicar la fecha de otorgamiento de la Carta de Retiro Voluntario." });
+            if (request.WithdrawalLetterGrantedDate > today)
+                return Results.BadRequest(new { message = "La fecha de la Carta de Retiro Voluntario no puede estar en el futuro." });
+            var expectedMode = WithdrawalLetterPolicy.ModeAtCreation(request.WithdrawalLetterGrantedDate, today);
+            if (!string.Equals(request.AffiliationMode, expectedMode, StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { message = $"La antigüedad de la Carta de Retiro exige afiliación {expectedMode}." });
             if (request.MemberId is null)
                 return Results.BadRequest(new { message = "Una afiliación requiere un hermano ya registrado en la base maestra." });
 
@@ -88,6 +121,7 @@ public static class AdmissionEndpoints
             OrganizationId = request.OrganizationId,
             AdmissionType = request.AdmissionType,
             AffiliationMode = Normalize(request.AffiliationMode),
+            WithdrawalLetterGrantedDate = request.WithdrawalLetterGrantedDate,
             MemberId = request.MemberId,
             PersonId = request.PersonId,
             OriginOrganizationId = request.OriginOrganizationId,
@@ -95,8 +129,8 @@ public static class AdmissionEndpoints
             OriginLodgeNumber = Normalize(request.OriginLodgeNumber),
             OriginObedience = Normalize(request.OriginObedience),
             Degree = Normalize(request.Degree),
-            WageIncreaseEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && request.WageIncreaseEvidenceApplies,
-            ExaltationEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && request.ExaltationEvidenceApplies,
+            WageIncreaseEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && (request.WageIncreaseEvidenceApplies || request.Degree is "fellowcraft" or "master"),
+            ExaltationEvidenceApplies = request.AdmissionType == CeremonyCodes.Type.Incorporation && (request.ExaltationEvidenceApplies || request.Degree == "master"),
             HasPeaceAndFriendshipPact = request.AdmissionType == CeremonyCodes.Type.Incorporation ? request.HasPeaceAndFriendshipPact : null,
             PreviousRejectionDate = request.PreviousRejectionDate,
             RejectionCausesRemedied = request.RejectionCausesRemedied,
@@ -222,6 +256,10 @@ public static class AdmissionEndpoints
             .SingleOrDefaultAsync(x => x.Id == evidenceId && x.AdmissionCaseId == caseId, cancellationToken);
         if (evidence is null) return Results.NotFound();
 
+        if (evidence.AdmissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
+            return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.AsOfDate > ChileToday())
+            return Results.BadRequest(new { message = "La revisión no puede registrarse con fecha futura." });
         var now = DateTimeOffset.UtcNow;
         var subject = GetSubject(httpContext.User);
         evidence.ReviewStatus = request.Status;
@@ -251,7 +289,7 @@ public static class AdmissionEndpoints
 
     private static async Task<IResult> VerifyWithdrawalLetterSignatureAsync(
         Guid caseId,
-        AdmissionReviewRequest request,
+        WithdrawalLetterSignatureReviewRequest request,
         HttpContext httpContext,
         AdmissionsDbContext admissionsDb,
         PmgmDbContext coreDb,
@@ -263,19 +301,26 @@ public static class AdmissionEndpoints
         if (!IsReviewStatusValid(request.Status))
             return Results.BadRequest(new { message = "La verificación debe aprobar, observar o rechazar." });
 
-        var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking()
+        var admissionCase = await admissionsDb.AdmissionCases.AsNoTracking().Include(x => x.Evidence)
             .SingleOrDefaultAsync(x => x.Id == caseId, cancellationToken);
         if (admissionCase is null) return Results.NotFound();
 
-        var hasWithdrawalLetter = await admissionsDb.AdmissionEvidence.AsNoTracking()
-            .AnyAsync(x => x.AdmissionCaseId == caseId && x.EvidenceType == AdmissionWorkflowCodes.EvidenceType.WithdrawalLetter,
-                cancellationToken);
-        if (!hasWithdrawalLetter)
-            return Results.Conflict(new { message = "Debe existir una Carta de Retiro Voluntario vinculada antes de registrar la verificación de firma." });
+        if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
+            return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.EvidenceId is null || request.AsOfDate is null || request.AsOfDate > ChileToday() ||
+            string.IsNullOrWhiteSpace(request.SourceReference) || request.SourceReference.Length > 500 || request.Notes?.Length > 4000)
+            return Results.BadRequest(new { message = "Indique la carta concreta, fecha de revisión no futura y fuente institucional." });
+        var letter = AdmissionWithdrawalEvidencePolicy.CurrentLetter(admissionCase);
+        if (letter is null || letter.Id != request.EvidenceId || letter.DocumentVersionId is null)
+            return Results.Conflict(new { message = "Debe revisar la versión trazable de la carta más reciente de este expediente." });
+        if (request.Status == CeremonyCodes.ValidationStatus.Approved &&
+            (letter.ReviewStatus != CeremonyCodes.ValidationStatus.Approved || letter.ReviewedAtUtc is null ||
+             !AdmissionWithdrawalEvidencePolicy.HasValidDate(admissionCase, letter, ChileToday()) || request.AsOfDate < letter.EvidenceDate))
+            return Results.Conflict(new { message = "La carta debe estar aprobada, con fecha de otorgamiento acreditada y coherente con la modalidad del expediente." });
 
         var decision = CreateDecision(caseId,
-            AdmissionWorkflowCodes.DecisionType.WithdrawalLetterHandwrittenSignature,
-            request,
+            AdmissionWorkflowCodes.DecisionType.WithdrawalSignature(letter.Id),
+            new AdmissionReviewRequest(request.Status, request.AsOfDate, request.SourceReference, request.Notes),
             GetSubject(httpContext.User));
         admissionsDb.AdmissionDecisions.Add(decision);
         await admissionsDb.SaveChangesAsync(cancellationToken);
@@ -283,7 +328,7 @@ public static class AdmissionEndpoints
         audit.Add(httpContext, "admission.withdrawal_letter.handwritten_signature_verified", nameof(AdmissionDecision),
             decision.Id.ToString(), admissionCase.OrganizationId,
             request.Status == CeremonyCodes.ValidationStatus.Approved ? AuditResults.Success : AuditResults.Observed,
-            new { decision.Status, decision.AsOfDate });
+            new { decision.Status, decision.AsOfDate, evidenceId = letter.Id, letter.DocumentVersionId });
         await coreDb.SaveChangesAsync(cancellationToken);
 
         return Results.Ok(ToDecisionDto(decision));
@@ -310,6 +355,11 @@ public static class AdmissionEndpoints
             return Results.BadRequest(new { message = "La aceptación especial de Gran Maestría sólo aplica a incorporaciones desde otra Obediencia." });
         if (admissionCase.HasPeaceAndFriendshipPact != false)
             return Results.Conflict(new { message = "Esta decisión especial se registra cuando consta que no existe Pacto de Paz y Amistad con la Obediencia de origen." });
+
+        if (admissionCase.Status == AdmissionWorkflowCodes.CaseStatus.Resolved)
+            return Results.Conflict(new { message = "El expediente ya está resuelto." });
+        if (request.AsOfDate is null || request.AsOfDate > ChileToday() || string.IsNullOrWhiteSpace(request.SourceReference) || request.SourceReference.Length > 500)
+            return Results.BadRequest(new { message = "Indique fecha no futura y resolución institucional de Gran Maestría." });
 
         var decision = CreateDecision(caseId,
             AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance,
@@ -344,33 +394,16 @@ public static class AdmissionEndpoints
             !access.CanEvaluateCeremonies(httpContext.User))
             return Results.Forbid();
 
-        var withdrawalLetter = LatestEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.WithdrawalLetter);
+        var withdrawalLetter = AdmissionWithdrawalEvidencePolicy.CurrentLetter(admissionCase);
         var initiationEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedInitiation);
         var wageEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedWageIncrease);
         var exaltationEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.LegalizedExaltation);
         var degreeEvidence = LatestApprovedEvidence(admissionCase, AdmissionWorkflowCodes.EvidenceType.Degree);
 
-        var signatureDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.WithdrawalLetterHandwrittenSignature);
+        var signatureDecision = AdmissionWithdrawalEvidencePolicy.VerifiedSignature(admissionCase, ChileToday());
         var gmSpecialDecision = LatestDecision(admissionCase, AdmissionWorkflowCodes.DecisionType.GrandMasterSpecialAcceptance);
 
-        var input = new AdmissionEligibilityInput(
-            AdmissionType: admissionCase.AdmissionType,
-            AffiliationMode: admissionCase.AffiliationMode,
-            WithdrawalLetterAttached: withdrawalLetter is not null,
-            WithdrawalLetterHandwrittenSignatureVerified: signatureDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            LegalizedInitiationEvidenceAttached: initiationEvidence is not null,
-            WageIncreaseEvidenceApplies: admissionCase.WageIncreaseEvidenceApplies,
-            LegalizedWageIncreaseEvidenceAttached: wageEvidence is not null,
-            ExaltationEvidenceApplies: admissionCase.ExaltationEvidenceApplies,
-            LegalizedExaltationEvidenceAttached: exaltationEvidence is not null,
-            DegreeEvidenceAttached: degreeEvidence is not null,
-            HasPeaceAndFriendshipPact: admissionCase.HasPeaceAndFriendshipPact,
-            GrandMasterSpecialAcceptanceApproved: gmSpecialDecision?.Status == CeremonyCodes.ValidationStatus.Approved,
-            PreviousRejectionDate: admissionCase.PreviousRejectionDate,
-            NewPresentationDate: ChileDate(admissionCase.CreatedAtUtc),
-            RejectionCausesRemedied: admissionCase.RejectionCausesRemedied);
-
-        var decision = AdmissionEligibilityPolicy.Evaluate(input);
+        var decision = AdmissionCaseEligibilityProjector.Evaluate(admissionCase).Decision;
 
         return Results.Ok(new
         {
@@ -454,6 +487,7 @@ public static class AdmissionEndpoints
         entity.OrganizationId,
         entity.AdmissionType,
         entity.AffiliationMode,
+        entity.WithdrawalLetterGrantedDate,
         entity.MemberId,
         entity.PersonId,
         entity.OriginOrganizationId,
@@ -512,7 +546,8 @@ public sealed record CreateAdmissionCaseRequest(
     bool ExaltationEvidenceApplies,
     bool? HasPeaceAndFriendshipPact,
     DateOnly? PreviousRejectionDate,
-    bool? RejectionCausesRemedied);
+    bool? RejectionCausesRemedied,
+    DateOnly? WithdrawalLetterGrantedDate = null);
 
 public sealed record AddAdmissionEvidenceRequest(
     string EvidenceType,
@@ -526,3 +561,6 @@ public sealed record AdmissionReviewRequest(
     DateOnly? AsOfDate,
     string? SourceReference,
     string? Notes);
+
+public sealed record WithdrawalLetterSignatureReviewRequest(
+    string Status, DateOnly? AsOfDate, string? SourceReference, string? Notes, Guid? EvidenceId = null);

@@ -52,7 +52,8 @@
 /* Accesos de igual tamaño: ícono + número + texto en una línea. */
 .dashboard-page .home-shortcuts.metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* 3 accesos (Agenda, Avisos, Insinuados): sin repetir la Agenda (decisión del PO 03-10-2026). */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.75rem;
 }
 
@@ -138,8 +139,8 @@
   .home-grid.has-inbox > .pending-inbox { grid-column: 1 / -1; }
 }
 
-@media (max-width: 1100px) {
-  .dashboard-page .home-shortcuts.metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 720px) {
+  .dashboard-page .home-shortcuts.metric-grid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 720px) {
@@ -165,7 +166,9 @@
 .dashboard-page .eyebrow,
 .archive-page .eyebrow,
 .library-heading .eyebrow,
-.regularity-page .eyebrow {
+.regularity-page .eyebrow,
+.lodge-kicker,
+.lodge-management-heading .lodge-kicker {
   text-transform: none;
   letter-spacing: 0;
   font-size: 0.875rem;
@@ -205,4 +208,65 @@
 @media (max-width: 720px) {
   .home-strip-meta { flex-direction: row; flex-wrap: wrap; gap: 0 0.75rem; }
   .home-strip-meta span + span::before { content: "· "; }
+}
+
+/* Corrección 02-10-2026: la regla antigua «.metric-card > span» (styles.css) dejaba el ícono sin centrar y en gris.
+   Se fija con mayor especificidad: ícono dorado y centrado en su cuadro azul. */
+.dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-icon {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  justify-self: center;
+  color: var(--brand-gold);
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-icon svg {
+  display: block;
+  margin: 0;
+}
+
+.dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-label {
+  display: block;
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+
+@media (max-width: 720px) {
+  /* Número y texto juntos y centrados verticalmente, aunque el texto ocupe más líneas. */
+  .dashboard-page .home-shortcuts .home-shortcut {
+    align-content: center;
+    row-gap: 0.125rem;
+  }
+  .dashboard-page .home-shortcuts .home-shortcut > strong { align-self: end; }
+  .dashboard-page .home-shortcuts .home-shortcut > .home-shortcut-label { align-self: start; }
+}
+
+/* Logo de cabecera — Guía de uso del logotipo de la GLMCh (opción A aprobada por el PO 02-10-2026):
+   versión para tamaños reducidos V2 (azul oficial) sobre placa blanca rectangular,
+   con área de protección de 1/4 X por lado (X = alto del logotipo). Sin recolorear ni deformar. */
+.brand .brand-mark.brand-mark-reduced {
+  --logo-h: 2.75rem;
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+  padding: calc(var(--logo-h) / 4);
+  background: #fff;
+  border-radius: 0.375rem;
+}
+
+.brand .brand-mark.brand-mark-reduced .brand-logo {
+  display: block;
+  height: var(--logo-h);
+  width: auto;
+  max-width: none;
+  object-fit: contain;
+}
+
+/* Mismo logo y mismo formato en escritorio, tablet y celular (instrucción del PO 02-10-2026):
+   no se reduce la altura del logotipo en pantallas pequeñas; el nombre del sistema puede pasar a dos líneas. */
+@media (max-width: 720px) {
+  .brand { min-width: 0; gap: 0.625rem; }
+  .brand strong { white-space: normal; overflow-wrap: anywhere; line-height: 1.15; }
 }

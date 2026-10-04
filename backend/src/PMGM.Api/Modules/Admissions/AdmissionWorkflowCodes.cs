@@ -26,11 +26,20 @@ public static class AdmissionWorkflowCodes
     public static class DecisionType
     {
         public const string WithdrawalLetterHandwrittenSignature = "withdrawal_letter_handwritten_signature";
+        public const string LodgeFirstDegreePresentation = "lodge_first_degree_presentation";
         public const string LodgeThirdDegreeApproval = "lodge_third_degree_approval";
         public const string LodgeFirstDegreeBallot = "lodge_first_degree_ballot";
         public const string GrandMasterSpecialAcceptance = "grand_master_special_acceptance";
+        public const string Article23Review = "article_2_3_review";
+        public const string GrandMasterPardon = "grand_master_pardon";
+        public const string GrandMasterRegularityRecognition = "grand_master_regularity_recognition";
+        public const string InformationCommissionAppointed = "information_commission_appointed";
+        public const string InformationCommissionCompleted = "information_commission_completed";
+        public const string MembershipMaterialized = "membership_materialized";
         public const string CeremonyRequestCreated = "ceremony_request_created";
         public const string EvidenceReviewPrefix = "evidence_review:";
+
+        public static string WithdrawalSignature(Guid evidenceId) => $"{WithdrawalLetterHandwrittenSignature}:{evidenceId:D}";
 
         public static string EvidenceReview(Guid evidenceId) => $"{EvidenceReviewPrefix}{evidenceId:D}";
     }

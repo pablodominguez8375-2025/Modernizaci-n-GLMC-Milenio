@@ -14,14 +14,20 @@ if (!browser || !baseUrl || !outputDir) {
 
 const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
+  { slug: 'iniciacion-publicados-hermano', profile: 'brother', label: 'Insinuaciones e Iniciación', initiationTabs: [] },
+  { slug: 'iniciacion-venerable', profile: 'lodge', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'], sidebarCount: 11 },
+  { slug: 'iniciacion-secretaria-taller', profile: 'lodgeSecretary', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'] },
+  { slug: 'iniciacion-gran-secretaria', profile: 'secretariat', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Revisión', 'Circuito de Iniciación'] },
+  { slug: 'iniciacion-regimen', profile: 'regimen', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Circuito de Iniciación'] },
+  { slug: 'afiliacion-incorporacion-tramitacion', profile: 'lodgeSecretary', label: 'Secretaría', admissions: true },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
   { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
   {
     slug: 'tesoreria-taller',
     profile: 'lodgeTreasurer',
     label: 'Tesorería',
-    requiredSidebar: ['Mi ficha', 'Mi calendario', 'Notificaciones', 'Insinuados publicados', 'Tesorería', 'Biblioteca Virtual'],
-    forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Carga de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
+    requiredSidebar: ['Mi ficha', 'Agenda', 'Avisos', 'Insinuaciones e Iniciación', 'Tesorería', 'Biblioteca Virtual'],
+    forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Insinuados publicados', 'Carga de insinuados', 'Revisión de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
     requiredTabs: ['Resumen', 'Cuotas y Cobranzas', 'Ingresos y Egresos', 'Cuadro mensual', 'Configuraciones', 'Reportes'],
     treasuryCollection: true,
   },
@@ -185,6 +191,27 @@ async function openModule(label) {
   await delay(650)
 }
 
+async function openAdmissionProcedure() {
+  const clicked = await evaluate(`(() => {
+    const button = [...document.querySelectorAll('.secretariat-role-tabs button')]
+      .find(candidate => candidate.querySelector('strong')?.textContent.trim() === 'Afiliación e incorporación');
+    if (!button) return false;
+    button.click(); return true;
+  })()`)
+  if (!clicked) throw new Error('Admission tab not found for Lodge Secretary.')
+  await waitForExpression(`!!document.querySelector('.admissions-documents')`, 'admission evidence list')
+  await evaluate(`(() => { const button = [...document.querySelectorAll('.admissions-documents button')].find(x => x.textContent.trim() === 'Cargar expediente'); if (!button || button.disabled) throw new Error('No synthetic admission case selected.'); button.click(); })()`)
+  await waitForExpression(`!!document.querySelector('[aria-labelledby="admission-procedure-title"] li')`, 'admission procedure requirements')
+  const result = await evaluate(`(() => {
+    const panel = document.querySelector('[aria-labelledby="admission-procedure-title"]');
+    const visibleForms = [...document.querySelectorAll('.admissions-page form')].filter(x => x.getClientRects().length);
+    const ceremony = [...panel.querySelectorAll('button')].find(x => x.textContent.trim() === 'Solicitar ceremonia' && x.type === 'button');
+    const forbidden = [...panel.querySelectorAll('option')].some(x => /Gran Maestría|art. 2.3/.test(x.textContent));
+    return { visibleForms: visibleForms.length, ceremonyDisabled: ceremony?.disabled === true, forbidden, alert: !!panel.querySelector('[role="alert"]') };
+  })()`)
+  if (result.visibleForms || !result.ceremonyDisabled || result.forbidden || result.alert) throw new Error(`Admission procedure check failed: ${JSON.stringify(result)}`)
+}
+
 async function assertNavigation(scenario) {
   const result = await evaluate(`(() => {
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
@@ -213,6 +240,40 @@ async function assertNavigation(scenario) {
   })) {
     if (values.length) throw new Error(`${scenario.slug} navigation check failed (${key}: ${values.join(', ')}).`)
   }
+}
+
+async function assertInitiationNavigation(scenario, viewport) {
+  const open = async tab => {
+    const clicked = await evaluate(`(() => {
+      const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
+      const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
+      const button = [...(nav?.querySelectorAll('[role="tab"]') || [])].find(button => label(button) === ${JSON.stringify(tab)});
+      if (!button || button.disabled) return false;
+      button.click(); return true;
+    })()`);
+    if (!clicked) throw new Error(`Initiation tab missing for ${scenario.profile}: ${tab}`);
+    await delay(350);
+  };
+  const read = () => evaluate(`(() => {
+    const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
+    const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
+    const sidebar = [...document.querySelectorAll('nav.sidebar .nav-item')];
+    return { tabs: [...(nav?.querySelectorAll('[role="tab"]') || [])].map(label),
+      activeTabs: [...(nav?.querySelectorAll('[aria-selected="true"]') || [])].map(label),
+      activeSidebar: sidebar.filter(button => button.classList.contains('active')).map(button => button.querySelector('.nav-text')?.textContent.trim()),
+      count: sidebar.length };
+  })()`);
+  const initial = await read();
+  if (JSON.stringify(initial.tabs) !== JSON.stringify(scenario.initiationTabs)) throw new Error(`Wrong initiation tabs for ${scenario.profile}: ${JSON.stringify(initial)}`);
+  if (scenario.sidebarCount && initial.count !== scenario.sidebarCount) throw new Error(`Expected ${scenario.sidebarCount} sidebar entries for ${scenario.profile}, got ${initial.count}`);
+  for (const tab of scenario.initiationTabs) {
+    await open(tab);
+    const state = await read();
+    if (JSON.stringify(state.activeTabs) !== JSON.stringify([tab]) || JSON.stringify(state.activeSidebar) !== JSON.stringify(['Insinuaciones e Iniciación'])) throw new Error(`Wrong initiation selection for ${scenario.profile}/${tab}: ${JSON.stringify(state)}`);
+    await assertNoGlobalHorizontalOverflow(`${scenario.profile}/${tab}`, viewport.suffix);
+  }
+  if (scenario.initiationTabs.length) await open('Publicados');
+  console.log(`initiation navigation ${scenario.profile} ${viewport.suffix}: ${JSON.stringify(initial)}`);
 }
 
 async function openTreasuryCollection() {
@@ -292,19 +353,31 @@ async function openGrandTreasuryRights() {
 }
 
 async function assertCeremonyRightPaymentAction(viewport) {
+  // PMGM-UX vista operativa (03-10-2026): «Registrar abono» se abre en panel (ActionDrawer) desde la tarjeta.
+  await evaluate(`(() => {
+    const card = document.querySelector('.ceremony-right-card');
+    const trigger = card?.querySelector('.action-trigger');
+    if (trigger && trigger.getAttribute('aria-expanded') !== 'true') trigger.click();
+    return true;
+  })()`)
+  await new Promise(resolve => setTimeout(resolve, 350))
   const result = await evaluate(`(() => {
     const card = document.querySelector('.ceremony-right-card');
-    const details = card?.querySelector('details');
-    const summary = details?.querySelector('summary');
-    if (details && summary && !details.open) summary.click();
-    const button = card?.querySelector('form button');
+    const trigger = card?.querySelector('.action-trigger');
+    const drawer = card?.querySelector('.action-drawer');
+    const button = drawer?.querySelector('form button[type="submit"], form button:not([type])');
     const rect = card?.getBoundingClientRect();
-    return { card: !!card, button: !!button, touchSize: button?.getBoundingClientRect().height ?? 0,
-      cardRight: rect?.right ?? 0, viewportWidth: innerWidth, labels: card ? [...card.querySelectorAll('form label span')].map(x => (x.textContent || '').trim()) : [] };
+    const drawerRect = drawer?.getBoundingClientRect();
+    const labels = drawer ? [...drawer.querySelectorAll('form label span')].map(x => (x.textContent || '').trim()) : [];
+    const close = drawer?.querySelector('.action-drawer-close, button[aria-label^="Cerrar"]');
+    if (close) close.click();
+    return { card: !!card, button: !!button, triggerSize: trigger?.getBoundingClientRect().height ?? 0, touchSize: button?.getBoundingClientRect().height ?? 0,
+      cardRight: rect?.right ?? 0, drawerRight: drawerRect?.right ?? 0, viewportWidth: innerWidth, labels };
   })()`)
+  await new Promise(resolve => setTimeout(resolve, 200))
   if (!result?.card || !result.button) throw new Error(`Ceremony right payment action is missing at ${viewport}.`)
-  if (result.touchSize < 44) throw new Error(`Ceremony right payment action is below 44px at ${viewport}.`)
-  if (result.cardRight > result.viewportWidth + 1) throw new Error(`Ceremony right card is clipped at ${viewport}.`)
+  if (result.touchSize < 44 || result.triggerSize < 44) throw new Error(`Ceremony right payment action is below 44px at ${viewport}: ${JSON.stringify(result)}.`)
+  if (result.cardRight > result.viewportWidth + 1 || result.drawerRight > result.viewportWidth + 1) throw new Error(`Ceremony right card or drawer is clipped at ${viewport}.`)
   if (result.labels.length !== 4) throw new Error(`Ceremony right form is incomplete at ${viewport}: ${JSON.stringify(result.labels)}.`)
 }
 
@@ -346,9 +419,10 @@ async function assertDashboardMetricLayout(viewport) {
     };
   })()`)
   // PMGM-UX-002: en móvil los 4 indicadores de Inicio se muestran en 2 columnas (decisión aprobada por el PO, 01-10-2026).
-  const expectedColumns = viewport.width <= 1100 ? 2 : 4
-  if (!result || result.cardCount !== 4 || result.columns !== expectedColumns) {
-    throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 4 cards, got ${JSON.stringify(result)}.`)
+  // PMGM-UX menús sin repetir (03-10-2026): 3 accesos en Inicio; 1 columna en celular, 3 desde 721 px.
+  const expectedColumns = viewport.width <= 720 ? 1 : 3
+  if (!result || result.cardCount !== 3 || result.columns !== expectedColumns) {
+    throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 3 cards, got ${JSON.stringify(result)}.`)
   }
 }
 
@@ -635,6 +709,8 @@ try {
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
       await assertNavigation(scenario)
+      if (scenario.initiationTabs) await assertInitiationNavigation(scenario, viewport)
+      if (scenario.admissions) await openAdmissionProcedure()
       if (scenario.slug === 'inicio') await assertDashboardMetricLayout(viewport)
       if (scenario.treasuryCollection) {
         await openTreasuryCollection()
@@ -650,8 +726,10 @@ try {
       const evidenceTarget = scenario.treasuryCollection
         ? '.treasury-collection-table tbody tr:has(button)'
         : scenario.grandTreasuryRights
-          ? '.ceremony-right-card form'
-          : null
+          ? '.ceremony-right-card' // PMGM-UX: el formulario vive en el panel; se encuadra la tarjeta con su botón «Registrar abono»
+          : scenario.admissions
+            ? '[aria-labelledby="admission-procedure-title"]'
+            : null
       await capture(filePath, evidenceTarget)
       console.log(`captured ${path.basename(filePath)}`)
     }

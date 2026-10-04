@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type HistoricalIntakeReviewItem, type InternalAffairsApiClient, type MemberControlRow } from './api/internalAffairsApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsControl.css'
+import { ActionDrawer, ConfirmAction } from './actionKit'
 import { organizationDisplayName } from './displayFormat'
 
 export default function InternalAffairsMemberControlPage({ api, internalAffairsApi }: { api: PmgmApiClient; internalAffairsApi: InternalAffairsApiClient }) {
@@ -78,14 +79,16 @@ export default function InternalAffairsMemberControlPage({ api, internalAffairsA
     {error && <div className="error-banner" role="alert"><strong>No fue posible cargar el control de miembros.</strong><span>{error}</span></div>}
 
     <section className="internal-control-filters panel">
-      <label><span>Corte</span><input type="date" value={asOf} onChange={event => setAsOf(event.target.value)} /></label>
+      <label className="internal-control-search"><span>Buscar</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Nombre, Nº institucional o Taller" /></label>
       <label><span>Taller relacionado</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Toda la Orden</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
       <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Todos</option>{statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <details className="internal-control-more"><summary>Más filtros ({[degree, financialStatus].filter(Boolean).length + (pastActiveOnly ? 1 : 0) + (pendingTransferOnly ? 1 : 0)} activos)</summary><div className="internal-control-more-grid">
+      <label><span>Corte</span><input type="date" value={asOf} onChange={event => setAsOf(event.target.value)} /></label>
       <label><span>Grado</span><select value={degree} onChange={event => setDegree(event.target.value)}><option value="">Todos</option><option value="apprentice">Aprendiz</option><option value="fellowcraft">Compañero</option><option value="master">Maestro</option></select></label>
       <label><span>Finanzas</span><select value={financialStatus} onChange={event => setFinancialStatus(event.target.value)}><option value="">Todos</option><option value="up_to_date">Al día</option><option value="delinquent">Moroso</option><option value="pending">Pendiente</option><option value="exempt">Exento</option><option value="no_status">Sin estado</option></select></label>
-      <label className="internal-control-search"><span>Buscar</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Nombre, Nº institucional o Taller" /></label>
       <label className="internal-control-check"><input type="checkbox" checked={pastActiveOnly} onChange={event => setPastActiveOnly(event.target.checked)} /><span>Sólo Past Active</span></label>
       <label className="internal-control-check"><input type="checkbox" checked={pendingTransferOnly} onChange={event => setPendingTransferOnly(event.target.checked)} /><span>Traslado pendiente</span></label>
+      </div></details>
     </section>
 
     <section className="internal-control-summary" aria-label="Resumen del listado">
@@ -102,11 +105,14 @@ export default function InternalAffairsMemberControlPage({ api, internalAffairsA
       <div className="historical-review-list">
         {historicalIntakes.map(item => <article key={item.id} className="historical-review-card">
           <div><strong>{item.firstNames} {item.lastNames}</strong><span>{degreeLabel(item.currentDegree)} · corte {formatDate(item.cutoffDate)}</span><small>{item.institutionalNumber || 'Sin Nº institucional'}{item.rut ? ` · RUT ${item.rut}` : ''}</small><small>Fuente: {item.evidenceReference}</small><small>Hitos: iniciación {formatDateOptional(item.initiationDate)} · aumento {formatDateOptional(item.wageIncreaseDate)} · exaltación {formatDateOptional(item.exaltationDate)}</small>{item.offices.length>0 && <small>Cargos: {item.offices.map(o=>`${o.officeType} (${o.period})`).join(', ')}</small>}</div>
-          <label><span>Observación de RI</span><textarea value={historicalNotes[item.id] ?? ''} onChange={e=>setHistoricalNotes(current=>({...current,[item.id]:e.target.value}))} placeholder="Obligatoria al observar o rechazar" /></label>
           <div className="historical-review-actions">
-            <button type="button" disabled={reviewingId!==null} onClick={()=>void resolveHistorical(item,'approve')}>Aprobar y actualizar Cuadro</button>
-            <button type="button" disabled={reviewingId!==null || !(historicalNotes[item.id]??'').trim()} onClick={()=>void resolveHistorical(item,'observe')}>Observar</button>
-            <button type="button" disabled={reviewingId!==null || !(historicalNotes[item.id]??'').trim()} onClick={()=>void resolveHistorical(item,'reject')}>Rechazar</button>
+            <ConfirmAction label="Aprobar y actualizar Cuadro" message={`Se incorporará a ${item.firstNames} ${item.lastNames} al Cuadro oficial del Taller.`} confirmLabel="Sí, aprobar" disabled={reviewingId!==null} onConfirm={()=>void resolveHistorical(item,'approve')} />
+            <ActionDrawer label="Observar o rechazar" tone="secondary" title={`Observar o rechazar — ${item.firstNames} ${item.lastNames}`} description="La observación es obligatoria y se informa a Secretaría del Taller." keepOpen>
+              <div className="historical-review-drawer">
+            <label><span>Observación de RI</span><textarea value={historicalNotes[item.id] ?? ''} onChange={e=>setHistoricalNotes(current=>({...current,[item.id]:e.target.value}))} placeholder="Obligatoria al observar o rechazar" /></label>
+                <div className="historical-review-actions"><button type="button" disabled={reviewingId!==null || !(historicalNotes[item.id]??'').trim()} onClick={()=>void resolveHistorical(item,'observe')}>Observar</button><button type="button" className="danger" disabled={reviewingId!==null || !(historicalNotes[item.id]??'').trim()} onClick={()=>void resolveHistorical(item,'reject')}>Rechazar</button></div>
+              </div>
+            </ActionDrawer>
           </div>
         </article>)}
         {historicalIntakes.length===0 && <div className="empty-state"><strong>No hay cargas históricas pendientes de validación.</strong></div>}

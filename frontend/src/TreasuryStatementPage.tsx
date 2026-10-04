@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ActionDrawer, ConfirmAction } from './actionKit'
 import { type OrganizationOption, type PmgmApiClient, type TreasuryStatement, type TreasuryTerritory } from './api/pmgmApi'
 import './treasuryStatement.css'
 
@@ -173,8 +174,8 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
         <label className="regularity-field"><span>Cuota base Gran Tesorería · {currency}</span><input type="number" min="0" step={currency==='USD'?'0.01':'1000'} value={baseAmount} disabled={busy||territory==='peru'} onChange={event => setBaseAmount(Number(event.target.value))} /></label>
         <button className="regularity-primary" type="button" disabled={busy || baseAmount < 0} onClick={generate}>Generar nómina</button>
       </>}
-      {canPrepare && statement?.status === 'draft' && statement.lines.length > 0 && <button className="regularity-primary" type="button" disabled={busy || !canSubmit} onClick={submit}>Enviar a Gran Tesorería</button>}
-      {canReview && (statement?.status === 'submitted' || statement?.status === 'observed') && <><p>Al confirmar, Gran Tesorería declara que verificó el abono en la cuenta bancaria. Esa conformidad en {currency} actualiza la regularidad financiera del Taller.</p><button className="regularity-primary" type="button" disabled={busy || statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0} onClick={reconcile}>Confirmar recepción bancaria y conciliar</button></>}
+      {canPrepare && statement?.status === 'draft' && statement.lines.length > 0 && <ConfirmAction label="Enviar a Gran Tesorería" message="El Cuadro mensual se enviará a Gran Tesorería y ya no podrá editarse mientras esté en revisión." confirmLabel="Sí, enviar" disabled={busy || !canSubmit} onConfirm={submit} />}
+      {canReview && (statement?.status === 'submitted' || statement?.status === 'observed') && <><p>Al confirmar, Gran Tesorería declara que verificó el abono en la cuenta bancaria. Esa conformidad en {currency} actualiza la regularidad financiera del Taller.</p><ConfirmAction label="Confirmar recepción bancaria y conciliar" message="Declaras que verificaste el abono en la cuenta bancaria. Esto actualiza la regularidad financiera del Taller." confirmLabel="Sí, conciliar" disabled={busy || statement.differenceAmount !== 0 || statement.unresolvedIdentities !== 0} onConfirm={() => { void reconcile() }} /></>}
     </section>
 
     {loadingStatement && <section className="panel treasury-empty"><strong>Cargando Cuadro del período…</strong></section>}
@@ -214,14 +215,14 @@ export default function TreasuryStatementPage({ api, canPrepare, canReview, orga
 
         <section className="panel treasury-payments">
           <div><p className="eyebrow">Forma de pago</p><h2>Transferencias y depósitos</h2></div>
-          {canPrepare && statement.status === 'draft' && <div className="treasury-toolbar">
+          {canPrepare && statement.status === 'draft' && <div className="action-bar treasury-action-bar"><ActionDrawer label="Registrar transferencia o depósito" description="Registra cada pago enviado a Gran Tesorería con su comprobante." confirmMessage="Se registrará el pago con la fecha, monto y referencia indicados."><form className="treasury-toolbar treasury-toolbar-drawer" onSubmit={event => { event.preventDefault(); registerPayment() }}>
             <label className="regularity-field"><span>Medio</span><select value={paymentMethod} disabled={busy} onChange={event => setPaymentMethod(event.target.value as 'transfer' | 'deposit')}><option value="transfer">Transferencia</option><option value="deposit">Depósito</option></select></label>
             <label className="regularity-field"><span>Fecha</span><input type="date" value={paymentDate} disabled={busy} onChange={event => setPaymentDate(event.target.value)} /></label>
             <label className="regularity-field"><span>Monto</span><input type="number" min="1" step="1" value={paymentAmount || ''} disabled={busy} onChange={event => setPaymentAmount(Number(event.target.value))} /></label>
             <label className="regularity-field"><span>Pagador</span><input value={payerDisplayName} disabled={busy} onChange={event => setPayerDisplayName(event.target.value)} /></label>
             <label className="regularity-field"><span>Referencia / comprobante</span><input value={paymentReference} disabled={busy} onChange={event => setPaymentReference(event.target.value)} placeholder="Ej.: TRX-2026-000123" /></label>
-            <button className="regularity-secondary" type="button" disabled={busy || paymentAmount <= 0 || !paymentReference.trim()} onClick={registerPayment}>Registrar pago</button>
-          </div>}
+            <button className="regularity-primary" type="submit" disabled={busy || paymentAmount <= 0 || !paymentReference.trim()}>Registrar pago</button>
+          </form></ActionDrawer></div>}
           {statement.payments.length === 0
             ? <p>No hay pagos registrados.</p>
             : statement.payments.map(payment => <div className="payment-row" key={payment.id}><span>{payment.paymentMethod === 'transfer' ? 'Transferencia' : 'Depósito'} · {payment.paymentDate}</span><strong>{formatMoney(payment.amount,currency)}</strong><small>{payment.reference || 'Sin referencia'}</small></div>)}

@@ -1,0 +1,11 @@
+# Handoff — ChatGPT — revisión CRV vinculada a carta
+
+Issue #275 / PR draft #276; reserva previa 5971386995. Base propia 8b1ce37f99f4da6959837d1a24bfe55d79f82b0e (CI #1856/Showcase #1221/QA #859 SUCCESS verificados); dev inicial 1c2162760f1202f0292341f631698d5aa5f69e7c; Claude #299/dev ade3f2e280299056bc2d85f55bdc802fbecdc214 a incorporar sin editar reservas calientes. Main 6dfb9546a4873baff15955cf86abfd7d47e3d111 congelado.
+
+Archivos propios: AdmissionEndpoints, AdmissionWorkflowCodes, AdmissionCaseEligibilityProjector, AdmissionLodgeDecisionEndpoints, nueva AdmissionWithdrawalEvidencePolicy; tests unitario/HTTP nuevos; API pmgmApi y admissionWithdrawalEvidence/test; este handoff y docs/modelo-datos/cambios/2026-10-03-issue-275-crv-evidencia-vinculada.md. Sin migración/App/CSS/Authorization/workflows.
+
+Revisión exige carta/version concreta, fuente y fecha. Firma acredita sólo carta más reciente aprobada, fecha coherente con expediente/modalidad al alta y revisión vigente. Reemplazo/rechazo/nueva revisión bloquea sin fallback. Decisiones legadas sin referencia se conservan como no acreditadas. Misma política en tres proyecciones. No autenticidad automática del original ni traslado por sí solo.
+
+Frontend 373/373 PASS, lint/build PASS sobre base previa a #299. Catorce casos unitarios nuevos y HTTP PostgreSQL pendiente CI al redactar; sin SDK .NET local. Demo de revisión parcial con fixture explícito, panel operativo de evidencias pendiente. SHA final/gates/resultados/ZIP SHA-256/MANIFEST/SOURCE_SHA/BUILD_RUN_ID y lecturas de retorno GitHub/Drive en recibos del PR, evitando cambio de SHA sólo para insertar sus propios hashes.
+
+Pendientes: corrección controlada de fecha/modalidad si discrepa documento; panel evidencias/Gran Secretaría; comisión/autoridades/cronología, duplicación de expedientes reutilizados, materialización/traslado idempotente y atomicidad transversal (revisión/auditoría aún guardados existentes separados); demo completa; presentación insinuados/balotaje delegada por Claude; QA visual/UAT. #275 abierta/#276 draft; #116 NO FUSIONAR TODAVÍA. Sin squash, START-HERE antes del merge, promoción main, instalación srv01 ni QA física/UAT. Despliegue QA pendiente. Drive: sólo Proyecto Centenario/subcarpetas, GOV-003 §15.
