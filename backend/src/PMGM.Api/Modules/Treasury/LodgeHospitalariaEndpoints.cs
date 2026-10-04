@@ -239,6 +239,7 @@ public static class LodgeHospitalariaEndpoints
         DateOnly? from,
         DateOnly? to,
         HttpContext context,
+        PmgmDbContext db,
         LodgeManagementDbContext lodgeDb,
         IInstitutionalAccessService access,
         CancellationToken ct)
@@ -278,6 +279,7 @@ public static class LodgeHospitalariaEndpoints
     private static async Task<IResult> GetCouncilFinancialReviewsAsync(
         Guid organizationId,
         HttpContext context,
+        PmgmDbContext db,
         LodgeManagementDbContext lodgeDb,
         IInstitutionalAccessService access,
         CancellationToken ct)
