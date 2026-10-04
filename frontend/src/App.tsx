@@ -143,6 +143,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canReadLodgeSecretariat = capabilities?.canReadLodgeSecretariat ?? false
   const canManageLodgeSecretariat = capabilities?.canManageLodgeSecretariat ?? false
   const canCandidateProfile = canSecretariat || canLodge
+  const initiationViews: View[] = ['candidates', 'candidateProfile', 'initiationCircuit']
+  const isInitiationView = initiationViews.includes(view)
   const canLibrary = effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)
   const canDocuments = capabilities?.canManageDocuments ?? false
   const canGrandArchive = capabilities?.canManageGrandArchive ?? false
@@ -228,9 +230,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
       ...entry(canNotifications, 'notifications', 'Avisos', 'Portal del Hermano', 'bell', 'avisos alertas'),
       ...entry(canConfigureSystem, 'system', 'Parámetros del sistema', 'Sistema', 'settings', 'configuracion plazos reglas'),
       ...entry(canBootstrap && !canConfigureSystem, 'bootstrap', 'Configuración inicial', 'Sistema', 'settings', 'carga institucional'),
-      ...entry(true, 'candidates', 'Insinuados publicados', 'Procesos', 'candidate', 'publicacion'),
-      ...entry(canCandidateProfile, 'candidateProfile', canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados', 'Procesos', 'candidate', 'insinuacion expediente'),
-      ...entry(canCandidateProfile || canCeremonies, 'initiationCircuit', 'Circuito de Iniciación', 'Procesos', 'ceremony', 'entrevistas balotaje plancha'),
+      ...entry(true, 'candidates', 'Insinuaciones e Iniciación', 'Procesos', 'candidate', `insinuados publicados publicacion${canCandidateProfile ? ' carga revision insinuacion expediente' : ''}${canCandidateProfile || canCeremonies ? ' circuito iniciacion entrevistas balotaje plancha' : ''}`),
       ...entry(canMembers, 'members', 'Fichas de miembros', 'Gestión institucional', 'members', 'hermanos cuadro'),
       ...entry(canReporting, 'reporting', 'Reportería Ejecutiva', 'Gestión institucional', 'report', 'reportes'),
       ...entry(canMemberControl, 'memberControl', 'Control de miembros', 'Gestión institucional', 'memberControl'),
@@ -286,9 +286,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         <ModuleAccess icon="bell" label="Avisos" badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label={canConfigureSystem ? 'Parámetros del sistema' : 'Configuración inicial'} allowed active={view === 'system' || view === 'bootstrap'} onOpen={() => setView(canConfigureSystem ? 'system' : 'bootstrap')} /></>}
         <div className="nav-section">Trámites</div>
-        <button className={view === 'candidates' ? 'nav-item active' : 'nav-item'} type="button" title={`Insinuados publicados — ${navHint('Insinuados publicados')}`} onClick={() => setView('candidates')}><NavIcon name="candidate" /> <span className="nav-text" data-hint={navHint('Insinuados publicados')}>Insinuados publicados</span></button>
-        {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="candidate" label={canSecretariat ? 'Revisión de insinuados' : 'Carga de insinuados'} badge={badges.candidateProfile} allowed={canCandidateProfile} active={view === 'candidateProfile'} onOpen={canCandidateProfile ? () => setView('candidateProfile') : undefined} />}
-        {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="ceremony" label="Circuito de Iniciación" allowed={canCandidateProfile || canCeremonies} active={view === 'initiationCircuit'} onOpen={canCandidateProfile || canCeremonies ? () => setView('initiationCircuit') : undefined} />}
+        <ModuleAccess icon="candidate" label="Insinuaciones e Iniciación" allowed active={isInitiationView} onOpen={() => setView('candidates')} />
         {hasInstitutionalManagement && <>
           <div className="nav-section">Gestión y consultas</div>
           {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="members" label="Fichas de miembros" allowed={canMembers} active={view === 'members'} onOpen={canMembers ? () => setView('members') : undefined} />}
@@ -299,14 +297,14 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
           <ModuleAccess icon="shield" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
           <ModuleAccess icon="treasury" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
-          <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={isGrandSecretaryWorkspace ? grandSecretariatViews.includes(view) : view === 'secretariat'} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
+          <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={!isInitiationView && (isGrandSecretaryWorkspace ? grandSecretariatViews.includes(view) : view === 'secretariat')} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
           <ModuleAccess icon="archive" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
           <ModuleAccess icon="library" label="Docencia de la Orden" allowed={canReadOrderInstructions} active={view === 'orderInstructionReport'} onOpen={canReadOrderInstructions ? () => setView('orderInstructionReport') : undefined} />
         </>}
         {(canLodgeProfile || canLodge || canLodgeTreasury || canApproveLodgeExpenses || canReadLodgeHospitalaria || canManageAnyInstruction) && <>
           <div className="nav-section">Mi Taller</div>
           <ModuleAccess icon="lodge" label="Ficha del Taller" allowed={canLodgeProfile && !canLodge} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
-          {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" badge={badges.lodge} allowed active={localSecretariatViews.includes(view) || view === 'lodgeProfile'} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" badge={badges.lodge} allowed={canLodge} active={view === 'lodge' || view === 'lodgeProfile'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
+          {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" badge={badges.lodge} allowed active={!isInitiationView && (localSecretariatViews.includes(view) || view === 'lodgeProfile')} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" badge={badges.lodge} allowed={canLodge} active={view === 'lodge' || view === 'lodgeProfile'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
           {!isLodgeSecretaryWorkspace && <ModuleAccess icon="library" label="Docencia" allowed={canManageAnyInstruction} active={view === 'lodgeInstruction'} onOpen={canManageAnyInstruction ? () => setView('lodgeInstruction') : undefined} />}
           <ModuleAccess icon="treasury" label="Tesorería" badge={badges.lodgeTreasury} allowed={canLodgeTreasury || canApproveLodgeExpenses} active={view === 'lodgeTreasury'} onOpen={canLodgeTreasury || canApproveLodgeExpenses ? () => setView('lodgeTreasury') : undefined} />
           {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
@@ -320,14 +318,19 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
       </nav>
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
-        {isLodgeSecretaryWorkspace && localSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Secretaría" sections={localSecretariatSections} active={view} onChange={id => setView(id as View)} />}
-        {isGrandSecretaryWorkspace && grandSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Gran Secretaría" sections={grandSecretariatSections} active={view} onChange={id => setView(id as View)} />}
+        {isLodgeSecretaryWorkspace && !isInitiationView && localSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Secretaría" sections={localSecretariatSections} active={view} onChange={id => setView(id as View)} />}
+        {isGrandSecretaryWorkspace && !isInitiationView && grandSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Gran Secretaría" sections={grandSecretariatSections} active={view} onChange={id => setView(id as View)} />}
         {view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
         {(view === 'system' || view === 'bootstrap') && canConfigureSystem && canBootstrap && <WorkspaceTabs label="Secciones de Sistema" active={view} onChange={setView} tabs={[{ id: 'system' as View, label: 'Parámetros del sistema' }, { id: 'bootstrap' as View, label: 'Configuración inicial' }]} />}
         {view === 'bootstrap' && canBootstrap && <BootstrapPage bootstrapApi={bootstrapApi} />}
         {view === 'system' && canConfigureSystem && <SystemConfigurationPage api={api} />}
+        {isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs label="Secciones de Insinuaciones e Iniciación" active={view} onChange={setView} tabs={[
+          { id: 'candidates' as View, label: 'Publicados' },
+          ...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga', badge: badges.candidateProfile }] : []),
+          ...(canCandidateProfile || canCeremonies ? [{ id: 'initiationCircuit' as View, label: 'Circuito de Iniciación' }] : []),
+        ]} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
@@ -373,16 +376,13 @@ function ModuleAccess({ icon, label, allowed, active = false, onOpen, badge }: {
 
 /** PMGM-UX-004 · Una línea de ayuda en lenguaje simple por opción del menú (visible en tablet y celular; tooltip en escritorio). */
 const NAV_HINTS: Record<string, string> = {
+  'Insinuaciones e Iniciación': 'Publicaciones y seguimiento de la iniciación según tus permisos',
   'Inicio': 'Resumen del día y tus pendientes',
   'Mi ficha': 'Tus datos personales y masónicos',
   'Agenda': 'Tenidas, reuniones y actividades',
   'Avisos': 'Avisos y mensajes para ti',
   'Parámetros del sistema': 'Ajustes generales, respaldos y perfiles',
   'Configuración inicial': 'Puesta en marcha del sistema',
-  'Insinuados publicados': 'Candidatos en período de publicación',
-  'Carga de insinuados': 'Proponer un nuevo candidato',
-  'Revisión de insinuados': 'Revisar candidatos antes de publicarlos',
-  'Circuito de Iniciación': 'Entrevistas, votación y ceremonia',
   'Fichas de miembros': 'Buscar y consultar hermanos',
   'Reportería Ejecutiva': 'Indicadores y reportes de la Orden',
   'Control de miembros': 'Altas, bajas y cambios de estado',
