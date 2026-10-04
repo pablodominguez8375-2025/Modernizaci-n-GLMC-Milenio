@@ -38,7 +38,7 @@ describe('PMGM-UX-004 legibilidad y menú claro', () => {
   })
 
   it('usa grupos con nombres simples y una ayuda por opción', () => {
-    for (const group of ['Mi espacio', 'Trámites', 'Mi Taller', 'Biblioteca y documentos']) expect(app).toContain(`<div className="nav-section">${group}</div>`)
+    for (const group of ['Mi espacio', 'Trámites', 'Mi Taller', 'Biblioteca y documentos']) expect(app).toMatch(new RegExp(`<div className="nav-section"[^>]*>${group}</div>`))
     expect(app).toContain("'Insinuaciones e Iniciación': 'Publicaciones y seguimiento de la iniciación según tus permisos'")
     expect(app).toContain('<span className="nav-text" data-hint={hint}>{label}</span>')
   })

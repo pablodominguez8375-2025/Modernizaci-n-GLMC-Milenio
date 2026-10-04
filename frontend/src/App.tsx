@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCollapsibleNavGroups } from './navGroups'
 import AdmissionsPage from './AdmissionsPage'
 import BootstrapPage from './BootstrapPage'
 import CalendarPage from './CalendarPage'
@@ -35,7 +36,7 @@ import RegularityPage from './RegularityPage'
 import SystemConfigurationPage from './SystemConfigurationPage'
 import UserMenu from './UserMenu'
 import { WorkspaceTabs } from './actionKit'
-import TextSizeControl from './TextSizeControl'
+import TextSizeControl, { TextSizeMenu } from './TextSizeControl'
 import SecretariatRoleNavigation, { type SecretariatSection } from './SecretariatRoleNavigation'
 import { type BootstrapApiClient } from './api/bootstrapApi'
 import { type CalendarApiClient } from './api/calendarApi'
@@ -173,6 +174,8 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
 
   const pendingFlags: PendingTaskFlags = useMemo(() => ({ canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap }), [canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap])
   const operational = isOperationalProfile(pendingFlags)
+  const navRef = useRef<HTMLElement>(null)
+  useCollapsibleNavGroups(navRef, [view, effectiveProfile?.displayName, sidebarCollapsed, operational])
   const pendingTasks = useMemo(() => buildPendingTasks(pendingFlags, pendingCounts), [pendingFlags, pendingCounts])
   const badges = useMemo(() => navigationBadges(pendingTasks), [pendingTasks])
   const pendingTotal = totalPending(pendingTasks)
@@ -268,22 +271,22 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.86' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.87' : `API v${systemInfo?.version ?? '—'}`
   return <div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Inicio"><span className="brand-mark brand-mark-reduced"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-glmch-reducido-v2-azul.svg`} alt="Gran Logia Mixta de Chile" /></span><span><strong>Proyecto Centenario</strong></span></button>
       <span className="product-motto">Camino al centenario 1929-2029</span>
-      <div className="topbar-meta">{effectiveProfile && <GlobalSearch entries={searchEntries} onSearchMembers={canMembers ? openMembersSearch : undefined} />}{effectiveProfile && <span className="environment-badge role-chip">{effectiveProfile.displayName}</span>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" data-badge={unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined} onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{effectiveProfile ? <UserMenu displayName={effectiveProfile.displayName} versionLabel={versionLabel} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} onLogout={onLogout} /> : onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}</div>
+      <div className="topbar-meta">{effectiveProfile && <GlobalSearch entries={searchEntries} onSearchMembers={canMembers ? openMembersSearch : undefined} />}{effectiveProfile && <span className="environment-badge role-chip">{effectiveProfile.displayName}</span>}{effectiveProfile && <TextSizeMenu />}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" data-badge={unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined} onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{effectiveProfile ? <UserMenu displayName={effectiveProfile.displayName} versionLabel={versionLabel} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} onLogout={onLogout} /> : onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}</div>
     </header>
     <div className={sidebarCollapsed ? 'workspace is-sidebar-collapsed' : 'workspace'}>
-      <nav className={menuOpen ? 'sidebar is-open' : 'sidebar'} id="navegacion-principal" aria-label="Navegación principal" onClick={event => { if ((event.target as HTMLElement).closest('button')) setMenuOpen(false) }}>
+      <nav ref={navRef} className={menuOpen ? 'sidebar is-open' : 'sidebar'} id="navegacion-principal" aria-label="Navegación principal" onClick={event => { if ((event.target as HTMLElement).closest('button')) setMenuOpen(false) }}>
         <button className="sidebar-collapse" type="button" aria-pressed={sidebarCollapsed} aria-label={sidebarCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'} title={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'} onClick={toggleSidebar}><InstitutionalIcon name={sidebarCollapsed ? 'sidebarExpand' : 'sidebarCollapse'} size={18} /><span>{sidebarCollapsed ? 'Expandir' : 'Contraer menú'}</span></button>
-        <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" title="Inicio" onClick={() => setView('dashboard')}><NavIcon name="home" /> <span className="nav-text" data-hint={navHint('Inicio')}>Inicio</span></button>
-        <div className="nav-section">Mi espacio</div>
-        <ModuleAccess icon="member" label="Mi ficha" allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
-        <ModuleAccess icon="calendar" label="Agenda" allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
-        <ModuleAccess icon="bell" label="Avisos" badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
+        <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" title="Inicio" data-in-tabbar="true" onClick={() => setView('dashboard')}><NavIcon name="home" /> <span className="nav-text" data-hint={navHint('Inicio')}>Inicio</span></button>
+        <div className="nav-section" data-in-tabbar={operational ? undefined : 'true'}>Mi espacio</div>
+        <ModuleAccess icon="member" label="Mi ficha" inTabbar={!operational} allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
+        <ModuleAccess icon="calendar" label="Agenda" inTabbar allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
+        <ModuleAccess icon="bell" label="Avisos" inTabbar badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label={canConfigureSystem ? 'Parámetros del sistema' : 'Configuración inicial'} allowed active={view === 'system' || view === 'bootstrap'} onOpen={() => setView(canConfigureSystem ? 'system' : 'bootstrap')} /></>}
         <div className="nav-section">Trámites</div>
         <ModuleAccess icon="candidate" label="Insinuaciones e Iniciación" allowed active={isInitiationView} onOpen={() => setView('candidates')} />
@@ -367,11 +370,11 @@ function NavIcon({ name }: { name: InstitutionalIconName }) {
   return <span className="nav-icon" aria-hidden="true"><InstitutionalIcon name={name} size={18} /></span>
 }
 
-function ModuleAccess({ icon, label, allowed, active = false, onOpen, badge }: { icon: InstitutionalIconName; label: string; allowed: boolean; active?: boolean; onOpen?: () => void; badge?: number }) {
+function ModuleAccess({ icon, label, allowed, active = false, onOpen, badge, inTabbar = false }: { icon: InstitutionalIconName; label: string; allowed: boolean; active?: boolean; onOpen?: () => void; badge?: number; inTabbar?: boolean }) {
   if (!allowed || !onOpen) return null
   const count = badge && badge > 0 ? (badge > 99 ? '99+' : String(badge)) : undefined
   const hint = navHint(label)
-  return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen} data-badge={count} title={[label, hint, count ? `${count} pendientes` : ''].filter(Boolean).join(' — ')}><NavIcon name={icon} /> <span className="nav-text" data-hint={hint}>{label}</span></button>
+  return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen} data-badge={count} data-in-tabbar={inTabbar ? 'true' : undefined} title={[label, hint, count ? `${count} pendientes` : ''].filter(Boolean).join(' — ')}><NavIcon name={icon} /> <span className="nav-text" data-hint={hint}>{label}</span></button>
 }
 
 /** PMGM-UX-004 · Una línea de ayuda en lenguaje simple por opción del menú (visible en tablet y celular; tooltip en escritorio). */
