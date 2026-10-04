@@ -24,7 +24,7 @@ describe('PMGM-UX menús sin funciones repetidas (aprobado por el PO 03-10-2026)
   })
 
   it('reúne las tres vistas de iniciación en una sola entrada y búsqueda', () => {
-    const sidebar = app.slice(app.indexOf('<nav className={menuOpen'), app.indexOf('<main className="content"'))
+    const sidebar = app.slice(app.indexOf('id="navegacion-principal"'), app.indexOf('<main className="content"'))
     expect(sidebar.match(/label="Insinuaciones e Iniciación"/g)).toHaveLength(1)
     expect(sidebar).not.toMatch(/label="Circuito de Iniciación"|label="Insinuados publicados"|label="Carga de insinuados"|label="Revisión de insinuados"/)
     expect(app).toContain("['candidates', 'candidateProfile', 'initiationCircuit']")

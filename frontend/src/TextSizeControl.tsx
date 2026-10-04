@@ -19,3 +19,25 @@ export default function TextSizeControl({ className = '' }: { className?: string
     </div>
   </div>
 }
+
+/** PMGM-UX menús simples · Botón «Aa» de la cabecera (PC) que abre el control de tamaño de letra. */
+export function TextSizeMenu() {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const close = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key !== 'Escape') return
+      if (event instanceof MouseEvent && (event.target as HTMLElement).closest('.text-size-menu')) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', close)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close) }
+  }, [open])
+  return <div className="text-size-menu">
+    <button type="button" className="text-size-menu-trigger" aria-expanded={open} aria-haspopup="true" title="Tamaño de letra" onClick={() => setOpen(value => !value)}>
+      <span aria-hidden="true">Aa</span><span className="sr-only">Tamaño de letra</span>
+    </button>
+    {open && <div className="text-size-menu-panel"><TextSizeControl /></div>}
+  </div>
+}
