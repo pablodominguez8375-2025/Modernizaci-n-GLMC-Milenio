@@ -243,6 +243,17 @@ async function assertNavigation(scenario) {
 }
 
 async function assertInitiationNavigation(scenario, viewport) {
+  const open = async tab => {
+    const clicked = await evaluate(`(() => {
+      const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
+      const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
+      const button = [...(nav?.querySelectorAll('[role="tab"]') || [])].find(button => label(button) === ${JSON.stringify(tab)});
+      if (!button || button.disabled) return false;
+      button.click(); return true;
+    })()`);
+    if (!clicked) throw new Error(`Initiation tab missing for ${scenario.profile}: ${tab}`);
+    await delay(350);
+  };
   const read = () => evaluate(`(() => {
     const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
     const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
@@ -256,12 +267,12 @@ async function assertInitiationNavigation(scenario, viewport) {
   if (JSON.stringify(initial.tabs) !== JSON.stringify(scenario.initiationTabs)) throw new Error(`Wrong initiation tabs for ${scenario.profile}: ${JSON.stringify(initial)}`);
   if (scenario.sidebarCount && initial.count !== scenario.sidebarCount) throw new Error(`Expected ${scenario.sidebarCount} sidebar entries for ${scenario.profile}, got ${initial.count}`);
   for (const tab of scenario.initiationTabs) {
-    await openMobileSubview(tab);
+    await open(tab);
     const state = await read();
     if (JSON.stringify(state.activeTabs) !== JSON.stringify([tab]) || JSON.stringify(state.activeSidebar) !== JSON.stringify(['Insinuaciones e Iniciación'])) throw new Error(`Wrong initiation selection for ${scenario.profile}/${tab}: ${JSON.stringify(state)}`);
     await assertNoGlobalHorizontalOverflow(`${scenario.profile}/${tab}`, viewport.suffix);
   }
-  if (scenario.initiationTabs.length) await openMobileSubview('Publicados');
+  if (scenario.initiationTabs.length) await open('Publicados');
   console.log(`initiation navigation ${scenario.profile} ${viewport.suffix}: ${JSON.stringify(initial)}`);
 }
 
