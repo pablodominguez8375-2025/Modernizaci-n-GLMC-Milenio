@@ -16,4 +16,8 @@ Archivos previstos: helper DynamicTariffAccess, GrandTreasuryTariffEndpoints, pr
 
 ## Validación e integración
 
-Pendientes de implementación y gates propios; no certificar todavía. START-HERE se enlazará en PR documental posterior al merge funcional. Main/srv01/UAT sin cambios; despliegue QA pendiente.
+Implementación: proyección propia GET `/api/tesoreria/tarifarios/decretos/acceso`; GET catálogo exige view y POST registro create, en Orden y con autoridad institucional vigente. Backend reevalúa cada petición, demo comparte política, pantalla refresca por catálogo/foco/30 s y retira datos/formulario cuando pierde acceso. Se conserva la auditoría de alta, inmutabilidad y tarifas anteriores.
+
+Diccionario y estructuras: [DB-008](../modelo-datos/PMGM-DB-008-acceso-efectivo-tarifario.md); [registro antes/después](../modelo-datos/cambios/2026-10-04-issue-266-acceso-tarifario.md). Sin migración.
+
+Frontend local: 414 PASS, lint/build SUCCESS sobre el árbol final, incluido refresco sin cerrar el asistente por una consulta periódica sin cambios. Backend política y HTTP PostgreSQL añadidos, ejecución pendiente CI por ausencia de SDK .NET local. Gates propios pendientes; no certificar todavía. START-HERE se enlazará en PR documental posterior al merge funcional. Main/srv01/UAT sin cambios; despliegue QA pendiente. Recibos de PR #320 completan el SHA exacto y gates; handoff postmerge agregará evidencia final.
