@@ -1,3 +1,4 @@
+import { useTreasuryAccess } from './useTreasuryAccess'
 import { useEffect, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient, type TreasuryTerritory } from './api/pmgmApi'
 import LodgeTreasuryPanel from './LodgeTreasuryPanel'
@@ -9,6 +10,8 @@ type LocalSection = 'summary' | 'collection' | 'movements' | 'statement' | 'sett
 
 export default function LodgeTreasuryPage({api,canManage,canApproveExpenses}:{api:PmgmApiClient;canManage:boolean;canApproveExpenses:boolean}){
  const [organizations,setOrganizations]=useState<OrganizationOption[]>([]);const [organizationId,setOrganizationId]=useState('')
+ const {access,error}=useTreasuryAccess(api,organizationId)
+ const allowed=access?.actions??[]
  const [section,setSection]=useState<LocalSection>(canManage?'summary':'movements')
  useEffect(()=>{void api.getOrganizationOptions().then(response=>{setOrganizations(response.items);setOrganizationId(current=>current||response.items[0]?.id||'')})},[api])
  const [territories,setTerritories]=useState<Record<string,TreasuryTerritory|null>>({})
@@ -25,6 +28,9 @@ export default function LodgeTreasuryPage({api,canManage,canApproveExpenses}:{ap
   : [{id:'movements',label:'Egresos por autorizar',description:'Revisión exclusiva del Venerable Maestro'}]
  return <div className="lodge-product-page"><section className="lodge-product-heading"><div><p className="lodge-product-breadcrumb">Taller <span>›</span> Tesorería</p><h1>{canManage?'Tesorería del Taller':'Revisión de egresos de Tesorería'}</h1><p>{canManage?'Todo lo necesario para recaudar, registrar y rendir la Tesorería del Taller.':'El Venerable Maestro revisa y autoriza egresos, sin modificar cuotas ni pagos.'}</p></div>{organizations.length===1?<div className="lodge-organization-select single-organization"><span>Taller</span><strong>{organizationDisplayName(organizations[0].name, organizations[0].number)}</strong></div>:<label className="lodge-organization-select"><span>Taller</span><select value={organizationId} onChange={e=>setOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.map(x=><option key={x.id} value={x.id}>{organizationDisplayName(x.name, x.number)}</option>)}</select></label>}</section>
  <TreasuryRoleNavigation title={canManage?'Tesorería del Taller':'Autorizaciones del Venerable'} sections={sections} active={section} onChange={id=>setSection(id as LocalSection)}/>
- {organizationId&&section!=='statement'&&<LodgeTreasuryPanel api={api} organizationId={organizationId} treasuryTerritory={territories[organizationId]??null} canManage={canManage} canApproveExpenses={canApproveExpenses} section={section}/>}
- {canManage&&section==='statement'&&<TreasuryStatementPage api={api} canPrepare canReview={false} organizationId={organizationId}/>}</div>
+ {error&&<p role="alert">{error}</p>}
+ {organizationId&&!access&&!error&&<p role="status">Comprobando acceso…</p>}
+ {access&&!allowed.includes('view')&&<p role="alert">No tiene acceso a Tesorería en este Taller.</p>}
+ {allowed.includes('view')&&organizationId&&section!=='statement'&&<LodgeTreasuryPanel api={api} organizationId={organizationId} treasuryTerritory={territories[organizationId]??null} canManage={canManage} canApproveExpenses={canApproveExpenses} actions={allowed} section={section}/>}
+ {allowed.includes('view')&&canManage&&section==='statement'&&<TreasuryStatementPage api={api} canPrepare actions={allowed} canReview={false} organizationId={organizationId}/>}</div>
 }

@@ -55,3 +55,9 @@ export class DynamicAccessClient {
  private profile(c:DynamicCatalog,code:string){const p=c.profiles.find(p=>p.code===code);if(!p||p.isSystem)throw new Error('El perfil no existe o es protegido.');return p}
  private validate(d:ProfileDraft,c:DynamicCatalog){if(!/^[a-z][a-z0-9-]{0,79}$/.test(d.code)||!d.name.trim()||d.name.length>240||!['order','lodge'].includes(d.scope)||(d.scope==='lodge'&&d.menuCodes.includes('system'))||d.menuCodes.some(code=>!c.menus.some(m=>m.isActive&&m.code===code)))throw new Error('Código, nombre, alcance o menús inválidos.')}
 }
+
+export interface TreasuryAccess { version:number; organizationId:string; managed:boolean; actions:AccessAction[] }
+export function treasuryAccess(c:DynamicCatalog,subject:string,organizationId:string,today:string):TreasuryAccess {
+ const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===organizationId)
+ return {version:c.version,organizationId,managed,actions:actions.filter(action=>!managed||technicalGrant(c,subject,'lodgetreasury',action,organizationId,today))}
+}

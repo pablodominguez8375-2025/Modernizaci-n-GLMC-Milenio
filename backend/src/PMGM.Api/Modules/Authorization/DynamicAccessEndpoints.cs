@@ -147,7 +147,7 @@ public static class DynamicAccessEndpoints
         await tx.CommitAsync(ct);
         return Results.Ok(next);
     }
-    private static async Task<DynamicAccessCatalog> LoadAsync(PmgmDbContext db, CancellationToken ct)
+    public static async Task<DynamicAccessCatalog> LoadAsync(PmgmDbContext db, CancellationToken ct)
     {
         var snapshot = await db.DynamicAccessSnapshots.AsNoTracking().OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
         if (snapshot is null) return CreateCatalog();
@@ -169,7 +169,7 @@ public static class DynamicAccessEndpoints
         var names = new[] { "Venerable Maestro", "Secretaría del Taller", "Tesorería del Taller", "Hospitalaria del Taller", "Orador del Taller", "Primer Vigilante", "Segundo Vigilante", "Inmediato Ex-Venerable Maestro", "Administrador del Sistema" };
         return new DynamicAccessCatalog(0, AllowedActions, menus, names.Select((name, i) => new DynamicProfile(Guid.Parse($"00000000-0000-0000-0000-{i + 1:000000000000}"), "system-" + i, name, i == 8 ? "order" : "lodge", true, true, [], [])).ToList(), []);
     }
-    private static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+    public static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
     private static bool Eq(string? left, string? right) => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
     private static string[] Normalize(string[]? values) => (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct().ToArray();
     private static bool ValidMenus(DynamicAccessCatalog catalog, string[]? menus) => (menus ?? []).All(m => catalog.Menus.Any(x => x.IsActive && Eq(x.Code, m)));

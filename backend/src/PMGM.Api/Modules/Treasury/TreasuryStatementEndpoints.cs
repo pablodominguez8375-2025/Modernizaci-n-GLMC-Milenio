@@ -33,6 +33,7 @@ public static class TreasuryStatementEndpoints
             .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
         if (statement is null) return Results.NotFound();
         if (!access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, statement.OrganizationId, "create", cancellationToken)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count != 0)
             return Results.Conflict(new { message = "La generación automática requiere un cuadro vacío en borrador." });
 
@@ -149,6 +150,7 @@ public static class TreasuryStatementEndpoints
         CancellationToken cancellationToken)
     {
         if (!access.CanPrepareTreasuryStatement(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "create", cancellationToken)) return Results.Forbid();
         if (request.PeriodYear is < 2000 or > 2200 || request.PeriodMonth is < 1 or > 12)
             return Results.BadRequest(new { message = "El período indicado no es válido." });
         if (!await db.Organizations.AnyAsync(x => x.Id == organizationId, cancellationToken))
@@ -187,6 +189,7 @@ public static class TreasuryStatementEndpoints
         if (!access.CanPrepareTreasuryStatement(context.User, organizationId) &&
             !access.CanManageTreasuryRegularity(context.User))
             return Results.Forbid();
+        if (!access.CanManageTreasuryRegularity(context.User) && !await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
 
         var query = db.TreasuryMonthlyStatements.AsNoTracking()
             .Where(x => x.OrganizationId == organizationId);
@@ -215,6 +218,7 @@ public static class TreasuryStatementEndpoints
         var statement = await db.TreasuryMonthlyStatements.FindAsync([statementId], cancellationToken);
         if (statement is null) return Results.NotFound();
         if (!access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, statement.OrganizationId, "write", cancellationToken)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft)
             return Results.Conflict(new { message = "Sólo se pueden modificar cuadros en borrador." });
         if (!TreasuryCodes.IdentityMatchStatus.IsValid(request.IdentityMatchStatus))
@@ -261,6 +265,7 @@ public static class TreasuryStatementEndpoints
         var statement = await db.TreasuryMonthlyStatements.FindAsync([statementId], cancellationToken);
         if (statement is null) return Results.NotFound();
         if (!access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, statement.OrganizationId, "write", cancellationToken)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft)
             return Results.Conflict(new { message = "Los pagos sólo pueden registrarse mientras el Cuadro está en borrador." });
         if (!TreasuryCodes.PaymentMethod.IsValid(request.PaymentMethod) || request.Amount <= 0)
@@ -292,6 +297,7 @@ public static class TreasuryStatementEndpoints
             .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
         if (statement is null) return Results.NotFound();
         if (!access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, statement.OrganizationId, "write", cancellationToken)) return Results.Forbid();
         if (statement.Status != TreasuryCodes.StatementStatus.Draft || statement.Lines.Count == 0)
             return Results.Conflict(new { message = "El cuadro debe estar en borrador y contener líneas antes de enviarse." });
         var totals = TreasuryStatementTotals.Calculate(statement.Lines, statement.Payments);
@@ -352,6 +358,7 @@ public static class TreasuryStatementEndpoints
         var canPrepareTreasury = access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId);
         if (!canManageTreasury && !access.CanReadOrganization(context.User, statement.OrganizationId))
             return Results.Forbid();
+        if (!access.CanManageTreasuryRegularity(context.User) && !await DynamicTreasuryAccess.AllowsAsync(db, context.User, statement.OrganizationId, "view", cancellationToken)) return Results.Forbid();
         var includeDetails = canManageTreasury ? includeMemberDetail == true : canPrepareTreasury;
         var memberDetails = includeDetails
             ? await GetMemberDetailsAsync(db, statement.Lines, cancellationToken)

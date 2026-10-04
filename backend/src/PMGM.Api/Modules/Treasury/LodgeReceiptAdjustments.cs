@@ -36,6 +36,7 @@ public static partial class LodgeTreasuryEndpoints
         var receipt = await db.LodgeMemberReceipts.AsNoTracking().SingleOrDefaultAsync(x => x.Id == receiptId, ct);
         if (receipt is null) return Results.NotFound();
         if (!access.CanManageLodgeTreasury(context.User, receipt.OrganizationId)) return Results.Forbid();
+        if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, receipt.OrganizationId, request.Kind == "void" ? "delete" : "edit", ct)) return Results.Forbid();
         var reason = request.Reason?.Trim();
         var key = request.IdempotencyKey?.Trim();
         if (request.Kind is not ("void" or "correction") || string.IsNullOrWhiteSpace(reason) || reason.Length > 1000 ||
