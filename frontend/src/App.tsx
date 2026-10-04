@@ -174,10 +174,10 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   ]
   const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive || canManageAnyInstruction || canReadOrderInstructions
 
-  const pendingFlags: PendingTaskFlags = useMemo(() => ({ canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap }), [canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap])
+  const pendingFlags: PendingTaskFlags = useMemo(() => ({ canApproveLodgeExpenses:canApproveLodgeExpenses&&canOpenLodgeTreasury, canLodgeTreasury:canLodgeTreasury&&canOpenLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap }), [canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap, canOpenLodgeTreasury])
   const operational = isOperationalProfile(pendingFlags)
   const navRef = useRef<HTMLElement>(null)
-  useCollapsibleNavGroups(navRef, [view, effectiveProfile?.displayName, sidebarCollapsed, operational])
+  useCollapsibleNavGroups(navRef, [view, effectiveProfile?.displayName, sidebarCollapsed, operational, canOpenLodgeTreasury])
   const pendingTasks = useMemo(() => buildPendingTasks(pendingFlags, pendingCounts), [pendingFlags, pendingCounts])
   const badges = useMemo(() => navigationBadges(pendingTasks), [pendingTasks])
   const pendingTotal = totalPending(pendingTasks)
@@ -206,6 +206,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     return () => { active = false }
   }, [api, candidateIntakeApi, lodgeApi, notificationApi, effectiveProfile, canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat])
 
+  useEffect(() => { if(view==='lodgeTreasury'&&!canOpenLodgeTreasury)setView('dashboard') }, [view,canOpenLodgeTreasury])
   useEffect(() => { setMenuOpen(false) }, [view])
   useEffect(() => {
     if (!menuOpen) return
