@@ -18,6 +18,7 @@ public static class LodgeHospitalariaEndpoints
             .WithTags("Hospitalaria del Taller")
             .RequireAuthorization();
 
+        group.MapGet("/talleres/{organizationId:guid}/acceso", GetAccessAsync);
         group.MapPost("/talleres/{organizationId:guid}/movimientos", CreateMovementAsync);
         group.MapPost("/movimientos/{movementId:guid}/aprobar", ApproveMovementAsync);
         group.MapPost("/movimientos/{movementId:guid}/aprobar-consejo", ApproveMovementByCouncilAsync);
@@ -31,6 +32,13 @@ public static class LodgeHospitalariaEndpoints
         return endpoints;
     }
 
+    private static async Task<IResult> GetAccessAsync(Guid organizationId, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        if (!access.CanReadLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        return Results.Ok(await DynamicHospitalariaAccess.ProjectAsync(db, context.User, organizationId, access, ct));
+    }
+
     private static async Task<IResult> CreateMovementAsync(
         Guid organizationId,
         CreateLodgeHospitalariaMovementRequest request,
@@ -41,6 +49,7 @@ public static class LodgeHospitalariaEndpoints
         CancellationToken ct)
     {
         if (!access.CanManageLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "create", ct)) return Results.Forbid();
         if (request.Amount <= 0 ||
             !HospitalariaMovementCodes.IsValidType(request.MovementType) ||
             !HospitalariaMovementCodes.IsValidCategory(request.Category))
@@ -96,6 +105,7 @@ public static class LodgeHospitalariaEndpoints
         if (movement.MovementType != HospitalariaMovementCodes.Expense)
             return Results.BadRequest(new { message = "Solo los egresos requieren aprobación." });
         if (!access.CanApproveLodgeExpenses(context.User, movement.OrganizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, movement.OrganizationId, "write", ct)) return Results.Forbid();
         if (movement.ApprovalStatus != HospitalariaMovementCodes.PendingApproval)
             return Results.Conflict(new { message = "El egreso ya fue aprobado o no está pendiente." });
 
@@ -131,6 +141,7 @@ public static class LodgeHospitalariaEndpoints
         var movement = await db.LodgeHospitalariaMovements.SingleOrDefaultAsync(x => x.Id == movementId, ct);
         if (movement is null) return Results.NotFound();
         if (!access.CanManageLodgeHospitalaria(context.User, movement.OrganizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, movement.OrganizationId, "write", ct)) return Results.Forbid();
         if (movement.MovementType != HospitalariaMovementCodes.Expense ||
             movement.Category != HospitalariaMovementCodes.CharityAid)
             return Results.BadRequest(new { message = "La vía de Consejo sólo aplica a socorros/ayudas de beneficencia." });
@@ -183,6 +194,7 @@ public static class LodgeHospitalariaEndpoints
         CancellationToken ct)
     {
         if (!access.CanReadLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
 
         var start = from ?? FirstDayOfCurrentMonthInChile();
         var end = to ?? start.AddMonths(1).AddDays(-1);
@@ -232,6 +244,7 @@ public static class LodgeHospitalariaEndpoints
         CancellationToken ct)
     {
         if (!access.CanManageLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
 
         var query = lodgeDb.LodgeCouncilDecisions
             .AsNoTracking()
@@ -270,6 +283,7 @@ public static class LodgeHospitalariaEndpoints
         CancellationToken ct)
     {
         if (!access.CanManageLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
 
         var items = await lodgeDb.LodgeCouncilFinancialReviews
             .AsNoTracking()
@@ -306,6 +320,7 @@ public static class LodgeHospitalariaEndpoints
         CancellationToken ct)
     {
         if (!access.CanManageLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         if (year is < 2000 or > 2200 || month is < 1 or > 12)
             return Results.BadRequest(new { message = "El período indicado no es válido." });
         if (request.ReplenishmentDueAmount < 0 || request.ReplenishmentPaidAmount < 0)
@@ -384,6 +399,7 @@ public static class LodgeHospitalariaEndpoints
         CancellationToken ct)
     {
         if (!access.CanReadLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
 
         var query = db.HospitalariaMonthlySubmissions
             .AsNoTracking()
@@ -413,6 +429,7 @@ public static class LodgeHospitalariaEndpoints
         var submission = await db.HospitalariaMonthlySubmissions.SingleOrDefaultAsync(x => x.Id == submissionId, ct);
         if (submission is null) return Results.NotFound();
         if (!access.CanManageLodgeHospitalaria(context.User, submission.OrganizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, submission.OrganizationId, "write", ct)) return Results.Forbid();
         if (submission.Status != HospitalariaCodes.SubmissionStatus.Draft)
             return Results.Conflict(new { message = "Sólo una rendición en borrador puede enviarse." });
 

@@ -169,6 +169,7 @@ public static class HospitalariaEndpoints
         IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanReadLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "view", ct)) return Results.Forbid();
         var cutoff = asOf ?? TodayInChile();
         var obligations = await db.DeathReplenishmentObligations.AsNoTracking()
             .Include(x => x.Member).ThenInclude(x => x.Person)
@@ -212,6 +213,7 @@ public static class HospitalariaEndpoints
             .SingleOrDefaultAsync(x => x.Id == obligationId, ct);
         if (obligation is null) return Results.NotFound();
         if (!access.CanManageLodgeHospitalaria(context.User, obligation.OrganizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, obligation.OrganizationId, "write", ct)) return Results.Forbid();
         var paid = obligation.Payments.Sum(x => x.Amount);
         if (request.Amount <= 0 || request.Amount > obligation.AmountDue - paid ||
             string.IsNullOrWhiteSpace(request.Reference) || string.IsNullOrWhiteSpace(request.PaymentMethod))
@@ -242,6 +244,7 @@ public static class HospitalariaEndpoints
         PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageLodgeHospitalaria(context.User, organizationId)) return Results.Forbid();
+        if (!await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "write", ct)) return Results.Forbid();
         var caseExists = await db.DeathReplenishmentCases.AnyAsync(x => x.Id == caseId, ct);
         if (!caseExists) return Results.NotFound();
         var obligations = await db.DeathReplenishmentObligations.Include(x => x.Payments)

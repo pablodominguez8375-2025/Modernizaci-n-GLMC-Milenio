@@ -67,3 +67,9 @@ export function tariffAccess(c:DynamicCatalog,subject:string,today:string):Tarif
  const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===null)
  return {version:c.version,managed,actions:(['view','create'] as AccessAction[]).filter(action=>!managed||technicalGrant(c,subject,'treasury',action,null,today))}
 }
+
+export type HospitalariaAccess = TreasuryAccess
+export function hospitalariaAccess(c:DynamicCatalog,subject:string,organizationId:string,today:string):HospitalariaAccess {
+ const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===organizationId)
+ return {version:c.version,organizationId,managed,actions:(['view','create','write'] as AccessAction[]).filter(action=>!managed||technicalGrant(c,subject,'hospitalaria',action,organizationId,today))}
+}
