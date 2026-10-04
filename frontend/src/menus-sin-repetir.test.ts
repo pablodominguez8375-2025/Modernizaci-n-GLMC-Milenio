@@ -22,4 +22,23 @@ describe('PMGM-UX menús sin funciones repetidas (aprobado por el PO 03-10-2026)
     expect(app).toContain('label="Secciones del Taller"')
     expect(app).not.toContain('<ModuleAccess icon="check" label="Cola de corroboración"')
   })
+
+  it('reúne las tres vistas de iniciación en una sola entrada y búsqueda', () => {
+    const sidebar = app.slice(app.indexOf('<nav className={menuOpen'), app.indexOf('<main className="content"'))
+    expect(sidebar.match(/label="Insinuaciones e Iniciación"/g)).toHaveLength(1)
+    expect(sidebar).not.toMatch(/label="Circuito de Iniciación"|label="Insinuados publicados"|label="Carga de insinuados"|label="Revisión de insinuados"/)
+    expect(app).toContain("['candidates', 'candidateProfile', 'initiationCircuit']")
+    const search = app.slice(app.indexOf('const searchEntries'), app.indexOf('const changeDemoProfile'))
+    expect(search.match(/'Insinuaciones e Iniciación'/g)).toHaveLength(1)
+    expect(search).not.toContain("'Procesos', 'ceremony'")
+  })
+
+  it('mantiene publicados para todos y pestañas privadas sólo por capacidades existentes', () => {
+    expect(app).toContain('isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs')
+    expect(app).toContain("{ id: 'candidates' as View, label: 'Publicados' }")
+    expect(app).toContain("...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga'")
+    expect(app).toContain("...(canCandidateProfile || canCeremonies ? [{ id: 'initiationCircuit' as View")
+    expect(app).toContain("view === 'candidateProfile' && canCandidateProfile")
+    expect(app).toContain("view === 'initiationCircuit' && (canCandidateProfile || canCeremonies)")
+  })
 })

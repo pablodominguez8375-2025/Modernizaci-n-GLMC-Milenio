@@ -14,6 +14,11 @@ if (!browser || !baseUrl || !outputDir) {
 
 const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
+  { slug: 'iniciacion-publicados-hermano', profile: 'brother', label: 'Insinuaciones e Iniciación', initiationTabs: [] },
+  { slug: 'iniciacion-venerable', profile: 'lodge', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'], sidebarCount: 11 },
+  { slug: 'iniciacion-secretaria-taller', profile: 'lodgeSecretary', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'] },
+  { slug: 'iniciacion-gran-secretaria', profile: 'secretariat', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Revisión', 'Circuito de Iniciación'] },
+  { slug: 'iniciacion-regimen', profile: 'regimen', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Circuito de Iniciación'] },
   { slug: 'afiliacion-incorporacion-tramitacion', profile: 'lodgeSecretary', label: 'Secretaría', admissions: true },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
   { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
@@ -21,8 +26,8 @@ const scenarios = [
     slug: 'tesoreria-taller',
     profile: 'lodgeTreasurer',
     label: 'Tesorería',
-    requiredSidebar: ['Mi ficha', 'Agenda', 'Avisos', 'Insinuados publicados', 'Tesorería', 'Biblioteca Virtual'],
-    forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Carga de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
+    requiredSidebar: ['Mi ficha', 'Agenda', 'Avisos', 'Insinuaciones e Iniciación', 'Tesorería', 'Biblioteca Virtual'],
+    forbiddenSidebar: ['Secretaría', 'Gestión Logial', 'Tenidas y actas', 'Insinuados publicados', 'Carga de insinuados', 'Revisión de insinuados', 'Circuito de Iniciación', 'Fichas de miembros', 'Cuadro del Taller', 'Ficha de Taller', 'Retiros y traslados', 'Bandeja de pendientes', 'Gestor Documental'],
     requiredTabs: ['Resumen', 'Cuotas y Cobranzas', 'Ingresos y Egresos', 'Cuadro mensual', 'Configuraciones', 'Reportes'],
     treasuryCollection: true,
   },
@@ -235,6 +240,40 @@ async function assertNavigation(scenario) {
   })) {
     if (values.length) throw new Error(`${scenario.slug} navigation check failed (${key}: ${values.join(', ')}).`)
   }
+}
+
+async function assertInitiationNavigation(scenario, viewport) {
+  const open = async tab => {
+    const clicked = await evaluate(`(() => {
+      const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
+      const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
+      const button = [...(nav?.querySelectorAll('[role="tab"]') || [])].find(button => label(button) === ${JSON.stringify(tab)});
+      if (!button || button.disabled) return false;
+      button.click(); return true;
+    })()`);
+    if (!clicked) throw new Error(`Initiation tab missing for ${scenario.profile}: ${tab}`);
+    await delay(350);
+  };
+  const read = () => evaluate(`(() => {
+    const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
+    const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
+    const sidebar = [...document.querySelectorAll('nav.sidebar .nav-item')];
+    return { tabs: [...(nav?.querySelectorAll('[role="tab"]') || [])].map(label),
+      activeTabs: [...(nav?.querySelectorAll('[aria-selected="true"]') || [])].map(label),
+      activeSidebar: sidebar.filter(button => button.classList.contains('active')).map(button => button.querySelector('.nav-text')?.textContent.trim()),
+      count: sidebar.length };
+  })()`);
+  const initial = await read();
+  if (JSON.stringify(initial.tabs) !== JSON.stringify(scenario.initiationTabs)) throw new Error(`Wrong initiation tabs for ${scenario.profile}: ${JSON.stringify(initial)}`);
+  if (scenario.sidebarCount && initial.count !== scenario.sidebarCount) throw new Error(`Expected ${scenario.sidebarCount} sidebar entries for ${scenario.profile}, got ${initial.count}`);
+  for (const tab of scenario.initiationTabs) {
+    await open(tab);
+    const state = await read();
+    if (JSON.stringify(state.activeTabs) !== JSON.stringify([tab]) || JSON.stringify(state.activeSidebar) !== JSON.stringify(['Insinuaciones e Iniciación'])) throw new Error(`Wrong initiation selection for ${scenario.profile}/${tab}: ${JSON.stringify(state)}`);
+    await assertNoGlobalHorizontalOverflow(`${scenario.profile}/${tab}`, viewport.suffix);
+  }
+  if (scenario.initiationTabs.length) await open('Publicados');
+  console.log(`initiation navigation ${scenario.profile} ${viewport.suffix}: ${JSON.stringify(initial)}`);
 }
 
 async function openTreasuryCollection() {
@@ -670,6 +709,7 @@ try {
       await selectProfile(scenario.profile)
       await openModule(scenario.label)
       await assertNavigation(scenario)
+      if (scenario.initiationTabs) await assertInitiationNavigation(scenario, viewport)
       if (scenario.admissions) await openAdmissionProcedure()
       if (scenario.slug === 'inicio') await assertDashboardMetricLayout(viewport)
       if (scenario.treasuryCollection) {
