@@ -7,3 +7,5 @@ describe('access profile designer',()=>{
  it('rejects a lodge profile with system access',()=>expect(validateAccessProfile({code:'custom',name:'Perfil',scope:'lodge',menuCodes:['system']}).errors.length).toBeGreaterThan(0))
  it('requires canonical stable profile codes',()=>expect(validateAccessProfile({code:'Código libre',name:'Perfil',scope:'order',menuCodes:[]}).errors.length).toBeGreaterThan(0))
 })
+
+it('rechaza código duplicado al crear y permite editar el perfil seleccionado',()=>{const draft={code:'auditor',name:'Auditor',scope:'order' as const,menuCodes:['personal']};expect(validateAccessProfile(draft,['auditor']).errors).toContain('El código del perfil ya existe.');expect(validateAccessProfile(draft,['auditor'],'auditor').errors).toEqual([])})

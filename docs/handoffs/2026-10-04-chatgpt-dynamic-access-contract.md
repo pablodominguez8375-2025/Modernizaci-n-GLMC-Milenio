@@ -12,6 +12,8 @@ Datos: DB-005/SEC-004 y migración 20261004031137_AddDynamicAccessSnapshots. Up 
 
 Archivos: Authorization/**, PmgmDbContext/Program/migración específica; AccessProfileDesigner/UserAccessAssignments/AccessReviewPanel, su conexión mínima en SystemOperationsPanel; api/pmgmApi + dynamicAccess + hook, tests; DB-005/SEC-004 y este handoff. Ningún PR abierto de Claude al inicio. No editar START-HERE en PR funcional.
 
-Frontend: 398 PASS, lint/build PASS local. Backend y proyecto de pruebas compilan sin errores/advertencias; 2 pruebas unitarias del evaluador PASS. Las 3 pruebas HTTP nuevas requieren PMGM_TEST_POSTGRES y se verificarán con PostgreSQL en CI (no ejecutadas localmente). Gates exact-head y publicación se completarán en recibos del PR y Línea Base. No reutilizar CI del head fa1b3dd; dev vivo debe ser padre antes de merge.
+Frontend: 399 PASS, lint/build PASS local. Backend y proyecto de pruebas compilan sin errores/advertencias; 2 pruebas unitarias del evaluador PASS. Las 3 pruebas HTTP nuevas requieren PMGM_TEST_POSTGRES y se verificarán con PostgreSQL en CI (no ejecutadas localmente). Gates exact-head y publicación se completarán en recibos del PR y Línea Base. No reutilizar CI del head fa1b3dd; dev vivo debe ser padre antes de merge.
+
+Se separan explícitamente los modos crear/editar; escribir un código existente al crear se rechaza sin sobrescribir el perfil.
 
 Pendientes: revisión funcional del contrato técnico y pruebas PostgreSQL, CI/Showcase/QA exact-head, integración cuando el alcance esté completo, luego Pages/qa-current/ZIP/manifiesto del SHA integrado. Main/srv01/UAT pendientes; #116 histórico NO FUSIONAR TODAVÍA. Adenda #313 pendiente de consolidación en Línea Base. Continuar sólo desde GitHub/Drive y consultar reservas antes de cambios.
