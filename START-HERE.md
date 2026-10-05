@@ -248,3 +248,4 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 
 - Continuidad de permisos del tarifario (#266 / #320): [handoff de cierre](docs/handoffs/2026-10-04-chatgpt-tariff-access-postmerge.md).
 - Cierre técnico Hospitalaria local #266/#322: [handoff y evidencias](docs/handoffs/2026-10-04-chatgpt-hospitalaria-access-postmerge.md); Gran Hospitalaria/navegación y QA física/UAT pendientes.
+- Verificación pública Hospitalaria #266/#324: [recibo y continuidad](docs/handoffs/2026-10-05-chatgpt-public-qa-verification.md); ZIP público, 1025 MANIFEST, nueve archivos críticos y demo comprobados; Gran Hospitalaria y QA física/UAT pendientes.
