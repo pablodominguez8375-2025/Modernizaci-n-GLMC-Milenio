@@ -56,6 +56,8 @@ public sealed class DynamicHospitalariaAccessHttpTests
         var projection = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
         Assert.Equal(new[] { "view" }, projection.GetProperty("actions").EnumerateArray().Select(x => x.GetString()).ToArray());
         Assert.False(projection.TryGetProperty("subject", out _)); Assert.False(projection.TryGetProperty("assignments", out _));
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(url + "/resumen", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(url + "/rendiciones", ct)).StatusCode);
         var request = new { movementType = "expense", category = "charity_aid", amount = 1000, movementDate = "2026-10-04", evidenceReference = "QA" };
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(url + "/movimientos", request, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(url + "/rendiciones/2026/10", new { replenishmentDueAmount = 0, replenishmentPaidAmount = 0 }, ct)).StatusCode);
