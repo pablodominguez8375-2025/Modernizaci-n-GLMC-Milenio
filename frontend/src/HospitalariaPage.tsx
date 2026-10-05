@@ -55,8 +55,10 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
   const [rateAmount,setRateAmount]=useState(1500)
   const [rateDate,setRateDate]=useState(todayInChile())
   const [rateReference,setRateReference]=useState('Acuerdo institucional de reposición por fallecimiento')
-  const [aidDecisions,setAidDecisions]=useState<HospitalariaCouncilAidDecision[]>([])
-  const [councilReviews,setCouncilReviews]=useState<HospitalariaCouncilFinancialReview[]>([])
+  const [storedAidDecisions,setAidDecisions]=useState<HospitalariaCouncilAidDecision[]>([])
+  const aidDecisions=localView&&loadedKey===accessKey?storedAidDecisions:[]
+  const [storedCouncilReviews,setCouncilReviews]=useState<HospitalariaCouncilFinancialReview[]>([])
+  const councilReviews=localView&&loadedKey===accessKey?storedCouncilReviews:[]
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [message,setMessage]=useState<string|null>(null)
@@ -75,6 +77,12 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
   const [paymentReference,setPaymentReference]=useState('')
   const [councilReviewId,setCouncilReviewId]=useState('')
   const [reviewNotes,setReviewNotes]=useState('')
+
+  useEffect(()=>{
+    // Draft references must not follow a different Taller, subject or period.
+    setAmount(0);setMemberReference('');setDestination('');setEvidenceReference('');setObservation('')
+    setReplenishmentDue(0);setReplenishmentPaid(0);setPaymentReference('');setCouncilReviewId('')
+  },[organizationId,period,api.demoAccessSubject])
 
   const [year,month]=period.split('-').map(Number)
   const start=`${period}-01`

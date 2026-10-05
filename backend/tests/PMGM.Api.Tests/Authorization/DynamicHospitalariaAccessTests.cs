@@ -15,8 +15,8 @@ public sealed class DynamicHospitalariaAccessTests
         Assert.True(Allowed("write", "another-subject"));
         Assert.True(DynamicHospitalariaAccess.Allows(c, "qa", "write", Guid.NewGuid(), today));
         Assert.False(Allowed("print"));
-        c.Profiles[0] = c.Profiles[0] with { IsActive = false }; Assert.False(Allowed("view"));
-        c.Profiles[0] = c.Profiles[0] with { IsActive = true };
+        c.Profiles[^1] = c.Profiles[^1] with { IsActive = false }; Assert.False(Allowed("view"));
+        c.Profiles[^1] = c.Profiles[^1] with { IsActive = true };
         c.Assignments[0] = c.Assignments[0] with { IsActive = false };
         Assert.False(Allowed("view")); Assert.False(Allowed("write"));
         c.Assignments[0] = c.Assignments[0] with { IsActive = true, EffectiveTo = today.AddDays(-1) };
