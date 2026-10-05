@@ -69,7 +69,9 @@ export type CsvColumn = { header: string; value: (row: any) => unknown }
 
 export function buildCsv(columns: CsvColumn[], rows: unknown[], footer?: string) {
   const escape = (value: unknown) => {
-    const text = value === null || value === undefined ? '' : String(value)
+    const raw = value === null || value === undefined ? '' : String(value)
+    // Seguridad: evita la inyección de fórmulas en Excel/Sheets (=, +, -, @, tabulación) en textos; los números quedan intactos.
+    const text = typeof value !== 'number' && /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
     return /[;"\n\r]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text
   }
   const lines = [columns.map(column => escape(column.header)).join(';'), ...rows.map(row => columns.map(column => escape(column.value(row))).join(';'))]
