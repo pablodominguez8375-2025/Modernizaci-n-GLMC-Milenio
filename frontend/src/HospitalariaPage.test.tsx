@@ -53,3 +53,23 @@ describe('hospitalaria page — Gran Hospitalaria (aggregate-only view)', () => 
     }
   })
 })
+
+
+describe('Hospitalaria — sincronización explícita', () => {
+  it('explica la consulta sin generación y ofrece una acción con revisión previa a Gran Hospitalaria', () => {
+    const html = renderToStaticMarkup(
+      <HospitalariaPage {...baseProps()} canReadLocal={false} canManageLocal={false} canApproveExpenses={false} canManageGrand />
+    )
+    expect(html).toContain('Consultar esta bandeja no genera obligaciones.')
+    expect(html).toContain('Sincronizar defunciones')
+    expect(html).toContain('Generar casos pendientes')
+    expect(html).toContain('aria-haspopup="dialog"')
+  })
+  it('no ofrece la generación institucional al perfil local', () => {
+    const html = renderToStaticMarkup(
+      <HospitalariaPage {...baseProps()} canReadLocal canManageLocal canApproveExpenses={false} canManageGrand={false} />
+    )
+    expect(html).not.toContain('Sincronizar defunciones')
+    expect(html).not.toContain('Generar casos pendientes')
+  })
+})
