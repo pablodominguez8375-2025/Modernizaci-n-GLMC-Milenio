@@ -18,7 +18,8 @@ describe('hospitalaria page — Taller (Hospitalario/a)', () => {
     const withManage = renderToStaticMarkup(
       <HospitalariaPage {...baseProps()} canReadLocal canManageLocal canApproveExpenses={false} canManageGrand={false} />
     )
-    expect(withManage).toContain('Registrar movimiento')
+    expect(withManage).not.toContain('Registrar movimiento')
+    expect(withManage).toContain('Comprobando acceso')
 
     const readOnly = renderToStaticMarkup(
       <HospitalariaPage {...baseProps()} canReadLocal canManageLocal={false} canApproveExpenses={false} canManageGrand={false} />
@@ -26,7 +27,7 @@ describe('hospitalaria page — Taller (Hospitalario/a)', () => {
     // Venerable Maestro / read-only inspection must not expose the reserved
     // movement-entry form (per PMGM-ARCH-011: inspects, does not edit).
     expect(readOnly).not.toContain('Registrar movimiento')
-    expect(readOnly).toContain('Venerable Maestro · inspección Hospitalaria')
+    expect(readOnly).toContain('Comprobando acceso')
   })
 })
 

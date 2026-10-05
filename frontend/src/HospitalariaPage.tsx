@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, useRef, type ReactNode } from 'react'
 import { ActionDrawer, HelpNote, WorkspacePanel, WorkspaceTabs } from './actionKit'
 import {
   type GrandHospitalariaSubmission,
@@ -16,6 +16,7 @@ import {
 import './regularity.css'
 import './treasuryStatement.css'
 import { organizationDisplayName } from './displayFormat'
+import { useHospitalariaAccess } from './useHospitalariaAccess'
 
 const money = new Intl.NumberFormat('es-CL',{style:'currency',currency:'CLP',maximumFractionDigits:0})
 
@@ -33,17 +34,31 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
   const [organizations,setOrganizations]=useState<OrganizationOption[]>([])
   const [organizationId,setOrganizationId]=useState('')
   const [period,setPeriod]=useState(currentPeriodInChile())
-  const [summary,setSummary]=useState<LodgeHospitalariaSummary|null>(null)
-  const [submission,setSubmission]=useState<HospitalariaMonthlySubmission|null>(null)
+  const localAccess=useHospitalariaAccess(api,canReadLocal?organizationId:'')
+  const localView=canReadLocal&&!!localAccess.access?.actions.includes('view')
+  const localCreate=canManageLocal&&!!localAccess.access?.actions.includes('create')
+  const localWrite=canManageLocal&&!!localAccess.access?.actions.includes('write')
+  const localApprove=canApproveExpenses&&!!localAccess.access?.actions.includes('write')
+  const accessKey=`${api.demoAccessSubject}:${organizationId}:${period}:${localAccess.access?.version}:${localAccess.access?.actions.join(',')}`
+  const currentAccessKey=useRef(accessKey)
+  currentAccessKey.current=accessKey
+  const [loadedKey,setLoadedKey]=useState('')
+  const [storedSummary,setSummary]=useState<LodgeHospitalariaSummary|null>(null)
+  const summary=localView&&loadedKey===accessKey?storedSummary:null
+  const [storedSubmission,setSubmission]=useState<HospitalariaMonthlySubmission|null>(null)
+  const submission=localView&&loadedKey===accessKey?storedSubmission:null
   const [grandItems,setGrandItems]=useState<GrandHospitalariaSubmission[]>([])
   const [deathCases,setDeathCases]=useState<DeathReplenishmentCase[]>([])
-  const [localReplenishments,setLocalReplenishments]=useState<WorkshopDeathReplenishments|null>(null)
+  const [storedLocalreplenishments,setLocalReplenishments]=useState<WorkshopDeathReplenishments|null>(null)
+  const localReplenishments=localView&&loadedKey===accessKey?storedLocalreplenishments:null
   const [replenishmentRate,setReplenishmentRate]=useState<HospitalariaReplenishmentRate|null>(null)
   const [rateAmount,setRateAmount]=useState(1500)
   const [rateDate,setRateDate]=useState(todayInChile())
   const [rateReference,setRateReference]=useState('Acuerdo institucional de reposición por fallecimiento')
-  const [aidDecisions,setAidDecisions]=useState<HospitalariaCouncilAidDecision[]>([])
-  const [councilReviews,setCouncilReviews]=useState<HospitalariaCouncilFinancialReview[]>([])
+  const [storedAidDecisions,setAidDecisions]=useState<HospitalariaCouncilAidDecision[]>([])
+  const aidDecisions=localView&&loadedKey===accessKey?storedAidDecisions:[]
+  const [storedCouncilReviews,setCouncilReviews]=useState<HospitalariaCouncilFinancialReview[]>([])
+  const councilReviews=localView&&loadedKey===accessKey?storedCouncilReviews:[]
   const [busy,setBusy]=useState(false)
   const [error,setError]=useState<string|null>(null)
   const [message,setMessage]=useState<string|null>(null)
@@ -63,6 +78,12 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
   const [councilReviewId,setCouncilReviewId]=useState('')
   const [reviewNotes,setReviewNotes]=useState('')
 
+  useEffect(()=>{
+    // Draft references must not follow a different Taller, subject or period.
+    setAmount(0);setMemberReference('');setDestination('');setEvidenceReference('');setObservation('')
+    setReplenishmentDue(0);setReplenishmentPaid(0);setPaymentReference('');setCouncilReviewId('')
+  },[organizationId,period,api.demoAccessSubject])
+
   const [year,month]=period.split('-').map(Number)
   const start=`${period}-01`
   const end=monthEnd(year,month)
@@ -78,7 +99,8 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
   },[api])
 
   const refreshLocal=async()=>{
-    if(!organizationId||!canReadLocal)return
+    if(!organizationId||!localView)return
+    const requestKey=accessKey
     const [s,subs,decisions,reviews,replenishments]=await Promise.all([
       api.getLodgeHospitalariaSummary(organizationId,start,end),
       api.getHospitalariaMonthlySubmissions(organizationId,year,month),
@@ -86,6 +108,8 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
       canManageLocal?api.getHospitalariaCouncilFinancialReviews(organizationId):Promise.resolve({total:0,items:[]}),
       api.getWorkshopDeathReplenishments(organizationId),
     ])
+    if(currentAccessKey.current!==requestKey)return
+    setLoadedKey(requestKey)
     setSummary(s);setSubmission(subs.items[0]??null);setAidDecisions(decisions.items);setCouncilReviews(reviews.items);setLocalReplenishments(replenishments)
     const existing=subs.items[0]
     if(existing){setReplenishmentDue(existing.replenishmentDueAmount);setReplenishmentPaid(existing.replenishmentPaidAmount);setPaymentReference(existing.paymentReference??'');setCouncilReviewId(existing.councilFinancialReviewId??'')}
@@ -107,14 +131,14 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
     if(!organizationId)return
     let active=true
     setError(null)
-    Promise.all([canReadLocal?refreshLocal():Promise.resolve(),canManageGrand?refreshGrand():Promise.resolve()])
+    Promise.all([localView?refreshLocal():Promise.resolve(),canManageGrand?refreshGrand():Promise.resolve()])
       .catch(reason=>{if(active)setError(toMessage(reason))})
     return()=>{active=false}
-  },[organizationId,period,canReadLocal,canManageGrand])
+  },[organizationId,period,localView,accessKey,canManageGrand])
 
   const execute=async(operation:()=>Promise<unknown>,success:string)=>{
     setBusy(true);setError(null);setMessage(null)
-    try{await operation();await Promise.all([canReadLocal?refreshLocal():Promise.resolve(),canManageGrand?refreshGrand():Promise.resolve()]);setMessage(success)}
+    try{await operation();await Promise.all([localView?refreshLocal():Promise.resolve(),canManageGrand?refreshGrand():Promise.resolve()]);setMessage(success)}
     catch(reason){setError(toMessage(reason))}
     finally{setBusy(false)}
   }
@@ -173,6 +197,12 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
     </>
   }
 
+  if(canReadLocal&&!localView)return <>
+    <section className="page-heading"><h1>Tronco de Beneficencia y estado mensual</h1><p>Fondo independiente de Tesorería.</p></section>
+    <label className="regularity-field"><span>Taller</span><select value={organizationId} onChange={e=>setOrganizationId(e.target.value)}>{organizations.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+    <p role="status">{localAccess.error??(localAccess.access?'El perfil no permite consultar Hospitalaria en este Taller.':'Comprobando acceso a Hospitalaria…')}</p>
+  </>
+
   return <>
     <section className="page-heading"><div><p className="eyebrow">{canManageLocal?'Hospitalaria del Taller':'Venerable Maestro · inspección Hospitalaria'}</p><h1>Tronco de Beneficencia y estado mensual</h1><p>Fondo independiente de Tesorería. Los antecedentes personales de socorros permanecen restringidos al Taller; Gran Hospitalaria recibe sólo la rendición agregada.</p></div><span className="count-badge">{period}</span></section>
     {message&&<div className="regularity-success" role="status">{message}</div>}{error&&<div className="error-banner" role="alert">{error}</div>}
@@ -191,14 +221,14 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
       {pendingExpenses.length===0?<p>No hay egresos pendientes.</p>:pendingExpenses.map(item=>{
         const matching=aidDecisions.filter(x=>x.amount===item.amount)
         return <div className="payment-row" key={item.id}><span>{formatDate(item.movementDate)} · {categoryLabel(item.category)}</span><strong>{money.format(item.amount)}</strong><small>{item.evidenceReference??'Sin respaldo'}</small>
-          {canApproveExpenses&&<button type="button" className="regularity-primary" disabled={busy} onClick={()=>void execute(()=>api.approveLodgeHospitalariaExpense(item.id),'Socorro autorizado por el Venerable Maestro.')}>Aprobar como Venerable</button>}
-          {canManageLocal&&item.category==='charity_aid'&&<select aria-label="Acuerdo del Consejo" defaultValue="" onChange={e=>{if(e.target.value)void execute(()=>api.approveLodgeHospitalariaExpenseByCouncil(item.id,e.target.value),'Socorro vinculado a acuerdo aprobado del Consejo.')}}><option value="">Vincular acuerdo del Consejo…</option>{matching.map(decision=><option key={decision.id} value={decision.id}>{formatDate(decision.sessionDate)} · {money.format(decision.amount??0)}</option>)}</select>}
+          {localApprove&&<button type="button" className="regularity-primary" disabled={busy} onClick={()=>void execute(()=>api.approveLodgeHospitalariaExpense(item.id),'Socorro autorizado por el Venerable Maestro.')}>Aprobar como Venerable</button>}
+          {localWrite&&item.category==='charity_aid'&&<select aria-label="Acuerdo del Consejo" defaultValue="" onChange={e=>{if(e.target.value)void execute(()=>api.approveLodgeHospitalariaExpenseByCouncil(item.id,e.target.value),'Socorro vinculado a acuerdo aprobado del Consejo.')}}><option value="">Vincular acuerdo del Consejo…</option>{matching.map(decision=><option key={decision.id} value={decision.id}>{formatDate(decision.sessionDate)} · {money.format(decision.amount??0)}</option>)}</select>}
         </div>
       })}
     </section>
     </WorkspacePanel>
     <WorkspacePanel id="movimientos" active={localTab==='movimientos'}>
-    {canManageLocal&&<section className="panel">
+    {localCreate&&<section className="panel">
       <p className="eyebrow">Registro reservado del Taller</p><h2>Movimiento del Tronco de Beneficencia</h2>
       <HelpNote>Registra aquí cada ingreso o socorro del Tronco de Beneficencia. Los socorros quedan esperando la autorización del Venerable Maestro o del Consejo.</HelpNote>
       <div className="action-bar treasury-action-bar"><ActionDrawer label="Registrar movimiento" description="Ingreso o socorro del Tronco de Beneficencia, con su respaldo." confirmMessage="Se registrará el movimiento. Si es un socorro, quedará pendiente de autorización."><form className="regularity-form hospitalaria-drawer-form" onSubmit={event=>{event.preventDefault();void createMovement()}}>
@@ -220,20 +250,20 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
     <WorkspacePanel id="reposiciones" active={localTab==='reposiciones'}>
     {canManageLocal&&localReplenishments&&<section className="panel">
       <p className="eyebrow">Hospitalaria del Taller · obligaciones individuales</p><h2>Reposiciones por fallecimiento</h2><p>El cobro se genera por cada hermano activo del Taller. Registra cada abono con su comprobante; al pagarse todo el caso, se habilita la transferencia a Gran Hospitalaria.</p>
-      {localReplenishments.cases.map(item=><article className="hospitalaria-submission-card" key={item.caseId}><div><h3>{item.deceasedDisplayName}</h3><p>Defunción {formatDate(item.deathDate)}</p></div><div><strong>{money.format(item.paidAmount)} / {money.format(item.dueAmount)}</strong><small>{item.allPaid?'Cobro completo':'Cobro pendiente'}</small></div>{item.allPaid&&(!item.transfer||item.transfer.status==='observed')&&<TransferForm busy={busy} amount={item.dueAmount} onSubmit={payload=>void execute(()=>api.submitDeathReplenishmentTransfer(item.caseId,organizationId,payload),'Transferencia enviada a Gran Hospitalaria para conciliación.')} />}{item.transfer&&<small>Última transferencia: {money.format(item.transfer.amount)} · {item.transfer.reference} · {statusLabel(item.transfer.status)}{item.transfer.status==='observed'?' · Puede registrar una nueva transferencia corregida.':''}</small>}</article>)}
-      <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Hermano obligado</th><th>Hermano fallecido</th><th>Reposición</th><th>Pagado</th><th>Saldo / registro</th></tr></thead><tbody>{localReplenishments.items.map(item=><tr key={item.id}><td>{item.memberDisplayName}</td><td>{item.deceasedDisplayName}</td><td>{money.format(item.amountDue)}</td><td>{money.format(item.paidAmount)}</td><td>{item.balance>0?<ReplenishmentPaymentForm item={item} busy={busy} onSubmit={payload=>void execute(()=>api.addDeathReplenishmentPayment(item.id,organizationId,payload),'Pago de reposición registrado y asociado al hermano fallecido.')}/>:<span>Pagado · {item.payments.map(x=>x.receiptNumber).join(', ')}</span>}</td></tr>)}</tbody></table></div>
+      {localReplenishments.cases.map(item=><article className="hospitalaria-submission-card" key={item.caseId}><div><h3>{item.deceasedDisplayName}</h3><p>Defunción {formatDate(item.deathDate)}</p></div><div><strong>{money.format(item.paidAmount)} / {money.format(item.dueAmount)}</strong><small>{item.allPaid?'Cobro completo':'Cobro pendiente'}</small></div>{localWrite&&item.allPaid&&(!item.transfer||item.transfer.status==='observed')&&<TransferForm busy={busy} amount={item.dueAmount} onSubmit={payload=>void execute(()=>api.submitDeathReplenishmentTransfer(item.caseId,organizationId,payload),'Transferencia enviada a Gran Hospitalaria para conciliación.')} />}{item.transfer&&<small>Última transferencia: {money.format(item.transfer.amount)} · {item.transfer.reference} · {statusLabel(item.transfer.status)}{item.transfer.status==='observed'?' · Puede registrar una nueva transferencia corregida.':''}</small>}</article>)}
+      <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Hermano obligado</th><th>Hermano fallecido</th><th>Reposición</th><th>Pagado</th><th>Saldo / registro</th></tr></thead><tbody>{localReplenishments.items.map(item=><tr key={item.id}><td>{item.memberDisplayName}</td><td>{item.deceasedDisplayName}</td><td>{money.format(item.amountDue)}</td><td>{money.format(item.paidAmount)}</td><td>{item.balance>0&&localWrite?<ReplenishmentPaymentForm item={item} busy={busy} onSubmit={payload=>void execute(()=>api.addDeathReplenishmentPayment(item.id,organizationId,payload),'Pago de reposición registrado y asociado al hermano fallecido.')}/>:<span>{item.balance>0?'Pendiente':'Pagado'} · {item.payments.map(x=>x.receiptNumber).join(', ')}</span>}</td></tr>)}</tbody></table></div>
     </section>}
     </WorkspacePanel>
     <WorkspacePanel id="rendicion" active={localTab==='rendicion'}>
     {canManageLocal&&<section className="panel">
       <p className="eyebrow">Estado mensual al Consejo / Gran Hospitalaria</p><h2>Rendición agregada {period}</h2>
       <p>El sistema recalcula ingresos y egresos aprobados. La rendición no contiene beneficiarios ni observaciones privadas.</p>
-      <div className="action-bar treasury-action-bar"><ActionDrawer label="Preparar rendición" tone="secondary" description="Reposición del período, pago y revisión del Consejo." confirmMessage="Se guardará la rendición del período como borrador."><form className="regularity-form hospitalaria-drawer-form" onSubmit={event=>{event.preventDefault();void saveSubmission()}}>
+      {localWrite&&<div className="action-bar treasury-action-bar"><ActionDrawer label="Preparar rendición" tone="secondary" description="Reposición del período, pago y revisión del Consejo." confirmMessage="Se guardará la rendición del período como borrador."><form className="regularity-form hospitalaria-drawer-form" onSubmit={event=>{event.preventDefault();void saveSubmission()}}>
         <label className="regularity-field"><span>Reposición/obligación del período</span><input type="number" min="0" value={replenishmentDue} onChange={e=>setReplenishmentDue(Number(e.target.value))}/></label>
         <label className="regularity-field"><span>Reposición pagada</span><input type="number" min="0" value={replenishmentPaid} onChange={e=>setReplenishmentPaid(Number(e.target.value))}/></label>
         <label className="regularity-field"><span>Referencia de pago</span><input value={paymentReference} onChange={e=>setPaymentReference(e.target.value)} placeholder="Comprobante / transferencia"/></label>
         <label className="regularity-field"><span>Revisión del Consejo</span><select value={councilReviewId} onChange={e=>setCouncilReviewId(e.target.value)}><option value="">Seleccione revisión mensual…</option>{councilReviews.map(x=><option key={x.id} value={x.id}>{formatDate(x.sessionDate)} · {x.periodLabel}</option>)}</select></label>
-        <button type="submit" className="regularity-primary" disabled={busy||replenishmentPaid>0&&!paymentReference.trim()}>Guardar rendición</button></form></ActionDrawer><button type="button" className="regularity-primary" disabled={busy||!submission||submission.status!=='draft'||submission.pendingExpenseCount>0||!submission.councilFinancialReviewId} onClick={()=>void submit()}>Enviar a Gran Hospitalaria</button>      </div>
+        <button type="submit" className="regularity-primary" disabled={busy||replenishmentPaid>0&&!paymentReference.trim()}>Guardar rendición</button></form></ActionDrawer><button type="button" className="regularity-primary" disabled={busy||!submission||submission.status!=='draft'||submission.pendingExpenseCount>0||!submission.councilFinancialReviewId} onClick={()=>void submit()}>Enviar a Gran Hospitalaria</button>      </div>}
       {submission&&<div className="payment-row"><span>Estado: {statusLabel(submission.status)}</span><strong>Diferencia reposición: {money.format(submission.differenceAmount)}</strong><small>Ingresos {money.format(submission.incomeAmount)} · Egresos aprobados {money.format(submission.approvedExpenseAmount)} · {submission.movementCount} movimientos agregados</small></div>}
     </section>}
     </WorkspacePanel>
