@@ -247,3 +247,4 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 - Cierre técnico PR #276 — Afiliación/Incorporación: [handoff y verificaciones](docs/handoffs/2026-10-03-chatgpt-cierre-admisiones-276.md); UAT institucional y despliegue QA pendientes.
 
 - Continuidad de permisos del tarifario (#266 / #320): [handoff de cierre](docs/handoffs/2026-10-04-chatgpt-tariff-access-postmerge.md).
+- Cierre técnico Hospitalaria local #266/#322: [handoff y evidencias](docs/handoffs/2026-10-04-chatgpt-hospitalaria-access-postmerge.md); Gran Hospitalaria/navegación y QA física/UAT pendientes.
