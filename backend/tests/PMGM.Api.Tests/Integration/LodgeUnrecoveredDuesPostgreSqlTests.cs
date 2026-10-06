@@ -27,7 +27,7 @@ public sealed class LodgeUnrecoveredDuesPostgreSqlTests
         using var factory = new PmgmWebApplicationFactory(connection);
         using var client = factory.CreateClient();
         var today = GrandTreasuryTariff.Today();
-        Guid organizationId, withdrawalId, voluntaryId, pendingId, partialId, futureId, memberId;
+        Guid organizationId, withdrawalId, voluntaryId, pendingId, partialId, futureId, memberId, creditId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>(); await db.Database.MigrateAsync(ct);
@@ -43,9 +43,10 @@ public sealed class LodgeUnrecoveredDuesPostgreSqlTests
             paid.Payments.Add(new LodgeMemberPayment { Charge = paid, Amount = 100, Currency = currency, PaymentDate = today, PaymentMethod = "cash", ReceiptNumber = Guid.NewGuid().ToString(), RecordedBySubject = "ci-seed" });
             MemberWithdrawalRequest Withdrawal(string type,string status) => new() { Member = member, OriginOrganization = org, WithdrawalType = type, Status = status, RequestedEffectiveDate = today.AddDays(-1), Reason = "Causa verificada en resolución", EvidenceReference = "RES-FICTICIA", RequestedBySubject = "ci-seed" };
             var withdrawal = Withdrawal("forced","approved"); var voluntary = Withdrawal("voluntary","approved"); var pending = Withdrawal("forced","pending");
-            db.AddRange(org, member, plan, partial, unpaid, future, paid, receipt, withdrawal, voluntary, pending);
+            var credit = new LodgeMemberReceipt { OrganizationId = org.Id, Member = member, Amount = 1, Currency = currency, PaymentDate = today, PaymentMethod = "transfer", ReceiptNumber = Guid.NewGuid().ToString(), IdempotencyKey = Guid.NewGuid().ToString(), RecordedBySubject = "ci-seed" };
+            db.AddRange(org, member, plan, partial, unpaid, future, paid, receipt, credit, withdrawal, voluntary, pending);
             await db.SaveChangesAsync(ct);
-            organizationId = org.Id; memberId = member.Id; withdrawalId = withdrawal.Id; voluntaryId = voluntary.Id; pendingId = pending.Id; partialId = partial.Id; futureId = future.Id;
+            creditId = credit.Id; organizationId = org.Id; memberId = member.Id; withdrawalId = withdrawal.Id; voluntaryId = voluntary.Id; pendingId = pending.Id; partialId = partial.Id; futureId = future.Id;
         }
         var path = $"/api/gestion-logial/tesoreria/talleres/{organizationId}/perdidas";
         object Request(Guid id,bool confirmed=true) => new { withdrawalRequestId = id, recognitionDate = today, currency, nonPaymentConfirmed = confirmed, evidenceReference = "RES-NO-PAGO-FICTICIA" };
@@ -53,9 +54,12 @@ public sealed class LodgeUnrecoveredDuesPostgreSqlTests
         Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync(path,Request(voluntaryId),ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync(path,Request(pendingId),ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync($"/api/gestion-logial/tesoreria/talleres/{Guid.NewGuid()}/perdidas",Request(withdrawalId),ct)).StatusCode);
+        // Real money received but unallocated must not be classified as unrecovered.
+        Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync(path,Request(withdrawalId),ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created,(await client.PostAsJsonAsync($"/api/gestion-logial/tesoreria/recibos/{creditId}/imputaciones",new { allocations = new[]{new { chargeId = futureId, amount = 1m }} },ct)).StatusCode);
         var reportPath=$"/api/gestion-logial/tesoreria/talleres/{organizationId}/reportes?from={today:yyyy-MM-dd}&to={today:yyyy-MM-dd}&currencyCode={currency}";
         var before = await client.GetFromJsonAsync<JsonElement>(reportPath,ct);
-        Assert.Equal(140,before.GetProperty("income").GetDecimal());
+        Assert.Equal(141,before.GetProperty("income").GetDecimal());
         var created=await client.PostAsJsonAsync(path,Request(withdrawalId),ct); Assert.Equal(HttpStatusCode.Created,created.StatusCode);
         var result=await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken:ct);
         Assert.Equal(160,result.GetProperty("total").GetDecimal()); Assert.Equal(2,result.GetProperty("items").GetArrayLength());

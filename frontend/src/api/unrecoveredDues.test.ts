@@ -1,4 +1,7 @@
 import {describe,it,expect} from 'vitest'
+import {createElement} from 'react'
+import {renderToStaticMarkup} from 'react-dom/server'
+import UnrecoveredDuesPanel from '../UnrecoveredDuesPanel'
 import {PmgmApiClient} from './pmgmApi'
 
 const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
@@ -17,6 +20,19 @@ describe('Cuotas no recuperadas, separadas de caja',()=>{
     expect(after.unrecoveredDuesTotal).toBe(currency==='USD'?9:30000)
     expect((await api.getLodgeTreasuryReport('org-1','2024-01-01','2024-12-31',null,currency)).unrecoveredDuesTotal).toBe(0)
     expect((await api.getLodgeTreasuryReport('org-1',date,date,null,currency==='CLP'?'USD':'CLP')).unrecoveredDuesTotal).toBe(0)
+  })
+  it('consulta no puede registrar pérdidas y la revocación bloquea lectura',async()=>{
+    const api=new PmgmApiClient({useMocks:true});api.demoAccessSubject='demo:lodgeTreasurer'
+    const org=(await api.getOrganizationOptions()).items.find(o=>o.type==='workshop')!.id
+    let c=await api.dynamicAccess.create({code:'loss-view',name:'Consulta',scope:'lodge',menuCodes:['treasury']},0)
+    c=await api.dynamicAccess.grants('loss-view',[{viewCode:'lodgetreasury',actions:['view']}],c.version)
+    c=await api.dynamicAccess.assign({subject:api.demoAccessSubject,profileCode:'loss-view',organizationId:org,effectiveFrom:'2020-01-01',effectiveTo:null},c.version)
+    await expect(api.recognizeUnrecoveredDues(org,{withdrawalRequestId:'demo-forced-nonpayment',recognitionDate:today(),currency:'CLP',nonPaymentConfirmed:true,evidenceReference:'RES'})).rejects.toThrow('perfil no permite')
+    const report=await api.getLodgeTreasuryReport(org,today(),today())
+    const html=renderToStaticMarkup(createElement(UnrecoveredDuesPanel,{api,organizationId:org,currency:'CLP',report,canWrite:false,onSaved:async()=>{}}))
+    expect(html).toContain('Pérdida por cuotas no recuperadas');expect(html).not.toContain('Registrar pérdida por no pago')
+    await api.dynamicAccess.revoke(c.assignments[0].id,c.version)
+    await expect(api.getUnrecoveredDueCandidates(org,'CLP')).rejects.toThrow('perfil no permite')
   })
   it('exige confirmación, respaldo y retiro formal; conserva pérdidas ante error',async()=>{
     const api=new PmgmApiClient({useMocks:true});const base={withdrawalRequestId:'demo-forced-nonpayment',recognitionDate:today(),currency:'CLP',nonPaymentConfirmed:true,evidenceReference:'RES'}
