@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { ActionDrawer } from './actionKit'
 import { type LodgeSummaryAccess, type OrganizationProfile, type OrganizationProfileApiClient } from './api/organizationProfileApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './lodgeProfile.css'
@@ -141,14 +142,15 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
 
       <section className="panel workshop-origin-panel" aria-labelledby="workshop-origin-heading">
         <div className="panel-heading"><div><p className="eyebrow">Identidad institucional</p><h2 id="workshop-origin-heading">Origen y pertenencia del Taller</h2></div></div>
-        {canEditWorkshopProfile ? <div className="workshop-origin-form">
+        <dl className="workshop-origin-readonly"><div><dt>Nombre del Taller</dt><dd>{profile.organization.name}</dd></div><div><dt>Fecha de iniciación</dt><dd>{profile.organization.establishedOn ? formatDate(profile.organization.establishedOn) : 'Sin registrar'}</dd></div><div><dt>Ciudad / Oriente</dt><dd>{profile.organization.city ?? 'Sin registrar'}</dd></div><div><dt>País</dt><dd>{profile.organization.country ?? 'Sin registrar'}</dd></div></dl>
+        {canEditWorkshopProfile && <div className="action-bar"><ActionDrawer label="Editar ficha del Taller" tone="secondary" description="Nombre, fecha de iniciación, Oriente, ciudad, país y logo del Taller." keepOpen><div className="workshop-origin-form">
           <label className="workshop-name-field"><span>Nombre del Taller</span><input required maxLength={200} value={workshopProfileDraft.name} onChange={event => setWorkshopProfileDraft(value => ({ ...value, name: event.target.value }))} /></label>
           <label><span>Fecha de iniciación</span><input type="date" value={workshopProfileDraft.establishedOn} onChange={event => setWorkshopProfileDraft(value => ({ ...value, establishedOn: event.target.value }))} /></label>
           <label><span>Oriente</span><select required value={workshopProfileDraft.orienteCode} onChange={event=>{const code=event.target.value;setWorkshopProfileDraft(value=>({...value,orienteCode:code,country:code==='peru'?'Perú':code?'Chile':'',city:code==='santiago'?'Santiago':value.city==='Santiago'?'':value.city}))}}><option value="">Seleccione…</option><option value="santiago">Santiago</option><option value="other_chile">Otra ciudad de Chile</option><option value="peru">Perú</option></select></label><label><span>Ciudad / Oriente</span><input required readOnly={workshopProfileDraft.orienteCode==='santiago'} maxLength={120} value={workshopProfileDraft.city} onChange={event => setWorkshopProfileDraft(value => ({ ...value, city: event.target.value }))} /></label>
           <label><span>País</span><input readOnly maxLength={120} value={workshopProfileDraft.country} onChange={event => setWorkshopProfileDraft(value => ({ ...value, country: event.target.value }))} /></label>
           <label className="workshop-logo-field"><span>Logo personalizado (opcional, PNG/JPEG hasta 2 MiB)</span><input type="file" accept="image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0] ?? null; setLogoFile(file); if (file) { const url = URL.createObjectURL(file); setLogoUrl(current => { if (current) URL.revokeObjectURL(current); return url }) } }} /></label>
           <div className="workshop-profile-actions"><button type="button" className="primary-action" disabled={savingWorkshopProfile || !workshopProfileDraft.name.trim() || !workshopProfileDraft.orienteCode || !workshopProfileDraft.city.trim()} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>{logoFile && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void saveWorkshopLogo()}>{savingLogo ? 'Subiendo…' : 'Guardar logo'}</button>}{profile.organization.hasLogo && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void removeWorkshopLogo()}>Quitar logo</button>}</div>
-        </div> : <dl className="workshop-origin-readonly"><div><dt>Nombre del Taller</dt><dd>{profile.organization.name}</dd></div><div><dt>Fecha de iniciación</dt><dd>{profile.organization.establishedOn ? formatDate(profile.organization.establishedOn) : 'Sin registrar'}</dd></div><div><dt>Ciudad / Oriente</dt><dd>{profile.organization.city ?? 'Sin registrar'}</dd></div><div><dt>País</dt><dd>{profile.organization.country ?? 'Sin registrar'}</dd></div></dl>}
+        </div></ActionDrawer></div>}
         <p className="workshop-origin-note">La clasificación de cuotas se administra aparte por Gran Tesorería: {treasuryTerritoryLabel(profile.organization.treasuryTerritory)}. No se deduce de la ciudad ni del país.</p>
       </section>
 
@@ -193,11 +195,13 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
       {canManageAccess && <article className="panel lodge-summary-access">
         <div className="panel-heading"><div><p className="eyebrow">Permiso de consulta</p><h2>Accesos delegados</h2></div><span className="count-badge">{accessManagement?.activeGrants.length ?? 0}</span></div>
         <p>Como Venerable Maestro puede delegar y revocar el acceso de solo lectura a un Maestro activo de este Taller. La delegación no lo integra al Consejo ni habilita otros módulos.</p>
+        <div className="action-bar"><ActionDrawer label="Delegar acceso de consulta" description="Elige un Maestro activo del Taller e indica el motivo. La delegación es de solo lectura." confirmMessage="Se otorgará acceso de solo lectura al resumen del Taller y quedará auditado.">
         <div className="lodge-summary-grant-form">
           <label><span>Hermano Maestro</span><select value={selectedMasterId} onChange={event => setSelectedMasterId(event.target.value)}><option value="">Seleccione un Maestro activo…</option>{accessManagement?.eligibleMasters.map(item => <option key={item.memberId} value={item.memberId}>{item.displayName}</option>)}</select></label>
           <label><span>Fundamento breve</span><input maxLength={500} value={grantReason} onChange={event => setGrantReason(event.target.value)} placeholder="Motivo de la delegación" /></label>
           <button type="button" className="primary-action" disabled={savingGrant || !selectedMasterId || !grantReason.trim()} onClick={() => void grantSummaryAccess()}>{savingGrant ? 'Guardando…' : 'Otorgar acceso'}</button>
         </div>
+        </ActionDrawer></div>
         {!accessManagement ? <div className="empty-state compact"><strong>Cargando permisos…</strong></div> : accessManagement.activeGrants.length === 0 ? <div className="empty-state compact"><strong>No hay accesos delegados vigentes.</strong></div> : <div className="summary-grant-list">{accessManagement.activeGrants.map(item => <div key={item.id}><div><strong>{item.displayName}</strong><small>Desde {formatDateTime(item.grantedAtUtc)} · {item.reason}</small><small className={item.isCurrentlyEligible ? 'summary-grant-effective' : 'summary-grant-ineffective'}>{item.isCurrentlyEligible ? 'Acceso vigente' : 'Acceso no efectivo: debe mantener membresía activa y grado de Maestro'}</small></div><button type="button" className="secondary-action" onClick={() => void revokeSummaryAccess(item.id)}>Revocar</button></div>)}</div>}
       </article>}
     </>}
