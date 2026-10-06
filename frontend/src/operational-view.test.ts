@@ -66,3 +66,12 @@ describe('PMGM-UX vista limpia · Hospitalaria en pestañas', () => {
     expect(app).not.toMatch(/<HospitalariaPage[^>]*\/>\{canHospitalaria && <RegularityPage/)
   })
 })
+
+describe('PMGM-UX vista limpia · Ficha del Taller', () => {
+  const source = read('LodgeProfilePage.tsx')
+  it('la ficha se muestra en solo lectura y se edita desde un panel; la delegación de acceso también', () => {
+    expect(source).toContain('<ActionDrawer label="Editar ficha del Taller"')
+    expect(source).toContain('<ActionDrawer label="Delegar acceso de consulta"')
+    expect(source.indexOf('<dl className="workshop-origin-readonly">')).toBeLessThan(source.indexOf('<ActionDrawer label="Editar ficha del Taller"'))
+  })
+})
