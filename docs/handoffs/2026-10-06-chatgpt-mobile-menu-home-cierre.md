@@ -1,6 +1,6 @@
 # Cierre técnico — Menú móvil → Inicio
 
-- Reclamo documental: Issue #343; agente ChatGPT/Codex. Alcance: enlace único en START-HERE y continuidad verificable del PR #342.
+- Reclamo documental: Issue #343; PR #344; agente ChatGPT/Codex. Alcance: enlace único en START-HERE y continuidad verificable del PR #342.
 - PR #342 integrado por squash en f3983654cd102b223f03a1b327e7597b6e97e800, desde dev 86302aaba94b6e6e7ceb6df2120c252854e229c5; main 6dfb9546a4873baff15955cf86abfd7d47e3d111 sin promoción.
 - HEAD funcional 71fa1658c6a17924f515b4df23f268b7057c00a2; CI37479375958, Showcase37479376284 y QA37479376377 SUCCESS exact-head.
 - Resultado: Menú se cierra al seleccionar Inicio aunque la vista Inicio ya esté activa; igual protección para Mi ficha/Pendientes, Agenda y Avisos.
