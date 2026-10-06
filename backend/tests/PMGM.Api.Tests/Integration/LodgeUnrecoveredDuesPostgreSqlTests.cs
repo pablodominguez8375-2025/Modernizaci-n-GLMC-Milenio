@@ -56,7 +56,7 @@ public sealed class LodgeUnrecoveredDuesPostgreSqlTests
         Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync($"/api/gestion-logial/tesoreria/talleres/{Guid.NewGuid()}/perdidas",Request(withdrawalId),ct)).StatusCode);
         // Real money received but unallocated must not be classified as unrecovered.
         Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync(path,Request(withdrawalId),ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.Created,(await client.PostAsJsonAsync($"/api/gestion-logial/tesoreria/recibos/{creditId}/imputaciones",new { allocations = new[]{new { chargeId = futureId, amount = 1m }} },ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,(await client.PostAsJsonAsync($"/api/gestion-logial/tesoreria/recibos/{creditId}/imputaciones",new { allocations = new[]{new { chargeId = futureId, amount = 1m }} },ct)).StatusCode);
         var reportPath=$"/api/gestion-logial/tesoreria/talleres/{organizationId}/reportes?from={today:yyyy-MM-dd}&to={today:yyyy-MM-dd}&currencyCode={currency}";
         var before = await client.GetFromJsonAsync<JsonElement>(reportPath,ct);
         Assert.Equal(141,before.GetProperty("income").GetDecimal());
