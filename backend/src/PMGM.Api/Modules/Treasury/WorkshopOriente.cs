@@ -18,7 +18,9 @@ public static class WorkshopOriente
         };
     }
     public static string? Territory(Organization organization)
-        => FromLocation(organization.City, organization.Country) switch
+        => Territory(organization.OrienteCode, organization.City, organization.Country);
+    public static string? Territory(string? orienteCode, string? city, string? country)
+        => (orienteCode is null || orienteCode == FromLocation(city, country) ? FromLocation(city, country) : null) switch
         {
             "santiago" => GrandTreasuryFeeSchedule.Santiago,
             "other_chile" => GrandTreasuryFeeSchedule.OtherOriente,

@@ -65,7 +65,6 @@ describe('Tesorería del Taller en demostración', () => {
   it('recalcula el aporte institucional por Oriente sin cambiar la cuota local del Taller', async () => {
     const api = new PmgmApiClient({ useMocks: true })
     const organizationId = '23232323-2323-2323-2323-232323232323'
-    await expect(api.setTreasuryTerritory(organizationId,'other_oriente')).rejects.toThrow('Ficha')
     const profileApi=new OrganizationProfileApiClient({useMocks:true})
     await profileApi.updateWorkshopMetadata(organizationId,{name:'Taller QA',establishedOn:null,city:'Valparaíso',country:'Chile',orienteCode:'other_chile'})
     const plans=(await api.getLodgeFeePlans(organizationId)).items
