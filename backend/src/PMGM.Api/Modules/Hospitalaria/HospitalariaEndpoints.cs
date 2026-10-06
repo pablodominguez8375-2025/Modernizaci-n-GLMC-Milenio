@@ -18,6 +18,7 @@ public static class HospitalariaEndpoints
 
         group.MapPost("/talleres/{organizationId:guid}/regularidad", SetWorkshopRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/regularidad", GetWorkshopRegularityAsync);
+        group.MapGet("/acceso", GetGrandAccessAsync);
         group.MapGet("/rendiciones", ListMonthlySubmissionsAsync);
         group.MapPost("/rendiciones/{submissionId:guid}/revision", ReviewMonthlySubmissionAsync);
         group.MapGet("/reposiciones/tarifa", GetReplenishmentRateAsync);
@@ -32,10 +33,20 @@ public static class HospitalariaEndpoints
         return endpoints;
     }
 
+    private static async Task<IResult> GetGrandAccessAsync(
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
+        context.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(await DynamicGrandHospitalariaAccess.ProjectAsync(db, context.User, ct));
+    }
+
     private static async Task<IResult> GetReplenishmentRateAsync(
         DateOnly? asOf, HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "view", ct)) return Results.Forbid();
+        context.Response.Headers.CacheControl = "private, no-store";
         var date = asOf ?? TodayInChile();
         var rate = await db.HospitalariaReplenishmentRates.AsNoTracking()
             .Where(x => x.EffectiveFrom <= date && (x.EffectiveUntil == null || x.EffectiveUntil >= date))
@@ -48,6 +59,7 @@ public static class HospitalariaEndpoints
         IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "create", ct)) return Results.Forbid();
         if (request.AmountPerActiveMember <= 0 || string.IsNullOrWhiteSpace(request.SourceReference))
             return Results.BadRequest(new { message = "La tarifa debe ser positiva e indicar la referencia institucional de vigencia." });
         var next = await db.HospitalariaReplenishmentRates.Where(x => x.EffectiveFrom < request.EffectiveFrom &&
@@ -70,11 +82,12 @@ public static class HospitalariaEndpoints
         return Results.Created($"/api/hospitalaria/reposiciones/tarifa?asOf={rate.EffectiveFrom:yyyy-MM-dd}", rate);
     }
 
-    // Gran Hospitalaria procesa de forma idempotente las defunciones nuevas al abrir su bandeja.
+    // Gran Hospitalaria procesa defunciones de forma idempotente mediante acción explícita.
     private static async Task<IResult> SyncDeathReplenishmentsAsync(
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "create", ct)) return Results.Forbid();
         var events = await db.InstitutionalStatusEvents.AsNoTracking()
             .Where(x => x.EventType == MembershipCodes.InstitutionalStatus.Deceased &&
                         !db.DeathReplenishmentCases.Any(c => c.DeathStatusEventId == x.Id))
@@ -140,6 +153,7 @@ public static class HospitalariaEndpoints
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "view", ct)) return Results.Forbid();
         var cases = await db.DeathReplenishmentCases.AsNoTracking()
             .Include(x => x.DeceasedMember).ThenInclude(x => x.Person)
             .Include(x => x.Obligations).ThenInclude(x => x.Payments)
@@ -278,6 +292,7 @@ public static class HospitalariaEndpoints
         IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "write", ct)) return Results.Forbid();
         if (request.Decision is not "reconciled" and not "observed" || request.Decision == "observed" && string.IsNullOrWhiteSpace(request.Notes))
             return Results.BadRequest(new { message = "La revisión debe conciliar o indicar el motivo de observación." });
         var transfer = await db.DeathReplenishmentTransfers.Include(x => x.Case)
@@ -337,6 +352,8 @@ public static class HospitalariaEndpoints
             return Results.Forbid();
         }
 
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, httpContext.User, "write", cancellationToken)) return Results.Forbid();
+
         if (!HospitalariaCodes.RegularityStatus.IsValid(request.Status))
         {
             return Results.BadRequest(new { message = "El estado de regularidad hospitalaria indicado no es válido." });
@@ -387,6 +404,11 @@ public static class HospitalariaEndpoints
             return Results.Forbid();
         }
 
+        // Administrative detail is restricted by the Order matrix. Minimal
+        // regularity projections for other institutional readers remain unchanged.
+        if (access.CanManageHospitalariaRegularity(httpContext.User) &&
+            !await DynamicGrandHospitalariaAccess.AllowsAsync(db, httpContext.User, "view", cancellationToken)) return Results.Forbid();
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         var cutoff = asOf ?? TodayInChile();
         var snapshot = await db.HospitalariaRegularitySnapshots
             .AsNoTracking()
@@ -419,6 +441,7 @@ public static class HospitalariaEndpoints
         CancellationToken cancellationToken)
     {
         if (!access.CanManageHospitalariaRegularity(httpContext.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, httpContext.User, "view", cancellationToken)) return Results.Forbid();
 
         if (month is < 1 or > 12)
             return Results.BadRequest(new { message = "El mes indicado no es válido." });
@@ -481,6 +504,7 @@ public static class HospitalariaEndpoints
         CancellationToken cancellationToken)
     {
         if (!access.CanManageHospitalariaRegularity(httpContext.User)) return Results.Forbid();
+        if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, httpContext.User, "write", cancellationToken)) return Results.Forbid();
         if (!HospitalariaCodes.ReviewDecision.IsValid(request.Decision))
             return Results.BadRequest(new { message = "La decisión indicada no es válida." });
         if (request.Decision == HospitalariaCodes.ReviewDecision.Observed && string.IsNullOrWhiteSpace(request.Notes))
