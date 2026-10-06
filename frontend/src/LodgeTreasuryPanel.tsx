@@ -3,6 +3,7 @@ import { type AccessAction } from './api/dynamicAccess'
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import { type LodgeCashSummary, type LodgeFeePlan, type LodgeMemberReceipt, type LodgeTreasuryCharge, type LodgeTreasuryChargePeriod, type LodgeTreasuryExpense, type LodgeTreasuryReport, type LodgeTreasurySummary, type LodgeTreasuryYearClosure, type PmgmApiClient, type TreasuryTerritory } from './api/pmgmApi'
 import './lodgeTreasury.css'
+import UnrecoveredDuesPanel from './UnrecoveredDuesPanel'
 import LodgeReceiptAdjustmentsPanel from './LodgeReceiptAdjustmentsPanel'
 import { countLabel, formatDateOnlyCl } from './displayFormat'
 import { ActionDrawer, HelpNote } from './actionKit'
@@ -113,7 +114,10 @@ export default function LodgeTreasuryPanel({ api, organizationId, treasuryTerrit
         </div>
       </div>
       <p className="lodge-treasury-note">El detalle y el CSV incorporan ID de origen y trazabilidad UTC de registro/autorización.</p>
+      <p className="lodge-treasury-note">El dinero recibido se registra en su mes y año efectivos. El control de cuotas por período determina si el hermano está al día en Tesorería; ambos controles son independientes.</p>
       {report&&<>
+        <UnrecoveredDuesPanel api={api} organizationId={organizationId} currency={currency} report={report} canWrite={canAction('write')} onSaved={refresh}/>
+
         <div className="lodge-treasury-summary">
           <article><small>Saldo de apertura del período</small><strong>{money.format(report.openingBalance)}</strong></article>
           <article><small>Ingresos (incluye cuotas)</small><strong>{money.format(report.income)}</strong></article>

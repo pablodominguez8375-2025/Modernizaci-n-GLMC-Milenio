@@ -354,6 +354,22 @@
       "retentionPolicyCode": "RET-LODGE-TREASURY-RECONCILIATION",
       "owner": "Tesorería del Taller",
       "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-GL-023",
+      "module": "Tesorería del Taller",
+      "entity": "LodgeUnrecoveredDue",
+      "field": "MemberId/ChargeId/WithdrawalRequestId/Amount/PaidAmount/ChargedAmount/Currency/RecognitionDate/EvidenceReference/RecordedBySubject/RecordedAtUtc",
+      "classification": "sensitive",
+      "purpose": "Acreditar cuotas no recuperadas por retiro formal por no pago sin modificar caja ni regularidad.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "authorized_lodge_treasury_only",
+      "retentionPolicyCode": "RET-FINANCIAL-REGULARITY",
+      "owner": "Tesorería del Taller",
+      "status": "active"
     }
   ]
 }

@@ -24,6 +24,8 @@ public static partial class LodgeTreasuryEndpoints
         group.MapGet("/talleres/{organizationId:guid}/resumen", GetSummaryAsync);
         group.MapGet("/talleres/{organizationId:guid}/caja", GetCashSummaryAsync);
         group.MapGet("/talleres/{organizationId:guid}/reportes", GetCashReportAsync);
+        group.MapGet("/talleres/{organizationId:guid}/perdidas/candidatos", GetLossCandidatesAsync);
+        group.MapPost("/talleres/{organizationId:guid}/perdidas", RecognizeUnrecoveredDuesAsync);
         group.MapPost("/talleres/{organizationId:guid}/conciliaciones", SaveCashReconciliationAsync);
         group.MapPost("/talleres/{organizationId:guid}/ingresos", CreateIncomeAsync);
         group.MapGet("/talleres/{organizationId:guid}/configuracion", GetConfigurationAsync);
@@ -575,7 +577,12 @@ public static partial class LodgeTreasuryEndpoints
         var reconciliations = await db.LodgeTreasuryReconciliations.AsNoTracking()
             .Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.From == from && x.To == to)
             .OrderByDescending(x => x.RecordedAtUtc).Take(50).ToListAsync(ct);
-        return Results.Ok(new { organizationId, currency, from, to, openingBalance = periodOpening, income = received, authorizedExpenses = authorized,
+        var losses = await db.LodgeUnrecoveredDues.AsNoTracking()
+            .Include(x => x.Charge).ThenInclude(x => x.Member).ThenInclude(x => x.Person)
+            .Where(x => x.OrganizationId == organizationId && x.Currency == currency && x.RecognitionDate >= from && x.RecognitionDate <= to)
+            .OrderBy(x => x.RecognitionDate).ThenBy(x => x.ChargeId).ToListAsync(ct);
+        return Results.Ok(new { unrecoveredDuesTotal = losses.Sum(x => x.Amount), unrecoveredDues = losses.Select(LossDto),
+            organizationId, currency, from, to, openingBalance = periodOpening, income = received, authorizedExpenses = authorized,
             pendingExpenses = pending, closingBalance = calculatedBalance, observedBalance,
             reconciliationHistory = reconciliations.Select(ToReconciliation),
             difference = observedBalance is null ? (decimal?)null : observedBalance.Value - calculatedBalance, monthlyTotals, movements });
