@@ -47,6 +47,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<LodgeTreasuryIncome> LodgeTreasuryIncomes => Set<LodgeTreasuryIncome>();
     public DbSet<LodgeTreasuryConfiguration> LodgeTreasuryConfigurations => Set<LodgeTreasuryConfiguration>();
     public DbSet<LodgeTreasuryYearClosure> LodgeTreasuryYearClosures => Set<LodgeTreasuryYearClosure>();
+    public DbSet<LodgeUnrecoveredDue> LodgeUnrecoveredDues => Set<LodgeUnrecoveredDue>();
     public DbSet<LodgeTreasuryReconciliation> LodgeTreasuryReconciliations => Set<LodgeTreasuryReconciliation>();
     public DbSet<HospitalariaRegularitySnapshot> HospitalariaRegularitySnapshots => Set<HospitalariaRegularitySnapshot>();
     public DbSet<HospitalariaMonthlySubmission> HospitalariaMonthlySubmissions => Set<HospitalariaMonthlySubmission>();
@@ -434,6 +435,22 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.GrandTreasuryAmount).HasPrecision(18, 2);
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.FeeType, x.EffectiveFrom }).IsUnique();
+        });
+
+        modelBuilder.Entity<LodgeUnrecoveredDue>(entity =>
+        {
+            entity.ToTable("lodge_unrecovered_dues"); entity.HasKey(x => x.Id);
+            entity.Property(x => x.ChargedAmount).HasPrecision(18, 2);
+            entity.Property(x => x.PaidAmount).HasPrecision(18, 2);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.Charge).WithMany().HasForeignKey(x => x.ChargeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<MemberWithdrawalRequest>().WithMany().HasForeignKey(x => x.WithdrawalRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Organization>().WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.ChargeId).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.RecognitionDate, x.Currency });
         });
 
         modelBuilder.Entity<LodgeMemberCharge>(entity =>
