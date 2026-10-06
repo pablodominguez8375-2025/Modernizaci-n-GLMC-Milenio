@@ -38,7 +38,6 @@ import SystemConfigurationPage from './SystemConfigurationPage'
 import UserMenu from './UserMenu'
 import { WorkspaceTabs } from './actionKit'
 import TextSizeControl, { TextSizeMenu } from './TextSizeControl'
-import SecretariatRoleNavigation, { type SecretariatSection } from './SecretariatRoleNavigation'
 import { type BootstrapApiClient } from './api/bootstrapApi'
 import { type CalendarApiClient } from './api/calendarApi'
 import { type CandidateIntakeApiClient } from './api/candidateIntakeApi'
@@ -156,25 +155,10 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const canGrandArchive = capabilities?.canManageGrandArchive ?? false
   const isLodgeSecretaryWorkspace = canManageLodgeSecretariat && !canSecretariat
   const isGrandSecretaryWorkspace = canSecretariat
-  const localSecretariatViews: View[] = ['lodge', 'candidateProfile', 'initiationCircuit', 'admissions', 'members', 'documents']
+  /* PMGM-UX 06-10-2026 (opción B del PO): las autoridades de la Orden ven Gestión Logial como supervisión de Talleres, en solo lectura. */
+  const isGrandSupervision = canLodge && !isLodgeSecretaryWorkspace && !canOpenLodgeTreasury && (canSecretariat || canTreasury || canHospitalaria || canRegimen || canMemberControl)
+  const lodgeMenuLabel = isLodgeSecretaryWorkspace ? 'Secretaría' : isGrandSupervision ? 'Talleres (supervisión)' : 'Gestión Logial'
   const grandSecretariatViews: View[] = ['secretariat', 'candidateProfile', 'initiationCircuit', 'admissions', 'ceremonies', 'members', 'documents']
-  const localSecretariatSections: SecretariatSection[] = [
-    { id: 'lodge', label: 'Tenidas y actas', description: 'Agenda, asistencia, extractos, correspondencia y pendientes' },
-    { id: 'candidateProfile', label: 'Insinuados', description: 'Nuevo insinuado y seguimiento del expediente privado' },
-    { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Entrevistas, balotaje y solicitud de Plancha' },
-    { id: 'admissions', label: 'Afiliación e incorporación', description: 'Expedientes de hermanos ya iniciados, separados de la iniciación' },
-    { id: 'members', label: 'Cuadro del Taller', description: 'Fichas e historial de los hermanos del Taller' },
-    { id: 'documents', label: 'Documentos', description: 'Carga y consulta de respaldos firmados' },
-  ]
-  const grandSecretariatSections: SecretariatSection[] = [
-    { id: 'secretariat', label: 'Bandeja institucional', description: 'Planchas PDF firmadas, extractos, templos y salas' },
-    { id: 'candidateProfile', label: 'Revisión de insinuados', description: 'Control previo a publicación institucional' },
-    { id: 'initiationCircuit', label: 'Circuito de iniciación', description: 'Control administrativo y Plancha de autorización' },
-    { id: 'admissions', label: 'Afiliación e incorporación', description: 'Expedientes de hermanos ya iniciados, separados de la iniciación' },
-    { id: 'ceremonies', label: 'Ceremonias', description: 'Solicitudes, requisitos y autorizaciones' },
-    { id: 'members', label: 'Cuadro General', description: 'Consulta mínima de fichas institucionales' },
-    { id: 'documents', label: 'Documentos', description: 'Carga y consulta de PDF oficiales firmados' },
-  ]
   const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive || canManageAnyInstruction || canReadOrderInstructions
 
   const pendingFlags: PendingTaskFlags = useMemo(() => ({ canApproveLodgeExpenses:canApproveLodgeExpenses&&canOpenLodgeTreasury, canLodgeTreasury:canLodgeTreasury&&canOpenLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap }), [canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap, canOpenLodgeTreasury])
@@ -253,7 +237,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
       ...entry(canGrandArchive, 'grandArchive', 'Gran Archivero', 'Gestión institucional', 'archive', 'archivo'),
       ...entry(canReadOrderInstructions, 'orderInstructionReport', 'Docencia de la Orden', 'Gestión institucional', 'library'),
       ...entry(canLodgeProfile && !canLodge, 'lodgeProfile', 'Ficha del Taller', 'Taller', 'lodge'),
-      ...entry(canLodge, 'lodge', isLodgeSecretaryWorkspace ? 'Secretaría' : 'Gestión Logial', 'Taller', 'lodge', 'tenidas actas asistencia'),
+      ...entry(canLodge, 'lodge', lodgeMenuLabel, 'Taller', 'lodge', 'tenidas actas asistencia'),
       ...entry(canManageAnyInstruction, 'lodgeInstruction', 'Docencia', 'Taller', 'library', 'instruccion'),
       ...entry(canOpenLodgeTreasury, 'lodgeTreasury', 'Tesorería', 'Taller', 'treasury', 'egresos cuotas recibos'),
       ...entry(canLibrary, 'library', 'Biblioteca Virtual', 'Conocimiento', 'library', 'libros planchas'),
@@ -278,7 +262,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.89' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.90' : `API v${systemInfo?.version ?? '—'}`
   return <div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -297,13 +281,14 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label={canConfigureSystem ? 'Parámetros del sistema' : 'Configuración inicial'} allowed active={view === 'system' || view === 'bootstrap'} onOpen={() => setView(canConfigureSystem ? 'system' : 'bootstrap')} /></>}
         <div className="nav-section">Trámites</div>
         <ModuleAccess icon="candidate" label="Insinuaciones e Iniciación" allowed active={isInitiationView} onOpen={() => setView('candidates')} />
+            {(isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && <ModuleAccess icon="member" label="Afiliación e incorporación" allowed active={view === 'admissions'} onOpen={() => setView('admissions')} />}
         {hasInstitutionalManagement && <>
           <div className="nav-section">Gestión y consultas</div>
-          {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="members" label="Fichas de miembros" allowed={canMembers} active={view === 'members'} onOpen={canMembers ? () => setView('members') : undefined} />}
+          <ModuleAccess icon="members" label="Fichas de miembros" allowed={canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace} active={view === 'members'} onOpen={canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace ? () => setView('members') : undefined} />
           <ModuleAccess icon="report" label="Reportería Ejecutiva" allowed={canReporting} active={view === 'reporting'} onOpen={canReporting ? () => setView('reporting') : undefined} />
           <ModuleAccess icon="memberControl" label="Control de miembros" allowed={canMemberControl} active={view === 'memberControl'} onOpen={canMemberControl ? () => setView('memberControl') : undefined} />
           <ModuleAccess icon="dataQuality" label={canDataQuality ? 'Calidad de datos' : 'Cola de corroboración'} allowed={canDataQuality || canCaseQueue} active={view === 'dataQuality' || view === 'caseQueue'} onOpen={() => setView(canDataQuality ? 'dataQuality' : 'caseQueue')} />
-          {!isGrandSecretaryWorkspace && <ModuleAccess icon="ceremony" label="Ceremonias" badge={badges.ceremonies} allowed={canCeremonies} active={view === 'ceremonies'} onOpen={canCeremonies ? () => setView('ceremonies') : undefined} />}
+          <ModuleAccess icon="ceremony" label="Ceremonias" badge={badges.ceremonies} allowed={canCeremonies || isGrandSecretaryWorkspace} active={view === 'ceremonies'} onOpen={canCeremonies || isGrandSecretaryWorkspace ? () => setView('ceremonies') : undefined} />
           <ModuleAccess icon="shield" label="Régimen Interior" allowed={canRegimen} active={view === 'regimen'} onOpen={canRegimen ? () => setView('regimen') : undefined} />
           <ModuleAccess icon="treasury" label="Gran Tesorería" allowed={canTreasury} active={view === 'treasury'} onOpen={canTreasury ? () => setView('treasury') : undefined} />
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canHospitalaria} active={view === 'hospitalaria'} onOpen={canHospitalaria ? () => setView('hospitalaria') : undefined} />
@@ -314,7 +299,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {(canLodgeProfile || canLodge || canLodgeTreasury || canApproveLodgeExpenses || canReadLodgeHospitalaria || canManageAnyInstruction) && <>
           <div className="nav-section">Mi Taller</div>
           <ModuleAccess icon="lodge" label="Ficha del Taller" allowed={canLodgeProfile && !canLodge} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
-          {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" badge={badges.lodge} allowed active={!isInitiationView && (localSecretariatViews.includes(view) || view === 'lodgeProfile')} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label="Gestión Logial" badge={badges.lodge} allowed={canLodge} active={view === 'lodge' || view === 'lodgeProfile'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
+          {isLodgeSecretaryWorkspace ? <ModuleAccess icon="secretariat" label="Secretaría" badge={badges.lodge} allowed active={view === 'lodge' || view === 'lodgeProfile'} onOpen={() => setView('lodge')} /> : <ModuleAccess icon="lodge" label={lodgeMenuLabel} badge={badges.lodge} allowed={canLodge} active={view === 'lodge' || view === 'lodgeProfile'} onOpen={canLodge ? () => setView('lodge') : undefined} />}
           {!isLodgeSecretaryWorkspace && <ModuleAccess icon="library" label="Docencia" allowed={canManageAnyInstruction} active={view === 'lodgeInstruction'} onOpen={canManageAnyInstruction ? () => setView('lodgeInstruction') : undefined} />}
           <ModuleAccess icon="treasury" label="Tesorería" badge={badges.lodgeTreasury} allowed={canOpenLodgeTreasury} active={view === 'lodgeTreasury'} onOpen={canOpenLodgeTreasury ? () => setView('lodgeTreasury') : undefined} />
           {canReadLodgeHospitalaria && !canHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
@@ -322,14 +307,12 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {(canLibrary || canDocuments) && <>
           <div className="nav-section">Biblioteca y documentos</div>
           <ModuleAccess icon="library" label="Biblioteca Virtual" allowed={canLibrary} active={view === 'library'} onOpen={canLibrary ? () => setView('library') : undefined} />
-          {!isLodgeSecretaryWorkspace && !isGrandSecretaryWorkspace && <ModuleAccess icon="documents" label="Gestor Documental" allowed={canDocuments} active={view === 'documents'} onOpen={canDocuments ? () => setView('documents') : undefined} />}
+          <ModuleAccess icon="documents" label="Gestor Documental" allowed={canDocuments || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace} active={view === 'documents'} onOpen={canDocuments || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace ? () => setView('documents') : undefined} />
         </>}
         <TextSizeControl className="in-sidebar" />
       </nav>
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
-        {isLodgeSecretaryWorkspace && !isInitiationView && localSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Secretaría" sections={localSecretariatSections} active={view} onChange={id => setView(id as View)} />}
-        {isGrandSecretaryWorkspace && !isInitiationView && grandSecretariatViews.includes(view) && <SecretariatRoleNavigation title="Gran Secretaría" sections={grandSecretariatSections} active={view} onChange={id => setView(id as View)} />}
         {view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
@@ -345,8 +328,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
         {view === 'admissions' && (canManageLodgeSecretariat || canSecretariat) && <AdmissionsPage demoProfileKey={api.useMocks ? demoProfileKey : undefined} api={api} membershipApi={membershipApi} documentApi={documentApi} />}
         {view === 'members' && canMembers && <MemberDirectoryPage key={memberQueryRevision} api={api} membershipApi={membershipApi} initialQuery={memberQuery} canExport={canSecretariat || canManageLodgeSecretariat || canConfigureSystem} allowTableView={canSecretariat || canConfigureSystem} />}
-        {(view === 'lodge' || view === 'lodgeProfile') && canLodge && canLodgeProfile && <WorkspaceTabs label="Secciones del Taller" active={view} onChange={setView} tabs={[{ id: 'lodge' as View, label: isLodgeSecretaryWorkspace ? 'Secretaría' : 'Gestión Logial' }, { id: 'lodgeProfile' as View, label: 'Ficha del Taller' }]} />}
-        {view === 'lodgeProfile' && canLodgeProfile && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
+        {view === 'lodgeProfile' && canLodgeProfile && !canLodge && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
         {(view === 'dataQuality' || view === 'caseQueue') && canDataQuality && canCaseQueue && <WorkspaceTabs label="Secciones de Calidad de datos" active={view} onChange={setView} tabs={[{ id: 'dataQuality' as View, label: 'Hallazgos' }, { id: 'caseQueue' as View, label: 'Cola de corroboración' }]} />}
@@ -361,7 +343,7 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
         {view === 'hospitalaria' && canHospitalariaWorkspace && <HospitalariaPage api={api} canReadLocal={canReadLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canHospitalaria} regularitySlot={canHospitalaria ? <RegularityPage api={api} kind="hospitalaria" /> : undefined} />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
         {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
-        {view === 'lodge' && canLodge && <LodgeManagementPage api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat} instructionGrades={instructionGrades} />}
+        {(view === 'lodge' || (view === 'lodgeProfile' && canLodgeProfile)) && canLodge && <LodgeManagementPage key={view} api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat && !isGrandSupervision} instructionGrades={isGrandSupervision ? [] : instructionGrades} pageTitle={lodgeMenuLabel === 'Secretaría' ? 'Gestión Logial' : lodgeMenuLabel} initialTab={view === 'lodgeProfile' ? 'ficha' : undefined} profileSlot={canLodgeProfile ? <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} /> : undefined} />}
         {view === 'lodgeInstruction' && canManageAnyInstruction && <LodgeInstructionPage api={api} lodgeApi={lodgeApi} allowedGrades={instructionGrades} />}
         {view === 'orderInstructionReport' && canReadOrderInstructions && <OrderInstructionReportPage lodgeApi={lodgeApi} allowedGrades={orderInstructionGrades} canReadAll={canReadAllOrderInstructions} />}
         {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}

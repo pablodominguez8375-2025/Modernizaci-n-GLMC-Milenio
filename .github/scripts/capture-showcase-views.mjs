@@ -21,7 +21,7 @@ const scenarios = [
   { slug: 'iniciacion-regimen', profile: 'regimen', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Circuito de Iniciación'] },
   { slug: 'afiliacion-incorporacion-tramitacion', profile: 'lodgeSecretary', label: 'Secretaría', admissions: true },
   { slug: 'biblioteca', profile: 'brother', label: 'Biblioteca Virtual' },
-  { slug: 'gestion-logial', profile: 'grandLodge', label: 'Gestión Logial' },
+  { slug: 'gestion-logial', profile: 'grandLodge', label: 'Talleres (supervisión)' },
   {
     slug: 'tesoreria-taller',
     profile: 'lodgeTreasurer',
@@ -192,13 +192,8 @@ async function openModule(label) {
 }
 
 async function openAdmissionProcedure() {
-  const clicked = await evaluate(`(() => {
-    const button = [...document.querySelectorAll('.secretariat-role-tabs button')]
-      .find(candidate => candidate.querySelector('strong')?.textContent.trim() === 'Afiliación e incorporación');
-    if (!button) return false;
-    button.click(); return true;
-  })()`)
-  if (!clicked) throw new Error('Admission tab not found for Lodge Secretary.')
+  // PMGM-UX 06-10-2026: «Afiliación e incorporación» es una opción del menú lateral (se eliminó el carrusel por cargo).
+  await openModule('Afiliación e incorporación')
   await waitForExpression(`!!document.querySelector('.admissions-documents')`, 'admission evidence list')
   await evaluate(`(() => { const button = [...document.querySelectorAll('.admissions-documents button')].find(x => x.textContent.trim() === 'Cargar expediente'); if (!button || button.disabled) throw new Error('No synthetic admission case selected.'); button.click(); })()`)
   await waitForExpression(`!!document.querySelector('[aria-labelledby="admission-procedure-title"] li')`, 'admission procedure requirements')
