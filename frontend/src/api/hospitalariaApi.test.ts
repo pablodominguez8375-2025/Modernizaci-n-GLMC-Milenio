@@ -3,7 +3,7 @@ import { PmgmApiClient } from './pmgmApi'
 
 describe('Hospitalaria demo workflow', () => {
   it('calculates death replenishments from active rosters, records each payer and reconciles the workshop transfer', async () => {
-    const api = new PmgmApiClient({ useMocks: true })
+    const api = new PmgmApiClient({ useMocks: true }); api.demoAccessSubject='demo:hospitalaria'
     const organizationId = '11111111-1111-1111-1111-111111111111'
 
     await api.syncDeathReplenishmentCases()
@@ -45,7 +45,7 @@ describe('Hospitalaria demo workflow', () => {
   })
 
   it('keeps private aid details local while Gran Hospitalaria receives only aggregate submission data', async () => {
-    const api = new PmgmApiClient({ useMocks: true })
+    const api = new PmgmApiClient({ useMocks: true }); api.demoAccessSubject='demo:hospitalaria'
     const organizationId = '23232323-2323-2323-2323-232323232323'
 
     let summary = await api.getLodgeHospitalariaSummary(organizationId, '2026-09-01', '2026-09-30')

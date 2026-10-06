@@ -1,7 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import HospitalariaPage from './HospitalariaPage'
 import { PmgmApiClient } from './api/pmgmApi'
+
+const projected=vi.hoisted(()=>({actions:['view','create','write'] as string[]}))
+vi.mock('./useGrandHospitalariaAccess',()=>({useGrandHospitalariaAccess:()=>({access:{version:0,managed:true,actions:projected.actions},error:null})}))
 
 const baseProps = () => ({ api: new PmgmApiClient({ useMocks: true }) })
 
@@ -72,4 +75,27 @@ describe('Hospitalaria — sincronización explícita', () => {
     expect(html).not.toContain('Sincronizar defunciones')
     expect(html).not.toContain('Generar casos pendientes')
   })
+})
+
+
+describe('Gran Hospitalaria — controles por capacidad',()=>{
+ it('oculta creación, revisiones y regularidad editable a un perfil sólo consulta',()=>{
+  projected.actions=['view']
+  try{
+   const html=renderToStaticMarkup(<HospitalariaPage {...baseProps()} canReadLocal={false} canManageLocal={false} canApproveExpenses={false} canManageGrand regularitySlot={<p>FORMULARIO REGULARIDAD</p>}/> )
+   expect(html).toContain('Consultar esta bandeja no genera obligaciones.')
+   expect(html).not.toContain('Sincronizar defunciones')
+   expect(html).not.toContain('Cambiar tarifa')
+   expect(html).not.toContain('FORMULARIO REGULARIDAD')
+  }finally{projected.actions=['view','create','write']}
+ })
+ it('no expone datos ni formularios mientras verifica el acceso o después de revocarlo',()=>{
+  projected.actions=[]
+  try{
+   const html=renderToStaticMarkup(<HospitalariaPage {...baseProps()} canReadLocal={false} canManageLocal={false} canApproveExpenses={false} canManageGrand/> )
+   expect(html).toContain('El perfil no permite consultar Gran Hospitalaria.')
+   expect(html).not.toContain('Sincronizar defunciones')
+   expect(html).not.toContain('Parámetro vigente')
+  }finally{projected.actions=['view','create','write']}
+ })
 })
