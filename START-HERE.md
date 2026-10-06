@@ -1,3 +1,4 @@
+- Permisos efectivos de Gran Hospitalaria #266/#348: [handoff y evidencia técnica](docs/handoffs/2026-10-06-chatgpt-grand-hospitalaria-access-cierre.md).
 - Zona de cuotas desde Ficha del Taller #337/#338: [handoff y recibo de cierre](docs/handoffs/2026-10-06-chatgpt-zone-from-lodge-cierre.md).
 - Seguridad backend #332: [handoff y recibo de cierre](docs/handoffs/2026-10-06-chatgpt-backend-security-cierre.md).
 - Issue #191 / PR #329, caja y cuotas no recuperadas sin plan de cuentas: [handoff postmerge](docs/handoffs/2026-10-06-chatgpt-unrecovered-dues-postmerge.md); recibo de publicación en Issue/Drive, srv01/UAT pausados.
