@@ -122,6 +122,25 @@ jobs:
       - name: Restore tests
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
+      - name: Audit direct and transitive NuGet dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/dependency-audit
+          python3 -m unittest discover -s tests -p test_dependency_vulnerabilities.py
+          dotnet list backend/src/PMGM.Api/PMGM.Api.csproj package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit/api.json
+          dotnet list backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit/tests.json
+          python3 scripts/check-dependency-vulnerabilities.py artifacts/dependency-audit/api.json artifacts/dependency-audit/tests.json
+
+      - name: Publish NuGet audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-dependency-audit
+          path: artifacts/dependency-audit
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Test unit, PostgreSQL, S3 and ClamAV integration
         run: >-
           dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
@@ -164,6 +183,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend --no-audit --no-fund
+
+      - name: Audit production npm dependencies
+        run: npm audit --prefix frontend --omit=dev --audit-level=high
 
       - name: Lint frontend
         run: npm run lint --prefix frontend

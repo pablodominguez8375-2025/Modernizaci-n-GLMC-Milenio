@@ -75,6 +75,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddInstitutionalRequestRateLimiting(builder.Configuration);
 builder.Services.AddSingleton<IInstitutionalAccessService, InstitutionalAccessService>();
 builder.Services.AddScoped<IInstitutionalMemberContextResolver, InstitutionalMemberContextResolver>();
 builder.Services.AddScoped<IInstitutionalBootstrapService, InstitutionalBootstrapService>();
@@ -132,6 +133,7 @@ app.UseRequestLocalization();
 app.UseAuthentication();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();
 app.UseMiddleware<CandidateInitiationAuthorizationGuardMiddleware>();
 app.UseMiddleware<AdmissionCeremonyAuthorizationGuardMiddleware>();
