@@ -15,8 +15,8 @@ describe('PMGM-ADM-001 · afiliación e incorporación separadas de iniciación'
     expect(page).toContain('derivedMode')
     expect(page).not.toContain('CandidateWorkshopIntakePage')
   })
-  it('queda disponible en las vistas de Secretaría', () => {
-    expect(app).toContain("label: 'Afiliación e incorporación'")
+  it('queda disponible para Secretaría como opción propia del menú lateral (06-10-2026)', () => {
+    expect(app).toContain('label="Afiliación e incorporación"')
     expect(app).toContain("view === 'admissions'")
   })
   it('incluye panel documental vinculado al expediente y no bypass del pipeline', () => {

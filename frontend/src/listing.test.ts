@@ -41,10 +41,9 @@ describe('PMGM-UX-003 · listados y vistas operativas', () => {
     expect(read('./CandidateWorkshopIntakePage.tsx')).toContain('<SectionIndex')
   })
 
-  it('el sello de Gestión Logial muestra el número del Taller y no una letra fija', () => {
+  it('Gestión Logial no muestra un sello con letra fija (el Resumen ya no repite la ficha, 06-10-2026)', () => {
     const page = read('./LodgeManagementPage.tsx')
     expect(page).not.toContain('<span className="lodge-seal">M</span>')
-    expect(page).toContain('{lodgeSealText}')
   })
 
   it('el selector de Taller se reemplaza por texto cuando el perfil opera un solo Taller', () => {
