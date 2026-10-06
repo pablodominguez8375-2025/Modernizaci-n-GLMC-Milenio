@@ -114,8 +114,11 @@ export default function App({ api, bootstrapApi, lodgeApi, membershipApi, organi
   const isLodgeTreasurerWorkspace = canLodgeTreasury && !canLodgeOperations
   const canMembers = hasInstitutionalScope && !isLodgeTreasurerWorkspace
   const canManageWorkshopProfile = capabilities?.canManageAnyWorkshopProfile ?? false
-  const canLodgeProfile = (capabilities?.canReadLodgeCouncilSummary ?? false) || canManageWorkshopProfile
+  const canLodgeProfile = (capabilities?.canReadLodgeCouncilSummary ?? false) || canManageWorkshopProfile || (capabilities?.canManageTreasuryRegularity ?? false)
   const canManageLodgeSummaryAccess = capabilities?.canManageLodgeCouncilSummaryAccess ?? false
+  useEffect(() => {
+    if (window.location.hash === '#ficha-del-taller' && canLodgeProfile) setView('lodgeProfile')
+  }, [canLodgeProfile])
   const canCeremonies = capabilities?.canReviewCeremonies ?? false
   const canRegimen = capabilities?.canRunRegimenInteriorReports ?? false
   const canReporting = canRegimen

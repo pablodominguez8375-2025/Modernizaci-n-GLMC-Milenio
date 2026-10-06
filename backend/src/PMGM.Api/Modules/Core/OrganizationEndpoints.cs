@@ -232,11 +232,19 @@ public static class OrganizationEndpoints
             .ToListAsync(cancellationToken);
 
         var canReadRegularity = OrganizationProfilePrivacy.CanReadRegularity(access, httpContext.User, id);
+        var quotaDecreeNumber = GrandTreasuryTariff.At(await GrandTreasuryTariff.LoadAsync(db, cancellationToken), GrandTreasuryTariff.Today())?.Number;
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
-            organization,
+            organization = new
+            {
+                organization.Id, organization.Name, organization.Number, organization.Type,
+                organization.ParentOrganizationId, organization.CreatedAtUtc, organization.EstablishedOn,
+                organization.City, organization.Country, organization.OrienteCode, organization.hasLogo,
+                treasuryTerritory = WorkshopOriente.Territory(organization.OrienteCode, organization.City, organization.Country)
+            },
+            quotaDecreeNumber,
             members = new
             {
                 active = activeMemberIds.Count,

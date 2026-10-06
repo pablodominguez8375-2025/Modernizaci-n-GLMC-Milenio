@@ -20,7 +20,6 @@ public static class TreasuryEndpoints
         group.MapGet("/derechos-ceremoniales", GetCeremonyRightsAsync);
         group.MapGet("/talleres/orientes", GetTreasuryTerritoriesAsync);
         group.MapGet("/talleres/{organizationId:guid}/oriente", GetTreasuryTerritoryAsync);
-        group.MapPost("/talleres/{organizationId:guid}/oriente", SetTreasuryTerritoryAsync);
         group.MapPost("/talleres/{organizationId:guid}/regularidad", SetWorkshopRegularityAsync);
         group.MapGet("/talleres/{organizationId:guid}/regularidad", GetWorkshopRegularityAsync);
         group.MapPost("/talleres/{organizationId:guid}/miembros/{memberId:guid}/regularidad", SetMemberRegularityAsync);
@@ -121,14 +120,6 @@ public static class TreasuryEndpoints
         var item = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
         return item is null ? Results.NotFound() : Results.Ok(new { organizationId = item.Id,
             territory = WorkshopOriente.Territory(item), item.City, item.Country, item.OrienteCode });
-    }
-
-    private static async Task<IResult> SetTreasuryTerritoryAsync(Guid organizationId, SetTreasuryTerritoryRequest request,
-        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
-    {
-        if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
-        if (!await db.Organizations.AnyAsync(x => x.Id == organizationId, cancellationToken)) return Results.NotFound();
-        return Results.Conflict(new { message = "El Oriente se administra exclusivamente en la Ficha del Taller; esta consulta es de solo lectura." });
     }
 
     private static async Task<IResult> SetWorkshopRegularityAsync(
@@ -339,7 +330,6 @@ public static class TreasuryEndpoints
     }
 }
 
-public sealed record SetTreasuryTerritoryRequest(string Territory);
 
 public sealed record FinancialRegularityProjectionDto(
     string Status,

@@ -1,4 +1,5 @@
-import { setDemoWorkshopLocation, zoneFromLocation } from './treasuryTariffs'
+import { chileCivilDate } from '../admissionDates'
+import { initialTariff, tariffAt, setDemoWorkshopLocation, zoneFromLocation } from './treasuryTariffs'
 export interface OrganizationAuthority {
   id: string
   officeType: string
@@ -43,6 +44,7 @@ export interface OrganizationTransfer {
 }
 
 export interface OrganizationProfile {
+  quotaDecreeNumber?: string | null
   organization: { id: string; name: string; number: string | null; type: string; parentOrganizationId: string | null; createdAtUtc: string; establishedOn: string | null; city: string | null; country: string | null; orienteCode?:string|null; treasuryTerritory: string | null; hasLogo?: boolean }
   members: { active: number; degreeDistribution: Record<string, number> }
   authorities: OrganizationAuthority[]
@@ -189,6 +191,7 @@ function demoProfile(organizationId: string): OrganizationProfile {
   const other = second ? 'Taller Demostrativo Nº 1' : 'Taller Demostrativo Nº 23'
   const otherId = second ? ORG_1 : ORG_23
   return {
+    quotaDecreeNumber: tariffAt([initialTariff], chileCivilDate())?.number ?? null,
     organization: { id, name, number, type: 'workshop', parentOrganizationId: null, createdAtUtc: '2010-01-01T12:00:00Z', establishedOn: metadata ? metadata.establishedOn : (second ? '1984-03-10' : '1967-08-21'), city: metadata ? metadata.city : (second ? 'Valparaíso' : 'Santiago'), country: metadata ? metadata.country : 'Chile', treasuryTerritory: metadata?zoneFromLocation(metadata.city,metadata.country):second?'other_oriente':'santiago', hasLogo: demoWorkshopLogos.has(id) },
     members: { active: second ? 19 : 27, degreeDistribution: second ? { apprentice: 6, fellowcraft: 5, master: 8 } : { apprentice: 8, fellowcraft: 7, master: 12 } },
     authorities: [

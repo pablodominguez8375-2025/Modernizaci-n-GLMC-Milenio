@@ -29,7 +29,8 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
         if (!active) return
         const workshops = response.items.filter(item => item.type.toLowerCase() === 'workshop')
         setOrganizations(workshops)
-        setOrganizationId(workshops[0]?.id ?? '')
+        const requested = new URLSearchParams(window.location.search).get('taller')
+        setOrganizationId(workshops.find(item => item.id === requested)?.id ?? workshops[0]?.id ?? '')
       })
       .catch(reason => { if (active) setError(toMessage(reason)) })
       .finally(() => { if (active) setLoading(false) })
@@ -151,7 +152,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
           <label className="workshop-logo-field"><span>Logo personalizado (opcional, PNG/JPEG hasta 2 MiB)</span><input type="file" accept="image/png,image/jpeg" onChange={event => { const file = event.target.files?.[0] ?? null; setLogoFile(file); if (file) { const url = URL.createObjectURL(file); setLogoUrl(current => { if (current) URL.revokeObjectURL(current); return url }) } }} /></label>
           <div className="workshop-profile-actions"><button type="button" className="primary-action" disabled={savingWorkshopProfile || !workshopProfileDraft.name.trim() || !workshopProfileDraft.orienteCode || !workshopProfileDraft.city.trim()} onClick={() => void saveWorkshopProfile()}>{savingWorkshopProfile ? 'Guardando…' : 'Guardar ficha'}</button>{logoFile && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void saveWorkshopLogo()}>{savingLogo ? 'Subiendo…' : 'Guardar logo'}</button>}{profile.organization.hasLogo && <button type="button" className="secondary-action" disabled={savingLogo} onClick={() => void removeWorkshopLogo()}>Quitar logo</button>}</div>
         </div></ActionDrawer></div>}
-        <p className="workshop-origin-note">La clasificación de cuotas se administra aparte por Gran Tesorería: {treasuryTerritoryLabel(profile.organization.treasuryTerritory)}. No se deduce de la ciudad ni del país.</p>
+        <p className="workshop-origin-note">Zona de cuotas según su Oriente: {treasuryTerritoryLabel(profile.organization.treasuryTerritory)}{profile.quotaDecreeNumber ? ` (Decreto vigente N.º ${profile.quotaDecreeNumber})` : ' (sin decreto vigente)'}.</p>
       </section>
 
       <section className="lodge-kpi-grid">

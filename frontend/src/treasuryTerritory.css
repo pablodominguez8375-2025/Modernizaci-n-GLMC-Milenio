@@ -1,0 +1,10 @@
+.treasury-territory-list { display: grid; gap: 1rem; }
+.treasury-territory-card { border: 1px solid var(--brand-border, #d7dfe8); border-radius: .75rem; padding: 1rem; }
+.treasury-territory-card h3 { margin: 0 0 .75rem; }
+.treasury-territory-card dl { display: flex; flex-wrap: wrap; gap: 1rem 2rem; margin: 0 0 1rem; }
+.treasury-territory-card dt { font-weight: 600; }
+.treasury-territory-card dd { margin: .25rem 0 0; }
+@media (max-width: 760px) {
+  .treasury-territory-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: .5rem; }
+  .treasury-territory-card { flex: 0 0 min(88%, 22rem); scroll-snap-align: start; }
+}
