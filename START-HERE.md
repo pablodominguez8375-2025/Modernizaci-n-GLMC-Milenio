@@ -1,3 +1,5 @@
+- Issue #191 / PR #329, caja y cuotas no recuperadas sin plan de cuentas: [handoff postmerge](docs/handoffs/2026-10-06-chatgpt-unrecovered-dues-postmerge.md); recibo de publicación en Issue/Drive, srv01/UAT pausados.
+
 - Cierre del tarifario por decreto v2 (PR #318, Issue #190): [handoff postmerge](docs/handoffs/2026-10-04-chatgpt-tariff-decree-v2-postmerge.md); SHA publicado y recibo final en Issue/Drive, main y srv01/UAT pausados.
 
 - Continuidad de PR #316 / permisos efectivos de Tesorería: [handoff postmerge](docs/handoffs/2026-10-04-chatgpt-dynamic-access-postmerge.md); #266 mantiene pendientes los demás módulos.
