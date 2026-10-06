@@ -20,11 +20,15 @@ export default function MobileTabBar(props: MobileTabBarProps) {
   const second = props.operational
     ? { label: 'Pendientes', icon: 'tasks' as const, badge: props.pendingCount }
     : { label: 'Mi ficha', icon: 'member' as const, badge: 0 }
+  const navigate = (action: () => void) => {
+    if (props.menuOpen) props.onToggleMenu()
+    action()
+  }
   return <nav className="mobile-tabbar" aria-label="Navegación rápida">
-    <Tab id="home" label="Inicio" icon="home" active={!props.menuOpen && props.active === 'home'} onClick={props.onHome} />
-    <Tab id="second" label={second.label} icon={second.icon} badge={second.badge} active={!props.menuOpen && props.active === 'second'} onClick={props.onSecond} />
-    <Tab id="calendar" label="Agenda" icon="calendar" active={!props.menuOpen && props.active === 'calendar'} onClick={props.onCalendar} />
-    <Tab id="notifications" label="Avisos" icon="bell" badge={props.unreadCount} active={!props.menuOpen && props.active === 'notifications'} onClick={props.onNotifications} />
+    <Tab id="home" label="Inicio" icon="home" active={!props.menuOpen && props.active === 'home'} onClick={() => navigate(props.onHome)} />
+    <Tab id="second" label={second.label} icon={second.icon} badge={second.badge} active={!props.menuOpen && props.active === 'second'} onClick={() => navigate(props.onSecond)} />
+    <Tab id="calendar" label="Agenda" icon="calendar" active={!props.menuOpen && props.active === 'calendar'} onClick={() => navigate(props.onCalendar)} />
+    <Tab id="notifications" label="Avisos" icon="bell" badge={props.unreadCount} active={!props.menuOpen && props.active === 'notifications'} onClick={() => navigate(props.onNotifications)} />
     <button className={props.menuOpen ? 'mobile-tab active' : 'mobile-tab'} type="button" data-tab="menu" aria-expanded={props.menuOpen} aria-controls="navegacion-principal" onClick={props.onToggleMenu}>
       <InstitutionalIcon name="menu" size={22} />
       <span>{props.menuOpen ? 'Cerrar' : 'Menú'}</span>

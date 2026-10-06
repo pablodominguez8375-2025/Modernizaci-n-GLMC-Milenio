@@ -1,7 +1,13 @@
-# Menú móvil → Inicio — ChatGPT — 06-10
+# Corrección: Menú móvil → Inicio
 
-Issue #341 · base dev 86302aaba94b6e6e7ceb6df2120c252854e229c5. Fuente: reporte directo del PO y captura móvil adjunta. Reserva MobileTabBar y prueba de interacción; sin hot files, identidad, backend/modelo/contratos/reglas de datos. Main y srv01 preservados.
-
-Causa: App cierra menú con useEffect([view]); si Inicio ya es la vista activa, pulsarlo no cambia view y el menú sigue abierto. Cierre explícito al navegar desde la barra evita depender de ese cambio. Debe cubrir también Mi ficha/Pendientes, Agenda y Avisos, sin que pulsar una pestaña con menú cerrado lo abra.
-
-Drive revisado desde el cierre anterior: no archivos nuevos/modificados; propuesta Claude sobre menús sigue pendiente PO, no se aplica. #116/#60/#58 históricos sin cambios; no otro agente activo sobre MobileTabBar. Estado: preparación antes de programar. Evidencias y corte final se completarán mediante recibo persistente del PR.
+- Issue #341; PR #342. Solicitud directa del PO: revisar y corregir el bloqueo al volver a Inicio desde Menú.
+- Base dev: 86302aaba94b6e6e7ceb6df2120c252854e229c5; main: 6dfb9546a4873baff15955cf86abfd7d47e3d111.
+- Causa: App cierra Menú en el efecto dependiente de view; volver a la vista ya activa no dispara ese efecto.
+- MobileTabBar ahora cierra explícitamente el menú abierto antes de ejecutar Inicio, Mi ficha/Pendientes, Agenda o Avisos. Con el menú cerrado no lo abre accidentalmente.
+- Archivos: frontend/src/MobileTabBar.tsx, frontend/src/MobileTabBar.test.tsx y este handoff. No cambia App, CSS, backend, permisos, modelo, contratos ni reglas de datos.
+- Prueba de regresión: seis casos fallan antes de corregir; después pasan. Suite frontend: 434/434; lint y compilación TypeScript/Vite correctos.
+- Revisión Drive al inicio: ningún archivo nuevo/modificado en Proyecto Centenario desde la revisión previa. Propuesta de reordenamiento de menús sigue pendiente del PO y queda fuera de este arreglo.
+- Anti-conflicto: dev sin cambios; PR #116/#60/#58 sin solapamientos en MobileTabBar. Tarea UI asignada expresamente por el PO a Codex.
+- Gates exact-head, SHA integrado/publicado y checksums QA: se registran en el recibo persistente del PR #342 después de su verificación.
+- Pages y QA se actualizan mediante los workflows del mismo código. Despliegue QA pendiente: srv01/UAT pausados (#97); main sin promoción.
+- Continuidad: PR documental posterior agregará únicamente el enlace a este handoff en START-HERE; adenda de Línea Base Drive al cierre.
