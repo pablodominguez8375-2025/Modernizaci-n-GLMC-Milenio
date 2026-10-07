@@ -15,6 +15,9 @@
 .member-insight-grid > .member-treasury-account,
 .member-insight-grid > .member-quick-links { grid-column: 1 / -1; }
 
+/* PMGM-UX #366: el crédito pendiente de imputación no debe quedar pegado al encabezado de la Cartola personal. */
+.member-treasury-account > section[aria-label="Crédito pendiente de imputación"] { margin-bottom: 1.5rem; }
+
 .member-status-stack { align-content: stretch; }
 .member-status-stack > .member-card { height: 100%; }
 
