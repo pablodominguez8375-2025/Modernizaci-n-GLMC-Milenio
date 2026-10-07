@@ -1,4 +1,6 @@
 import { technicalGrant } from './dynamicAccess'
+import { demoAccountCandidates } from './membershipApi'
+import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated } from './userAccounts'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
 export interface HospitalariaContributionObligation { id:string;organizationId:string;taller:string;rateId:string;periodYear:number;periodMonth:number;currency:'CLP';amountDue:number;status:'pending'|'submitted'|'observed'|'reconciled';paymentDate:string|null;paymentReference:string|null;reviewedAtUtc:string|null;reviewNotes:string|null }
@@ -421,6 +423,10 @@ export class PmgmApiClient {
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
   demoAccessSubject = 'demo:brother'
+  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin')
+  async getUserAccountCandidates():Promise<AccountCandidates>{if(this.useMocks)return this.userAccountsDemo.candidatesForCreation();return this.request('/api/system/user-accounts/eligible-members')}
+  async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
+  async createUserAccount(request:CreateUserAccount):Promise<UserAccountCreated>{if(this.useMocks)return this.userAccountsDemo.create(request);return this.request('/api/system/user-accounts',{method:'POST',body:JSON.stringify(request)})}
   readonly dynamicAccess: DynamicAccessClient
   private canMockManageGrandTreasury(){return getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity}
   async getViewAccess(): Promise<ViewAccess> {

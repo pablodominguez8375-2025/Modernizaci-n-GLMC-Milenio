@@ -58,6 +58,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      PMGM_ACCOUNT_SMTP_HOST: ${PMGM_ACCOUNT_SMTP_HOST:-}
+      PMGM_ACCOUNT_SMTP_PORT: ${PMGM_ACCOUNT_SMTP_PORT:-587}
+      PMGM_ACCOUNT_SMTP_USER: ${PMGM_ACCOUNT_SMTP_USER:-}
+      PMGM_ACCOUNT_SMTP_PASSWORD: ${PMGM_ACCOUNT_SMTP_PASSWORD:-}
+      PMGM_ACCOUNT_SMTP_FROM: ${PMGM_ACCOUNT_SMTP_FROM:-no-reply@pmgm.invalid}
+      PMGM_ACCOUNT_SMTP_AUTH: ${PMGM_ACCOUNT_SMTP_AUTH:-true}
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/pmgm_keycloak
       KC_DB_USERNAME: pmgm_app
@@ -95,6 +101,17 @@ services:
       ASPNETCORE_ENVIRONMENT: Staging
       Database__ApplyMigrationsOnStartup: "true"
       DemoData__Enabled: "true"
+      UserAccounts__Identity__ServerUrl: ${PMGM_ACCOUNT_IDENTITY_URL:-}
+      UserAccounts__Identity__Issuer: ${PMGM_ACCOUNT_ISSUER:-}
+      UserAccounts__Identity__ClientId: ${PMGM_ACCOUNT_CLIENT_ID:-pmgm-account-admin}
+      UserAccounts__Identity__ClientSecret: ${PMGM_ACCOUNT_CLIENT_SECRET:-}
+      UserAccounts__Mail__Host: ${PMGM_ACCOUNT_SMTP_HOST:-}
+      UserAccounts__Mail__Port: ${PMGM_ACCOUNT_SMTP_PORT:-587}
+      UserAccounts__Mail__EnableSsl: "true"
+      UserAccounts__Mail__Username: ${PMGM_ACCOUNT_SMTP_USER:-}
+      UserAccounts__Mail__Password: ${PMGM_ACCOUNT_SMTP_PASSWORD:-}
+      UserAccounts__Mail__From: ${PMGM_ACCOUNT_SMTP_FROM:-}
+      UserAccounts__Mail__LoginUrl: ${PMGM_ACCOUNT_LOGIN_URL:-}
       Authentication__Authority: http://keycloak:8080/realms/pmgm
       Authentication__Audience: pmgm-api
       Authentication__RequireHttpsMetadata: "false"

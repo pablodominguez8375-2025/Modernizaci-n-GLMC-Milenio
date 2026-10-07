@@ -4,6 +4,9 @@ import type { AccessAction } from './dynamicAccess'
 export interface DynamicMethodPolicy { view: string; action: AccessAction; organizationArg?: number }
 export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodPolicy>> = {
   pmgmApi: {
+    getUserAccountCandidates: { view: 'system', action: 'view' },
+    getUserAccounts: { view: 'system', action: 'view' },
+    createUserAccount: { view: 'system', action: 'create' },
     getCandidatePortal: { view: 'candidates', action: 'view' },
     getSystemSettings: { view: 'system', action: 'view' },
     createSystemSettingVersion: { view: 'system', action: 'create' },

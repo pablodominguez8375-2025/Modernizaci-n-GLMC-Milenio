@@ -802,6 +802,54 @@
       "retentionPolicyCode": "RET-MEMBERSHIP-HISTORY",
       "owner": "Régimen Interior",
       "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-038",
+      "module": "UserAccounts",
+      "entity": "MemberIdentityLink",
+      "field": "MemberId/Issuer/Subject",
+      "classification": "restricted",
+      "purpose": "Vincular cuenta externa con Hermano institucional autorizado.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "omit_credentials_and_identity_links",
+      "retentionPolicyCode": "RET-IDENTITY",
+      "owner": "Administración / Privacidad",
+      "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-039",
+      "module": "UserAccounts",
+      "entity": "InitialCredential",
+      "field": "TemporaryPassword",
+      "classification": "restricted",
+      "purpose": "Habilitar primer acceso con cambio obligatorio; valor efímero sin persistencia institucional.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "omit_credentials_and_identity_links",
+      "retentionPolicyCode": "RET-IDENTITY",
+      "owner": "Administración / Privacidad",
+      "status": "active"
+    },
+    {
+      "code": "PMGM-DCF-040",
+      "module": "UserAccounts",
+      "entity": "AccountServiceConfiguration",
+      "field": "ClientSecret/SmtpPassword",
+      "classification": "restricted",
+      "purpose": "Autenticar servicio de identidad y transporte de correo protegidos.",
+      "containsSensitiveData": true,
+      "allowInLogs": false,
+      "allowExport": false,
+      "publicProjection": false,
+      "masking": "omit_credentials_and_identity_links",
+      "retentionPolicyCode": "RET-IDENTITY",
+      "owner": "Administración / Privacidad",
+      "status": "active"
     }
   ]
 }
