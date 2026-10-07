@@ -469,3 +469,32 @@ main.content label > span { font-weight: 600; }
 .member-portal > .workspace-panel,
 .member-portal > .workspace-panel > * { min-width: 0; max-width: 100%; }
 .member-portal > .workspace-panel { display: grid; gap: 1rem; }
+
+/* ---------- Corrección 07-10-2026 (captura del PO en Mi ficha): pestañas que no se deslizaban y línea doble ----------
+   Causa: el contenedor .workspace-tabs y la lista interna eran dos zonas de desplazamiento anidadas (la lista tenía
+   min-width: max-content), y se veían a la vez la barra de desplazamiento y el borde inferior.
+   Bajo 1440 px: una sola zona de desplazamiento (la lista), sin borde extra; con 4 opciones o menos, todas visibles
+   en una fila de tarjetas iguales, sin necesidad de deslizar. */
+@media (max-width: 89.99rem) {
+  .workspace-tabs { overflow: visible; border-bottom: 0; min-width: 0; max-width: 100%; }
+  .workspace-tabs [role="tablist"]:has(> :nth-child(5)) { max-width: 100%; overflow-x: auto; }
+  .workspace-tabs [role="tablist"] { min-width: 0; -webkit-overflow-scrolling: touch; touch-action: pan-x pan-y; }
+
+  .workspace-tabs [role="tablist"]:not(:has(> :nth-child(5))) {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    overflow: visible;
+  }
+
+  .workspace-tabs [role="tablist"]:not(:has(> :nth-child(5))) > button {
+    width: auto;
+    min-height: 3.5rem;
+    padding: 0.625rem 0.5rem;
+    justify-content: center;
+    align-content: center;
+    text-align: center;
+  }
+
+  .workspace-tabs [role="tablist"] > button:not(:has(small)) { min-height: 3.5rem; align-content: center; }
+}
