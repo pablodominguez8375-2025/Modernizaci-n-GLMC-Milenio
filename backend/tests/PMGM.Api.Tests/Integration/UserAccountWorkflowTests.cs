@@ -35,16 +35,16 @@ public sealed class UserAccountWorkflowTests
         Assert.Equal(mailFails||enableFails?HttpStatusCode.ServiceUnavailable:HttpStatusCode.Created,response.StatusCode);
         Assert.Equal(ids.Email,mail.LastAccount!.Email);Assert.Equal(ids.Member,mail.LastAccount.MemberId);
         Assert.Equal(24,mail.Password!.Length);
-        var text=await response.Content.ReadAsStringAsync();Assert.DoesNotContain(mail.Password,text);
+        var text=await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);Assert.DoesNotContain(mail.Password,text);
         await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
-        var links=await db.Database.SqlQuery<Guid>($"SELECT \"MemberId\" AS \"Value\" FROM core.member_identity_links WHERE \"Issuer\"={identity.Issuer} AND \"Subject\"={identity.Subject} AND \"RevokedAtUtc\" IS NULL").ToListAsync();
+        var links=await db.Database.SqlQuery<Guid>($"SELECT \"MemberId\" AS \"Value\" FROM core.member_identity_links WHERE \"Issuer\"={identity.Issuer} AND \"Subject\"={identity.Subject} AND \"RevokedAtUtc\" IS NULL").ToListAsync(TestContext.Current.CancellationToken);
         if(mailFails||enableFails){Assert.Empty(links);Assert.False(identity.Enabled);Assert.True(identity.Removed);}
         else
         {
             Assert.Equal(ids.Member,Assert.Single(links));Assert.True(identity.Enabled);
             using var json=JsonDocument.Parse(text);Assert.True(json.RootElement.GetProperty("requiresPasswordChange").GetBoolean());
             Assert.True(json.RootElement.GetProperty("initialPasswordEmailSent").GetBoolean());
-            var duplicate=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization});Assert.Equal(HttpStatusCode.Conflict,duplicate.StatusCode);
+            var duplicate=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);Assert.Equal(HttpStatusCode.Conflict,duplicate.StatusCode);
         }
         var audits=await db.AuditEvents.Where(a=>a.EntityId==identity.Subject).ToListAsync();
         Assert.All(audits,a=>{Assert.DoesNotContain(mail.Password,a.MetadataJson??"");Assert.DoesNotContain(ids.Email,a.MetadataJson??"");});
@@ -60,9 +60,9 @@ public sealed class UserAccountWorkflowTests
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
         var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,status);
-        var response=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization});
+        var response=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest,response.StatusCode);Assert.Equal(0,identity.Prepares);
-        using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members"));
+        using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
         Assert.DoesNotContain(candidates.RootElement.GetProperty("items").EnumerateArray(),x=>x.GetProperty("memberId").GetGuid()==ids.Member);
     }
 
@@ -71,13 +71,13 @@ public sealed class UserAccountWorkflowTests
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
         var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,"active");
-        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {})).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=Guid.NewGuid()})).StatusCode);
-        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization,platformEmail="override@example.invalid"})).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {},TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=Guid.NewGuid()},TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization,platformEmail="override@example.invalid"},TestContext.Current.CancellationToken)).StatusCode);
         var platform=new {platformAdministrator=true,platformName="Admin Ficticio",platformEmail=$"admin-{Guid.NewGuid():N}@example.invalid"};
-        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/system/user-accounts",platform)).StatusCode);Assert.Equal(0,identity.Prepares);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/system/user-accounts",platform,TestContext.Current.CancellationToken)).StatusCode);Assert.Equal(0,identity.Prepares);
         client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
-        Assert.Equal(HttpStatusCode.Created,(await client.PostAsJsonAsync("/api/system/user-accounts",platform)).StatusCode);
+        Assert.Equal(HttpStatusCode.Created,(await client.PostAsJsonAsync("/api/system/user-accounts",platform,TestContext.Current.CancellationToken)).StatusCode);
         Assert.Null(identity.Account!.MemberId);Assert.Null(identity.Account.OrganizationId);Assert.True(identity.Account.PlatformAdministrator);
     }
 
@@ -90,13 +90,13 @@ public sealed class UserAccountWorkflowTests
         }));
     private static async Task<(Guid Member,Guid Organization,string Email)> Seed(Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> factory,string status)
     {
-        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();await db.Database.MigrateAsync();
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();await db.Database.MigrateAsync(TestContext.Current.CancellationToken);
         var org=new Organization{Name=$"Taller cuentas CI {Guid.NewGuid():N}",Type="workshop",Number="CI",City="Santiago",Country="Chile",OrienteCode="santiago"};
         var person=new Person{FirstNames="Hermano",LastNames="Ficticio",Email=$"cuenta-{Guid.NewGuid():N}@example.invalid"};
         var member=new Member{Person=person,PersonId=person.Id};
         db.AddRange(org,person,member,new Membership{Member=member,MemberId=member.Id,Organization=org,OrganizationId=org.Id,MembershipType="regular",Status="active",StartDate=DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)},
             new InstitutionalStatusEvent{Member=member,MemberId=member.Id,EventType=status,EffectiveDate=DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)});
-        await db.SaveChangesAsync();return(member.Id,org.Id,person.Email!);
+        await db.SaveChangesAsync(TestContext.Current.CancellationToken);return(member.Id,org.Id,person.Email!);
     }
     private sealed class Identity:IAccountIdentityProvider
     {
