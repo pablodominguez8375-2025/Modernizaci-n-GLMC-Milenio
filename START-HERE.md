@@ -257,3 +257,5 @@ Los SHA escritos en conversaciones o documentos son checkpoints históricos. **E
 - Cierre técnico Hospitalaria local #266/#322: [handoff y evidencias](docs/handoffs/2026-10-04-chatgpt-hospitalaria-access-postmerge.md); Gran Hospitalaria/navegación y QA física/UAT pendientes.
 - Verificación pública Hospitalaria #266/#324: [recibo y continuidad](docs/handoffs/2026-10-05-chatgpt-public-qa-verification.md); ZIP público, 1025 MANIFEST, nueve archivos críticos y demo comprobados; Gran Hospitalaria y QA física/UAT pendientes.
 - Corrección Menú móvil → Inicio (#342): [handoff y cierre técnico](docs/handoffs/2026-10-06-chatgpt-mobile-menu-home-cierre.md); publicación/QA y recibo verificable enlazados.
+
+- Cierre técnico de permisos dinámicos #266 / PR #360: [handoff y evidencia](docs/handoffs/2026-10-07-chatgpt-dynamic-access-cierre.md); SHA publicado y recibo final en Issue/Drive, despliegue QA pendiente.
