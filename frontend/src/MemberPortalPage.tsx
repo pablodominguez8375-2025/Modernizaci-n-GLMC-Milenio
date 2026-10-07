@@ -7,13 +7,24 @@ import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import MemberTreasuryCredits from './MemberTreasuryCredits'
-import { ActionDrawer, WorkspacePanel, WorkspaceTabs } from './actionKit'
+import { ActionDrawer, WorkspacePanel } from './actionKit'
 import './memberPortalInstruction.css'
 import './memberLibraryShortcut.css'
 
 const formatTreasuryMoney=(amount:number,currency:'CLP'|'USD'='CLP')=>new Intl.NumberFormat('es-CL',{style:'currency',currency,maximumFractionDigits:currency==='USD'?2:0}).format(amount)
 
+export type MemberPortalSection = 'datos' | 'pagos' | 'asistencias'
+
+const SECTION_TITLES: Record<MemberPortalSection, string> = { datos: 'Mis datos', pagos: 'Mis pagos', asistencias: 'Mis asistencias' }
+const SECTION_SUBTITLES: Record<MemberPortalSection, string> = {
+  datos: 'Tu información personal, masónica y de participación en un solo lugar.',
+  pagos: 'Tu situación de tesorería y hospitalaria, tus recibos y tu cartola personal.',
+  asistencias: 'Tu asistencia a tenidas y a instrucción, y tu participación en ceremonias.',
+}
+
 interface MemberPortalPageProps {
+  /** PMGM-UX 07-10-2026: la sección se elige en el menú lateral (Mi ficha → Mis pagos / Mis asistencias), no con pestañas dentro de la vista. */
+  section?: MemberPortalSection
   profile: SessionProfile | null
   useMocks: boolean
   membershipApi: MembershipApiClient
@@ -123,9 +134,8 @@ export const memberPortalDemoData = {
   ],
 } as const
 
-export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
+export default function MemberPortalPage({ section = 'datos', profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
-  const [tab, setTab] = useState<'datos' | 'pagos' | 'asistencias'>('datos')
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
   const [loadingSelf, setLoadingSelf] = useState(!useMocks)
@@ -205,11 +215,11 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
   return <div className="member-portal">
     <section className="member-portal-heading">
       <div>
-        <p className="member-breadcrumb">Portal del Hermano <span>›</span> Mi ficha</p>
-        <h1>Mi ficha</h1>
-        <p>Tu información personal, masónica y de participación en un solo lugar.</p>
+        <p className="member-breadcrumb">Portal del Hermano <span>›</span> Mi ficha{section !== 'datos' && <> <span>›</span> {SECTION_TITLES[section]}</>}</p>
+        <h1>{section === 'datos' ? 'Mi ficha' : SECTION_TITLES[section]}</h1>
+        <p>{SECTION_SUBTITLES[section]}</p>
       </div>
-        <ActionDrawer label="Editar mis datos" title="Editar mis datos de contacto" description="Correo, teléfono y domicilio. Los datos masónicos los mantiene la Secretaría." disabled={!canEdit || loadingSelf || saving} keepOpen open={editing} onOpenChange={setEditing}>
+        {section === 'datos' && <ActionDrawer label="Editar mis datos" title="Editar mis datos de contacto" description="Correo, teléfono y domicilio. Los datos masónicos los mantiene la Secretaría." disabled={!canEdit || loadingSelf || saving} keepOpen open={editing} onOpenChange={setEditing}>
           <div className="member-edit-card">
       <div className="member-card-title-row"><div><p className="member-card-kicker">Autogestión</p><h2>Datos personales editables</h2><p>Los datos institucionales permanecen protegidos.</p></div><span className="member-demo-chip">{useMocks ? 'Demostración local' : 'Edición auditada'}</span></div>
       <div className="member-edit-grid">
@@ -220,16 +230,15 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       </div>
       <div className="member-edit-actions"><button type="button" disabled={saving} onClick={() => void savePersonalData()}>{saving ? 'Guardando…' : 'Guardar cambios'}</button><small>{useMocks ? 'Los datos de QA son ficticios y permanecen sólo en la sesión demostrativa.' : 'Sólo se modifican tus datos de contacto; grado, Taller, estado y fechas masónicas no pueden editarse aquí.'}</small></div>
           </div>
-        </ActionDrawer>
+        </ActionDrawer>}
     </section>
 
     {loadingSelf && <div className="member-live-notice">Cargando tu expediente institucional…</div>}
     {selfError && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{selfError}</span></div>}
     {saveMessage && <div className="member-live-notice">{saveMessage}</div>}
 
-    <WorkspaceTabs label="Secciones de Mi ficha" active={tab} onChange={setTab} tabs={[{ id: 'datos', label: 'Mis datos' }, { id: 'pagos', label: 'Mis pagos' }, { id: 'asistencias', label: 'Mis asistencias' }]} />
 
-    <WorkspacePanel id="datos" active={tab === 'datos'}>
+    <WorkspacePanel id="datos" active={section === 'datos'}>
     <section className="member-profile-grid">
       <article className="member-card member-identity-card">
         <div className="member-avatar-wrap"><img className="member-avatar-photo" src={`${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={useMocks ? 'Avatar demostrativo' : 'Avatar institucional'} /></div>
@@ -273,7 +282,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       <MemberWorkPapersPanel api={documentApi} organizationId={useMocks ? 'demo-org-23' : selfProfile?.current.membership?.organizationId ?? ''} enabled={useMocks || selfProfile?.current.membership?.status === 'active'} />
     </WorkspacePanel>
 
-    <WorkspacePanel id="pagos" active={tab === 'pagos'}>
+    <WorkspacePanel id="pagos" active={section === 'pagos'}>
       <section className="member-insight-grid member-payments-grid">
         <div className="member-status-stack">
           <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="treasury" size={22} /></span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div></article>
@@ -292,7 +301,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       </article>
     </WorkspacePanel>
 
-    <WorkspacePanel id="asistencias" active={tab === 'asistencias'}>
+    <WorkspacePanel id="asistencias" active={section === 'asistencias'}>
       <section className="member-insight-grid member-attendance-grid">
         <article className="member-card member-attendance-card">
           <div className="member-card-title-row"><div><p className="member-card-kicker">Participación</p><h2>Asistencia a tenidas</h2><p>Últimos 12 meses</p></div></div>

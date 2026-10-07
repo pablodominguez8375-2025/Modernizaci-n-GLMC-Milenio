@@ -16,11 +16,12 @@ describe('PMGM-UX menús simples en celular y PC (aprobado por el PO 03-10-2026)
     expect(css).toMatch(/\.sidebar\.is-open \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/s)
   })
 
-  it('en PC el tamaño de letra está en la cabecera y los grupos se pliegan solo si el menú no cabe', () => {
+  it('en PC el tamaño de letra está en la cabecera y todos los grupos (también «Mi espacio») se pliegan con un clic (PO 07-10-2026)', () => {
     expect(app).toContain('{effectiveProfile && <TextSizeMenu />}')
     expect(textSize).toContain('export function TextSizeMenu()')
     expect(css).toMatch(/\.sidebar \.text-size-control\.in-sidebar \{ display: none; \}/)
-    expect(groups).toContain('if (contentHeight(nav) <= available) return')
+    expect(groups).not.toContain('if (contentHeight(nav) <= available) return')
+    expect(groups).not.toContain('index > 0')
     expect(groups).toContain('for (const group of [...groups].reverse())')
   })
 })

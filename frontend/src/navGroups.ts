@@ -1,9 +1,9 @@
 import { useEffect, type DependencyList, type RefObject } from 'react'
 
-/* PMGM-UX menús simples (aprobado por el PO 03-10-2026).
-   En PC, si el menú lateral no cabe en la pantalla, sus grupos se pueden plegar:
-   quedan abiertos «Mi espacio» (primer grupo) y el grupo de la vista actual, y se recuerda lo que cada persona abrió.
-   Si el menú cabe, no se pliega nada. En celular y tablet no aplica (allí el menú es una hoja de tarjetas). */
+/* PMGM-UX menús simples (aprobado por el PO 03-10-2026; ajustado por el PO 07-10-2026).
+   En PC todos los grupos del menú lateral, incluido «Mi espacio», se pueden plegar y abrir con un clic, y se recuerda lo que cada persona dejó cerrado.
+   El grupo de la vista actual queda siempre abierto. Si el menú no cabe en la pantalla y la persona aún no eligió nada, se parte con los últimos grupos plegados.
+   En celular y tablet no aplica (allí el menú es una hoja de tarjetas). */
 const STORAGE_KEY = 'pmgm.navCollapsedGroups'
 const DESKTOP_QUERY = '(min-width: 981px)'
 
@@ -59,7 +59,6 @@ export function useCollapsibleNavGroups(ref: RefObject<HTMLElement | null>, deps
       if (!window.matchMedia(DESKTOP_QUERY).matches || nav.closest('.is-sidebar-collapsed')) return
       const top = nav.getBoundingClientRect().top + window.scrollY
       const available = window.innerHeight - top
-      if (contentHeight(nav) <= available) return
       nav.classList.add('has-collapsible-groups')
       const stored = readCollapsed()
       const setGroup = (group: NavGroup, collapsed: boolean) => {
@@ -68,15 +67,15 @@ export function useCollapsibleNavGroups(ref: RefObject<HTMLElement | null>, deps
         group.header.setAttribute('aria-expanded', String(!collapsed))
         group.items.forEach(item => { item.hidden = collapsed })
       }
-      const canCollapse = (group: NavGroup, index: number) => index > 0 && !group.items.some(item => item.classList.contains('active'))
+      const canCollapse = (group: NavGroup) => !group.items.some(item => item.classList.contains('active'))
       if (stored) {
-        groups.forEach((group, index) => setGroup(group, canCollapse(group, index) && stored.includes(group.name)))
+        groups.forEach(group => setGroup(group, canCollapse(group) && stored.includes(group.name)))
       } else {
         /* Sin preferencia guardada: se pliegan los grupos desde el final, solo los necesarios para que el menú quepa. */
         groups.forEach(group => setGroup(group, false))
         for (const group of [...groups].reverse()) {
           if (contentHeight(nav) <= available) break
-          if (canCollapse(group, groups.indexOf(group))) setGroup(group, true)
+          if (canCollapse(group)) setGroup(group, true)
         }
       }
     }
