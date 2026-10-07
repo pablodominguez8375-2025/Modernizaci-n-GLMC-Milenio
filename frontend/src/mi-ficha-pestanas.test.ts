@@ -35,6 +35,10 @@ describe('PMGM-UX Mi ficha sin pestañas: Mis pagos y Mis asistencias bajo Mi fi
     expect(page).toContain('Tenidas y ceremonias')
   })
 
+  it('separa el crédito pendiente de la Cartola personal en Mis pagos (#366)', () => {
+    expect(css).toMatch(/\.member-treasury-account > section\[aria-label="Crédito pendiente de imputación"\]\s*\{[^}]*margin-bottom:\s*1\.5rem/)
+  })
+
   it('la edición de datos se abre en panel y no hay formulario abierto', () => {
     expect(page).toContain('<ActionDrawer label="Editar mis datos"')
     expect(page).toContain("{section === 'datos' && <ActionDrawer")
