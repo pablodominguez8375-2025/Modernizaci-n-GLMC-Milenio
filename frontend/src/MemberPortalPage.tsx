@@ -6,6 +6,7 @@ import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import MemberTreasuryCredits from './MemberTreasuryCredits'
+import { ActionDrawer, WorkspacePanel, WorkspaceTabs } from './actionKit'
 import './memberPortalInstruction.css'
 import './memberLibraryShortcut.css'
 
@@ -123,13 +124,13 @@ export const memberPortalDemoData = {
 
 export default function MemberPortalPage({ profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
+  const [tab, setTab] = useState<'datos' | 'pagos' | 'asistencias'>('datos')
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
   const [loadingSelf, setLoadingSelf] = useState(!useMocks)
   const [selfError, setSelfError] = useState<string | null>(null)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [showTreasuryDetail, setShowTreasuryDetail] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -207,13 +208,27 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
         <h1>Mi ficha</h1>
         <p>Tu información personal, masónica y de participación en un solo lugar.</p>
       </div>
-      <button className="member-primary-action" type="button" disabled={!canEdit || loadingSelf || saving} onClick={() => setEditing(value => !value)}>{editing ? 'Cerrar edición' : 'Editar mis datos'}</button>
+        <ActionDrawer label="Editar mis datos" title="Editar mis datos de contacto" description="Correo, teléfono y domicilio. Los datos masónicos los mantiene la Secretaría." disabled={!canEdit || loadingSelf || saving} keepOpen open={editing} onOpenChange={setEditing}>
+          <div className="member-edit-card">
+      <div className="member-card-title-row"><div><p className="member-card-kicker">Autogestión</p><h2>Datos personales editables</h2><p>Los datos institucionales permanecen protegidos.</p></div><span className="member-demo-chip">{useMocks ? 'Demostración local' : 'Edición auditada'}</span></div>
+      <div className="member-edit-grid">
+        <MemberInput label="Correo" value={personal.email} onChange={value => setPersonal(current => ({ ...current, email: value }))} />
+        <MemberInput label="Teléfono" value={personal.phone} onChange={value => setPersonal(current => ({ ...current, phone: value }))} />
+        {useMocks && <MemberInput label="Ciudad" value={personal.city} onChange={value => setPersonal(current => ({ ...current, city: value }))} />}
+        <MemberInput label="Domicilio" value={personal.address} onChange={value => setPersonal(current => ({ ...current, address: value }))} />
+      </div>
+      <div className="member-edit-actions"><button type="button" disabled={saving} onClick={() => void savePersonalData()}>{saving ? 'Guardando…' : 'Guardar cambios'}</button><small>{useMocks ? 'Los datos de QA son ficticios y permanecen sólo en la sesión demostrativa.' : 'Sólo se modifican tus datos de contacto; grado, Taller, estado y fechas masónicas no pueden editarse aquí.'}</small></div>
+          </div>
+        </ActionDrawer>
     </section>
 
     {loadingSelf && <div className="member-live-notice">Cargando tu expediente institucional…</div>}
     {selfError && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{selfError}</span></div>}
     {saveMessage && <div className="member-live-notice">{saveMessage}</div>}
 
+    <WorkspaceTabs label="Secciones de Mi ficha" active={tab} onChange={setTab} tabs={[{ id: 'datos', label: 'Mis datos' }, { id: 'pagos', label: 'Mis pagos' }, { id: 'asistencias', label: 'Mis asistencias' }]} />
+
+    <WorkspacePanel id="datos" active={tab === 'datos'}>
     <section className="member-profile-grid">
       <article className="member-card member-identity-card">
         <div className="member-avatar-wrap"><img className="member-avatar-photo" src={`${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={useMocks ? 'Avatar demostrativo' : 'Avatar institucional'} /></div>
@@ -249,54 +264,58 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
         </button>}
       </article>
 
-      <aside className="member-quote-card"><span className="member-quote-mark">“</span><p>Que nuestras acciones sean testimonio de los principios que profesamos.</p><span className="member-quote-rule" /><strong>Proyecto Centenario</strong><small>Libertad · Igualdad · Fraternidad</small></aside>
     </section>
-
-    {editing && <section className="member-card member-edit-card">
-      <div className="member-card-title-row"><div><p className="member-card-kicker">Autogestión</p><h2>Datos personales editables</h2><p>Los datos institucionales permanecen protegidos.</p></div><span className="member-demo-chip">{useMocks ? 'Demostración local' : 'Edición auditada'}</span></div>
-      <div className="member-edit-grid">
-        <MemberInput label="Correo" value={personal.email} onChange={value => setPersonal(current => ({ ...current, email: value }))} />
-        <MemberInput label="Teléfono" value={personal.phone} onChange={value => setPersonal(current => ({ ...current, phone: value }))} />
-        {useMocks && <MemberInput label="Ciudad" value={personal.city} onChange={value => setPersonal(current => ({ ...current, city: value }))} />}
-        <MemberInput label="Domicilio" value={personal.address} onChange={value => setPersonal(current => ({ ...current, address: value }))} />
-      </div>
-      <div className="member-edit-actions"><button type="button" disabled={saving} onClick={() => void savePersonalData()}>{saving ? 'Guardando…' : 'Guardar cambios'}</button><small>{useMocks ? 'Los datos de QA son ficticios y permanecen sólo en la sesión demostrativa.' : 'Sólo se modifican tus datos de contacto; grado, Taller, estado y fechas masónicas no pueden editarse aquí.'}</small></div>
-    </section>}
-
-    <section className="member-insight-grid">
-      <article className="member-card member-attendance-card">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Participación</p><h2>Asistencia a tenidas</h2><p>Últimos 12 meses</p></div></div>
-        {useMocks
-          ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${memberPortalDemoData.attendance.percentage}%` } as CSSProperties}><div><strong>{memberPortalDemoData.attendance.percentage}%</strong><small>{memberPortalDemoData.attendance.attended} de {memberPortalDemoData.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{memberPortalDemoData.attendance.attended}</strong></li><li><span className="dot danger" />Inasistencias <strong>{memberPortalDemoData.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{memberPortalDemoData.attendance.excused}</strong></li></ul></div>
-          : activity?.attendance && activity.attendance.total > 0
-            ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${activity.attendance.percentage ?? 0}%` } as CSSProperties}><div><strong>{activity.attendance.percentage ?? 0}%</strong><small>{activity.attendance.present} de {activity.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{activity.attendance.present}</strong></li><li><span className="dot danger" />Inasistencias <strong>{activity.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{activity.attendance.excused}</strong></li></ul></div>
-            : <PortalPendingData text="Aún no existen registros personales de asistencia dentro de los últimos 12 meses." />}
+      <article className="member-card member-office-history">
+        <div className="member-card-title-row"><div><p className="member-card-kicker">Trayectoria</p><h2>Historial de cargos en el Taller</h2></div><span className="member-lock-badge">Sólo consulta</span></div>
+        <PortalPendingData text="Próximamente: aquí verás los cargos que has ejercido en tu Taller, con su período." />
       </article>
+      <MemberWorkPapersPanel api={documentApi} organizationId={useMocks ? 'demo-org-23' : selfProfile?.current.membership?.organizationId ?? ''} enabled={useMocks || selfProfile?.current.membership?.status === 'active'} />
+    </WorkspacePanel>
 
-      <article className="member-card member-instruction-card">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Historial de instrucciones</h2><p>Sesiones y asistencia registradas por los encargados de instrucción del Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-        {useMocks
-          ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><details className="member-instruction-details"><summary>Ver historial de sesiones</summary><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></details></>
-          : activity?.instruction && activity.instruction.history.length > 0
-            ? <><div className="member-instruction-summary"><strong>{activity.instruction.total} sesiones registradas</strong><span>Historial real proveniente de Docencia / Gestión Logial</span></div><details className="member-instruction-details"><summary>Ver historial de sesiones</summary><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{activity.instruction.history.map(item => <div className="member-instruction-row" role="row" key={item.instructionSessionId}><span data-label="Fecha">{formatShortDate(item.instructionDate)}</span><span data-label="Grado">{formatLodgeGrade(item.grade)}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={`member-instruction-status ${attendanceStatusClass(item.attendanceStatus)}`}>{formatAttendanceStatus(item.attendanceStatus)}</span><span data-label="Encargado">{formatResponsibleOffice(item.responsibleOffice)}</span></div>)}</div></details></>
-            : <PortalPendingData text="Aún no existen sesiones de instrucción registradas para tu ficha." />}
+    <WorkspacePanel id="pagos" active={tab === 'pagos'}>
+      <section className="member-insight-grid member-payments-grid">
+        <div className="member-status-stack">
+          <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="treasury" size={22} /></span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div></article>
+          <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="hospitalaria" size={22} /></span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
+        </div>
+      </section>
+        {treasuryAccount && <article className="member-card member-treasury-account">
+          <MemberTreasuryCredits credits={treasuryAccount.unappliedCredits} />
+          <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
+          {(treasuryAccount.currencies?.length?treasuryAccount.currencies:[{currency:treasuryAccount.currency??'CLP',totalCharged:treasuryAccount.totalCharged??0,totalPaid:treasuryAccount.totalPaid??0,balance:treasuryAccount.balance??0,overdueBalance:treasuryAccount.overdueBalance??0,currentPeriodBalance:treasuryAccount.currentPeriodBalance??0,futurePeriodBalance:treasuryAccount.futurePeriodBalance??0,futurePaidAmount:treasuryAccount.futurePaidAmount??0}]).map(book=><div className="member-institutional-summary" key={book.currency}><h3>Libro {book.currency}</h3><MemberDatum label="Cargado histórico" value={formatTreasuryMoney(book.totalCharged,book.currency)} /><MemberDatum label="Pagado histórico" value={formatTreasuryMoney(book.totalPaid,book.currency)} /><MemberDatum label="Morosidad anterior" value={formatTreasuryMoney(book.overdueBalance,book.currency)} /><MemberDatum label="Cuotas futuras pagadas" value={formatTreasuryMoney(book.futurePaidAmount,book.currency)} /><MemberDatum label="Saldo" value={formatTreasuryMoney(book.balance,book.currency)} success={book.balance === 0} /></div>)}
+          <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Estado</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{memberTreasuryPeriodLabel(item.periodStatus)}</td><td>{item.organization}</td><td>{formatTreasuryMoney(item.chargedAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.paidAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.balance,item.currency??'CLP')}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {formatTreasuryMoney(payment.amount,payment.currency??item.currency??'CLP')}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
+        </article>}
+      <article className="member-card member-hospitalaria-payments">
+        <div className="member-card-title-row"><div><p className="member-card-kicker">Hospitalaria</p><h2>Reposiciones por hermanos fallecidos</h2><p>$1.500 por cada fallecimiento, cobrado por la Hospitalaria de tu Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
+        <PortalPendingData text="Próximamente: aquí verás cada reposición, su estado de pago, el comprobante y el decreto que la respalda." />
       </article>
+    </WorkspacePanel>
 
-      <div className="member-status-stack">
-        <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="treasury" size={22} /></span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div><button type="button" onClick={() => setShowTreasuryDetail(value => !value)}>{showTreasuryDetail ? 'Ocultar cartola' : 'Ver cartola'}</button></article>
-        <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="hospitalaria" size={22} /></span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
-      </div>
+    <WorkspacePanel id="asistencias" active={tab === 'asistencias'}>
+      <section className="member-insight-grid member-attendance-grid">
+        <article className="member-card member-attendance-card">
+          <div className="member-card-title-row"><div><p className="member-card-kicker">Participación</p><h2>Asistencia a tenidas</h2><p>Últimos 12 meses</p></div></div>
+          {useMocks
+            ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${memberPortalDemoData.attendance.percentage}%` } as CSSProperties}><div><strong>{memberPortalDemoData.attendance.percentage}%</strong><small>{memberPortalDemoData.attendance.attended} de {memberPortalDemoData.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{memberPortalDemoData.attendance.attended}</strong></li><li><span className="dot danger" />Inasistencias <strong>{memberPortalDemoData.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{memberPortalDemoData.attendance.excused}</strong></li></ul></div>
+            : activity?.attendance && activity.attendance.total > 0
+              ? <div className="member-attendance-layout"><div className="member-ring" style={{ '--member-progress': `${activity.attendance.percentage ?? 0}%` } as CSSProperties}><div><strong>{activity.attendance.percentage ?? 0}%</strong><small>{activity.attendance.present} de {activity.attendance.total}</small></div></div><ul><li><span className="dot success" />Asistidas <strong>{activity.attendance.present}</strong></li><li><span className="dot danger" />Inasistencias <strong>{activity.attendance.absent}</strong></li><li><span className="dot info" />Justificadas <strong>{activity.attendance.excused}</strong></li></ul></div>
+              : <PortalPendingData text="Aún no existen registros personales de asistencia dentro de los últimos 12 meses." />}
+        </article>
 
-      {showTreasuryDetail && treasuryAccount && <article className="member-card member-treasury-account">
-        <MemberTreasuryCredits credits={treasuryAccount.unappliedCredits} />
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-        {(treasuryAccount.currencies?.length?treasuryAccount.currencies:[{currency:treasuryAccount.currency??'CLP',totalCharged:treasuryAccount.totalCharged??0,totalPaid:treasuryAccount.totalPaid??0,balance:treasuryAccount.balance??0,overdueBalance:treasuryAccount.overdueBalance??0,currentPeriodBalance:treasuryAccount.currentPeriodBalance??0,futurePeriodBalance:treasuryAccount.futurePeriodBalance??0,futurePaidAmount:treasuryAccount.futurePaidAmount??0}]).map(book=><div className="member-institutional-summary" key={book.currency}><h3>Libro {book.currency}</h3><MemberDatum label="Cargado histórico" value={formatTreasuryMoney(book.totalCharged,book.currency)} /><MemberDatum label="Pagado histórico" value={formatTreasuryMoney(book.totalPaid,book.currency)} /><MemberDatum label="Morosidad anterior" value={formatTreasuryMoney(book.overdueBalance,book.currency)} /><MemberDatum label="Cuotas futuras pagadas" value={formatTreasuryMoney(book.futurePaidAmount,book.currency)} /><MemberDatum label="Saldo" value={formatTreasuryMoney(book.balance,book.currency)} success={book.balance === 0} /></div>)}
-        <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Estado</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{memberTreasuryPeriodLabel(item.periodStatus)}</td><td>{item.organization}</td><td>{formatTreasuryMoney(item.chargedAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.paidAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.balance,item.currency??'CLP')}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {formatTreasuryMoney(payment.amount,payment.currency??item.currency??'CLP')}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
-      </article>}
-
-    </section>
-
-    <MemberWorkPapersPanel api={documentApi} organizationId={useMocks ? 'demo-org-23' : selfProfile?.current.membership?.organizationId ?? ''} enabled={useMocks || selfProfile?.current.membership?.status === 'active'} />
+        <article className="member-card member-instruction-card">
+          <div className="member-card-title-row"><div><p className="member-card-kicker">Docencia</p><h2>Historial de instrucciones</h2><p>Sesiones y asistencia registradas por los encargados de instrucción del Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
+          {useMocks
+            ? <><div className="member-instruction-summary"><strong>{memberPortalDemoData.instruction.length} sesiones registradas</strong><span>La asistencia se controla en Docencia / Gestión Logial</span></div><details className="member-instruction-details"><summary>Ver historial de sesiones</summary><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{memberPortalDemoData.instruction.map(item => <div className="member-instruction-row" role="row" key={`${item.date}-${item.topic}`}><span data-label="Fecha">{item.date}</span><span data-label="Grado">{item.degree}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={item.attendance === 'Presente' ? 'member-instruction-status present' : item.attendance === 'Justificada' ? 'member-instruction-status excused' : 'member-instruction-status absent'}>{item.attendance}</span><span data-label="Encargado">{item.responsible}</span></div>)}</div></details></>
+            : activity?.instruction && activity.instruction.history.length > 0
+              ? <><div className="member-instruction-summary"><strong>{activity.instruction.total} sesiones registradas</strong><span>Historial real proveniente de Docencia / Gestión Logial</span></div><details className="member-instruction-details"><summary>Ver historial de sesiones</summary><div className="member-instruction-history" role="table" aria-label="Historial personal de instrucciones"><div className="member-instruction-row member-instruction-header" role="row"><span>Fecha</span><span>Grado</span><span>Tema</span><span>Asistencia</span><span>Encargado</span></div>{activity.instruction.history.map(item => <div className="member-instruction-row" role="row" key={item.instructionSessionId}><span data-label="Fecha">{formatShortDate(item.instructionDate)}</span><span data-label="Grado">{formatLodgeGrade(item.grade)}</span><strong data-label="Tema">{item.topic}</strong><span data-label="Asistencia" className={`member-instruction-status ${attendanceStatusClass(item.attendanceStatus)}`}>{formatAttendanceStatus(item.attendanceStatus)}</span><span data-label="Encargado">{formatResponsibleOffice(item.responsibleOffice)}</span></div>)}</div></details></>
+              : <PortalPendingData text="Aún no existen sesiones de instrucción registradas para tu ficha." />}
+        </article>
+      </section>
+      <article className="member-card member-attendance-detail">
+        <div className="member-card-title-row"><div><p className="member-card-kicker">Detalle</p><h2>Tenidas y ceremonias</h2></div><span className="member-lock-badge">Sólo consulta</span></div>
+        <PortalPendingData text="Próximamente: aquí verás cada tenida y ceremonia con su fecha y si asististe, justificaste o faltaste." />
+      </article>
+    </WorkspacePanel>
   </div>
 }
 
