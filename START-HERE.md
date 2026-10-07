@@ -1,3 +1,4 @@
+- Permisos efectivos de Gran Tesorería #266/#350: [handoff y evidencia técnica](docs/handoffs/2026-10-06-chatgpt-grand-treasury-access-cierre.md).
 - Permisos efectivos de Gran Hospitalaria #266/#348: [handoff y evidencia técnica](docs/handoffs/2026-10-06-chatgpt-grand-hospitalaria-access-cierre.md).
 - Zona de cuotas desde Ficha del Taller #337/#338: [handoff y recibo de cierre](docs/handoffs/2026-10-06-chatgpt-zone-from-lodge-cierre.md).
 - Seguridad backend #332: [handoff y recibo de cierre](docs/handoffs/2026-10-06-chatgpt-backend-security-cierre.md).
