@@ -498,3 +498,9 @@ main.content label > span { font-weight: 600; }
 
   .workspace-tabs [role="tablist"] > button:not(:has(small)) { min-height: 3.5rem; align-content: center; }
 }
+
+/* PMGM-UX 07-10-2026: «Mis pagos» y «Mis asistencias» cuelgan de «Mi ficha» en el menú lateral (sin pestañas dentro de la vista). */
+@media (min-width: 981px) {
+  .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item.nav-subitem { margin-left: 1.25rem; min-height: 2.5rem; border-left: 2px solid rgba(255, 255, 255, 0.18); border-top-left-radius: 0; border-bottom-left-radius: 0; }
+  .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item.nav-subitem.active { border-left-color: var(--brand-gold); }
+}

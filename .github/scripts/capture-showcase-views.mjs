@@ -15,7 +15,7 @@ if (!browser || !baseUrl || !outputDir) {
 const scenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
   { slug: 'iniciacion-publicados-hermano', profile: 'brother', label: 'Insinuaciones e Iniciación', initiationTabs: [] },
-  { slug: 'iniciacion-venerable', profile: 'lodge', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'], sidebarCount: 11 },
+  { slug: 'iniciacion-venerable', profile: 'lodge', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'], sidebarCount: 13 },
   { slug: 'iniciacion-secretaria-taller', profile: 'lodgeSecretary', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'] },
   { slug: 'iniciacion-gran-secretaria', profile: 'secretariat', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Revisión', 'Circuito de Iniciación'] },
   { slug: 'iniciacion-regimen', profile: 'regimen', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Circuito de Iniciación'] },

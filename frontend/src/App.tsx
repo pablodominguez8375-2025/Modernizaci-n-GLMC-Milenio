@@ -59,7 +59,7 @@ import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'admissions' | 'memberPortal' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
+type View = 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
@@ -113,7 +113,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const rawCouncilApi = useLodgeCouncilApi()
   const councilApi = useMemo(() => restrictClient(rawCouncilApi, 'lodgeCouncilApi', rawApi, () => accessRef.current), [rawCouncilApi, rawApi])
   const canView = (code: string) => viewAccess?.views[code]?.includes('view') ?? false
-  const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
+  const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', memberPayments:'member', memberAttendance:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
   const printViewCodes: Partial<Record<View,string>> = { ...viewCodes, treasury:'treasury', lodgeTreasury:'lodgetreasury', hospitalaria:'hospitalaria' }
   const activeViewAllowed = !viewCodes[view] || canView(viewCodes[view]!)
   useEffect(() => { if (!activeViewAllowed) setView('dashboard') }, [activeViewAllowed])
@@ -250,7 +250,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     setMenuOpen(false)
     window.setTimeout(() => document.getElementById('mis-pendientes')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 60)
   }
-  const activeTab: MobileTabId | null = view === 'dashboard' ? 'home' : view === 'calendar' ? 'calendar' : view === 'notifications' ? 'notifications' : view === 'memberPortal' && !operational ? 'second' : null
+  const activeTab: MobileTabId | null = view === 'dashboard' ? 'home' : view === 'calendar' ? 'calendar' : view === 'notifications' ? 'notifications' : (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && !operational ? 'second' : null
 
   const toggleSidebar = () => setSidebarCollapsed(current => { const next = !current; writeSidebarPreference(next); return next })
   const openMembersSearch = (query: string) => { setMemberQuery(query); setMemberQueryRevision(revision => revision + 1); setView('members') }
@@ -260,7 +260,9 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     const entry = (allowed: boolean, id: View, label: string, section: string, icon: InstitutionalIconName, keywords = ''): SearchEntry[] => allowed ? [{ id, label, section, icon, keywords, onSelect: () => setView(id) }] : []
     return [
       ...entry(true, 'dashboard', 'Inicio', 'General', 'home', 'pendientes resumen'),
-      ...entry(canMemberPortal, 'memberPortal', 'Mi ficha', 'Portal del Hermano', 'member', 'perfil datos personales'),
+      ...entry(canMemberPortal, 'memberPortal', 'Mi ficha', 'Portal del Hermano', 'member', 'perfil datos personales mis datos'),
+      ...entry(canMemberPortal, 'memberPayments', 'Mis pagos', 'Portal del Hermano', 'treasury', 'cuotas tesoreria estado de cuenta hospitalaria'),
+      ...entry(canMemberPortal, 'memberAttendance', 'Mis asistencias', 'Portal del Hermano', 'calendar', 'asistencia tenidas instruccion justificada'),
       ...entry(canCalendar, 'calendar', 'Agenda', 'Portal del Hermano', 'calendar', 'agenda tenidas eventos'),
       ...entry(canNotifications, 'notifications', 'Avisos', 'Portal del Hermano', 'bell', 'avisos alertas'),
       ...entry(canConfigureSystem, 'system', 'Parámetros del sistema', 'Sistema', 'settings', 'configuracion plazos reglas'),
@@ -318,6 +320,8 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" title="Inicio" data-in-tabbar="true" onClick={() => setView('dashboard')}><NavIcon name="home" /> <span className="nav-text" data-hint={navHint('Inicio')}>Inicio</span></button>
         <div className="nav-section" data-in-tabbar={operational ? undefined : 'true'}>Mi espacio</div>
         <ModuleAccess icon="member" label="Mi ficha" inTabbar={!operational} allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
+        <ModuleAccess icon="treasury" label="Mis pagos" sub allowed={canMemberPortal} active={view === 'memberPayments'} onOpen={canMemberPortal ? () => setView('memberPayments') : undefined} />
+        <ModuleAccess icon="calendar" label="Mis asistencias" sub allowed={canMemberPortal} active={view === 'memberAttendance'} onOpen={canMemberPortal ? () => setView('memberAttendance') : undefined} />
         <ModuleAccess icon="calendar" label="Agenda" inTabbar allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="bell" label="Avisos" inTabbar badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label={canConfigureSystem ? 'Parámetros del sistema' : 'Configuración inicial'} allowed active={view === 'system' || view === 'bootstrap'} onOpen={() => setView(canConfigureSystem ? 'system' : 'bootstrap')} /></>}
@@ -356,7 +360,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       <main className="content" id="contenido-principal">
         {activeViewAllowed && printViewCodes[view] && viewAccess?.views[printViewCodes[view]!]?.includes('print') && <button type="button" className="secondary" onClick={() => { void api.authorizeViewPrint(printViewCodes[view]!).then(() => window.print()).catch(reason => setError(reason instanceof Error ? reason.message : 'No fue posible autorizar la impresión.')) }}>Imprimir vista</button>}
         {error && <ErrorBanner message={error} />}
-        {activeViewAllowed && view === 'memberPortal' && canMemberPortal && <MemberPortalPage profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
+        {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {activeViewAllowed && <>
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
@@ -403,11 +407,11 @@ function NavIcon({ name }: { name: InstitutionalIconName }) {
   return <span className="nav-icon" aria-hidden="true"><InstitutionalIcon name={name} size={18} /></span>
 }
 
-function ModuleAccess({ icon, label, allowed, active = false, onOpen, badge, inTabbar = false }: { icon: InstitutionalIconName; label: string; allowed: boolean; active?: boolean; onOpen?: () => void; badge?: number; inTabbar?: boolean }) {
+function ModuleAccess({ icon, label, allowed, active = false, onOpen, badge, inTabbar = false, sub = false }: { icon: InstitutionalIconName; label: string; allowed: boolean; active?: boolean; onOpen?: () => void; badge?: number; inTabbar?: boolean; sub?: boolean }) {
   if (!allowed || !onOpen) return null
   const count = badge && badge > 0 ? (badge > 99 ? '99+' : String(badge)) : undefined
   const hint = navHint(label)
-  return <button className={active ? 'nav-item active' : 'nav-item'} type="button" onClick={onOpen} data-badge={count} data-in-tabbar={inTabbar ? 'true' : undefined} title={[label, hint, count ? `${count} pendientes` : ''].filter(Boolean).join(' — ')}><NavIcon name={icon} /> <span className="nav-text" data-hint={hint}>{label}</span></button>
+  return <button className={[active ? 'nav-item active' : 'nav-item', sub ? 'nav-subitem' : ''].filter(Boolean).join(' ')} type="button" onClick={onOpen} data-badge={count} data-in-tabbar={inTabbar ? 'true' : undefined} title={[label, hint, count ? `${count} pendientes` : ''].filter(Boolean).join(' — ')}><NavIcon name={icon} /> <span className="nav-text" data-hint={hint}>{label}</span></button>
 }
 
 /** PMGM-UX-004 · Una línea de ayuda en lenguaje simple por opción del menú (visible en tablet y celular; tooltip en escritorio). */
@@ -415,6 +419,8 @@ const NAV_HINTS: Record<string, string> = {
   'Insinuaciones e Iniciación': 'Publicaciones y seguimiento de la iniciación según tus permisos',
   'Inicio': 'Resumen del día y tus pendientes',
   'Mi ficha': 'Tus datos personales y masónicos',
+  'Mis pagos': 'Tus cuotas y tu situación de pagos',
+  'Mis asistencias': 'Tus asistencias a tenidas e instrucción',
   'Agenda': 'Tenidas, reuniones y actividades',
   'Avisos': 'Avisos y mensajes para ti',
   'Parámetros del sistema': 'Ajustes generales, respaldos y perfiles',
