@@ -46,7 +46,7 @@ public sealed class UserAccountWorkflowTests
             Assert.True(json.RootElement.GetProperty("initialPasswordEmailSent").GetBoolean());
             var duplicate=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);Assert.Equal(HttpStatusCode.Conflict,duplicate.StatusCode);
         }
-        var audits=await db.AuditEvents.Where(a=>a.EntityId==identity.Subject).ToListAsync();
+        var audits=await db.AuditEvents.Where(a=>a.EntityId==identity.Subject).ToListAsync(TestContext.Current.CancellationToken);
         Assert.All(audits,a=>{Assert.DoesNotContain(mail.Password,a.MetadataJson??"");Assert.DoesNotContain(ids.Email,a.MetadataJson??"");});
         Assert.Equal(!mailFails&&!enableFails,audits.Any(a=>a.Action=="system.users.created"));
     }
