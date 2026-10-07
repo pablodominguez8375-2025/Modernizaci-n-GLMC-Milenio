@@ -5,7 +5,7 @@ import './ceremony-rights.css'
 import { ActionDrawer } from './actionKit'
 import { organizationDisplayName } from './displayFormat'
 
-export default function CeremonyRightsPage({ api }: { api: PmgmApiClient }) {
+export default function CeremonyRightsPage({ api, canWrite=true }: { api: PmgmApiClient; canWrite?:boolean }) {
   const [items, setItems] = useState<TreasuryCeremonyRightItem[]>([])
   const [unpriced,setUnpriced]=useState<NonNullable<TreasuryCeremonyRightsResponse['unpriced']>>([])
   const [loading, setLoading] = useState(true)
@@ -23,6 +23,7 @@ export default function CeremonyRightsPage({ api }: { api: PmgmApiClient }) {
   }, [api])
 
   const record = async (item: TreasuryCeremonyRightItem, payload: { amount: number; paymentMethod: 'cash'|'transfer'|'deposit'; paymentDate: string; reference: string|null; idempotencyKey: string }): Promise<boolean> => {
+    if(!canWrite)return false
     setWorking(true); setError(null); setMessage(null)
     try {
       const receipt = await api.recordCeremonyRightPayment(item.id, payload)
@@ -38,11 +39,11 @@ export default function CeremonyRightsPage({ api }: { api: PmgmApiClient }) {
     {error && <div className="error-banner" role="alert">{error}</div>}{message && <div className="success-banner" role="status">{message}</div>}
     {unpriced.length>0&&<div className="panel" role="status"><h3>Derechos pendientes de tarifa o Ficha</h3>{unpriced.map(x=><p key={x.id}><strong>{x.organizationName}</strong> · {x.reason}</p>)}</div>}
     {loading ? <div className="panel loading-rows"><span/><span/><span/></div> : items.length === 0 ? <div className="panel empty-state"><strong>No hay derechos con saldo calculado pendientes de conciliación.</strong></div> :
-      <div className="ceremony-rights-list">{items.map(item => <CeremonyRightCard key={item.id} item={item} working={working} onRecord={record}/>)}</div>}
+      <div className="ceremony-rights-list">{items.map(item => <CeremonyRightCard key={item.id} item={item} working={working} canWrite={canWrite} onRecord={record}/>)}</div>}
   </section>
 }
 
-function CeremonyRightCard({ item, working, onRecord }: { item: TreasuryCeremonyRightItem; working: boolean; onRecord: (item: TreasuryCeremonyRightItem, payload: { amount: number; paymentMethod: 'cash'|'transfer'|'deposit'; paymentDate: string; reference: string|null; idempotencyKey: string }) => Promise<boolean> }) {
+function CeremonyRightCard({ item, working, canWrite, onRecord }: { item: TreasuryCeremonyRightItem; working: boolean; canWrite:boolean; onRecord: (item: TreasuryCeremonyRightItem, payload: { amount: number; paymentMethod: 'cash'|'transfer'|'deposit'; paymentDate: string; reference: string|null; idempotencyKey: string }) => Promise<boolean> }) {
   const [amount, setAmount] = useState(item.balance)
   const [paymentMethod, setPaymentMethod] = useState<'transfer'|'deposit'|'cash'>('transfer')
   const [paymentDate, setPaymentDate] = useState(todayChile())
@@ -59,13 +60,13 @@ function CeremonyRightCard({ item, working, onRecord }: { item: TreasuryCeremony
     <div className="ceremony-right-card-heading"><div><p className="eyebrow">{ceremonyTypeLabel(item.ceremonyType)}</p><h3>{item.subjectDisplayName}</h3><p>{organizationDisplayName(item.organizationName, item.organizationNumber)}</p></div><span className="status-pill blocked">Saldo pendiente</span></div>
     <dl className="ceremony-right-values"><div><dt>Derecho oficial</dt><dd>{money(item.amount, item.currency)}</dd></div><div><dt>Pagado</dt><dd>{money(item.paid, item.currency)}</dd></div><div><dt>Saldo</dt><dd>{money(item.balance, item.currency)}</dd></div><div><dt>Fecha propuesta</dt><dd>{item.proposedDate ? dateLabel(item.proposedDate) : 'Sin fecha'}</dd></div></dl>
     <p className="ceremony-right-source">{item.source}</p>
-    <ActionDrawer label="Registrar abono" tone="secondary" title="Registrar abono y emitir comprobante" description="Monto, medio, fecha y referencia del pago del derecho de ceremonia." confirmMessage="Se registrará el abono y se emitirá su comprobante."><form className="ceremony-right-payment-form" onSubmit={submit}>
+    {canWrite&&<ActionDrawer label="Registrar abono" tone="secondary" title="Registrar abono y emitir comprobante" description="Monto, medio, fecha y referencia del pago del derecho de ceremonia." confirmMessage="Se registrará el abono y se emitirá su comprobante."><form className="ceremony-right-payment-form" onSubmit={submit}>
       <label><span>Monto ({item.currency})</span><input required type="number" min={item.currency==='USD'?'0.01':'1'} step={item.currency==='USD'?'0.01':'1'} max={item.balance} value={amount || ''} onChange={event => { setAmount(Number(event.target.value)); renewKey() }}/></label>
       <label><span>Medio</span><select value={paymentMethod} onChange={event => { setPaymentMethod(event.target.value as typeof paymentMethod); renewKey() }}><option value="transfer">Transferencia</option><option value="deposit">Depósito</option><option value="cash">Efectivo</option></select></label>
       <label><span>Fecha efectiva</span><input required type="date" value={paymentDate} onChange={event => { setPaymentDate(event.target.value); renewKey() }}/></label>
       <label><span>Referencia</span><input maxLength={500} value={reference} onChange={event => { setReference(event.target.value); renewKey() }} placeholder="Transferencia o depósito"/></label>
       <button className="primary-action" disabled={working || amount <= 0 || amount > item.balance}>Registrar pago</button>
-    </form></ActionDrawer>
+    </form></ActionDrawer>}
   </article>
 }
 

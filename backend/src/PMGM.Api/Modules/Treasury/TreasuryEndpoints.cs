@@ -16,6 +16,12 @@ public static class TreasuryEndpoints
             .WithTags("Gran Tesorería")
             .RequireAuthorization();
 
+        group.MapGet("/acceso", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            if (!access.CanManageTreasuryRegularity(ctx.User)) return Results.Forbid();
+            return Results.Ok(await DynamicGrandTreasuryAccess.ProjectAsync(db, ctx.User, ct));
+        });
         group.MapGet("/tarifario-cuotas", GetOfficialFeeScheduleAsync);
         group.MapGet("/derechos-ceremoniales", GetCeremonyRightsAsync);
         group.MapGet("/talleres/orientes", GetTreasuryTerritoriesAsync);
@@ -34,6 +40,7 @@ public static class TreasuryEndpoints
         IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandTreasuryAccess.AllowsAsync(db, context.User, "view", cancellationToken)) return Results.Forbid();
         var today = TodayInChile();
         var ceremonies = await db.CeremonyRequests.AsNoTracking()
             .Where(x => x.Status != CeremonyCodes.RequestStatus.Rejected && x.Status != CeremonyCodes.RequestStatus.Completed)
@@ -105,6 +112,7 @@ public static class TreasuryEndpoints
         IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandTreasuryAccess.AllowsAsync(db, context.User, "view", cancellationToken)) return Results.Forbid();
         var rows = await db.Organizations.AsNoTracking().Where(x => x.Type != "order")
             .OrderBy(x => x.Name).ThenBy(x => x.Number).ToListAsync(cancellationToken);
         var items = rows.Select(x => new { x.Id, x.Name, x.Number, x.Type, x.City, x.Country, x.OrienteCode,
@@ -117,6 +125,7 @@ public static class TreasuryEndpoints
     {
         if (!access.CanManageTreasuryRegularity(context.User) &&
             !access.CanManageLodgeTreasury(context.User, organizationId) && !access.CanApproveLodgeExpenses(context.User, organizationId)) return Results.Forbid();
+        if (access.CanManageTreasuryRegularity(context.User) && !await DynamicGrandTreasuryAccess.AllowsAsync(db, context.User, "view", cancellationToken)) return Results.Forbid();
         var item = await db.Organizations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == organizationId, cancellationToken);
         return item is null ? Results.NotFound() : Results.Ok(new { organizationId = item.Id,
             territory = WorkshopOriente.Territory(item), item.City, item.Country, item.OrienteCode });
@@ -135,6 +144,8 @@ public static class TreasuryEndpoints
         {
             return Results.Forbid();
         }
+
+        if (!await DynamicGrandTreasuryAccess.AllowsAsync(db, httpContext.User, "write", cancellationToken)) return Results.Forbid();
 
         if (!TreasuryCodes.RegularityStatus.IsValid(request.Status))
         {
@@ -188,6 +199,9 @@ public static class TreasuryEndpoints
             return Results.Forbid();
         }
 
+        if (access.CanManageTreasuryRegularity(httpContext.User) &&
+            !await DynamicGrandTreasuryAccess.AllowsAsync(db, httpContext.User, "view", cancellationToken)) return Results.Forbid();
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         var cutoff = asOf ?? TodayInChile();
         var snapshot = await db.FinancialRegularitySnapshots
             .AsNoTracking()
@@ -226,6 +240,8 @@ public static class TreasuryEndpoints
         {
             return Results.Forbid();
         }
+
+        if (!await DynamicGrandTreasuryAccess.AllowsAsync(db, httpContext.User, "write", cancellationToken)) return Results.Forbid();
 
         if (!TreasuryCodes.RegularityStatus.IsValid(request.Status))
         {
@@ -283,6 +299,9 @@ public static class TreasuryEndpoints
             return Results.Forbid();
         }
 
+        if (access.CanManageTreasuryRegularity(httpContext.User) &&
+            !await DynamicGrandTreasuryAccess.AllowsAsync(db, httpContext.User, "view", cancellationToken)) return Results.Forbid();
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         var cutoff = asOf ?? TodayInChile();
         var snapshot = await db.FinancialRegularitySnapshots
             .AsNoTracking()

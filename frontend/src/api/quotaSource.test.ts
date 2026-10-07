@@ -6,6 +6,7 @@ afterEach(() => vi.unstubAllGlobals())
 it('keeps profile, zone consultation and tariff aligned after each Oriente edit', async () => {
   vi.stubGlobal('fetch', vi.fn())
   const api = new PmgmApiClient({ useMocks: true })
+  api.demoAccessSubject='demo:treasury'
   const profiles = new OrganizationProfileApiClient({ useMocks: true })
   const id = '23232323-2323-2323-2323-232323232323'
   for (const [orienteCode, city, country, zone, currency] of [
