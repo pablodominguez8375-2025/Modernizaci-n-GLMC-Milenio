@@ -56,3 +56,12 @@ describe('PMGM-UX menús de secciones horizontales en tarjetas grandes (decisió
     expect(block).not.toMatch(/button small \{\s*display:\s*none/)
   })
 })
+
+describe('PMGM-UX pestañas cortas sin desplazamiento ni línea doble (07-10-2026)', () => {
+  it('con 4 opciones o menos se muestran todas en una fila; un solo contenedor desplazable', () => {
+    const block = css.slice(css.indexOf('pestañas que no se deslizaban y línea doble'))
+    expect(block).toMatch(/\.workspace-tabs \{ overflow: visible; border-bottom: 0; min-width: 0; max-width: 100%; \}/)
+    expect(block).toContain('[role="tablist"]:not(:has(> :nth-child(5)))')
+    expect(block).toMatch(/grid-auto-columns: minmax\(0, 1fr\)/)
+  })
+})
