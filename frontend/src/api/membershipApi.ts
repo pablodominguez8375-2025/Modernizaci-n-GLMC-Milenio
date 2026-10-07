@@ -1,3 +1,8 @@
+export interface OwnOffice { id:string; cargo:string; periodo:string; tallerId:string; taller:string; desde:string|null; hasta:string|null }
+export interface OwnAttendance { id:string; fecha:string; tipo:'tenida'|'ceremonia'|'instruccion'; tema:string|null; tallerId:string; taller:string; estado:'presente'|'justificado'|'ausente' }
+export interface OwnAttendanceResponse { desde:string; hasta:string; items:OwnAttendance[]; resumen:{total:number;presente:number;justificado:number;ausente:number} }
+export interface OwnHospitalaria { id:string; caseId:string; tallerId:string; taller:string; fecha:string; hermanoFallecido:string; moneda:'CLP'; monto:number; pagado:number; saldo:number; estado:string; fechaPago:string|null; comprobantes:Array<{receiptNumber:string;paymentDate:string;amount:number;reference:string}>; decreto:{numero:string|null;fecha:string|null;vigencia:string;respaldo:string}|null }
+
 export type MembershipStatus = 'active' | 'transferred' | 'closed'
 
 export interface MemberDirectoryItem {
@@ -160,6 +165,26 @@ export class MembershipApiClient {
       return mockProfile(item)
     }
     return this.request<MemberProfile>(`/api/members/${encodeURIComponent(memberId)}/profile`)
+  }
+
+  async getOwnOffices(): Promise<{total:number;items:OwnOffice[]}> {
+    if(this.useMocks) return {total:1,items:[{id:'own-office-demo',cargo:'secretary',periodo:'2025',tallerId:org23,taller:'Taller Demostrativo Nº 23',desde:'2025-01-01',hasta:'2025-12-31'}]}
+    return this.request('/api/membership/me/cargos')
+  }
+  async getOwnAttendance(filters:{tipo?:OwnAttendance['tipo'];desde?:string;hasta?:string}={}):Promise<OwnAttendanceResponse> {
+    if(this.useMocks) {
+      const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Santiago',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date())
+      const desde=filters.desde??`${Number(today.slice(0,4))-1}${today.slice(4)}`,hasta=filters.hasta??today
+      if(desde>hasta)throw new Error('El rango de fechas no es válido.')
+      const rows:OwnAttendance[]=[{id:'own-meeting-demo',fecha:'2026-09-12',tipo:'tenida',tema:'Tenida demostrativa',tallerId:org23,taller:'Taller Demostrativo Nº 23',estado:'presente'},{id:'own-ceremony-demo',fecha:'2026-09-19',tipo:'ceremonia',tema:'Ceremonia demostrativa',tallerId:org23,taller:'Taller Demostrativo Nº 23',estado:'justificado'},{id:'own-instruction-demo',fecha:'2026-09-26',tipo:'instruccion',tema:'Instrucción demostrativa',tallerId:org23,taller:'Taller Demostrativo Nº 23',estado:'ausente'}]
+      const items=rows.filter(x=>(!filters.tipo||x.tipo===filters.tipo)&&x.fecha>=desde&&x.fecha<=hasta).sort((a,b)=>b.fecha.localeCompare(a.fecha))
+      return {desde,hasta,items,resumen:{total:items.length,presente:items.filter(x=>x.estado==='presente').length,justificado:items.filter(x=>x.estado==='justificado').length,ausente:items.filter(x=>x.estado==='ausente').length}}
+    }
+    const q=new URLSearchParams(filters);return this.request(`/api/membership/me/asistencias${q.size?'?'+q:''}`)
+  }
+  async getOwnHospitalaria():Promise<{total:number;items:OwnHospitalaria[]}> {
+    if(this.useMocks)return {total:1,items:[{id:'own-replenishment-demo',caseId:'death-demo-1',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-09-10',hermanoFallecido:'Hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:1500,saldo:0,estado:'paid',fechaPago:'2026-09-12',comprobantes:[{receiptNumber:'HOSP-DEMO-001',paymentDate:'2026-09-12',amount:1500,reference:'TRX-HOSP-DEMO-001'}],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}}]}
+    return this.request('/api/membership/me/hospitalaria')
   }
 
   async getSelfProfile(): Promise<MemberSelfProfile> {

@@ -85,7 +85,7 @@ describe('Gran Hospitalaria — controles por capacidad',()=>{
    const html=renderToStaticMarkup(<HospitalariaPage {...baseProps()} canReadLocal={false} canManageLocal={false} canApproveExpenses={false} canManageGrand regularitySlot={<p>FORMULARIO REGULARIDAD</p>}/> )
    expect(html).toContain('Consultar esta bandeja no genera obligaciones.')
    expect(html).not.toContain('Sincronizar defunciones')
-   expect(html).not.toContain('Cambiar tarifa')
+   expect(html).not.toContain('Registrar decreto de reposición')
    expect(html).not.toContain('FORMULARIO REGULARIDAD')
   }finally{projected.actions=['view','create','write']}
  })
