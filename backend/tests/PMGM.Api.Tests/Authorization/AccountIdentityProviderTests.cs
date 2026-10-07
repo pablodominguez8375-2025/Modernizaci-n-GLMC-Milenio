@@ -13,7 +13,7 @@ public sealed class AccountIdentityProviderTests
     {
         var passwords=Enumerable.Range(0,100).Select(_=>AccountPassword.Generate()).ToArray();
         Assert.Equal(100,passwords.Distinct().Count());
-        foreach(var p in passwords){Assert.Equal(24,p.Length);Assert.True(p.Any(char.IsUpper));Assert.True(p.Any(char.IsLower));Assert.True(p.Any(char.IsDigit));Assert.True(p.Any(c=>!char.IsLetterOrDigit(c)));}
+        foreach(var p in passwords){Assert.Equal(24,p.Length);Assert.Contains(p,char.IsUpper);Assert.Contains(p,char.IsLower);Assert.Contains(p,char.IsDigit);Assert.Contains(p,c=>!char.IsLetterOrDigit(c));}
     }
     [Theory]
     [InlineData("nombre@example.invalid",true)]
