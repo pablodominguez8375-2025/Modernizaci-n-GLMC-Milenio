@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.DocumentManagement;
 using Xunit;
 namespace PMGM.Api.Tests.Integration;
 [Collection(PostgresIntegrationCollection.Name)]
@@ -19,8 +20,14 @@ public sealed class DynamicViewAccessHttpTests
 {
     private static readonly string? Connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection)
-        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddAuthentication(o =>
-        { o.DefaultAuthenticateScheme=Auth.Name; o.DefaultChallengeScheme=Auth.Name; o.DefaultForbidScheme=Auth.Name; }).AddScheme<AuthenticationSchemeOptions,Auth>(Auth.Name,_=>{})));
+        => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            // Resolve the normal endpoint dependencies before the filter, without unconfigured S3.
+            s.AddSingleton<IDocumentObjectStore>(new InMemoryDocumentObjectStore());
+            s.AddAuthentication(o =>
+            { o.DefaultAuthenticateScheme=Auth.Name; o.DefaultChallengeScheme=Auth.Name; o.DefaultForbidScheme=Auth.Name; })
+                .AddScheme<AuthenticationSchemeOptions,Auth>(Auth.Name,_=>{});
+        }));
     private static async Task Save(PmgmDbContext db,DynamicAccessCatalog catalog,CancellationToken ct)
     {
         db.DynamicAccessSnapshots.Add(new(){Version=catalog.Version+1,Payload=JsonSerializer.Serialize(catalog with{Version=catalog.Version+1},new JsonSerializerOptions(JsonSerializerDefaults.Web))});
@@ -44,7 +51,10 @@ public sealed class DynamicViewAccessHttpTests
             "/api/gran-secretaria/documentos","/api/biblioteca","/api/documentos/colecciones","/api/grand-archive/",
             "/api/calendar?fromUtc=2026-10-01T00:00:00Z&toUtc=2026-11-01T00:00:00Z","/api/calendar/ics?fromUtc=2026-10-01T00:00:00Z&toUtc=2026-11-01T00:00:00Z",
             "/api/notifications/me","/api/system/settings/","/api/system/audit-events"})
-            Assert.Equal(HttpStatusCode.Forbidden,(await client.GetAsync(path,ct)).StatusCode);
+        {
+            var response=await client.GetAsync(path,ct);
+            Assert.True(response.StatusCode==HttpStatusCode.Forbidden,$"{path}: {response.StatusCode}");
+        }
         var projection=await client.GetFromJsonAsync<JsonElement>("/api/session/view-access",ct);
         Assert.Empty(projection.GetProperty("views").GetProperty("lodge").EnumerateArray());Assert.False(projection.TryGetProperty("assignments",out _));
         var catalog=await client.GetFromJsonAsync<JsonElement>("/api/system/access/catalog",ct);var version=catalog.GetProperty("version").GetInt32();var newCode="qa-"+Guid.NewGuid().ToString("N");
@@ -85,6 +95,14 @@ public sealed class DynamicViewAccessHttpTests
         Assert.Equal(HttpStatusCode.Forbidden,(await client.GetAsync(root,ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsync($"/api/session/views/lodge/print?organizationId={org.Id}",null,ct)).StatusCode);
         // A complete technical grant cannot turn a local secretary into the Gran Archivero.
+        var otherSubject="no-authority-"+Guid.NewGuid().ToString("N");
+        await using(var scope=factory.Services.CreateAsyncScope())
+        {
+            var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();var c=await DynamicAccessEndpoints.LoadAsync(db,ct);var fullCode="qa-"+Guid.NewGuid().ToString("N");
+            c.Profiles.Add(new(Guid.NewGuid(),fullCode,"Archivo técnico completo","order",false,true,["documents"],[new("grandarchive",DynamicAccessEndpoints.AllowedActions)]));
+            c.Assignments.Add(new(Guid.NewGuid(),otherSubject,fullCode,null,new(2020,1,1),null,true));await Save(db,c,ct);
+        }
+        client.DefaultRequestHeaders.Remove("X-View-Subject");client.DefaultRequestHeaders.Add("X-View-Subject",otherSubject);
         Assert.Equal(HttpStatusCode.Forbidden,(await client.GetAsync("/api/grand-archive/",ct)).StatusCode);
         await using var check=factory.Services.CreateAsyncScope();var checkDb=check.ServiceProvider.GetRequiredService<PmgmDbContext>();
         Assert.Equal(1,await checkDb.AuditEvents.CountAsync(a=>a.Action=="system.access.view_print_requested"&&a.OrganizationId==org.Id,ct));
