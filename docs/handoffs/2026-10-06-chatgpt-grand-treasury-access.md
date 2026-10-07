@@ -11,3 +11,5 @@ PR draft #350 reclamado antes de programación. Implementación en rama: backend
 Registro de diccionario/estructuras sin migración: [GOV-004](../modelo-datos/cambios/2026-10-06-issue-266-gran-tesoreria-acceso.md). Despliegue QA pendiente. Solape no caliente CeremonyEndpoints.cs y pmgmApi.ts con #116 declarado; App excluido.
 
 Anti-conflicto: PR #58 sin solape; #60 histórica solapa TreasuryEndpoints.cs no caliente, declarado; #116 histórica solapa CeremonyEndpoints.cs/pmgmApi.ts no calientes, declarado. App.tsx excluido. Frontend447/lint/build y privacy/classification/migration locales PASS; .NET local no disponible, backend/HTTP PostgreSQL se ejecutarán en CI exact-head.
+
+Gate Showcase37551035351 detectó desbordamiento de tarifario por wrapper de remount; corregido usando Fragment con clave, conserva estructura DOM/CSS existente. Se requieren gates frescos del nuevo HEAD, no reutilizar el gate fallido ni el paquete anterior para declarar entrega final.

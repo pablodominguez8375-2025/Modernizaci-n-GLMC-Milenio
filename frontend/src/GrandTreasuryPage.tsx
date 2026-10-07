@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { useGrandTreasuryAccess } from './useGrandTreasuryAccess'
 import type { PmgmApiClient } from './api/pmgmApi'
 import RegularityPage from './RegularityPage'
@@ -31,7 +31,7 @@ export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
       active={section}
       onChange={id => setSection(id as GrandSection)}
     />
-    <div key={context}>{section === 'statements' ? <TreasuryStatementPage api={api} canPrepare={false} canReview={canWrite} /> : section==='regularity'?<RegularityPage api={api} kind="treasury" canWrite={canWrite}/>:section==='territories'?<TariffDecreePage api={api}/>:<CeremonyRightsPage api={api} canWrite={canWrite}/>}
-    </div>
+    <Fragment key={context}>{section === 'statements' ? <TreasuryStatementPage api={api} canPrepare={false} canReview={canWrite} /> : section==='regularity'?<RegularityPage api={api} kind="treasury" canWrite={canWrite}/>:section==='territories'?<TariffDecreePage api={api}/>:<CeremonyRightsPage api={api} canWrite={canWrite}/>}
+    </Fragment>
   </div>
 }
