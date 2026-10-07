@@ -83,6 +83,7 @@ public sealed class DynamicViewAccessHttpTests
         Assert.Equal(HttpStatusCode.OK,(await client.GetAsync(root,ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsync($"/api/gestion-logial/tenidas/{id}/realizar?organizationId={other.Id}",null,ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsync($"/api/session/views/lodge/print?organizationId={org.Id}",null,ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsync($"/api/session/views/lodge/print?organizationId={other.Id}",null,ct)).StatusCode);
         await using(var scope=factory.Services.CreateAsyncScope())
         {
             var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();var c=await DynamicAccessEndpoints.LoadAsync(db,ct);var i=c.Profiles.FindIndex(p=>p.Code==code);c.Profiles[i]=c.Profiles[i] with{Grants=[new("lodge",["view","create","print"])]};await Save(db,c,ct);

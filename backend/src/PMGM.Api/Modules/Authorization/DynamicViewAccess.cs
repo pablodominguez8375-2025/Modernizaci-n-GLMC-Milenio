@@ -104,9 +104,12 @@ public static class DynamicViewAccess
         return view switch
         {
             "member" or "calendar" or "notifications" or "candidates" => user.Identity?.IsAuthenticated == true,
-            "lodgeprofile" => Local(access.CanReadLodgeCouncilSummary) || Local(access.CanManageWorkshopProfile),
-            "lodge" => access.CanManageLodgeOperations(user) || Local(access.CanReadLodgeSecretariat),
-            "members" => Local(access.CanReadOrganization) || access.HasOrderScope(user) && access.CanRunRegimenInteriorReports(user),
+            "lodgeprofile" => Local(access.CanReadLodgeCouncilSummary) || Local(access.CanManageWorkshopProfile) ||
+                org is null && access.HasOrderScope(user) && access.CanReadOrganization(user, Guid.Empty),
+            "lodge" => Local(access.CanReadLodgeSecretariat) || Local(access.CanManageOrganization) ||
+                Local(access.CanParticipateInLodgeCouncil) || Local((u, id) => Enumerable.Range(1,3).Any(degree => access.CanManageLodgeInstruction(u,id,degree))) ||
+                org is null && access.HasOrderScope(user) && access.HasRole(user, InstitutionalRoles.GranLogiaAdmin),
+            "members" => Local(access.CanReadOrganization) || org is null && access.HasOrderScope(user) && access.CanReadOrganization(user, Guid.Empty),
             "regimen" => access.CanRunRegimenInteriorReports(user),
             "ceremonies" => access.CanEvaluateCeremonies(user) || Local(access.CanReviewCeremonies),
             "candidateprofile" or "initiationcircuit" or "admissions" => access.CanManageGrandSecretariat(user) || Local(access.CanManageOrganization),
