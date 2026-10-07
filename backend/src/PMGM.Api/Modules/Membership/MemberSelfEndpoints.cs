@@ -15,6 +15,7 @@ public static class MemberSelfEndpoints
             .WithTags("Member Self Service")
             .RequireAuthorization();
 
+        endpoints.MapMemberOwnHistoryEndpoints();
         group.MapGet("/profile", GetSelfProfileAsync);
         group.MapPut("/contact", UpdateSelfContactAsync);
         return endpoints;

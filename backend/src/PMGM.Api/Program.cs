@@ -94,6 +94,8 @@ builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
 builder.Services.AddScoped<FirstImplementationSeedService>();
 
+if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<HospitalariaContributionWorker>();
+
 var app = builder.Build();
 
 if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))

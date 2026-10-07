@@ -24,6 +24,9 @@ public static class HospitalariaEndpoints
         group.MapGet("/reposiciones/tarifa", GetReplenishmentRateAsync);
         group.MapPost("/reposiciones/tarifa", SetReplenishmentRateAsync);
         group.MapPost("/reposiciones/sincronizar-defunciones", SyncDeathReplenishmentsAsync);
+        group.MapPost("/talleres/{organizationId:guid}/defunciones", RecordDeathAsync);
+        group.MapGet("/talleres/{organizationId:guid}/defunciones/candidatos", DeathCandidatesAsync);
+        endpoints.MapHospitalariaContributionEndpoints();
         group.MapGet("/reposiciones", ListDeathReplenishmentCasesAsync);
         group.MapGet("/talleres/{organizationId:guid}/reposiciones", ListWorkshopReplenishmentObligationsAsync);
         group.MapPost("/reposiciones/obligaciones/{obligationId:guid}/pagos", RecordReplenishmentPaymentAsync);
@@ -60,8 +63,13 @@ public static class HospitalariaEndpoints
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
         if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "create", ct)) return Results.Forbid();
-        if (request.AmountPerActiveMember <= 0 || string.IsNullOrWhiteSpace(request.SourceReference))
-            return Results.BadRequest(new { message = "La tarifa debe ser positiva e indicar la referencia institucional de vigencia." });
+        if (request.AmountPerActiveMember <= 0 || request.AmountPerActiveMember != decimal.Truncate(request.AmountPerActiveMember) ||
+            string.IsNullOrWhiteSpace(request.SourceReference) || request.SourceReference.Length > 500 ||
+            string.IsNullOrWhiteSpace(request.DecreeNumber) || request.DecreeNumber.Length > 80 || request.DecreeDate is null ||
+            request.DecreeDate > request.EffectiveFrom || request.EffectiveFrom < TodayInChile())
+            return Results.BadRequest(new { message = "El decreto requiere número, fecha, respaldo y monto positivo entero; la vigencia no puede ser retroactiva." });
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(3541500)", ct);
         var next = await db.HospitalariaReplenishmentRates.Where(x => x.EffectiveFrom < request.EffectiveFrom &&
                 (x.EffectiveUntil == null || x.EffectiveUntil >= request.EffectiveFrom))
             .OrderByDescending(x => x.EffectiveFrom).FirstOrDefaultAsync(ct);
@@ -71,26 +79,39 @@ public static class HospitalariaEndpoints
             return Results.Conflict(new { message = "La vigencia de la tarifa se superpone con otra configuración." });
         if (next is not null) next.EffectiveUntil = request.EffectiveFrom.AddDays(-1);
         var rate = new HospitalariaReplenishmentRate {
+            DecreeNumber = request.DecreeNumber!.Trim(), DecreeDate = request.DecreeDate,
             AmountPerActiveMember = request.AmountPerActiveMember,
             EffectiveFrom = request.EffectiveFrom, EffectiveUntil = request.EffectiveUntil,
             SourceReference = request.SourceReference.Trim(), CreatedBySubject = GetSubject(context.User)
         };
         db.HospitalariaReplenishmentRates.Add(rate);
         audit.Add(context, "hospitalaria.replenishment_rate.created", nameof(HospitalariaReplenishmentRate), rate.Id.ToString(),
-            null, AuditResults.Success, new { rate.AmountPerActiveMember, rate.EffectiveFrom, rate.EffectiveUntil, rate.SourceReference });
+            null, AuditResults.Success, new { rate.AmountPerActiveMember, rate.EffectiveFrom, rate.EffectiveUntil, rate.SourceReference, rate.DecreeNumber, rate.DecreeDate });
         await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
         return Results.Created($"/api/hospitalaria/reposiciones/tarifa?asOf={rate.EffectiveFrom:yyyy-MM-dd}", rate);
     }
 
-    // Gran Hospitalaria procesa defunciones de forma idempotente mediante acción explícita.
+    // Respaldo idempotente. El registro de fallecimiento genera obligaciones en su misma transacción.
     private static async Task<IResult> SyncDeathReplenishmentsAsync(
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
     {
         if (!access.CanManageHospitalariaRegularity(context.User)) return Results.Forbid();
         if (!await DynamicGrandHospitalariaAccess.AllowsAsync(db, context.User, "create", ct)) return Results.Forbid();
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(3541500)", ct);
+        var created = await GenerateDeathReplenishmentsAsync(context, db, audit, null, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Results.Ok(new { createdCases = created });
+    }
+
+    private static async Task<int> GenerateDeathReplenishmentsAsync(HttpContext context, PmgmDbContext db,
+        IAuditService audit, Guid? deathId, CancellationToken ct)
+    {
         var events = await db.InstitutionalStatusEvents.AsNoTracking()
             .Where(x => x.EventType == MembershipCodes.InstitutionalStatus.Deceased &&
-                        !db.DeathReplenishmentCases.Any(c => c.DeathStatusEventId == x.Id))
+                        !db.DeathReplenishmentCases.Any(c => c.DeathStatusEventId == x.Id) && (deathId == null || x.Id == deathId))
             .OrderBy(x => x.EffectiveDate).ThenBy(x => x.RecordedAtUtc).Take(250).ToListAsync(ct);
         var created = 0;
         foreach (var death in events)
@@ -101,7 +122,7 @@ public static class HospitalariaEndpoints
             if (rate is null) continue;
             var memberships = await db.Memberships.AsNoTracking()
                 .Where(x => x.MemberId != death.MemberId && x.Organization.Type == "workshop" &&
-                    x.Status == MembershipCodes.MembershipStatus.Active &&
+                    x.Status == MembershipCodes.MembershipStatus.Active && x.MembershipType != "past_active" && x.Member.CurrentDegree != "past_active" &&
                     (x.StartDate == null || x.StartDate <= death.EffectiveDate) &&
                     (x.EndDate == null || x.EndDate >= death.EffectiveDate))
                 .Select(x => new { x.Id, x.OrganizationId, x.MemberId })
@@ -124,7 +145,7 @@ public static class HospitalariaEndpoints
 
             var replenishmentCase = new DeathReplenishmentCase {
                 DeathStatusEventId = death.Id, DeceasedMemberId = death.MemberId, DeathDate = death.EffectiveDate,
-                AmountPerActiveMember = rate.AmountPerActiveMember, Status = HospitalariaCodes.ReplenishmentStatus.Pending,
+                RateId = rate.Id, AmountPerActiveMember = rate.AmountPerActiveMember, Status = HospitalariaCodes.ReplenishmentStatus.Pending,
                 CreatedBySubject = GetSubject(context.User)
             };
             foreach (var group in activeMemberships.GroupBy(x => x.OrganizationId))
@@ -145,8 +166,52 @@ public static class HospitalariaEndpoints
                 new { deathStatusEventId = death.Id, death.EffectiveDate, replenishmentCase.AmountPerActiveMember, activeMembers = activeMemberships.Count });
             created++;
         }
+        return created;
+    }
+
+    private static async Task<IResult> DeathCandidatesAsync(Guid organizationId, HttpContext context,
+        PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeHospitalaria(context.User, organizationId) ||
+            !await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "create", ct)) return Results.Forbid();
+        context.Response.Headers.CacheControl = "private, no-store";
+        var items = await db.Memberships.AsNoTracking().Where(x => x.OrganizationId == organizationId &&
+            x.Status == MembershipCodes.MembershipStatus.Active && !db.InstitutionalStatusEvents.Any(e =>
+                e.MemberId == x.MemberId && e.EventType == MembershipCodes.InstitutionalStatus.Deceased))
+            .Select(x => new { id = x.MemberId, displayName = x.Member.Person.FirstNames + " " + x.Member.Person.LastNames })
+            .Distinct().OrderBy(x => x.displayName).ToListAsync(ct);
+        return Results.Ok(new { items });
+    }
+
+    private static async Task<IResult> RecordDeathAsync(Guid organizationId, RecordHospitalariaDeathRequest request,
+        HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        if (!access.CanManageLodgeHospitalaria(context.User, organizationId) ||
+            !await DynamicHospitalariaAccess.AllowsAsync(db, context.User, organizationId, "create", ct)) return Results.Forbid();
+        if (request.DeathDate > TodayInChile() || string.IsNullOrWhiteSpace(request.EvidenceReference) || request.EvidenceReference.Length > 500)
+            return Results.BadRequest(new { message = "Indique fecha de fallecimiento y referencia del respaldo." });
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlRawAsync("SELECT pg_advisory_xact_lock(3541500)", ct);
+        if (!await db.Memberships.AnyAsync(x => x.OrganizationId == organizationId && x.MemberId == request.MemberId &&
+            x.Status == MembershipCodes.MembershipStatus.Active && x.EndDate == null, ct)) return Results.NotFound();
+        if (await db.InstitutionalStatusEvents.AnyAsync(x => x.MemberId == request.MemberId &&
+            x.EventType == MembershipCodes.InstitutionalStatus.Deceased, ct))
+            return Results.Conflict(new { message = "El fallecimiento ya fue registrado; utilice sincronización para reprocesar." });
+        if (!await db.HospitalariaReplenishmentRates.AnyAsync(x => x.EffectiveFrom <= request.DeathDate &&
+            (x.EffectiveUntil == null || x.EffectiveUntil >= request.DeathDate) && x.DecreeNumber != null && x.DecreeDate != null, ct))
+            return Results.Conflict(new { message = "Falta un decreto de reposición vigente a la fecha del fallecimiento." });
+        var death = new PMGM.Api.Modules.Membership.Entities.InstitutionalStatusEvent {
+            MemberId = request.MemberId, OrganizationId = organizationId, EventType = MembershipCodes.InstitutionalStatus.Deceased,
+            EffectiveDate = request.DeathDate, EvidenceReference = request.EvidenceReference.Trim()
+        };
+        db.InstitutionalStatusEvents.Add(death);
+        audit.Add(context, "hospitalaria.death.recorded", nameof(death), death.Id.ToString(), organizationId, AuditResults.Success,
+            new { death.MemberId, death.EffectiveDate });
         await db.SaveChangesAsync(ct);
-        return Results.Ok(new { createdCases = created, message = $"Se generaron {created} casos de reposición desde defunciones registradas." });
+        var created = await GenerateDeathReplenishmentsAsync(context, db, audit, death.Id, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Results.Created($"/api/hospitalaria/reposiciones", new { death.Id, createdCases = created });
     }
 
     private static async Task<IResult> ListDeathReplenishmentCasesAsync(
@@ -491,7 +556,12 @@ public static class HospitalariaEndpoints
             .ToListAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new { total = items.Count, items });
+        var contributionQuery = db.HospitalariaContributionObligations.AsNoTracking().AsQueryable();
+        if (organizationId != null) contributionQuery = contributionQuery.Where(x => x.OrganizationId == organizationId);
+        if (year != null) contributionQuery = contributionQuery.Where(x => x.PeriodYear == year);
+        if (month != null) contributionQuery = contributionQuery.Where(x => x.PeriodMonth == month);
+        var monthlyContributions = await contributionQuery.Select(x => new { x.Id, x.OrganizationId, x.PeriodYear, x.PeriodMonth, x.AmountDue, x.Status, x.PaymentDate, x.PaymentReference }).ToListAsync(cancellationToken);
+        return Results.Ok(new { total = items.Count, items, monthlyContributions });
     }
 
     private static async Task<IResult> ReviewMonthlySubmissionAsync(
@@ -641,7 +711,8 @@ public sealed record HospitalariaSubmissionReviewRequest(
     string Decision,
     string? Notes);
 
-public sealed record HospitalariaRateRequest(decimal AmountPerActiveMember, DateOnly EffectiveFrom, DateOnly? EffectiveUntil, string SourceReference);
+public sealed record HospitalariaRateRequest(decimal AmountPerActiveMember, DateOnly EffectiveFrom, DateOnly? EffectiveUntil, string SourceReference, string? DecreeNumber = null, DateOnly? DecreeDate = null);
+public sealed record RecordHospitalariaDeathRequest(Guid MemberId, DateOnly DeathDate, string EvidenceReference);
 public sealed record ReplenishmentPaymentRequest(decimal Amount, string PaymentMethod, DateOnly PaymentDate, string Reference);
 public sealed record ReplenishmentTransferRequest(decimal Amount, DateOnly TransferDate, string Reference);
 public sealed record ReplenishmentTransferReviewRequest(string Decision, string? Notes);

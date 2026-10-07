@@ -1,3 +1,4 @@
+import { OwnOffices, OwnReplenishments, OwnAttendanceHistory } from './MemberOwnHistory'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { organizationNumberOf } from './displayFormat'
 import InstitutionalIcon from './InstitutionalIcon'
@@ -267,7 +268,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
     </section>
       <article className="member-card member-office-history">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Trayectoria</p><h2>Historial de cargos en el Taller</h2></div><span className="member-lock-badge">Sólo consulta</span></div>
-        <PortalPendingData text="Próximamente: aquí verás los cargos que has ejercido en tu Taller, con su período." />
+        <OwnOffices api={membershipApi} />
       </article>
       <MemberWorkPapersPanel api={documentApi} organizationId={useMocks ? 'demo-org-23' : selfProfile?.current.membership?.organizationId ?? ''} enabled={useMocks || selfProfile?.current.membership?.status === 'active'} />
     </WorkspacePanel>
@@ -287,7 +288,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
         </article>}
       <article className="member-card member-hospitalaria-payments">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Hospitalaria</p><h2>Reposiciones por hermanos fallecidos</h2><p>$1.500 por cada fallecimiento, cobrado por la Hospitalaria de tu Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-        <PortalPendingData text="Próximamente: aquí verás cada reposición, su estado de pago, el comprobante y el decreto que la respalda." />
+        <OwnReplenishments api={membershipApi} />
       </article>
     </WorkspacePanel>
 
@@ -313,7 +314,7 @@ export default function MemberPortalPage({ profile, useMocks, membershipApi, doc
       </section>
       <article className="member-card member-attendance-detail">
         <div className="member-card-title-row"><div><p className="member-card-kicker">Detalle</p><h2>Tenidas y ceremonias</h2></div><span className="member-lock-badge">Sólo consulta</span></div>
-        <PortalPendingData text="Próximamente: aquí verás cada tenida y ceremonia con su fecha y si asististe, justificaste o faltaste." />
+        <OwnAttendanceHistory api={membershipApi} />
       </article>
     </WorkspacePanel>
   </div>

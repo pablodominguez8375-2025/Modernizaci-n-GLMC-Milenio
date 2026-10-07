@@ -6,6 +6,8 @@ namespace PMGM.Api.Modules.Hospitalaria.Entities;
 public sealed class HospitalariaReplenishmentRate
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    public string? DecreeNumber { get; set; }
+    public DateOnly? DecreeDate { get; set; }
     public decimal AmountPerActiveMember { get; set; }
     public DateOnly EffectiveFrom { get; set; }
     public DateOnly? EffectiveUntil { get; set; }
@@ -17,6 +19,8 @@ public sealed class HospitalariaReplenishmentRate
 public sealed class DeathReplenishmentCase
 {
     public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid? RateId { get; set; }
+    public HospitalariaReplenishmentRate? Rate { get; set; }
     public Guid DeathStatusEventId { get; set; }
     public Guid DeceasedMemberId { get; set; }
     public Member DeceasedMember { get; set; } = null!;

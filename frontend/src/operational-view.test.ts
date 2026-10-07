@@ -34,7 +34,7 @@ describe('PMGM-UX vista operativa · formularios solo en panel', () => {
     const source = read('HospitalariaPage.tsx')
     expect(source).toContain('<ActionDrawer label="Registrar movimiento"')
     expect(source).toContain('<ActionDrawer label="Preparar rendición"')
-    expect(source).toContain('<ActionDrawer label="Cambiar tarifa"')
+    expect(source).toContain('<ActionDrawer label="Registrar decreto de reposición"')
   })
 
   it('Control de miembros: filtros secundarios plegados y observar/rechazar en panel', () => {

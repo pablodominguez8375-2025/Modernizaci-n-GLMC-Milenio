@@ -416,7 +416,9 @@ public static class LodgeHospitalariaEndpoints
             .ToListAsync(ct);
 
         context.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new { total = items.Count, items = items.Select(ToSubmissionDto) });
+        var contributions = await db.HospitalariaContributionObligations.AsNoTracking()
+            .Where(x => x.OrganizationId == organizationId).Select(x => new { x.Id, x.PeriodYear, x.PeriodMonth, x.AmountDue, x.Status, x.PaymentDate, x.PaymentReference }).ToListAsync(ct);
+        return Results.Ok(new { total = items.Count, items = items.Select(ToSubmissionDto), monthlyContributions = contributions });
     }
 
     private static async Task<IResult> SubmitMonthlySubmissionAsync(

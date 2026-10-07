@@ -71,9 +71,26 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<PrivacySecurityIncident> PrivacySecurityIncidents => Set<PrivacySecurityIncident>();
     public DbSet<PrivacyImpactAssessment> PrivacyImpactAssessments => Set<PrivacyImpactAssessment>();
 
+    public DbSet<HospitalariaContributionRate> HospitalariaContributionRates => Set<HospitalariaContributionRate>();
+    public DbSet<HospitalariaContributionObligation> HospitalariaContributionObligations => Set<HospitalariaContributionObligation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("core");
+        modelBuilder.Entity<HospitalariaContributionRate>(e => {
+            e.ToTable("hospitalaria_contribution_rates"); e.HasKey(x => x.Id);
+            e.Property(x => x.Amount).HasPrecision(18, 2); e.Property(x => x.CreatedBySubject).HasMaxLength(320);
+            e.HasIndex(x => x.EffectiveFrom).IsUnique();
+        });
+        modelBuilder.Entity<HospitalariaContributionObligation>(e => {
+            e.ToTable("hospitalaria_contribution_obligations"); e.HasKey(x => x.Id);
+            e.Property(x => x.AmountDue).HasPrecision(18, 2); e.Property(x => x.Status).HasMaxLength(30);
+            e.Property(x => x.PaymentReference).HasMaxLength(500); e.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            e.Property(x => x.RecordedBySubject).HasMaxLength(320); e.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            e.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Rate).WithMany().HasForeignKey(x => x.RateId).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth }).IsUnique();
+        });
 
         modelBuilder.Entity<DynamicAccessSnapshot>(entity =>
         {
@@ -639,6 +656,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
         modelBuilder.Entity<HospitalariaReplenishmentRate>(entity =>
         {
             entity.ToTable("hospitalaria_replenishment_rates");
+            entity.Property(x => x.DecreeNumber).HasMaxLength(80);
             entity.HasKey(x => x.Id);
             entity.Property(x => x.AmountPerActiveMember).HasPrecision(18, 2);
             entity.Property(x => x.SourceReference).HasMaxLength(500).IsRequired();
@@ -649,6 +667,8 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
         modelBuilder.Entity<DeathReplenishmentCase>(entity =>
         {
             entity.ToTable("hospitalaria_death_replenishment_cases");
+            entity.HasOne(x => x.Rate).WithMany().HasForeignKey(x => x.RateId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InstitutionalStatusEvent>().WithMany().HasForeignKey(x => x.DeathStatusEventId).OnDelete(DeleteBehavior.Restrict);
             entity.HasKey(x => x.Id);
             entity.Property(x => x.AmountPerActiveMember).HasPrecision(18, 2);
             entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
