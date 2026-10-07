@@ -464,3 +464,8 @@ main.content label > span { font-weight: 600; }
 .system-setting-value small { color: var(--brand-muted); }
 .action-drawer-body .system-setting-form { display: grid; gap: 0.875rem; }
 .action-drawer-body .system-console-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* ---------- Mi ficha en pestañas (07-10-2026): los paneles no deben ensanchar la grilla de la página ---------- */
+.member-portal > .workspace-panel,
+.member-portal > .workspace-panel > * { min-width: 0; max-width: 100%; }
+.member-portal > .workspace-panel { display: grid; gap: 1rem; }
