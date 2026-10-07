@@ -62,7 +62,7 @@ describe('PMGM-UX vista limpia · Hospitalaria en pestañas', () => {
     expect(source).toContain('label="Secciones de Hospitalaria"')
     expect(source).toContain('label="Secciones de Gran Hospitalaria"')
     expect(source.match(/<WorkspacePanel id="regularidad"/g)?.length).toBe(2)
-    expect(app).toContain('regularitySlot={canHospitalaria ? <RegularityPage')
+    expect(app).toContain('regularitySlot={canOpenGrandHospitalaria ? <RegularityPage')
     expect(app).not.toMatch(/<HospitalariaPage[^>]*\/>\{canHospitalaria && <RegularityPage/)
   })
 })
