@@ -93,6 +93,13 @@ const demoMembers: MemberDirectoryItem[] = demoWorkshopNumbers.flatMap(workshopN
   })
 })
 
+const accountEmails:Record<string,string>={
+ '23232323-0002-0000-0000-000000000023':'hermano.demo23@example.invalid',
+ '11111111-0001-0000-0000-000000000001':'hermano.demo1@example.invalid'
+}
+export function demoAccountCandidates(){return demoMembers.filter(m=>m.membershipStatus==='active'&&m.institutionalStatus==='active'&&accountEmails[m.memberId]).map(m=>{
+ const number=Number(m.memberId.slice(-12));return{memberId:m.memberId,organizationId:number===23?'23232323-2323-2323-2323-232323232323':'11111111-1111-1111-1111-111111111111',name:m.displayName,email:accountEmails[m.memberId],workshop:`Taller Demostrativo Nº ${number}`}
+})}
 const demoSelfProfile: MemberSelfProfile = {
   member: { id: 'demo-self-member', institutionalNumber: 'DEMO-0001', firstNames: 'Hermano', lastNames: 'Demostrativo' },
   contact: { email: 'hermano.demo@ejemplo.cl', phone: '+56 9 0000 0000', address: 'Dirección ficticia para demostración' },
@@ -241,7 +248,7 @@ function mockProfile(item: MemberDirectoryItem): MemberProfile {
   const oldMembership: MemberMembership = { ...currentMembership, id: `old-${item.memberId}`, organizationId: org1, organization: 'Taller Demostrativo Nº 1', organizationNumber: '1', startDate: item.startDate, endDate: '2026-06-30', status: 'transferred', endReason: 'Cambio de Taller aprobado', evidenceReference: 'TR-DEMO-001' }
   const transfer: MemberTransfer = { id: `t-${item.memberId}`, sourceOrganizationId: org1, sourceOrganization: 'Taller Demostrativo Nº 1', targetOrganizationId: org23, targetOrganization: 'Taller Demostrativo Nº 23', requestedDate: '2026-06-10', proposedEffectiveDate: '2026-07-01', approvedEffectiveDate: '2026-07-01', status: 'executed', reason: 'Continuidad de trabajo logial.', resolution: 'Traslado aprobado con historial preservado.', evidenceReference: 'TR-DEMO-001', executedAtUtc: '2026-07-01T15:00:00Z' }
   const parts = item.displayName.split(' ')
-  return { member: { id: item.memberId, personId: `p-${item.memberId}`, institutionalNumber: item.institutionalNumber, firstNames: parts.slice(0, -2).join(' ') || parts[0], lastNames: parts.slice(-2).join(' '), createdAtUtc: '2026-09-08T12:00:00Z' }, contactVisible: true, contact: { email: null, phone: null, address: null }, scope: 'order', current: { membership: currentMembership, degree, institutionalStatus: statusEvent, offices: office }, memberships: transferred ? [currentMembership, oldMembership] : [currentMembership], degreeEvents: [degree], offices: office, statusEvents: [statusEvent], transfers: transferred ? [transfer] : [], regularity: { financial: { status: item.displayName.includes('Marcelo') ? 'delinquent' : 'up_to_date', asOfDate: '2026-09-08', scope: 'member', sourceReference: 'TES-DEMO' }, hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO' } } }
+  return { member: { id: item.memberId, personId: `p-${item.memberId}`, institutionalNumber: item.institutionalNumber, firstNames: parts.slice(0, -2).join(' ') || parts[0], lastNames: parts.slice(-2).join(' '), createdAtUtc: '2026-09-08T12:00:00Z' }, contactVisible: true, contact: { email: accountEmails[item.memberId]??null, phone: null, address: null }, scope: 'order', current: { membership: currentMembership, degree, institutionalStatus: statusEvent, offices: office }, memberships: transferred ? [currentMembership, oldMembership] : [currentMembership], degreeEvents: [degree], offices: office, statusEvents: [statusEvent], transfers: transferred ? [transfer] : [], regularity: { financial: { status: item.displayName.includes('Marcelo') ? 'delinquent' : 'up_to_date', asOfDate: '2026-09-08', scope: 'member', sourceReference: 'TES-DEMO' }, hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO' } } }
 }
 
 export function createDefaultMembershipApiClient(getAccessToken?: MembershipAccessTokenProvider, onUnauthorized?: () => Promise<void>): MembershipApiClient {

@@ -27,6 +27,7 @@ using PMGM.Api.Modules.RegimenInterior;
 using PMGM.Api.Modules.SecretariatOperations;
 using PMGM.Api.Modules.Treasury;
 using PMGM.Api.Modules.SystemConfiguration;
+using PMGM.Api.Modules.UserAccounts;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -93,6 +94,10 @@ builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDa
 builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
 builder.Services.AddScoped<FirstImplementationSeedService>();
+builder.Services.Configure<AccountIdentityOptions>(builder.Configuration.GetSection("UserAccounts:Identity"));
+builder.Services.Configure<InitialAccountMailOptions>(builder.Configuration.GetSection("UserAccounts:Mail"));
+builder.Services.AddHttpClient<IAccountIdentityProvider, KeycloakAccountIdentityProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddSingleton<IInitialAccountMail, InitialAccountMail>();
 
 if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<HospitalariaContributionWorker>();
 
@@ -225,6 +230,7 @@ api.MapPrivacyProcessorLifecycleEndpoints();
 api.MapPrivacyLegalRuleEndpoints();
 api.MapPrivacyWorkflowEndpoints();
 api.MapSystemConfigurationEndpoints();
+api.MapUserAccountEndpoints();
 api.MapDynamicAccessEndpoints();
 api.MapAuditLogEndpoints();
 

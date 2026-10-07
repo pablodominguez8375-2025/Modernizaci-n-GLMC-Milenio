@@ -4,24 +4,46 @@
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
-  "resetPasswordAllowed": false,
+  "resetPasswordAllowed": true,
   "rememberMe": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "verifyEmail": false,
   "roles": {
     "realm": [
-      { "name": "platform_superadmin" },
-      { "name": "grand_lodge_admin" },
-      { "name": "internal_affairs" },
-      { "name": "grand_secretariat" },
-      { "name": "grand_treasury" },
-      { "name": "grand_hospitalaria" },
-      { "name": "privacy_officer" },
-      { "name": "document_manager" },
-      { "name": "grand_archivist" },
-      { "name": "lodge_admin" },
-      { "name": "lodge_secretariat" }
+      {
+        "name": "platform_superadmin"
+      },
+      {
+        "name": "grand_lodge_admin"
+      },
+      {
+        "name": "internal_affairs"
+      },
+      {
+        "name": "grand_secretariat"
+      },
+      {
+        "name": "grand_treasury"
+      },
+      {
+        "name": "grand_hospitalaria"
+      },
+      {
+        "name": "privacy_officer"
+      },
+      {
+        "name": "document_manager"
+      },
+      {
+        "name": "grand_archivist"
+      },
+      {
+        "name": "lodge_admin"
+      },
+      {
+        "name": "lodge_secretariat"
+      }
     ]
   },
   "clients": [
@@ -114,7 +136,9 @@
       "email": "${PMGM_PILOT_ADMIN_EMAIL}",
       "emailVerified": true,
       "attributes": {
-        "pmgm_scope": ["order"]
+        "pmgm_scope": [
+          "order"
+        ]
       },
       "realmRoles": [
         "platform_superadmin",
@@ -135,5 +159,28 @@
         }
       ]
     }
-  ]
+  ],
+  "smtpServer": {
+    "host": "${PMGM_ACCOUNT_SMTP_HOST}",
+    "port": "${PMGM_ACCOUNT_SMTP_PORT}",
+    "from": "${PMGM_ACCOUNT_SMTP_FROM}",
+    "auth": "${PMGM_ACCOUNT_SMTP_AUTH}",
+    "user": "${PMGM_ACCOUNT_SMTP_USER}",
+    "password": "${PMGM_ACCOUNT_SMTP_PASSWORD}",
+    "starttls": "true",
+    "ssl": "false"
+  },
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "name": "user-profile",
+        "providerId": "declarative-user-profile",
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\":[{\"name\":\"username\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]}},{\"name\":\"email\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]}},{\"name\":\"firstName\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]}},{\"name\":\"lastName\",\"permissions\":{\"view\":[\"admin\",\"user\"],\"edit\":[\"admin\"]}},{\"name\":\"pmgm_managed\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":true},{\"name\":\"pmgm_account_kind\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":true},{\"name\":\"pmgm_member_id\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":true},{\"name\":\"pmgm_scope\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":true},{\"name\":\"pmgm_org\",\"permissions\":{\"view\":[\"admin\"],\"edit\":[\"admin\"]},\"multivalued\":true}],\"unmanagedAttributePolicy\":\"ADMIN_EDIT\"}"
+          ]
+        }
+      }
+    ]
+  }
 }
