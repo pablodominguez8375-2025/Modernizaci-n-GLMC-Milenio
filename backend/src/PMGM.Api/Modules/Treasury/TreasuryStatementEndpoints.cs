@@ -182,8 +182,10 @@ public static class TreasuryStatementEndpoints
         if (!access.CanPrepareTreasuryStatement(context.User, organizationId) &&
             !access.CanManageTreasuryRegularity(context.User))
             return Results.Forbid();
+        if (access.CanManageTreasuryRegularity(context.User) && !await DynamicGrandTreasuryAccess.AllowsAsync(db, context.User, "view", cancellationToken)) return Results.Forbid();
         if (!access.CanManageTreasuryRegularity(context.User) && !await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "view", cancellationToken)) return Results.Forbid();
 
+        context.Response.Headers.CacheControl = "private, no-store";
         var query = db.TreasuryMonthlyStatements.AsNoTracking()
             .Where(x => x.OrganizationId == organizationId);
         if (year is not null) query = query.Where(x => x.PeriodYear == year.Value);
@@ -311,6 +313,7 @@ public static class TreasuryStatementEndpoints
         IInstitutionalAccessService access, IAuditService audit, CancellationToken cancellationToken)
     {
         if (!access.CanManageTreasuryRegularity(context.User)) return Results.Forbid();
+        if (!await DynamicGrandTreasuryAccess.AllowsAsync(db, context.User, "write", cancellationToken)) return Results.Forbid();
         var statement = await db.TreasuryMonthlyStatements.Include(x => x.Lines).Include(x => x.Payments)
             .SingleOrDefaultAsync(x => x.Id == statementId, cancellationToken);
         if (statement is null) return Results.NotFound();
@@ -351,7 +354,9 @@ public static class TreasuryStatementEndpoints
         var canPrepareTreasury = access.CanPrepareTreasuryStatement(context.User, statement.OrganizationId);
         if (!canManageTreasury && !access.CanReadOrganization(context.User, statement.OrganizationId))
             return Results.Forbid();
+        if (access.CanManageTreasuryRegularity(context.User) && !await DynamicGrandTreasuryAccess.AllowsAsync(db, context.User, "view", cancellationToken)) return Results.Forbid();
         if (!access.CanManageTreasuryRegularity(context.User) && !await DynamicTreasuryAccess.AllowsAsync(db, context.User, statement.OrganizationId, "view", cancellationToken)) return Results.Forbid();
+        context.Response.Headers.CacheControl = "private, no-store";
         var includeDetails = canManageTreasury ? includeMemberDetail == true : canPrepareTreasury;
         var memberDetails = includeDetails
             ? await GetMemberDetailsAsync(db, statement.Lines, cancellationToken)

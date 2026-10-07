@@ -4,6 +4,7 @@ import { PmgmApiClient } from './pmgmApi'
 describe('Derechos de ceremonia en Tesorería', () => {
   it('reconcilia pagos parciales, conserva el comprobante al reintentar y actualiza elegibilidad', async () => {
     const api = new PmgmApiClient({ useMocks: true })
+    api.demoAccessSubject='demo:treasury'
     const item = (await api.getCeremonyReviewQueue()).items[0]
     expect(item.eligibility.ceremonyRight).toMatchObject({ amount: 31000, paid: 10000, balance: 21000, currency: 'CLP' })
 
@@ -21,6 +22,7 @@ describe('Derechos de ceremonia en Tesorería', () => {
 
   it('permite autorizar el avance financiero al completar el derecho', async () => {
     const api = new PmgmApiClient({ useMocks: true })
+    api.demoAccessSubject='demo:treasury'
     const item = (await api.getCeremonyReviewQueue()).items[0]
     await api.recordCeremonyRightPayment(item.id, { amount: 21000, paymentMethod: 'transfer', paymentDate: '2026-09-24', reference: 'TRX-DEMO-002', idempotencyKey: 'demo-right-payment-full' })
     const current = (await api.getCeremonyReviewQueue()).items.find(value => value.id === item.id)!
@@ -32,6 +34,7 @@ describe('Derechos de ceremonia en Tesorería', () => {
 
   it('expone a Gran Tesorería sólo expedientes con saldo y su referencia financiera mínima', async () => {
     const api = new PmgmApiClient({ useMocks: true })
+    api.demoAccessSubject='demo:treasury'
     const initial = await api.getTreasuryCeremonyRights()
     expect(initial.total).toBe(2)
     expect(initial.items[0]).toMatchObject({ organizationName: expect.any(String), ceremonyType: 'wage_increase', amount: 31000, balance: 21000 })

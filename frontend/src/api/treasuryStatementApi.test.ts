@@ -28,6 +28,7 @@ describe('Gran Tesorería monthly statement demo', () => {
     expect(statement.differenceAmount).toBe(0)
     statement = await api.submitTreasuryStatement(statement.id)
     expect(statement.status).toBe('submitted')
+    api.demoAccessSubject='demo:treasury'
     statement = await api.reconcileTreasuryStatement(statement.id)
     expect(statement.status).toBe('reconciled')
   })

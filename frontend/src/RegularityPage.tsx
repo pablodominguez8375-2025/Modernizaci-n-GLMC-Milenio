@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react'
+import { type FormEvent, useEffect, useRef, useState } from 'react'
 import {
   type OrganizationOption,
   type PmgmApiClient,
@@ -40,8 +40,11 @@ const configs = {
   },
 } as const
 
-export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind: RegularityKind }) {
+export default function RegularityPage({ api, kind, canWrite=true }: { api: PmgmApiClient; kind: RegularityKind; canWrite?:boolean }) {
   const config = configs[kind]
+  const generation=useRef(0)
+  const invalidate=()=>{generation.current++;setCurrent(null);setMessage(null);setError(null);setWorking(false)}
+  useEffect(()=>()=>{generation.current++},[api,kind])
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [asOfDate, setAsOfDate] = useState(todayInChile())
@@ -70,11 +73,13 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
 
   const readCurrent = async () => {
     if (!organizationId) return
+    const request=++generation.current
     setWorking(true); setError(null); setMessage(null)
     try {
       const snapshot = kind === 'treasury'
         ? await api.getTreasuryWorkshopRegularity(organizationId, asOfDate)
         : await api.getHospitalariaWorkshopRegularity(organizationId, asOfDate)
+      if(request!==generation.current)return
       setCurrent(snapshot)
       if (snapshot) {
         setStatus(snapshot.status)
@@ -84,13 +89,14 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
       } else {
         setMessage('No existe un estado registrado para el Taller en esa fecha de corte.')
       }
-    } catch (reason) { setError(toMessage(reason)) }
-    finally { setWorking(false) }
+    } catch (reason) { if(request===generation.current)setError(toMessage(reason)) }
+    finally { if(request===generation.current)setWorking(false) }
   }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!organizationId) return
+    if (!organizationId||!canWrite) return
+    const currentGeneration=++generation.current
     setWorking(true); setError(null); setMessage(null)
     const payload = { status, asOfDate, sourceReference: sourceReference.trim() || null, notes: notes.trim() || null }
     const request = kind === 'treasury'
@@ -98,11 +104,12 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
       : api.setHospitalariaWorkshopRegularity(organizationId, payload)
     void request
       .then(snapshot => {
+        if(currentGeneration!==generation.current)return
         setCurrent(snapshot)
         setMessage(kind === 'treasury' ? 'Regularidad de Gran Tesorería registrada y auditada.' : 'Regularidad de Gran Hospitalaria registrada y auditada.')
       })
-      .catch(reason => setError(toMessage(reason)))
-      .finally(() => setWorking(false))
+      .catch(reason => {if(currentGeneration===generation.current)setError(toMessage(reason))})
+      .finally(() => {if(currentGeneration===generation.current)setWorking(false)})
   }
 
   const selectedOrganization = organizations.find(item => item.id === organizationId)
@@ -122,8 +129,8 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
       <article className="panel regularity-consult-panel">
         <p className="eyebrow">Estado vigente</p><h2>Consultar Taller</h2>
         <div className="regularity-form">
-          <Field label="Taller / organización"><select required value={organizationId} onChange={event => { setOrganizationId(event.target.value); setCurrent(null); setMessage(null) }}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></Field>
-          <Field label="Fecha de corte · Chile"><input type="date" required value={asOfDate} onChange={event => { setAsOfDate(event.target.value); setCurrent(null); setMessage(null) }} /></Field>
+          <Field label="Taller / organización"><select required value={organizationId} onChange={event => { setOrganizationId(event.target.value); invalidate() }}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></Field>
+          <Field label="Fecha de corte · Chile"><input type="date" required value={asOfDate} onChange={event => { setAsOfDate(event.target.value); invalidate() }} /></Field>
           <button className="regularity-secondary" type="button" disabled={working || !organizationId} onClick={() => { void readCurrent() }}>Consultar estado</button>
         </div>
 
@@ -138,17 +145,16 @@ export default function RegularityPage({ api, kind }: { api: PmgmApiClient; kind
         </div>
       </article>
 
-      <article className="panel regularity-update-panel">
+      {canWrite&&<article className="panel regularity-update-panel">
         <p className="eyebrow">Nuevo registro</p><h2>Actualizar regularidad</h2>
         <div className="action-bar treasury-action-bar"><ActionDrawer label="Actualizar regularidad" description="Estado de regularidad, fecha efectiva, referencia y observaciones." confirmMessage="Se registrará el cambio de regularidad y quedará auditado."><form className="regularity-form" onSubmit={submit}>
           <Field label="Estado"><select value={status} onChange={event => setStatus(event.target.value)}>{config.statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
-          <Field label="Fecha efectiva · Chile"><input type="date" required value={asOfDate} onChange={event => setAsOfDate(event.target.value)} /></Field>
+          <Field label="Fecha efectiva · Chile"><input type="date" required value={asOfDate} onChange={event => {setAsOfDate(event.target.value);invalidate()}} /></Field>
           <Field label={config.sourceLabel}><input maxLength={500} value={sourceReference} onChange={event => setSourceReference(event.target.value)} placeholder="Documento, comprobante o referencia interna" /></Field>
           <Field label="Observaciones administrativas"><textarea rows={4} maxLength={2000} value={notes} onChange={event => setNotes(event.target.value)} /></Field>
           <button className="regularity-primary" type="submit" disabled={working || !organizationId}>Registrar estado</button>
         </form></ActionDrawer></div>
-      </article>
-
+      </article>}
       <article className="panel regularity-wide regularity-integration-panel">
         <p className="eyebrow">Integración institucional</p><h2>Uso en autorización de ceremonias</h2>
         <p className="regularity-note">{config.ceremonyNote} La referencia y las observaciones quedan restringidas a la administración de esta área y no se proyectan al Portal de Insinuados.</p>

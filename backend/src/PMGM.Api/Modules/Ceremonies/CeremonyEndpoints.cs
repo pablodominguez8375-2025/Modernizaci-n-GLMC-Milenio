@@ -207,6 +207,7 @@ public static class CeremonyEndpoints
         var ceremony = await db.CeremonyRequests.SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
         if (ceremony is null) return Results.NotFound();
         if (!access.CanManageTreasuryRegularity(httpContext.User)) return Results.Forbid();
+        if (!await DynamicGrandTreasuryAccess.AllowsAsync(db, httpContext.User, "write", cancellationToken)) return Results.Forbid();
 
         var key = request.IdempotencyKey?.Trim();
         var reference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();

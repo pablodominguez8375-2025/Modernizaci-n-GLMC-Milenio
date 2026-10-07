@@ -1,5 +1,5 @@
 import { initialTariff, tariffAt, tariffRate, demoWorkshopLocation, zoneFromLocation, nextTariffPeriod, type TariffVersion, type RegisterTariff, type OfficialSchedule } from './treasuryTariffs'
-import { DynamicAccessClient, treasuryAccess, tariffAccess, hospitalariaAccess, grandHospitalariaAccess, type GrandHospitalariaAccess, type HospitalariaAccess, type TariffAccess, type TreasuryAccess, type AccessAction } from './dynamicAccess'
+import { DynamicAccessClient, treasuryAccess, tariffAccess, hospitalariaAccess, grandHospitalariaAccess, grandTreasuryAccess, type GrandTreasuryAccess, type GrandHospitalariaAccess, type HospitalariaAccess, type TariffAccess, type TreasuryAccess, type AccessAction } from './dynamicAccess'
 import { getDemoProfile, type DemoProfileKey } from '../demoProfiles'
 import { chileCivilDate } from '../admissionDates'
 import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
@@ -414,6 +414,15 @@ export class PmgmApiClient {
 
   demoAccessSubject = 'demo:brother'
   readonly dynamicAccess: DynamicAccessClient
+  private canMockManageGrandTreasury(){return getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity}
+  async getGrandTreasuryAccess():Promise<GrandTreasuryAccess> {
+    if(this.useMocks){if(!this.canMockManageGrandTreasury())throw new Error('Sin permiso para administrar Gran Tesorería.');return grandTreasuryAccess(this.dynamicAccess.snapshot(),this.demoAccessSubject,chileCivilDate())}
+    return this.request('/api/tesoreria/acceso')
+  }
+  private assertMockGrandTreasuryAccess(action:AccessAction){
+    if(this.useMocks&&(!this.canMockManageGrandTreasury()||!grandTreasuryAccess(this.dynamicAccess.snapshot(),this.demoAccessSubject,chileCivilDate()).actions.includes(action)))throw new Error('El perfil no permite esta acción de Gran Tesorería.')
+  }
+  private assertMockStatementRead(organizationId:string){if(!this.useMocks)return;if(this.canMockManageGrandTreasury())this.assertMockGrandTreasuryAccess('view');else this.assertMockTreasuryAccess(organizationId,'view')}
   async getGrandHospitalariaAccess():Promise<GrandHospitalariaAccess> {
     if(this.useMocks){
       if(!getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageHospitalariaRegularity)throw new Error('Sin permiso para administrar Gran Hospitalaria.')
@@ -457,8 +466,8 @@ export class PmgmApiClient {
   async getTariffVersions():Promise<{version:number;total:number;items:TariffVersion[]}>{if(this.useMocks){await this.assertMockTariffAccess('view');return{version:Math.max(...this.mockTariffs.map(x=>x.version)),total:this.mockTariffs.length,items:structuredClone(this.mockTariffs)}}return this.request('/api/tesoreria/tarifarios/decretos')}
   async registerTariff(payload:RegisterTariff):Promise<TariffVersion>{if(this.useMocks){await this.assertMockTariffAccess('create');const max=Math.max(...this.mockTariffs.map(x=>x.version));if(payload.expectedVersion!==max)throw new Error('El tarifario cambió. Recargue antes de confirmar.');if(!payload.number.trim()||!payload.sourceReference.trim()||payload.effectiveFrom<nextTariffPeriod(chileToday())||payload.decreeDate>payload.effectiveFrom||(payload.effectiveUntil&&payload.effectiveUntil<payload.effectiveFrom))throw new Error('Revise decreto, respaldo y vigencia futura.');const entries=[...payload.rates.map(x=>({...x,key:`cuota:${x.territory}:${x.feeType}`})),...payload.ceremonyRights.map(x=>({...x,key:`ceremonia:${x.territory}:${x.ceremonyType}`})),...payload.unemployment.map(x=>({...x,key:`cesantia:${x.territory}:${x.quarter}`}))];if(new Set(entries.map(x=>x.key)).size!==entries.length||entries.some(x=>x.amount<0||!Number.isFinite(x.amount)||Number(x.amount.toFixed(x.currency==='CLP'?0:2))!==x.amount)||payload.rates.some(x=>x.feeType==='past_active'&&x.amount!==0))throw new Error('Revise montos, duplicados, moneda y exención Past Activo.');const row:TariffVersion={...structuredClone(payload),id:crypto.randomUUID(),version:max+1};this.mockTariffs.push(row);return structuredClone(row)}return this.postJson('/api/tesoreria/tarifarios/decretos',payload)}
   async getOfficialFeeSchedule(organizationId?:string,asOf=chileToday()):Promise<OfficialSchedule>{if(this.useMocks){if(organizationId)this.assertMockTreasuryAccess(organizationId,'view');const row=tariffAt(this.mockTariffs,asOf);if(!row)throw new Error('No existe un decreto publicado vigente para esta fecha.');const territory=organizationId?this.mockZone(organizationId):null;if(organizationId&&!territory)throw new Error('Complete el Oriente y país en la Ficha del Taller.');return{...structuredClone(row),asOf,territory,items:row.rates.filter(x=>!territory||x.territory===territory)}}return this.request(`/api/tesoreria/tarifario-cuotas?asOf=${asOf}${organizationId?`&organizationId=${encodeURIComponent(organizationId)}`:''}`)}
-  async getTreasuryTerritories():Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks)return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,...demoWorkshopLocation(item.id,item.treasuryTerritory),treasuryTerritory:this.mockZone(item.id)}))};return this.request('/api/tesoreria/talleres/orientes')}
-  async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:this.mockZone(organizationId)}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
+  async getTreasuryTerritories():Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks){this.assertMockGrandTreasuryAccess('view');return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,...demoWorkshopLocation(item.id,item.treasuryTerritory),treasuryTerritory:this.mockZone(item.id)}))}};return this.request('/api/tesoreria/talleres/orientes')}
+  async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){if(this.canMockManageGrandTreasury())this.assertMockGrandTreasuryAccess('view');const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:this.mockZone(organizationId)}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
 
   async getSystemSettings(): Promise<SystemSettingsResponse> {
     if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => {
@@ -693,7 +702,7 @@ export class PmgmApiClient {
     return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
   }
   async getTreasuryCeremonyRights(): Promise<TreasuryCeremonyRightsResponse> {
-    if (this.useMocks) {
+    if (this.useMocks) { this.assertMockGrandTreasuryAccess('view');
       this.refreshMockCeremonyRights()
       const items = this.mockReviewCeremonies.filter(item => (item.eligibility.ceremonyRight?.balance ?? 0) > 0).map(item => ({
         id: item.id, organizationId: item.organizationId, organizationName: item.organizationName, organizationNumber: item.organizationNumber,
@@ -705,7 +714,7 @@ export class PmgmApiClient {
     return this.request<TreasuryCeremonyRightsResponse>('/api/tesoreria/derechos-ceremoniales')
   }
   async recordCeremonyRightPayment(ceremonyRequestId: string, payload: { amount: number; paymentMethod: 'cash'|'transfer'|'deposit'; paymentDate: string; reference: string|null; idempotencyKey: string }): Promise<{ receiptNumber: string; paidTotal: number; balance: number }> {
-    if (this.useMocks) {
+    if (this.useMocks) { this.assertMockGrandTreasuryAccess('write');
       const item = this.requireMockReviewCeremony(ceremonyRequestId)
       const paymentKey = `${ceremonyRequestId}:${payload.idempotencyKey}`
       const payloadFingerprint = JSON.stringify({ amount: payload.amount, paymentMethod: payload.paymentMethod, paymentDate: payload.paymentDate, reference: payload.reference })
@@ -826,16 +835,16 @@ export class PmgmApiClient {
   }
 
   async getTreasuryWorkshopRegularity(organizationId: string, asOf?: string): Promise<WorkshopRegularitySnapshot | null> {
-    if (this.useMocks) return mockSnapshotAsOf(this.mockTreasury.get(organizationId), asOf)
+    if (this.useMocks) { if(this.canMockManageGrandTreasury())this.assertMockGrandTreasuryAccess('view'); const snapshot=mockSnapshotAsOf(this.mockTreasury.get(organizationId), asOf); return !snapshot||this.canMockManageGrandTreasury()?snapshot:{status:snapshot.status,asOfDate:snapshot.asOfDate} }
     const query = new URLSearchParams(); if (asOf) query.set('asOf', asOf)
     return this.optionalGet<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad${query.size ? `?${query}` : ''}`)
   }
   async setTreasuryWorkshopRegularity(organizationId: string, payload: WorkshopRegularityRequest): Promise<WorkshopRegularitySnapshot> {
-    if (this.useMocks) { const snapshot = mockRegularitySnapshot(organizationId, payload, 'treasury'); this.mockTreasury.set(organizationId, snapshot); return snapshot }
+    if (this.useMocks) { this.assertMockGrandTreasuryAccess('write'); const snapshot = mockRegularitySnapshot(organizationId, payload, 'treasury'); this.mockTreasury.set(organizationId, snapshot); return snapshot }
     return this.postJson<WorkshopRegularitySnapshot>(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/regularidad`, payload)
   }
   async listTreasuryStatements(organizationId: string, year?: number, month?: number): Promise<TreasuryStatementListResponse> {
-    this.assertMockTreasuryAccess(organizationId,'view')
+    this.assertMockStatementRead(organizationId)
     if (this.useMocks) {
       const items = [...this.mockTreasuryStatements.values()]
         .filter(item => item.organizationId === organizationId && (year == null || item.periodYear === year) && (month == null || item.periodMonth === month))
@@ -892,10 +901,10 @@ export class PmgmApiClient {
     return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/enviar`, { method: 'POST' })
   }
   async reconcileTreasuryStatement(statementId: string): Promise<TreasuryStatement> {
-    if (this.useMocks) { const statement = this.requireMockTreasuryStatement(statementId); if (statement.differenceAmount !== 0) throw new Error('El cuadro mantiene una diferencia pendiente.'); statement.status = 'reconciled'; statement.reconciledAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
+    if (this.useMocks) { this.assertMockGrandTreasuryAccess('write'); const statement = this.requireMockTreasuryStatement(statementId); if (statement.differenceAmount !== 0) throw new Error('El cuadro mantiene una diferencia pendiente.'); statement.status = 'reconciled'; statement.reconciledAtUtc = new Date().toISOString(); return cloneTreasuryStatement(statement) }
     return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}/conciliar`, { method: 'POST' })
   }
-  async getTreasuryStatement(statementId: string, includeMemberDetail = false): Promise<TreasuryStatement> { if (this.useMocks) { const source=this.requireMockTreasuryStatement(statementId);this.assertMockTreasuryAccess(source.organizationId,'view');const item=cloneTreasuryStatement(source); if(!includeMemberDetail)item.lines=item.lines.map(x=>({...x,memberId:null,membershipId:null,degreeCodeAtCutoff:'',officeCodeAtCutoff:null,observation:null,authorizationReference:null,adjustmentType:null})); return item } return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}?includeMemberDetail=${includeMemberDetail}`) }
+  async getTreasuryStatement(statementId: string, includeMemberDetail = false): Promise<TreasuryStatement> { if (this.useMocks) { const source=this.requireMockTreasuryStatement(statementId);this.assertMockStatementRead(source.organizationId);const item=cloneTreasuryStatement(source); if(!includeMemberDetail)item.lines=item.lines.map(x=>({...x,memberId:null,membershipId:null,degreeCodeAtCutoff:'',officeCodeAtCutoff:null,observation:null,authorizationReference:null,adjustmentType:null})); return item } return this.request<TreasuryStatement>(`/api/tesoreria/cuadros/${encodeURIComponent(statementId)}?includeMemberDetail=${includeMemberDetail}`) }
   async getLodgeHospitalariaSummary(organizationId:string, from?:string, to?:string):Promise<LodgeHospitalariaSummary>{
     if(this.useMocks){this.assertMockHospitalariaAccess(organizationId,'view');
       const items=this.ensureMockHospitalariaMovements(organizationId).filter(item=>(!from||item.movementDate>=from)&&(!to||item.movementDate<=to))

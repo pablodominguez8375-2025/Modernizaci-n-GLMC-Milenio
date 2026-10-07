@@ -79,3 +79,9 @@ export function grandHospitalariaAccess(c:DynamicCatalog,subject:string,today:st
  const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===null)
  return {version:c.version,managed,actions:(['view','create','write'] as AccessAction[]).filter(action=>!managed||technicalGrant(c,subject,'hospitalaria',action,null,today))}
 }
+
+export type GrandTreasuryAccess = GrandHospitalariaAccess
+export function grandTreasuryAccess(c:DynamicCatalog,subject:string,today:string):GrandTreasuryAccess {
+ const managed=c.assignments.some(a=>a.subject===subject&&a.organizationId===null)
+ return {version:c.version,managed,actions:(['view','create','write'] as AccessAction[]).filter(action=>!managed||technicalGrant(c,subject,'treasury',action,null,today))}
+}
