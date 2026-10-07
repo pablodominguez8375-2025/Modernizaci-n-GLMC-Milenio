@@ -17,9 +17,9 @@ describe('PMGM-UX Gestión Logial sin menús repetidos (aprobado por el PO 06-10
 
   it('Secretaría abre afiliación, fichas, documentos y ceremonias desde el menú lateral', () => {
     expect(app).toContain('label="Afiliación e incorporación" allowed active={view === \'admissions\'}')
-    expect(app).toContain('allowed={canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace}')
-    expect(app).toContain('allowed={canDocuments || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace}')
-    expect(app).toContain('allowed={canCeremonies || isGrandSecretaryWorkspace}')
+    expect(app).toContain("allowed={(canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('members')}")
+    expect(app).toContain("allowed={(canDocuments || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('documentmanager')}")
+    expect(app).toContain("allowed={(canCeremonies || isGrandSecretaryWorkspace) && canView('ceremonies')}")
   })
 
   it('las autoridades de la Orden ven «Talleres (supervisión)» (opción B del PO)', () => {

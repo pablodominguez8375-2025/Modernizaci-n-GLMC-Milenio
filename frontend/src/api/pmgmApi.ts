@@ -1,3 +1,5 @@
+import { technicalGrant } from './dynamicAccess'
+import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
 export interface HospitalariaContributionObligation { id:string;organizationId:string;taller:string;rateId:string;periodYear:number;periodMonth:number;currency:'CLP';amountDue:number;status:'pending'|'submitted'|'observed'|'reconciled';paymentDate:string|null;paymentReference:string|null;reviewedAtUtc:string|null;reviewNotes:string|null }
 
@@ -421,6 +423,14 @@ export class PmgmApiClient {
   demoAccessSubject = 'demo:brother'
   readonly dynamicAccess: DynamicAccessClient
   private canMockManageGrandTreasury(){return getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity}
+  async getViewAccess(): Promise<ViewAccess> {
+    if(this.useMocks)return aggregateViewAccess(this.dynamicAccess.snapshot(),this.demoAccessSubject,chileDate())
+    return this.request('/api/session/view-access')
+  }
+  async authorizeViewPrint(viewCode:string,organizationId?:string):Promise<{allowed:boolean}>{
+    if(this.useMocks){const catalog=this.dynamicAccess.snapshot();const scopes=organizationId?[organizationId]:[...new Set(catalog.assignments.filter(a=>a.subject===this.demoAccessSubject).map(a=>a.organizationId))];if(!scopes.length)scopes.push(null);if(!scopes.every(org=>!catalog.assignments.some(a=>a.subject===this.demoAccessSubject&&a.organizationId===org)||technicalGrant(catalog,this.demoAccessSubject,viewCode,'print',org,chileDate())))throw new Error('Tu perfil no permite imprimir esta vista.');return {allowed:true}}
+    return this.request(`/api/session/views/${encodeURIComponent(viewCode)}/print${organizationId?'?organizationId='+encodeURIComponent(organizationId):''}`,{method:'POST'})
+  }
   async getGrandTreasuryAccess():Promise<GrandTreasuryAccess> {
     if(this.useMocks){if(!this.canMockManageGrandTreasury())throw new Error('Sin permiso para administrar Gran Tesorería.');return grandTreasuryAccess(this.dynamicAccess.snapshot(),this.demoAccessSubject,chileCivilDate())}
     return this.request('/api/tesoreria/acceso')
