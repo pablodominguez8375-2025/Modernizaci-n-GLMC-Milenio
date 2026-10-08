@@ -73,6 +73,8 @@ jobs:
 
       - name: Capture responsive visual evidence
         shell: bash
+        env:
+          PMGM_VISUAL_MODE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
         run: |
           set -euo pipefail
           BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
@@ -114,24 +116,37 @@ jobs:
             test -s "frontend/visual-evidence/$file"
           }
 
-          # Full acceptance matrix for the initial member view.
-          capture 360,800 mi-ficha-360x800.png
-          capture 390,844 mi-ficha-390x844.png
-          capture 768,1024 mi-ficha-768x1024.png
-          capture 820,1180 mi-ficha-820x1180.png
-          capture 1024,768 mi-ficha-1024x768.png
-          capture 1366,768 mi-ficha-1366x768.png
-          capture 1440,900 mi-ficha-1440x900.png
-          capture 1920,1080 mi-ficha-1920x1080.png
+          if [ "$PMGM_VISUAL_MODE" = "pr" ]; then
+            # Fast PR gate: mobile, tablet and desktop plus critical role/module scenarios.
+            capture 360,800 mi-ficha-360x800.png
+            capture 768,1024 mi-ficha-768x1024.png
+            capture 1440,900 mi-ficha-1440x900.png
+          else
+            # Full publication matrix stays mandatory on dev/manual runs.
+            capture 360,800 mi-ficha-360x800.png
+            capture 390,844 mi-ficha-390x844.png
+            capture 768,1024 mi-ficha-768x1024.png
+            capture 820,1180 mi-ficha-820x1180.png
+            capture 1024,768 mi-ficha-1024x768.png
+            capture 1366,768 mi-ficha-1366x768.png
+            capture 1440,900 mi-ficha-1440x900.png
+            capture 1920,1080 mi-ficha-1920x1080.png
+          fi
 
-          # Representative module matrix: browser automation changes QA profile and module exactly as a user would.
+          # Browser automation changes QA profile and module exactly as a user would.
           node .github/scripts/capture-showcase-views.mjs \
             "$BROWSER" \
             http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ \
             frontend/visual-evidence
 
-          test "$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)" -ge 180
-          printf 'RESPONSIVE VISUAL EVIDENCE OK\n'
+          count="$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)"
+          if [ "$PMGM_VISUAL_MODE" = "pr" ]; then
+            test "$count" -ge 30
+            printf 'RESPONSIVE VISUAL PR MATRIX OK — %s PNG\n' "$count"
+          else
+            test "$count" -ge 180
+            printf 'RESPONSIVE VISUAL FULL MATRIX OK — %s PNG\n' "$count"
+          fi
 
       - name: Upload responsive visual evidence
         uses: actions/upload-artifact@v4

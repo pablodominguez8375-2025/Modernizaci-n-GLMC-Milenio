@@ -12,7 +12,7 @@ if (!browser || !baseUrl || !outputDir) {
   process.exit(2)
 }
 
-const scenarios = [
+const allScenarios = [
   { slug: 'inicio', profile: 'brother', label: 'Inicio' },
   { slug: 'iniciacion-publicados-hermano', profile: 'brother', label: 'Insinuaciones e Iniciación', initiationTabs: [] },
   { slug: 'iniciacion-venerable', profile: 'lodge', label: 'Insinuaciones e Iniciación', initiationTabs: ['Publicados', 'Carga', 'Circuito de Iniciación'], sidebarCount: 13 },
@@ -44,7 +44,7 @@ const scenarios = [
   { slug: 'gran-archivero', profile: 'grandArchivist', label: 'Gran Archivero', requiredSidebar: ['Gran Archivero'], forbiddenSidebar: ['Parámetros del sistema', 'Configuración inicial', 'Gran Secretaría', 'Gran Tesorería', 'Gran Hospitalaria', 'Gestión Logial'] },
 ]
 
-const viewports = [
+const allViewports = [
   { width: 360, height: 800, suffix: '360x800' },
   { width: 390, height: 844, suffix: '390x844' },
   { width: 768, height: 1024, suffix: '768x1024' },
@@ -54,6 +54,22 @@ const viewports = [
   { width: 1440, height: 900, suffix: '1440x900' },
   { width: 1920, height: 1080, suffix: '1920x1080' },
 ]
+
+const visualMode = process.env.PMGM_VISUAL_MODE === 'pr' ? 'pr' : 'full'
+const prScenarioSlugs = new Set([
+  'inicio',
+  'iniciacion-secretaria-taller',
+  'afiliacion-incorporacion-tramitacion',
+  'gestion-logial',
+  'tesoreria-taller',
+  'gran-tesoreria',
+  'gran-hospitalaria',
+  'gran-secretaria',
+  'gran-archivero',
+])
+const prViewportSuffixes = new Set(['360x800', '768x1024', '1440x900'])
+const scenarios = visualMode === 'pr' ? allScenarios.filter(scenario => prScenarioSlugs.has(scenario.slug)) : allScenarios
+const viewports = visualMode === 'pr' ? allViewports.filter(viewport => prViewportSuffixes.has(viewport.suffix)) : allViewports
 
 const debugPort = 9227
 const userDataDir = await mkdtemp(path.join(tmpdir(), 'pmgm-chrome-'))
@@ -769,7 +785,8 @@ try {
       console.log(`captured ${path.basename(filePath)}`)
     }
   }
-  await auditEveryMobileMenuView()
+  if (visualMode === 'full') await auditEveryMobileMenuView()
+  else console.log(`PR VISUAL MATRIX OK: ${scenarios.length} scenarios x ${viewports.length} viewports`)
 } finally {
   await stopChromeAndClean()
 }
