@@ -96,7 +96,7 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
             "master",
             "delinquent",
             suffix,
-            true,
+            false,
             false,
             50), cancellationToken);
 
@@ -112,7 +112,7 @@ public sealed class RegimenInteriorMemberControlPostgreSqlTests
         Assert.Equal(new DateOnly(2024, 3, 15), row.Milestones.Reinstatement);
         Assert.Equal(new DateOnly(2026, 1, 1), row.Milestones.Transfer);
         Assert.Equal("delinquent", row.FinancialStatus);
-        Assert.True(row.PastActive);
+        Assert.False(row.PastActive);
         Assert.False(row.PendingTransfer);
     }
 }

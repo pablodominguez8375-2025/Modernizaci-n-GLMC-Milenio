@@ -43,7 +43,13 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
             var pastActiveMembership = new Membership
             {
                 Member = pastActiveMember, MemberId = pastActiveMember.Id, Organization = organization, OrganizationId = organization.Id,
-                MembershipType = GrandTreasuryFeeSchedule.PastActiveMembershipType, StartDate = new DateOnly(2026, 1, 1), Status = MembershipCodes.MembershipStatus.Active
+                MembershipType = "regular", StartDate = new DateOnly(2026, 1, 1), Status = MembershipCodes.MembershipStatus.Active
+            };
+            var pastActiveStatus = new InstitutionalStatusEvent
+            {
+                Member = pastActiveMember, MemberId = pastActiveMember.Id, Organization = organization, OrganizationId = organization.Id,
+                EventType = MembershipCodes.InstitutionalStatus.PastActive, EffectiveDate = new DateOnly(2026, 1, 1),
+                Reason = "Condición Past Activo de prueba", EvidenceReference = "ACTA-PAST-ACTIVO-CI"
             };
             var degree = new DegreeEvent
             {
@@ -84,7 +90,7 @@ public sealed class TreasuryMonthlyStatementPostgreSqlTests
                 EffectiveUntil = new DateOnly(2026, 12, 31), Amount = 0m,
                 AuthorizationReference = "PLANCHA-CI-001", Status = TreasuryCodes.AdjustmentStatus.Active
             };
-            db.AddRange(organization, person, member, membership, pastActivePerson, pastActiveMember, pastActiveMembership, degree, office, secondOffice, feePlan, charge, adjustment);
+            db.AddRange(organization, person, member, membership, pastActivePerson, pastActiveMember, pastActiveMembership, pastActiveStatus, degree, office, secondOffice, feePlan, charge, adjustment);
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             memberId = member.Id;

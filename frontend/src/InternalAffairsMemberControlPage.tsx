@@ -4,6 +4,7 @@ import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsControl.css'
 import { ActionDrawer, ConfirmAction } from './actionKit'
 import { organizationDisplayName } from './displayFormat'
+import { institutionalStatusLabel, institutionalStatusOptions } from './institutionalStatus'
 
 export default function InternalAffairsMemberControlPage({ api, internalAffairsApi }: { api: PmgmApiClient; internalAffairsApi: InternalAffairsApiClient }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
@@ -81,21 +82,21 @@ export default function InternalAffairsMemberControlPage({ api, internalAffairsA
     <section className="internal-control-filters panel">
       <label className="internal-control-search"><span>Buscar</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Nombre, Nº institucional o Taller" /></label>
       <label><span>Taller relacionado</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Toda la Orden</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
-      <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Todos</option>{statusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+      <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Todos</option>{institutionalStatusOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <details className="internal-control-more"><summary>Más filtros ({[degree, financialStatus].filter(Boolean).length + (pastActiveOnly ? 1 : 0) + (pendingTransferOnly ? 1 : 0)} activos)</summary><div className="internal-control-more-grid">
       <label><span>Corte</span><input type="date" value={asOf} onChange={event => setAsOf(event.target.value)} /></label>
       <label><span>Grado</span><select value={degree} onChange={event => setDegree(event.target.value)}><option value="">Todos</option><option value="apprentice">Aprendiz</option><option value="fellowcraft">Compañero</option><option value="master">Maestro</option></select></label>
       <label><span>Finanzas</span><select value={financialStatus} onChange={event => setFinancialStatus(event.target.value)}><option value="">Todos</option><option value="up_to_date">Al día</option><option value="delinquent">Moroso</option><option value="pending">Pendiente</option><option value="exempt">Exento</option><option value="no_status">Sin estado</option></select></label>
-      <label className="internal-control-check"><input type="checkbox" checked={pastActiveOnly} onChange={event => setPastActiveOnly(event.target.checked)} /><span>Sólo Past Active</span></label>
+      <label className="internal-control-check"><input type="checkbox" checked={pastActiveOnly} onChange={event => setPastActiveOnly(event.target.checked)} /><span>Sólo Past Activo</span></label>
       <label className="internal-control-check"><input type="checkbox" checked={pendingTransferOnly} onChange={event => setPendingTransferOnly(event.target.checked)} /><span>Traslado pendiente</span></label>
       </div></details>
     </section>
 
     <section className="internal-control-summary" aria-label="Resumen del listado">
-      <Summary label="Vigentes" value={counters.current} />
+      <Summary label="Vigentes en cuadro" value={counters.current} />
       <Summary label="Relación histórica" value={counters.historical} />
       <Summary label="Morosos" value={counters.delinquent} attention={counters.delinquent > 0} />
-      <Summary label="Past Active" value={counters.pastActive} />
+      <Summary label="Past Activo" value={counters.pastActive} />
       <Summary label="Traslados pendientes" value={counters.pendingTransfers} attention={counters.pendingTransfers > 0} />
     </section>
 
@@ -136,11 +137,11 @@ function MemberRow({ row }: { row: MemberControlRow }) {
   const workshop = row.currentWorkshop ?? row.lastWorkshop
   return <tr>
     <td><strong>{row.displayName}</strong><small>{row.institutionalNumber || 'Sin Nº institucional'}</small></td>
-    <td><span className={row.relation === 'current' ? 'internal-control-pill good' : 'internal-control-pill neutral'}>{row.relation === 'current' ? 'Vigente' : 'Histórica'}</span><strong>{workshop.name}</strong><small>{workshop.number ? `Nº ${workshop.number}` : ''}{row.currentWorkshop ? ` · desde ${formatDateOptional(row.currentWorkshop.startDate)}` : row.lastWorkshop.endDate ? ` · hasta ${formatDate(row.lastWorkshop.endDate)}` : ''}</small></td>
-    <td><span className={statusClass(row.currentStatus)}>{statusLabel(row.currentStatus)}</span>{row.statusEffectiveDate && <small>desde {formatDate(row.statusEffectiveDate)}</small>}{row.pendingTransfer && <span className="internal-control-pill attention">Traslado pendiente</span>}</td>
-    <td><strong>{degreeLabel(row.currentDegree)}</strong>{row.pastActive && <span className="internal-control-pill accent">Past Active</span>}</td>
+    <td><span className={row.relation === 'current' ? 'internal-control-pill good' : 'internal-control-pill neutral'}>{row.relation === 'current' ? 'En cuadro' : 'Histórica'}</span><strong>{workshop.name}</strong><small>{workshop.number ? `Nº ${workshop.number}` : ''}{row.currentWorkshop ? ` · desde ${formatDateOptional(row.currentWorkshop.startDate)}` : row.lastWorkshop.endDate ? ` · hasta ${formatDate(row.lastWorkshop.endDate)}` : ''}</small></td>
+    <td><span className={statusClass(row.currentStatus)}>{institutionalStatusLabel(row.currentStatus)}</span>{row.statusEffectiveDate && <small>desde {formatDate(row.statusEffectiveDate)}</small>}{row.pendingTransfer && <span className="internal-control-pill attention">Traslado pendiente</span>}</td>
+    <td><strong>{degreeLabel(row.currentDegree)}</strong>{row.pastActive && <span className="internal-control-pill accent">Past Activo</span>}</td>
     <td><Milestone label="Iniciación" value={row.milestones.initiation} /><Milestone label="Aumento" value={row.milestones.wageIncrease} /><Milestone label="Exaltación" value={row.milestones.exaltation} /></td>
-    <td><Milestone label={withdrawalLabel(row.milestones.withdrawalType)} value={row.milestones.withdrawal} /><Milestone label="Reintegro" value={row.milestones.reinstatement} /><Milestone label="Defunción" value={row.milestones.death} /><Milestone label="Traslado" value={row.milestones.transfer} /></td>
+    <td><Milestone label={withdrawalLabel(row.milestones.withdrawalType)} value={row.milestones.withdrawal} /><Milestone label="Reintegro" value={row.milestones.reinstatement} />{row.reinstatementMovement && <ReinstatementMovement movement={row.reinstatementMovement} />}<Milestone label="Defunción" value={row.milestones.death} /><Milestone label="Traslado" value={row.milestones.transfer} /></td>
     <td><FinancialStatus value={row.financialStatus} /></td>
     <td><strong>{row.membershipHistoryCount}</strong><small>afiliación(es) registradas</small></td>
   </tr>
@@ -148,14 +149,18 @@ function MemberRow({ row }: { row: MemberControlRow }) {
 
 function Summary({ label, value, attention }: { label: string; value: number; attention?: boolean }) { return <article className={attention ? 'panel internal-control-summary-card attention' : 'panel internal-control-summary-card'}><span>{label}</span><strong>{value}</strong></article> }
 function Milestone({ label, value }: { label: string; value: string | null }) { if (!value) return null; return <span className="internal-control-date"><small>{label}</small>{formatDate(value)}</span> }
+function ReinstatementMovement({ movement }: { movement: NonNullable<MemberControlRow['reinstatementMovement']> }) { return <span className="internal-control-date"><small>Origen → destino</small>{movement.sourceOrganizationName || 'Sin origen registrado'} → {movement.destinationOrganizationName || 'Sin destino registrado'}</span> }
 function FinancialStatus({ value }: { value: string | null }) { const good = value === 'up_to_date' || value === 'exempt'; return <span className={good ? 'internal-control-pill good' : value ? 'internal-control-pill attention' : 'internal-control-pill neutral'}>{financialLabel(value)}</span> }
 
-const statusOptions = [['active', 'Activo'], ['inactive', 'Inactivo'], ['voluntary_withdrawal', 'Retiro voluntario'], ['forced_withdrawal', 'Retiro forzoso'], ['reinstated', 'Reintegrado'], ['deceased', 'Fallecido']] as const
-function statusLabel(value: string) { return statusOptions.find(([code]) => code === value)?.[1] ?? value }
-function statusClass(value: string) { return value === 'active' || value === 'reinstated' ? 'internal-control-pill good' : value === 'inactive' ? 'internal-control-pill neutral' : 'internal-control-pill attention' }
+function statusClass(value: string) {
+  if (value === 'active' || value === 'reinstated') return 'internal-control-pill good'
+  if (value === 'past_active') return 'internal-control-pill accent'
+  if (value === 'inactive') return 'internal-control-pill neutral'
+  return 'internal-control-pill attention'
+}
 function degreeLabel(value: string | null) { return value === 'apprentice' ? 'Aprendiz' : value === 'fellowcraft' ? 'Compañero' : value === 'master' ? 'Maestro' : value || 'Sin grado registrado' }
 function financialLabel(value: string | null) { return value === 'up_to_date' ? 'Al día' : value === 'delinquent' ? 'Moroso' : value === 'pending' ? 'Pendiente' : value === 'exempt' ? 'Exento' : 'Sin estado' }
-function withdrawalLabel(value: string | null) { return value === 'forced_withdrawal' ? 'Retiro forzoso' : value === 'voluntary_withdrawal' ? 'Retiro voluntario' : 'Retiro' }
+function withdrawalLabel(value: string | null) { return value === 'forced_withdrawal' ? 'Retiro forzoso' : value === 'voluntary_withdrawal' ? 'Retiro voluntario / En sueño' : 'Retiro' }
 function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }
 function formatDateOptional(value: string | null) { return value ? formatDate(value) : 'sin fecha exacta' }

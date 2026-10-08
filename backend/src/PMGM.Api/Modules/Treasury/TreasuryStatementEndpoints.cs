@@ -3,6 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
+using MemberMembership = PMGM.Api.Modules.Membership.Entities.Membership;
 using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Modules.Treasury;
@@ -24,7 +25,7 @@ public static class TreasuryStatementEndpoints
 
     private static async Task<IResult> GenerateLinesAsync(Guid statementId, GenerateTreasuryStatementLinesRequest request,
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
-        CancellationToken cancellationToken)
+        ITreasuryOrdinaryDuesEligibilityService duesEligibility, CancellationToken cancellationToken)
     {
         if (request.ApprenticeAmount < 0 || request.FellowcraftAmount < 0 || request.MasterAmount < 0)
             return Results.BadRequest(new { message = "Las cuotas base no pueden ser negativas." });
@@ -59,9 +60,26 @@ public static class TreasuryStatementEndpoints
             .Where(x => x.FeePlan.FeeType == TreasuryCodes.LodgeFeeType.PastActive)
             .Select(x => x.MemberId)
             .ToHashSet();
-        var billableMemberships = memberships
-            .Where(x => x.MembershipType != GrandTreasuryFeeSchedule.PastActiveMembershipType && !pastActiveChargeIds.Contains(x.MemberId))
-            .ToList();
+        var billableMemberships = new List<MemberMembership>();
+        foreach (var membership in memberships)
+        {
+            // Legacy data may still carry Past Activo as membership/fee type. New data uses the institutional state.
+            if (membership.MembershipType == GrandTreasuryFeeSchedule.PastActiveMembershipType ||
+                pastActiveChargeIds.Contains(membership.MemberId))
+            {
+                continue;
+            }
+
+            var eligibility = await duesEligibility.GetAsync(
+                statement.OrganizationId,
+                membership.MemberId,
+                cutoff,
+                cancellationToken);
+            if (eligibility?.GeneratesOrdinaryDues == true)
+            {
+                billableMemberships.Add(membership);
+            }
+        }
         if (billableMemberships.Count == 0)
             return Results.Conflict(new { message = "No hay miembros facturables a Gran Tesorería en el Cuadro." });
 

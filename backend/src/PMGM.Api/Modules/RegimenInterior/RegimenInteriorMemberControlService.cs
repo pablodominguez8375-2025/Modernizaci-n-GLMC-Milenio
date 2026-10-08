@@ -77,13 +77,6 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 x.RecordedAtUtc))
             .ToListAsync(cancellationToken);
 
-        var pastActiveIds = await db.OfficeAssignments
-            .AsNoTracking()
-            .Where(x => relatedMemberIds.Contains(x.MemberId) && x.EndDate != null && x.EndDate < query.AsOf)
-            .Select(x => x.MemberId)
-            .Distinct()
-            .ToListAsync(cancellationToken);
-
         var transfers = await db.MemberTransfers
             .AsNoTracking()
             .Where(x => relatedMemberIds.Contains(x.MemberId) && x.RequestedDate <= query.AsOf)
@@ -135,10 +128,9 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .ThenByDescending(x => x.RecordedAtUtc)
                 .ToList();
             var latestStatus = memberStatuses.FirstOrDefault();
-            var currentStatus = latestStatus?.Status ??
-                                (currentMembership is not null
-                                    ? MembershipCodes.InstitutionalStatus.Active
-                                    : MembershipCodes.InstitutionalStatus.Inactive);
+            var currentStatus = InstitutionalStatusPolicy.ResolveCurrentStatus(
+                latestStatus?.Status,
+                currentMembership is not null);
 
             var memberDegrees = degreeEvents
                 .Where(x => x.MemberId == person.MemberId)
@@ -171,6 +163,7 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                 .FirstOrDefault();
             var reinstatement = memberStatuses
                 .FirstOrDefault(x => x.Status == MembershipCodes.InstitutionalStatus.Reinstated);
+            var reinstatementMovement = BuildReinstatementMovement(memberMemberships, reinstatement);
             var death = memberStatuses
                 .FirstOrDefault(x => x.Status == MembershipCodes.InstitutionalStatus.Deceased);
 
@@ -197,8 +190,9 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
                     reinstatement?.EffectiveDate,
                     death?.EffectiveDate,
                     latestTransfer is null ? null : latestTransfer.ApprovedEffectiveDate ?? latestTransfer.ProposedEffectiveDate),
+                reinstatementMovement,
                 financial?.Status,
-                pastActiveIds.Contains(person.MemberId),
+                InstitutionalStatusPolicy.IsPastActive(currentStatus),
                 pendingTransfer,
                 memberMemberships.Count));
         }
@@ -239,6 +233,32 @@ public sealed class RegimenInteriorMemberControlService(PmgmDbContext db) : IReg
         var total = ordered.Count;
         var items = ordered.Take(query.Limit).ToList();
         return new MemberControlResponse(query.AsOf, total, items.Count, items);
+    }
+
+    private static MemberWorkshopMovement? BuildReinstatementMovement(
+        IReadOnlyCollection<MembershipRow> memberships,
+        StatusRow? reinstatement)
+    {
+        if (reinstatement is null) return null;
+
+        var source = memberships
+            .Where(x => x.EndDate is not null && x.EndDate.Value < reinstatement.EffectiveDate)
+            .OrderByDescending(x => x.EndDate)
+            .ThenByDescending(x => x.StartDate)
+            .FirstOrDefault();
+
+        var destination = memberships
+            .Where(x => (x.StartDate == null || x.StartDate <= reinstatement.EffectiveDate) &&
+                        (x.EndDate == null || x.EndDate >= reinstatement.EffectiveDate))
+            .OrderByDescending(x => x.StartDate)
+            .FirstOrDefault();
+
+        return new MemberWorkshopMovement(
+            source?.OrganizationId,
+            source?.OrganizationName,
+            destination?.OrganizationId,
+            destination?.OrganizationName,
+            reinstatement.EffectiveDate);
     }
 
     private static bool IsCurrentMembership(MembershipRow row, DateOnly asOf)
@@ -298,10 +318,18 @@ public sealed record MemberControlRow(
     DateOnly? StatusEffectiveDate,
     string? CurrentDegree,
     MemberMilestones Milestones,
+    MemberWorkshopMovement? ReinstatementMovement,
     string? FinancialStatus,
     bool PastActive,
     bool PendingTransfer,
     int MembershipHistoryCount);
+
+public sealed record MemberWorkshopMovement(
+    Guid? SourceOrganizationId,
+    string? SourceOrganizationName,
+    Guid? DestinationOrganizationId,
+    string? DestinationOrganizationName,
+    DateOnly EffectiveDate);
 
 public sealed record WorkshopRef(
     Guid Id,

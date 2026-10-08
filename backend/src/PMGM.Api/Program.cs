@@ -90,6 +90,7 @@ builder.Services.AddScoped<IInstitutionalCalendarProjectionService, Institutiona
 builder.Services.AddScoped<IInstitutionalCalendarSourceSyncService, InstitutionalCalendarSourceSyncService>();
 builder.Services.AddScoped<IExecutiveReportingService, ExecutiveReportingService>();
 builder.Services.AddScoped<IRegimenInteriorMemberControlService, RegimenInteriorMemberControlService>();
+builder.Services.AddScoped<ITreasuryOrdinaryDuesEligibilityService, TreasuryOrdinaryDuesEligibilityService>();
 builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
 builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
@@ -179,6 +180,7 @@ api.MapBootstrapEndpoints();
 api.MapOrganizationEndpoints();
 api.MapLodgeSummaryAccessEndpoints();
 api.MapMembershipEndpoints();
+api.MapInstitutionalStatusEndpoints();
 api.MapMemberSelfEndpoints();
 api.MapTransferEndpoints();
 api.MapWithdrawalEndpoints();
