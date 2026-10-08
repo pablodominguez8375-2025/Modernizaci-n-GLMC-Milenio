@@ -22,8 +22,8 @@ Antes de analizar, programar, corregir, publicar la demo o desplegar QA:
 1. Obtener el HEAD actual de `dev` y el estado actual de `main`.
 2. Inspeccionar el árbol y el código realmente existente en `dev`.
 3. Leer `README.md`.
-4. Leer `docs/PMGM-BASE-001-estado-maestro.md`.
-5. Leer `docs/PMGM-GOV-001-instrucciones-decisiones-consolidadas.md` y cualquier documento `PMGM-GOV-*` posterior.
+4. Leer `START-HERE.md` y `docs/PMGM-GOV-003-coordinacion-multi-ia.md` (§16, proceso liviano).
+5. Consultar `docs/PMGM-BASE-001-estado-maestro.md`, `docs/PMGM-GOV-001-instrucciones-decisiones-consolidadas.md` y los demás `PMGM-GOV-*` solo en la materia que toque la tarea (búsqueda puntual, no lectura completa).
 6. Leer los ADR, migraciones, pruebas, workflows y documentación específica relacionada con la tarea.
 7. Consultar la Línea Base Maestra y los documentos oficiales vigentes en Google Drive que afecten el cambio.
 8. Verificar la Constitución/Reglamento y protocolos/formularios oficiales cuando la tarea afecte responsabilidades, firmas, aprobaciones o flujos normativos.
