@@ -58,6 +58,7 @@ class PlanningTests(unittest.TestCase):
 
     def test_recent_merge_blocked(self):
         self.assertEqual(self.select(prs=[pr(merged_at=RECENT)])[0], [])
+        self.assertEqual(self.select(prs=[pr(), pr(merged_at=RECENT, number=102)])[0], [])
 
     def test_reserved_and_protected_excluded(self):
         reserved = ["main", "dev", "release/v1", "uat/test", "recovery/2026",
@@ -67,6 +68,8 @@ class PlanningTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.select([branch(name)], [pr(name=name)])[0], [])
         self.assertEqual(self.select([branch(protected=True)])[0], [])
+        # Fail closed si GitHub omite el estado de protección.
+        self.assertEqual(self.select([{"name": "docs/old", "commit": {"sha": "abc"}}])[0], [])
 
     def test_never_prune_without_complete_metadata(self):
         self.assertEqual(self.select([{"name": "docs/old"}])[0], [])
