@@ -109,6 +109,7 @@ export const memberPortalDemoData = {
     orient: 'Santiago',
     degree: 'Maestro (3°)',
     status: 'Activo',
+    statusSince: '12 de octubre de 2013',
     initiation: '12 de octubre de 2013',
     wageIncrease: '18 de junio de 2015',
     exaltation: '21 de mayo de 2017',
@@ -205,7 +206,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
   const degree = useMocks ? memberPortalDemoData.institutional.degree : formatDegree(selfProfile?.current.effectiveDegree, selfProfile?.current.degree?.degree)
   const libraryAccess = libraryAccessForDegree(effectiveDegree)
   const status = useMocks ? memberPortalDemoData.institutional.status : institutionalStatusLabel(selfProfile?.current.institutionalStatus?.eventType)
-  const statusSince = useMocks ? memberPortalDemoData.institutional.initiation : formatDateOnly(selfProfile?.current.institutionalStatus?.effectiveDate)
+  const statusSince = useMocks ? memberPortalDemoData.institutional.statusSince : formatDateOnly(selfProfile?.current.institutionalStatus?.effectiveDate)
   const initiation = useMocks ? memberPortalDemoData.institutional.initiation : formatDateOnly(selfProfile?.milestones.initiation)
   const wageIncrease = useMocks ? memberPortalDemoData.institutional.wageIncrease : formatDateOnly(selfProfile?.milestones.wageIncrease)
   const exaltation = useMocks ? memberPortalDemoData.institutional.exaltation : formatDateOnly(selfProfile?.milestones.exaltation)
