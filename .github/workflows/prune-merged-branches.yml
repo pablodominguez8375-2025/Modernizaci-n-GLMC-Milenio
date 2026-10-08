@@ -1,0 +1,68 @@
+name: PMGM - poda segura de ramas fusionadas
+
+# El repositorio tiene main como rama default; los cron solo arrancan desde default.
+# Para no tocar main, esta limpieza se activa con cada integración/push a dev.
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - ".github/workflows/prune-merged-branches.yml"
+      - ".github/scripts/prune-merged-branches.py"
+      - "tests/test_prune_merged_branches.py"
+  push:
+    branches: [dev]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: pmgm-merged-branch-pruning
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Test poda segura
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Probar invariantes y exclusiones
+        run: python3 -m unittest discover -s tests -p 'test_prune_merged_branches.py' -v
+
+      - name: Inventario dry-run en pull request
+        if: github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python3 .github/scripts/prune-merged-branches.py --min-days 7
+
+  prune:
+    name: Eliminar solo ramas mergeadas verificadas
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Checkout del HEAD exacto
+        uses: actions/checkout@v4
+
+      - name: Revisar tip/PR y borrar con recibo
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/prune-merged-branches.py --apply --min-days 7 --max-delete 80 | tee prune-result.log
+
+      - name: Publicar recibo de conservación/eliminación
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-prune-merged-branches-${{ github.run_id }}
+          path: prune-result.log
+          if-no-files-found: warn
+          retention-days: 14
