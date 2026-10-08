@@ -85,8 +85,12 @@ jobs:
           retention-days: 14
 
   backend-integration:
-    name: Backend PostgreSQL, S3 and ClamAV integration
+    name: Backend integration shard ${{ matrix.shard }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [a, b]
 
     services:
       postgres:
@@ -111,10 +115,53 @@ jobs:
       PMGM_TEST_S3_BUCKET: pmgm-documents
       PMGM_TEST_CLAMAV_HOST: 127.0.0.1
       PMGM_TEST_CLAMAV_PORT: 3310
+      PMGM_INTEGRATION_SHARD: ${{ matrix.shard }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate integration shard coverage and build filter
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          from collections import Counter
+          from pathlib import Path
+
+          config_path = Path(".github/backend-integration-shards.json")
+          config = json.loads(config_path.read_text(encoding="utf-8"))
+          shards = config["shards"]
+          expected_keys = {"a", "b"}
+          if set(shards) != expected_keys:
+              raise SystemExit(f"Shard keys inválidas: {sorted(shards)}; esperadas: {sorted(expected_keys)}")
+
+          test_dir = Path("backend/tests/PMGM.Api.Tests/Integration")
+          actual = {path.stem for path in test_dir.glob("*Tests.cs")}
+          assigned = [name for shard in shards.values() for name in shard]
+          counts = Counter(assigned)
+          duplicates = sorted(name for name, count in counts.items() if count != 1)
+          missing = sorted(actual - set(assigned))
+          unknown = sorted(set(assigned) - actual)
+
+          if duplicates or missing or unknown:
+              print(f"duplicates={duplicates}")
+              print(f"missing={missing}")
+              print(f"unknown={unknown}")
+              raise SystemExit("Definición de shards de integración incompleta o duplicada")
+
+          shard = os.environ["PMGM_INTEGRATION_SHARD"]
+          selected = shards[shard]
+          expression = "|".join(
+              f"FullyQualifiedName~PMGM.Api.Tests.Integration.{name}"
+              for name in selected
+          )
+          filter_path = Path(os.environ["RUNNER_TEMP"]) / "pmgm-integration-filter.txt"
+          filter_path.write_text(expression, encoding="utf-8")
+          print(f"Integration shard {shard}: {len(selected)} clases; cobertura total {len(actual)} clases")
+          PY
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -181,23 +228,26 @@ jobs:
       - name: Restore integration tests
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
-      - name: Test PostgreSQL, S3 and ClamAV integration suite
-        run: >-
-          dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
-          --configuration Release
-          --no-restore
-          --filter 'FullyQualifiedName~PMGM.Api.Tests.Integration'
-          --results-directory artifacts/test-results-integration
-          --report-xunit-trx
-          --report-xunit-trx-filename pmgm-integration-tests.trx
-          --xunit-info
+      - name: Test PostgreSQL, S3 and ClamAV integration shard
+        shell: bash
+        run: |
+          set -euo pipefail
+          filter="$(cat "$RUNNER_TEMP/pmgm-integration-filter.txt")"
+          dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj \
+            --configuration Release \
+            --no-restore \
+            --filter "$filter" \
+            --results-directory "artifacts/test-results-integration-$PMGM_INTEGRATION_SHARD" \
+            --report-xunit-trx \
+            --report-xunit-trx-filename "pmgm-integration-tests-$PMGM_INTEGRATION_SHARD.trx" \
+            --xunit-info
 
       - name: Publish backend integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pmgm-backend-integration-test-results
-          path: artifacts/test-results-integration
+          name: pmgm-backend-integration-test-results-${{ matrix.shard }}
+          path: artifacts/test-results-integration-${{ matrix.shard }}
           if-no-files-found: warn
           retention-days: 14
 
