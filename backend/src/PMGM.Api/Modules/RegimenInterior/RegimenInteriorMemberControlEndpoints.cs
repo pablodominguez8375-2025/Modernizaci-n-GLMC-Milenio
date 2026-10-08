@@ -12,6 +12,7 @@ public static class RegimenInteriorMemberControlEndpoints
     {
         MembershipCodes.InstitutionalStatus.Active,
         MembershipCodes.InstitutionalStatus.Inactive,
+        MembershipCodes.InstitutionalStatus.PastActive,
         MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
         MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
         MembershipCodes.InstitutionalStatus.Reinstated,

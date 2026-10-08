@@ -89,7 +89,7 @@ const demoMembers: MemberDirectoryItem[] = demoWorkshopNumbers.flatMap(workshopN
     const transferred = workshopNumber === 23 && index === 0
     const memberId = transferred ? 'aaaaaaaa-6666-6666-6666-666666666666' : `${memberPrefix}-${String(index + 1).padStart(4, '0')}-0000-0000-${String(workshopNumber).padStart(12, '0')}`
     const roleLabel = role === 'master' ? 'Maestro operativo' : role === 'fellowcraft' ? 'Compañero' : role === 'apprentice' ? 'Aprendiz operativo' : 'PAS activo'
-    return { memberId, displayName: `${roleLabel} ${String(index + 1).padStart(2, '0')} · Taller ${workshopNumber}`, institutionalNumber: `DEMO-${String(workshopNumber).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`, membershipStatus: transferred ? 'transferred' : 'active', membershipType: role === 'past_active' ? 'past_active' : 'regular', startDate: `202${Math.min(6, 1 + (index % 5))}-03-12`, endDate: transferred ? '2026-06-30' : null, currentDegree: role === 'past_active' ? 'past_active' : role, institutionalStatus: transferred ? 'workshop_transfer' : 'active' }
+    return { memberId, displayName: `${roleLabel} ${String(index + 1).padStart(2, '0')} · Taller ${workshopNumber}`, institutionalNumber: `DEMO-${String(workshopNumber).padStart(2, '0')}-${String(index + 1).padStart(2, '0')}`, membershipStatus: transferred ? 'transferred' : 'active', membershipType: 'regular', startDate: `202${Math.min(6, 1 + (index % 5))}-03-12`, endDate: transferred ? '2026-06-30' : null, currentDegree: role === 'past_active' ? 'master' : role, institutionalStatus: transferred ? 'workshop_transfer' : role === 'past_active' ? 'past_active' : 'active' }
   })
 })
 

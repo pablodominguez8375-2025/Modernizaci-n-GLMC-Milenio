@@ -114,7 +114,7 @@ public static partial class LodgeTreasuryEndpoints
 
     private static async Task<IResult> GenerateChargesAsync(Guid organizationId, GenerateLodgeChargesRequest request,
         HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit,
-        CancellationToken cancellationToken)
+        ITreasuryOrdinaryDuesEligibilityService duesEligibility, CancellationToken cancellationToken)
     {
         if (!access.CanManageLodgeTreasury(context.User, organizationId)) return Results.Forbid();
         if (!await DynamicTreasuryAccess.AllowsAsync(db, context.User, organizationId, "create", cancellationToken)) return Results.Forbid();
@@ -142,6 +142,8 @@ public static partial class LodgeTreasuryEndpoints
         foreach (var membership in members)
         {
             if (!GrandTreasuryFeeSchedule.HasOrdinaryDues(membership.MembershipType)) continue;
+            var eligibility = await duesEligibility.GetAsync(organizationId, membership.MemberId, cutoff, cancellationToken);
+            if (eligibility is null || !eligibility.GeneratesOrdinaryDues) continue;
             var feeType = assignments.GetValueOrDefault(membership.MemberId, TreasuryCodes.LodgeFeeType.Normal);
             if (!GrandTreasuryFeeSchedule.IsOrdinaryFeeType(feeType))
                 return Results.BadRequest(new { message = $"El tipo de cuota '{feeType}' no corresponde a una cuota ordinaria válida.", memberId = membership.MemberId });
