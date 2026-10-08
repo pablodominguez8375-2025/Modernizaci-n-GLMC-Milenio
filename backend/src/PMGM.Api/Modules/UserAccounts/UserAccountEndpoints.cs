@@ -10,7 +10,7 @@ namespace PMGM.Api.Modules.UserAccounts;
 
 public static class UserAccountEndpoints
 {
-    private static readonly string[] Statuses = ["active","reinstated","inactive","voluntary_withdrawal","forced_withdrawal","deceased"];
+    private static readonly string[] Statuses = ["active","reinstated","past_active","inactive","voluntary_withdrawal","forced_withdrawal","deceased"];
     private static IQueryable<MemberMembership> Eligible(PmgmDbContext db, DateOnly today)
         => db.Memberships.AsNoTracking().Where(m=>m.Status==MembershipCodes.MembershipStatus.Active &&
             (m.StartDate==null || m.StartDate<=today) && (m.EndDate==null || m.EndDate>=today) && m.Organization.Type=="workshop" &&

@@ -53,6 +53,7 @@ public sealed class UserAccountWorkflowTests
 
     [Theory]
     [InlineData("inactive")]
+    [InlineData("past_active")]
     [InlineData("deceased")]
     [InlineData("voluntary_withdrawal")]
     [InlineData("forced_withdrawal")]
