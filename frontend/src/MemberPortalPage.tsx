@@ -1,4 +1,4 @@
-import { OwnOffices, OwnReplenishments, OwnAttendanceHistory } from './MemberOwnHistory'
+import { OwnOffices, OwnAttendanceHistory } from './MemberOwnHistory'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { organizationNumberOf } from './displayFormat'
 import InstitutionalIcon from './InstitutionalIcon'
@@ -6,13 +6,11 @@ import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
-import MemberTreasuryCredits from './MemberTreasuryCredits'
+import { TreasuryPayments, HospitalariaPayments } from './MemberPayments'
 import { institutionalStatusLabel } from './institutionalStatus'
 import { ActionDrawer, WorkspacePanel } from './actionKit'
 import './memberPortalInstruction.css'
 import './memberLibraryShortcut.css'
-
-const formatTreasuryMoney=(amount:number,currency:'CLP'|'USD'='CLP')=>new Intl.NumberFormat('es-CL',{style:'currency',currency,maximumFractionDigits:currency==='USD'?2:0}).format(amount)
 
 export type MemberPortalSection = 'datos' | 'pagos' | 'asistencias'
 
@@ -287,22 +285,10 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
     </WorkspacePanel>
 
     <WorkspacePanel id="pagos" active={section === 'pagos'}>
-      <section className="member-insight-grid member-payments-grid">
-        <div className="member-status-stack">
-          <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="treasury" size={22} /></span><div><small>Estado de tesorería</small><strong className={(treasuryAccount?.balance ?? 0) === 0 ? 'member-success-text' : undefined}>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Saldos separados en varias monedas':formatTreasuryMoney(treasuryAccount.balance??0,treasuryAccount.currency??'CLP')+' pendiente total') : treasury.status}</strong><p>{treasuryAccount ? ((treasuryAccount.currencies?.length??0)>1?'Consulta el detalle por moneda, sin conversión.':`${formatTreasuryMoney(treasuryAccount.overdueBalance??0,treasuryAccount.currency??'CLP')} en morosidad anterior · ${formatTreasuryMoney(treasuryAccount.futurePaidAmount??0,treasuryAccount.currency??'CLP')} pagado por adelantado`) : treasury.detail}</p></div></article>
-          <article className="member-card member-status-card"><span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="hospitalaria" size={22} /></span><div><small>Estado hospitalaria</small><strong className={hospitalaria.status === 'Al día' || hospitalaria.status === 'Activo' ? 'member-success-text' : undefined}>{hospitalaria.status}</strong><p>{hospitalaria.detail}</p></div><button type="button">Ver detalle</button></article>
-        </div>
-      </section>
-        {treasuryAccount && <article className="member-card member-treasury-account">
-          <MemberTreasuryCredits credits={treasuryAccount.unappliedCredits} />
-          <div className="member-card-title-row"><div><p className="member-card-kicker">Mi Tesorería</p><h2>Cartola personal</h2><p>La fecha de pago se conserva separada del período de la obligación.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-          {(treasuryAccount.currencies?.length?treasuryAccount.currencies:[{currency:treasuryAccount.currency??'CLP',totalCharged:treasuryAccount.totalCharged??0,totalPaid:treasuryAccount.totalPaid??0,balance:treasuryAccount.balance??0,overdueBalance:treasuryAccount.overdueBalance??0,currentPeriodBalance:treasuryAccount.currentPeriodBalance??0,futurePeriodBalance:treasuryAccount.futurePeriodBalance??0,futurePaidAmount:treasuryAccount.futurePaidAmount??0}]).map(book=><div className="member-institutional-summary" key={book.currency}><h3>Libro {book.currency}</h3><MemberDatum label="Cargado histórico" value={formatTreasuryMoney(book.totalCharged,book.currency)} /><MemberDatum label="Pagado histórico" value={formatTreasuryMoney(book.totalPaid,book.currency)} /><MemberDatum label="Morosidad anterior" value={formatTreasuryMoney(book.overdueBalance,book.currency)} /><MemberDatum label="Cuotas futuras pagadas" value={formatTreasuryMoney(book.futurePaidAmount,book.currency)} /><MemberDatum label="Saldo" value={formatTreasuryMoney(book.balance,book.currency)} success={book.balance === 0} /></div>)}
-          <div className="table-scroll"><table className="treasury-table"><thead><tr><th>Período cuota</th><th>Estado</th><th>Taller</th><th>Cargo</th><th>Pagado</th><th>Saldo</th><th>Comprobante / fecha real</th></tr></thead><tbody>{treasuryAccount.items.map(item => <tr key={item.chargeId}><td>{String(item.periodMonth).padStart(2, '0')}/{item.periodYear}</td><td>{memberTreasuryPeriodLabel(item.periodStatus)}</td><td>{item.organization}</td><td>{formatTreasuryMoney(item.chargedAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.paidAmount,item.currency??'CLP')}</td><td>{formatTreasuryMoney(item.balance,item.currency??'CLP')}</td><td>{item.payments.length ? item.payments.map(payment => <small key={payment.id}>{payment.receiptNumber} · {formatShortDate(payment.paymentDate)} · {formatTreasuryMoney(payment.amount,payment.currency??item.currency??'CLP')}</small>) : <small>Sin pagos</small>}</td></tr>)}</tbody></table></div>
-        </article>}
-      <article className="member-card member-hospitalaria-payments">
-        <div className="member-card-title-row"><div><p className="member-card-kicker">Hospitalaria</p><h2>Reposiciones por hermanos fallecidos</h2><p>$1.500 por cada fallecimiento, cobrado por la Hospitalaria de tu Taller.</p></div><span className="member-lock-badge">Sólo consulta</span></div>
-        <OwnReplenishments api={membershipApi} />
-      </article>
+      <div className="member-pay-grid">
+        <TreasuryPayments account={treasuryAccount} fallback={treasury} />
+        <HospitalariaPayments api={membershipApi} fallback={hospitalaria} />
+      </div>
     </WorkspacePanel>
 
     <WorkspacePanel id="asistencias" active={section === 'asistencias'}>
@@ -384,11 +370,6 @@ function formatRegularity(value: string | undefined, kind: 'tesorería' | 'hospi
   if (value === 'delinquent' || value === 'overdue') return { status: 'Pendiente', detail: kind === 'tesorería' ? 'Existen obligaciones por regularizar' : 'Existen reposiciones u obligaciones por regularizar' }
   if (value === 'exempt') return { status: 'Exento', detail: 'Condición institucional registrada' }
   return { status: 'Sin información', detail: 'No existe una regularidad vigente registrada' }
-}
-
-function memberTreasuryPeriodLabel(value: string) {
-  const labels: Record<string, string> = { overdue: 'Morosa', due: 'Vigente', partial: 'Abono parcial', paid: 'Pagada', future_due: 'Futura pendiente', advance_partial: 'Adelanto parcial', advance_paid: 'Adelantada pagada' }
-  return labels[value] ?? 'Sin estado'
 }
 
 function formatAttendanceStatus(value: string) {

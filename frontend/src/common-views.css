@@ -507,3 +507,30 @@ main.content label > span { font-weight: 600; }
   .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item.nav-subitem { margin-left: 1.25rem; min-height: 2.5rem; border-left: 2px solid rgba(255, 255, 255, 0.18); border-top-left-radius: 0; border-bottom-left-radius: 0; }
   .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item.nav-subitem.active { border-left-color: var(--brand-gold); }
 }
+
+/* Mis pagos (pedido del PO 08-10-2026): Tesorería y Hospitalaria separadas, frase de estado grande,
+   «Lo que debo» y «Mis pagos realizados» como listas simples; sin tablas en la vista principal. */
+.member-pay-grid { display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 68.75rem) { .member-pay-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.member-pay-block { display: grid; gap: 1rem; min-width: 0; }
+.member-pay-header { display: flex; gap: .75rem; align-items: flex-start; }
+.member-pay-header > .member-status-icon { flex: none; }
+.member-pay-header h2 { margin: 0; font-size: 1.25rem; }
+.member-pay-header p { margin: .15rem 0 0; color: var(--muted, #475569); }
+.member-pay-headline { border-radius: .75rem; padding: .85rem 1rem; border: 1px solid; }
+.member-pay-headline strong { display: block; font-size: 1.375rem; line-height: 1.25; }
+.member-pay-headline p { margin: .25rem 0 0; }
+.member-pay-headline.is-ok { background: #ecfdf3; border-color: #9ad8b5; color: #14532d; }
+.member-pay-headline.is-due { background: #fff7e6; border-color: #f2c46d; color: #7a4a00; }
+.member-pay-list h3 { margin: 0 0 .5rem; font-size: 1.0625rem; }
+.member-pay-list ul, .member-pay-detail { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.member-pay-list li { display: flex; justify-content: space-between; gap: .75rem; align-items: center; padding: .65rem .75rem; border: 1px solid var(--line, #dbe3ef); border-radius: .6rem; min-width: 0; }
+.member-pay-list li > span { min-width: 0; overflow-wrap: anywhere; }
+.member-pay-list li small { display: block; color: var(--muted, #475569); }
+.member-pay-list li > strong { white-space: nowrap; font-size: 1.0625rem; }
+.member-pay-more { justify-self: start; margin-top: .5rem; }
+.member-pay-note { margin: 0; padding: .65rem .75rem; border-left: 4px solid #f2c46d; background: #fffbeb; }
+.member-pay-block > .action-trigger { justify-self: start; }
+.member-pay-detail li { padding: .65rem 0; border-bottom: 1px solid var(--line, #dbe3ef); }
+.member-pay-detail p { margin: .2rem 0 0; }
+.member-pay-block .member-institutional-summary p { display: flex; justify-content: space-between; gap: .75rem; margin: .25rem 0; }
