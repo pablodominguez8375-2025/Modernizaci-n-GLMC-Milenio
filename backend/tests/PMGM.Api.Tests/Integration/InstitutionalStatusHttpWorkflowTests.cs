@@ -40,9 +40,9 @@ public sealed class InstitutionalStatusHttpWorkflowTests
         }
 
         async Task<HttpResponseMessage> Transition(string eventType, DateOnly date, Guid workshop) =>
-            await client.PostAsJsonAsync($"/api/regimen-interior/members/{memberId}/institutional-status", new
+            await client.PostAsJsonAsync($"/api/regimen-interior/talleres/{workshop}/members/{memberId}/institutional-status", new
             {
-                eventType, effectiveDate = date, organizationId = workshop,
+                eventType, effectiveDate = date,
                 reason = "Flujo CI", evidenceReference = $"CI-{eventType}", notes = "Dato sintético"
             }, ct);
 

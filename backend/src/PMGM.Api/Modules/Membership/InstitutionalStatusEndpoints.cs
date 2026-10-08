@@ -21,13 +21,14 @@ public static class InstitutionalStatusEndpoints
 
     public static IEndpointRouteBuilder MapInstitutionalStatusEndpoints(this IEndpointRouteBuilder endpoints)
     {
-        endpoints.MapPost("/api/regimen-interior/members/{memberId:guid}/institutional-status", RecordStatusAsync)
+        endpoints.MapPost("/api/regimen-interior/talleres/{organizationId:guid}/members/{memberId:guid}/institutional-status", RecordStatusAsync)
             .WithTags("Régimen Interior")
             .RequireAuthorization();
         return endpoints;
     }
 
     private static async Task<IResult> RecordStatusAsync(
+        Guid organizationId,
         Guid memberId,
         InstitutionalStatusTransitionRequest request,
         HttpContext httpContext,
@@ -50,7 +51,7 @@ public static class InstitutionalStatusEndpoints
 
         if (!await db.Members.AsNoTracking().AnyAsync(x => x.Id == memberId, cancellationToken))
             return Results.NotFound(new { message = "El Hermano indicado no existe." });
-        if (!await db.Organizations.AsNoTracking().AnyAsync(x => x.Id == request.OrganizationId && x.Type == "workshop", cancellationToken))
+        if (!await db.Organizations.AsNoTracking().AnyAsync(x => x.Id == organizationId && x.Type == "workshop", cancellationToken))
             return Results.NotFound(new { message = "El Taller indicado no existe." });
 
         var latestStatus = await db.InstitutionalStatusEvents.AsNoTracking()
@@ -79,7 +80,7 @@ public static class InstitutionalStatusEndpoints
         if (eventType == MembershipCodes.InstitutionalStatus.PastActive)
         {
             var activeMembership = activeMemberships.SingleOrDefault();
-            if (activeMembership is null || activeMembership.OrganizationId != request.OrganizationId)
+            if (activeMembership is null || activeMembership.OrganizationId != organizationId)
                 return Results.Conflict(new { message = "Past Activo requiere una pertenencia vigente al cuadro del Taller indicado." });
             sourceOrganizationId = activeMembership.OrganizationId;
         }
@@ -88,14 +89,14 @@ public static class InstitutionalStatusEndpoints
             if (latestStatus is null || !string.Equals(latestStatus.EventType, MembershipCodes.InstitutionalStatus.PastActive, StringComparison.OrdinalIgnoreCase))
                 return Results.Conflict(new { message = "El retorno a Activo por este flujo sólo procede desde Past Activo mediante una modificación institucional autorizada." });
             var activeMembership = activeMemberships.SingleOrDefault();
-            if (activeMembership is null || activeMembership.OrganizationId != request.OrganizationId)
+            if (activeMembership is null || activeMembership.OrganizationId != organizationId)
                 return Results.Conflict(new { message = "El retorno desde Past Activo debe conservar la pertenencia vigente al mismo Taller." });
             sourceOrganizationId = activeMembership.OrganizationId;
         }
         else if (eventType is MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal or MembershipCodes.InstitutionalStatus.ForcedWithdrawal or MembershipCodes.InstitutionalStatus.Deceased)
         {
             var activeMembership = activeMemberships.SingleOrDefault();
-            if (activeMembership is null || activeMembership.OrganizationId != request.OrganizationId)
+            if (activeMembership is null || activeMembership.OrganizationId != organizationId)
                 return Results.Conflict(new { message = "La transición requiere una pertenencia vigente al Taller indicado." });
             if (activeMembership.StartDate is DateOnly startDate && request.EffectiveDate <= startDate)
                 return Results.BadRequest(new { message = "La fecha efectiva debe ser posterior al inicio del segmento vigente de pertenencia." });
@@ -123,7 +124,7 @@ public static class InstitutionalStatusEndpoints
             createdMembership = new MembershipEntity
             {
                 MemberId = memberId,
-                OrganizationId = request.OrganizationId,
+                OrganizationId = organizationId,
                 MembershipType = previousMembership.MembershipType,
                 StartDate = request.EffectiveDate,
                 Status = MembershipCodes.MembershipStatus.Active,
@@ -138,19 +139,19 @@ public static class InstitutionalStatusEndpoints
             EventType = eventType,
             EffectiveDate = request.EffectiveDate,
             Reason = reason,
-            OrganizationId = request.OrganizationId,
+            OrganizationId = organizationId,
             EvidenceReference = evidenceReference,
             Notes = notes
         };
         db.InstitutionalStatusEvents.Add(statusEvent);
         audit.Add(httpContext, "membership.institutional_status.recorded", nameof(InstitutionalStatusEvent), statusEvent.Id.ToString(),
-            request.OrganizationId, AuditResults.Success, new
+            organizationId, AuditResults.Success, new
             {
                 PreviousStatus = latestStatus?.EventType,
                 NewStatus = eventType,
                 request.EffectiveDate,
                 SourceOrganizationId = sourceOrganizationId,
-                TargetOrganizationId = request.OrganizationId,
+                TargetOrganizationId = organizationId,
                 Reason = reason,
                 EvidenceReference = evidenceReference,
                 ClosedMembershipSegment = closedMembership?.Id,
@@ -160,12 +161,12 @@ public static class InstitutionalStatusEndpoints
 
         return Results.Created($"/api/members/{memberId}/history",
             new InstitutionalStatusTransitionResponse(statusEvent.Id, memberId, latestStatus?.EventType, statusEvent.EventType,
-                statusEvent.EffectiveDate, sourceOrganizationId, request.OrganizationId, closedMembership?.Id, createdMembership?.Id));
+                statusEvent.EffectiveDate, sourceOrganizationId, organizationId, closedMembership?.Id, createdMembership?.Id));
     }
 
     private static string? NormalizeOptional(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }
 
-public sealed record InstitutionalStatusTransitionRequest(string EventType, DateOnly EffectiveDate, Guid OrganizationId, string? Reason, string? EvidenceReference, string? Notes);
+public sealed record InstitutionalStatusTransitionRequest(string EventType, DateOnly EffectiveDate, string? Reason, string? EvidenceReference, string? Notes);
 public sealed record InstitutionalStatusTransitionResponse(Guid EventId, Guid MemberId, string? PreviousStatus, string NewStatus, DateOnly EffectiveDate, Guid? SourceOrganizationId, Guid TargetOrganizationId, Guid? ClosedMembershipId, Guid? CreatedMembershipId);
