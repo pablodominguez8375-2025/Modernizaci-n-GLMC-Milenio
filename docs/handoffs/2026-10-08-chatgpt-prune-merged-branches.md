@@ -20,4 +20,22 @@
 
 ## Estado al iniciar
 
-Registro inicial; implementación, pruebas, PR y ejecución de Actions pendientes de validación. Los SHA de dev deben refrescarse al cierre y fusionar únicamente con gates SUCCESS exact-head.
+Rama/PR preparados; el borrado físico debe comprobarse en GitHub Actions y no inferirse por la existencia del workflow.
+
+
+## Implementación preparada — PR #381 (draft)
+
+- Archivos añadidos en rama: `.github/scripts/prune-merged-branches.py`, `.github/workflows/prune-merged-branches.yml`, `tests/test_prune_merged_branches.py` y este handoff.
+- Workflow en `pull_request` valida invariantes y ejecuta **solo dry-run** con credencial de lectura. En `push: dev` comprueba nuevamente y puede hacer DELETE con credencial `contents: write` acotada al job.
+- No se añade `schedule` porque la rama predeterminada sigue siendo `main` y el Sponsor no autorizó modificarla; la ejecución automática sucede al integrar en `dev`.
+- Se conservan `main`, `dev`, `release/*`, `uat/*`, `recovery/*`, `codex/*`, `claude/*`, ramas protegidas y cualquier rama con referencia operativa reconocible (`qa`, `uat`, `release`, `recovery`, `backup`, `srv01`, `rc`, `pilot`). También se excluyen ramas con PR abierto, PR no fusionado o head sin igualdad exacta.
+- Mínimo 7 días desde el **último merge relacionado**, máximo 80 borrados por ejecución, checks nuevos inmediatamente antes de cada DELETE. No hay mecanismo GitHub de borrado atómico por SHA: queda un riesgo de carrera residual minimizado por la segunda comprobación.
+- Primera simulación, **anterior a la ampliación de exclusiones operativas**: inventario 301 ramas, 287 PR, 183 candidatas; cero borrados. Nueve pruebas unitarias pasaron en GitHub Actions para el corte previo; repetir al HEAD definitivo antes de integrar.
+- Drive: lista de carpeta oficial Proyecto Centenario leída el 08-10-2026 (98 elementos visibles); últimos modificados Línea Base Maestra y adendas Claude 08-10. No se detectaron nuevas fuentes normativas para esta automatización exclusivamente administrativa.
+
+## Pendiente para cerrar
+
+1. CI/Showcase/QA y validación dry-run del HEAD definitivo de PR #381 en SUCCESS.
+2. Refrescar HEAD dev; pasar PR de draft a ready; fusionar por squash únicamente si el gate exact-head y gobernanza permiten.
+3. Revisar ejecución posterior `push: dev`: registrar número real de ramas eliminadas y las conservadas, o el bloqueo `contents:write`, sin declarar borrado si no ocurrió.
+4. Actualizar Issue #380 con recibo y mantener abierto mientras queden candidatas sin procesar. No tocar `main`, `srv01` ni UAT.
