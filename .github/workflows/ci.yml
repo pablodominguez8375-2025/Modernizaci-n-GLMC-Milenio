@@ -14,8 +14,78 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend-build:
-    name: Backend build and tests
+  backend-unit:
+    name: Backend unit and policy tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Privacy gate — Ley 21.719
+        run: python3 tests/privacy_gate.py
+
+      - name: Data classification gate
+        run: python3 tests/data_classification_gate.py
+
+      - name: Migration safety gate
+        run: python3 tests/migration_gate.py
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore API
+        run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
+
+      - name: Build API
+        run: dotnet build backend/src/PMGM.Api/PMGM.Api.csproj --configuration Release --no-restore
+
+      - name: Restore tests
+        run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
+
+      - name: Audit direct and transitive NuGet dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/dependency-audit
+          python3 -m unittest discover -s tests -p test_dependency_vulnerabilities.py
+          dotnet list backend/src/PMGM.Api/PMGM.Api.csproj package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit/api.json
+          dotnet list backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit/tests.json
+          python3 scripts/check-dependency-vulnerabilities.py artifacts/dependency-audit/api.json artifacts/dependency-audit/tests.json
+
+      - name: Publish NuGet audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-dependency-audit
+          path: artifacts/dependency-audit
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Test unit and policy suite
+        run: >-
+          dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
+          --configuration Release
+          --no-restore
+          --filter 'FullyQualifiedName!~PMGM.Api.Tests.Integration'
+          --results-directory artifacts/test-results-unit
+          --report-xunit-trx
+          --report-xunit-trx-filename pmgm-unit-tests.trx
+          --xunit-info
+
+      - name: Publish backend unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmgm-backend-unit-test-results
+          path: artifacts/test-results-unit
+          if-no-files-found: warn
+          retention-days: 14
+
+  backend-integration:
+    name: Backend PostgreSQL, S3 and ClamAV integration
     runs-on: ubuntu-latest
 
     services:
@@ -45,15 +115,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Privacy gate — Ley 21.719
-        run: python3 tests/privacy_gate.py
-
-      - name: Data classification gate
-        run: python3 tests/data_classification_gate.py
-
-      - name: Migration safety gate
-        run: python3 tests/migration_gate.py
 
       - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
@@ -117,50 +178,26 @@ jobs:
             exit 1
           fi
 
-      - name: Restore API
-        run: dotnet restore backend/src/PMGM.Api/PMGM.Api.csproj
-
-      - name: Build API
-        run: dotnet build backend/src/PMGM.Api/PMGM.Api.csproj --configuration Release --no-restore
-
-      - name: Restore tests
+      - name: Restore integration tests
         run: dotnet restore backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
 
-      - name: Audit direct and transitive NuGet dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p artifacts/dependency-audit
-          python3 -m unittest discover -s tests -p test_dependency_vulnerabilities.py
-          dotnet list backend/src/PMGM.Api/PMGM.Api.csproj package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit/api.json
-          dotnet list backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj package --vulnerable --include-transitive --format json --output-version 1 > artifacts/dependency-audit/tests.json
-          python3 scripts/check-dependency-vulnerabilities.py artifacts/dependency-audit/api.json artifacts/dependency-audit/tests.json
-
-      - name: Publish NuGet audit reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pmgm-dependency-audit
-          path: artifacts/dependency-audit
-          if-no-files-found: warn
-          retention-days: 14
-
-      - name: Test unit, PostgreSQL, S3 and ClamAV integration
+      - name: Test PostgreSQL, S3 and ClamAV integration suite
         run: >-
           dotnet test backend/tests/PMGM.Api.Tests/PMGM.Api.Tests.csproj
           --configuration Release
           --no-restore
-          --results-directory artifacts/test-results
+          --filter 'FullyQualifiedName~PMGM.Api.Tests.Integration'
+          --results-directory artifacts/test-results-integration
           --report-xunit-trx
-          --report-xunit-trx-filename pmgm-tests.trx
+          --report-xunit-trx-filename pmgm-integration-tests.trx
           --xunit-info
 
-      - name: Publish backend test results
+      - name: Publish backend integration test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pmgm-backend-test-results
-          path: artifacts/test-results
+          name: pmgm-backend-integration-test-results
+          path: artifacts/test-results-integration
           if-no-files-found: warn
           retention-days: 14
 
@@ -171,6 +208,23 @@ jobs:
       - name: Stop S3Mock
         if: always()
         run: docker rm -f pmgm-s3mock-ci >/dev/null 2>&1 || true
+
+  backend-build:
+    name: Backend build and tests
+    needs: [backend-unit, backend-integration]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require both backend shards
+        shell: bash
+        env:
+          UNIT_RESULT: ${{ needs.backend-unit.result }}
+          INTEGRATION_RESULT: ${{ needs.backend-integration.result }}
+        run: |
+          set -euo pipefail
+          printf 'backend-unit=%s\nbackend-integration=%s\n' "$UNIT_RESULT" "$INTEGRATION_RESULT"
+          test "$UNIT_RESULT" = "success"
+          test "$INTEGRATION_RESULT" = "success"
 
   frontend-build:
     name: Frontend lint and build
