@@ -190,7 +190,7 @@ export class MembershipApiClient {
     const q=new URLSearchParams(filters);return this.request(`/api/membership/me/asistencias${q.size?'?'+q:''}`)
   }
   async getOwnHospitalaria():Promise<{total:number;items:OwnHospitalaria[]}> {
-    if(this.useMocks)return {total:1,items:[{id:'own-replenishment-demo',caseId:'death-demo-1',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-09-10',hermanoFallecido:'Hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:1500,saldo:0,estado:'paid',fechaPago:'2026-09-12',comprobantes:[{receiptNumber:'HOSP-DEMO-001',paymentDate:'2026-09-12',amount:1500,reference:'TRX-HOSP-DEMO-001'}],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}}]}
+    if(this.useMocks)return {total:2,items:[{id:'own-replenishment-demo-pending',caseId:'death-demo-2',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-10-01',hermanoFallecido:'Segundo hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:0,saldo:1500,estado:'pending',fechaPago:null,comprobantes:[],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}},{id:'own-replenishment-demo',caseId:'death-demo-1',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-09-10',hermanoFallecido:'Hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:1500,saldo:0,estado:'paid',fechaPago:'2026-09-12',comprobantes:[{receiptNumber:'HOSP-DEMO-001',paymentDate:'2026-09-12',amount:1500,reference:'TRX-HOSP-DEMO-001'}],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}}]}
     return this.request('/api/membership/me/hospitalaria')
   }
 

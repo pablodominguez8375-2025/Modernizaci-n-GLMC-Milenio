@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 const page = readFileSync(new URL('./MemberPortalPage.tsx', import.meta.url), 'utf8')
 const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
+const payments = readFileSync(new URL('./MemberPayments.tsx', import.meta.url), 'utf8')
 const css = readFileSync(new URL('./common-views.css', import.meta.url), 'utf8')
 
 /* Sustituye la decisión del 06-10-2026 (tres pestañas dentro de Mi ficha) por el pedido del PO del 07-10-2026:
@@ -31,7 +32,7 @@ describe('PMGM-UX Mi ficha sin pestañas: Mis pagos y Mis asistencias bajo Mi fi
 
   it('incluye historial de cargos, reposiciones de Hospitalaria y detalle de tenidas y ceremonias', () => {
     expect(page).toContain('Historial de cargos en el Taller')
-    expect(page).toContain('Reposiciones por hermanos fallecidos')
+    expect(payments).toContain('Reposiciones por hermanos fallecidos')
     expect(page).toContain('Tenidas y ceremonias')
   })
 

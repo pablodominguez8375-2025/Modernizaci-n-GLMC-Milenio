@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { MembershipApiClient, OwnOffice, OwnHospitalaria, OwnAttendanceResponse, OwnAttendance } from './api/membershipApi'
-const money = new Intl.NumberFormat('es-CL', { style:'currency', currency:'CLP', maximumFractionDigits:0 })
+import type { MembershipApiClient, OwnOffice, OwnAttendanceResponse, OwnAttendance } from './api/membershipApi'
 const date = (s:string|null) => s ? s.split('-').reverse().join('-') : '—'
 const message = (e:unknown) => e instanceof Error ? e.message : 'No fue posible consultar tu historial.'
 export function OwnOffices({api}:{api:MembershipApiClient}) {
@@ -9,13 +8,6 @@ export function OwnOffices({api}:{api:MembershipApiClient}) {
  if(error)return <p role="alert">{error}</p>
  if(result?.api!==api)return <p role="status">Consultando tus cargos…</p>
  return result.items.length ? <ul>{result.items.map(x=><li style={{overflowWrap:"anywhere"}} key={x.id}><strong>{x.cargo}</strong> · {x.taller} · Período {x.periodo} · {date(x.desde)} a {date(x.hasta)}</li>)}</ul> : <p>No tienes cargos registrados.</p>
-}
-export function OwnReplenishments({api}:{api:MembershipApiClient}) {
- const [result,setResult]=useState<{api:MembershipApiClient;items:OwnHospitalaria[]}|null>(null),[error,setError]=useState<string|null>(null)
- useEffect(()=>{let active=true;setResult(null);setError(null);api.getOwnHospitalaria().then(r=>{if(active)setResult({api,items:r.items})}).catch(e=>{if(active)setError(message(e))});return()=>{active=false}},[api])
- if(error)return <p role="alert">{error}</p>
- if(result?.api!==api)return <p role="status">Consultando tus reposiciones…</p>
- return result.items.length ? <ul>{result.items.map(x=><li style={{overflowWrap:"anywhere"}} key={x.id}><strong>{x.hermanoFallecido}</strong> · {date(x.fecha)} · {x.taller}<p>{money.format(x.monto)} · Pagado {money.format(x.pagado)} · Saldo {money.format(x.saldo)} · {x.estado==='paid'?'Pagada':x.estado==='partial'?'Pago parcial':'Pendiente'} · Fecha pago {date(x.fechaPago)}</p>{x.comprobantes.map(p=><p key={p.receiptNumber}>Comprobante {p.receiptNumber} · {p.reference} · {date(p.paymentDate)} · {money.format(p.amount)}</p>)}<p>{x.decreto ? `Decreto ${x.decreto.numero??'sin número en registro histórico'} · ${date(x.decreto.fecha)} · Vigencia ${date(x.decreto.vigencia)} · ${x.decreto.respaldo}` : 'Registro histórico sin decreto vinculado.'}</p></li>)}</ul> : <p>No tienes reposiciones registradas.</p>
 }
 export function OwnAttendanceHistory({api}:{api:MembershipApiClient}) {
  const [tipo,setTipo]=useState<OwnAttendance['tipo']|''>(''),[desde,setDesde]=useState(''),[hasta,setHasta]=useState('')
