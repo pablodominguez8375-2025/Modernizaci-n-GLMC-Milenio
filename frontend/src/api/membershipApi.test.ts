@@ -46,9 +46,10 @@ it('demo mode models twenty workshops with the agreed operational composition', 
     const id = number === 1 ? '11111111-1111-1111-1111-111111111111' : number === 23 ? '23232323-2323-2323-2323-232323232323' : `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`
     const roster = await client.getMembers(id, { limit: 100 })
     expect(roster.total).toBe(24)
-    expect(roster.items.filter(item => item.currentDegree === 'master').length).toBe(12)
+    expect(roster.items.filter(item => item.currentDegree === 'master').length).toBe(14)
     expect(roster.items.filter(item => item.currentDegree === 'fellowcraft').length).toBe(5)
     expect(roster.items.filter(item => item.currentDegree === 'apprentice').length).toBe(5)
-    expect(roster.items.filter(item => item.membershipType === 'past_active').length).toBe(2)
+    expect(roster.items.filter(item => item.institutionalStatus === 'past_active').length).toBe(2)
+    expect(roster.items.filter(item => item.membershipType === 'regular').length).toBe(24)
   }
 })
