@@ -63,7 +63,9 @@ class PlanningTests(unittest.TestCase):
     def test_reserved_and_protected_excluded(self):
         reserved = ["main", "dev", "release/v1", "uat/test", "recovery/2026",
                     "codex/test", "claude/test", "hotfix/a", "backup/foo",
-                    "dependabot/deps"]
+                    "dependabot/deps", "feature/v1.0-uat-readiness",
+                    "docs/uat-execution-v1.0-rc1", "feature/pilot-backup-recovery-v0.31",
+                    "feature/srv01-regression-kit-v1", "docs/qa-current"]
         for name in reserved:
             with self.subTest(name=name):
                 self.assertEqual(self.select([branch(name)], [pr(name=name)])[0], [])
