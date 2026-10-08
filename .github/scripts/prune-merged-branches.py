@@ -39,6 +39,7 @@ class GitHub:
         if not token or not repository or repository.count("/") != 1:
             raise ValueError("Requiere GITHUB_REPOSITORY y GITHUB_TOKEN")
         self.repository = repository
+        self.token = token
         self.owner = repository.partition("/")[0]
         self.root = f"https://api.github.com/repos/{repository}"
 
@@ -47,7 +48,7 @@ class GitHub:
             self.root + "/" + path.lstrip("/"),
             method=method,
             headers={
-                "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
+                "Authorization": f"Bearer {self.token}",
                 "Accept": "application/vnd.github+json",
                 "X-GitHub-Api-Version": "2022-11-28",
                 "User-Agent": "centenario-safe-branch-pruner",
@@ -91,7 +92,7 @@ def protected(name: str, branch: dict) -> bool:
     return (
         name in PROTECTED_NAMES
         or any(name.startswith(prefix) for prefix in PROTECTED_PREFIXES)
-        or bool(branch.get("protected"))
+        or branch.get("protected") is not False
     )
 
 
@@ -132,14 +133,13 @@ def plan(branches: list[dict], prs: list[dict], repository: str,
             reasons["pr_abierto"] += 1
         else:
             evidence = merged.get((name, sha), [])
-            old = [(when, pr) for when, pr in evidence if when <= cutoff]
             if not evidence:
                 reasons["sin_merge_exacto_a_dev"] += 1
-            elif not old:
+            elif max(when for when, _ in evidence) > cutoff:
                 reasons["periodo_de_gracia"] += 1
             else:
-                # La rama no ha recibido commits después del SHA del PR fusionado.
-                when, number = max(old, key=lambda entry: entry[0])
+                # Usar el merge más reciente evita borrar una rama recién reutilizada.
+                when, number = max(evidence, key=lambda entry: entry[0])
                 proposed.append({"branch": name, "sha": sha,
                                  "pr": number, "merged_at": when.isoformat()})
     return sorted(proposed, key=lambda item: (item["merged_at"], item["branch"])), reasons
