@@ -3,6 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Modules.Treasury;
