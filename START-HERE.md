@@ -1,3 +1,5 @@
+- **ENTRADA VIGENTE 08-10-2026:** [higiene de repositorio, CI y continuidad actual](docs/handoffs/2026-10-08-chatgpt-higiene-repositorio.md). Verificar siempre HEAD/PR/Issues y Drive en vivo; los bloques históricos inferiores se conservan para trazabilidad y se consultan sólo cuando su materia sea relevante.
+
 - Mi ficha y Hospitalaria v2 #354/#355: [cierre, adenda y evidencia](docs/handoffs/2026-10-07-chatgpt-member-hospitalaria-v2-cierre.md).
 - Permisos efectivos de Gran Tesorería #266/#350: [handoff y evidencia técnica](docs/handoffs/2026-10-06-chatgpt-grand-treasury-access-cierre.md).
 - Permisos efectivos de Gran Hospitalaria #266/#348: [handoff y evidencia técnica](docs/handoffs/2026-10-06-chatgpt-grand-hospitalaria-access-cierre.md).
