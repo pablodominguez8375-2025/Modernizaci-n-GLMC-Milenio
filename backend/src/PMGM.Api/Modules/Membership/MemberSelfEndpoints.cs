@@ -190,7 +190,7 @@ public static class MemberSelfEndpoints
                 payments = x.Payments.Select(payment => new { id = payment.Id, currency = payment.Currency, payment.ReceiptNumber,
                         amount = payment.Amount, payment.PaymentMethod, payment.PaymentDate, payment.Reference })
                     .Concat(x.Allocations.Select(a => new { id = a.ReceiptId, currency = a.Receipt.Currency,
-                        a.Receipt.ReceiptNumber, amount = a.Amount, a.Receipt.PaymentMethod, PaymentDate = a.EffectiveDate ?? a.Receipt.PaymentDate, a.Receipt.Reference }))
+                        a.Receipt.ReceiptNumber, amount = a.Amount, a.Receipt.PaymentMethod, a.Receipt.PaymentDate, a.Receipt.Reference }))
                     .OrderByDescending(payment => payment.PaymentDate).ToList()
             })
         };

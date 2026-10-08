@@ -25,6 +25,7 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
         using var factory = new PmgmWebApplicationFactory(connection);
         using var client = factory.CreateClient();
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        var receiptDate = new DateOnly(today.Year - 1, 12, 31);
         const string issuer = "urn:pmgm:unspecified-issuer", subject = "ci-http-admin";
         Guid correctedId, voidId, fullId, allocationId, otherMemberId, receiptOnlyId;
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -44,12 +45,14 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
             var corrected = Receipt(member, "OWN-CORRECTED", currency, org.Id);
             var annulled = Receipt(member, "OWN-VOID", currency, org.Id);
             var full = Receipt(member, "OWN-FULL", currency, org.Id);
+            // Cash received in the previous year and allocated later must keep its receipt date.
+            full.PaymentDate = receiptDate;
             var otherReceipt = Receipt(other, "OTHER-MEMBER-PRIVATE", currency, org.Id);
             var receiptOnly = Receipt(member, "OWN-RECEIPT-ONLY", otherCurrency, historicalOrg.Id);
             receiptOnly.Amount = 25;
             var correctionAllocation = new LodgeMemberPaymentAllocation { Receipt = corrected, Charge = Charge(1), Amount = 40, AllocatedBySubject = "ci-seed" };
             var voidAllocation = new LodgeMemberPaymentAllocation { Receipt = annulled, Charge = Charge(2), Amount = 40, AllocatedBySubject = "ci-seed" };
-            var fullAllocation = new LodgeMemberPaymentAllocation { Receipt = full, Charge = Charge(3), Amount = 100, AllocatedBySubject = "ci-seed" };
+            var fullAllocation = new LodgeMemberPaymentAllocation { Receipt = full, Charge = Charge(3), Amount = 100, EffectiveDate = today, AllocatedBySubject = "ci-seed" };
             db.AddRange(org, historicalOrg, member, other, membership, degree, plan, corrected, annulled, full, otherReceipt, receiptOnly, correctionAllocation, voidAllocation, fullAllocation);
             await db.SaveChangesAsync(ct);
             var linkId = Guid.NewGuid(); var createdAt = DateTimeOffset.UtcNow;
@@ -85,9 +88,18 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
         // Available credit never silently pays another charge or offsets the debt balance.
         Assert.Equal(180m, account.GetProperty("balance").GetDecimal());
         Assert.Equal(120m, account.GetProperty("totalPaid").GetDecimal());
+        var paidCharge = account.GetProperty("items").EnumerateArray().Single(x => x.GetProperty("periodMonth").GetInt32() == 3);
+        Assert.Equal(today.Year, paidCharge.GetProperty("periodYear").GetInt32());
+        var projectedReceipt = Assert.Single(paidCharge.GetProperty("payments").EnumerateArray());
+        Assert.Equal(fullId, projectedReceipt.GetProperty("id").GetGuid());
+        Assert.Equal(receiptDate.ToString("yyyy-MM-dd"), projectedReceipt.GetProperty("paymentDate").GetString());
+        Assert.Equal(currency, projectedReceipt.GetProperty("currency").GetString());
+        Assert.Equal(100m, projectedReceipt.GetProperty("amount").GetDecimal());
         await using var verify = factory.Services.CreateAsyncScope();
         var verifyDb = verify.ServiceProvider.GetRequiredService<PmgmDbContext>();
         Assert.Equal(100m, (await verifyDb.LodgeMemberReceipts.SingleAsync(x => x.Id == correctedId, ct)).Amount);
         Assert.Equal(40m, (await verifyDb.LodgeMemberPaymentAllocations.SingleAsync(x => x.Id == allocationId, ct)).Amount);
+        Assert.Equal(receiptDate, (await verifyDb.LodgeMemberReceipts.SingleAsync(x => x.Id == fullId, ct)).PaymentDate);
+        Assert.Equal(today, (await verifyDb.LodgeMemberPaymentAllocations.SingleAsync(x => x.ReceiptId == fullId, ct)).EffectiveDate);
     }
 }
