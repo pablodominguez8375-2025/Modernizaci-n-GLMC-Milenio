@@ -284,3 +284,15 @@ Antes de comenzar cualquier trabajo, todo agente revisa si hay archivos nuevos o
 
 Solo se revisa y se toma en cuenta lo que está **dentro de la carpeta de Drive «Proyecto Centenario»** (id `1P74Q8lhNPu6lHZ5zZR9ZD3AJFr_EtZyO`) y sus subcarpetas. Los archivos que están fuera de esa carpeta no se consideran para el proyecto, aunque estén compartidos con el PO o hayan sido modificados recientemente. Esto incluye planillas administrativas de terceros y archivos de claves. Esta regla acota el paso 4.1 de §11 y la §14.
 
+
+## 16. Proceso liviano (instrucción del PO, 08-10-2026)
+
+El PO pidió eliminar lo obsoleto y acelerar el desarrollo para que cada respuesta sea más rápida y consuma menos contexto. Estas reglas **acotan** §6, §11 y AGENTS §2 sin cambiar reglas institucionales ni funcionales. La higiene de ramas, handoffs, START-HERE y CI la ejecuta ChatGPT en el Issue #369; esta sección fija cómo trabaja cada agente.
+
+1. **Lectura mínima al arrancar.** Obligatorio: HEAD vivo de `dev`, PR/Issues abiertos, `START-HERE.md` (estado vivo), este GOV-003 y el Issue/PR del tema. `PMGM-BASE-001`, `PMGM-GOV-001`, `PROJECT-CONTINUITY-MASTER`, ADR, arquitectura y handoffs antiguos se consultan **solo cuando la tarea toca su materia** (con búsqueda puntual, no lectura completa).
+2. **Drive por diferencias.** La revisión de §11 paso 4.1 se hace con una búsqueda en la carpeta Proyecto Centenario filtrada por `modifiedTime` posterior a la última revisión, solo con metadatos. Se abren únicamente los archivos que afectan la tarea. La Línea Base Maestra no se relee completa en cada sesión: se leen las adendas nuevas.
+3. **Un registro por entrega, no tres copias.** La descripción del PR es el handoff de la entrega. Un archivo en `docs/handoffs/` se crea solo si queda trabajo abierto que otra sesión debe retomar. En Drive, **una adenda por sesión o lote** de PR, no una por PR. La memoria de cada IA guarda el estado vivo y las reglas, no el historial (el historial está en Git y Drive).
+4. **Verificación local proporcional.** Antes de abrir el PR: compilación de tipos, pruebas de los archivos tocados y capturas de la vista tocada en 360, 768 y 1440 px. La matriz visual completa la ejecuta el CI en `push` a `dev`; solo se repite localmente cuando el cambio altera navegación global o CSS transversal.
+5. **Esperas sin sondeo.** Los gates de PR (~5 min) y la publicación en `dev` (~13 min) se verifican una vez al final del tiempo estimado, no con consultas repetidas.
+6. **Enlace de QA.** Se entrega al PO solo después de comprobar que `downloads/qa-current.json` muestra el SHA nuevo.
+7. **Acceso a GitHub.** Las sesiones de Claude con el repositorio adjunto escriben con la credencial de la sesión; no se necesitan tokens personales del PO.
