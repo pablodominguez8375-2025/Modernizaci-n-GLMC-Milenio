@@ -53,3 +53,10 @@ Carpeta oficial `Proyecto Centenario` revisada el 08-10-2026 antes de este corte
 - `dev@0e1fbb8` separa claramente Tesorería y Hospitalaria dentro de Mi ficha → Mis pagos; no cambia el alcance de #369/#373.
 - La descarga de comprobantes sigue pendiente en Issue #36.
 - Esta adenda complementa el proceso liviano de PR #372.
+
+## Decisión sobre PR documentales
+
+- Se evaluó omitir CI/QA/Showcase en PR que sólo cambien `START-HERE.md` o `docs/handoffs/**`.
+- La protección de rama `dev` no es legible con la credencial del conector (GitHub 403), por lo que no se puede confirmar si esos checks son obligatorios.
+- Para evitar que un PR documental quede bloqueado en estado pending, se descartó `paths-ignore` en este corte.
+- Se mantienen las optimizaciones seguras y ya verificadas: concurrency/cancel-in-progress, Showcase PR reducido, eliminación de duplicados post-merge y retiro del workflow Post-RC histórico.
