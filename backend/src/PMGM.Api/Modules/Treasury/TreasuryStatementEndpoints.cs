@@ -3,7 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
-using PMGM.Api.Modules.Membership.Entities;
+using MemberMembership = PMGM.Api.Modules.Membership.Entities.Membership;
 using PMGM.Api.Modules.Treasury.Entities;
 
 namespace PMGM.Api.Modules.Treasury;
@@ -60,7 +60,7 @@ public static class TreasuryStatementEndpoints
             .Where(x => x.FeePlan.FeeType == TreasuryCodes.LodgeFeeType.PastActive)
             .Select(x => x.MemberId)
             .ToHashSet();
-        var billableMemberships = new List<Membership>();
+        var billableMemberships = new List<MemberMembership>();
         foreach (var membership in memberships)
         {
             // Legacy data may still carry Past Activo as membership/fee type. New data uses the institutional state.
