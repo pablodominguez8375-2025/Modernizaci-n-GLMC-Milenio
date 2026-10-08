@@ -11,6 +11,7 @@ import collections
 import datetime as dt
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -23,6 +24,11 @@ PROTECTED_NAMES = {
 PROTECTED_PREFIXES = (
     "release/", "uat/", "recovery/", "codex/", "claude/",
     "hotfix/", "backup/", "archive/", "dependabot/",
+)
+# Preservar referencias técnicas aunque estén bajo feature/ o docs/.
+OPERATIONAL_MARKERS = re.compile(
+    r"(?:^|[/_.-])(qa|uat|release|recovery|rollback|backup|srv01|rc[0-9]*|pilot)(?:$|[/_.-])",
+    re.IGNORECASE,
 )
 DEFAULT_MIN_DAYS = 7
 DEFAULT_MAX_DELETE = 80
@@ -92,6 +98,7 @@ def protected(name: str, branch: dict) -> bool:
     return (
         name in PROTECTED_NAMES
         or any(name.startswith(prefix) for prefix in PROTECTED_PREFIXES)
+        or bool(OPERATIONAL_MARKERS.search(name))
         or branch.get("protected") is not False
     )
 
