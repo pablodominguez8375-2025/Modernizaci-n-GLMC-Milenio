@@ -5,7 +5,7 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
-    types: [opened, synchronize, reopened, closed]
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 permissions:
@@ -14,22 +14,21 @@ permissions:
   deployments: read
   id-token: write
 
-# PR validation is isolated by exact head SHA so a stale/cancelled run cannot block
-# evidence for the current PR head. Pushes to dev remain serialized by branch/ref.
+# Keep only the newest validation for each PR/ref. Exact-head evidence remains attached
+# to the latest commit, while stale visual/package work is cancelled automatically.
 concurrency:
-  group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
+  group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: Build showcase for GitHub Pages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact delivery SHA
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
       - name: Setup Node 24
@@ -53,14 +52,14 @@ jobs:
           VITE_API_BASE_URL: ''
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
-          VITE_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
+          VITE_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           VITE_SHOWCASE_CHANNEL: 'post-rc-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase
         shell: bash
         env:
-          EXPECTED_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: |
           set -euo pipefail
           test -s frontend/dist/index.html
@@ -74,6 +73,8 @@ jobs:
 
       - name: Capture responsive visual evidence
         shell: bash
+        env:
+          PMGM_VISUAL_MODE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
         run: |
           set -euo pipefail
           BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
@@ -115,24 +116,37 @@ jobs:
             test -s "frontend/visual-evidence/$file"
           }
 
-          # Full acceptance matrix for the initial member view.
-          capture 360,800 mi-ficha-360x800.png
-          capture 390,844 mi-ficha-390x844.png
-          capture 768,1024 mi-ficha-768x1024.png
-          capture 820,1180 mi-ficha-820x1180.png
-          capture 1024,768 mi-ficha-1024x768.png
-          capture 1366,768 mi-ficha-1366x768.png
-          capture 1440,900 mi-ficha-1440x900.png
-          capture 1920,1080 mi-ficha-1920x1080.png
+          if [ "$PMGM_VISUAL_MODE" = "pr" ]; then
+            # Fast PR gate: mobile, tablet and desktop plus critical role/module scenarios.
+            capture 360,800 mi-ficha-360x800.png
+            capture 768,1024 mi-ficha-768x1024.png
+            capture 1440,900 mi-ficha-1440x900.png
+          else
+            # Full publication matrix stays mandatory on dev/manual runs.
+            capture 360,800 mi-ficha-360x800.png
+            capture 390,844 mi-ficha-390x844.png
+            capture 768,1024 mi-ficha-768x1024.png
+            capture 820,1180 mi-ficha-820x1180.png
+            capture 1024,768 mi-ficha-1024x768.png
+            capture 1366,768 mi-ficha-1366x768.png
+            capture 1440,900 mi-ficha-1440x900.png
+            capture 1920,1080 mi-ficha-1920x1080.png
+          fi
 
-          # Representative module matrix: browser automation changes QA profile and module exactly as a user would.
+          # Browser automation changes QA profile and module exactly as a user would.
           node .github/scripts/capture-showcase-views.mjs \
             "$BROWSER" \
             http://127.0.0.1:4173/Modernizaci-n-GLMC-Milenio/ \
             frontend/visual-evidence
 
-          test "$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)" -ge 180
-          printf 'RESPONSIVE VISUAL EVIDENCE OK\n'
+          count="$(find frontend/visual-evidence -maxdepth 1 -name '*.png' | wc -l)"
+          if [ "$PMGM_VISUAL_MODE" = "pr" ]; then
+            test "$count" -ge 30
+            printf 'RESPONSIVE VISUAL PR MATRIX OK — %s PNG\n' "$count"
+          else
+            test "$count" -ge 180
+            printf 'RESPONSIVE VISUAL FULL MATRIX OK — %s PNG\n' "$count"
+          fi
 
       - name: Upload responsive visual evidence
         uses: actions/upload-artifact@v4
@@ -143,10 +157,10 @@ jobs:
           retention-days: 14
 
       - name: Publish QA installable beside the demo
-        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
-          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged && github.event.pull_request.merge_commit_sha || github.event.pull_request.head.sha || github.sha }}
+          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           SOURCE_REF: ${{ github.head_ref || github.ref_name }}
           BUILD_RUN_ID: ${{ github.run_id }}
         run: |
@@ -183,7 +197,7 @@ jobs:
           printf 'QA PUBLIC DOWNLOAD OK — %s — %s\n' "$filename" "$digest"
 
       - name: Inspect Pages and deployment environment
-        if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        if: github.event_name == 'push'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -271,17 +285,17 @@ jobs:
           PY
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
 
   deploy:
-    if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
+    if: github.event_name != 'pull_request'
     name: Deploy testing showcase
     needs: build
     environment:
-      name: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && 'github-pages-merged' || 'github-pages' }}
+      name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
