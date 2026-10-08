@@ -46,3 +46,10 @@ Carpeta oficial `Proyecto Centenario` revisada el 08-10-2026 antes de este corte
 - Mientras corrían los gates, Claude integró PR #372 y luego PR #376; `dev` avanzó a `0e1fbb833e6436a77da7c9a8b1cf186ee9e55612`.
 - #373 se refresca sobre ese `dev` antes de integrar; no hay solapamiento de archivos con #372 ni #376.
 - Se repiten gates exact-head después del refresco.
+
+## Novedad Drive posterior al refresco
+
+- Revisada adenda Claude del 08-10-2026 para PR #376 (UI QA v0.93).
+- `dev@0e1fbb8` separa claramente Tesorería y Hospitalaria dentro de Mi ficha → Mis pagos; no cambia el alcance de #369/#373.
+- La descarga de comprobantes sigue pendiente en Issue #36.
+- Esta adenda complementa el proceso liviano de PR #372.
