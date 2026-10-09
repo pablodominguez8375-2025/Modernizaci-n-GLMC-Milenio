@@ -29,7 +29,8 @@ public static class CeremonyEligibilityPolicy
         string? hospitalariaStatus,
         string? grandMasterStatus,
         CandidatePublicationEvidence? publication,
-        bool ceremonyRightPaid = true)
+        bool ceremonyRightPaid = true,
+        AdvancementEligibilityDecision? advancement = null)
     {
         var requirements = new List<CeremonyRequirementResult>
         {
@@ -45,6 +46,11 @@ public static class CeremonyEligibilityPolicy
             requirements.Add(EvaluatePublication(publication));
         }
 
+        if (ceremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation)
+        {
+            requirements.Add(EvaluateAdvancement(ceremonyType, advancement));
+        }
+
         var overall = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Rejected)
             ? "does_not_comply"
             : requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Observed)
@@ -55,6 +61,43 @@ public static class CeremonyEligibilityPolicy
             overall,
             overall == "complies",
             requirements);
+    }
+
+    /// <summary>
+    /// Guard institucional compartido por la matriz y el POST /autorizar.
+    /// Sin regla versionada y evaluación de las tres fuentes, el avance no puede autorizarse.
+    /// </summary>
+    private static CeremonyRequirementResult EvaluateAdvancement(
+        string ceremonyType,
+        AdvancementEligibilityDecision? advancement)
+    {
+        var expectedDegree = ceremonyType == CeremonyCodes.Type.WageIncrease ? 1 : 2;
+        if (advancement is null || !advancement.Applies ||
+            advancement.SourceDegree != expectedDegree ||
+            string.IsNullOrWhiteSpace(advancement.RuleVersion) ||
+            advancement.Requirements.Count != 3)
+        {
+            return new(CeremonyCodes.ValidationType.AdvancementEligibility,
+                "Asistencia, instrucciones y planchas", CeremonyCodes.ValidationStatus.Observed,
+                "Pendiente: evaluar los tres requisitos del grado con una regla institucional vigente y evidencia verificable.");
+        }
+
+        var ordinarilyApproved = advancement.Mode == AdvancementEligibilityModes.Ordinary &&
+                                advancement.Requirements.All(x => x.Complies);
+        var dispensationApproved = advancement.Mode == AdvancementEligibilityModes.Dispensation &&
+                                   advancement.Dispensation?.Status == AdvancementDispensationStatuses.Approved;
+        if (advancement.CanProceed && (ordinarilyApproved || dispensationApproved))
+        {
+            return new(CeremonyCodes.ValidationType.AdvancementEligibility,
+                "Asistencia, instrucciones y planchas", CeremonyCodes.ValidationStatus.Approved,
+                dispensationApproved
+                    ? $"Elegibilidad por dispensa documentada; regla {advancement.RuleVersion}."
+                    : $"Elegibilidad ordinaria acreditada; regla {advancement.RuleVersion}.");
+        }
+
+        return new(CeremonyCodes.ValidationType.AdvancementEligibility,
+            "Asistencia, instrucciones y planchas", CeremonyCodes.ValidationStatus.Rejected,
+            "No se cumplen los mínimos configurados de asistencia, instrucciones y planchas o falta una dispensa institucional validada.");
     }
 
     private static CeremonyRequirementResult EvaluateCeremonyRight(string ceremonyType, bool paid)
