@@ -44,7 +44,7 @@ public sealed class AdvancementReviewMatrixPolicyTests
             AdvancementSeniorityRulePolicy.Review(null, null));
 
         Assert.All(matrix.Requirements, x => Assert.False(x.InstitutionallyCertified));
-        Assert.Equal(3, matrix.Requirements.Count(x => x.Status == "rule_missing" ||
+        Assert.Equal(4, matrix.Requirements.Count(x => x.Status == "rule_missing" ||
                         x.Status == "institutional_rule_missing"));
         Assert.Equal("rule_missing", matrix.Requirements[0].Status);
         Assert.Null(matrix.Requirements[0].Required);
