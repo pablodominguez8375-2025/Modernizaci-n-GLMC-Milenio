@@ -114,7 +114,6 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const councilApi = useMemo(() => restrictClient(rawCouncilApi, 'lodgeCouncilApi', rawApi, () => accessRef.current), [rawCouncilApi, rawApi])
   const canView = (code: string) => viewAccess?.views[code]?.includes('view') ?? false
   const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', memberPayments:'member', memberAttendance:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
-  const printViewCodes: Partial<Record<View,string>> = { ...viewCodes, treasury:'treasury', lodgeTreasury:'lodgetreasury', hospitalaria:'hospitalaria' }
   const activeViewAllowed = !viewCodes[view] || canView(viewCodes[view]!)
   useEffect(() => { if (!activeViewAllowed) setView('dashboard') }, [activeViewAllowed])
   useEffect(() => {
@@ -306,7 +305,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.95' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.96' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -358,7 +357,6 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <TextSizeControl className="in-sidebar" />
       </nav>
       <main className="content" id="contenido-principal">
-        {activeViewAllowed && printViewCodes[view] && viewAccess?.views[printViewCodes[view]!]?.includes('print') && <button type="button" className="secondary" onClick={() => { void api.authorizeViewPrint(printViewCodes[view]!).then(() => window.print()).catch(reason => setError(reason instanceof Error ? reason.message : 'No fue posible autorizar la impresión.')) }}>Imprimir vista</button>}
         {error && <ErrorBanner message={error} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
