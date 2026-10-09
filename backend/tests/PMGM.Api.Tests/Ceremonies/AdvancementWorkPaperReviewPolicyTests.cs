@@ -130,6 +130,32 @@ public sealed class AdvancementWorkPaperReviewPolicyTests
         Assert.Empty(result.SubmittedExtractMeetingIds!);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DuplicateMeetingLinks_RetainSubmittedExtractRegardlessOfOrdering(bool submittedFirst)
+    {
+        var version = ReadyVersion(1, false);
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Versión con extracto", false, GradeStart, AsOf, 1, [version]);
+        var meetingId = Guid.NewGuid();
+        var pending = new WorkPaperMeetingLink(meetingId, version.Id, true, false);
+        var submitted = new WorkPaperMeetingLink(meetingId, version.Id, true, true);
+        var wrongVersion = new WorkPaperMeetingLink(meetingId, Guid.NewGuid(), true, true);
+        WorkPaperMeetingLink[] links = submittedFirst
+            ? [submitted, pending, wrongVersion]
+            : [pending, wrongVersion, submitted];
+
+        var result = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(paper, links);
+        var summary = AdvancementWorkPaperReviewPolicy.Summarize([result]);
+
+        Assert.Equal([meetingId], result.LinkedHeldMeetingIds);
+        Assert.Equal([meetingId], result.SubmittedExtractMeetingIds);
+        Assert.False(result.PresentationVerified);
+        Assert.Equal(0, summary.ConfirmedPresented);
+        Assert.False(summary.PresentationEvidenceAvailable);
+    }
+
     private static WorkPaperReviewVersion ReadyVersion(int number, bool published)
         => new(
             Guid.NewGuid(), number, new DateOnly(2026, 8, 7), 1,
