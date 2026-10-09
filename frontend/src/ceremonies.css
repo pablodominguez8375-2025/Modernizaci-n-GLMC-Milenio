@@ -43,3 +43,11 @@
 .ceremony-right-summary dd { margin: 0; font-weight: 800; font-size: 0.875rem; }
 @media (max-width: 900px) { .ceremony-filters, .requirement-grid { grid-template-columns: 1fr; } .ceremony-meta { grid-template-columns: 1fr 1fr; } .validation-form { grid-template-columns: 1fr 1fr; } .validation-form .secondary-action { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .ceremony-card-heading { display: grid; } .ceremony-state-stack { justify-content: flex-start; } .ceremony-meta, .validation-form, .ceremony-right-summary dl { grid-template-columns: 1fr; } .validation-form .secondary-action { grid-column: auto; } .ceremony-actions > button { width: 100%; } }
+
+/* Móvil: las tarjetas de Ceremonias no deben ensanchar la pantalla (en 390 px se salían 145 px). */
+.ceremony-list > *, .ceremony-card, .ceremony-card > * { min-width: 0; }
+.ceremony-card { max-width: 100%; }
+@media (max-width: 640px) { .ceremony-card-heading > *, .ceremony-meta > div, .ceremony-meta dd, .ceremony-meta dt { min-width: 0; overflow-wrap: anywhere; } }
+.ceremony-right-summary, .ceremony-right-summary > *, .ceremony-right-summary dl > div { min-width: 0; }
+.ceremony-right-summary > div:first-child { grid-template-columns: minmax(0, 1fr); }
+.ceremony-right-summary strong, .ceremony-right-summary span, .ceremony-right-summary dt, .ceremony-right-summary dd { overflow-wrap: anywhere; }
