@@ -18,8 +18,8 @@ describe('PMGM-UX Mi ficha sin pestañas: Mis pagos y Mis asistencias bajo Mi fi
 
   it('el menú lateral muestra Mi ficha seguida de Mis pagos y Mis asistencias, con el mismo permiso del Portal del Hermano', () => {
     const fichaAt = app.indexOf('label="Mi ficha"')
-    const pagosAt = app.indexOf('label="Mis pagos" sub')
-    const asistAt = app.indexOf('label="Mis asistencias" sub')
+    const pagosAt = app.indexOf('label="Mis pagos"')
+    const asistAt = app.indexOf('label="Mis asistencias"')
     const agendaAt = app.indexOf('label="Agenda" inTabbar')
     expect(fichaAt).toBeGreaterThan(-1)
     expect(fichaAt).toBeLessThan(pagosAt)
@@ -27,7 +27,9 @@ describe('PMGM-UX Mi ficha sin pestañas: Mis pagos y Mis asistencias bajo Mi fi
     expect(asistAt).toBeLessThan(agendaAt)
     expect(app).toContain("memberPayments:'member', memberAttendance:'member'")
     expect(app).toContain("section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'}")
-    expect(css).toContain('.nav-item.nav-subitem')
+    /* PO 09-10-2026: Mis pagos y Mis asistencias son opciones de menú normales, sin sangría de submenú. */
+    expect(app).not.toContain('label="Mis pagos" sub')
+    expect(app).not.toContain('label="Mis asistencias" sub')
   })
 
   it('incluye historial de cargos, reposiciones de Hospitalaria y detalle de tenidas y ceremonias', () => {
