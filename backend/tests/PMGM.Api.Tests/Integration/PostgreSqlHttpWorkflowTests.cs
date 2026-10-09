@@ -510,6 +510,13 @@ public sealed class PostgreSqlHttpWorkflowTests
         Assert.False(payload.GetProperty("authorizesCeremony").GetBoolean());
         Assert.False(payload.GetProperty("workPapersEvaluated").GetBoolean());
         Assert.False(payload.GetProperty("includesExcusesInPresence").GetBoolean());
+        Assert.False(payload.GetProperty("minimumSeniorityRuleApplied").GetBoolean());
+        Assert.False(payload.GetProperty("institutionalContinuityCertified").GetBoolean());
+        var seniority = payload.GetProperty("seniority");
+        Assert.Equal("membership_dates_covered", seniority.GetProperty("continuityEvidenceStatus").GetString());
+        Assert.True(seniority.GetProperty("membershipDateCoverageComplete").GetBoolean());
+        Assert.False(seniority.GetProperty("hasInstitutionalInterruption").GetBoolean());
+        Assert.True(seniority.GetProperty("completeCalendarMonths").GetInt32() >= 8);
         var snapshot = payload.GetProperty("snapshot");
         Assert.Equal(new DateOnly(2026, 1, 15).ToString("yyyy-MM-dd"),
             snapshot.GetProperty("gradeStartDate").GetString());
