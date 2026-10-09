@@ -534,3 +534,14 @@ main.content label > span { font-weight: 600; }
 .member-pay-detail li { padding: .65rem 0; border-bottom: 1px solid var(--line, #dbe3ef); }
 .member-pay-detail p { margin: .2rem 0 0; }
 .member-pay-block .member-institutional-summary p { display: flex; justify-content: space-between; gap: .75rem; margin: .25rem 0; }
+
+/* Menú lateral del Administrador y de perfiles con muchos grupos (pedido del PO 08-10-2026):
+   más compacto en PC para que quepan las opciones sin bajar la página, y cabeceras de grupo iguales.
+   Letra de 16 px y objetivos táctiles de 2,5 rem se mantienen. */
+@media (min-width: 981px) {
+  .workspace:not(.is-sidebar-collapsed) .sidebar { padding: 0.75rem 0.625rem; gap: 0.125rem; }
+  .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item { gap: 0.5rem; padding-inline: 0.5rem; min-height: 2.5rem; }
+  .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item > span:first-child { flex-basis: 1.75rem; width: 1.75rem; height: 1.75rem; }
+  .workspace:not(.is-sidebar-collapsed) .sidebar .nav-section { margin-top: 0.5rem; padding: 0.25rem 0.5rem; min-height: 2rem; display: flex; align-items: center; justify-content: space-between; }
+  .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item.nav-subitem { margin-left: 1rem; }
+}

@@ -97,11 +97,21 @@ export function useCollapsibleNavGroups(ref: RefObject<HTMLElement | null>, deps
       if (header && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); toggle(header) }
     }
     apply()
+    /* Si el menú se vuelve a dibujar (por ejemplo al cambiar de perfil, cuando llegan los permisos), se aplica de nuevo:
+       así todos los grupos quedan plegables y el plegado automático mide el menú completo. */
+    let frame = 0
+    const observer = new MutationObserver(() => {
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(apply)
+    })
+    observer.observe(nav, { childList: true })
     nav.addEventListener('click', onClick)
     nav.addEventListener('keydown', onKey)
     window.addEventListener('resize', apply)
     window.addEventListener('pmgm:text-size', apply)
     return () => {
+      observer.disconnect()
+      window.cancelAnimationFrame(frame)
       nav.removeEventListener('click', onClick)
       nav.removeEventListener('keydown', onKey)
       window.removeEventListener('resize', apply)
