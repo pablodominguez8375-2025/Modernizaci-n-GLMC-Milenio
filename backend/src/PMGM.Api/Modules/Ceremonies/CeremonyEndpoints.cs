@@ -38,6 +38,7 @@ public static class CeremonyEndpoints
         group.MapGet("/portal-insinuados", GetCandidatePortalAsync);
         group.MapPost("/reglas/publicacion-iniciacion", SetInitiationPublicationRuleAsync);
         group.MapGet("/reglas/publicacion-iniciacion", GetInitiationPublicationRuleAsync);
+        AdvancementRuleEndpoints.Map(group);
 
         return endpoints;
     }
