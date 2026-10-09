@@ -11,6 +11,7 @@
       "MemberSelfTreasuryCreditsPostgreSqlTests",
       "PostgreSqlHttpWorkflowTests",
       "AdvancementRuleHttpTests",
+      "AdvancementSeniorityRuleHttpTests",
       "LibraryCatalogHttpTests",
       "CandidatePublicationEvidenceHttpTests",
       "LodgeReceiptAdjustmentPostgreSqlTests",
