@@ -28,7 +28,7 @@ namespace PMGM.Api.Tests.Integration;
 public sealed class PostgreSqlHttpWorkflowTests
 {
     [Fact]
-    public async Task WageIncrease_full_http_workflow_authorizes_and_persists_audit()
+    public async Task WageIncrease_full_http_workflow_blocks_authorization_without_advancement_evidence_and_audits()
     {
         var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -244,7 +244,10 @@ public sealed class PostgreSqlHttpWorkflowTests
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, eligibilityAfterGrandMasterResponse.StatusCode);
         var eligibilityAfterGrandMasterJson = await eligibilityAfterGrandMasterResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.True(eligibilityAfterGrandMasterJson.GetProperty("canAuthorize").GetBoolean());
+        Assert.False(eligibilityAfterGrandMasterJson.GetProperty("canAuthorize").GetBoolean());
+        var advanceRequirement = eligibilityAfterGrandMasterJson.GetProperty("requirements").EnumerateArray()
+            .Single(x => x.GetProperty("code").GetString() == CeremonyCodes.ValidationType.AdvancementEligibility);
+        Assert.Equal(CeremonyCodes.ValidationStatus.Observed, advanceRequirement.GetProperty("status").GetString());
 
         var queueReadyResponse = await client.GetAsync(
             "/api/institutional/ceremonias/bandeja",
@@ -254,17 +257,22 @@ public sealed class PostgreSqlHttpWorkflowTests
         var queueReadyItem = queueReadyJson.GetProperty("items")
             .EnumerateArray()
             .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
-        Assert.True(queueReadyItem.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
-        Assert.True(queueReadyItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
+        Assert.False(queueReadyItem.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
+        Assert.False(queueReadyItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
 
         var authorizeResponse = await client.PostAsync(
             $"/api/ceremonias/solicitudes/{ceremonyId}/autorizar",
             content: null,
             cancellationToken);
-        Assert.Equal(HttpStatusCode.OK, authorizeResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, authorizeResponse.StatusCode);
 
         var authorizeJson = await authorizeResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
-        Assert.Equal(CeremonyCodes.RequestStatus.Authorized, authorizeJson.GetProperty("status").GetString());
+        Assert.Contains("requisitos", authorizeJson.GetProperty("message").GetString() ?? string.Empty);
+        var rejectionEligibility = authorizeJson.GetProperty("eligibility");
+        Assert.False(rejectionEligibility.GetProperty("canAuthorize").GetBoolean());
+        Assert.Contains(rejectionEligibility.GetProperty("requirements").EnumerateArray(),
+            x => x.GetProperty("code").GetString() == CeremonyCodes.ValidationType.AdvancementEligibility &&
+                 x.GetProperty("status").GetString() == CeremonyCodes.ValidationStatus.Observed);
 
         var queueAfterResponse = await client.GetAsync(
             "/api/institutional/ceremonias/bandeja",
@@ -274,7 +282,7 @@ public sealed class PostgreSqlHttpWorkflowTests
         var queueAfterItem = queueAfterJson.GetProperty("items")
             .EnumerateArray()
             .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
-        Assert.Equal(CeremonyCodes.RequestStatus.Authorized, queueAfterItem.GetProperty("status").GetString());
+        Assert.Equal(CeremonyCodes.RequestStatus.Observed, queueAfterItem.GetProperty("status").GetString());
         Assert.False(queueAfterItem.GetProperty("actions").GetProperty("canValidateInternalAffairs").GetBoolean());
         Assert.False(queueAfterItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
 
@@ -285,7 +293,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             var persistedCeremony = await db.CeremonyRequests
                 .AsNoTracking()
                 .SingleAsync(x => x.Id == ceremonyId, cancellationToken);
-            Assert.Equal(CeremonyCodes.RequestStatus.Authorized, persistedCeremony.Status);
+            Assert.Equal(CeremonyCodes.RequestStatus.Observed, persistedCeremony.Status);
             Assert.Equal(2, await db.CeremonyRightPayments.CountAsync(x => x.CeremonyRequestId == ceremonyId, cancellationToken));
 
             var auditActions = await db.AuditEvents
@@ -300,7 +308,8 @@ public sealed class PostgreSqlHttpWorkflowTests
             Assert.Contains("treasury.ceremony_right.payment_recorded", auditActions);
             Assert.Contains("ceremony.internal_affairs_validation.recorded", auditActions);
             Assert.Contains("ceremony.grand_master_validation.recorded", auditActions);
-            Assert.Contains("ceremony.authorization.approved", auditActions);
+            Assert.Contains("ceremony.authorization.rejected", auditActions);
+            Assert.DoesNotContain("ceremony.authorization.approved", auditActions);
         }
     }
 }
