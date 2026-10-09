@@ -544,6 +544,27 @@ public sealed class PostgreSqlHttpWorkflowTests
         Assert.Single(paper.GetProperty("linkedHeldMeetingIds").EnumerateArray());
         Assert.Empty(paper.GetProperty("submittedExtractMeetingIds").EnumerateArray());
         Assert.False(paper.GetProperty("presentationVerified").GetBoolean());
+
+        var matrixResponse = await client.GetAsync(
+            $"/api/ceremonias/solicitudes/{ceremonyId}/avance/resumen", token);
+        Assert.Equal(HttpStatusCode.OK, matrixResponse.StatusCode);
+        Assert.Contains("no-store", matrixResponse.Headers.CacheControl?.ToString() ?? string.Empty);
+        var matrixJson = await matrixResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token);
+        Assert.False(matrixJson.GetProperty("authorizesCeremony").GetBoolean());
+        Assert.False(matrixJson.GetProperty("institutionalContinuityCertified").GetBoolean());
+        Assert.False(matrixJson.GetProperty("presentationEvidenceCertified").GetBoolean());
+        var matrix = matrixJson.GetProperty("matrix");
+        Assert.Equal("pending_institutional_validation", matrix.GetProperty("status").GetString());
+        Assert.False(matrix.GetProperty("authorizesCeremony").GetBoolean());
+        var matrixRequirements = matrix.GetProperty("requirements").EnumerateArray().ToArray();
+        Assert.Equal(4, matrixRequirements.Length);
+        Assert.Contains(matrixRequirements, x => x.GetProperty("code").GetString() == "meeting_attendance" &&
+            x.GetProperty("observed").GetInt32() == 1 && !x.GetProperty("institutionallyCertified").GetBoolean());
+        Assert.Contains(matrixRequirements, x => x.GetProperty("code").GetString() == "instruction_attendance" &&
+            x.GetProperty("observed").GetInt32() == 1 && !x.GetProperty("institutionallyCertified").GetBoolean());
+        Assert.Contains(matrixRequirements, x => x.GetProperty("code").GetString() == "work_papers" &&
+            x.GetProperty("observed").ValueKind == JsonValueKind.Null);
+
     }
 
 }
