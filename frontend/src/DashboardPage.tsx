@@ -28,8 +28,9 @@ export default function DashboardPage(props: DashboardPageProps) {
   const pendingTasks = props.pendingTasks ?? []
   const operational = props.operational ?? false
   const administrator = props.administrator ?? false
-  const showPendingInbox = (operational || administrator) && pendingTasks.length > 0
   const pendingTotal = totalPending(pendingTasks)
+  /* Decisión del PO 08-10-2026 (opción A): el Administrador solo ve «Mis pendientes» si tiene pendientes reales; sus accesos a Parámetros y Configuración inicial ya están en el menú lateral. */
+  const showPendingInbox = (operational && pendingTasks.length > 0) || (administrator && pendingTotal > 0)
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [notifications, setNotifications] = useState<NotificationInboxItem[]>([])
   const [pulseLoading, setPulseLoading] = useState(true)
