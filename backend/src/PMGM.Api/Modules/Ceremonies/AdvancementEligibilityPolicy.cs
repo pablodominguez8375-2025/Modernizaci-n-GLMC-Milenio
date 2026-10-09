@@ -123,6 +123,28 @@ public static class AdvancementEligibilityPolicy
                 evidence.InternalAffairsResolutionReference);
         }
 
+        // Una aprobación sin acta de Consejo no acredita acuerdo institucional.
+        if (string.IsNullOrWhiteSpace(evidence.CouncilRecordReference))
+        {
+            return new AdvancementDispensationDecision(
+                AdvancementDispensationStatuses.Rejected,
+                "No consta referencia del acta del Consejo de Maestros que acordó la dispensa.",
+                evidence.CouncilRecordReference,
+                evidence.InternalAffairsResolutionReference);
+        }
+
+        // El estado favorable de Régimen Interior requiere resolución respaldada.
+        if ((string.Equals(evidence.InternalAffairsStatus, CeremonyCodes.ValidationStatus.ExceptionApproved, StringComparison.OrdinalIgnoreCase) ||
+             string.Equals(evidence.InternalAffairsStatus, CeremonyCodes.ValidationStatus.Approved, StringComparison.OrdinalIgnoreCase)) &&
+            string.IsNullOrWhiteSpace(evidence.InternalAffairsResolutionReference))
+        {
+            return new AdvancementDispensationDecision(
+                AdvancementDispensationStatuses.PendingInternalAffairs,
+                "Falta referencia de la resolución favorable de Régimen Interior para validar la dispensa.",
+                evidence.CouncilRecordReference,
+                evidence.InternalAffairsResolutionReference);
+        }
+
         if (string.Equals(
                 evidence.InternalAffairsStatus,
                 CeremonyCodes.ValidationStatus.ExceptionApproved,

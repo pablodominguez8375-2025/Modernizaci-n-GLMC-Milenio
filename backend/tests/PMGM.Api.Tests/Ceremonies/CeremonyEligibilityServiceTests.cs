@@ -187,6 +187,31 @@ public sealed class CeremonyEligibilityServiceTests
         Assert.Equal(AdvancementDispensationStatuses.Approved, result.Advancement.Dispensation?.Status);
     }
 
+    [Fact]
+    public void Exaltation_DispensationWithoutRecordedResolution_RemainsBlockedInConsolidatedMatrix()
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.Exaltation,
+                FullyApprovedValidations(),
+                null,
+                null,
+                20,
+                AdvancementThresholds: new AdvancementThresholds(10, 5, 2, "rule-v2"),
+                AdvancementEvidence: new AdvancementEvidence(8, 4, 1),
+                Dispensation: new DispensationEvidence(
+                    CouncilApproved: true,
+                    CouncilRecordReference: "ACTA-DEMO-011",
+                    InternalAffairsStatus: CeremonyCodes.ValidationStatus.ExceptionApproved,
+                    InternalAffairsResolutionReference: null)),
+            Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Equal(AdvancementEligibilityModes.Blocked, result.Advancement?.Mode);
+        Assert.Equal(AdvancementDispensationStatuses.PendingInternalAffairs, result.Advancement?.Dispensation?.Status);
+        Assert.Contains(result.BlockingReasons, x => x.StartsWith("dispensation:") && x.Contains("resolución"));
+    }
+
     private static Dictionary<string, string> FullyApprovedValidations()
         => new()
         {
