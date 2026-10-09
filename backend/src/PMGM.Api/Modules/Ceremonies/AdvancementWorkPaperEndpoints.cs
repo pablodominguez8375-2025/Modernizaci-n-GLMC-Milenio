@@ -3,6 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.LodgeManagement;
+using PMGM.Api.Modules.SecretariatOperations;
 
 namespace PMGM.Api.Modules.Ceremonies;
 
@@ -87,13 +88,61 @@ public static class AdvancementWorkPaperEndpoints
                 from, cutoff, sourceDegree.Value, versions);
         }).ToArray();
 
+        // La referencia a una plancha puede guardarse antes de la Tenida.
+        // Sólo se expone el vínculo cuando la actividad efectivamente ocurrió
+        // y se corresponde con Taller, grado, fecha, autor y versión.
+        var secretariatLinks = await db.LodgeSecretariatRecords.AsNoTracking()
+            .Where(x => x.OrganizationId == ceremony.OrganizationId &&
+                        x.RecordType == SecretariatOperationsCodes.RecordType.LodgeMeeting &&
+                        x.WorkPaperAuthorMemberId == ceremony.MemberId.Value &&
+                        x.WorkPaperDocumentVersionId != null &&
+                        x.EventDate > from &&
+                        x.EventDate <= cutoff)
+            .Select(x => new
+            {
+                x.SourceRecordId,
+                x.EventDate,
+                x.WorkPaperDocumentVersionId,
+                x.ExtractDocumentVersionId,
+                x.Status
+            })
+            .ToListAsync(cancellationToken);
+
+        var linkedMeetingIds = secretariatLinks.Select(x => x.SourceRecordId).Distinct().ToArray();
+        var validMeetings = await lodgeDb.LodgeMeetings.AsNoTracking()
+            .Where(x => linkedMeetingIds.Contains(x.Id) &&
+                        x.OrganizationId == ceremony.OrganizationId &&
+                        x.Grade == sourceGrade &&
+                        x.CeremonyType == null &&
+                        x.MeetingDate > from &&
+                        x.MeetingDate <= cutoff &&
+                        (x.Status == LodgeManagementCodes.MeetingStatus.Held ||
+                         x.Status == LodgeManagementCodes.MeetingStatus.Closed))
+            .Select(x => new { x.Id, x.MeetingDate })
+            .ToListAsync(cancellationToken);
+        var meetingDates = validMeetings.ToDictionary(x => x.Id, x => x.MeetingDate);
+
+        var links = secretariatLinks
+            .Where(x => meetingDates.TryGetValue(x.SourceRecordId, out var day) && day == x.EventDate)
+            .Select(x => new WorkPaperMeetingLink(
+                x.SourceRecordId,
+                x.WorkPaperDocumentVersionId!.Value,
+                true,
+                x.ExtractDocumentVersionId is not null &&
+                (x.Status == SecretariatOperationsCodes.SubmissionStatus.Submitted ||
+                 x.Status == SecretariatOperationsCodes.SubmissionStatus.Received)))
+            .ToArray();
+        var withMeetings = candidates
+            .Select(x => AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(x, links))
+            .ToArray();
+
         return Results.Ok(new
         {
             requestId,
             gradeStartDate = from,
             asOf = cutoff,
             sourceGrade,
-            workPapers = AdvancementWorkPaperReviewPolicy.Summarize(candidates),
+            workPapers = AdvancementWorkPaperReviewPolicy.Summarize(withMeetings),
             authorizesCeremony = false
         });
     }
