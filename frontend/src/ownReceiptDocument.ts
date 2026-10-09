@@ -40,5 +40,6 @@ export function downloadOwnReceiptDocument(item: OwnReceiptDocument): void {
   document.body.append(link)
   link.click()
   link.remove()
-  URL.revokeObjectURL(blobUrl)
+  // El navegador puede iniciar la lectura del archivo después del click.
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
 }
