@@ -58,7 +58,8 @@ public static class AdvancementWorkPaperReviewPolicy
             return candidate with
             {
                 LinkedHeldMeetingIds = Array.Empty<Guid>(),
-                SubmittedExtractMeetingIds = Array.Empty<Guid>()
+                SubmittedExtractMeetingIds = Array.Empty<Guid>(),
+                ReviewableFullMinuteMeetingIds = Array.Empty<Guid>()
             };
 
         var eligible = links
@@ -69,7 +70,8 @@ public static class AdvancementWorkPaperReviewPolicy
             .Select(group => new
             {
                 MeetingId = group.Key,
-                ExtractSubmitted = group.Any(link => link.ExtractSubmitted)
+                ExtractSubmitted = group.Any(link => link.ExtractSubmitted),
+                FullMinutesReviewable = group.Any(link => link.FullMinutesReviewable)
             })
             .ToArray();
 
@@ -78,6 +80,9 @@ public static class AdvancementWorkPaperReviewPolicy
             LinkedHeldMeetingIds = eligible.Select(x => x.MeetingId).Order().ToArray(),
             SubmittedExtractMeetingIds = eligible
                 .Where(x => x.ExtractSubmitted)
+                .Select(x => x.MeetingId).Order().ToArray(),
+            ReviewableFullMinuteMeetingIds = eligible
+                .Where(x => x.FullMinutesReviewable)
                 .Select(x => x.MeetingId).Order().ToArray()
         };
     }
@@ -115,13 +120,15 @@ public sealed record WorkPaperReviewCandidate(
     bool PresentationVerified,
     string Reason,
     IReadOnlyList<Guid>? LinkedHeldMeetingIds = null,
-    IReadOnlyList<Guid>? SubmittedExtractMeetingIds = null);
+    IReadOnlyList<Guid>? SubmittedExtractMeetingIds = null,
+    IReadOnlyList<Guid>? ReviewableFullMinuteMeetingIds = null);
 
 public sealed record WorkPaperMeetingLink(
     Guid MeetingId,
     Guid WorkPaperVersionId,
     bool IsHeldNonCeremonial,
-    bool ExtractSubmitted);
+    bool ExtractSubmitted,
+    bool FullMinutesReviewable = false);
 
 public sealed record WorkPaperReviewSummary(
     int TotalDocuments,
