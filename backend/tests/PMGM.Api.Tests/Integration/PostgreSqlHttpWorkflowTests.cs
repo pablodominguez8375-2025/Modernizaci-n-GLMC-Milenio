@@ -20,6 +20,9 @@ using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Treasury;
 using PMGM.Api.Modules.Hospitalaria;
+using PMGM.Api.Modules.LodgeManagement;
+using PMGM.Api.Modules.LodgeManagement.Entities;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -312,6 +315,134 @@ public sealed class PostgreSqlHttpWorkflowTests
             Assert.DoesNotContain("ceremony.authorization.approved", auditActions);
         }
     }
+
+    [Fact]
+    public async Task AdvancementAttendance_ReadsRealMeetingAndInstructionRecordsWithoutAuthorizing()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var token = TestContext.Current.CancellationToken;
+        using var factory = new PmgmWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+
+        Guid ceremonyId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var lodgeDb = scope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
+            await db.Database.MigrateAsync(token);
+
+            var organization = new Organization
+            {
+                Name = $"Taller Evidencia CI {Guid.NewGuid():N}", Number = "EV-CI",
+                Type = "workshop", City = "Santiago", Country = "Chile"
+            };
+            var person = new Person { FirstNames = "Evidencia", LastNames = "Aprendiz" };
+            var member = new Member { Person = person, PersonId = person.Id };
+            var membership = new Membership
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                Member = member, MemberId = member.Id, MembershipType = "regular",
+                StartDate = new DateOnly(2026, 1, 1), Status = MembershipCodes.MembershipStatus.Active
+            };
+            var degree = new DegreeEvent
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                Member = member, MemberId = member.Id,
+                Degree = "1", EventType = MembershipCodes.DegreeEvent.Initiation,
+                EffectiveDate = new DateOnly(2026, 1, 15)
+            };
+            var ceremony = new CeremonyRequest
+            {
+                Organization = organization, OrganizationId = organization.Id,
+                Member = member, MemberId = member.Id,
+                CeremonyType = CeremonyCodes.Type.WageIncrease,
+                Status = CeremonyCodes.RequestStatus.UnderReview
+            };
+            db.AddRange(organization, person, member, membership, degree, ceremony);
+            await db.SaveChangesAsync(token);
+            ceremonyId = ceremony.Id;
+
+            var attended = new LodgeMeeting
+            {
+                OrganizationId = organization.Id, MeetingDate = new DateOnly(2026, 7, 3),
+                Grade = LodgeManagementCodes.Grade.Apprentice, MeetingType = LodgeManagementCodes.MeetingType.Regular,
+                Status = LodgeManagementCodes.MeetingStatus.Closed
+            };
+            var excused = new LodgeMeeting
+            {
+                OrganizationId = organization.Id, MeetingDate = new DateOnly(2026, 8, 3),
+                Grade = LodgeManagementCodes.Grade.Apprentice, MeetingType = LodgeManagementCodes.MeetingType.Regular,
+                Status = LodgeManagementCodes.MeetingStatus.Held
+            };
+            var cancelled = new LodgeMeeting
+            {
+                OrganizationId = organization.Id, MeetingDate = new DateOnly(2026, 8, 4),
+                Grade = LodgeManagementCodes.Grade.Apprentice, MeetingType = LodgeManagementCodes.MeetingType.Regular,
+                Status = LodgeManagementCodes.MeetingStatus.Cancelled
+            };
+            var instruction = new LodgeInstructionSession
+            {
+                OrganizationId = organization.Id, InstructionDate = new DateOnly(2026, 8, 6),
+                Grade = LodgeManagementCodes.Grade.Apprentice, Topic = "Estudio del grado",
+                ResponsibleOffice = LodgeManagementCodes.InstructionOffice.SecondWarden,
+                Status = LodgeManagementCodes.InstructionStatus.Held,
+                CreatedBySubject = "ci-evidence"
+            };
+            lodgeDb.AddRange(attended, excused, cancelled, instruction);
+            await lodgeDb.SaveChangesAsync(token);
+
+            lodgeDb.AddRange(
+                new LodgeAttendanceRecord
+                {
+                    MeetingId = attended.Id, MemberId = member.Id,
+                    Status = LodgeManagementCodes.AttendanceStatus.Absent
+                },
+                new LodgeAttendanceRecord
+                {
+                    MeetingId = attended.Id, MemberId = member.Id,
+                    Status = LodgeManagementCodes.AttendanceStatus.Present
+                },
+                new LodgeAttendanceRecord
+                {
+                    MeetingId = excused.Id, MemberId = member.Id,
+                    Status = LodgeManagementCodes.AttendanceStatus.Excused
+                },
+                new LodgeAttendanceRecord
+                {
+                    MeetingId = cancelled.Id, MemberId = member.Id,
+                    Status = LodgeManagementCodes.AttendanceStatus.Present
+                },
+                new LodgeInstructionAttendanceRecord
+                {
+                    InstructionSessionId = instruction.Id, MemberId = member.Id,
+                    Status = LodgeManagementCodes.InstructionAttendanceStatus.Present,
+                    RecordedBySubject = "ci-evidence"
+                });
+            await lodgeDb.SaveChangesAsync(token);
+        }
+
+        var response = await client.GetAsync(
+            $"/api/ceremonias/solicitudes/{ceremonyId}/avance/asistencias", token);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? string.Empty);
+        var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token);
+        Assert.Equal("ready", payload.GetProperty("status").GetString());
+        Assert.False(payload.GetProperty("authorizesCeremony").GetBoolean());
+        Assert.False(payload.GetProperty("workPapersEvaluated").GetBoolean());
+        Assert.False(payload.GetProperty("includesExcusesInPresence").GetBoolean());
+        var snapshot = payload.GetProperty("snapshot");
+        Assert.Equal(new DateOnly(2026, 1, 15).ToString("yyyy-MM-dd"),
+            snapshot.GetProperty("gradeStartDate").GetString());
+        var meetings = snapshot.GetProperty("meetings");
+        Assert.Equal(2, meetings.GetProperty("held").GetInt32());
+        Assert.Equal(1, meetings.GetProperty("present").GetInt32());
+        Assert.Equal(1, meetings.GetProperty("excused").GetInt32());
+        var instructions = snapshot.GetProperty("instructions");
+        Assert.Equal(1, instructions.GetProperty("present").GetInt32());
+    }
+
 }
 
 internal sealed class PmgmWebApplicationFactory(string connectionString) : WebApplicationFactory<Program>
