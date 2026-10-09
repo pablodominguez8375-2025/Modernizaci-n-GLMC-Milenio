@@ -56,6 +56,21 @@ public static class AdvancementAttendanceEndpoints
                 cancellationToken);
         }
 
+        AdvancementSeniorityRuleSnapshot? seniorityRule = null;
+        if (seniority is not null)
+        {
+            var ruleCode = AdvancementSeniorityRulePolicy.CodeFor(ceremony.CeremonyType);
+            var relevant = await db.InstitutionalRuleSettings.AsNoTracking()
+                .Where(x => x.Code == ruleCode &&
+                            x.Status == "active" &&
+                            x.EffectiveFrom <= today &&
+                            (x.EffectiveTo == null || x.EffectiveTo >= today))
+                .ToListAsync(cancellationToken);
+            seniorityRule = AdvancementSeniorityRulePolicy.Resolve(
+                ceremony.CeremonyType, today, relevant);
+        }
+        var seniorityThresholdReview = AdvancementSeniorityRulePolicy.Review(seniorityRule, seniority);
+
         context.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
@@ -64,7 +79,11 @@ public static class AdvancementAttendanceEndpoints
             result.Reason,
             result.Snapshot,
             seniority,
+            seniorityRule,
+            seniorityThresholdReview,
+            // Solo revisión de evidencia: sigue sin aplicarse al guard final.
             minimumSeniorityRuleApplied = false,
+            minimumSeniorityRuleReviewed = seniorityRule is not null,
             institutionalContinuityCertified = false,
             includesExcusesInPresence = false,
             workPapersEvaluated = false,
