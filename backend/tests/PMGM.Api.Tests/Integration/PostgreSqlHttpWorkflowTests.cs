@@ -462,8 +462,11 @@ public sealed class PostgreSqlHttpWorkflowTests
                 ObjectKey = $"documents/{document.Id:N}/{Guid.NewGuid():N}",
                 CreatedBySubject = "ci-evidence"
             };
-            document.PublishedVersionId = version.Id;
+            // La versión debe existir antes de actualizar el puntero publicado:
+            // core.institutional_documents.PublishedVersionId es una FK real.
             documentsDb.AddRange(collection, document, version);
+            await documentsDb.SaveChangesAsync(token);
+            document.PublishedVersionId = version.Id;
             await documentsDb.SaveChangesAsync(token);
         }
 
