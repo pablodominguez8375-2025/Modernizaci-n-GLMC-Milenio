@@ -11,7 +11,7 @@ const charge = (month: number, payments: MemberTreasuryCharge['payments']): Memb
 /* Pedido del PO 08-10-2026: el hermano entiende sus pagos; Tesorería y Hospitalaria se mantienen separadas. */
 describe('PMGM-UX Mis pagos claros, Tesorería y Hospitalaria separadas', () => {
   it('la vista muestra dos bloques separados y ninguna tabla en la vista principal', () => {
-    expect(page).toContain('<TreasuryPayments account={treasuryAccount} fallback={treasury} />')
+    expect(page).toContain('<TreasuryPayments account={treasuryAccount} fallback={treasury} api={membershipApi} />')
     expect(page).toContain('<HospitalariaPayments api={membershipApi} fallback={hospitalaria} />')
     expect(payments).toContain('<h2 id="pay-treasury-title">Tesorería</h2>')
     expect(payments).toContain('<h2 id="pay-hospitalaria-title">Hospitalaria</h2>')
