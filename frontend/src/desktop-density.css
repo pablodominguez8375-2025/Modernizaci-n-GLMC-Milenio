@@ -221,3 +221,10 @@
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Secciones como tarjetas (opción C, PO 09-10-2026): sin columna izquierda de pestañas; las tarjetas y el botón «Volver» usan todo el ancho. */
+@media (min-width: 90rem) {
+  :is(div, section, main):has(> nav.workspace-tabs:is(.is-hub, .is-open-section)) { grid-template-columns: minmax(0, 1fr); }
+  :is(div, section, main):has(> nav.workspace-tabs:is(.is-hub, .is-open-section)) > * { grid-column: 1; }
+  :is(div, section, main) > nav.workspace-tabs:is(.is-hub, .is-open-section) { grid-column: 1; grid-row: auto; position: static; }
+}

@@ -352,7 +352,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
     {error && <div className="error-banner" role="alert"><strong>Operación no completada.</strong><span>{error}</span></div>}
     {message && <div className="regularity-success" role="status">{message}</div>}
 
-    <WorkspaceTabs label="Secciones de Gestión Logial" tabs={lodgeTabs} active={tab} onChange={setTab} />
+    <WorkspaceTabs label="Secciones de Gestión Logial" tabs={lodgeTabs} active={tab} onChange={setTab} hub={{ title: 'Gestión Logial', startOpen: Boolean(initialTab) || focusInstructions, hints: { resumen: 'Cuadro de cargos, próxima tenida y pendientes', tenidas: 'Tenidas, asistencia y actas', docencia: 'Registrar instrucción y ver el historial' } }} />
     {tab === 'resumen' && <HelpNote><p>Aquí ve el estado del Taller. Para trabajar, elija una pestaña: <strong>Tenidas y actas</strong> para la agenda y asistencia{canReadSecretariat ? ', o las pestañas de Secretaría para correspondencia, Cuadro y archivo' : ''}.</p><p>Cada pestaña muestra primero la lista; los formularios se abren con su botón.</p></HelpNote>}
 
     <section hidden={tab !== 'resumen'} id="lodge-summary" className="lodge-cockpit-grid">
