@@ -54,6 +54,7 @@ export function useCollapsibleNavGroups(ref: RefObject<HTMLElement | null>, deps
         group.header.removeAttribute('role')
         group.header.removeAttribute('tabindex')
         group.header.removeAttribute('aria-expanded')
+        group.header.classList.remove('is-solo')
       })
       nav.classList.remove('has-collapsible-groups')
       if (!window.matchMedia(DESKTOP_QUERY).matches || nav.closest('.is-sidebar-collapsed')) return
@@ -61,6 +62,9 @@ export function useCollapsibleNavGroups(ref: RefObject<HTMLElement | null>, deps
       const available = window.innerHeight - top
       nav.classList.add('has-collapsible-groups')
       const stored = readCollapsed()
+      /* Un grupo con una sola opción no necesita título ni flecha: la opción queda a la vista. */
+      const solo = (group: NavGroup) => group.items.length === 1 && group.name !== 'Mi espacio'
+      groups.forEach(group => { if (solo(group)) group.header.classList.add('is-solo') })
       const setGroup = (group: NavGroup, collapsed: boolean) => {
         group.header.setAttribute('role', 'button')
         group.header.tabIndex = 0
@@ -68,12 +72,17 @@ export function useCollapsibleNavGroups(ref: RefObject<HTMLElement | null>, deps
         group.items.forEach(item => { item.hidden = collapsed })
       }
       const canCollapse = (group: NavGroup) => !group.items.some(item => item.classList.contains('active'))
+      const plain = groups.filter(group => !solo(group))
+      groups.filter(solo).forEach(group => { group.header.removeAttribute('role'); group.header.removeAttribute('tabindex'); group.header.removeAttribute('aria-expanded'); group.items.forEach(item => { item.hidden = false }) })
       if (stored) {
-        groups.forEach(group => setGroup(group, canCollapse(group) && stored.includes(group.name)))
+        plain.forEach(group => setGroup(group, canCollapse(group) && stored.includes(group.name)))
       } else {
         /* Sin preferencia guardada: se pliegan los grupos desde el final, solo los necesarios para que el menú quepa. */
-        groups.forEach(group => setGroup(group, false))
-        for (const group of [...groups].reverse()) {
+        plain.forEach(group => setGroup(group, false))
+        /* Solo si el menú no cabe: primero se pliega «Mi espacio» (lo personal) y luego los grupos desde el final; el grupo de la vista actual queda abierto. */
+        const mine = plain.find(group => group.name === 'Mi espacio')
+        const order = [...(mine ? [mine] : []), ...[...plain].reverse().filter(group => group !== mine)]
+        for (const group of order) {
           if (contentHeight(nav) <= available) break
           if (canCollapse(group)) setGroup(group, true)
         }

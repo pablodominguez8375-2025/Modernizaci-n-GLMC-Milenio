@@ -545,3 +545,16 @@ main.content label > span { font-weight: 600; }
   .workspace:not(.is-sidebar-collapsed) .sidebar .nav-section { margin-top: 0.5rem; padding: 0.25rem 0.5rem; min-height: 2rem; display: flex; align-items: center; justify-content: space-between; }
   .workspace:not(.is-sidebar-collapsed) .sidebar .nav-item.nav-subitem { margin-left: 1rem; }
 }
+
+.sidebar .nav-section.is-solo { display: none !important; }
+
+/* Informes: una opción del menú con tarjetas grandes (vista previa PO 09-10-2026) */
+.reports-hub h2 { margin: 0 0 .25rem; }
+.reports-hub p { margin: 0 0 1rem; color: var(--muted, #475569); }
+.reports-hub-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.reports-hub-card { display: grid; gap: .35rem; justify-items: start; text-align: left; padding: 1.1rem 1.2rem; min-height: 7rem; border-radius: .75rem; border: 1px solid var(--line, #dbe3ef); background: var(--surface, #fff); color: var(--brand-ink, #0f172a); cursor: pointer; }
+.reports-hub-card:hover, .reports-hub-card:focus-visible { border-color: var(--brand-gold, #f5b800); }
+.reports-hub-card strong { font-size: 1.15rem; }
+.reports-hub-card small { font-size: .95rem; color: var(--muted, #475569); }
+.reports-hub-icon { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .6rem; background: var(--brand-navy, #0b1a8c); color: var(--brand-gold, #f5b800); }
+.reports-back { justify-self: start; margin-bottom: .75rem; }
