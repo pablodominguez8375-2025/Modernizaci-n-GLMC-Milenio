@@ -134,7 +134,9 @@ public sealed class CeremonyEligibilityServiceTests
                 validations,
                 null,
                 null,
-                20),
+                20,
+                AdvancementThresholds: new AdvancementThresholds(3, 2, 1, "formal-exception-v1"),
+                AdvancementEvidence: new AdvancementEvidence(3, 2, 1)),
             Now);
 
         Assert.True(result.IsEligible);
@@ -210,6 +212,53 @@ public sealed class CeremonyEligibilityServiceTests
         Assert.Equal(AdvancementEligibilityModes.Blocked, result.Advancement?.Mode);
         Assert.Equal(AdvancementDispensationStatuses.PendingInternalAffairs, result.Advancement?.Dispensation?.Status);
         Assert.Contains(result.BlockingReasons, x => x.StartsWith("dispensation:") && x.Contains("resolución"));
+    }
+
+    [Theory]
+    [InlineData(CeremonyCodes.Type.WageIncrease)]
+    [InlineData(CeremonyCodes.Type.Exaltation)]
+    public void AdvancementWithoutAnyVersionedRequirements_IsBlocked(string ceremonyType)
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(ceremonyType, FullyApprovedValidations(), null, null, 20), Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Null(result.Advancement);
+        Assert.Contains(result.BlockingReasons,
+            x => x.StartsWith(CeremonyCodes.ValidationType.AdvancementEligibility));
+    }
+
+    [Fact]
+    public void AdvancementWithRuleButWithoutRealEvidence_IsBlocked()
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.WageIncrease,
+                FullyApprovedValidations(),
+                null, null, 20,
+                AdvancementThresholds: new AdvancementThresholds(5, 3, 1, "rule-v3")),
+            Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Contains(result.BlockingReasons,
+            x => x.StartsWith(CeremonyCodes.ValidationType.AdvancementEligibility));
+    }
+
+    [Fact]
+    public void WageIncrease_WithFullEvidenceCanPassSharedAuthorizationGuard()
+    {
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.WageIncrease,
+                FullyApprovedValidations(),
+                null, null, 20,
+                AdvancementThresholds: new AdvancementThresholds(5, 3, 1, "rule-v3"),
+                AdvancementEvidence: new AdvancementEvidence(5, 3, 1)),
+            Now);
+
+        Assert.True(result.IsEligible);
+        Assert.Empty(result.BlockingReasons);
+        Assert.Equal(AdvancementEligibilityModes.Ordinary, result.Advancement?.Mode);
     }
 
     private static Dictionary<string, string> FullyApprovedValidations()

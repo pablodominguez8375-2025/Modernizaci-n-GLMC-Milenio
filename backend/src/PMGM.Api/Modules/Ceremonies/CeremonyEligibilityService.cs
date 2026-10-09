@@ -84,20 +84,6 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
                 CeremonyCodes.Rules.InitiationPublicationMinimumDays);
         }
 
-        var decision = CeremonyEligibilityPolicy.Evaluate(
-            input.CeremonyType,
-            regimenStatus,
-            treasuryStatus,
-            hospitalariaStatus,
-            grandMasterStatus,
-            publication,
-            input.CeremonyRightPaid);
-
-        var blockingReasons = decision.Requirements
-            .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
-            .Select(x => $"{MapRequirementCodeToValidationType(x.Code)}: {x.Reason}")
-            .ToList();
-
         AdvancementEligibilityDecision? advancement = null;
         if (input.AdvancementThresholds is not null && input.AdvancementEvidence is not null)
         {
@@ -106,22 +92,39 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
                 input.AdvancementThresholds,
                 input.AdvancementEvidence,
                 input.Dispensation);
+        }
 
-            if (advancement.Applies && !advancement.CanProceed)
+        // Es la misma política usada directamente por la matriz y el endpoint real
+        // de autorización. Sin decisión de avance validada, bloquear fail-closed.
+        var decision = CeremonyEligibilityPolicy.Evaluate(
+            input.CeremonyType,
+            regimenStatus,
+            treasuryStatus,
+            hospitalariaStatus,
+            grandMasterStatus,
+            publication,
+            input.CeremonyRightPaid,
+            advancement);
+
+        var blockingReasons = decision.Requirements
+            .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
+            .Select(x => $"{MapRequirementCodeToValidationType(x.Code)}: {x.Reason}")
+            .ToList();
+
+        if (advancement is { Applies: true, CanProceed: false })
+        {
+            blockingReasons.AddRange(
+                advancement.Requirements
+                    .Where(x => !x.Complies)
+                    .Select(x => $"advancement.{x.Code}: alcanzado {x.Achieved}; mínimo {x.Minimum}."));
+
+            if (advancement.Dispensation is not null)
             {
-                blockingReasons.AddRange(
-                    advancement.Requirements
-                        .Where(x => !x.Complies)
-                        .Select(x => $"advancement.{x.Code}: alcanzado {x.Achieved}; mínimo {x.Minimum}."));
-
-                if (advancement.Dispensation is not null)
-                {
-                    blockingReasons.Add($"dispensation: {advancement.Dispensation.Reason}");
-                }
+                blockingReasons.Add($"dispensation: {advancement.Dispensation.Reason}");
             }
         }
 
-        var isEligible = decision.CanAuthorize && (advancement?.CanProceed ?? true);
+        var isEligible = decision.CanAuthorize;
 
         return new CeremonyEligibilityResult(
             IsEligible: isEligible,
