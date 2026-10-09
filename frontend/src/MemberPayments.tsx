@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
 import MemberTreasuryCredits from './MemberTreasuryCredits'
+import { downloadOwnReceiptDocument } from './ownReceiptDocument'
 import { ActionDrawer } from './actionKit'
 import type { MemberTreasuryAccount, MemberTreasuryCharge, MembershipApiClient, OwnHospitalaria } from './api/membershipApi'
 
@@ -16,15 +17,15 @@ const period = (item: Pick<MemberTreasuryCharge, 'periodMonth' | 'periodYear'>) 
 const OWED: MemberTreasuryCharge['periodStatus'][] = ['overdue', 'due', 'partial']
 const VISIBLE = 5
 
-export interface TreasuryReceipt { receiptNumber: string; date: string; amount: number; currency: Money; periods: string[] }
+export interface TreasuryReceipt { id: string; receiptNumber: string; date: string; amount: number; currency: Money; periods: string[] }
 
 /** Agrupa las imputaciones por recibo: un pago puede cubrir varios meses. Más reciente primero. */
 export function treasuryReceipts(items: MemberTreasuryCharge[]): TreasuryReceipt[] {
   const byReceipt = new Map<string, TreasuryReceipt>()
   for (const item of items) for (const payment of item.payments) {
     const currency = (payment.currency ?? item.currency ?? 'CLP') as Money
-    const key = `${payment.receiptNumber}|${currency}`
-    const receipt = byReceipt.get(key) ?? { receiptNumber: payment.receiptNumber, date: payment.paymentDate, amount: 0, currency, periods: [] }
+    const key = `${payment.id}|${currency}`
+    const receipt = byReceipt.get(key) ?? { id: payment.id, receiptNumber: payment.receiptNumber, date: payment.paymentDate, amount: 0, currency, periods: [] }
     receipt.amount += payment.amount
     if (payment.paymentDate > receipt.date) receipt.date = payment.paymentDate
     const label = period(item)
@@ -32,6 +33,18 @@ export function treasuryReceipts(items: MemberTreasuryCharge[]): TreasuryReceipt
     byReceipt.set(key, receipt)
   }
   return [...byReceipt.values()].sort((a, b) => b.date.localeCompare(a.date))
+}
+
+function useReceiptDownload(api: MembershipApiClient, kind: 'tesoreria' | 'hospitalaria') {
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const download = async (id: string) => {
+    setBusyId(id); setError(null)
+    try { downloadOwnReceiptDocument(await api.getOwnReceipt(kind, id)) }
+    catch (cause) { setError(cause instanceof Error ? cause.message : 'No fue posible obtener el comprobante.') }
+    finally { setBusyId(null) }
+  }
+  return { busyId, error, download }
 }
 
 function Headline({ ok, text, detail }: { ok: boolean; text: string; detail?: string }) {
@@ -46,8 +59,9 @@ function ShowMore({ total, open, onToggle }: { total: number; open: boolean; onT
   return <button type="button" className="member-pay-more" aria-expanded={open} onClick={onToggle}>{open ? 'Ver menos' : `Ver todos (${total})`}</button>
 }
 
-export function TreasuryPayments({ account, fallback }: { account?: MemberTreasuryAccount | null; fallback: { status: string; detail: string } }) {
+export function TreasuryPayments({ account, fallback, api }: { account?: MemberTreasuryAccount | null; fallback: { status: string; detail: string }; api: MembershipApiClient }) {
   const [all, setAll] = useState(false)
+  const receiptAction = useReceiptDownload(api, 'tesoreria')
   const items = account?.items ?? []
   const books = account?.currencies?.length ? account.currencies : account ? [{ currency: (account.currency ?? 'CLP') as Money, totalCharged: account.totalCharged ?? 0, totalPaid: account.totalPaid ?? 0, balance: account.balance ?? 0, overdueBalance: account.overdueBalance ?? 0, currentPeriodBalance: account.currentPeriodBalance ?? 0, futurePeriodBalance: account.futurePeriodBalance ?? 0, futurePaidAmount: account.futurePaidAmount ?? 0 }] : []
   const owed = items.filter(item => item.balance > 0 && OWED.includes(item.periodStatus))
@@ -73,10 +87,17 @@ export function TreasuryPayments({ account, fallback }: { account?: MemberTreasu
 
     <div className="member-pay-list">
       <h3>Mis pagos realizados</h3>
+      {receiptAction.error && <p role="alert">{receiptAction.error}</p>}
       {receipts.length === 0 ? <p>Aún no hay pagos registrados.</p> : <>
-        <ul>{(all ? receipts : receipts.slice(0, VISIBLE)).map(r => <li key={`${r.receiptNumber}-${r.currency}`}>
+        <ul>{(all ? receipts : receipts.slice(0, VISIBLE)).map(r => <li key={r.id}>
           <span><b>{day(r.date)}</b> · Recibo {r.receiptNumber}<small>Cubrió {r.periods.join(', ')}</small></span>
-          <strong>{money(r.amount, r.currency)}</strong>
+          <strong title="Importe imputado a las cuotas visibles">{money(r.amount, r.currency)}</strong>
+          {r.id && <button type="button" className="member-pay-more"
+            disabled={receiptAction.busyId !== null}
+            onClick={() => void receiptAction.download(r.id)}
+            aria-label={`Descargar comprobante original ${r.receiptNumber}`}>
+            {receiptAction.busyId === r.id ? 'Preparando…' : 'Descargar comprobante'}
+          </button>}
         </li>)}</ul>
         <ShowMore total={receipts.length} open={all} onToggle={() => setAll(v => !v)} />
       </>}
@@ -102,7 +123,7 @@ export function TreasuryPayments({ account, fallback }: { account?: MemberTreasu
             <td>{item.payments.length ? item.payments.map(p => <small key={p.id}>{p.receiptNumber} · {day(p.paymentDate)} · {money(p.amount, (p.currency ?? item.currency ?? 'CLP') as Money)}</small>) : <small>Sin pagos</small>}</td>
           </tr>)}</tbody>
         </table></div>
-        <MemberTreasuryCredits credits={credits} />
+        <MemberTreasuryCredits credits={credits} onDownload={id => void receiptAction.download(id)} busy={receiptAction.busyId !== null} />
       </article>
     </ActionDrawer>}
   </section>
@@ -114,6 +135,7 @@ function statusLabel(value: MemberTreasuryCharge['periodStatus']) {
 }
 
 export function HospitalariaPayments({ api, fallback }: { api: MembershipApiClient; fallback: { status: string; detail: string } }) {
+  const receiptAction = useReceiptDownload(api, 'hospitalaria')
   const [result, setResult] = useState<{ api: MembershipApiClient; items: OwnHospitalaria[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [all, setAll] = useState(false)
@@ -145,8 +167,17 @@ export function HospitalariaPayments({ api, fallback }: { api: MembershipApiClie
 
     {items && <div className="member-pay-list">
       <h3>Mis pagos realizados</h3>
+      {receiptAction.error && <p role="alert">{receiptAction.error}</p>}
       {paid.length === 0 ? <p>Aún no hay pagos de reposiciones registrados.</p> : <>
-        <ul>{(all ? paid : paid.slice(0, VISIBLE)).map(p => <li key={p.receiptNumber}><span><b>{day(p.paymentDate)}</b> · Recibo {p.receiptNumber}<small>Reposición por {p.deceased}</small></span><strong>{money(p.amount)}</strong></li>)}</ul>
+        <ul>{(all ? paid : paid.slice(0, VISIBLE)).map(p => <li key={p.id}>
+          <span><b>{day(p.paymentDate)}</b> · Recibo {p.receiptNumber}<small>Reposición por {p.deceased}</small></span>
+          <strong>{money(p.amount)}</strong>
+          <button type="button" className="member-pay-more" disabled={receiptAction.busyId !== null}
+            aria-label={`Descargar comprobante de Hospitalaria ${p.receiptNumber}`}
+            onClick={() => void receiptAction.download(p.id)}>
+            {receiptAction.busyId === p.id ? 'Preparando…' : 'Descargar comprobante'}
+          </button>
+        </li>)}</ul>
         <ShowMore total={paid.length} open={all} onToggle={() => setAll(v => !v)} />
       </>}
     </div>}

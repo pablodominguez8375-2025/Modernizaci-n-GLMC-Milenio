@@ -23,6 +23,7 @@ public sealed class MemberHospitalariaV2HttpTests
         using var factory = new PmgmWebApplicationFactory(connection); using var client = factory.CreateClient();
         var today = HospitalariaContributionGenerator.Today(); var deathDate = new DateOnly(1997,10,7);
         var org = new Organization { Name = "Hospitalaria v2 sintética", Type = "workshop" };
+        Guid ownPaymentId, otherPaymentId;
         Member M(string name) => new() { Person = new Person { FirstNames = name, LastNames = "Sintético" }, CurrentDegree = "3" };
         var own = M("Propio"); var other = M("Ajeno"); var dead = M("Fallecido"); var past = M("Past"); past.CurrentDegree = "past_active";
         Membership Join(Member m, string type = "regular") => new() { Member = m, Organization = org, Status = "active", MembershipType = type, StartDate = deathDate.AddYears(-1) };
@@ -66,6 +67,17 @@ public sealed class MemberHospitalariaV2HttpTests
             Assert.Equal(2,c.Obligations.Count(x=>x.OrganizationId==org.Id)); Assert.All(c.Obligations,x=>Assert.Equal(1500,x.AmountDue));
             Assert.DoesNotContain(c.Obligations,x=>x.MemberId==past.Id||x.MemberId==dead.Id);
             Assert.True(await db.AuditEvents.AnyAsync(x=>x.Action=="hospitalaria.death_replenishment.generated"&&x.EntityId==c.Id.ToString(),ct));
+            var ownObligation = c.Obligations.Single(x => x.MemberId == own.Id);
+            var otherObligation = c.Obligations.Single(x => x.MemberId == other.Id);
+            var ownPayment = new DeathReplenishmentPayment { ObligationId = ownObligation.Id, Amount = 1500m,
+                PaymentMethod = "cash", PaymentDate = today, ReceiptNumber = "HOSP-OWN-DEMO",
+                Reference = "PRIVATE-BANK-REFERENCE", RecordedBySubject = "ci" };
+            var otherPayment = new DeathReplenishmentPayment { ObligationId = otherObligation.Id, Amount = 1500m,
+                PaymentMethod = "cash", PaymentDate = today, ReceiptNumber = "HOSP-OTHER-DEMO",
+                Reference = "PRIVATE-OTHER-BANK", RecordedBySubject = "ci" };
+            db.DeathReplenishmentPayments.AddRange(ownPayment, otherPayment);
+            await db.SaveChangesAsync(ct);
+            ownPaymentId = ownPayment.Id; otherPaymentId = otherPayment.Id;
         }
         foreach(var path in new[]{"cargos","asistencias","hospitalaria"})
         {
@@ -74,6 +86,17 @@ public sealed class MemberHospitalariaV2HttpTests
             var text=await r.Content.ReadAsStringAsync(ct); Assert.DoesNotContain("PRIVATE-OTHER",text); Assert.DoesNotContain("PRIVATE-EXCUSE",text);
             if(path=="hospitalaria") { Assert.Single(JsonSerializer.Deserialize<JsonElement>(text).GetProperty("items").EnumerateArray()); Assert.Contains("DEMO-354",text); }
         }
+
+        var ownReceiptResponse = await client.GetAsync($"/api/membership/me/comprobantes/hospitalaria/{ownPaymentId}", ct);
+        Assert.Equal(HttpStatusCode.OK, ownReceiptResponse.StatusCode);
+        Assert.True(ownReceiptResponse.Headers.CacheControl?.Private);
+        Assert.True(ownReceiptResponse.Headers.CacheControl?.NoStore);
+        var ownReceipt = await ownReceiptResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal(1500m, ownReceipt.GetProperty("receivedAmount").GetDecimal());
+        Assert.Equal("HOSP-OWN-DEMO", ownReceipt.GetProperty("receiptNumber").GetString());
+        Assert.DoesNotContain("PRIVATE-BANK-REFERENCE", ownReceipt.GetRawText());
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync($"/api/membership/me/comprobantes/hospitalaria/{otherPaymentId}", ct)).StatusCode);
         var attendance=await client.GetFromJsonAsync<JsonElement>("/api/membership/me/asistencias?tipo=ceremonia",ct);
         Assert.Equal(1,attendance.GetProperty("resumen").GetProperty("justificado").GetInt32());
         Assert.Equal(HttpStatusCode.BadRequest,(await client.GetAsync("/api/membership/me/asistencias?desde=2026-10-08&hasta=2026-10-07",ct)).StatusCode);
@@ -89,7 +112,13 @@ public sealed class MemberHospitalariaV2HttpTests
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES"); if(string.IsNullOrWhiteSpace(connection))return;
         var ct=TestContext.Current.CancellationToken; using var factory=new PmgmWebApplicationFactory(connection); using var client=factory.CreateClient();
-        var today=HospitalariaContributionGenerator.Today(); var org=new Organization {Name="Aporte mensual sintético",Type="workshop"};
+        var today=HospitalariaContributionGenerator.Today();
+        // 00:30Z del día siguiente todavía corresponde al día civil de Chile.
+        // Regresión: no omitir un Taller creado durante la noche local.
+        var utcNextDay = new DateTimeOffset(today.AddDays(1).ToDateTime(new TimeOnly(0, 30)), TimeSpan.Zero);
+        Assert.Equal(today.AddDays(1), DateOnly.FromDateTime(utcNextDay.UtcDateTime));
+        Assert.Equal(today, DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(utcNextDay, "America/Santiago").DateTime));
+        var org=new Organization {Name="Aporte mensual sintético",Type="workshop",CreatedAtUtc=utcNextDay};
         await using(var scope=factory.Services.CreateAsyncScope())
         {var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();await db.Database.MigrateAsync(ct);db.Organizations.Add(org);await db.SaveChangesAsync(ct);await HospitalariaContributionGenerator.GenerateAsync(db,ct);await HospitalariaContributionGenerator.GenerateAsync(db,ct);}
         var list=await client.GetFromJsonAsync<JsonElement>($"/api/hospitalaria/aportes?organizationId={org.Id}",ct);
