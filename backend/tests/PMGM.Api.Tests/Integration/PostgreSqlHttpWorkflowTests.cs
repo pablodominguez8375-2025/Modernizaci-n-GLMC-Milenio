@@ -283,7 +283,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             .EnumerateArray()
             .Single(x => x.GetProperty("id").GetGuid() == ceremonyId);
         Assert.Equal(CeremonyCodes.RequestStatus.Observed, queueAfterItem.GetProperty("status").GetString());
-        Assert.False(queueAfterItem.GetProperty("actions").GetProperty("canValidateInternalAffairs").GetBoolean());
+        Assert.True(queueAfterItem.GetProperty("actions").GetProperty("canValidateInternalAffairs").GetBoolean());
         Assert.False(queueAfterItem.GetProperty("actions").GetProperty("canAuthorize").GetBoolean());
 
         await using (var verificationScope = factory.Services.CreateAsyncScope())
