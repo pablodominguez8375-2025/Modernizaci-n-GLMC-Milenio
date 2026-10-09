@@ -107,6 +107,50 @@ public sealed class AdvancementEligibilityPolicyTests
         Assert.Equal(AdvancementDispensationStatuses.Rejected, result.Dispensation?.Status);
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void MissingCouncilMinutes_BlocksEvenWhenInternalAffairsIsApproved(string? minutes)
+    {
+        var result = AdvancementEligibilityPolicy.Evaluate(
+            CeremonyCodes.Type.WageIncrease,
+            Thresholds,
+            new AdvancementEvidence(6, 4, 2),
+            new DispensationEvidence(
+                CouncilApproved: true,
+                CouncilRecordReference: minutes,
+                InternalAffairsStatus: CeremonyCodes.ValidationStatus.ExceptionApproved,
+                InternalAffairsResolutionReference: "RI-DEMO-004"));
+
+        Assert.False(result.CanProceed);
+        Assert.Equal(AdvancementEligibilityModes.Blocked, result.Mode);
+        Assert.Equal(AdvancementDispensationStatuses.Rejected, result.Dispensation?.Status);
+        Assert.Contains("acta", result.Dispensation!.Reason.ToLowerInvariant());
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void MissingInternalAffairsResolution_BlocksEvenWhenStatusIsApproved(string? resolution)
+    {
+        var result = AdvancementEligibilityPolicy.Evaluate(
+            CeremonyCodes.Type.Exaltation,
+            Thresholds,
+            new AdvancementEvidence(7, 3, 1),
+            new DispensationEvidence(
+                CouncilApproved: true,
+                CouncilRecordReference: "ACTA-DEMO-005",
+                InternalAffairsStatus: CeremonyCodes.ValidationStatus.Approved,
+                InternalAffairsResolutionReference: resolution));
+
+        Assert.False(result.CanProceed);
+        Assert.Equal(AdvancementEligibilityModes.Blocked, result.Mode);
+        Assert.Equal(AdvancementDispensationStatuses.PendingInternalAffairs, result.Dispensation?.Status);
+        Assert.Contains("resolución", result.Dispensation!.Reason.ToLowerInvariant());
+    }
+
     [Fact]
     public void Initiation_DoesNotApplyAdvancementRequirements()
     {
