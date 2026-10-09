@@ -72,13 +72,8 @@ public sealed class AdvancementSeniorityRuleHttpTests
             Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
 
             var historical = await client.GetAsync(
-                "/api/ceremonias/reglas/avance/antiguedad?ceremonyType=wage_increase&asOf=2098-02-01",
+                $"/api/ceremonias/reglas/avance/antiguedad?ceremonyType={Uri.EscapeDataString(CeremonyCodes.Type.WageIncrease)}&asOf=2098-02-01",
                 cancellationToken);
-            // Usar el código real del sistema en la consulta, no adivinar alias.
-            if (historical.StatusCode == HttpStatusCode.BadRequest)
-                historical = await client.GetAsync(
-                    $"/api/ceremonias/reglas/avance/antiguedad?ceremonyType={Uri.EscapeDataString(CeremonyCodes.Type.WageIncrease)}&asOf=2098-02-01",
-                    cancellationToken);
             Assert.Equal(HttpStatusCode.OK, historical.StatusCode);
             var document = await historical.Content.ReadFromJsonAsync<JsonElement>(
                 cancellationToken: cancellationToken);
