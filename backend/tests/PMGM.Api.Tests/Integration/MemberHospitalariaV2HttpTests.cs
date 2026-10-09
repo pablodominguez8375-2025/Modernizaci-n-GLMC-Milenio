@@ -112,7 +112,13 @@ public sealed class MemberHospitalariaV2HttpTests
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES"); if(string.IsNullOrWhiteSpace(connection))return;
         var ct=TestContext.Current.CancellationToken; using var factory=new PmgmWebApplicationFactory(connection); using var client=factory.CreateClient();
-        var today=HospitalariaContributionGenerator.Today(); var org=new Organization {Name="Aporte mensual sintético",Type="workshop"};
+        var today=HospitalariaContributionGenerator.Today();
+        // 00:30Z del día siguiente todavía corresponde al día civil de Chile.
+        // Regresión: no omitir un Taller creado durante la noche local.
+        var utcNextDay = new DateTimeOffset(today.AddDays(1).ToDateTime(new TimeOnly(0, 30)), TimeSpan.Zero);
+        Assert.Equal(today.AddDays(1), DateOnly.FromDateTime(utcNextDay.UtcDateTime));
+        Assert.Equal(today, DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(utcNextDay, "America/Santiago").DateTime));
+        var org=new Organization {Name="Aporte mensual sintético",Type="workshop",CreatedAtUtc=utcNextDay};
         await using(var scope=factory.Services.CreateAsyncScope())
         {var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();await db.Database.MigrateAsync(ct);db.Organizations.Add(org);await db.SaveChangesAsync(ct);await HospitalariaContributionGenerator.GenerateAsync(db,ct);await HospitalariaContributionGenerator.GenerateAsync(db,ct);}
         var list=await client.GetFromJsonAsync<JsonElement>($"/api/hospitalaria/aportes?organizationId={org.Id}",ct);
