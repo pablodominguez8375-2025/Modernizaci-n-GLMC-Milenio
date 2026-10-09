@@ -114,7 +114,32 @@ export function RowMenu({ items, label = 'Más acciones' }: { items: RowMenuItem
 
 export type WorkspaceTab<T extends string> = { id: T; label: string; badge?: number }
 
-export function WorkspaceTabs<T extends string>({ tabs, active, onChange, label }: { tabs: WorkspaceTab<T>[]; active: T; onChange: (id: T) => void; label: string }) {
+/** Decisión del PO 09-10-2026 (opción C): un módulo con secciones no muestra pestañas ni menú interno.
+ *  Con `hub`, el módulo abre primero tarjetas grandes; al elegir una, se ve solo esa sección con «← Volver a …».
+ *  Sin `hub` mantiene las pestañas (usos que son filtros o categorías, no secciones). */
+export type WorkspaceHub<T extends string> = { title: string; hints?: Partial<Record<T, string>>; startOpen?: boolean }
+
+export function WorkspaceTabs<T extends string>({ tabs, active, onChange, label, hub }: { tabs: WorkspaceTab<T>[]; active: T; onChange: (id: T) => void; label: string; hub?: WorkspaceHub<T> }) {
+  const [opened, setOpened] = useState(hub?.startOpen ?? false)
+  if (hub) {
+    if (!opened) {
+      return <nav className="workspace-tabs is-hub" aria-label={label}>
+        <p className="section-hub-intro">Elige qué quieres hacer.</p>
+        <div className="section-hub-grid">
+          {tabs.map(tab => <button key={tab.id} type="button" className="section-hub-card" onClick={() => { onChange(tab.id); setOpened(true); window.scrollTo({ top: 0 }) }}>
+            <strong>{tab.label}</strong>
+            {hub.hints?.[tab.id] && <small>{hub.hints[tab.id]}</small>}
+            {tab.badge ? <span className="workspace-tab-badge">{tab.badge}</span> : null}
+          </button>)}
+        </div>
+      </nav>
+    }
+    const current = tabs.find(tab => tab.id === active)
+    return <nav className="workspace-tabs is-open-section" aria-label={label}>
+      <button type="button" className="secondary section-hub-back" onClick={() => { setOpened(false); window.scrollTo({ top: 0 }) }}>← Volver a {hub.title}</button>
+      {current && <strong className="section-hub-current">{current.label}</strong>}
+    </nav>
+  }
   return <nav className="workspace-tabs" aria-label={label}>
     <div role="tablist">
       {tabs.map(tab => <button key={tab.id} type="button" role="tab" id={`tab-${tab.id}`} aria-selected={tab.id === active} aria-controls={`panel-${tab.id}`} className={tab.id === active ? 'active' : ''} onClick={() => onChange(tab.id)}>

@@ -86,7 +86,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
       {error && <div className="error-banner" role="alert"><strong>Operación no completada.</strong><span>{error}</span></div>}
       {message && <div className="success-banner" role="status">{message}</div>}
 
-      <WorkspaceTabs label="Secciones de Gran Secretaría" tabs={tabs} active={tab} onChange={setTab} />
+      <WorkspaceTabs label="Secciones de Gran Secretaría" tabs={tabs} active={tab} onChange={setTab} hub={{ title: 'Gran Secretaría', hints: { bandeja: 'Autorizaciones y extractos por atender', documentos: 'Planchas y Decretos emitidos' } }} />
 
       <section className="secretariat-grid workspace-panel" hidden={tab !== 'bandeja'}>
         <div className="secretariat-wide"><HelpNote><p>Aquí llegan las ceremonias autorizadas que necesitan su Plancha y los extractos de Tenidas que envían los Talleres.</p><p>Revise cada fila y use su botón principal. Las demás opciones están en el botón «⋯».</p></HelpNote></div>

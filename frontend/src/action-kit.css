@@ -65,3 +65,19 @@
 
 /* Las pestañas ocultan secciones con el atributo hidden; algunas hojas antiguas fijan display y lo anularían. */
 .lodge-product-page [hidden], .secretariat-grid[hidden], .workspace-panel[hidden] { display: none !important; }
+
+/* Secciones como tarjetas (opción C, PO 09-10-2026): en el modo tarjetas se oculta el contenido del módulo hasta elegir una sección. */
+.workspace-tabs.is-hub, .workspace-tabs.is-open-section { overflow: visible; border-bottom: 0; }
+.workspace-tabs.is-hub ~ * { display: none !important; }
+.section-hub-intro { margin: 0 0 .75rem; color: var(--muted, #475569); }
+.section-hub-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+.section-hub-card { position: relative; display: grid; gap: .35rem; align-content: start; justify-items: start; text-align: left; padding: 1.1rem 1.2rem; min-height: 6.5rem; border-radius: .75rem; border: 1px solid var(--line, #dbe3ef); border-left: 4px solid var(--gold, #F3C609); background: var(--surface, #fff); color: var(--ink, #0f172a); cursor: pointer; }
+.section-hub-card:hover, .section-hub-card:focus-visible { border-color: var(--navy, #06148E); }
+.section-hub-card strong { font-size: 1.15rem; color: var(--navy, #06148E); }
+.section-hub-card small { font-size: .95rem; color: var(--muted, #475569); }
+.section-hub-card .workspace-tab-badge { position: absolute; top: .7rem; right: .8rem; }
+.workspace-tabs.is-open-section { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; margin-bottom: 1rem; }
+.section-hub-current { font-size: 1.15rem; color: var(--navy, #06148E); }
+@media (max-width: 640px) { .section-hub-back { width: 100%; } }
+.section-hub-back { min-height: 2.75rem; padding: .6rem 1rem; border-radius: .6rem; border: 2px solid var(--navy, #06148E); background: var(--surface, #fff); color: var(--navy, #06148E); font-weight: 700; cursor: pointer; }
+.section-hub-back:hover, .section-hub-back:focus-visible { background: var(--navy, #06148E); color: #fff; }
