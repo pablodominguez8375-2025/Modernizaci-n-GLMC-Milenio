@@ -122,6 +122,26 @@ public static class AdvancementWorkPaperEndpoints
             .ToListAsync(cancellationToken);
         var meetingDates = validMeetings.ToDictionary(x => x.Id, x => x.MeetingDate);
 
+        // El estado submitted/received del registro de Secretaría no basta:
+        // comprobar la versión de extracto PDF contra su fuente documental viva.
+        // El vínculo se conserva aunque el extracto no reúna estas garantías,
+        // pero nunca se declara remitido sobre una referencia huérfana o inválida.
+        var extractVersionIds = secretariatLinks
+            .Where(x => x.ExtractDocumentVersionId is not null)
+            .Select(x => x.ExtractDocumentVersionId!.Value)
+            .Distinct()
+            .ToArray();
+        var extractVersions = await documentsDb.DocumentVersions.AsNoTracking()
+            .Where(x => extractVersionIds.Contains(x.Id))
+            .Select(x => new WorkPaperExtractVersion(
+                x.Id, x.Document.OrganizationId, x.Document.Status, x.ContentType,
+                x.ProcessingStatus, x.Sha256, x.ScanReference, x.ObjectKey))
+            .ToListAsync(cancellationToken);
+        var reviewableExtractIds = extractVersions
+            .Where(x => AdvancementExtractEvidencePolicy.IsReviewableExtract(x, ceremony.OrganizationId))
+            .Select(x => x.Id)
+            .ToHashSet();
+
         var links = secretariatLinks
             .Where(x => meetingDates.TryGetValue(x.SourceRecordId, out var day) && day == x.EventDate)
             .Select(x => new WorkPaperMeetingLink(
@@ -129,6 +149,7 @@ public static class AdvancementWorkPaperEndpoints
                 x.WorkPaperDocumentVersionId!.Value,
                 true,
                 x.ExtractDocumentVersionId is not null &&
+                reviewableExtractIds.Contains(x.ExtractDocumentVersionId.Value) &&
                 (x.Status == SecretariatOperationsCodes.SubmissionStatus.Submitted ||
                  x.Status == SecretariatOperationsCodes.SubmissionStatus.Received)))
             .ToArray();
