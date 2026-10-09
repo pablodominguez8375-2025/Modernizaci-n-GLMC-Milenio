@@ -27,7 +27,7 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
         var receiptDate = new DateOnly(today.Year - 1, 12, 31);
         const string issuer = "urn:pmgm:unspecified-issuer", subject = "ci-http-admin";
-        Guid correctedId, voidId, fullId, allocationId, otherMemberId, receiptOnlyId;
+        Guid correctedId, voidId, fullId, allocationId, otherMemberId, otherReceiptId, receiptOnlyId;
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
@@ -61,7 +61,7 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
                 VALUES ({linkId}, {member.Id}, {issuer}, {subject}, {createdAt}, {subject}, NULL)
                 """, ct);
             correctedId = corrected.Id; voidId = annulled.Id; fullId = full.Id; allocationId = correctionAllocation.Id;
-            otherMemberId = other.Id; receiptOnlyId = receiptOnly.Id;
+            otherMemberId = other.Id; otherReceiptId = otherReceipt.Id; receiptOnlyId = receiptOnly.Id;
         }
 
         var correction = new { kind = "correction", effectiveDate = today, reason = "Liberar a crédito ficticio", idempotencyKey = "self-credit-correction", allocationId, amount = 20m, allocations = Array.Empty<object>() };
@@ -73,6 +73,34 @@ public sealed class MemberSelfTreasuryCreditsPostgreSqlTests
         Assert.True(response.Headers.CacheControl?.Private);
         Assert.True(response.Headers.CacheControl?.NoStore);
         var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+
+        // El comprobante conserva fecha e importe original aunque la asignación ocurra después.
+        var fullDocumentResponse = await client.GetAsync($"/api/membership/me/comprobantes/tesoreria/{fullId}", ct);
+        Assert.Equal(HttpStatusCode.OK, fullDocumentResponse.StatusCode);
+        Assert.True(fullDocumentResponse.Headers.CacheControl?.Private);
+        Assert.True(fullDocumentResponse.Headers.CacheControl?.NoStore);
+        var fullDocument = await fullDocumentResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal(receiptDate.ToString("yyyy-MM-dd"), fullDocument.GetProperty("paymentDate").GetString());
+        Assert.Equal(100m, fullDocument.GetProperty("receivedAmount").GetDecimal());
+        Assert.Equal(100m, fullDocument.GetProperty("lines")[0].GetProperty("amount").GetDecimal());
+        Assert.False(fullDocument.TryGetProperty("reference", out _));
+        Assert.False(fullDocument.TryGetProperty("recordedBySubject", out _));
+        Assert.DoesNotContain("fictitious-bank-reference", fullDocument.GetRawText());
+        // Crédito no imputado y ajustes se calculan desde el recibo completo, no desde la cartola.
+        var adjustedDocumentResponse = await client.GetAsync($"/api/membership/me/comprobantes/tesoreria/{correctedId}", ct);
+        Assert.Equal(HttpStatusCode.OK, adjustedDocumentResponse.StatusCode);
+        var adjustedDocument = await adjustedDocumentResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal(100m, adjustedDocument.GetProperty("receivedAmount").GetDecimal());
+        Assert.Equal(80m, adjustedDocument.GetProperty("unallocatedAmount").GetDecimal());
+        Assert.NotEmpty(adjustedDocument.GetProperty("corrections").EnumerateArray());
+        // No filtra existencia ni datos de un recibo perteneciente a otra persona.
+        var foreign = await client.GetAsync($"/api/membership/me/comprobantes/tesoreria/{otherReceiptId}", ct);
+        Assert.Equal(HttpStatusCode.NotFound, foreign.StatusCode);
+        Assert.True(foreign.Headers.CacheControl?.NoStore);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync($"/api/membership/me/comprobantes/tesoreria/{Guid.NewGuid()}", ct)).StatusCode);
+        var historicalCredit = await client.GetAsync($"/api/membership/me/comprobantes/tesoreria/{receiptOnlyId}", ct);
+        Assert.Equal(HttpStatusCode.OK, historicalCredit.StatusCode);
         var account = json.GetProperty("treasuryAccount");
         var credits = account.GetProperty("unappliedCredits").EnumerateArray().ToList();
         Assert.Equal(2, credits.Count);

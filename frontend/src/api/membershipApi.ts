@@ -1,7 +1,22 @@
 export interface OwnOffice { id:string; cargo:string; periodo:string; tallerId:string; taller:string; desde:string|null; hasta:string|null }
 export interface OwnAttendance { id:string; fecha:string; tipo:'tenida'|'ceremonia'|'instruccion'; tema:string|null; tallerId:string; taller:string; estado:'presente'|'justificado'|'ausente' }
 export interface OwnAttendanceResponse { desde:string; hasta:string; items:OwnAttendance[]; resumen:{total:number;presente:number;justificado:number;ausente:number} }
-export interface OwnHospitalaria { id:string; caseId:string; tallerId:string; taller:string; fecha:string; hermanoFallecido:string; moneda:'CLP'; monto:number; pagado:number; saldo:number; estado:string; fechaPago:string|null; comprobantes:Array<{receiptNumber:string;paymentDate:string;amount:number;reference:string}>; decreto:{numero:string|null;fecha:string|null;vigencia:string;respaldo:string}|null }
+export interface OwnHospitalaria { id:string; caseId:string; tallerId:string; taller:string; fecha:string; hermanoFallecido:string; moneda:'CLP'; monto:number; pagado:number; saldo:number; estado:string; fechaPago:string|null; comprobantes:Array<{id:string;receiptNumber:string;paymentDate:string;amount:number;reference:string}>; decreto:{numero:string|null;fecha:string|null;vigencia:string;respaldo:string}|null }
+
+export interface OwnReceiptLine { description: string; amount: number; periodYear: number | null; periodMonth: number | null }
+export interface OwnReceiptCorrection { kind: string; date: string; cashAmount: number }
+export interface OwnReceiptDocument {
+  kind: 'tesoreria' | 'hospitalaria'
+  receiptNumber: string
+  organization: string
+  currency: 'CLP' | 'USD'
+  paymentDate: string
+  receivedAmount: number
+  paymentMethod: string
+  unallocatedAmount: number
+  lines: OwnReceiptLine[]
+  corrections: OwnReceiptCorrection[]
+}
 
 export type MembershipStatus = 'active' | 'transferred' | 'closed'
 
@@ -190,8 +205,38 @@ export class MembershipApiClient {
     const q=new URLSearchParams(filters);return this.request(`/api/membership/me/asistencias${q.size?'?'+q:''}`)
   }
   async getOwnHospitalaria():Promise<{total:number;items:OwnHospitalaria[]}> {
-    if(this.useMocks)return {total:2,items:[{id:'own-replenishment-demo-pending',caseId:'death-demo-2',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-10-01',hermanoFallecido:'Segundo hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:0,saldo:1500,estado:'pending',fechaPago:null,comprobantes:[],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}},{id:'own-replenishment-demo',caseId:'death-demo-1',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-09-10',hermanoFallecido:'Hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:1500,saldo:0,estado:'paid',fechaPago:'2026-09-12',comprobantes:[{receiptNumber:'HOSP-DEMO-001',paymentDate:'2026-09-12',amount:1500,reference:'TRX-HOSP-DEMO-001'}],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}}]}
+    if(this.useMocks)return {total:2,items:[{id:'own-replenishment-demo-pending',caseId:'death-demo-2',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-10-01',hermanoFallecido:'Segundo hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:0,saldo:1500,estado:'pending',fechaPago:null,comprobantes:[],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}},{id:'own-replenishment-demo',caseId:'death-demo-1',tallerId:org23,taller:'Taller Demostrativo Nº 23',fecha:'2026-09-10',hermanoFallecido:'Hermano fallecido demostrativo',moneda:'CLP',monto:1500,pagado:1500,saldo:0,estado:'paid',fechaPago:'2026-09-12',comprobantes:[{id:'hospitalaria-payment-demo',receiptNumber:'HOSP-DEMO-001',paymentDate:'2026-09-12',amount:1500,reference:'TRX-HOSP-DEMO-001'}],decreto:{numero:'DEMO-1500',fecha:'2026-01-01',vigencia:'2026-01-01',respaldo:'Referencia ficticia de decreto'}}]}
     return this.request('/api/membership/me/hospitalaria')
+  }
+
+  /** El identificador selecciona un movimiento propio, jamás un hermano arbitrario. */
+  async getOwnReceipt(kind: 'tesoreria' | 'hospitalaria', id: string): Promise<OwnReceiptDocument> {
+    if (this.useMocks) {
+      if (kind === 'hospitalaria') {
+        const own = await this.getOwnHospitalaria()
+        for (const item of own.items) {
+          const payment = item.comprobantes.find(value => value.id === id)
+          if (payment) return { kind, receiptNumber: payment.receiptNumber, organization: item.taller,
+            currency: 'CLP', paymentDate: payment.paymentDate, receivedAmount: payment.amount,
+            paymentMethod: 'transferencia', unallocatedAmount: 0, corrections: [],
+            lines: [{ description: `Reposición por fallecimiento: ${item.hermanoFallecido}`, amount: payment.amount, periodYear: null, periodMonth: null }] }
+        }
+      } else {
+        for (const charge of demoSelfProfile.treasuryAccount.items) {
+          const payment = charge.payments.find(value => value.id === id)
+          if (payment) return { kind, receiptNumber: payment.receiptNumber, organization: charge.organization,
+            currency: (payment.currency ?? charge.currency ?? 'CLP'), paymentDate: payment.paymentDate,
+            receivedAmount: payment.amount, paymentMethod: payment.paymentMethod, unallocatedAmount: 0, corrections: [],
+            lines: [{ description: 'Cuota registrada', amount: payment.amount, periodYear: charge.periodYear, periodMonth: charge.periodMonth }] }
+        }
+        const credit = demoSelfProfile.treasuryAccount.unappliedCredits?.find(value => value.id === id)
+        if (credit) return { kind, receiptNumber: credit.receiptNumber, organization: 'Taller Demostrativo Nº 23',
+          currency: credit.currency, paymentDate: credit.paymentDate, receivedAmount: credit.amount,
+          paymentMethod: 'transferencia', unallocatedAmount: credit.amount, corrections: [], lines: [] }
+      }
+      throw new Error('El comprobante solicitado no existe en la demostración.')
+    }
+    return this.request<OwnReceiptDocument>(`/api/membership/me/comprobantes/${kind}/${encodeURIComponent(id)}`)
   }
 
   async getSelfProfile(): Promise<MemberSelfProfile> {
