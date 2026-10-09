@@ -10,6 +10,7 @@
       "AdmissionMaterializationHttpTests",
       "MemberSelfTreasuryCreditsPostgreSqlTests",
       "PostgreSqlHttpWorkflowTests",
+      "AdvancementRuleHttpTests",
       "LibraryCatalogHttpTests",
       "CandidatePublicationEvidenceHttpTests",
       "LodgeReceiptAdjustmentPostgreSqlTests",
