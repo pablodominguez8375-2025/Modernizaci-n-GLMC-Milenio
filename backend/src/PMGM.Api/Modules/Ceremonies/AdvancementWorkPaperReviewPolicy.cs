@@ -66,7 +66,11 @@ public static class AdvancementWorkPaperReviewPolicy
                         x.IsHeldNonCeremonial &&
                         x.MeetingId != Guid.Empty)
             .GroupBy(x => x.MeetingId)
-            .Select(x => x.First())
+            .Select(group => new
+            {
+                MeetingId = group.Key,
+                ExtractSubmitted = group.Any(link => link.ExtractSubmitted)
+            })
             .ToArray();
 
         return candidate with
@@ -86,7 +90,7 @@ public static class AdvancementWorkPaperReviewPolicy
             items.Count(x => x.ContentVerified),
             0,
             false,
-            "Ningún archivo presentado queda acreditado sin vínculo institucional con Tenida.",
+            "Un vínculo a Tenida o Extracto remitido no certifica presentación de la plancha.",
             items);
     }
 }
