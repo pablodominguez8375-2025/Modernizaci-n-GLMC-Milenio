@@ -37,4 +37,17 @@ describe('PMGM-UX Mis pagos claros, Tesorería y Hospitalaria separadas', () => 
     expect(receipts.map(r => r.receiptNumber)).toEqual(['R-1', 'R-0'])
     expect(receipts[0]).toMatchObject({ amount: 42000, periods: ['marzo 2026', 'abril 2026'] })
   })
+
+  it('no mezcla dos pagos con un folio reutilizado: la descarga usa el ID inmutable del recibo', () => {
+    const payment = (id: string, month: number) => ({
+      id, receiptNumber: 'R-FOLIO-REPETIDO', amount: 21000,
+      paymentMethod: 'cash', paymentDate: `2026-${String(month).padStart(2, '0')}-05`,
+      reference: null,
+    })
+    const receipts = treasuryReceipts([charge(3, [payment('receipt-A', 3)]), charge(4, [payment('receipt-B', 4)])])
+    expect(receipts).toHaveLength(2)
+    expect(receipts.map(r => r.id)).toEqual(['receipt-B', 'receipt-A'])
+    expect(receipts.map(r => r.amount)).toEqual([21000, 21000])
+    expect(payments).toContain('receiptAction.download(r.id)')
+  })
 })
