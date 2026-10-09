@@ -14,6 +14,7 @@ public static class MemberOwnHistoryEndpoints
         group.MapGet("/cargos", OfficesAsync);
         group.MapGet("/asistencias", AttendanceAsync);
         group.MapGet("/hospitalaria", HospitalariaAsync);
+        endpoints.MapMemberOwnReceiptEndpoints();
         return endpoints;
     }
 
@@ -79,7 +80,7 @@ public static class MemberOwnHistoryEndpoints
             fecha = x.Case.DeathDate, hermanoFallecido = $"{x.Case.DeceasedMember.Person.FirstNames} {x.Case.DeceasedMember.Person.LastNames}",
             moneda = "CLP", monto = x.AmountDue, pagado = x.Payments.Sum(p => p.Amount), saldo = x.AmountDue - x.Payments.Sum(p => p.Amount), estado = x.Status,
             fechaPago = x.Status == "paid" ? x.Payments.Max(p => (DateOnly?)p.PaymentDate) : null,
-            comprobantes = x.Payments.Select(p => new { p.ReceiptNumber, p.PaymentDate, p.Amount, p.Reference }),
+            comprobantes = x.Payments.Select(p => new { p.Id, p.ReceiptNumber, p.PaymentDate, p.Amount, p.Reference }),
             decreto = x.Case.Rate == null ? null : new { numero = x.Case.Rate.DecreeNumber, fecha = x.Case.Rate.DecreeDate,
                 vigencia = x.Case.Rate.EffectiveFrom, respaldo = x.Case.Rate.SourceReference } }).ToList();
         return Results.Ok(new { total = items.Count, items });

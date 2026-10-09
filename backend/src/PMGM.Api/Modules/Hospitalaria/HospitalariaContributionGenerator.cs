@@ -23,7 +23,10 @@ public static class HospitalariaContributionGenerator
             var cutoff = month.AddMonths(1).AddDays(-1); if (cutoff > today) cutoff = today;
             var rate = rates.LastOrDefault(x => x.EffectiveFrom <= cutoff && (x.EffectiveUntil == null || x.EffectiveUntil >= cutoff));
             if (rate == null) continue;
-            foreach (var workshop in workshops.Where(x => DateOnly.FromDateTime(x.CreatedAtUtc.UtcDateTime) <= cutoff))
+            // El corte mensual se rige por el día civil de Chile, no por UTC.
+            // Entre 20:00/21:00 y medianoche en Chile, UTC ya es el día siguiente.
+            foreach (var workshop in workshops.Where(x => DateOnly.FromDateTime(
+                         TimeZoneInfo.ConvertTimeBySystemTimeZoneId(x.CreatedAtUtc, "America/Santiago").DateTime) <= cutoff))
             {
                 if (!keys.Add((workshop.Id, month.Year, month.Month))) continue;
                 var obligation = new HospitalariaContributionObligation { OrganizationId = workshop.Id, RateId = rate.Id,

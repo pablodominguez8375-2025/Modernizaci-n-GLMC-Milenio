@@ -286,7 +286,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
 
     <WorkspacePanel id="pagos" active={section === 'pagos'}>
       <div className="member-pay-grid">
-        <TreasuryPayments account={treasuryAccount} fallback={treasury} />
+        <TreasuryPayments account={treasuryAccount} fallback={treasury} api={membershipApi} />
         <HospitalariaPayments api={membershipApi} fallback={hospitalaria} />
       </div>
     </WorkspacePanel>

@@ -11,7 +11,7 @@ const charge = (month: number, payments: MemberTreasuryCharge['payments']): Memb
 /* Pedido del PO 08-10-2026: el hermano entiende sus pagos; Tesorería y Hospitalaria se mantienen separadas. */
 describe('PMGM-UX Mis pagos claros, Tesorería y Hospitalaria separadas', () => {
   it('la vista muestra dos bloques separados y ninguna tabla en la vista principal', () => {
-    expect(page).toContain('<TreasuryPayments account={treasuryAccount} fallback={treasury} />')
+    expect(page).toContain('<TreasuryPayments account={treasuryAccount} fallback={treasury} api={membershipApi} />')
     expect(page).toContain('<HospitalariaPayments api={membershipApi} fallback={hospitalaria} />')
     expect(payments).toContain('<h2 id="pay-treasury-title">Tesorería</h2>')
     expect(payments).toContain('<h2 id="pay-hospitalaria-title">Hospitalaria</h2>')
@@ -36,5 +36,18 @@ describe('PMGM-UX Mis pagos claros, Tesorería y Hospitalaria separadas', () => 
     const receipts = treasuryReceipts([charge(3, [pay(21000)]), charge(4, [pay(21000)]), charge(2, [{ ...pay(21000), id: 'p0', receiptNumber: 'R-0', paymentDate: '2026-02-03' }])])
     expect(receipts.map(r => r.receiptNumber)).toEqual(['R-1', 'R-0'])
     expect(receipts[0]).toMatchObject({ amount: 42000, periods: ['marzo 2026', 'abril 2026'] })
+  })
+
+  it('no mezcla dos pagos con un folio reutilizado: la descarga usa el ID inmutable del recibo', () => {
+    const payment = (id: string, month: number) => ({
+      id, receiptNumber: 'R-FOLIO-REPETIDO', amount: 21000,
+      paymentMethod: 'cash', paymentDate: `2026-${String(month).padStart(2, '0')}-05`,
+      reference: null,
+    })
+    const receipts = treasuryReceipts([charge(3, [payment('receipt-A', 3)]), charge(4, [payment('receipt-B', 4)])])
+    expect(receipts).toHaveLength(2)
+    expect(receipts.map(r => r.id)).toEqual(['receipt-B', 'receipt-A'])
+    expect(receipts.map(r => r.amount)).toEqual([21000, 21000])
+    expect(payments).toContain('receiptAction.download(r.id)')
   })
 })
