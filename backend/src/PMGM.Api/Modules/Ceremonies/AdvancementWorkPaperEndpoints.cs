@@ -104,6 +104,7 @@ public static class AdvancementWorkPaperEndpoints
                 x.EventDate,
                 x.WorkPaperDocumentVersionId,
                 x.ExtractDocumentVersionId,
+                x.FullMinuteDocumentVersionId,
                 x.Status
             })
             .ToListAsync(cancellationToken);
@@ -142,6 +143,25 @@ public static class AdvancementWorkPaperEndpoints
             .Select(x => x.Id)
             .ToHashSet();
 
+        // Las actas completas se examinan como una segunda fuente documental,
+        // independiente del extracto remitido. Tener el archivo no significa
+        // que contenga un acuerdo de la Cámara del Medio o una aprobación.
+        var fullMinuteVersionIds = secretariatLinks
+            .Where(x => x.FullMinuteDocumentVersionId is not null)
+            .Select(x => x.FullMinuteDocumentVersionId!.Value)
+            .Distinct()
+            .ToArray();
+        var fullMinuteVersions = await documentsDb.DocumentVersions.AsNoTracking()
+            .Where(x => fullMinuteVersionIds.Contains(x.Id))
+            .Select(x => new WorkPaperMeetingMinuteVersion(
+                x.Id, x.Document.OrganizationId, x.Document.Status, x.ContentType,
+                x.ProcessingStatus, x.Sha256, x.ScanReference, x.ObjectKey))
+            .ToListAsync(cancellationToken);
+        var reviewableMinuteIds = fullMinuteVersions
+            .Where(x => AdvancementMeetingMinuteEvidencePolicy.IsReviewableFullMinute(x, ceremony.OrganizationId))
+            .Select(x => x.Id)
+            .ToHashSet();
+
         var links = secretariatLinks
             .Where(x => meetingDates.TryGetValue(x.SourceRecordId, out var day) && day == x.EventDate)
             .Select(x => new WorkPaperMeetingLink(
@@ -151,7 +171,9 @@ public static class AdvancementWorkPaperEndpoints
                 x.ExtractDocumentVersionId is not null &&
                 reviewableExtractIds.Contains(x.ExtractDocumentVersionId.Value) &&
                 (x.Status == SecretariatOperationsCodes.SubmissionStatus.Submitted ||
-                 x.Status == SecretariatOperationsCodes.SubmissionStatus.Received)))
+                 x.Status == SecretariatOperationsCodes.SubmissionStatus.Received),
+                x.FullMinuteDocumentVersionId is not null &&
+                reviewableMinuteIds.Contains(x.FullMinuteDocumentVersionId.Value)))
             .ToArray();
         var withMeetings = candidates
             .Select(x => AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(x, links))

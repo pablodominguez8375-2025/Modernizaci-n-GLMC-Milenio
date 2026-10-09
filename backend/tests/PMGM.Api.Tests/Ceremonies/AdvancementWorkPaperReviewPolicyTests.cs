@@ -156,6 +156,65 @@ public sealed class AdvancementWorkPaperReviewPolicyTests
         Assert.False(summary.PresentationEvidenceAvailable);
     }
 
+    [Fact]
+    public void CompleteMinutesFromHeldMeeting_AreListedButNeverAccreditPaper()
+    {
+        var version = ReadyVersion(1, false);
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Trabajo con acta", false, GradeStart, AsOf, 1, [version]);
+        var meetingId = Guid.NewGuid();
+        var linked = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(
+            paper, [new WorkPaperMeetingLink(meetingId, version.Id, true, true, true)]);
+        var summary = AdvancementWorkPaperReviewPolicy.Summarize([linked]);
+
+        Assert.Equal([meetingId], linked.LinkedHeldMeetingIds);
+        Assert.Equal([meetingId], linked.SubmittedExtractMeetingIds);
+        Assert.Equal([meetingId], linked.ReviewableFullMinuteMeetingIds);
+        Assert.False(linked.PresentationVerified);
+        Assert.Equal(0, summary.ConfirmedPresented);
+        Assert.False(summary.PresentationEvidenceAvailable);
+    }
+
+    [Fact]
+    public void CompleteMinutesAreIndependentFromExtractAndDuplicateLinks()
+    {
+        var version = ReadyVersion(1, false);
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Acta por cotejar", false, GradeStart, AsOf, 1, [version]);
+        var meetingId = Guid.NewGuid();
+        var links = new[]
+        {
+            new WorkPaperMeetingLink(meetingId, version.Id, true, false, true),
+            new WorkPaperMeetingLink(meetingId, version.Id, true, false, false),
+            new WorkPaperMeetingLink(meetingId, Guid.NewGuid(), true, true, true),
+            new WorkPaperMeetingLink(Guid.NewGuid(), version.Id, false, true, true)
+        };
+        var actual = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(paper, links);
+
+        Assert.Equal([meetingId], actual.LinkedHeldMeetingIds);
+        Assert.Empty(actual.SubmittedExtractMeetingIds!);
+        Assert.Equal([meetingId], actual.ReviewableFullMinuteMeetingIds);
+        Assert.False(actual.PresentationVerified);
+    }
+
+    [Fact]
+    public void InvalidPaperOrWrongVersion_NeverExposesFullMinutesAsAccreditation()
+    {
+        var version = ReadyVersion(1, false) with
+        {
+            ProcessingStatus = DocumentManagementCodes.ProcessingStatus.Rejected
+        };
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Borrador no disponible", false, GradeStart, AsOf, 1, [version]);
+        var result = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(
+            paper, [new WorkPaperMeetingLink(Guid.NewGuid(), version.Id, true, true, true)]);
+
+        Assert.Empty(result.LinkedHeldMeetingIds!);
+        Assert.Empty(result.SubmittedExtractMeetingIds!);
+        Assert.Empty(result.ReviewableFullMinuteMeetingIds!);
+        Assert.Equal(0, AdvancementWorkPaperReviewPolicy.Summarize([result]).ConfirmedPresented);
+    }
+
     private static WorkPaperReviewVersion ReadyVersion(int number, bool published)
         => new(
             Guid.NewGuid(), number, new DateOnly(2026, 8, 7), 1,
