@@ -89,6 +89,95 @@ public sealed class AdvancementReviewMatrixPolicyTests
         Assert.False(missing.AuthorizesCeremony);
     }
 
+    [Fact]
+    public void RuleForOtherSourceDegree_MustNotSupplyMinimumsOrVersion()
+    {
+        var wrong = CountRule(1, 1, 1) with
+        {
+            RuleCode = AdvancementRulePolicy.FellowcraftCode
+        };
+
+        var matrix = AdvancementReviewMatrixPolicy.Build(
+            CeremonyCodes.Type.WageIncrease,
+            Attendance(10, 8, 0, 0),
+            wrong,
+            AdvancementSeniorityRulePolicy.Review(null, null));
+
+        Assert.Null(matrix.CountRuleId);
+        Assert.All(matrix.Requirements.Take(3), row =>
+        {
+            Assert.Equal("rule_missing", row.Status);
+            Assert.Null(row.Required);
+            Assert.Null(row.RuleVersion);
+            Assert.False(row.InstitutionallyCertified);
+        });
+        Assert.False(matrix.AuthorizesCeremony);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RuleOutsideEvidenceCutoff_IsTreatedAsMissing(bool future)
+    {
+        var invalid = CountRule(1, 1, 1) with
+        {
+            EffectiveFrom = future ? Cutoff.AddDays(1) : Start,
+            EffectiveTo = future ? null : Cutoff.AddDays(-1)
+        };
+
+        var matrix = AdvancementReviewMatrixPolicy.Build(
+            CeremonyCodes.Type.WageIncrease,
+            Attendance(10, 8, 0, 0),
+            invalid,
+            AdvancementSeniorityRulePolicy.Review(null, null));
+
+        Assert.Null(matrix.CountRuleId);
+        Assert.All(matrix.Requirements.Take(3), row =>
+        {
+            Assert.Equal("rule_missing", row.Status);
+            Assert.Null(row.Required);
+        });
+    }
+
+    [Fact]
+    public void EffectiveCorrectDegreeRule_PreservesReadOnlyThresholdReview()
+    {
+        var applicable = CountRule(3, 2, 2) with
+        {
+            EffectiveFrom = Start,
+            EffectiveTo = Cutoff
+        };
+
+        var matrix = AdvancementReviewMatrixPolicy.Build(
+            CeremonyCodes.Type.WageIncrease,
+            Attendance(4, 3, 0, 0),
+            applicable,
+            AdvancementSeniorityRulePolicy.Review(null, null));
+
+        Assert.Equal(applicable.RuleId, matrix.CountRuleId);
+        Assert.Equal(3, matrix.Requirements[0].Required);
+        Assert.Equal(2, matrix.Requirements[1].Required);
+        Assert.Equal(2, matrix.Requirements[2].Required);
+        Assert.Equal("threshold_reached_pending_verification", matrix.Requirements[0].Status);
+        Assert.Equal("presentation_unverified", matrix.Requirements[2].Status);
+        Assert.False(matrix.AuthorizesCeremony);
+    }
+
+    [Fact]
+    public void MissingAttendance_KeepsRelevantRuleVisibleButStillBlocks()
+    {
+        var matrix = AdvancementReviewMatrixPolicy.Build(
+            CeremonyCodes.Type.WageIncrease,
+            new AdvancementAttendanceResult("missing_degree_start", "Sin evento.", null),
+            CountRule(4, 2, 2),
+            AdvancementSeniorityRulePolicy.Review(null, null));
+
+        Assert.Equal(4, matrix.Requirements[0].Required);
+        Assert.Null(matrix.Requirements[0].Observed);
+        Assert.Equal("evidence_missing", matrix.Requirements[0].Status);
+        Assert.False(matrix.AuthorizesCeremony);
+    }
+
     private static AdvancementAttendanceResult Attendance(
         int meetingsPresent, int instructionsPresent,
         int excusedMeetings, int excusedInstructions,

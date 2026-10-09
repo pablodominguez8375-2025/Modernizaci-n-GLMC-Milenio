@@ -18,22 +18,34 @@ public static class AdvancementReviewMatrixPolicy
                    attendance.Snapshot.SourceGrade == expectedGrade
             ? attendance.Snapshot : null;
 
+        // Defensa en profundidad: jamás mostrar mínimos de otro grado o fuera
+        // de vigencia aunque el consumidor haya entregado una regla incorrecta.
+        // Los endpoints resuelven por grado y fecha, pero otros consumidores
+        // futuros deben conservar la misma semántica fail-closed.
+        var applicableCountRule = countRule is not null &&
+                                  countRule.RuleCode == AdvancementRulePolicy.CodeFor(ceremonyType) &&
+                                  (data is null ||
+                                   (countRule.EffectiveFrom <= data.AsOf &&
+                                    (countRule.EffectiveTo is null || countRule.EffectiveTo >= data.AsOf)))
+            ? countRule
+            : null;
+
         var rows = new[]
         {
             CountRow("meeting_attendance", "Tenidas realizadas con presencia",
-                countRule?.Configuration.MinimumMeetingAttendance, data?.Meetings.Present,
-                countRule?.Thresholds.RuleVersion),
+                applicableCountRule?.Configuration.MinimumMeetingAttendance, data?.Meetings.Present,
+                applicableCountRule?.Thresholds.RuleVersion),
             CountRow("instruction_attendance", "Instrucciones realizadas con presencia",
-                countRule?.Configuration.MinimumInstructionAttendance, data?.Instructions.Present,
-                countRule?.Thresholds.RuleVersion),
+                applicableCountRule?.Configuration.MinimumInstructionAttendance, data?.Instructions.Present,
+                applicableCountRule?.Thresholds.RuleVersion),
             // No existe una constancia institucional verificada de presentación
             // y aprobación de los dos trabajos. Ni publicación ni vínculo con
             // Tenida celebrada acreditan un número de trabajos cumplidos.
             new AdvancementReviewRow(
                 "work_papers", "Planchas presentadas y aprobadas",
-                countRule?.Configuration.MinimumWorkPapers, null,
-                countRule is null ? "rule_missing" : "presentation_unverified",
-                false, countRule?.Thresholds.RuleVersion,
+                applicableCountRule?.Configuration.MinimumWorkPapers, null,
+                applicableCountRule is null ? "rule_missing" : "presentation_unverified",
+                false, applicableCountRule?.Thresholds.RuleVersion,
                 "Los archivos y enlaces a Tenidas son sólo candidatos; faltan presentación, acta y aprobación institucional."),
             new AdvancementReviewRow(
                 "complete_months", "Antigüedad continuada en el grado",
@@ -47,7 +59,7 @@ public static class AdvancementReviewMatrixPolicy
             ceremonyType,
             data?.GradeStartDate,
             data?.AsOf,
-            countRule?.RuleId,
+            applicableCountRule?.RuleId,
             rows,
             // Esta revisión no sustituye la constatación de Cámara del Medio,
             // la continuidad firmada ni el expediente de dispensa.
