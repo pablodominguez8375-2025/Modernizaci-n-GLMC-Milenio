@@ -23,6 +23,8 @@ using PMGM.Api.Modules.Hospitalaria;
 using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Ceremonies.Entities;
+using PMGM.Api.Modules.DocumentManagement;
+using PMGM.Api.Modules.DocumentManagement.Entities;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -421,6 +423,51 @@ public sealed class PostgreSqlHttpWorkflowTests
                     RecordedBySubject = "ci-evidence"
                 });
             await lodgeDb.SaveChangesAsync(token);
+
+            var documentsDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            var collection = new DocumentCollection
+            {
+                Code = $"test-workpaper-{Guid.NewGuid():N}",
+                Name = "Planchas CI",
+                Scope = DocumentManagementCodes.Scope.Organization,
+                OrganizationId = organization.Id,
+                Status = DocumentManagementCodes.CollectionStatus.Active,
+                CreatedBySubject = "ci-evidence"
+            };
+            var document = new InstitutionalDocument
+            {
+                Collection = collection,
+                CollectionId = collection.Id,
+                OrganizationId = organization.Id,
+                AuthorMemberId = member.Id,
+                DocumentType = "work_paper",
+                Title = "Plancha con análisis limpio, aún sin presentación acreditada",
+                Status = DocumentManagementCodes.DocumentStatus.Published,
+                MinimumDegreeRequired = 1,
+                CreatedBySubject = "ci-evidence"
+            };
+            var version = new DocumentVersion
+            {
+                Document = document,
+                DocumentId = document.Id,
+                VersionNumber = 1,
+                OriginalFileName = "plancha.pdf",
+                ContentType = "application/pdf",
+                SizeBytes = 810,
+                Sha256 = new string('b', 64),
+                ScanReference = "SCAN-CI-OK",
+                ProcessingStatus = DocumentManagementCodes.ProcessingStatus.Available,
+                AuthorEffectiveDegreeAtUpload = 1,
+                CreatedAtUtc = new DateTimeOffset(2026, 8, 7, 13, 0, 0, TimeSpan.Zero),
+                ObjectKey = $"documents/{document.Id:N}/{Guid.NewGuid():N}",
+                CreatedBySubject = "ci-evidence"
+            };
+            // La versión debe existir antes de actualizar el puntero publicado:
+            // core.institutional_documents.PublishedVersionId es una FK real.
+            documentsDb.AddRange(collection, document, version);
+            await documentsDb.SaveChangesAsync(token);
+            document.PublishedVersionId = version.Id;
+            await documentsDb.SaveChangesAsync(token);
         }
 
         var response = await client.GetAsync(
@@ -441,6 +488,20 @@ public sealed class PostgreSqlHttpWorkflowTests
         Assert.Equal(1, meetings.GetProperty("excused").GetInt32());
         var instructions = snapshot.GetProperty("instructions");
         Assert.Equal(1, instructions.GetProperty("present").GetInt32());
+
+        var papersResponse = await client.GetAsync(
+            $"/api/ceremonias/solicitudes/{ceremonyId}/avance/planchas", token);
+        Assert.Equal(HttpStatusCode.OK, papersResponse.StatusCode);
+        Assert.Contains("no-store", papersResponse.Headers.CacheControl?.ToString() ?? string.Empty);
+        var papers = await papersResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: token);
+        Assert.False(papers.GetProperty("authorizesCeremony").GetBoolean());
+        var summary = papers.GetProperty("workPapers");
+        Assert.Equal(1, summary.GetProperty("totalDocuments").GetInt32());
+        Assert.Equal(1, summary.GetProperty("reviewableDocuments").GetInt32());
+        Assert.Equal(0, summary.GetProperty("confirmedPresented").GetInt32());
+        Assert.False(summary.GetProperty("presentationEvidenceAvailable").GetBoolean());
+        Assert.False(summary.GetProperty("items")[0].GetProperty("presentationVerified").GetBoolean());
+        Assert.True(summary.GetProperty("items")[0].GetProperty("publishedToLibrary").GetBoolean());
     }
 
 }
@@ -459,6 +520,9 @@ internal sealed class PmgmWebApplicationFactory(string connectionString) : WebAp
             services.RemoveAll<LodgeManagementDbContext>();
             services.RemoveAll<DbContextOptions<LodgeManagementDbContext>>();
             services.AddDbContext<LodgeManagementDbContext>(options => options.UseNpgsql(connectionString));
+            services.RemoveAll<DocumentManagementDbContext>();
+            services.RemoveAll<DbContextOptions<DocumentManagementDbContext>>();
+            services.AddDbContext<DocumentManagementDbContext>(options => options.UseNpgsql(connectionString));
 
             services.AddAuthentication(options =>
                 {

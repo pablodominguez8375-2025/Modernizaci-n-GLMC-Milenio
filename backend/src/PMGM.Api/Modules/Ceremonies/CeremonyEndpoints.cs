@@ -40,6 +40,7 @@ public static class CeremonyEndpoints
         group.MapGet("/reglas/publicacion-iniciacion", GetInitiationPublicationRuleAsync);
         AdvancementRuleEndpoints.Map(group);
         AdvancementAttendanceEndpoints.Map(group);
+        AdvancementWorkPaperEndpoints.Map(group);
 
         return endpoints;
     }
