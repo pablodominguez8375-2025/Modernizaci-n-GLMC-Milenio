@@ -45,6 +45,17 @@ public static class AdvancementAttendanceEndpoints
             lodgeDb,
             cancellationToken);
 
+        AdvancementSenioritySnapshot? seniority = null;
+        if (result.Status == "ready" && result.Snapshot is not null)
+        {
+            seniority = await AdvancementSeniorityProjection.GetAsync(
+                ceremony.MemberId.Value,
+                result.Snapshot.GradeStartDate,
+                today,
+                db,
+                cancellationToken);
+        }
+
         context.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
@@ -52,6 +63,9 @@ public static class AdvancementAttendanceEndpoints
             result.Status,
             result.Reason,
             result.Snapshot,
+            seniority,
+            minimumSeniorityRuleApplied = false,
+            institutionalContinuityCertified = false,
             includesExcusesInPresence = false,
             workPapersEvaluated = false,
             authorizesCeremony = false
