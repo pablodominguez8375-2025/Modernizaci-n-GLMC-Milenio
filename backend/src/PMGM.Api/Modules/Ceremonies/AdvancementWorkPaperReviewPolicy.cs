@@ -46,6 +46,38 @@ public static class AdvancementWorkPaperReviewPolicy
             reason);
     }
 
+    /// <summary>
+    /// Un vínculo comprobable a Tenida celebrada es evidencia para revisión,
+    /// pero NO es confirmación de presentación ni incrementa mínimos.
+    /// </summary>
+    public static WorkPaperReviewCandidate AttachMeetingLinks(
+        WorkPaperReviewCandidate candidate,
+        IEnumerable<WorkPaperMeetingLink> links)
+    {
+        if (candidate.ReviewVersionId is null || !candidate.ContentVerified)
+            return candidate with
+            {
+                LinkedHeldMeetingIds = Array.Empty<Guid>(),
+                SubmittedExtractMeetingIds = Array.Empty<Guid>()
+            };
+
+        var eligible = links
+            .Where(x => x.WorkPaperVersionId == candidate.ReviewVersionId &&
+                        x.IsHeldNonCeremonial &&
+                        x.MeetingId != Guid.Empty)
+            .GroupBy(x => x.MeetingId)
+            .Select(x => x.First())
+            .ToArray();
+
+        return candidate with
+        {
+            LinkedHeldMeetingIds = eligible.Select(x => x.MeetingId).Order().ToArray(),
+            SubmittedExtractMeetingIds = eligible
+                .Where(x => x.ExtractSubmitted)
+                .Select(x => x.MeetingId).Order().ToArray()
+        };
+    }
+
     public static WorkPaperReviewSummary Summarize(IEnumerable<WorkPaperReviewCandidate> candidates)
     {
         var items = candidates.OrderBy(x => x.DocumentId).ToArray();
@@ -77,7 +109,15 @@ public sealed record WorkPaperReviewCandidate(
     bool ContentVerified,
     bool PublishedToLibrary,
     bool PresentationVerified,
-    string Reason);
+    string Reason,
+    IReadOnlyList<Guid>? LinkedHeldMeetingIds = null,
+    IReadOnlyList<Guid>? SubmittedExtractMeetingIds = null);
+
+public sealed record WorkPaperMeetingLink(
+    Guid MeetingId,
+    Guid WorkPaperVersionId,
+    bool IsHeldNonCeremonial,
+    bool ExtractSubmitted);
 
 public sealed record WorkPaperReviewSummary(
     int TotalDocuments,

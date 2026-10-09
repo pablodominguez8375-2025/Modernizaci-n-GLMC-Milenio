@@ -83,6 +83,53 @@ public sealed class AdvancementWorkPaperReviewPolicyTests
         Assert.False(item.PresentationVerified);
     }
 
+    [Fact]
+    public void HeldMeetingLink_IsVisibleWithoutCertifyingPresentation()
+    {
+        var version = ReadyVersion(1, false);
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Plancha vinculada", false, GradeStart, AsOf, 1, [version]);
+        var meetingId = Guid.NewGuid();
+        var link = new WorkPaperMeetingLink(meetingId, version.Id, true, true);
+        var result = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(paper, [link]);
+
+        Assert.Equal([meetingId], result.LinkedHeldMeetingIds);
+        Assert.Equal([meetingId], result.SubmittedExtractMeetingIds);
+        Assert.False(result.PresentationVerified);
+        Assert.Equal(0, AdvancementWorkPaperReviewPolicy.Summarize([result]).ConfirmedPresented);
+    }
+
+    [Fact]
+    public void ScheduledOrWrongVersionLink_IsExcludedEvenWithWorkPaper()
+    {
+        var version = ReadyVersion(1, false);
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Prueba", false, GradeStart, AsOf, 1, [version]);
+        var links = new[]
+        {
+            new WorkPaperMeetingLink(Guid.NewGuid(), version.Id, false, true),
+            new WorkPaperMeetingLink(Guid.NewGuid(), Guid.NewGuid(), true, true)
+        };
+        var result = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(paper, links);
+
+        Assert.Empty(result.LinkedHeldMeetingIds!);
+        Assert.Empty(result.SubmittedExtractMeetingIds!);
+    }
+
+    [Fact]
+    public void DuplicateMeetingLinks_DoNotInflateLinkedMeetings()
+    {
+        var version = ReadyVersion(1, false);
+        var paper = AdvancementWorkPaperReviewPolicy.Assess(
+            Guid.NewGuid(), "Duplicada", false, GradeStart, AsOf, 1, [version]);
+        var meetingId = Guid.NewGuid();
+        var item = new WorkPaperMeetingLink(meetingId, version.Id, true, false);
+        var result = AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(paper, [item, item]);
+
+        Assert.Single(result.LinkedHeldMeetingIds!);
+        Assert.Empty(result.SubmittedExtractMeetingIds!);
+    }
+
     private static WorkPaperReviewVersion ReadyVersion(int number, bool published)
         => new(
             Guid.NewGuid(), number, new DateOnly(2026, 8, 7), 1,

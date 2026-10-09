@@ -25,6 +25,8 @@ using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.DocumentManagement.Entities;
+using PMGM.Api.Modules.SecretariatOperations;
+using PMGM.Api.Modules.SecretariatOperations.Entities;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -468,6 +470,35 @@ public sealed class PostgreSqlHttpWorkflowTests
             await documentsDb.SaveChangesAsync(token);
             document.PublishedVersionId = version.Id;
             await documentsDb.SaveChangesAsync(token);
+
+            // La referencia de Secretaría puede existir aun sin acreditación
+            // formal de presentación: cotejar solamente Tenida realizada.
+            db.LodgeSecretariatRecords.AddRange(
+                new LodgeSecretariatRecord
+                {
+                    OrganizationId = organization.Id,
+                    RecordType = SecretariatOperationsCodes.RecordType.LodgeMeeting,
+                    SourceRecordId = attended.Id,
+                    EventDate = attended.MeetingDate,
+                    Title = "Tenida realizada con plancha referenciada",
+                    WorkPaperDocumentVersionId = version.Id,
+                    WorkPaperAuthorMemberId = member.Id,
+                    Status = SecretariatOperationsCodes.SubmissionStatus.Draft,
+                    CreatedBySubject = "ci-evidence"
+                },
+                new LodgeSecretariatRecord
+                {
+                    OrganizationId = organization.Id,
+                    RecordType = SecretariatOperationsCodes.RecordType.LodgeMeeting,
+                    SourceRecordId = cancelled.Id,
+                    EventDate = cancelled.MeetingDate,
+                    Title = "Tenida cancelada, no acredita vínculo realizado",
+                    WorkPaperDocumentVersionId = version.Id,
+                    WorkPaperAuthorMemberId = member.Id,
+                    Status = SecretariatOperationsCodes.SubmissionStatus.Draft,
+                    CreatedBySubject = "ci-evidence"
+                });
+            await db.SaveChangesAsync(token);
         }
 
         var response = await client.GetAsync(
@@ -502,6 +533,10 @@ public sealed class PostgreSqlHttpWorkflowTests
         Assert.False(summary.GetProperty("presentationEvidenceAvailable").GetBoolean());
         Assert.False(summary.GetProperty("items")[0].GetProperty("presentationVerified").GetBoolean());
         Assert.True(summary.GetProperty("items")[0].GetProperty("publishedToLibrary").GetBoolean());
+        var paper = summary.GetProperty("items")[0];
+        Assert.Single(paper.GetProperty("linkedHeldMeetingIds").EnumerateArray());
+        Assert.Empty(paper.GetProperty("submittedExtractMeetingIds").EnumerateArray());
+        Assert.False(paper.GetProperty("presentationVerified").GetBoolean());
     }
 
 }
