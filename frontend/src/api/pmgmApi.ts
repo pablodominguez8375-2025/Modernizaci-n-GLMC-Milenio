@@ -160,7 +160,7 @@ export interface AdvancementLiveEligibility {
     certifiedPaperCount: number
     twoDifferentKindsCertified: boolean
     institutionalContinuityCertified: boolean
-    decision: { canProceed: boolean; mode: string; requirements: { code: string; minimum: number; achieved: number; complies: boolean }[] }
+    decision: { canProceed: boolean; mode: string; requirements: { code: string; name: string; minimum: number; achieved: number; complies: boolean; status: string }[] }
   } | null
 }
 export interface AdvancementPaperAttestationCandidate {
