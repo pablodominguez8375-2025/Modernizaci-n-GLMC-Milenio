@@ -26,6 +26,7 @@ public static class CandidateInterviewAssignmentEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-notificaciones", RetryNotificationsAsync);
         group.MapGet("/entrevistas/mis-designaciones", MineAsync);
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados/{assignmentId:guid}/aceptar", AcceptAsync);
+        group.MapPatch("/solicitudes/{requestId:guid}/entrevistadores-designados/{assignmentId:guid}/reprogramar", RescheduleAsync);
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados/{assignmentId:guid}/entregar", DeliverAsync);
     }
 
@@ -378,6 +379,105 @@ public static class CandidateInterviewAssignmentEndpoints
         return pending.ToArray();
     }
 
+    private static async Task<IResult> RescheduleAsync(
+        Guid requestId, Guid assignmentId, RescheduleCandidateInterview input,
+        HttpContext http, PmgmDbContext db, IInstitutionalAccessService access,
+        IAuditService audit, IInstitutionalNotificationService notifications, CancellationToken ct)
+    {
+        var request = await db.CeremonyRequests.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.Id == requestId && x.CeremonyType == CeremonyCodes.Type.Initiation, ct);
+        if (request is null) return Results.NotFound();
+        if (!CanDesignate(http, access, request.OrganizationId)) return Results.Forbid();
+        var actor = Subject(http.User);
+        if (string.IsNullOrWhiteSpace(actor)) return Results.Forbid();
+
+        var reason = input.Reason?.Trim();
+        var policyError = CandidateInterviewReschedulePolicy.Validate(
+            input.ScheduledDate, Today(), reason);
+        if (policyError is not null) return Results.BadRequest(new { message = policyError });
+        if (request.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected)
+            return Results.Conflict(new { message = "Expediente cerrado: no admite reprogramaciones." });
+
+        var oldDate = (DateOnly?)null;
+        CandidateInterviewAssignment? assignment;
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({requestId.ToString()}, 0))", ct);
+            assignment = await db.CandidateInterviewAssignments.SingleOrDefaultAsync(x =>
+                x.Id == assignmentId && x.CeremonyRequestId == requestId &&
+                x.OrganizationId == request.OrganizationId, ct);
+            if (assignment is null) return Results.NotFound();
+            if (assignment.Status != CandidateInterviewAssignmentPolicy.Assigned ||
+                assignment.ReportDocumentVersionId is not null)
+                return Results.Conflict(new { message = "No es posible reprogramar una entrevista finalizada o sustituida." });
+            if (input.ScheduledDate < assignment.CouncilDecisionDate)
+                return Results.BadRequest(new { message = "La fecha no puede ser anterior al acuerdo colegiado." });
+            if (!await IsActiveDesignatedMasterAsync(db, assignment.OrganizationId, assignment.InterviewerMemberId, ct))
+                return Results.Conflict(new { message = "El entrevistador ya no pertenece como Maestro activo a este Taller; gestione una suplencia." });
+
+            oldDate = assignment.ScheduledDate;
+            if (oldDate != input.ScheduledDate)
+            {
+                assignment.ScheduledDate = input.ScheduledDate;
+                audit.Add(http, "candidate.interview.schedule.changed",
+                    nameof(CandidateInterviewAssignment), assignment.Id.ToString(),
+                    assignment.OrganizationId, AuditResults.Success,
+                    new {
+                        requestId, assignmentId, oldScheduledDate = oldDate,
+                        newScheduledDate = input.ScheduledDate, reason, changedBy = actor,
+                        assignment.AcceptedAtUtc, assignment.InterviewerMemberId
+                    });
+                await db.SaveChangesAsync(ct);
+            }
+            await tx.CommitAsync(ct);
+        }
+
+        // Idempotencia por (asignación, fecha). Si el primer intento falló,
+        // repetir el mismo PATCH puede reenviar el aviso sin reescribir el historial.
+        var recipients = await db.Database.SqlQuery<string>($"""
+            SELECT "Subject" AS "Value" FROM core.member_identity_links
+            WHERE "MemberId" = {assignment.InterviewerMemberId} AND "RevokedAtUtc" IS NULL
+            """).ToListAsync(ct);
+        if (recipients.Count != 1)
+            return Results.Conflict(new {
+                message = "Fecha actualizada, pero la identidad institucional de destino requiere revisión.",
+                changed = oldDate != input.ScheduledDate,
+                notificationPending = true
+            });
+
+        var noticePending = false;
+        try
+        {
+            await notifications.QueueAsync(new QueueNotificationCommand(
+                NotificationCodes.Template.CandidateInterviewRescheduled, null,
+                NotificationCodes.Type.CandidateInterviewRescheduled,
+                recipients[0], null,
+                new[] { NotificationCodes.Channel.Internal },
+                new Dictionary<string, string?> {
+                    ["date"] = input.ScheduledDate.ToString("yyyy-MM-dd",
+                        System.Globalization.CultureInfo.InvariantCulture)
+                },
+                $"candidate-interview-rescheduled:{assignment.Id:N}:{input.ScheduledDate:yyyyMMdd}",
+                assignment.Id.ToString("N"), assignment.Id.ToString("N"),
+                "/interviews", true, null, true,
+                RelatedResourceType: "candidate_interview_assignment",
+                RelatedResourceId: assignment.Id.ToString("N")), ct);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+        {
+            noticePending = true;
+        }
+
+        http.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new {
+            assignment.Id, assignment.ScheduledDate,
+            previousScheduledDate = oldDate,
+            changed = oldDate != input.ScheduledDate,
+            notificationPending = noticePending
+        });
+    }
+
     private static async Task<IResult> AcceptAsync(
         Guid requestId, Guid assignmentId, HttpContext http, PmgmDbContext db,
         IInstitutionalMemberContextResolver identity, IAuditService audit, CancellationToken ct)
@@ -533,3 +633,5 @@ public sealed record AssignCandidateInterviewers(
     IReadOnlyList<DateOnly?>? ScheduledDates = null, string? ReplacementReason = null);
 
 public sealed record CompleteCandidateInterview(Guid DocumentVersionId);
+
+public sealed record RescheduleCandidateInterview(DateOnly ScheduledDate, string? Reason);
