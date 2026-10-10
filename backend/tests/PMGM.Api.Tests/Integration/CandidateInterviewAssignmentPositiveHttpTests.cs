@@ -1,8 +1,16 @@
+using System.IO.Compression;
 using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using Microsoft.AspNetCore.TestHost;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using PMGM.Api.Modules.CandidateIntake;
+using PMGM.Api.Modules.CandidateIntake.Entities;
+using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
@@ -23,7 +31,13 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
         var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connection)) return;
         var ct = TestContext.Current.CancellationToken;
-        using var factory = new CandidatePublicationTestFactory(connection);
+        using var baseFactory = new CandidatePublicationTestFactory(connection);
+        var scanner = new CleanDocumentMalwareScanner();
+        using var factory = baseFactory.WithWebHostBuilder(builder => builder.ConfigureTestServices(services =>
+        {
+            services.RemoveAll<IDocumentMalwareScanner>();
+            services.AddSingleton<IDocumentMalwareScanner>(scanner);
+        }));
         using var client = factory.CreateClient();
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
             DateTimeOffset.UtcNow, "America/Santiago").DateTime);
@@ -61,6 +75,9 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
             { Person = person, PersonId = person.Id, CurrentDegree = "master" }).ToArray();
         var subjects = members.Select((_, i) => $"ci-assignment-427-{Guid.NewGuid():N}-{i}").ToArray();
         var assignmentIds = Array.Empty<Guid>();
+        var ownIds = new Guid[3];
+        var reportIds = new Guid[3];
+        var payloads = new[] { PdfReport(), WordReport(), PdfReport() };
         try
         {
             await using (var scope = factory.Services.CreateAsyncScope())
@@ -69,6 +86,16 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 var notifications = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
                 await db.Database.MigrateAsync(ct);
                 await notifications.Database.MigrateAsync(ct);
+                var intake = scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>();
+                var documents = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+                await intake.Database.MigrateAsync(ct);
+                await documents.Database.MigrateAsync(ct);
+                intake.CandidateIntakeProfiles.Add(new CandidateIntakeProfile
+                {
+                    CeremonyRequestId = ceremony.Id, OrganizationId = workshop.Id, PersonId = candidate.Id,
+                    InsinuationDate = today.AddDays(-10), SubmittedBySubject = "ci-test", UpdatedBySubject = "ci-test"
+                });
+                await intake.SaveChangesAsync(ct);
                 db.AddRange(workshop, candidate, ceremony, publication, deliberation);
                 db.AddRange(members);
                 foreach (var member in members)
@@ -142,11 +169,15 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 var task = await mine.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
                 var only = Assert.Single(task.GetProperty("items").EnumerateArray().ToArray());
                 var ownAssignment = only.GetProperty("id").GetGuid();
+                ownIds[index] = ownAssignment;
                 Assert.Contains(ownAssignment, assignmentIds);
                 var otherAssignment = assignmentIds.First(x => x != ownAssignment);
                 var forbiddenOther = await client.PostAsync(
                     $"{route}/entrevistadores-designados/{otherAssignment}/aceptar", null, ct);
                 Assert.Equal(HttpStatusCode.NotFound, forbiddenOther.StatusCode);
+                using var beforeAcceptance = UploadRequest(route, ownAssignment, people[index], today, payloads[index], index);
+                var deniedBeforeAcceptance = await client.SendAsync(beforeAcceptance, ct);
+                Assert.Equal(HttpStatusCode.Conflict, deniedBeforeAcceptance.StatusCode);
                 var accept = await client.PostAsync(
                     $"{route}/entrevistadores-designados/{ownAssignment}/aceptar", null, ct);
                 Assert.Equal(HttpStatusCode.OK, accept.StatusCode);
@@ -202,6 +233,137 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                     x.OrganizationId == workshop.Id &&
                     x.Action == "candidate.interview.designation.accepted", ct));
             }
+
+            // Actual upload and delivery under three distinct institutional identities.
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Role", "member");
+            for (var index = 0; index < members.Length; index++)
+            {
+                client.DefaultRequestHeaders.Remove("X-Publication-Test-Subject");
+                client.DefaultRequestHeaders.Add("X-Publication-Test-Subject", subjects[index]);
+                var ownId = ownIds[index];
+                var otherId = ownIds[(index + 1) % ownIds.Length];
+                using var otherUpload = UploadRequest(route, otherId, people[index], today, payloads[index], index);
+                var deniedUpload = await client.SendAsync(otherUpload, ct);
+                Assert.Equal(HttpStatusCode.Forbidden, deniedUpload.StatusCode);
+                using var falseAuthor = UploadRequest(route, ownId, people[(index + 1) % 3], today, payloads[index], index);
+                var deniedFalseAuthor = await client.SendAsync(falseAuthor, ct);
+                Assert.Equal(HttpStatusCode.BadRequest, deniedFalseAuthor.StatusCode);
+                using var ownUpload = UploadRequest(route, ownId, people[index], today, payloads[index], index);
+                var uploaded = await client.SendAsync(ownUpload, ct);
+                Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+                var uploadedJson = await uploaded.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+                reportIds[index] = uploadedJson.GetProperty("documentVersionId").GetGuid();
+                var deliverOther = await client.PostAsJsonAsync(
+                    $"{route}/entrevistadores-designados/{otherId}/entregar",
+                    new { documentVersionId = reportIds[index] }, ct);
+                Assert.Equal(HttpStatusCode.NotFound, deliverOther.StatusCode);
+                if (index < 2)
+                {
+                    var delivered = await client.PostAsJsonAsync(
+                        $"{route}/entrevistadores-designados/{ownId}/entregar",
+                        new { documentVersionId = reportIds[index] }, ct);
+                    Assert.Equal(HttpStatusCode.OK, delivered.StatusCode);
+                }
+            }
+            Assert.Equal(3, scanner.ScanCount);
+            // A third file alone must not count as the third Maestro's personal delivery.
+            var evidence = people.Select((person, i) => new CandidateInterviewEvidenceRequest(
+                today, $"{person.FirstNames} {person.LastNames}", $"Resumen privado CI {i}",
+                "favorable", reportIds[i])).ToArray();
+            var package = new InterviewPackageRequest(today, evidence, true, "CUESTIONARIO-CI",
+                true, "AUTOBIOGRAFIA-CI");
+            var memberPackage = await client.PostAsJsonAsync($"{route}/antecedentes", package, ct);
+            Assert.Equal(HttpStatusCode.Forbidden, memberPackage.StatusCode);
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerSecretaria);
+            var thirdDegreeRequest = new ThirdDegreeReviewRequest(today, 3, 3, 0, 0, true, "ACTA-TERCER-GRADO-CI");
+            var blockedReview = await client.PostAsJsonAsync($"{route}/revision-tercer-grado", thirdDegreeRequest, ct);
+            Assert.Equal(HttpStatusCode.Conflict, blockedReview.StatusCode);
+            var incomplete = await client.PostAsJsonAsync($"{route}/antecedentes", package, ct);
+            Assert.Equal(HttpStatusCode.Conflict, incomplete.StatusCode);
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Role", "member");
+            var lastDeliveryRoute = $"{route}/entrevistadores-designados/{ownIds[2]}/entregar";
+            var lastDelivery = await client.PostAsJsonAsync(lastDeliveryRoute,
+                new { documentVersionId = reportIds[2] }, ct);
+            Assert.Equal(HttpStatusCode.OK, lastDelivery.StatusCode);
+            var repeatedDelivery = await client.PostAsJsonAsync(lastDeliveryRoute,
+                new { documentVersionId = reportIds[2] }, ct);
+            Assert.Equal(HttpStatusCode.Conflict, repeatedDelivery.StatusCode);
+
+            // An interviewer cannot download a colleague's private report or see its metadata.
+            for (var index = 0; index < members.Length; index++)
+            {
+                client.DefaultRequestHeaders.Remove("X-Publication-Test-Subject");
+                client.DefaultRequestHeaders.Add("X-Publication-Test-Subject", subjects[index]);
+                var otherDownload = await client.GetAsync(
+                    $"/api/documentos/versiones/{reportIds[(index + 1) % 3]}/contenido", ct);
+                Assert.Equal(HttpStatusCode.Forbidden, otherDownload.StatusCode);
+                var assignments = await client.GetAsync($"{route}/entrevistadores-designados", ct);
+                Assert.Equal(HttpStatusCode.Forbidden, assignments.StatusCode);
+            }
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerSecretaria);
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Organization");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Organization", Guid.NewGuid().ToString());
+            var wrongWorkshop = await client.GetAsync($"/api/documentos/versiones/{reportIds[0]}/contenido", ct);
+            Assert.Equal(HttpStatusCode.Forbidden, wrongWorkshop.StatusCode);
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Organization");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Organization", workshop.Id.ToString());
+            for (var index = 0; index < reportIds.Length; index++)
+            {
+                var download = await client.GetAsync($"/api/documentos/versiones/{reportIds[index]}/contenido", ct);
+                Assert.Equal(HttpStatusCode.OK, download.StatusCode);
+                Assert.Equal(payloads[index], await download.Content.ReadAsByteArrayAsync(ct));
+            }
+            var missingBackground = await client.PostAsJsonAsync($"{route}/antecedentes",
+                package with { ConfidentialQuestionnaireAvailable = false, AutobiographyAvailable = false }, ct);
+            Assert.Equal(HttpStatusCode.OK, missingBackground.StatusCode);
+            var missingJson = await missingBackground.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.NotEqual(CeremonyCodes.ValidationStatus.Approved,
+                missingJson.GetProperty("validationStatus").GetString());
+            var missingAutobiography = await client.PostAsJsonAsync($"{route}/antecedentes",
+                package with { AutobiographyAvailable = false }, ct);
+            Assert.Equal(HttpStatusCode.OK, missingAutobiography.StatusCode);
+            var missingAutobiographyJson = await missingAutobiography.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.NotEqual(CeremonyCodes.ValidationStatus.Approved,
+                missingAutobiographyJson.GetProperty("validationStatus").GetString());
+            var stillBlockedReview = await client.PostAsJsonAsync($"{route}/revision-tercer-grado", thirdDegreeRequest, ct);
+            Assert.Equal(HttpStatusCode.Conflict, stillBlockedReview.StatusCode);
+            var complete = await client.PostAsJsonAsync($"{route}/antecedentes", package, ct);
+            Assert.Equal(HttpStatusCode.OK, complete.StatusCode);
+            var completeJson = await complete.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal(CeremonyCodes.ValidationStatus.Approved,
+                completeJson.GetProperty("validationStatus").GetString());
+            Assert.Equal(3, completeJson.GetProperty("completedInterviews").GetInt32());
+            var enabledReview = await client.PostAsJsonAsync($"{route}/revision-tercer-grado", thirdDegreeRequest, ct);
+            Assert.Equal(HttpStatusCode.OK, enabledReview.StatusCode);
+            var enabledReviewJson = await enabledReview.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal(CeremonyCodes.ValidationStatus.Approved,
+                enabledReviewJson.GetProperty("thirdDegree").GetProperty("status").GetString());
+            await using (var scope = factory.Services.CreateAsyncScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+                var documents = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+                var deliveredRows = await db.CandidateInterviewAssignments.AsNoTracking()
+                    .Where(x => x.CeremonyRequestId == ceremony.Id).ToListAsync(ct);
+                Assert.All(deliveredRows, row => Assert.Equal("completed", row.Status));
+                Assert.All(deliveredRows, row => Assert.NotNull(row.CompletedAtUtc));
+                Assert.Equal(3, await db.AuditEvents.CountAsync(x => x.OrganizationId == workshop.Id &&
+                    x.Action == "candidate.interview.report.delivered", ct));
+                var versions = await documents.DocumentVersions.AsNoTracking()
+                    .Include(x => x.Document).Where(x => reportIds.Contains(x.Id)).ToListAsync(ct);
+                Assert.Equal(3, versions.Count);
+                Assert.All(versions, version =>
+                {
+                    Assert.Equal(DocumentManagementCodes.ProcessingStatus.Available, version.ProcessingStatus);
+                    Assert.Equal(DocumentManagementCodes.Classification.Sensitive, version.Document.Classification);
+                    Assert.Equal(DocumentManagementCodes.AccessPolicy.ManagementOnly, version.Document.AccessPolicy);
+                    Assert.True(DocumentIntegrity.IsValidSha256(version.Sha256));
+                    Assert.StartsWith("clamav:test-clean:", version.ScanReference, StringComparison.Ordinal);
+                });
+            }
         }
         finally
         {
@@ -214,6 +376,16 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 await db.Database.ExecuteSqlInterpolatedAsync(
                     $"DELETE FROM core.member_identity_links WHERE \"Subject\" = {subject}",
                     CancellationToken.None);
+            var documents = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            var intake = scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>();
+            await documents.DocumentVersions.Where(x => assignmentIds.Contains(x.DocumentId))
+                .ExecuteDeleteAsync(CancellationToken.None);
+            await documents.InstitutionalDocuments.Where(x => assignmentIds.Contains(x.Id))
+                .ExecuteDeleteAsync(CancellationToken.None);
+            await documents.DocumentCollections.Where(x => x.OrganizationId == workshop.Id)
+                .ExecuteDeleteAsync(CancellationToken.None);
+            await intake.CandidateIntakeProfiles.Where(x => x.CeremonyRequestId == ceremony.Id)
+                .ExecuteDeleteAsync(CancellationToken.None);
             await db.AuditEvents.Where(x => x.OrganizationId == workshop.Id)
                 .ExecuteDeleteAsync(CancellationToken.None);
             await db.CandidateInterviewAssignments.Where(x => x.CeremonyRequestId == ceremony.Id)
@@ -238,4 +410,61 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 .ExecuteDeleteAsync(CancellationToken.None);
         }
     }
+
+    private static HttpRequestMessage UploadRequest(string route, Guid assignmentId, Person person,
+        DateOnly today, byte[] bytes, int index)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Put, $"{route}/entrevistas/{assignmentId}/contenido")
+        { Content = new ByteArrayContent(bytes) };
+        var isWord = index == 1;
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue(isWord
+            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf");
+        request.Headers.Add("X-File-Name", $"informe-ci-{index}.{(isWord ? "docx" : "pdf")}");
+        request.Headers.Add("X-Interviewer", Uri.EscapeDataString($"{person.FirstNames} {person.LastNames}"));
+        request.Headers.Add("X-Interview-Summary", Uri.EscapeDataString($"Resumen privado CI {index}"));
+        request.Headers.Add("X-Interview-Result", "favorable");
+        request.Headers.Add("X-Interview-Date", today.ToString("yyyy-MM-dd"));
+        return request;
+    }
+
+    private static byte[] PdfReport()
+    {
+        const string pageText = "BT /F1 12 Tf 50 750 Td (Informe sintetico CI) Tj ET";
+        string[] objects =
+        [
+            "<</Type/Catalog/Pages 2 0 R>>",
+            "<</Type/Pages/Count 1/Kids[3 0 R]>>",
+            "<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>",
+            "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            $"<</Length {pageText.Length}>>\nstream\n{pageText}\nendstream"
+        ];
+        var pdf = new StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        for (var i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append($"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+        var xrefOffset = pdf.Length;
+        pdf.Append($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets) pdf.Append($"{offset:D10} 00000 n \n");
+        pdf.Append($"trailer<</Size {objects.Length + 1}/Root 1 0 R>>\nstartxref\n{xrefOffset}\n%%EOF\n");
+        return Encoding.ASCII.GetBytes(pdf.ToString());
+    }
+
+    private static byte[] WordReport()
+    {
+        using var buffer = new MemoryStream();
+        using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            using (var writer = new StreamWriter(zip.CreateEntry("[Content_Types].xml").Open()))
+                writer.Write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>");
+            using (var writer = new StreamWriter(zip.CreateEntry("_rels/.rels").Open()))
+                writer.Write("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>");
+            using (var writer = new StreamWriter(zip.CreateEntry("word/document.xml").Open()))
+                writer.Write("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Informe sintetico CI</w:t></w:r></w:p></w:body></w:document>");
+        }
+        return buffer.ToArray();
+    }
+
 }
