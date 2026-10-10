@@ -192,7 +192,7 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                     .Where(x => x.CeremonyRequestId == ceremony.Id).ToListAsync(ct);
                 Assert.Equal(3, rows.Count);
                 Assert.All(rows, row => Assert.NotNull(row.AcceptedAtUtc));
-                var changedRow = Assert.Single(rows.Where(x => x.Id == assignmentIds[0]));
+                var changedRow = Assert.Single(rows, x => x.Id == assignmentIds[0]);
                 Assert.Equal(today.AddDays(7), changedRow.ScheduledDate);
                 Assert.All(rows.Where(x => x.Id != changedRow.Id), row => Assert.Null(row.ScheduledDate));
                 Assert.All(notices, notice => Assert.Equal(subjects[Array.FindIndex(members, m => m.Id == changedRow.InterviewerMemberId)], notice.RecipientSubject));
