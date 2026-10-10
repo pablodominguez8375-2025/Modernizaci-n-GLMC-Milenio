@@ -804,9 +804,16 @@ public static class CeremonyEndpoints
         }
 
         if (context.Advancement is not null)
+        {
+            var advancement = context.Advancement;
             AddFrozenValidation(db, requestId, CeremonyCodes.ValidationType.AdvancementEligibility,
-                context.Advancement.RuleId, today,
-                $"Validación institucional al {today:yyyy-MM-dd}: {context.Advancement.CertifiedPaperCount} planchas aprobadas de grado; regla {context.Advancement.RuleVersion}.");
+                advancement.RuleId, today,
+                $"Evaluación de ascenso {today:yyyy-MM-dd}; regla {advancement.RuleVersion}: " +
+                $"Tenidas {advancement.MeetingAttendance}/{advancement.Minimums.MinimumMeetingAttendance}, " +
+                $"instrucciones {advancement.InstructionAttendance}/{advancement.Minimums.MinimumInstructionAttendance}, " +
+                $"planchas certificadas {advancement.CertifiedPaperCount}/{advancement.Minimums.MinimumWorkPapers}; " +
+                $"continuidad acreditada: {advancement.InstitutionalContinuityCertified}.");
+        }
 
         ceremony.Status = CeremonyCodes.RequestStatus.Authorized;
         var authorizedAtUtc = DateTimeOffset.UtcNow;
@@ -830,6 +837,15 @@ public static class CeremonyEndpoints
                 evaluatedAsOf = context.AsOfDate,
                 advancementRuleId = context.Advancement?.RuleId,
                 advancementRuleVersion = context.Advancement?.RuleVersion,
+                advancementSeniorityRuleId = context.Advancement?.SeniorityRuleId,
+                advancementRequiredMeetingAttendance = context.Advancement?.Minimums.MinimumMeetingAttendance,
+                advancementRequiredInstructionAttendance = context.Advancement?.Minimums.MinimumInstructionAttendance,
+                advancementRequiredWorkPapers = context.Advancement?.Minimums.MinimumWorkPapers,
+                advancementMeetingAttendance = context.Advancement?.MeetingAttendance,
+                advancementInstructionAttendance = context.Advancement?.InstructionAttendance,
+                advancementCertifiedPaperCount = context.Advancement?.CertifiedPaperCount,
+                advancementMeetingEvidenceIds = context.Advancement?.VerifiedMeetingAttendanceIds,
+                advancementInstructionEvidenceIds = context.Advancement?.VerifiedInstructionAttendanceIds,
                 advancementCertifiedPaperDocumentIds = context.Advancement?.CertifiedPaperDocumentIds,
                 advancementGradeStart = context.Advancement?.GradeStart,
                 advancementContinuityCertified = context.Advancement?.InstitutionalContinuityCertified,

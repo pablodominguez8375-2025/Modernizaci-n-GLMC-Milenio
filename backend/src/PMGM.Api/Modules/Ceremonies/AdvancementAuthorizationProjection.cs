@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json.Serialization;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Ceremonies.Entities;
 
@@ -10,7 +11,10 @@ public sealed record AdvancementAuthorizationSnapshot(
     int MeetingAttendance, int InstructionAttendance,
     int CertifiedPaperCount, bool TwoDifferentKindsCertified,
     bool InstitutionalContinuityCertified,
-    IReadOnlyList<Guid> CertifiedPaperDocumentIds,
+    AdvancementThresholds Minimums,
+    [property: JsonIgnore] IReadOnlyList<Guid> CertifiedPaperDocumentIds,
+    [property: JsonIgnore] IReadOnlyList<Guid> VerifiedMeetingAttendanceIds,
+    [property: JsonIgnore] IReadOnlyList<Guid> VerifiedInstructionAttendanceIds,
     AdvancementEligibilityDecision Decision);
 
 /// <summary>
@@ -101,6 +105,10 @@ public static class AdvancementAuthorizationProjection
             seniorityRule.RuleId, gradeStart, asOf,
             evidence.MeetingAttendance, evidence.InstructionAttendance,
             papers.Count, papers.TwoRequiredKinds, continuityCertified,
-            papers.VerifiedDocumentIds, decision);
+            countRule.Thresholds,
+            papers.VerifiedDocumentIds,
+            attendance.Snapshot.Meetings.PresentIds,
+            attendance.Snapshot.Instructions.PresentIds,
+            decision);
     }
 }
