@@ -323,6 +323,12 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
             var missingJson = await missingBackground.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
             Assert.NotEqual(CeremonyCodes.ValidationStatus.Approved,
                 missingJson.GetProperty("validationStatus").GetString());
+            var missingAutobiography = await client.PostAsJsonAsync($"{route}/antecedentes",
+                package with { AutobiographyAvailable = false }, ct);
+            Assert.Equal(HttpStatusCode.OK, missingAutobiography.StatusCode);
+            var missingAutobiographyJson = await missingAutobiography.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.NotEqual(CeremonyCodes.ValidationStatus.Approved,
+                missingAutobiographyJson.GetProperty("validationStatus").GetString());
             var stillBlockedReview = await client.PostAsJsonAsync($"{route}/revision-tercer-grado", thirdDegreeRequest, ct);
             Assert.Equal(HttpStatusCode.Conflict, stillBlockedReview.StatusCode);
             var complete = await client.PostAsJsonAsync($"{route}/antecedentes", package, ct);
@@ -331,6 +337,11 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
             Assert.Equal(CeremonyCodes.ValidationStatus.Approved,
                 completeJson.GetProperty("validationStatus").GetString());
             Assert.Equal(3, completeJson.GetProperty("completedInterviews").GetInt32());
+            var enabledReview = await client.PostAsJsonAsync($"{route}/revision-tercer-grado", thirdDegreeRequest, ct);
+            Assert.Equal(HttpStatusCode.OK, enabledReview.StatusCode);
+            var enabledReviewJson = await enabledReview.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal(CeremonyCodes.ValidationStatus.Approved,
+                enabledReviewJson.GetProperty("thirdDegree").GetProperty("status").GetString());
             await using (var scope = factory.Services.CreateAsyncScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
@@ -417,8 +428,29 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
     }
 
     private static byte[] PdfReport()
-        => Encoding.ASCII.GetBytes("%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n" +
-            "2 0 obj<</Type/Pages/Count 0/Kids[]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF");
+    {
+        const string pageText = "BT /F1 12 Tf 50 750 Td (Informe sintetico CI) Tj ET";
+        string[] objects =
+        [
+            "<</Type/Catalog/Pages 2 0 R>>",
+            "<</Type/Pages/Count 1/Kids[3 0 R]>>",
+            "<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Resources<</Font<</F1 4 0 R>>>>/Contents 5 0 R>>",
+            "<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>",
+            $"<</Length {pageText.Length}>>\nstream\n{pageText}\nendstream"
+        ];
+        var pdf = new StringBuilder("%PDF-1.4\n");
+        var offsets = new List<int>();
+        for (var i = 0; i < objects.Length; i++)
+        {
+            offsets.Add(pdf.Length);
+            pdf.Append($"{i + 1} 0 obj\n{objects[i]}\nendobj\n");
+        }
+        var xrefOffset = pdf.Length;
+        pdf.Append($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        foreach (var offset in offsets) pdf.Append($"{offset:D10} 00000 n \n");
+        pdf.Append($"trailer<</Size {objects.Length + 1}/Root 1 0 R>>\nstartxref\n{xrefOffset}\n%%EOF\n");
+        return Encoding.ASCII.GetBytes(pdf.ToString());
+    }
 
     private static byte[] WordReport()
     {
@@ -426,7 +458,9 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
         using (var zip = new ZipArchive(buffer, ZipArchiveMode.Create, leaveOpen: true))
         {
             using (var writer = new StreamWriter(zip.CreateEntry("[Content_Types].xml").Open()))
-                writer.Write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>");
+                writer.Write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"xml\" ContentType=\"application/xml\"/><Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/></Types>");
+            using (var writer = new StreamWriter(zip.CreateEntry("_rels/.rels").Open()))
+                writer.Write("<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/></Relationships>");
             using (var writer = new StreamWriter(zip.CreateEntry("word/document.xml").Open()))
                 writer.Write("<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\"><w:body><w:p><w:r><w:t>Informe sintetico CI</w:t></w:r></w:p></w:body></w:document>");
         }
