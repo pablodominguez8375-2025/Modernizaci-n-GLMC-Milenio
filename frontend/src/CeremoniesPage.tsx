@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
+  type AdvancementLiveEligibility,
   type CeremonyInternalAffairsValidationRequest,
   type CeremonyReviewQueueItem,
   type PmgmApiClient,
@@ -83,9 +84,21 @@ function CeremonyCard({ item, api, working, execute }: {
   working: boolean
   execute: (action: () => Promise<unknown>, success: string) => Promise<unknown | null>
 }) {
-  const completed = item.eligibility.requirements.filter(requirement => requirement.status === 'approved').length
-  const total = item.eligibility.requirements.length
+  const [liveEligibility, setLiveEligibility] = useState<AdvancementLiveEligibility | null>(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+  useEffect(() => { setLiveEligibility(null); setReviewError(null) }, [item.eligibility])
+  const eligibility = liveEligibility ?? item.eligibility
+  const completed = eligibility.requirements.filter(requirement => requirement.status === 'approved').length
+  const total = eligibility.requirements.length
   const final = item.status === 'authorized' || item.status === 'rejected'
+  const isAdvancement = item.ceremonyType === 'wage_increase' || item.ceremonyType === 'exaltation'
+  const reviewAdvancement = async () => {
+    setReviewing(true); setReviewError(null)
+    try { setLiveEligibility(await api.getCeremonyEligibility(item.id)) }
+    catch (reason) { setReviewError(toMessage(reason)) }
+    finally { setReviewing(false) }
+  }
 
   return <article className="panel ceremony-card">
     <div className="ceremony-card-heading">
@@ -96,7 +109,7 @@ function CeremonyCard({ item, api, working, execute }: {
       </div>
       <div className="ceremony-state-stack">
         <span className={requestStatusClass(item.status)}>{requestStatusLabel(item.status)}</span>
-        <span className={item.eligibility.canAuthorize ? 'status-pill complete' : 'status-pill blocked'}>{item.eligibility.canAuthorize ? 'Requisitos cumplidos' : 'Requisitos pendientes'}</span>
+        <span className={eligibility.canAuthorize ? 'status-pill complete' : 'status-pill blocked'}>{eligibility.canAuthorize ? 'Requisitos cumplidos' : 'Requisitos pendientes'}</span>
       </div>
     </div>
 
@@ -107,11 +120,28 @@ function CeremonyCard({ item, api, working, execute }: {
     </dl>
 
     <div className="requirement-grid">
-      {item.eligibility.requirements.map(requirement => <div className="requirement-card" key={requirement.code}>
+      {eligibility.requirements.map(requirement => <div className="requirement-card" key={requirement.code}>
         <div><strong>{requirement.name}</strong><span className={requirement.status === 'approved' ? 'requirement-ok' : requirement.status === 'observed' ? 'requirement-observed' : 'requirement-blocked'}>{requirementStatusLabel(requirement.status)}</span></div>
         <p>{requirement.reason}</p>
       </div>)}
     </div>
+
+    {isAdvancement && !final && <section className="panel" aria-label="Constancias de ascenso">
+      <div className="ceremony-actions">
+        <button className="secondary-action" type="button" disabled={working || reviewing}
+          onClick={() => { void reviewAdvancement() }}>
+          {reviewing ? 'Comprobando fuentes institucionales…' : 'Revisar elegibilidad y constancias'}
+        </button>
+      </div>
+      {reviewError && <p role="alert">{reviewError}</p>}
+      {liveEligibility && <div className="requirement-grid">
+        <div className="requirement-card"><strong>Asistencia a Tenidas</strong><p>{liveEligibility.advancement?.meetingAttendance ?? 'Pendiente de corroboración'}</p></div>
+        <div className="requirement-card"><strong>Asistencia a instrucciones</strong><p>{liveEligibility.advancement?.instructionAttendance ?? 'Pendiente de corroboración'}</p></div>
+        <div className="requirement-card"><strong>Planchas aprobadas</strong><p>{liveEligibility.advancement?.certifiedPaperCount ?? 0} (se requieren dos clases distintas)</p></div>
+        <div className="requirement-card"><strong>Continuidad validada</strong><p>{liveEligibility.advancement?.institutionalContinuityCertified ? 'Sí' : 'Pendiente'}</p></div>
+        <div className="requirement-card"><strong>Regla aplicada</strong><p>{liveEligibility.advancement?.ruleVersion ?? 'No consta regla vigente'}</p></div>
+      </div>}
+    </section>}
 
     {item.eligibility.publication && <PublicationProgress item={item} />}
 
@@ -123,7 +153,7 @@ function CeremonyCard({ item, api, working, execute }: {
     {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || item.actions.canAuthorize) && <div className="ceremony-actions">
       {item.actions.canValidateInternalAffairs && <InternalAffairsForm item={item} api={api} working={working} execute={execute} />}
       {item.actions.canPublishCandidate && <button className="secondary-action" type="button" disabled={working} title="Gran Secretaría aprueba la ficha, la hace visible y notifica a los Hermanos." onClick={() => void execute(() => api.publishCeremonyCandidate(item.id), 'Ficha aprobada por Gran Secretaría. La insinuación quedó publicada y se generaron las notificaciones institucionales.')}>Aprobar ficha y publicar</button>}
-      {item.actions.canAuthorize && <button className="primary-action" type="button" disabled={working || !item.eligibility.canAuthorize} title={item.eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
+      {item.actions.canAuthorize && <button className="primary-action" type="button" disabled={working || !eligibility.canAuthorize} title={eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
     </div>}
   </article>
 }

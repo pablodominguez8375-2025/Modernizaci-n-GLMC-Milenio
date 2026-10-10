@@ -150,6 +150,19 @@ export interface CeremonyRightSummary { amount: number; currency: string; paid: 
 export interface TreasuryCeremonyRightItem extends CeremonyRightSummary { id: string; organizationId: string; organizationName: string; organizationNumber: string | null; ceremonyType: CeremonyType; proposedDate: string | null; subjectDisplayName: string }
 export interface TreasuryCeremonyRightsResponse { total: number; items: TreasuryCeremonyRightItem[]; unpriced?:{id:string;organizationId:string;organizationName:string;ceremonyType:string;reason:string}[] }
 export interface CeremonyQueueEligibility { status: string; canAuthorize: boolean; requirements: CeremonyQueueRequirement[]; publication: CeremonyQueuePublication | null; ceremonyRight?: CeremonyRightSummary | null }
+export interface AdvancementLiveEligibility {
+  canAuthorize: boolean
+  requirements: CeremonyQueueRequirement[]
+  advancement?: {
+    ruleVersion: string
+    meetingAttendance: number
+    instructionAttendance: number
+    certifiedPaperCount: number
+    twoDifferentKindsCertified: boolean
+    institutionalContinuityCertified: boolean
+    decision: { canProceed: boolean; mode: string; requirements: { code: string; minimum: number; achieved: number; complies: boolean }[] }
+  } | null
+}
 export interface CeremonyQueueActions { canValidateInternalAffairs: boolean; canPublishCandidate: boolean; canAuthorize: boolean }
 export interface CeremonyReviewQueueItem {
   id: string
@@ -722,6 +735,17 @@ export class PmgmApiClient {
     if(this.useMocks)this.refreshMockCeremonyRights()
     if (this.useMocks) return { total: this.mockReviewCeremonies.length, items: this.mockReviewCeremonies.map(cloneCeremonyQueueItem) }
     return this.request<CeremonyReviewQueueResponse>('/api/institutional/ceremonias/bandeja')
+  }
+  async getCeremonyEligibility(ceremonyRequestId: string): Promise<AdvancementLiveEligibility> {
+    if (this.useMocks) {
+      const item = this.requireMockReviewCeremony(ceremonyRequestId)
+      return {
+        canAuthorize: item.eligibility.canAuthorize,
+        requirements: item.eligibility.requirements.map(requirement => ({ ...requirement })),
+        advancement: null,
+      }
+    }
+    return this.request<AdvancementLiveEligibility>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/elegibilidad`)
   }
   async getTreasuryCeremonyRights(): Promise<TreasuryCeremonyRightsResponse> {
     if (this.useMocks) { this.assertMockGrandTreasuryAccess('view');
