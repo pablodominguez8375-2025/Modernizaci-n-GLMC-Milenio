@@ -190,6 +190,8 @@ public static class CandidateWorkflowEndpoints
                 (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
                  x.Status == CandidateInterviewAssignmentPolicy.Completed))
             .ToListAsync(cancellationToken);
+        if (ceremony.RequiresFormalInterviewAssignments && formal.Count == 0)
+            return Results.Conflict(new { message = "El Venerable Maestro debe registrar tres designaciones respaldadas por acta antes de validar entrevistas." });
         if (formal.Count > 0)
         {
             if (formal.Count < 3 || formal.Any(x =>

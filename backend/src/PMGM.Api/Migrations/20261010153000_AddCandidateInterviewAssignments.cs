@@ -11,6 +11,10 @@ public sealed class AddCandidateInterviewAssignments : Migration
 {
     protected override void Up(MigrationBuilder m)
     {
+        // Preserva expedientes anteriores; las solicitudes nuevas activan este requisito.
+        m.AddColumn<bool>(name: "RequiresFormalInterviewAssignments",
+            schema: "core", table: "ceremony_requests", type: "boolean",
+            nullable: false, defaultValue: false);
         m.CreateTable(name: "candidate_interview_assignments", schema: "core",
             columns: t => new
             {
@@ -57,5 +61,9 @@ public sealed class AddCandidateInterviewAssignments : Migration
     }
 
     protected override void Down(MigrationBuilder m)
-        => m.DropTable(name: "candidate_interview_assignments", schema: "core");
+    {
+        m.DropTable(name: "candidate_interview_assignments", schema: "core");
+        m.DropColumn(name: "RequiresFormalInterviewAssignments",
+            schema: "core", table: "ceremony_requests");
+    }
 }

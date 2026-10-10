@@ -165,6 +165,7 @@ public static class CeremonyEndpoints
         {
             OrganizationId = request.OrganizationId,
             CeremonyType = request.CeremonyType,
+            RequiresFormalInterviewAssignments = request.CeremonyType == CeremonyCodes.Type.Initiation,
             MemberId = request.MemberId,
             CandidatePersonId = request.CandidatePersonId,
             ProposedDate = request.ProposedDate,
