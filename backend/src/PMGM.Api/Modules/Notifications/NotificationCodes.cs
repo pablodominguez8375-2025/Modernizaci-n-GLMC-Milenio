@@ -44,6 +44,7 @@ public static class NotificationCodes
     public static class Template
     {
         public const string CandidatePublicationApproved = "candidate.publication.approved";
+        public const string CandidateInterviewAssigned = "candidate.interview.assigned";
     }
 
     public static class Type
