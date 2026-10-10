@@ -154,6 +154,7 @@ export interface CandidateInterviewAssignment {
   scheduledDate: string | null
   status: string
   assignedAtUtc?: string
+  acceptedAtUtc?: string | null
   notificationQueuedAtUtc?: string | null
   notified?: boolean
   reportDocumentVersionId?: string | null
@@ -500,6 +501,17 @@ export class CandidateIntakeApiClient {
   async getMyInterviewAssignments(): Promise<{ items: CandidateInterviewAssignment[] }> {
     if (this.useMocks) return { items: [...this.mockInterviewerAssignments.values()].flat().filter(x => x.status !== 'replaced') }
     return this.request('/api/insinuados/entrevistas/mis-designaciones')
+  }
+
+  async acceptAssignedInterview(requestId: string, assignmentId: string): Promise<void> {
+    if (this.useMocks) {
+      const item = (this.mockInterviewerAssignments.get(requestId) ?? []).find(x => x.id === assignmentId)
+      if (!item || item.status !== 'assigned' || !item.acceptedAtUtc) throw new CandidateIntakeApiHttpError(409, 'Debe aceptar la entrevista antes de entregar el informe.')
+      item.acceptedAtUtc ??= new Date().toISOString()
+      return
+    }
+    await this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/entrevistadores-designados/' + encodeURIComponent(assignmentId) + '/aceptar', { method: 'POST' })
   }
 
   async deliverAssignedInterview(requestId: string, assignmentId: string, documentVersionId: string): Promise<void> {
