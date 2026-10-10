@@ -11,6 +11,7 @@ import BootstrapPage from './BootstrapPage'
 import CalendarPage from './CalendarPage'
 import CandidateProfilePage from './CandidateProfilePage'
 import CandidateWorkshopIntakePage from './CandidateWorkshopIntakePage'
+import CandidateInterviewAssignmentsPage from './CandidateInterviewAssignmentsPage'
 import CeremoniesPage from './CeremoniesPage'
 import DashboardPage from './DashboardPage'
 import DataQualityCaseQueuePage from './DataQualityCaseQueuePage'
@@ -60,7 +61,7 @@ import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
+type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
@@ -114,7 +115,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const rawCouncilApi = useLodgeCouncilApi()
   const councilApi = useMemo(() => restrictClient(rawCouncilApi, 'lodgeCouncilApi', rawApi, () => accessRef.current), [rawCouncilApi, rawApi])
   const canView = (code: string) => viewAccess?.views[code]?.includes('view') ?? false
-  const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', memberPayments:'member', memberAttendance:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
+  const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', interviews:'member', memberPayments:'member', memberAttendance:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
   const activeViewAllowed = !viewCodes[view] || canView(viewCodes[view]!)
   useEffect(() => { if (!activeViewAllowed) setView('dashboard') }, [activeViewAllowed])
   useEffect(() => {
@@ -264,6 +265,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     return [
       ...entry(true, 'dashboard', 'Inicio', 'General', 'home', 'pendientes resumen'),
       ...entry(canMemberPortal, 'memberPortal', 'Mi ficha', 'Portal del Hermano', 'member', 'perfil datos personales mis datos'),
+      ...entry(canMemberPortal, 'interviews', canManageLodgeSummaryAccess ? 'Designar entrevistadores' : 'Mis entrevistas', 'Mi Taller', 'candidate', 'designar maestros entrevistas insinuados informes'),
       ...entry(canMemberPortal, 'memberPayments', 'Mis pagos', 'Portal del Hermano', 'treasury', 'cuotas tesoreria estado de cuenta hospitalaria'),
       ...entry(canMemberPortal, 'memberAttendance', 'Mis asistencias', 'Portal del Hermano', 'calendar', 'asistencia tenidas instruccion justificada'),
       ...entry(canCalendar, 'calendar', 'Agenda', 'Portal del Hermano', 'calendar', 'agenda tenidas eventos'),
@@ -290,7 +292,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       ...entry(canLibrary, 'library', 'Biblioteca Virtual', 'Conocimiento', 'library', 'libros planchas'),
       ...entry(canDocuments, 'documents', 'Gestor Documental', 'Conocimiento', 'documents', 'pdf archivos'),
     ]
-  }, [initiationEntry, viewAccess, canMemberPortal, canCalendar, canNotifications, canConfigureSystem, canBootstrap, canCandidateProfile, canSecretariat, canCeremonies, canMembers, canReporting, canMemberControl, canDataQuality, canCaseQueue, canRegimen, canTreasury, canHospitalariaWorkspace, canHospitalaria, canGrandArchive, canReadOrderInstructions, canLodgeProfile, canLodge, isLodgeSecretaryWorkspace, canManageAnyInstruction, canLodgeTreasury, canApproveLodgeExpenses, canLibrary, canDocuments, canOpenLodgeTreasury, canOpenGrandTreasury, canOpenGrandHospitalaria])
+  }, [initiationEntry, viewAccess, canMemberPortal, canCalendar, canNotifications, canConfigureSystem, canBootstrap, canCandidateProfile, canSecretariat, canCeremonies, canMembers, canReporting, canMemberControl, canDataQuality, canCaseQueue, canRegimen, canTreasury, canHospitalariaWorkspace, canHospitalaria, canGrandArchive, canReadOrderInstructions, canLodgeProfile, canLodge, isLodgeSecretaryWorkspace, canManageAnyInstruction, canLodgeTreasury, canManageLodgeSummaryAccess, canApproveLodgeExpenses, canLibrary, canDocuments, canOpenLodgeTreasury, canOpenGrandTreasury, canOpenGrandHospitalaria])
 
   const changeDemoProfile = (next: DemoProfileKey) => {
     api.demoAccessSubject=`demo:${next}`
@@ -303,6 +305,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     const path = actionUrl.split(/[?#]/, 1)[0]
     if (path === '/initiation-circuit') return setView('initiationCircuit')
     if (path === '/candidates') return setView('candidates')
+    if (path === '/interviews' && canMemberPortal) return setView('interviews')
     if (path === '/calendar' && canCalendar) return setView('calendar')
     if (path === '/ceremonies' && canCeremonies) return setView('ceremonies')
     if (path === '/lodge' && canLodge) return setView('lodge')
@@ -322,6 +325,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <button className="sidebar-collapse" type="button" aria-pressed={sidebarCollapsed} aria-label={sidebarCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'} title={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'} onClick={toggleSidebar}><InstitutionalIcon name={sidebarCollapsed ? 'sidebarExpand' : 'sidebarCollapse'} size={18} /><span>{sidebarCollapsed ? 'Expandir' : 'Contraer menú'}</span></button>
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" title="Inicio" data-in-tabbar="true" onClick={() => setView('dashboard')}><NavIcon name="home" /> <span className="nav-text" data-hint={navHint('Inicio')}>Inicio</span></button>
         <div className="nav-section" data-in-tabbar={operational ? undefined : 'true'}>Mi espacio</div>
+        <ModuleAccess icon="candidate" label={canManageLodgeSummaryAccess ? 'Designar entrevistadores' : 'Mis entrevistas'} allowed={canMemberPortal} active={view === 'interviews'} onOpen={canMemberPortal ? () => setView('interviews') : undefined} />
         <ModuleAccess icon="member" label="Mi ficha" inTabbar={!operational} allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
         <ModuleAccess icon="treasury" label="Mis pagos" allowed={canMemberPortal} active={view === 'memberPayments'} onOpen={canMemberPortal ? () => setView('memberPayments') : undefined} />
         <ModuleAccess icon="calendar" label="Mis asistencias" allowed={canMemberPortal} active={view === 'memberAttendance'} onOpen={canMemberPortal ? () => setView('memberAttendance') : undefined} />
@@ -377,6 +381,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
           ...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga', badge: badges.candidateProfile }] : []),
           ...((canCandidateProfile || canCeremonies) && canView('initiationcircuit') ? [{ id: 'initiationCircuit' as View, label: 'Circuito de Iniciación' }] : []),
         ]} />}
+        {view === 'interviews' && canMemberPortal && <CandidateInterviewAssignmentsPage api={candidateIntakeApi} canDesignate={canManageLodgeSummaryAccess} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}

@@ -38,6 +38,17 @@ public static class DynamicViewAccess
         if (route.StartsWith("/api/regimen-interior") || route.StartsWith("/api/reporting")) return "regimen";
         if (route.StartsWith("/api/admisiones")) return "admissions";
         if (route.StartsWith("/api/insinuados/regimen-interior")) return "regimen";
+        // Designaciones y entregas de entrevistas: capa de vista personal.
+        // La identidad del Maestro, el Taller y la competencia del Venerable
+        // se validan de nuevo por endpoints; no heredar el acceso de Secretaría.
+        if (route.StartsWith("/api/insinuados") &&
+            (route.Contains("/entrevistadores-") ||
+             route.Contains("/maestros-entrevistadores") ||
+             route.Contains("/expedientes-para-entrevista") ||
+             route.Contains("/entrevistas/mis-designaciones") ||
+             (route.Contains("/entrevistas/") && route.EndsWith("/contenido"))))
+            return "member";
+
         if (route.StartsWith("/api/insinuados")) return route.Contains("/flujo") || route.Contains("/deliberacion-inicial") ||
             route.Contains("/antecedentes") || route.Contains("/entrevistas") || route.Contains("/revision-tercer-grado") ||
             route.Contains("/balotaje") || route.Contains("/solicitud-iniciacion") ? "initiationcircuit" : "candidateprofile";

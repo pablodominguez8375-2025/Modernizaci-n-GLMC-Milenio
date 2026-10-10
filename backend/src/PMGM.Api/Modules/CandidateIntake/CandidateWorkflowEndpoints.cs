@@ -25,6 +25,7 @@ public static class CandidateWorkflowEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/balotaje", RecordFinalBallotAsync);
         group.MapPost("/solicitudes/{requestId:guid}/solicitud-iniciacion", SubmitInitiationRequestAsync);
         group.MapGet("/solicitudes/{requestId:guid}/flujo", GetWorkflowAsync);
+        CandidateInterviewAssignmentEndpoints.Map(group);
 
         return endpoints;
     }
@@ -37,6 +38,7 @@ public static class CandidateWorkflowEndpoints
         CandidateIntakeDbContext intakeDb,
         DocumentManagementDbContext documentDb,
         IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver memberResolver,
         IDocumentObjectStore objectStore,
         IDocumentMalwareScanner scanner,
         IOptions<DocumentStorageOptions> storageOptions,
@@ -46,7 +48,30 @@ public static class CandidateWorkflowEndpoints
         var profile = await intakeDb.CandidateIntakeProfiles.AsNoTracking()
             .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId, cancellationToken);
         if (profile is null) return Results.NotFound(new { message = "Primero debe existir la ficha privada del insinuado." });
-        if (!access.CanManageOrganization(httpContext.User, profile.OrganizationId)) return Results.Forbid();
+        var designated = await coreDb.CandidateInterviewAssignments.AsNoTracking().SingleOrDefaultAsync(x =>
+            x.Id == interviewId && x.CeremonyRequestId == requestId &&
+            x.OrganizationId == profile.OrganizationId &&
+            x.Status == CandidateInterviewAssignmentPolicy.Assigned, cancellationToken);
+        if (designated is not null)
+        {
+            var me = await memberResolver.ResolveAsync(httpContext.User, cancellationToken);
+            if (me is null || me.MemberId != designated.InterviewerMemberId || me.EffectiveDegree < 3 ||
+                !await CandidateInterviewAssignmentEndpoints.IsActiveDesignatedMasterAsync(
+                    coreDb, profile.OrganizationId, me.MemberId, cancellationToken))
+                return Results.Forbid();
+        }
+        else
+        {
+            if (!access.CanManageOrganization(httpContext.User, profile.OrganizationId))
+                return Results.Forbid();
+            if (await coreDb.CeremonyRequests.AsNoTracking().AnyAsync(x =>
+                    x.Id == requestId && x.RequiresFormalInterviewAssignments, cancellationToken) ||
+                await coreDb.CandidateInterviewAssignments.AsNoTracking().AnyAsync(x =>
+                    x.CeremonyRequestId == requestId &&
+                    (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
+                     x.Status == CandidateInterviewAssignmentPolicy.Completed), cancellationToken))
+                return Results.Conflict(new { message = "El expediente exige designaciones formales; solo los Maestros autorizados pueden subir sus informes." });
+        }
         var existingDocument = await documentDb.InstitutionalDocuments.SingleOrDefaultAsync(x => x.Id == interviewId, cancellationToken);
         if (existingDocument is not null &&
             (existingDocument.DocumentType != "candidate_interview" || existingDocument.Edition != requestId.ToString("N") || existingDocument.OrganizationId != profile.OrganizationId))
@@ -65,6 +90,18 @@ public static class CandidateWorkflowEndpoints
             return Results.BadRequest(new { message = "El resultado debe ser favorable o desfavorable." });
         if (!DateOnly.TryParse(dateText, out var interviewDate) || interviewDate > ChileToday())
             return Results.BadRequest(new { message = "La fecha de entrevista no es válida." });
+        if (designated is not null)
+        {
+            if (interviewDate < designated.CouncilDecisionDate)
+                return Results.BadRequest(new { message = "La entrevista no puede preceder al acuerdo." });
+            var officialName = await coreDb.Members.AsNoTracking()
+                .Where(x => x.Id == designated.InterviewerMemberId)
+                .Select(x => x.Person.FirstNames + " " + x.Person.LastNames)
+                .SingleOrDefaultAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(officialName) ||
+                !string.Equals(officialName.Trim(), interviewer.Trim(), StringComparison.OrdinalIgnoreCase))
+                return Results.BadRequest(new { message = "El autor debe coincidir con el Maestro oficialmente designado." });
+        }
 
         var contentType = DocumentContentTypePolicy.Normalize(httpContext.Request.ContentType);
         if (!DocumentContentTypePolicy.TryValidateMetadata(fileName, contentType, out var expectedContentType, out var metadataError))
@@ -147,6 +184,27 @@ public static class CandidateWorkflowEndpoints
                 version.DocumentDate == item.InterviewDate && version.ShortDescription == item.Summary.Trim() &&
                 version.OfficialDocumentType == item.Result)))
             return Results.BadRequest(new { message = "Todas las entrevistas deben tener un archivo Word o PDF validado y asociado al expediente." });
+        // La designación formal no puede ser sustituida por texto libre o archivos
+        // aportados en nombre de otro Maestro. Históricos sin designaciones quedan
+        // bajo el circuito anterior; nuevos expedientes deben usar esta asignación.
+        var formal = await coreDb.CandidateInterviewAssignments.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId &&
+                (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
+                 x.Status == CandidateInterviewAssignmentPolicy.Completed))
+            .ToListAsync(cancellationToken);
+        if (ceremony.RequiresFormalInterviewAssignments && formal.Count == 0)
+            return Results.Conflict(new { message = "El Venerable Maestro debe registrar tres designaciones respaldadas por acta antes de validar entrevistas." });
+        if (formal.Count > 0)
+        {
+            if (formal.Count < 3 || formal.Any(x =>
+                    x.Status != CandidateInterviewAssignmentPolicy.Completed ||
+                    x.ReportDocumentVersionId == null) ||
+                formal.Select(x => x.InterviewerMemberId).Distinct().Count() != formal.Count ||
+                formal.Select(x => x.ReportDocumentVersionId).Distinct().Count() != formal.Count ||
+                request.Interviews.Count != formal.Count ||
+                request.Interviews.Any(x => !formal.Any(a => a.ReportDocumentVersionId == x.DocumentVersionId)))
+                return Results.Conflict(new { message = "Deben constar informes privados válidos de cada Maestro formalmente designado antes de continuar." });
+        }
         if (request.ConfidentialQuestionnaireAvailable && string.IsNullOrWhiteSpace(request.ConfidentialQuestionnaireReference))
             return Results.BadRequest(new { message = "Debe indicar la referencia privada del cuestionario confidencial." });
         if (request.AutobiographyAvailable && string.IsNullOrWhiteSpace(request.AutobiographyReference))
