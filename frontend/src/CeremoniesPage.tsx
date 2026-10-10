@@ -1,5 +1,8 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import {
+  type AdvancementLiveEligibility,
+  type AdvancementPaperAttestation,
+  type AdvancementPaperAttestationCandidate,
   type CeremonyInternalAffairsValidationRequest,
   type CeremonyReviewQueueItem,
   type PmgmApiClient,
@@ -83,9 +86,23 @@ function CeremonyCard({ item, api, working, execute }: {
   working: boolean
   execute: (action: () => Promise<unknown>, success: string) => Promise<unknown | null>
 }) {
-  const completed = item.eligibility.requirements.filter(requirement => requirement.status === 'approved').length
-  const total = item.eligibility.requirements.length
+  const [liveEligibility, setLiveEligibility] = useState<AdvancementLiveEligibility | null>(null)
+  const [reviewing, setReviewing] = useState(false)
+  const [reviewError, setReviewError] = useState<string | null>(null)
+  useEffect(() => { setLiveEligibility(null); setReviewError(null) }, [item.eligibility])
+  const eligibility = liveEligibility ?? item.eligibility
+  const completed = eligibility.requirements.filter(requirement => requirement.status === 'approved').length
+  const total = eligibility.requirements.length
   const final = item.status === 'authorized' || item.status === 'rejected'
+  const isAdvancement = item.ceremonyType === 'wage_increase' || item.ceremonyType === 'exaltation'
+  const canAuthorize = item.actions.canAuthorize ||
+    (isAdvancement && Boolean(item.actions.canAuthorizeAfterLiveReview) && Boolean(liveEligibility?.canAuthorize))
+  const reviewAdvancement = async () => {
+    setReviewing(true); setReviewError(null)
+    try { setLiveEligibility(await api.getCeremonyEligibility(item.id)) }
+    catch (reason) { setReviewError(toMessage(reason)) }
+    finally { setReviewing(false) }
+  }
 
   return <article className="panel ceremony-card">
     <div className="ceremony-card-heading">
@@ -96,7 +113,7 @@ function CeremonyCard({ item, api, working, execute }: {
       </div>
       <div className="ceremony-state-stack">
         <span className={requestStatusClass(item.status)}>{requestStatusLabel(item.status)}</span>
-        <span className={item.eligibility.canAuthorize ? 'status-pill complete' : 'status-pill blocked'}>{item.eligibility.canAuthorize ? 'Requisitos cumplidos' : 'Requisitos pendientes'}</span>
+        <span className={eligibility.canAuthorize ? 'status-pill complete' : 'status-pill blocked'}>{eligibility.canAuthorize ? 'Requisitos cumplidos' : 'Requisitos pendientes'}</span>
       </div>
     </div>
 
@@ -107,11 +124,31 @@ function CeremonyCard({ item, api, working, execute }: {
     </dl>
 
     <div className="requirement-grid">
-      {item.eligibility.requirements.map(requirement => <div className="requirement-card" key={requirement.code}>
+      {eligibility.requirements.map(requirement => <div className="requirement-card" key={requirement.code}>
         <div><strong>{requirement.name}</strong><span className={requirement.status === 'approved' ? 'requirement-ok' : requirement.status === 'observed' ? 'requirement-observed' : 'requirement-blocked'}>{requirementStatusLabel(requirement.status)}</span></div>
         <p>{requirement.reason}</p>
       </div>)}
     </div>
+
+    {isAdvancement && !final && <section className="panel" aria-label="Constancias de ascenso">
+      <div className="ceremony-actions">
+        <button className="secondary-action" type="button" disabled={working || reviewing}
+          onClick={() => { void reviewAdvancement() }}>
+          {reviewing ? 'Comprobando fuentes institucionales…' : 'Revisar elegibilidad y constancias'}
+        </button>
+      </div>
+      {reviewError && <p role="alert">{reviewError}</p>}
+      {liveEligibility && <div className="requirement-grid">
+        <div className="requirement-card"><strong>Asistencia a Tenidas</strong><p>{liveEligibility.advancement?.meetingAttendance ?? 'Pendiente de corroboración'}</p></div>
+        <div className="requirement-card"><strong>Asistencia a instrucciones</strong><p>{liveEligibility.advancement?.instructionAttendance ?? 'Pendiente de corroboración'}</p></div>
+        <div className="requirement-card"><strong>Planchas aprobadas</strong><p>{liveEligibility.advancement?.certifiedPaperCount ?? 0} (se requieren dos clases distintas)</p></div>
+        <div className="requirement-card"><strong>Continuidad validada</strong><p>{liveEligibility.advancement?.institutionalContinuityCertified ? 'Sí' : 'Pendiente'}</p></div>
+        <div className="requirement-card"><strong>Regla aplicada</strong><p>{liveEligibility.advancement?.ruleVersion ?? 'No consta regla vigente'}</p></div>
+      </div>}
+    </section>}
+
+    {isAdvancement && !final && (item.actions.canSubmitAdvancementEvidence || item.actions.canReviewAdvancementEvidence) &&
+      <AdvancementEvidencePanel item={item} api={api} working={working} onUpdated={() => setLiveEligibility(null)} />}
 
     {item.eligibility.publication && <PublicationProgress item={item} />}
 
@@ -120,12 +157,162 @@ function CeremonyCard({ item, api, working, execute }: {
       <dl><div><dt>Exigido</dt><dd>{formatMoney(item.eligibility.ceremonyRight.amount, item.eligibility.ceremonyRight.currency)}</dd></div><div><dt>Pagado</dt><dd>{formatMoney(item.eligibility.ceremonyRight.paid, item.eligibility.ceremonyRight.currency)}</dd></div><div><dt>Saldo</dt><dd>{formatMoney(item.eligibility.ceremonyRight.balance, item.eligibility.ceremonyRight.currency)}</dd></div></dl>
     </section>}
 
-    {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || item.actions.canAuthorize) && <div className="ceremony-actions">
+    {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || canAuthorize) && <div className="ceremony-actions">
       {item.actions.canValidateInternalAffairs && <InternalAffairsForm item={item} api={api} working={working} execute={execute} />}
       {item.actions.canPublishCandidate && <button className="secondary-action" type="button" disabled={working} title="Gran Secretaría aprueba la ficha, la hace visible y notifica a los Hermanos." onClick={() => void execute(() => api.publishCeremonyCandidate(item.id), 'Ficha aprobada por Gran Secretaría. La insinuación quedó publicada y se generaron las notificaciones institucionales.')}>Aprobar ficha y publicar</button>}
-      {item.actions.canAuthorize && <button className="primary-action" type="button" disabled={working || !item.eligibility.canAuthorize} title={item.eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
+      {canAuthorize && <button className="primary-action" type="button" disabled={working || !eligibility.canAuthorize} title={eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
     </div>}
   </article>
+}
+
+function AdvancementEvidencePanel({ item, api, working, onUpdated }: {
+  item: CeremonyReviewQueueItem
+  api: PmgmApiClient
+  working: boolean
+  onUpdated: () => void
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [candidates, setCandidates] = useState<AdvancementPaperAttestationCandidate[]>([])
+  const [records, setRecords] = useState<AdvancementPaperAttestation[]>([])
+  const [choice, setChoice] = useState('')
+  const [kind, setKind] = useState<'degree_symbolism' | 'masonic_general_culture'>('degree_symbolism')
+  const [reviewId, setReviewId] = useState('')
+  const [councilReference, setCouncilReference] = useState('')
+  const [continuityReference, setContinuityReference] = useState('')
+  const [note, setNote] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const reload = async () => {
+    const [workPapers, attestations] = await Promise.all([
+      api.getAdvancementPaperCandidates(item.id),
+      api.getAdvancementAttestations(item.id),
+    ])
+    setCandidates(workPapers.attestationCandidates)
+    setRecords(attestations.records)
+  }
+  const run = async (fn: () => Promise<unknown>, ok: string) => {
+    setBusy(true); setError(null); setSuccess(null)
+    try { await fn(); await reload(); onUpdated(); setSuccess(ok) }
+    catch (reason) { setError(toMessage(reason)) }
+    finally { setBusy(false) }
+  }
+  const load = async () => {
+    setBusy(true); setError(null)
+    try { await reload(); setExpanded(true) }
+    catch (reason) { setError(toMessage(reason)) }
+    finally { setBusy(false) }
+  }
+  const chosenCandidate = choice === '' ? undefined : candidates[Number(choice)]
+  const pending = records.filter(record => record.status === 'pending')
+
+  return <section className="panel" aria-label="Constancias institucionales para ascenso">
+    <div className="ceremony-actions">
+      <strong>Constancias de planchas y continuidad</strong>
+      <button className="secondary-action" type="button" disabled={busy || working}
+        onClick={() => { void load() }}>
+        {busy ? 'Consultando…' : expanded ? 'Actualizar constancias' : 'Gestionar constancias'}
+      </button>
+    </div>
+    <p>La Secretaría registra referencias de documentos ya cotejados. Régimen Interior resuelve la presentación y la continuidad mediante constancias auditadas; ninguna referencia aprueba por sí sola una ceremonia.</p>
+    {error && <p role="alert">{error}</p>}
+    {success && <p role="status">{success}</p>}
+    {expanded && <>
+      <div className="requirement-grid">
+        <div className="requirement-card"><strong>Constancias registradas</strong><p>{records.length}</p></div>
+        <div className="requirement-card"><strong>Con revisión pendiente</strong><p>{pending.length}</p></div>
+      </div>
+      {item.actions.canSubmitAdvancementEvidence && <div className="ceremony-filters">
+        <h3>Registrar presentación de plancha</h3>
+        <label className="field"><span>Plancha y Tenida con documentos cotejados</span>
+          <select value={choice} onChange={event => setChoice(event.target.value)}>
+            <option value="">Seleccione evidencia</option>
+            {candidates.map((candidate, index) =>
+              <option key={candidate.workPaperVersionId + candidate.meetingId} value={String(index)}>
+                {candidate.title} — {candidate.presentationDate}
+              </option>)}
+          </select>
+        </label>
+        <label className="field"><span>Tipo de trabajo</span>
+          <select value={kind} onChange={event => setKind(event.target.value as typeof kind)}>
+            <option value="degree_symbolism">Simbolismo del grado</option>
+            <option value="masonic_general_culture">Cultura general masónica</option>
+          </select>
+        </label>
+        <div className="ceremony-actions">
+          <button className="secondary-action" type="button" disabled={busy || working || !chosenCandidate}
+            onClick={() => { if (!chosenCandidate) return; void run(() =>
+              api.submitAdvancementPresentation(item.id, {
+                workPaperDocumentId: chosenCandidate.workPaperDocumentId,
+                workPaperVersionId: chosenCandidate.workPaperVersionId,
+                meetingId: chosenCandidate.meetingId,
+                extractVersionId: chosenCandidate.extractVersionId,
+                fullMinuteVersionId: chosenCandidate.fullMinuteVersionId,
+                presentationDate: chosenCandidate.presentationDate,
+                workKind: kind,
+              }), 'Presentación registrada para revisión de Régimen Interior.') }}>
+            Registrar para revisión
+          </button>
+        </div>
+        {candidates.length === 0 && <p>No hay paquetes completos. Registre primero la plancha, la Tenida celebrada, el extracto y el acta completa en Secretaría.</p>}
+      </div>}
+      {item.actions.canReviewAdvancementEvidence && <div className="ceremony-filters">
+        <h3>Resolver constancias institucionales</h3>
+        <label className="field"><span>Plancha pendiente</span>
+          <select value={reviewId} onChange={event => setReviewId(event.target.value)}>
+            <option value="">Seleccione constancia pendiente</option>
+            {pending.map(row => <option key={row.id} value={row.id}>
+              {row.workKind === 'degree_symbolism' ? 'Simbolismo' : 'Cultura general'} — {row.presentationDate}
+            </option>)}
+          </select>
+        </label>
+        <label className="field"><span>Referencia del acuerdo de Cámara del Medio</span>
+          <input value={councilReference} maxLength={500} onChange={e => setCouncilReference(e.target.value)}
+            placeholder="Acta y folio de aprobación" />
+        </label>
+        <label className="field"><span>Observaciones de revisión</span>
+          <input value={note} maxLength={2000} onChange={e => setNote(e.target.value)} />
+        </label>
+        <div className="ceremony-actions">
+          <button className="secondary-action" type="button"
+            disabled={busy || working || !reviewId || !councilReference.trim()}
+            onClick={() => { void run(() => api.resolveAdvancementAttestation(item.id, reviewId, {
+              approved: true, councilApprovalReference: councilReference, reviewNotes: note || null,
+            }), 'Presentación y aprobación documentada por Régimen Interior.') }}>
+            Aprobar constancia
+          </button>
+          <button className="secondary-action" type="button" disabled={busy || working || !reviewId}
+            onClick={() => { void run(() => api.resolveAdvancementAttestation(item.id, reviewId, {
+              approved: false, councilApprovalReference: null, reviewNotes: note || null,
+            }), 'Constancia rechazada de forma auditada.') }}>
+            Rechazar constancia
+          </button>
+        </div>
+        <h3>Validación de antigüedad continuada</h3>
+        <label className="field"><span>Referencia formal de la verificación</span>
+          <input value={continuityReference} maxLength={500} onChange={e => setContinuityReference(e.target.value)}
+            placeholder="Acta, certificado o resolución" />
+        </label>
+        <div className="ceremony-actions">
+          <button className="secondary-action" type="button"
+            disabled={busy || working || !continuityReference.trim()}
+            onClick={() => { void run(() => api.validateAdvancementContinuity(item.id, {
+              approved: true, reference: continuityReference,
+            }), 'Continuidad institucional validada con regla vigente.') }}>
+            Validar continuidad
+          </button>
+          <button className="secondary-action" type="button"
+            disabled={busy || working || !continuityReference.trim()}
+            onClick={() => { void run(() => api.validateAdvancementContinuity(item.id, {
+              approved: false, reference: continuityReference,
+            }), 'Continuidad observada/rechazada en el expediente.') }}>
+            Rechazar continuidad
+          </button>
+        </div>
+      </div>}
+    </>}
+  </section>
 }
 
 function InternalAffairsForm({ item, api, working, execute }: {

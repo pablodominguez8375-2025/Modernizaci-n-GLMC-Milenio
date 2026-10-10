@@ -42,6 +42,7 @@ public static class CeremonyEndpoints
         AdvancementSeniorityRuleEndpoints.Map(group);
         AdvancementAttendanceEndpoints.Map(group);
         AdvancementWorkPaperEndpoints.Map(group);
+        AdvancementCertificationEndpoints.Map(group);
         AdvancementReviewEndpoints.Map(group);
 
         return endpoints;
@@ -703,17 +704,21 @@ public static class CeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
+        DocumentManagementDbContext documentsDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        var context = await BuildEligibilityContextAsync(requestId, db, cancellationToken);
+        var context = await BuildEligibilityContextAsync(requestId, db, lodgeDb, documentsDb, cancellationToken);
         if (context is null)
         {
             return Results.NotFound();
         }
 
         if (!access.CanEvaluateCeremonies(httpContext.User) &&
-            !access.CanReadOrganization(httpContext.User, context.Request.OrganizationId))
+            !(context.Request.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation
+                ? access.CanManageLodgeSecretariat(httpContext.User, context.Request.OrganizationId)
+                : access.CanReadOrganization(httpContext.User, context.Request.OrganizationId)))
         {
             return Results.Forbid();
         }
@@ -725,6 +730,8 @@ public static class CeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
+        DocumentManagementDbContext documentsDb,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -748,7 +755,7 @@ public static class CeremonyEndpoints
             return Results.Conflict(new { message = "La ceremonia ya se encuentra autorizada." });
         }
 
-        var context = await BuildEligibilityContextAsync(requestId, db, cancellationToken);
+        var context = await BuildEligibilityContextAsync(requestId, db, lodgeDb, documentsDb, cancellationToken);
         if (context is null)
         {
             return Results.NotFound();
@@ -796,6 +803,11 @@ public static class CeremonyEndpoints
                 $"Publicación del insinuado: {context.Publication.CompletedDays} días válidos de {context.Publication.RequiredDays} requeridos.");
         }
 
+        if (context.Advancement is not null)
+            AddFrozenValidation(db, requestId, CeremonyCodes.ValidationType.AdvancementEligibility,
+                context.Advancement.RuleId, today,
+                $"Validación institucional al {today:yyyy-MM-dd}: {context.Advancement.CertifiedPaperCount} planchas aprobadas de grado; regla {context.Advancement.RuleVersion}.");
+
         ceremony.Status = CeremonyCodes.RequestStatus.Authorized;
         var authorizedAtUtc = DateTimeOffset.UtcNow;
         var frozenReferences = await CandidatePublicationEvidenceStore.ReadAsync(db,
@@ -816,6 +828,11 @@ public static class CeremonyEndpoints
                 ceremony.Status,
                 authorizedAtUtc,
                 evaluatedAsOf = context.AsOfDate,
+                advancementRuleId = context.Advancement?.RuleId,
+                advancementRuleVersion = context.Advancement?.RuleVersion,
+                advancementCertifiedPaperDocumentIds = context.Advancement?.CertifiedPaperDocumentIds,
+                advancementGradeStart = context.Advancement?.GradeStart,
+                advancementContinuityCertified = context.Advancement?.InstitutionalContinuityCertified,
                 publicationRequiredDays = context.Publication?.RequiredDays,
                 publicationCompletedDays = context.Publication?.CompletedDays,
                 publicationId = context.Publication?.Id,
@@ -997,6 +1014,8 @@ public static class CeremonyEndpoints
     private static async Task<EligibilityContext?> BuildEligibilityContextAsync(
         Guid requestId,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
+        DocumentManagementDbContext documentsDb,
         CancellationToken cancellationToken)
     {
         var ceremony = await db.CeremonyRequests
@@ -1087,6 +1106,11 @@ public static class CeremonyEndpoints
                 publicationSnapshot.CompletedDays,
                 publicationSnapshot.RuleCode);
 
+        var advancement = ceremony.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation
+            ? await AdvancementAuthorizationProjection.EvaluateAsync(
+                ceremony, today, db, lodgeDb, documentsDb, cancellationToken)
+            : null;
+
         var decision = CeremonyEligibilityPolicy.Evaluate(
             ceremony.CeremonyType,
             internalAffairs?.Status,
@@ -1094,10 +1118,11 @@ public static class CeremonyEndpoints
             hospitalaria?.Status,
             grandMaster?.Status,
             evidence,
-            ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m));
+            ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
+            advancement: advancement?.Decision);
 
         return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
-            right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today);
+            right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today, advancement);
     }
 
     private static object ToEligibilityResponse(EligibilityContext context) => new
@@ -1109,6 +1134,7 @@ public static class CeremonyEndpoints
         status = context.Decision.Status,
         canAuthorize = context.Decision.CanAuthorize,
         requirements = context.Decision.Requirements,
+        advancement = context.Advancement,
         ceremonyRight = context.CeremonyRightAmount is null ? null : new
         {
             amount = context.CeremonyRightAmount,
@@ -1195,7 +1221,8 @@ public static class CeremonyEndpoints
         decimal CeremonyRightPaid,
         decimal CeremonyRightBalance,
         CeremonyEligibilityDecision Decision,
-        DateOnly AsOfDate);
+        DateOnly AsOfDate,
+        AdvancementAuthorizationSnapshot? Advancement);
 
     private sealed record CandidatePublicationSnapshot(
         Guid Id,
