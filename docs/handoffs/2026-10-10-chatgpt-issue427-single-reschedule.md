@@ -23,3 +23,12 @@ Solo ChatGPT; no modificar archivos de PR #434, especialmente tests Integration 
 - Aviso idempotente por ID del cambio auditado: regresar a una fecha anterior produce un nuevo aviso; repetir el mismo PATCH no lo duplica. Prueba HTTP A → B → A con reintentos comprueba tres cambios y tres avisos privados. No se agregan columnas ni migraciones de datos por esta corrección.
 - Verificación local visual real con Chromium y datos sintéticos a 360, 768 y 1440 px: designar tres Maestros → reprogramar primero → mensaje de éxito, sin desbordamiento horizontal en los tres tamaños. Se corrigió min-width de grids/controles con CSS exclusivo de la página; no cambia tema global ni identidad. Capturas de sesión inspeccionadas, no equivalen a aceptación visual institucional.
 - CI del SHA intermedio 10f3a08 falló por analizador xUnit2031 en la prueba añadida; corregido con `Assert.Single(rows, predicate)`. Exigir nuevos gates del SHA final, no reutilizar resultados previos.
+
+## Integración verificada — PR #435
+- Integrada por squash en `dev@778bb7ee0690c5e569b49f195e6f3b3bd0abbf7a`, desde base `5da7a3d3ac1e0f82f812a76e208911368b33a411`; inicio de sesión `4efd96768c3bee3e5dca79bc0a8d1b10ccfafa54`.
+- HEAD PR `22c9c575ea2119c13cf8a34e793240208c6e6280`: PMGM CI #38094967176, Showcase #38094967170 y QA Installable #38094967097 SUCCESS. Backend/PostgreSQL y nueva prueba HTTP aprobados.
+- 12 archivos: endpoint, política, códigos/plantilla de aviso, migración aditiva NotificationDbContext `20261010221500`, tests unitario/HTTP, frontend/API/políticas de método y CSS exclusivo de la vista, handoff. No nuevas columnas de datos.
+- Frontend local: 11/11 pruebas de API demo, tsc/lint/build SUCCESS. Recorrido Chromium y capturas inspeccionadas 360/768/1440: sin overflow, cambio individual exitoso.
+- PR #436 documental previa también integrada. Publicación del nuevo `dev` y paquete QA postmerge pendientes de comprobación; no se afirma Pages final ni despliegue QA. Última consulta pública qa-current registraba `4706ede7...`, paquete SHA256 `27879892e562944ab4e3339df3967aa8f713f73d81bccc26299776b2cff84d68`.
+- Registro espejo: Issue #427 y Línea Base Maestra Drive `1ncl0d--Bny8PzvtP38muPo5H2-JM5QUDGqH3lJ5ZtPM`. Consultar comentario final para postmerge y lectura de retorno.
+- Siguiente: prueba positiva de carga/entrega de 3 informes Word/PDF y paquete completo en `CandidateWorkflowEndpoints.cs`; no reconstruir designación/aceptación/reprogramación ya integradas. Revisión institucional móvil pendiente; main y srv01/UAT física pausados #97.
