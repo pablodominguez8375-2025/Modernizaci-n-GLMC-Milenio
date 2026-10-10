@@ -7,6 +7,7 @@ import {
   type CandidateAssignInterviewers,
 } from './api/candidateIntakeApi'
 import './CandidateWorkflowPanel.css'
+import './CandidateInterviewAssignmentsPage.css'
 
 interface Props { api: CandidateIntakeApiClient; canDesignate: boolean }
 type ReportDraft = { interviewDate: string; summary: string; result: 'favorable' | 'desfavorable'; file: File | null }
@@ -182,7 +183,7 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
   }
 
   const active = designations.filter(x => x.status === 'assigned' || x.status === 'completed')
-  return <div className="candidate-workflow-panel" style={{ maxWidth: 1080, margin: '0 auto' }}>
+  return <div className="candidate-workflow-panel candidate-interview-assignments" style={{ maxWidth: 1080, margin: '0 auto' }}>
     <header className="candidate-workflow-heading">
       <h1>Entrevistas de insinuados</h1>
       <p>Designación conforme al acuerdo del Consejo de Administración o Cámara del Medio.
