@@ -202,7 +202,7 @@ function AdvancementEvidencePanel({ item, api, working, onUpdated }: {
     catch (reason) { setError(toMessage(reason)) }
     finally { setBusy(false) }
   }
-  const chosenCandidate = candidates.find((c, index) => String(index) === choice)
+  const chosenCandidate = choice === '' ? undefined : candidates[Number(choice)]
   const pending = records.filter(record => record.status === 'pending')
 
   return <section className="panel" aria-label="Constancias institucionales para ascenso">
