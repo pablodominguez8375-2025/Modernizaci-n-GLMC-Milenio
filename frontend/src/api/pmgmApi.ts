@@ -163,7 +163,35 @@ export interface AdvancementLiveEligibility {
     decision: { canProceed: boolean; mode: string; requirements: { code: string; minimum: number; achieved: number; complies: boolean }[] }
   } | null
 }
-export interface CeremonyQueueActions { canValidateInternalAffairs: boolean; canPublishCandidate: boolean; canAuthorize: boolean }
+export interface AdvancementPaperAttestationCandidate {
+  workPaperDocumentId: string
+  workPaperVersionId: string
+  title: string
+  meetingId: string
+  extractVersionId: string
+  fullMinuteVersionId: string
+  presentationDate: string
+}
+export interface AdvancementPaperAttestation {
+  id: string
+  workPaperDocumentId: string
+  workPaperVersionId: string
+  workKind: string
+  meetingId: string
+  presentationDate: string
+  status: string
+  councilApprovalReference: string | null
+  reviewedAtUtc: string | null
+}
+export type AdvancementPresentationRequest = Omit<AdvancementPaperAttestationCandidate, 'title'> & { workKind: 'degree_symbolism' | 'masonic_general_culture' }
+export interface AdvancementAttestationReviewRequest { approved: boolean; councilApprovalReference: string | null; reviewNotes: string | null }
+export interface CeremonyQueueActions {
+  canValidateInternalAffairs: boolean
+  canPublishCandidate: boolean
+  canAuthorize: boolean
+  canSubmitAdvancementEvidence?: boolean
+  canReviewAdvancementEvidence?: boolean
+}
 export interface CeremonyReviewQueueItem {
   id: string
   organizationId: string
@@ -746,6 +774,28 @@ export class PmgmApiClient {
       }
     }
     return this.request<AdvancementLiveEligibility>(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/elegibilidad`)
+  }
+  async getAdvancementPaperCandidates(ceremonyRequestId: string): Promise<{ attestationCandidates: AdvancementPaperAttestationCandidate[] }> {
+    if (this.useMocks) return { attestationCandidates: [] }
+    return this.request<{ attestationCandidates: AdvancementPaperAttestationCandidate[] }>(
+      `/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/avance/planchas`)
+  }
+  async getAdvancementAttestations(ceremonyRequestId: string): Promise<{ records: AdvancementPaperAttestation[] }> {
+    if (this.useMocks) return { records: [] }
+    return this.request<{ records: AdvancementPaperAttestation[] }>(
+      `/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/avance/constancias`)
+  }
+  async submitAdvancementPresentation(ceremonyRequestId: string, payload: AdvancementPresentationRequest): Promise<unknown> {
+    if (this.useMocks) throw new Error('La demostración no registra constancias institucionales.')
+    return this.postJson(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/avance/constancias`, payload)
+  }
+  async resolveAdvancementAttestation(ceremonyRequestId: string, attestationId: string, payload: AdvancementAttestationReviewRequest): Promise<unknown> {
+    if (this.useMocks) throw new Error('La demostración no resuelve constancias institucionales.')
+    return this.postJson(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/avance/constancias/${encodeURIComponent(attestationId)}/resolver`, payload)
+  }
+  async validateAdvancementContinuity(ceremonyRequestId: string, payload: { approved: boolean; reference: string }): Promise<unknown> {
+    if (this.useMocks) throw new Error('La demostración no certifica continuidad institucional.')
+    return this.postJson(`/api/ceremonias/solicitudes/${encodeURIComponent(ceremonyRequestId)}/avance/continuidad/validar`, payload)
   }
   async getTreasuryCeremonyRights(): Promise<TreasuryCeremonyRightsResponse> {
     if (this.useMocks) { this.assertMockGrandTreasuryAccess('view');
