@@ -243,34 +243,54 @@ public static class CandidateInterviewAssignmentEndpoints
                 (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
                  x.Status == CandidateInterviewAssignmentPolicy.Completed))
             .ToListAsync(ct);
-        if (prior.Any(x => x.Status == CandidateInterviewAssignmentPolicy.Completed))
-            return Results.Conflict(new { message = "Existe un informe entregado; para modificar su designación debe abrirse revisión formal." });
-        if (prior.Count > 0 &&
+        // Conservar trabajos efectivamente entregados; sólo cambiar las plazas pendientes.
+        // Mantener ids permite reintentos idempotentes sin anular entregas previas.
+        var replaced = prior.Where(x => x.Position > input.InterviewerMemberIds.Count ||
+            input.InterviewerMemberIds[x.Position - 1] != x.InterviewerMemberId).ToArray();
+        if (replaced.Any(x => x.Status == CandidateInterviewAssignmentPolicy.Completed))
+            return Results.Conflict(new { message = "No se puede reemplazar a un Maestro cuyo informe ya fue entregado." });
+        if (replaced.Length > 0 &&
             (string.IsNullOrWhiteSpace(input.ReplacementReason) ||
              input.ReplacementReason.Trim().Length is < 10 or > 1000))
-            return Results.Conflict(new { message = "Para reemplazar entrevistadores se requiere motivo de 10 a 1000 caracteres." });
+            return Results.Conflict(new { message = "Cambiar un Maestro pendiente exige motivo de 10 a 1000 caracteres." });
+        var retained = prior.Except(replaced).ToArray();
+        var positions = retained.Select(x => x.Position).ToHashSet();
+        if (replaced.Length == 0 && positions.Count == input.InterviewerMemberIds.Count)
+        {
+            http.Response.Headers.CacheControl = "private, no-store";
+            return Results.Ok(new
+            {
+                requestId, assignmentIds = retained.Select(x => x.Id),
+                assigned = retained.Length, notificationsPending = Array.Empty<Guid>(),
+                alreadyAssigned = true
+            });
+        }
 
         var now = DateTimeOffset.UtcNow;
-        foreach (var old in prior)
+        foreach (var old in replaced)
         {
             old.Status = CandidateInterviewAssignmentPolicy.Replaced;
             old.ReplacedAtUtc = now;
             old.ReplacedBySubject = actor;
             old.ReplacementReason = input.ReplacementReason!.Trim();
         }
-        var added = input.InterviewerMemberIds.Select((member, i) => new CandidateInterviewAssignment
-        {
-            CeremonyRequestId = requestId,
-            OrganizationId = ceremony.OrganizationId,
-            InterviewerMemberId = member,
-            Position = i + 1,
-            CouncilBody = input.CouncilBody,
-            CouncilDecisionDate = input.CouncilDecisionDate,
-            CouncilMinuteReference = input.CouncilMinuteReference.Trim(),
-            ScheduledDate = input.ScheduledDates is null ? null : input.ScheduledDates[i],
-            Status = CandidateInterviewAssignmentPolicy.Assigned,
-            AssignedBySubject = actor
-        }).ToArray();
+        // Orden de escrituras: liberar índices únicos parciales antes de insertar suplentes.
+        if (replaced.Length > 0) await db.SaveChangesAsync(ct);
+        var added = input.InterviewerMemberIds.Select((member, i) => (member, position: i + 1))
+            .Where(x => !positions.Contains(x.position))
+            .Select(x => new CandidateInterviewAssignment
+            {
+                CeremonyRequestId = requestId,
+                OrganizationId = ceremony.OrganizationId,
+                InterviewerMemberId = x.member,
+                Position = x.position,
+                CouncilBody = input.CouncilBody,
+                CouncilDecisionDate = input.CouncilDecisionDate,
+                CouncilMinuteReference = input.CouncilMinuteReference.Trim(),
+                ScheduledDate = input.ScheduledDates is null ? null : input.ScheduledDates[x.position - 1],
+                Status = CandidateInterviewAssignmentPolicy.Assigned,
+                AssignedBySubject = actor
+            }).ToArray();
         db.CandidateInterviewAssignments.AddRange(added);
         audit.Add(http, "candidate.interview.designation.recorded", nameof(CandidateInterviewAssignment),
             requestId.ToString(), ceremony.OrganizationId, AuditResults.Success,
@@ -281,7 +301,7 @@ public static class CandidateInterviewAssignmentEndpoints
                 minuteReference = input.CouncilMinuteReference.Trim(),
                 assignedMemberIds = input.InterviewerMemberIds,
                 assignmentIds = added.Select(x => x.Id).ToArray(),
-                replacedAssignmentIds = prior.Select(x => x.Id).ToArray()
+                replacedAssignmentIds = replaced.Select(x => x.Id).ToArray()
             });
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);

@@ -59,6 +59,20 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
       ])
       setMasters(eligible.items)
       setDesignations(current.items)
+      const active = current.items.filter(x => x.status === 'assigned' || x.status === 'completed')
+        .sort((first, second) => first.position - second.position)
+      if (active.length >= 3 && active.every(x => x.interviewerMemberId)) {
+        setMemberIds(active.map(x => x.interviewerMemberId!))
+        setScheduled(active.map(x => x.scheduledDate ?? ''))
+        const first = active[0]
+        if (first.councilBody === 'administration_council' || first.councilBody === 'masters_chamber')
+          setCouncilBody(first.councilBody)
+        if (first.councilDecisionDate) setCouncilDate(first.councilDecisionDate)
+        if (first.councilMinuteReference) setMinuteRef(first.councilMinuteReference)
+      } else {
+        setMemberIds(['', '', ''])
+        setScheduled(['', '', ''])
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'No fue posible consultar Maestros del Taller.')
     } finally { setLoading(false) }
@@ -170,7 +184,8 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
           <strong>Entrevista {index + 1}</strong>
           <div className="candidate-workflow-grid">
             <label>Maestro entrevistador
-              <select value={id} onChange={event => {
+              <select value={id} disabled={active.some(x => x.position === index + 1 && x.status === 'completed')}
+              onChange={event => {
                 const next = [...memberIds]; next[index] = event.target.value; setMemberIds(next)
               }}>
                 <option value="">Seleccione Maestro activo</option>
@@ -183,7 +198,7 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
                 onChange={event => { const next = [...scheduled]; next[index] = event.target.value; setScheduled(next) }} />
             </label>
           </div>
-          {index > 2 && <button type="button" className="candidate-secondary-button"
+          {index > 2 && !active.some(x => x.position === index + 1 && x.status === 'completed') && <button type="button" className="candidate-secondary-button"
             onClick={() => { setMemberIds(memberIds.filter((_, i) => i !== index)); setScheduled(scheduled.filter((_, i) => i !== index)) }}>Quitar adicional</button>}
         </div>)}
         <button type="button" className="candidate-secondary-button" disabled={memberIds.length >= 6}
