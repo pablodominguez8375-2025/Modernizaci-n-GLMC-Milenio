@@ -20,5 +20,6 @@ public sealed class CandidateInterviewAssignment
     public string? ReplacementReason { get; set; }
     public Guid? ReportDocumentVersionId { get; set; }
     public DateTimeOffset? CompletedAtUtc { get; set; }
+    public DateTimeOffset? AcceptedAtUtc { get; set; }
     public DateTimeOffset? NotificationQueuedAtUtc { get; set; }
 }
