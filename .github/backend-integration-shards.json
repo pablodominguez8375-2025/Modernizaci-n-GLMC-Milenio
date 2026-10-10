@@ -33,7 +33,8 @@
       "ClamAvDocumentMalwareIntegrationTests",
       "PostgreSqlMigrationTests",
       "TreasuryOrdinaryDuesEligibilityPostgreSqlTests",
-      "CalendarPostgreSqlTests"
+      "CalendarPostgreSqlTests",
+      "AdvancementAttestationHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
