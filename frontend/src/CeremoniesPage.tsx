@@ -95,6 +95,8 @@ function CeremonyCard({ item, api, working, execute }: {
   const total = eligibility.requirements.length
   const final = item.status === 'authorized' || item.status === 'rejected'
   const isAdvancement = item.ceremonyType === 'wage_increase' || item.ceremonyType === 'exaltation'
+  const canAuthorize = item.actions.canAuthorize ||
+    (isAdvancement && Boolean(item.actions.canAuthorizeAfterLiveReview) && Boolean(liveEligibility?.canAuthorize))
   const reviewAdvancement = async () => {
     setReviewing(true); setReviewError(null)
     try { setLiveEligibility(await api.getCeremonyEligibility(item.id)) }
@@ -155,10 +157,10 @@ function CeremonyCard({ item, api, working, execute }: {
       <dl><div><dt>Exigido</dt><dd>{formatMoney(item.eligibility.ceremonyRight.amount, item.eligibility.ceremonyRight.currency)}</dd></div><div><dt>Pagado</dt><dd>{formatMoney(item.eligibility.ceremonyRight.paid, item.eligibility.ceremonyRight.currency)}</dd></div><div><dt>Saldo</dt><dd>{formatMoney(item.eligibility.ceremonyRight.balance, item.eligibility.ceremonyRight.currency)}</dd></div></dl>
     </section>}
 
-    {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || item.actions.canAuthorize) && <div className="ceremony-actions">
+    {!final && (item.actions.canValidateInternalAffairs || item.actions.canPublishCandidate || canAuthorize) && <div className="ceremony-actions">
       {item.actions.canValidateInternalAffairs && <InternalAffairsForm item={item} api={api} working={working} execute={execute} />}
       {item.actions.canPublishCandidate && <button className="secondary-action" type="button" disabled={working} title="Gran Secretaría aprueba la ficha, la hace visible y notifica a los Hermanos." onClick={() => void execute(() => api.publishCeremonyCandidate(item.id), 'Ficha aprobada por Gran Secretaría. La insinuación quedó publicada y se generaron las notificaciones institucionales.')}>Aprobar ficha y publicar</button>}
-      {item.actions.canAuthorize && <button className="primary-action" type="button" disabled={working || !eligibility.canAuthorize} title={eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
+      {canAuthorize && <button className="primary-action" type="button" disabled={working || !eligibility.canAuthorize} title={eligibility.canAuthorize ? 'Autorizar ceremonia' : 'Todos los requisitos deben estar cumplidos antes de autorizar.'} onClick={() => void execute(() => api.authorizeCeremony(item.id), 'Ceremonia autorizada. Gran Secretaría ya puede continuar con la reserva y el documento formal.')}>Autorizar ceremonia</button>}
     </div>}
   </article>
 }
