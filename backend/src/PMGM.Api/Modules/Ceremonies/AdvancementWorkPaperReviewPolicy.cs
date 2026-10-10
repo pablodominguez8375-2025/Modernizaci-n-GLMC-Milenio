@@ -96,7 +96,8 @@ public static class AdvancementWorkPaperReviewPolicy
             0,
             false,
             "Un vínculo a Tenida o Extracto remitido no certifica presentación de la plancha.",
-            items);
+            items,
+            items.Select(AdvancementWorkPaperAccreditationChecklistPolicy.Build).ToArray());
     }
 }
 
@@ -136,4 +137,5 @@ public sealed record WorkPaperReviewSummary(
     int ConfirmedPresented,
     bool PresentationEvidenceAvailable,
     string Reason,
-    IReadOnlyList<WorkPaperReviewCandidate> Items);
+    IReadOnlyList<WorkPaperReviewCandidate> Items,
+    IReadOnlyList<WorkPaperAccreditationChecklist>? EvidenceChecklists = null);
