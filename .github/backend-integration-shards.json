@@ -69,7 +69,8 @@
       "RegimenInteriorReinstatementMovementPostgreSqlTests",
       "RegimenInteriorDataQualityPostgreSqlTests",
       "RegimenInteriorMemberControlPostgreSqlTests",
-      "CandidateInterviewAssignmentHttpTests"
+      "CandidateInterviewAssignmentHttpTests",
+      "CandidateInterviewAssignmentPositiveHttpTests"
     ]
   }
 }
