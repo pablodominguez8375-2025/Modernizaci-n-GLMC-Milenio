@@ -493,6 +493,28 @@ export class CandidateIntakeApiClient {
     })
   }
 
+  async rescheduleInterviewer(
+    requestId: string, assignmentId: string, scheduledDate: string, reason: string
+  ): Promise<{ changed: boolean; notificationPending: boolean; scheduledDate: string }> {
+    if (this.useMocks) {
+      const assignment = (this.mockInterviewerAssignments.get(requestId) ?? [])
+        .find(x => x.id === assignmentId)
+      if (!assignment || assignment.status !== 'assigned' || assignment.hasReport)
+        throw new CandidateIntakeApiHttpError(409, 'La entrevista ya fue concluida o reemplazada.')
+      if (!scheduledDate || scheduledDate < new Date().toISOString().slice(0, 10) ||
+          reason.trim().length < 10)
+        throw new CandidateIntakeApiHttpError(400, 'Registre una fecha futura y un motivo válido.')
+      const changed = assignment.scheduledDate !== scheduledDate
+      assignment.scheduledDate = scheduledDate
+      return { changed, notificationPending: false, scheduledDate }
+    }
+    return this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/entrevistadores-designados/' + encodeURIComponent(assignmentId) + '/reprogramar', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scheduledDate, reason })
+    })
+  }
+
   async retryInterviewerNotifications(requestId: string): Promise<{ notificationsPending: string[] }> {
     if (this.useMocks) return { notificationsPending: [] }
     return this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/entrevistadores-notificaciones', { method: 'POST' })

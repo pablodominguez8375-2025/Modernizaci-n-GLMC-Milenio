@@ -27,6 +27,8 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
   const [councilDate, setCouncilDate] = useState(today)
   const [minuteRef, setMinuteRef] = useState('')
   const [replacementReason, setReplacementReason] = useState('')
+  const [rescheduleDates, setRescheduleDates] = useState<Record<string, string>>({})
+  const [rescheduleReasons, setRescheduleReasons] = useState<Record<string, string>>({})
   const [reports, setReports] = useState<Record<string, ReportDraft>>({})
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -102,6 +104,26 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
       await reloadMine()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'No se pudo registrar la designación.')
+    } finally { setLoading(false) }
+  }
+
+  const reschedule = async (assignment: CandidateInterviewAssignment) => {
+    const date = rescheduleDates[assignment.id] || assignment.scheduledDate || ''
+    const reason = rescheduleReasons[assignment.id]?.trim() || ''
+    if (!date || reason.length < 10) {
+      setError('Indique la nueva fecha y un motivo de al menos diez caracteres.')
+      return
+    }
+    setLoading(true); setError(''); setMessage('')
+    try {
+      const outcome = await api.rescheduleInterviewer(selectedId, assignment.id, date, reason)
+      setDesignations((await api.getAssignedInterviewers(selectedId)).items)
+      setMessage(outcome.notificationPending
+        ? 'Fecha registrada. Aviso pendiente; repita «Reprogramar» con la misma fecha para reintentar.'
+        : 'Entrevista reprogramada y Maestro notificado de forma privada.')
+      if (!outcome.notificationPending) setRescheduleReasons(cur => ({ ...cur, [assignment.id]: '' }))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible reprogramar la entrevista.')
     } finally { setLoading(false) }
   }
 
@@ -230,9 +252,26 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
         </div>
         <h3>Seguimiento del expediente</h3>
         {active.length === 0 ? <p>Todavía no hay designaciones registradas.</p> :
-          <ul>{active.map(row => <li key={row.id}>{row.interviewerName} · Entrevista {row.position} ·
+          <ul>{active.map(row => <li key={row.id}>
+            <strong>{row.interviewerName} · Entrevista {row.position}</strong> ·
             {row.status === 'completed' ? ' Informe entregado' : row.acceptedAtUtc ? ' Aceptada · informe pendiente' : ' Aceptación pendiente'} ·
-            {row.notified ? ' Avisado' : ' Aviso pendiente'}</li>)}</ul>}
+            {row.notified ? ' Avisado' : ' Aviso pendiente'}
+            <p>Fecha programada: {row.scheduledDate || 'Por coordinar'}</p>
+            {row.status === 'assigned' && <div className="candidate-workflow-grid">
+              <label>Reprogramar únicamente esta entrevista
+                <input type="date" min={today()}
+                  value={rescheduleDates[row.id] ?? row.scheduledDate ?? ''}
+                  onChange={event => setRescheduleDates(prev => ({ ...prev, [row.id]: event.target.value }))}/>
+              </label>
+              <label>Motivo del cambio (obligatorio)
+                <textarea rows={2} maxLength={1000}
+                  value={rescheduleReasons[row.id] ?? ''}
+                  onChange={event => setRescheduleReasons(prev => ({ ...prev, [row.id]: event.target.value }))}/>
+              </label>
+              <button type="button" className="candidate-secondary-button" disabled={loading}
+                onClick={() => void reschedule(row)}>Reprogramar y avisar al Maestro</button>
+            </div>}
+          </li>)}</ul>}
       </>}
     </section>}
 
