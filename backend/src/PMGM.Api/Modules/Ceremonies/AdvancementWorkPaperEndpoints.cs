@@ -55,6 +55,7 @@ public static class AdvancementWorkPaperEndpoints
                 attendance.Status,
                 attendance.Reason,
                 workPapers = AdvancementWorkPaperReviewPolicy.Summarize(Array.Empty<WorkPaperReviewCandidate>()),
+                attestationCandidates = Array.Empty<object>(),
                 authorizesCeremony = false
             });
 
@@ -179,6 +180,36 @@ public static class AdvancementWorkPaperEndpoints
             .Select(x => AdvancementWorkPaperReviewPolicy.AttachMeetingLinks(x, links))
             .ToArray();
 
+        // Opciones ya cotejadas para la declaración institucional de Secretaría.
+        // No son constancias de presentación ni aprobación, sino referencias
+        // editables sólo mediante endpoints privados con revalidación en servidor.
+        var attestationCandidates = withMeetings
+            .Where(x => x.ContentVerified && x.ReviewVersionId is not null)
+            .SelectMany(paper => secretariatLinks
+                .Where(link =>
+                    link.WorkPaperDocumentVersionId == paper.ReviewVersionId &&
+                    meetingDates.TryGetValue(link.SourceRecordId, out var meetingDate) &&
+                    meetingDate == link.EventDate &&
+                    link.ExtractDocumentVersionId is not null &&
+                    link.FullMinuteDocumentVersionId is not null &&
+                    link.ExtractDocumentVersionId != link.FullMinuteDocumentVersionId &&
+                    reviewableExtractIds.Contains(link.ExtractDocumentVersionId.Value) &&
+                    reviewableMinuteIds.Contains(link.FullMinuteDocumentVersionId.Value) &&
+                    (link.Status == SecretariatOperationsCodes.SubmissionStatus.Submitted ||
+                     link.Status == SecretariatOperationsCodes.SubmissionStatus.Received))
+                .Select(link => new
+                {
+                    workPaperDocumentId = paper.DocumentId,
+                    workPaperVersionId = paper.ReviewVersionId!.Value,
+                    title = paper.Title,
+                    meetingId = link.SourceRecordId,
+                    extractVersionId = link.ExtractDocumentVersionId!.Value,
+                    fullMinuteVersionId = link.FullMinuteDocumentVersionId!.Value,
+                    presentationDate = link.EventDate
+                }))
+            .Distinct()
+            .ToArray();
+
         return Results.Ok(new
         {
             requestId,
@@ -186,6 +217,7 @@ public static class AdvancementWorkPaperEndpoints
             asOf = cutoff,
             sourceGrade,
             workPapers = AdvancementWorkPaperReviewPolicy.Summarize(withMeetings),
+            attestationCandidates,
             authorizesCeremony = false
         });
     }
