@@ -25,6 +25,7 @@ public static class CandidateInterviewAssignmentEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados", AssignAsync);
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-notificaciones", RetryNotificationsAsync);
         group.MapGet("/entrevistas/mis-designaciones", MineAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados/{assignmentId:guid}/aceptar", AcceptAsync);
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados/{assignmentId:guid}/entregar", DeliverAsync);
     }
 
@@ -161,7 +162,7 @@ public static class CandidateInterviewAssignmentEndpoints
             interviewerName = byId.GetValueOrDefault(x.InterviewerMemberId, "Miembro no disponible"),
             x.CouncilBody, x.CouncilDecisionDate, x.CouncilMinuteReference,
             x.ScheduledDate, x.Status, x.AssignedAtUtc,
-            x.ReplacedAtUtc, x.ReplacementReason, x.CompletedAtUtc,
+            x.ReplacedAtUtc, x.ReplacementReason, x.CompletedAtUtc, x.AcceptedAtUtc,
             hasReport = x.ReportDocumentVersionId != null,
             x.ReportDocumentVersionId,
             reportDate = reportById.ContainsKey(x.ReportDocumentVersionId.GetValueOrDefault())
@@ -377,6 +378,44 @@ public static class CandidateInterviewAssignmentEndpoints
         return pending.ToArray();
     }
 
+    private static async Task<IResult> AcceptAsync(
+        Guid requestId, Guid assignmentId, HttpContext http, PmgmDbContext db,
+        IInstitutionalMemberContextResolver identity, IAuditService audit, CancellationToken ct)
+    {
+        var me = await identity.ResolveAsync(http.User, ct);
+        if (me is null || me.EffectiveDegree < 3) return Results.Forbid();
+        var assignment = await db.CandidateInterviewAssignments.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == assignmentId &&
+                x.CeremonyRequestId == requestId && x.InterviewerMemberId == me.MemberId, ct);
+        if (assignment is null) return Results.NotFound();
+        if (!await IsActiveDesignatedMasterAsync(db, assignment.OrganizationId, me.MemberId, ct))
+            return Results.Forbid();
+        if (assignment.Status != CandidateInterviewAssignmentPolicy.Assigned)
+            return Results.Conflict(new { message = "La designación ya no está vigente." });
+        if (assignment.AcceptedAtUtc is not null)
+        {
+            http.Response.Headers.CacheControl = "private, no-store";
+            return Results.Ok(new { assignment.Id, assignment.Status, assignment.AcceptedAtUtc, alreadyAccepted = true });
+        }
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var acceptedAt = DateTimeOffset.UtcNow;
+        var updated = await db.CandidateInterviewAssignments
+            .Where(x => x.Id == assignmentId && x.CeremonyRequestId == requestId &&
+                x.InterviewerMemberId == me.MemberId &&
+                x.Status == CandidateInterviewAssignmentPolicy.Assigned && x.AcceptedAtUtc == null)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.AcceptedAtUtc, acceptedAt), ct);
+        if (updated != 1)
+            return Results.Conflict(new { message = "La designación cambió; actualice sus tareas." });
+        audit.Add(http, "candidate.interview.designation.accepted",
+            nameof(CandidateInterviewAssignment), assignment.Id.ToString(),
+            assignment.OrganizationId, AuditResults.Success,
+            new { assignment.CeremonyRequestId, assignment.InterviewerMemberId, acceptedAt });
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        http.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { assignment.Id, assignment.Status, acceptedAtUtc = acceptedAt });
+    }
+
     private static async Task<IResult> DeliverAsync(
         Guid requestId, Guid assignmentId, CompleteCandidateInterview input, HttpContext http,
         PmgmDbContext db, DocumentManagementDbContext documents,
@@ -390,7 +429,7 @@ public static class CandidateInterviewAssignmentEndpoints
         if (assignment is null) return Results.NotFound();
         if (!await IsActiveDesignatedMasterAsync(db, assignment.OrganizationId, me.MemberId, ct))
             return Results.Forbid();
-        if (assignment.Status != CandidateInterviewAssignmentPolicy.Assigned ||
+        if (!CandidateInterviewAssignmentPolicy.CanDeliver(assignment.Status, assignment.AcceptedAtUtc) ||
             assignment.ReportDocumentVersionId is not null)
             return Results.Conflict(new { message = "La designación no está pendiente o ya fue entregada." });
         var valid = await documents.DocumentVersions.AsNoTracking()
@@ -459,7 +498,7 @@ public static class CandidateInterviewAssignmentEndpoints
             .Select(x => new
             {
                 x.Id, x.CeremonyRequestId, x.OrganizationId, x.Position,
-                x.ScheduledDate, x.Status, x.AssignedAtUtc,
+                x.ScheduledDate, x.Status, x.AssignedAtUtc, x.AcceptedAtUtc,
                 hasReport = x.ReportDocumentVersionId != null
             }).ToListAsync(ct);
         var caseIds = activeOrRecent.Select(x => x.CeremonyRequestId).Distinct().ToArray();
@@ -480,7 +519,7 @@ public static class CandidateInterviewAssignmentEndpoints
         {
             items = activeOrRecent.Select(x => new {
                 x.Id, x.CeremonyRequestId, x.OrganizationId, x.Position,
-                x.ScheduledDate, x.Status, x.AssignedAtUtc, x.hasReport,
+                x.ScheduledDate, x.Status, x.AssignedAtUtc, x.AcceptedAtUtc, x.hasReport,
                 interviewerName = name,
                 candidateName = caseNames.GetValueOrDefault(x.CeremonyRequestId, "Sin nombre")
             })
