@@ -104,8 +104,8 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
   const updateReport = (id: string, patch: Partial<ReportDraft>) =>
     setReports(current => ({
       ...current,
-      [id]: { interviewDate: today(), summary: '', result: 'favorable', file: null,
-        ...current[id], ...patch },
+      [id]: { ...(current[id] ?? { interviewDate: today(), summary: '', result: 'favorable', file: null }),
+        ...patch },
     }))
 
   const deliver = async (assignment: CandidateInterviewAssignment) => {
