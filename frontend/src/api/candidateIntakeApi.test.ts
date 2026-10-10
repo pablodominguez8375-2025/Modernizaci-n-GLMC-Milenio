@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { CandidateIntakeApiClient } from './candidateIntakeApi'
 
 describe('CandidateIntakeApiClient demo workflow', () => {
@@ -232,6 +232,38 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     await api.deliverAssignedInterview(requestId, assignmentId, 'synthetic-doc-version')
     const completed = (await api.getAssignedInterviewers(requestId)).items.find(x => x.id === assignmentId)
     expect(completed?.status).toBe('completed')
+  })
+
+  it('reschedules only one accepted assignment and enforces the API date and reason bounds', async () => {
+    vi.useFakeTimers()
+    // It is still October 10 in Chile when UTC has moved to October 11.
+    vi.setSystemTime(new Date('2026-10-11T01:00:00Z'))
+    try {
+      const api = new CandidateIntakeApiClient({ useMocks: true })
+      const requestId = (await api.getInterviewCases()).items[0].id
+      const masters = (await api.getEligibleInterviewers(requestId)).items
+      const assigned = await api.assignInterviewers(requestId, {
+        interviewerMemberIds: masters.slice(0, 3).map(x => x.id),
+        councilBody: 'administration_council', councilDecisionDate: '2026-10-09',
+        councilMinuteReference: 'ACTA-REPROGRAMACION-DEMO', scheduledDates: [null, null, null], replacementReason: null,
+      })
+      const id = assigned.assignmentIds[0]
+      await api.acceptAssignedInterview(requestId, id)
+      const before = structuredClone((await api.getAssignedInterviewers(requestId)).items)
+      const reason = 'Ajuste de agenda del entrevistador'
+      for (const invalid of ['2026-10-09', '2029-10-10', '2027-02-30', 'invalid'])
+        await expect(api.rescheduleInterviewer(requestId, id, invalid, reason)).rejects.toThrow()
+      await expect(api.rescheduleInterviewer(requestId, id, '2026-10-10', 'X'.repeat(1001))).rejects.toThrow()
+      expect(await api.rescheduleInterviewer(requestId, id, '2026-10-10', reason))
+        .toMatchObject({ changed: true, notificationPending: false })
+      expect(await api.rescheduleInterviewer(requestId, id, '2026-10-10', reason))
+        .toMatchObject({ changed: false })
+      const after = (await api.getAssignedInterviewers(requestId)).items
+      expect(after[0]).toEqual({ ...before[0], scheduledDate: '2026-10-10' })
+      expect(after.slice(1)).toEqual(before.slice(1))
+      await api.deliverAssignedInterview(requestId, id, 'synthetic-doc-version')
+      await expect(api.rescheduleInterviewer(requestId, id, '2026-10-11', reason)).rejects.toThrow()
+    } finally { vi.useRealTimers() }
   })
 
 })

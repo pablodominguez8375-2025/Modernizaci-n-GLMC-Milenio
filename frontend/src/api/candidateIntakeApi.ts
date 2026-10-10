@@ -501,8 +501,21 @@ export class CandidateIntakeApiClient {
         .find(x => x.id === assignmentId)
       if (!assignment || assignment.status !== 'assigned' || assignment.hasReport)
         throw new CandidateIntakeApiHttpError(409, 'La entrevista ya fue concluida o reemplazada.')
-      if (!scheduledDate || scheduledDate < new Date().toISOString().slice(0, 10) ||
-          reason.trim().length < 10)
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date())
+      const limit = new Date(`${today}T12:00:00Z`)
+      const targetYear = limit.getUTCFullYear() + 2
+      const targetMonth = limit.getUTCMonth()
+      limit.setUTCFullYear(targetYear)
+      // DateOnly.AddYears clamps February 29 to February 28.
+      if (limit.getUTCMonth() !== targetMonth) limit.setUTCDate(0)
+      const parsed = new Date(`${scheduledDate}T12:00:00Z`)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate) || !Number.isFinite(parsed.getTime()) ||
+          parsed.toISOString().slice(0, 10) !== scheduledDate ||
+          scheduledDate < today || scheduledDate > limit.toISOString().slice(0, 10) ||
+          (assignment.councilDecisionDate && scheduledDate < assignment.councilDecisionDate) ||
+          reason.trim().length < 10 || reason.trim().length > 1000)
         throw new CandidateIntakeApiHttpError(400, 'Registre una fecha futura y un motivo válido.')
       const changed = assignment.scheduledDate !== scheduledDate
       assignment.scheduledDate = scheduledDate

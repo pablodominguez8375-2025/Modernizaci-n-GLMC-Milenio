@@ -404,6 +404,13 @@ public static class CandidateInterviewAssignmentEndpoints
         {
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"SELECT pg_advisory_xact_lock(hashtextextended({requestId.ToString()}, 0))", ct);
+            var hasPublication = await db.CandidatePublications.AsNoTracking().AnyAsync(p =>
+                p.CeremonyRequestId == requestId &&
+                (p.Status == CeremonyCodes.PublicationStatus.Published ||
+                 p.Status == CeremonyCodes.PublicationStatus.Completed) &&
+                p.PublishedFromUtc <= DateTimeOffset.UtcNow, ct);
+            if (!hasPublication)
+                return Results.Conflict(new { message = "Requiere publicación institucional vigente." });
             assignment = await db.CandidateInterviewAssignments.SingleOrDefaultAsync(x =>
                 x.Id == assignmentId && x.CeremonyRequestId == requestId &&
                 x.OrganizationId == request.OrganizationId, ct);
