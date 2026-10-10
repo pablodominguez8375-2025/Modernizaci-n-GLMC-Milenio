@@ -39,10 +39,14 @@ public sealed class AddCandidateInterviewAssignments : Migration
             }, constraints: t =>
             {
                 t.PrimaryKey("PK_candidate_interview_assignments", x => x.Id);
-                t.ForeignKey("FK_candidate_interview_assignments_ceremony_requests_CeremonyRequestId",
-                    x => x.CeremonyRequestId, "core", "ceremony_requests", "Id", onDelete: ReferentialAction.Restrict);
-                t.ForeignKey("FK_candidate_interview_assignments_members_InterviewerMemberId",
-                    x => x.InterviewerMemberId, "core", "members", "Id", onDelete: ReferentialAction.Restrict);
+                t.ForeignKey(name: "FK_candidate_interview_assignments_ceremony_requests_CeremonyRequestId",
+                    column: x => x.CeremonyRequestId,
+                    principalSchema: "core", principalTable: "ceremony_requests",
+                    principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                t.ForeignKey(name: "FK_candidate_interview_assignments_members_InterviewerMemberId",
+                    column: x => x.InterviewerMemberId,
+                    principalSchema: "core", principalTable: "members",
+                    principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
         m.CreateIndex(name: "IX_candidate_interview_assignments_CeremonyRequestId_Status",
             schema: "core", table: "candidate_interview_assignments", columns: new[] { "CeremonyRequestId", "Status" });
