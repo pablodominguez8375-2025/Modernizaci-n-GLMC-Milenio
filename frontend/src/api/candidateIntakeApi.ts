@@ -133,6 +133,43 @@ export interface CandidateWorkflowResponse {
   publication: CandidateWorkflowPublication | null
 }
 
+export interface CandidateInterviewCase {
+  id: string
+  organizationId: string
+  displayName: string
+  workshop: string
+}
+export interface CandidateEligibleInterviewer { id: string; name: string }
+export interface CandidateInterviewAssignment {
+  id: string
+  ceremonyRequestId?: string
+  organizationId?: string
+  position: number
+  interviewerMemberId?: string
+  interviewerName?: string
+  councilBody?: string
+  councilDecisionDate?: string
+  councilMinuteReference?: string
+  scheduledDate: string | null
+  status: string
+  assignedAtUtc?: string
+  notificationQueuedAtUtc?: string | null
+  notified?: boolean
+  reportDocumentVersionId?: string | null
+  reportDate?: string | null
+  reportResult?: string | null
+  reportSummary?: string | null
+  hasReport: boolean
+}
+export interface CandidateAssignInterviewers {
+  interviewerMemberIds: string[]
+  councilBody: 'administration_council' | 'masters_chamber'
+  councilDecisionDate: string
+  councilMinuteReference: string
+  scheduledDates: (string | null)[]
+  replacementReason: string | null
+}
+
 export interface InitialDeliberationPayload {
   deliberationDate: string
   presentVoters: number
@@ -397,6 +434,91 @@ function daysBetween(fromDate: string, toDate: string): number {
 }
 
 export class CandidateIntakeApiClient {
+  private readonly mockInterviewerAssignments = new Map<string, CandidateInterviewAssignment[]>()
+
+  async getInterviewCases(): Promise<{ items: CandidateInterviewCase[] }> {
+    if (this.useMocks) return {
+      items: this.mockWorkshopQueue.filter(item => item.profileAvailable).map(item => ({
+        id: item.ceremonyRequestId,
+        organizationId: 'd0000000-0000-4000-8000-000000000023',
+        displayName: item.displayName,
+        workshop: item.workshopName
+      }))
+    }
+    return this.request('/api/insinuados/taller/expedientes-para-entrevista')
+  }
+
+  async getEligibleInterviewers(requestId: string): Promise<{ items: CandidateEligibleInterviewer[] }> {
+    if (this.useMocks) return { items: [
+      { id: '10000000-0000-4000-8000-000000000001', name: 'Maestro de Prueba Uno' },
+      { id: '10000000-0000-4000-8000-000000000002', name: 'Maestra de Prueba Dos' },
+      { id: '10000000-0000-4000-8000-000000000003', name: 'Maestro de Prueba Tres' },
+      { id: '10000000-0000-4000-8000-000000000004', name: 'Maestra de Prueba Cuatro' },
+    ] }
+    return this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/maestros-entrevistadores')
+  }
+
+  async getAssignedInterviewers(requestId: string): Promise<{ items: CandidateInterviewAssignment[] }> {
+    if (this.useMocks) return { items: [...(this.mockInterviewerAssignments.get(requestId) ?? [])] }
+    return this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/entrevistadores-designados')
+  }
+
+  async assignInterviewers(requestId: string, payload: CandidateAssignInterviewers):
+    Promise<{ assignmentIds: string[]; assigned: number; notificationsPending: string[] }> {
+    if (this.useMocks) {
+      const ids = payload.interviewerMemberIds
+      if (ids.length < 3 || new Set(ids).size !== ids.length || !payload.councilMinuteReference.trim())
+        throw new CandidateIntakeApiHttpError(400, 'Se requieren tres Maestros diferentes y acta verificable.')
+      const old = this.mockInterviewerAssignments.get(requestId) ?? []
+      if (old.some(x => x.status === 'assigned' || x.status === 'completed') && !payload.replacementReason)
+        throw new CandidateIntakeApiHttpError(409, 'Ingrese motivo del cambio de designaciones.')
+      const masters = (await this.getEligibleInterviewers(requestId)).items
+      const added: CandidateInterviewAssignment[] = ids.map((id, i) => ({
+        id: crypto.randomUUID(), position: i + 1, interviewerMemberId: id,
+        interviewerName: masters.find(x => x.id === id)?.name ?? 'Maestro asignado',
+        ceremonyRequestId: requestId, scheduledDate: payload.scheduledDates[i] ?? null,
+        councilBody: payload.councilBody, councilDecisionDate: payload.councilDecisionDate,
+        councilMinuteReference: payload.councilMinuteReference, status: 'assigned',
+        notified: true, hasReport: false, assignedAtUtc: new Date().toISOString(),
+      }))
+      this.mockInterviewerAssignments.set(requestId, [
+        ...old.map(x => ({ ...x, status: 'replaced' })), ...added
+      ])
+      return { assignmentIds: added.map(x => x.id), assigned: ids.length, notificationsPending: [] }
+    }
+    return this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/entrevistadores-designados', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    })
+  }
+
+  async retryInterviewerNotifications(requestId: string): Promise<{ notificationsPending: string[] }> {
+    if (this.useMocks) return { notificationsPending: [] }
+    return this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/entrevistadores-notificaciones', { method: 'POST' })
+  }
+
+  async getMyInterviewAssignments(): Promise<{ items: CandidateInterviewAssignment[] }> {
+    if (this.useMocks) return { items: [...this.mockInterviewerAssignments.values()].flat().filter(x => x.status !== 'replaced') }
+    return this.request('/api/insinuados/entrevistas/mis-designaciones')
+  }
+
+  async deliverAssignedInterview(requestId: string, assignmentId: string, documentVersionId: string): Promise<void> {
+    if (this.useMocks) {
+      const assignments = this.mockInterviewerAssignments.get(requestId) ?? []
+      const item = assignments.find(x => x.id === assignmentId)
+      if (!item || item.status !== 'assigned') throw new CandidateIntakeApiHttpError(409, 'Asignación no disponible.')
+      item.status = 'completed'
+      item.hasReport = true
+      item.reportDocumentVersionId = documentVersionId
+      return
+    }
+    await this.request('/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/entrevistadores-designados/' + encodeURIComponent(assignmentId) + '/entregar', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ documentVersionId })
+    })
+  }
+
+
   private readonly baseUrl: string
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
