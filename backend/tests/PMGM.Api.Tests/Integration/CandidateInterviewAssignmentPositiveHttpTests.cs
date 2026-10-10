@@ -141,11 +141,9 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 Assert.True(mine.Headers.CacheControl?.NoStore);
                 var task = await mine.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
                 var only = Assert.Single(task.GetProperty("items").EnumerateArray().ToArray());
-                Assert.Equal(members[index].Id, members[index].Id); // explicit identity under own request
                 var ownAssignment = only.GetProperty("id").GetGuid();
                 Assert.Contains(ownAssignment, assignmentIds);
-                var otherAssignment = assignmentIds.Single(x => x != ownAssignment &&
-                    x != assignmentIds[(index + 2) % 3]);
+                var otherAssignment = assignmentIds.First(x => x != ownAssignment);
                 var forbiddenOther = await client.PostAsync(
                     $"{route}/entrevistadores-designados/{otherAssignment}/aceptar", null, ct);
                 Assert.Equal(HttpStatusCode.NotFound, forbiddenOther.StatusCode);
