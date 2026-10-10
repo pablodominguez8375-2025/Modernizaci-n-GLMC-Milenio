@@ -449,7 +449,9 @@ public static class CandidateInterviewAssignmentEndpoints
                         "voluntary_withdrawal", "forced_withdrawal", "deceased" }.Contains(e.EventType)) ||
                  new[] { "active", "reinstated" }.Contains(
                     db.InstitutionalStatusEvents
-                        .Where(e => e.MemberId == me.MemberId && e.EffectiveDate <= today)
+                        .Where(e => e.MemberId == me.MemberId && e.EffectiveDate <= today &&
+                            new[] { "active", "reinstated", "past_active", "inactive",
+                                "voluntary_withdrawal", "forced_withdrawal", "deceased" }.Contains(e.EventType))
                         .OrderByDescending(e => e.EffectiveDate)
                         .ThenByDescending(e => e.RecordedAtUtc)
                         .Select(e => e.EventType).FirstOrDefault()!)))
