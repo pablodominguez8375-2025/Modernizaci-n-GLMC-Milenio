@@ -46,10 +46,14 @@ public sealed class AddCandidateInterviewAssignments : Migration
             schema: "core", table: "candidate_interview_assignments", columns: new[] { "InterviewerMemberId", "Status" });
         m.CreateIndex(name: "IX_candidate_interview_assignments_OrganizationId",
             schema: "core", table: "candidate_interview_assignments", column: "OrganizationId");
-        m.Sql("""CREATE UNIQUE INDEX "UX_candidate_interview_active_member" ON core.candidate_interview_assignments
-                ("CeremonyRequestId", "InterviewerMemberId") WHERE "Status" IN ('assigned','completed');""");
-        m.Sql("""CREATE UNIQUE INDEX "UX_candidate_interview_active_position" ON core.candidate_interview_assignments
-                ("CeremonyRequestId", "Position") WHERE "Status" IN ('assigned','completed');""");
+        m.Sql("""
+            CREATE UNIQUE INDEX "UX_candidate_interview_active_member" ON core.candidate_interview_assignments
+                ("CeremonyRequestId", "InterviewerMemberId") WHERE "Status" IN ('assigned','completed');
+            """);
+        m.Sql("""
+            CREATE UNIQUE INDEX "UX_candidate_interview_active_position" ON core.candidate_interview_assignments
+                ("CeremonyRequestId", "Position") WHERE "Status" IN ('assigned','completed');
+            """);
     }
 
     protected override void Down(MigrationBuilder m)
