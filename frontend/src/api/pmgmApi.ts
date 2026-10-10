@@ -189,6 +189,7 @@ export interface CeremonyQueueActions {
   canValidateInternalAffairs: boolean
   canPublishCandidate: boolean
   canAuthorize: boolean
+  canAuthorizeAfterLiveReview?: boolean
   canSubmitAdvancementEvidence?: boolean
   canReviewAdvancementEvidence?: boolean
 }
