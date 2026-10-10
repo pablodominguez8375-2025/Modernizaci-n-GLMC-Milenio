@@ -22,4 +22,11 @@ describe('Secciones como tarjetas (opción C, PO 09-10-2026)', () => {
     expect(read('action-kit.css')).toContain('.workspace-tabs.is-hub ~ * { display: none !important; }')
     expect(read('desktop-density.css')).toContain('nav.workspace-tabs:is(.is-hub, .is-open-section)')
   })
+  it('las tarjetas muestran íconos institucionales y cada módulo con tarjetas los asigna', () => {
+    expect(kit).toContain('section-hub-icon')
+    expect(kit).toContain('InstitutionalIcon')
+    for (const file of ['LodgeManagementPage.tsx', 'GrandSecretariatPage.tsx', 'HospitalariaPage.tsx', 'SystemConfigurationPage.tsx']) {
+      expect(read(file)).toMatch(/icon: ?'/)
+    }
+  })
 })

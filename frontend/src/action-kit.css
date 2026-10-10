@@ -81,3 +81,4 @@
 @media (max-width: 640px) { .section-hub-back { width: 100%; } }
 .section-hub-back { min-height: 2.75rem; padding: .6rem 1rem; border-radius: .6rem; border: 2px solid var(--navy, #06148E); background: var(--surface, #fff); color: var(--navy, #06148E); font-weight: 700; cursor: pointer; }
 .section-hub-back:hover, .section-hub-back:focus-visible { background: var(--navy, #06148E); color: #fff; }
+.section-hub-icon { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .7rem; background: var(--navy, #06148E); color: var(--gold, #F3C609); margin-bottom: .15rem; }

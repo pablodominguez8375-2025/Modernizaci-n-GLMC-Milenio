@@ -94,13 +94,13 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   const [showOperations] = useState(true)
   const [tab, setTab] = useState<LodgeTab>(initialTab ?? (focusInstructions ? 'docencia' : 'resumen'))
   const lodgeTabs: WorkspaceTab<LodgeTab>[] = [
-    { id: 'resumen', label: 'Resumen' },
-    { id: 'tenidas', label: 'Tenidas y actas' },
-    ...(canReadSecretariat ? [{ id: 'correspondencia' as const, label: 'Correspondencia' }, { id: 'cuadro' as const, label: 'Cuadro y reuniones' }, { id: 'archivo' as const, label: 'Archivo y cierre' }] : []),
-    { id: 'consejo', label: 'Consejo' },
-    { id: 'docencia', label: 'Docencia' },
-    { id: 'retiros', label: 'Cartas de retiro' },
-    ...(profileSlot ? [{ id: 'ficha' as const, label: 'Ficha del Taller' }] : []),
+    { id: 'resumen', label: 'Resumen', icon: 'report' },
+    { id: 'tenidas', label: 'Tenidas y actas', icon: 'calendar' },
+    ...(canReadSecretariat ? [{ id: 'correspondencia' as const, label: 'Correspondencia', icon: 'documents' as const }, { id: 'cuadro' as const, label: 'Cuadro y reuniones', icon: 'members' as const }, { id: 'archivo' as const, label: 'Archivo y cierre', icon: 'archive' as const }] : []),
+    { id: 'consejo', label: 'Consejo', icon: 'shield' },
+    { id: 'docencia', label: 'Docencia', icon: 'library' },
+    { id: 'retiros', label: 'Cartas de retiro', icon: 'memberControl' },
+    ...(profileSlot ? [{ id: 'ficha' as const, label: 'Ficha del Taller', icon: 'lodge' as const }] : []),
   ]
   const secretariatSection: LodgeSecretariatSection | null = tab === 'correspondencia' ? 'daily' : tab === 'cuadro' ? 'roster' : tab === 'archivo' ? 'documents' : null
   const openTenidas = () => { setTab('tenidas'); window.scrollTo({ top: 0, behavior: 'smooth' }) }
