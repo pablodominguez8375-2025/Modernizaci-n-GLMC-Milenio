@@ -180,6 +180,25 @@ public static class CandidateWorkflowEndpoints
                 version.DocumentDate == item.InterviewDate && version.ShortDescription == item.Summary.Trim() &&
                 version.OfficialDocumentType == item.Result)))
             return Results.BadRequest(new { message = "Todas las entrevistas deben tener un archivo Word o PDF validado y asociado al expediente." });
+        // La designación formal no puede ser sustituida por texto libre o archivos
+        // aportados en nombre de otro Maestro. Históricos sin designaciones quedan
+        // bajo el circuito anterior; nuevos expedientes deben usar esta asignación.
+        var formal = await coreDb.CandidateInterviewAssignments.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId &&
+                (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
+                 x.Status == CandidateInterviewAssignmentPolicy.Completed))
+            .ToListAsync(cancellationToken);
+        if (formal.Count > 0)
+        {
+            if (formal.Count < 3 || formal.Any(x =>
+                    x.Status != CandidateInterviewAssignmentPolicy.Completed ||
+                    x.ReportDocumentVersionId == null) ||
+                formal.Select(x => x.InterviewerMemberId).Distinct().Count() != formal.Count ||
+                formal.Select(x => x.ReportDocumentVersionId).Distinct().Count() != formal.Count ||
+                request.Interviews.Count != formal.Count ||
+                request.Interviews.Any(x => !formal.Any(a => a.ReportDocumentVersionId == x.DocumentVersionId)))
+                return Results.Conflict(new { message = "Deben constar informes privados válidos de cada Maestro formalmente designado antes de continuar." });
+        }
         if (request.ConfidentialQuestionnaireAvailable && string.IsNullOrWhiteSpace(request.ConfidentialQuestionnaireReference))
             return Results.BadRequest(new { message = "Debe indicar la referencia privada del cuestionario confidencial." });
         if (request.AutobiographyAvailable && string.IsNullOrWhiteSpace(request.AutobiographyReference))
