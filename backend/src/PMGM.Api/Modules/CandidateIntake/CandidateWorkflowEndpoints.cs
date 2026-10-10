@@ -55,7 +55,9 @@ public static class CandidateWorkflowEndpoints
         if (designated is not null)
         {
             var me = await memberResolver.ResolveAsync(httpContext.User, cancellationToken);
-            if (me is null || me.MemberId != designated.InterviewerMemberId || me.EffectiveDegree < 3)
+            if (me is null || me.MemberId != designated.InterviewerMemberId || me.EffectiveDegree < 3 ||
+                !await CandidateInterviewAssignmentEndpoints.IsActiveDesignatedMasterAsync(
+                    coreDb, profile.OrganizationId, me.MemberId, cancellationToken))
                 return Results.Forbid();
         }
         else

@@ -39,11 +39,11 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
 
   useEffect(() => {
     let active = true
-    void api.getInterviewCases().then(value => {
-      if (!active || !canDesignate) return
+    if (canDesignate) void api.getInterviewCases().then(value => {
+      if (!active) return
       setCases(value.items)
     }).catch(reason => {
-      if (active && canDesignate) setError(reason instanceof Error ? reason.message : 'No fue posible consultar expedientes.')
+      if (active) setError(reason instanceof Error ? reason.message : 'No fue posible consultar expedientes.')
     })
     void reloadMine()
     return () => { active = false }

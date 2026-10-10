@@ -90,6 +90,10 @@ public static class CandidateInterviewAssignmentEndpoints
 
     private sealed record EligibleMaster(Guid MemberId, string Name);
 
+    internal static async Task<bool> IsActiveDesignatedMasterAsync(
+        PmgmDbContext db, Guid organizationId, Guid memberId, CancellationToken ct)
+        => (await EligibleMasters(db, organizationId, ct)).ContainsKey(memberId);
+
     private static async Task<Dictionary<Guid, EligibleMaster>> EligibleMasters(
         PmgmDbContext db, Guid organizationId, CancellationToken ct)
     {
@@ -355,6 +359,8 @@ public static class CandidateInterviewAssignmentEndpoints
             x.Id == assignmentId && x.CeremonyRequestId == requestId &&
             x.InterviewerMemberId == me.MemberId, ct);
         if (assignment is null) return Results.NotFound();
+        if (!await IsActiveDesignatedMasterAsync(db, assignment.OrganizationId, me.MemberId, ct))
+            return Results.Forbid();
         if (assignment.Status != CandidateInterviewAssignmentPolicy.Assigned ||
             assignment.ReportDocumentVersionId is not null)
             return Results.Conflict(new { message = "La designación no está pendiente o ya fue entregada." });
@@ -399,9 +405,15 @@ public static class CandidateInterviewAssignmentEndpoints
     {
         var me = await identity.ResolveAsync(http.User, ct);
         if (me is null || me.EffectiveDegree < 3) return Results.Forbid();
+        var today = Today();
         var activeOrRecent = await db.CandidateInterviewAssignments.AsNoTracking()
             .Where(x => x.InterviewerMemberId == me.MemberId &&
-                x.Status != CandidateInterviewAssignmentPolicy.Replaced)
+                x.Status != CandidateInterviewAssignmentPolicy.Replaced &&
+                db.Memberships.Any(m => m.MemberId == me.MemberId &&
+                    m.OrganizationId == x.OrganizationId &&
+                    m.Status == MembershipCodes.MembershipStatus.Active &&
+                    (m.StartDate == null || m.StartDate <= today) &&
+                    (m.EndDate == null || m.EndDate >= today)))
             .OrderByDescending(x => x.AssignedAtUtc)
             .Select(x => new
             {
