@@ -225,7 +225,9 @@ public static class CeremonyReviewQueueEndpoints
                                      ceremony.CeremonyType == CeremonyCodes.Type.Initiation &&
                                      !activePublication &&
                                      access.CanManageCandidatePublications(user, ceremony.OrganizationId),
-                CanAuthorize: !isFinal && decision.CanAuthorize && access.CanAuthorizeCeremonies(user));
+                // La capacidad depende del rol; la elegibilidad real se revalida en POST /autorizar.
+                // El botón sigue deshabilitado en UI mientras canAuthorize sea false.
+                CanAuthorize: !isFinal && access.CanAuthorizeCeremonies(user));
 
             var eligibility = new CeremonyQueueEligibilityDto(
                 decision.Status,
