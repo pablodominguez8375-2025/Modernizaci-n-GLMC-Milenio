@@ -67,9 +67,9 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
   const pendingExtracts = submittedTenidas.filter(item => item.submissionStatus !== 'received').length
   const [tab, setTab] = useState<GrandSecretariatTab>('bandeja')
   const tabs: WorkspaceTab<GrandSecretariatTab>[] = [
-    { id: 'bandeja', label: 'Bandeja de trabajo', badge: pendingAuthorizations + pendingExtracts },
-    { id: 'templos', label: 'Templos y salas' },
-    { id: 'documentos', label: 'Documentos emitidos' },
+    { id: 'bandeja', label: 'Bandeja de trabajo', badge: pendingAuthorizations + pendingExtracts, icon: 'tasks' },
+    { id: 'templos', label: 'Templos y salas', icon: 'lodge' },
+    { id: 'documentos', label: 'Documentos emitidos', icon: 'documents' },
   ]
 
   return (

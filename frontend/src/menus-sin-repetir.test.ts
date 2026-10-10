@@ -22,7 +22,7 @@ describe('PMGM-UX menús sin funciones repetidas (aprobado por el PO 03-10-2026)
     expect(app).toContain('bootstrapSlot={canBootstrap ? <BootstrapPage')
     expect(app).toContain('label="Secciones de Calidad de datos"')
     expect(app).toContain("initialTab={view === 'lodgeProfile' ? 'ficha' : undefined}")
-    expect(read('./LodgeManagementPage.tsx')).toContain("{ id: 'ficha' as const, label: 'Ficha del Taller' }")
+    expect(read('./LodgeManagementPage.tsx')).toContain("{ id: 'ficha' as const, label: 'Ficha del Taller', icon: 'lodge' as const }")
     expect(app).not.toContain('<ModuleAccess icon="check" label="Cola de corroboración"')
   })
 

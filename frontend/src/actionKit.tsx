@@ -1,6 +1,7 @@
 /* PMGM-UX-004 · «Lista primero, acción bajo demanda».
  * Componentes de presentación para separar listados de acciones sin cambiar reglas, permisos ni llamadas a la API.
  * Los formularios se mantienen montados (ocultos) para conservar lo escrito si el usuario cierra el panel. */
+import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react'
 
 type ButtonTone = 'primary' | 'secondary'
@@ -112,7 +113,7 @@ export function RowMenu({ items, label = 'Más acciones' }: { items: RowMenuItem
   </div>
 }
 
-export type WorkspaceTab<T extends string> = { id: T; label: string; badge?: number }
+export type WorkspaceTab<T extends string> = { id: T; label: string; badge?: number; icon?: InstitutionalIconName }
 
 /** Decisión del PO 09-10-2026 (opción C): un módulo con secciones no muestra pestañas ni menú interno.
  *  Con `hub`, el módulo abre primero tarjetas grandes; al elegir una, se ve solo esa sección con «← Volver a …».
@@ -127,6 +128,7 @@ export function WorkspaceTabs<T extends string>({ tabs, active, onChange, label,
         <p className="section-hub-intro">Elige qué quieres hacer.</p>
         <div className="section-hub-grid">
           {tabs.map(tab => <button key={tab.id} type="button" className="section-hub-card" onClick={() => { onChange(tab.id); setOpened(true); window.scrollTo({ top: 0 }) }}>
+            {tab.icon && <span className="section-hub-icon" aria-hidden="true"><InstitutionalIcon name={tab.icon} size={26} /></span>}
             <strong>{tab.label}</strong>
             {hub.hints?.[tab.id] && <small>{hub.hints[tab.id]}</small>}
             {tab.badge ? <span className="workspace-tab-badge">{tab.badge}</span> : null}
