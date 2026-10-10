@@ -195,17 +195,24 @@ public static class CandidateInterviewAssignmentEndpoints
             return Results.BadRequest(new { message = "Las fechas propuestas deben corresponder a cada Maestro y ser posteriores al acuerdo." });
         if (ceremony.Status is CeremonyCodes.RequestStatus.Rejected or CeremonyCodes.RequestStatus.Authorized)
             return Results.Conflict(new { message = "El expediente ya se encuentra cerrado." });
-        var published = await db.CandidatePublications.AsNoTracking().AnyAsync(p =>
-            p.CeremonyRequestId == requestId &&
-            (p.Status == CeremonyCodes.PublicationStatus.Published ||
-             p.Status == CeremonyCodes.PublicationStatus.Completed) &&
-            p.PublishedFromUtc <= DateTimeOffset.UtcNow, ct);
+        var publishedAt = await db.CandidatePublications.AsNoTracking()
+            .Where(p => p.CeremonyRequestId == requestId &&
+                (p.Status == CeremonyCodes.PublicationStatus.Published ||
+                 p.Status == CeremonyCodes.PublicationStatus.Completed) &&
+                p.PublishedFromUtc <= DateTimeOffset.UtcNow)
+            .OrderByDescending(p => p.PublishedFromUtc)
+            .Select(p => (DateTimeOffset?)p.PublishedFromUtc)
+            .FirstOrDefaultAsync(ct);
         var deliberation = await db.CeremonyValidations.AsNoTracking()
             .Where(v => v.CeremonyRequestId == requestId &&
                 v.ValidationType == CeremonyCodes.ValidationType.CandidateInitialDeliberation)
             .OrderByDescending(v => v.RecordedAtUtc).Select(v => v.Status).FirstOrDefaultAsync(ct);
-        if (!published || deliberation != CeremonyCodes.ValidationStatus.Approved)
+        if (publishedAt is null || deliberation != CeremonyCodes.ValidationStatus.Approved)
             return Results.Conflict(new { message = "Requiere deliberación unánime aprobada y publicación institucional vigente." });
+        var publicationDate = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTimeBySystemTimeZoneId(publishedAt.Value, "America/Santiago").DateTime);
+        if (input.CouncilDecisionDate < publicationDate)
+            return Results.BadRequest(new { message = "El acuerdo de programación no puede ser anterior a la publicación institucional." });
 
         var eligible = await EligibleMasters(db, ceremony.OrganizationId, ct);
         if (input.InterviewerMemberIds.Any(id => !eligible.ContainsKey(id)))
@@ -415,7 +422,17 @@ public static class CandidateInterviewAssignmentEndpoints
                     m.OrganizationId == x.OrganizationId &&
                     m.Status == MembershipCodes.MembershipStatus.Active &&
                     (m.StartDate == null || m.StartDate <= today) &&
-                    (m.EndDate == null || m.EndDate >= today)))
+                    (m.EndDate == null || m.EndDate >= today)) &&
+                (!db.InstitutionalStatusEvents.Any(e =>
+                    e.MemberId == me.MemberId && e.EffectiveDate <= today &&
+                    new[] { "active", "reinstated", "past_active", "inactive",
+                        "voluntary_withdrawal", "forced_withdrawal", "deceased" }.Contains(e.EventType)) ||
+                 new[] { "active", "reinstated" }.Contains(
+                    db.InstitutionalStatusEvents
+                        .Where(e => e.MemberId == me.MemberId && e.EffectiveDate <= today)
+                        .OrderByDescending(e => e.EffectiveDate)
+                        .ThenByDescending(e => e.RecordedAtUtc)
+                        .Select(e => e.EventType).FirstOrDefault()!)))
             .OrderByDescending(x => x.AssignedAtUtc)
             .Select(x => new
             {

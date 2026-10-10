@@ -64,11 +64,13 @@ public static class CandidateWorkflowEndpoints
         {
             if (!access.CanManageOrganization(httpContext.User, profile.OrganizationId))
                 return Results.Forbid();
-            if (await coreDb.CandidateInterviewAssignments.AsNoTracking().AnyAsync(x =>
+            if (await coreDb.CeremonyRequests.AsNoTracking().AnyAsync(x =>
+                    x.Id == requestId && x.RequiresFormalInterviewAssignments, cancellationToken) ||
+                await coreDb.CandidateInterviewAssignments.AsNoTracking().AnyAsync(x =>
                     x.CeremonyRequestId == requestId &&
                     (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
                      x.Status == CandidateInterviewAssignmentPolicy.Completed), cancellationToken))
-                return Results.Conflict(new { message = "Las entrevistas de este expediente deben ser enviadas por los Maestros designados." });
+                return Results.Conflict(new { message = "El expediente exige designaciones formales; solo los Maestros autorizados pueden subir sus informes." });
         }
         var existingDocument = await documentDb.InstitutionalDocuments.SingleOrDefaultAsync(x => x.Id == interviewId, cancellationToken);
         if (existingDocument is not null &&
