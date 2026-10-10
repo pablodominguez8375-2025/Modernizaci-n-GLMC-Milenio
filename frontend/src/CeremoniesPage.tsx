@@ -139,10 +139,26 @@ function CeremonyCard({ item, api, working, execute }: {
       </div>
       {reviewError && <p role="alert">{reviewError}</p>}
       {liveEligibility && <div className="requirement-grid">
-        <div className="requirement-card"><strong>Asistencia a Tenidas</strong><p>{liveEligibility.advancement?.meetingAttendance ?? 'Pendiente de corroboración'}</p></div>
-        <div className="requirement-card"><strong>Asistencia a instrucciones</strong><p>{liveEligibility.advancement?.instructionAttendance ?? 'Pendiente de corroboración'}</p></div>
-        <div className="requirement-card"><strong>Planchas aprobadas</strong><p>{liveEligibility.advancement?.certifiedPaperCount ?? 0} (se requieren dos clases distintas)</p></div>
-        <div className="requirement-card"><strong>Continuidad validada</strong><p>{liveEligibility.advancement?.institutionalContinuityCertified ? 'Sí' : 'Pendiente'}</p></div>
+        {(liveEligibility.advancement?.decision.requirements ?? []).map(requirement =>
+          <div className="requirement-card" key={requirement.code}>
+            <div>
+              <strong>{requirement.name}</strong>
+              <span className={requirement.complies ? 'requirement-ok' : 'requirement-blocked'}>
+                {requirement.complies ? 'Cumple' : 'No cumple'}
+              </span>
+            </div>
+            <p>Alcanzado: {requirement.achieved} · Mínimo requerido: {requirement.minimum}</p>
+          </div>)}
+        {!liveEligibility.advancement && <div className="requirement-card">
+          <strong>Tenidas, instrucciones y planchas</strong>
+          <p>Pendiente de regla vigente y corroboración de las fuentes institucionales.</p>
+        </div>}
+        <div className="requirement-card"><strong>Planchas institucionales de dos clases</strong><p>
+          {liveEligibility.advancement?.twoDifferentKindsCertified ? 'Ambas categorías certificadas' : 'Pendiente de certificar simbolismo y cultura general masónica'}
+        </p></div>
+        <div className="requirement-card"><strong>Continuidad validada</strong><p>
+          {liveEligibility.advancement?.institutionalContinuityCertified ? 'Sí' : 'Pendiente'}
+        </p></div>
         <div className="requirement-card"><strong>Regla aplicada</strong><p>{liveEligibility.advancement?.ruleVersion ?? 'No consta regla vigente'}</p></div>
       </div>}
     </section>}
