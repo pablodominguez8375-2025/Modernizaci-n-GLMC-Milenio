@@ -460,6 +460,15 @@ public static class CandidateInterviewAssignmentEndpoints
                 x.ScheduledDate, x.Status, x.AssignedAtUtc,
                 hasReport = x.ReportDocumentVersionId != null
             }).ToListAsync(ct);
+        var caseIds = activeOrRecent.Select(x => x.CeremonyRequestId).Distinct().ToArray();
+        var caseNames = await db.CeremonyRequests.AsNoTracking()
+            .Where(x => caseIds.Contains(x.Id))
+            .Select(x => new
+            {
+                x.Id,
+                Name = x.CandidatePerson == null ? "Sin nombre" :
+                    x.CandidatePerson.FirstNames + " " + x.CandidatePerson.LastNames
+            }).ToDictionaryAsync(x => x.Id, x => x.Name, ct);
         var name = await db.Members.AsNoTracking()
             .Where(x => x.Id == me.MemberId)
             .Select(x => x.Person.FirstNames + " " + x.Person.LastNames)
@@ -470,7 +479,8 @@ public static class CandidateInterviewAssignmentEndpoints
             items = activeOrRecent.Select(x => new {
                 x.Id, x.CeremonyRequestId, x.OrganizationId, x.Position,
                 x.ScheduledDate, x.Status, x.AssignedAtUtc, x.hasReport,
-                interviewerName = name
+                interviewerName = name,
+                candidateName = caseNames.GetValueOrDefault(x.CeremonyRequestId, "Sin nombre")
             })
         });
     }

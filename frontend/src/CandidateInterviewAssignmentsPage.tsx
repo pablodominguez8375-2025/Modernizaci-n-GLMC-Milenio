@@ -228,7 +228,7 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
         Los informes son privados y se revisarán en Tenida de tercer grado.</p>
       {mine.length === 0 ? <p>No hay designaciones pendientes para esta identidad.</p> :
         mine.map(item => <article className="candidate-interview-card" key={item.id}>
-          <h3>Entrevista {item.position} · {item.status === 'completed' ? 'Entregada' : 'Pendiente'}</h3>
+          <h3>Entrevista {item.position} · {item.candidateName || 'Candidato asignado'} · {item.status === 'completed' ? 'Entregada' : 'Pendiente'}</h3>
           <p>Fecha programada: {item.scheduledDate || 'Por coordinar'} · Expediente institucional identificado por código.</p>
           {item.status === 'assigned' && <>
             <div className="candidate-workflow-grid">

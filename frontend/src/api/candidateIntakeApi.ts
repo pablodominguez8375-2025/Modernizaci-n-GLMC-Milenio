@@ -147,6 +147,7 @@ export interface CandidateInterviewAssignment {
   position: number
   interviewerMemberId?: string
   interviewerName?: string
+  candidateName?: string
   councilBody?: string
   councilDecisionDate?: string
   councilMinuteReference?: string
