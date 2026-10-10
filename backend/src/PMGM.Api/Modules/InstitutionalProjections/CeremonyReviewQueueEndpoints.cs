@@ -227,7 +227,13 @@ public static class CeremonyReviewQueueEndpoints
                                      access.CanManageCandidatePublications(user, ceremony.OrganizationId),
                 // La capacidad depende del rol; la elegibilidad real se revalida en POST /autorizar.
                 // El botón sigue deshabilitado en UI mientras canAuthorize sea false.
-                CanAuthorize: !isFinal && access.CanAuthorizeCeremonies(user));
+                CanAuthorize: !isFinal && access.CanAuthorizeCeremonies(user),
+                CanSubmitAdvancementEvidence: !isFinal &&
+                    ceremony.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation &&
+                    access.CanManageLodgeSecretariat(user, ceremony.OrganizationId),
+                CanReviewAdvancementEvidence: !isFinal &&
+                    ceremony.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation &&
+                    access.CanValidateCeremonyInternalAffairs(user));
 
             var eligibility = new CeremonyQueueEligibilityDto(
                 decision.Status,
@@ -321,7 +327,9 @@ public sealed record CeremonyQueuePublicationDto(
 public sealed record CeremonyQueueActionsDto(
     bool CanValidateInternalAffairs,
     bool CanPublishCandidate,
-    bool CanAuthorize);
+    bool CanAuthorize,
+    bool CanSubmitAdvancementEvidence = false,
+    bool CanReviewAdvancementEvidence = false);
 
 public sealed record CeremonyReviewQueueResponse(
     int Total,
