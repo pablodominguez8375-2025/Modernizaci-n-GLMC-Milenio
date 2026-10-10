@@ -25,6 +25,7 @@ public static class CandidateWorkflowEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/balotaje", RecordFinalBallotAsync);
         group.MapPost("/solicitudes/{requestId:guid}/solicitud-iniciacion", SubmitInitiationRequestAsync);
         group.MapGet("/solicitudes/{requestId:guid}/flujo", GetWorkflowAsync);
+        CandidateInterviewAssignmentEndpoints.Map(group);
 
         return endpoints;
     }
