@@ -14,3 +14,6 @@ Los identificadores de evidencia vinculados a hermanos se excluyen deliberadamen
 - Tras fusionar, comprobar CI, Showcase, QA/Pre-UAT del nuevo `dev`.
 - No alterar `main`, `srv01`, ni el flujo normativo de dispensa Issue #48.
 - Registrar resultados verificables en Issue #47 y Línea Base de Drive.
+
+## Criterio visual de Gran Secretaría (#47.5)
+La consulta de elegibilidad en vivo ahora muestra, por separado, Tenidas, instrucciones y planchas: nombre del requisito, **valor alcanzado**, **mínimo vigente**, y semáforo cumple/no cumple. Dos clases de planchas y continuidad conservan estados independientes; no se exponen IDs de asistencias ni de documentos en la respuesta de elegibilidad. Cambios acotados a `CeremoniesPage.tsx` y su interfaz tipada en `pmgmApi.ts`, sujetos a lint/TypeScript y triple gate exact-head.
