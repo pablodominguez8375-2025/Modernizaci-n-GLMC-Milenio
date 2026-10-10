@@ -143,6 +143,7 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     getAssignedInterviewers: { view: 'member', action: 'view' },
     assignInterviewers: { view: 'member', action: 'write' },
     retryInterviewerNotifications: { view: 'member', action: 'write' },
+    rescheduleInterviewer: { view: 'member', action: 'write' },
     getMyInterviewAssignments: { view: 'member', action: 'view' },
     deliverAssignedInterview: { view: 'member', action: 'write' },
     getPublishedCandidates: { view: 'candidates', action: 'view' },

@@ -155,13 +155,49 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 Assert.Equal(HttpStatusCode.OK, acceptAgain.StatusCode);
             }
 
+            var rescheduleRoute = $"{route}/entrevistadores-designados/{assignmentIds[0]}/reprogramar";
+            var scheduleChange = new { scheduledDate = today.AddDays(7), reason = "Ajuste de agenda del entrevistador CI" };
+            var forbiddenReschedule = await client.PatchAsJsonAsync(rescheduleRoute, scheduleChange, ct);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenReschedule.StatusCode);
+            client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+            client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerVenerable);
+            var rescheduled = await client.PatchAsJsonAsync(rescheduleRoute, scheduleChange, ct);
+            Assert.Equal(HttpStatusCode.OK, rescheduled.StatusCode);
+            var retrySchedule = await client.PatchAsJsonAsync(rescheduleRoute, scheduleChange, ct);
+            Assert.Equal(HttpStatusCode.OK, retrySchedule.StatusCode);
+            var retryResult = await retrySchedule.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.False(retryResult.GetProperty("changed").GetBoolean());
+            Assert.False(retryResult.GetProperty("notificationPending").GetBoolean());
+
+            // Returning to a previously notified date is a new change, not a retry.
+            var movedAgain = await client.PatchAsJsonAsync(rescheduleRoute,
+                new { scheduledDate = today.AddDays(8), reason = "Segundo ajuste de agenda de prueba" }, ct);
+            Assert.Equal(HttpStatusCode.OK, movedAgain.StatusCode);
+            var returnedToDate = await client.PatchAsJsonAsync(rescheduleRoute, scheduleChange, ct);
+            Assert.Equal(HttpStatusCode.OK, returnedToDate.StatusCode);
+            var retriedReturn = await client.PatchAsJsonAsync(rescheduleRoute, scheduleChange, ct);
+            Assert.Equal(HttpStatusCode.OK, retriedReturn.StatusCode);
+
             await using (var scope = factory.Services.CreateAsyncScope())
             {
+                var notifications = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
+                var notices = await notifications.NotificationMessages.AsNoTracking()
+                    .Where(x => subjects.Contains(x.RecipientSubject) &&
+                        x.TypeCode == "candidate.interview.rescheduled").ToListAsync(ct);
+                Assert.Equal(3, notices.Count);
+                Assert.All(notices, notice => Assert.Equal("restricted", notice.Classification));
+                Assert.All(notices, notice => Assert.DoesNotContain(candidate.FirstNames, notice.Body, StringComparison.OrdinalIgnoreCase));
                 var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
                 var rows = await db.CandidateInterviewAssignments.AsNoTracking()
                     .Where(x => x.CeremonyRequestId == ceremony.Id).ToListAsync(ct);
                 Assert.Equal(3, rows.Count);
                 Assert.All(rows, row => Assert.NotNull(row.AcceptedAtUtc));
+                var changedRow = Assert.Single(rows, x => x.Id == assignmentIds[0]);
+                Assert.Equal(today.AddDays(7), changedRow.ScheduledDate);
+                Assert.All(rows.Where(x => x.Id != changedRow.Id), row => Assert.Null(row.ScheduledDate));
+                Assert.All(notices, notice => Assert.Equal(subjects[Array.FindIndex(members, m => m.Id == changedRow.InterviewerMemberId)], notice.RecipientSubject));
+                Assert.Equal(3, await db.AuditEvents.CountAsync(x =>
+                    x.OrganizationId == workshop.Id && x.Action == "candidate.interview.schedule.changed", ct));
                 Assert.Equal(3, await db.AuditEvents.CountAsync(x =>
                     x.OrganizationId == workshop.Id &&
                     x.Action == "candidate.interview.designation.accepted", ct));
