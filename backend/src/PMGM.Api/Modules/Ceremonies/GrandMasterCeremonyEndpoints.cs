@@ -119,6 +119,8 @@ public static class GrandMasterCeremonyEndpoints
         Guid requestId,
         HttpContext httpContext,
         PmgmDbContext db,
+        LodgeManagementDbContext lodgeDb,
+        DocumentManagementDbContext documentsDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -126,7 +128,10 @@ public static class GrandMasterCeremonyEndpoints
             .SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
         if (ceremony is null) return Results.NotFound();
 
-        if (!access.CanEvaluateCeremonies(httpContext.User) && !access.CanReadOrganization(httpContext.User, ceremony.OrganizationId))
+        if (!access.CanEvaluateCeremonies(httpContext.User) &&
+            !(ceremony.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation
+                ? access.CanManageLodgeSecretariat(httpContext.User, ceremony.OrganizationId)
+                : access.CanReadOrganization(httpContext.User, ceremony.OrganizationId)))
             return Results.Forbid();
 
         var today = ChileToday();
@@ -185,13 +190,26 @@ public static class GrandMasterCeremonyEndpoints
             }
         }
 
+        var advancement = ceremony.CeremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation
+            ? await AdvancementAuthorizationProjection.EvaluateAsync(
+                ceremony, today, db, lodgeDb, documentsDb, cancellationToken)
+            : null;
+        var tariff = await GrandTreasuryTariff.ResolveCeremonyAsync(
+            db, requestId, ceremony.OrganizationId, ceremony.CeremonyType, today, cancellationToken);
+        var paid = await db.CeremonyRightPayments.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId && x.PaymentDate <= today)
+            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        var rightPaid = !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) ||
+            (tariff is not null && paid >= tariff.Value.Amount);
         var decision = CeremonyEligibilityPolicy.Evaluate(
             ceremony.CeremonyType,
             internalAffairs?.Status,
             treasury?.Status,
             hospitalaria?.Status,
             grandMaster?.Status,
-            publicationEvidence);
+            publicationEvidence,
+            ceremonyRightPaid: rightPaid,
+            advancement: advancement?.Decision);
 
         var requirements = decision.Requirements.ToList();
         CeremonyValidation? finalBallot = null;
@@ -227,12 +245,14 @@ public static class GrandMasterCeremonyEndpoints
                 ? "observed"
                 : "complies";
 
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
             requestId,
             ceremony.CeremonyType,
             ceremony.OrganizationId,
             evaluatedAsOf = today,
+            advancement,
             status = overall,
             canAuthorize = overall == "complies",
             requirements,
