@@ -399,6 +399,7 @@ public static class CandidateInterviewAssignmentEndpoints
             return Results.Conflict(new { message = "Expediente cerrado: no admite reprogramaciones." });
 
         var oldDate = (DateOnly?)null;
+        var scheduleChangeId = Guid.Empty;
         CandidateInterviewAssignment? assignment;
         await using (var tx = await db.Database.BeginTransactionAsync(ct))
         {
@@ -437,10 +438,17 @@ public static class CandidateInterviewAssignmentEndpoints
                     });
                 await db.SaveChangesAsync(ct);
             }
+            var assignmentKey = assignment.Id.ToString();
+            scheduleChangeId = await db.AuditEvents.AsNoTracking()
+                .Where(x => x.OrganizationId == assignment.OrganizationId &&
+                    x.EntityType == nameof(CandidateInterviewAssignment) && x.EntityId == assignmentKey &&
+                    x.Action == "candidate.interview.schedule.changed")
+                .OrderByDescending(x => x.OccurredAtUtc).Select(x => x.Id).FirstOrDefaultAsync(ct);
             await tx.CommitAsync(ct);
         }
 
-        // Idempotencia por (asignación, fecha). Si el primer intento falló,
+        // Idempotencia por cambio auditado, también si se vuelve a una fecha anterior.
+        // Si el primer intento falló,
         // repetir el mismo PATCH puede reenviar el aviso sin reescribir el historial.
         var recipients = await db.Database.SqlQuery<string>($"""
             SELECT "Subject" AS "Value" FROM core.member_identity_links
@@ -465,7 +473,7 @@ public static class CandidateInterviewAssignmentEndpoints
                     ["date"] = input.ScheduledDate.ToString("yyyy-MM-dd",
                         System.Globalization.CultureInfo.InvariantCulture)
                 },
-                $"candidate-interview-rescheduled:{assignment.Id:N}:{input.ScheduledDate:yyyyMMdd}",
+                $"candidate-interview-rescheduled:{assignment.Id:N}:{scheduleChangeId:N}:{input.ScheduledDate:yyyyMMdd}",
                 assignment.Id.ToString("N"), assignment.Id.ToString("N"),
                 "/interviews", true, null, true,
                 RelatedResourceType: "candidate_interview_assignment",
