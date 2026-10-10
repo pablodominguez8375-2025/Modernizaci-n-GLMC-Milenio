@@ -80,3 +80,25 @@ public sealed class InstitutionalRuleSetting
     public string? SourceReference { get; set; }
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
+
+public sealed class AdvancementPaperAttestation
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid CeremonyRequestId { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid MemberId { get; set; }
+    public Guid WorkPaperDocumentId { get; set; }
+    public Guid WorkPaperVersionId { get; set; }
+    public Guid MeetingId { get; set; }
+    public Guid ExtractVersionId { get; set; }
+    public Guid FullMinuteVersionId { get; set; }
+    public required string WorkKind { get; set; }
+    public DateOnly PresentationDate { get; set; }
+    public required string Status { get; set; }
+    public string? CouncilApprovalReference { get; set; }
+    public required string PresentedBySubject { get; set; }
+    public DateTimeOffset RecordedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public string? ReviewedBySubject { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+    public string? ReviewNotes { get; set; }
+}

@@ -57,6 +57,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<DeathReplenishmentPayment> DeathReplenishmentPayments => Set<DeathReplenishmentPayment>();
     public DbSet<DeathReplenishmentTransfer> DeathReplenishmentTransfers => Set<DeathReplenishmentTransfer>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
+    public DbSet<AdvancementPaperAttestation> AdvancementPaperAttestations => Set<AdvancementPaperAttestation>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
     public DbSet<CeremonyRightPayment> CeremonyRightPayments => Set<CeremonyRightPayment>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
@@ -732,6 +733,21 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.RecordedAtUtc).IsRequired();
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.OrganizationId, x.AsOfDate });
+        });
+
+        modelBuilder.Entity<AdvancementPaperAttestation>(entity =>
+        {
+            entity.ToTable("advancement_paper_attestations");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.WorkKind).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.CouncilApprovalReference).HasMaxLength(500);
+            entity.Property(x => x.PresentedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CeremonyRequestId, x.WorkPaperDocumentId, x.RecordedAtUtc });
+            entity.HasIndex(x => new { x.OrganizationId, x.MemberId });
         });
 
         modelBuilder.Entity<CeremonyRequest>(entity =>
