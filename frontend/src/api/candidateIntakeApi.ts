@@ -506,7 +506,7 @@ export class CandidateIntakeApiClient {
   async acceptAssignedInterview(requestId: string, assignmentId: string): Promise<void> {
     if (this.useMocks) {
       const item = (this.mockInterviewerAssignments.get(requestId) ?? []).find(x => x.id === assignmentId)
-      if (!item || item.status !== 'assigned' || !item.acceptedAtUtc) throw new CandidateIntakeApiHttpError(409, 'Debe aceptar la entrevista antes de entregar el informe.')
+      if (!item || item.status !== 'assigned') throw new CandidateIntakeApiHttpError(409, 'Asignación no disponible.')
       item.acceptedAtUtc ??= new Date().toISOString()
       return
     }
@@ -518,7 +518,7 @@ export class CandidateIntakeApiClient {
     if (this.useMocks) {
       const assignments = this.mockInterviewerAssignments.get(requestId) ?? []
       const item = assignments.find(x => x.id === assignmentId)
-      if (!item || item.status !== 'assigned') throw new CandidateIntakeApiHttpError(409, 'Asignación no disponible.')
+      if (!item || item.status !== 'assigned' || !item.acceptedAtUtc) throw new CandidateIntakeApiHttpError(409, 'Debe aceptar la entrevista antes de entregar el informe.')
       item.status = 'completed'
       item.hasReport = true
       item.reportDocumentVersionId = documentVersionId
