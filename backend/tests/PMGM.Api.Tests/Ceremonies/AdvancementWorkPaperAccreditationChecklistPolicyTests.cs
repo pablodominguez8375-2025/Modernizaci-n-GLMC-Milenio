@@ -91,7 +91,7 @@ public sealed class AdvancementWorkPaperAccreditationChecklistPolicyTests
         Assert.False(summary.PresentationEvidenceAvailable);
         Assert.NotNull(summary.EvidenceChecklists);
         Assert.Equal(2, summary.EvidenceChecklists.Count);
-        var ready = Assert.Single(summary.EvidenceChecklists.Where(x => x.DocumentaryPacketReadyForReview));
+        var ready = Assert.Single(summary.EvidenceChecklists, x => x.DocumentaryPacketReadyForReview);
         Assert.Equal([meeting], ready.SameMeetingPacketIds);
         Assert.False(ready.PresentationCertified);
         Assert.False(ready.ApprovalCertified);
@@ -110,6 +110,6 @@ public sealed class AdvancementWorkPaperAccreditationChecklistPolicyTests
         Assert.Equal(2, summary.EvidenceChecklists!.Count(x => x.DocumentaryPacketReadyForReview));
         Assert.Equal(0, summary.ConfirmedPresented);
         Assert.All(summary.Items, item => Assert.False(item.PresentationVerified));
-        Assert.All(summary.EvidenceChecklists, item => Assert.False(item.ApprovalCertified));
+        Assert.All(summary.EvidenceChecklists!, item => Assert.False(item.ApprovalCertified));
     }
 }
