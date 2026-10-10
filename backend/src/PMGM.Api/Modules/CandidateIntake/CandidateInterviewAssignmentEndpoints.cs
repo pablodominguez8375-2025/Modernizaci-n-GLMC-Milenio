@@ -33,7 +33,7 @@ public static class CandidateInterviewAssignmentEndpoints
             DateTimeOffset.UtcNow, "America/Santiago").DateTime);
 
     private static bool CanDesignate(HttpContext http, IInstitutionalAccessService access, Guid orgId)
-        => access.CanManageLodgeSummaryAccess(http.User, orgId) &&
+        => access.CanManageLodgeCouncilSummaryAccess(http.User, orgId) &&
            access.HasRole(http.User, InstitutionalRoles.TallerVenerable);
 
     private static bool CanObserve(HttpContext http, IInstitutionalAccessService access, Guid orgId)
@@ -129,7 +129,8 @@ public static class CandidateInterviewAssignmentEndpoints
     }
 
     private static async Task<IResult> GetAssignmentsAsync(
-        Guid requestId, HttpContext http, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+        Guid requestId, HttpContext http, PmgmDbContext db, DocumentManagementDbContext documents,
+        IInstitutionalAccessService access, CancellationToken ct)
     {
         var ceremony = await db.CeremonyRequests.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == requestId && x.CeremonyType == CeremonyCodes.Type.Initiation, ct);
@@ -138,8 +139,9 @@ public static class CandidateInterviewAssignmentEndpoints
         var records = await db.CandidateInterviewAssignments.AsNoTracking()
             .Where(x => x.CeremonyRequestId == requestId)
             .OrderByDescending(x => x.AssignedAtUtc).ToListAsync(ct);
+        var memberIds = records.Select(x => x.InterviewerMemberId).Distinct().ToArray();
         var names = await db.Members.AsNoTracking()
-            .Where(m => records.Select(x => x.InterviewerMemberId).Contains(m.Id))
+            .Where(m => memberIds.Contains(m.Id))
             .Select(m => new { m.Id, m.Person.FirstNames, m.Person.LastNames })
             .ToListAsync(ct);
         var byId = names.ToDictionary(x => x.Id,
@@ -162,12 +164,12 @@ public static class CandidateInterviewAssignmentEndpoints
             x.ReplacedAtUtc, x.ReplacementReason, x.CompletedAtUtc,
             hasReport = x.ReportDocumentVersionId != null,
             x.ReportDocumentVersionId,
-            reportDate = x.ReportDocumentVersionId is Guid version && reportById.ContainsKey(version)
-                ? reportById[version].DocumentDate : null,
-            reportResult = x.ReportDocumentVersionId is Guid resultId && reportById.ContainsKey(resultId)
-                ? reportById[resultId].OfficialDocumentType : null,
-            reportSummary = x.ReportDocumentVersionId is Guid summaryId && reportById.ContainsKey(summaryId)
-                ? reportById[summaryId].ShortDescription : null,
+            reportDate = reportById.ContainsKey(x.ReportDocumentVersionId.GetValueOrDefault())
+                ? reportById[x.ReportDocumentVersionId!.Value].DocumentDate : null,
+            reportResult = reportById.ContainsKey(x.ReportDocumentVersionId.GetValueOrDefault())
+                ? reportById[x.ReportDocumentVersionId!.Value].OfficialDocumentType : null,
+            reportSummary = reportById.ContainsKey(x.ReportDocumentVersionId.GetValueOrDefault())
+                ? reportById[x.ReportDocumentVersionId!.Value].ShortDescription : null,
             notified = x.NotificationQueuedAtUtc != null
         }) });
     }

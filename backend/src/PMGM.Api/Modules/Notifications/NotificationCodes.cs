@@ -50,5 +50,6 @@ public static class NotificationCodes
     public static class Type
     {
         public const string CandidatePublicationApproved = "candidate.publication.approved";
+        public const string CandidateInterviewAssigned = "candidate.interview.assigned";
     }
 }
