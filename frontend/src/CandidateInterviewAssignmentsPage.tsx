@@ -115,6 +115,20 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
     finally { setLoading(false) }
   }
 
+  const accept = async (assignment: CandidateInterviewAssignment) => {
+    if (!assignment.ceremonyRequestId) return
+    setLoading(true); setError(''); setMessage('')
+    try {
+      await api.acceptAssignedInterview(assignment.ceremonyRequestId, assignment.id)
+      setMessage('Designación aceptada personalmente. Ya puede preparar su informe privado.')
+      await reloadMine()
+      if (canDesignate && selectedId === assignment.ceremonyRequestId)
+        setDesignations((await api.getAssignedInterviewers(selectedId)).items)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'No fue posible aceptar la designación.')
+    } finally { setLoading(false) }
+  }
+
   const updateReport = (id: string, patch: Partial<ReportDraft>) =>
     setReports(current => ({
       ...current,
@@ -217,7 +231,7 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
         <h3>Seguimiento del expediente</h3>
         {active.length === 0 ? <p>Todavía no hay designaciones registradas.</p> :
           <ul>{active.map(row => <li key={row.id}>{row.interviewerName} · Entrevista {row.position} ·
-            {row.status === 'completed' ? ' Informe entregado' : ' Informe pendiente'} ·
+            {row.status === 'completed' ? ' Informe entregado' : row.acceptedAtUtc ? ' Aceptada · informe pendiente' : ' Aceptación pendiente'} ·
             {row.notified ? ' Avisado' : ' Aviso pendiente'}</li>)}</ul>}
       </>}
     </section>}
@@ -228,9 +242,11 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
         Los informes son privados y se revisarán en Tenida de tercer grado.</p>
       {mine.length === 0 ? <p>No hay designaciones pendientes para esta identidad.</p> :
         mine.map(item => <article className="candidate-interview-card" key={item.id}>
-          <h3>Entrevista {item.position} · {item.candidateName || 'Candidato asignado'} · {item.status === 'completed' ? 'Entregada' : 'Pendiente'}</h3>
+          <h3>Entrevista {item.position} · {item.candidateName || 'Candidato asignado'} · {item.status === 'completed' ? 'Entregada' : item.acceptedAtUtc ? 'Aceptada' : 'Por aceptar'}</h3>
           <p>Fecha programada: {item.scheduledDate || 'Por coordinar'} · Expediente institucional identificado por código.</p>
-          {item.status === 'assigned' && <>
+          {item.status === 'assigned' && !item.acceptedAtUtc && <button type="button" className="candidate-primary-button" disabled={loading}
+            onClick={() => void accept(item)}>Aceptar designación</button>}
+          {item.status === 'assigned' && !!item.acceptedAtUtc && <>
             <div className="candidate-workflow-grid">
               <label>Fecha de entrevista
                 <input type="date" max={today()} value={reports[item.id]?.interviewDate ?? today()}

@@ -8,6 +8,12 @@ public static class CandidateInterviewAssignmentPolicy
     public const string Completed = "completed";
     public const string Replaced = "replaced";
 
+    public static bool CanAccept(string? status, DateTimeOffset? acceptedAtUtc)
+        => status == Assigned && acceptedAtUtc is null;
+
+    public static bool CanDeliver(string? status, DateTimeOffset? acceptedAtUtc)
+        => status == Assigned && acceptedAtUtc is not null;
+
     public static bool ValidCouncil(string? value) => value is Council or Chamber;
 
     public static string? Validate(

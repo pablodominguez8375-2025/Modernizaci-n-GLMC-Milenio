@@ -55,6 +55,18 @@ public sealed class CandidateInterviewAssignmentPolicyTests
     }
 
     [Fact]
+    public void AcceptanceMustPrecedeDeliveryAndNotApplyToReplacements()
+    {
+        var now = DateTimeOffset.UtcNow;
+        Assert.True(CandidateInterviewAssignmentPolicy.CanAccept("assigned", null));
+        Assert.False(CandidateInterviewAssignmentPolicy.CanDeliver("assigned", null));
+        Assert.False(CandidateInterviewAssignmentPolicy.CanAccept("assigned", now));
+        Assert.True(CandidateInterviewAssignmentPolicy.CanDeliver("assigned", now));
+        Assert.False(CandidateInterviewAssignmentPolicy.CanAccept("replaced", null));
+        Assert.False(CandidateInterviewAssignmentPolicy.CanDeliver("completed", now));
+    }
+
+    [Fact]
     public void AdditionalMastersMayBeRequestedWithoutWeakeningMinimum()
     {
         var ids = Masters().Concat([Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid()]).ToArray();

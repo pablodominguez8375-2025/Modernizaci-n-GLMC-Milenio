@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
@@ -116,6 +117,25 @@ public sealed class CandidateInterviewAssignmentHttpTests
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             Assert.False(await db.CandidateInterviewAssignments.AnyAsync(
                 x => x.CeremonyRequestId == request.Id, ct));
+
+            // Aunque el Maestro sea activo, una identidad institucional no vinculada
+            // jamás puede aceptar una tarea creada administrativamente.
+            var designated = new CandidateInterviewAssignment
+            {
+                CeremonyRequestId = request.Id, OrganizationId = origin.Id,
+                InterviewerMemberId = members[0].Id, Position = 1,
+                CouncilBody = "administration_council",
+                CouncilDecisionDate = body.councilDecisionDate,
+                CouncilMinuteReference = body.councilMinuteReference,
+                Status = "assigned", AssignedBySubject = "venerable-ci"
+            };
+            db.CandidateInterviewAssignments.Add(designated);
+            await db.SaveChangesAsync(ct);
+            var deniedAccept = await client.PostAsync(
+                $"{route}/entrevistadores-designados/{designated.Id}/aceptar", null, ct);
+            Assert.Equal(HttpStatusCode.Forbidden, deniedAccept.StatusCode);
+            await db.Entry(designated).ReloadAsync(ct);
+            Assert.Null(designated.AcceptedAtUtc);
         }
         finally
         {

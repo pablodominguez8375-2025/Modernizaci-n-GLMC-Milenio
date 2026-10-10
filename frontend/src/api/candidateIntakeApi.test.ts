@@ -210,4 +210,28 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect((await api.getWorkflow(requestId)).initiationRequest?.status).toBe('approved')
   })
 
+  it('requires personal acceptance before an assigned interviewer delivers an interview', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const requestId = (await api.getInterviewCases()).items[0].id
+    const masters = (await api.getEligibleInterviewers(requestId)).items
+    const assignment = await api.assignInterviewers(requestId, {
+      interviewerMemberIds: masters.slice(0, 3).map(x => x.id),
+      councilBody: 'administration_council',
+      councilDecisionDate: '2026-10-09',
+      councilMinuteReference: 'ACTA-CONSEJO-DEMO-2026',
+      scheduledDates: [null, null, null],
+      replacementReason: null,
+    })
+    const assignmentId = assignment.assignmentIds[0]
+    await expect(api.deliverAssignedInterview(requestId, assignmentId, 'synthetic-doc-version'))
+      .rejects.toThrow('Debe aceptar')
+    await api.acceptAssignedInterview(requestId, assignmentId)
+    const accepted = (await api.getMyInterviewAssignments()).items.find(x => x.id === assignmentId)
+    expect(accepted?.acceptedAtUtc).toBeTruthy()
+    await api.acceptAssignedInterview(requestId, assignmentId)
+    await api.deliverAssignedInterview(requestId, assignmentId, 'synthetic-doc-version')
+    const completed = (await api.getAssignedInterviewers(requestId)).items.find(x => x.id === assignmentId)
+    expect(completed?.status).toBe('completed')
+  })
+
 })
