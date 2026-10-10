@@ -76,7 +76,8 @@ public static class CandidateInterviewAssignmentEndpoints
     }
 
     private static async Task<IResult> EligibleMastersAsync(
-        Guid requestId, HttpContext http, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+        Guid requestId, HttpContext http, PmgmDbContext db, DocumentManagementDbContext documents,
+        IInstitutionalAccessService access, CancellationToken ct)
     {
         var ceremony = await db.CeremonyRequests.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == requestId && x.CeremonyType == CeremonyCodes.Type.Initiation, ct);
@@ -139,6 +140,14 @@ public static class CandidateInterviewAssignmentEndpoints
             .ToListAsync(ct);
         var byId = names.ToDictionary(x => x.Id,
             x => (x.FirstNames + " " + x.LastNames).Trim());
+        var reportIds = records.Where(x => x.ReportDocumentVersionId != null)
+            .Select(x => x.ReportDocumentVersionId!.Value).Distinct().ToArray();
+        var reports = await documents.DocumentVersions.AsNoTracking()
+            .Where(x => reportIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.Document.DocumentDate,
+                x.Document.ShortDescription, x.Document.OfficialDocumentType })
+            .ToListAsync(ct);
+        var reportById = reports.ToDictionary(x => x.Id);
         http.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { items = records.Select(x => new
         {
@@ -148,6 +157,13 @@ public static class CandidateInterviewAssignmentEndpoints
             x.ScheduledDate, x.Status, x.AssignedAtUtc,
             x.ReplacedAtUtc, x.ReplacementReason, x.CompletedAtUtc,
             hasReport = x.ReportDocumentVersionId != null,
+            x.ReportDocumentVersionId,
+            reportDate = x.ReportDocumentVersionId is Guid version && reportById.ContainsKey(version)
+                ? reportById[version].DocumentDate : null,
+            reportResult = x.ReportDocumentVersionId is Guid resultId && reportById.ContainsKey(resultId)
+                ? reportById[resultId].OfficialDocumentType : null,
+            reportSummary = x.ReportDocumentVersionId is Guid summaryId && reportById.ContainsKey(summaryId)
+                ? reportById[summaryId].ShortDescription : null,
             notified = x.NotificationQueuedAtUtc != null
         }) });
     }
@@ -393,8 +409,19 @@ public static class CandidateInterviewAssignmentEndpoints
                 x.ScheduledDate, x.Status, x.AssignedAtUtc,
                 hasReport = x.ReportDocumentVersionId != null
             }).ToListAsync(ct);
+        var name = await db.Members.AsNoTracking()
+            .Where(x => x.Id == me.MemberId)
+            .Select(x => x.Person.FirstNames + " " + x.Person.LastNames)
+            .SingleOrDefaultAsync(ct);
         http.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new { items = activeOrRecent });
+        return Results.Ok(new
+        {
+            items = activeOrRecent.Select(x => new {
+                x.Id, x.CeremonyRequestId, x.OrganizationId, x.Position,
+                x.ScheduledDate, x.Status, x.AssignedAtUtc, x.hasReport,
+                interviewerName = name
+            })
+        });
     }
 }
 
