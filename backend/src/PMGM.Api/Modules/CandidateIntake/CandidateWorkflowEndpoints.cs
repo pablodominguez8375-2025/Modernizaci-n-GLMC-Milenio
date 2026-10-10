@@ -59,6 +59,8 @@ public static class CandidateWorkflowEndpoints
                 !await CandidateInterviewAssignmentEndpoints.IsActiveDesignatedMasterAsync(
                     coreDb, profile.OrganizationId, me.MemberId, cancellationToken))
                 return Results.Forbid();
+            if (!CandidateInterviewAssignmentPolicy.CanDeliver(designated.Status, designated.AcceptedAtUtc))
+                return Results.Conflict(new { message = "Debe aceptar su designación antes de subir el informe." });
         }
         else
         {
