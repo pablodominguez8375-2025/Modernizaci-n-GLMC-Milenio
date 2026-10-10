@@ -5,6 +5,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.Membership;
 using PMGM.Api.Modules.Notifications;
 
@@ -24,6 +25,7 @@ public static class CandidateInterviewAssignmentEndpoints
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados", AssignAsync);
         group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-notificaciones", RetryNotificationsAsync);
         group.MapGet("/entrevistas/mis-designaciones", MineAsync);
+        group.MapPost("/solicitudes/{requestId:guid}/entrevistadores-designados/{assignmentId:guid}/entregar", DeliverAsync);
     }
 
     private static DateOnly Today()
@@ -326,6 +328,55 @@ public static class CandidateInterviewAssignmentEndpoints
         return pending.ToArray();
     }
 
+    private static async Task<IResult> DeliverAsync(
+        Guid requestId, Guid assignmentId, CompleteCandidateInterview input, HttpContext http,
+        PmgmDbContext db, DocumentManagementDbContext documents,
+        IInstitutionalMemberContextResolver identity, IAuditService audit, CancellationToken ct)
+    {
+        var me = await identity.ResolveAsync(http.User, ct);
+        if (me is null || me.EffectiveDegree < 3) return Results.Forbid();
+        var assignment = await db.CandidateInterviewAssignments.SingleOrDefaultAsync(x =>
+            x.Id == assignmentId && x.CeremonyRequestId == requestId &&
+            x.InterviewerMemberId == me.MemberId, ct);
+        if (assignment is null) return Results.NotFound();
+        if (assignment.Status != CandidateInterviewAssignmentPolicy.Assigned ||
+            assignment.ReportDocumentVersionId is not null)
+            return Results.Conflict(new { message = "La designación no está pendiente o ya fue entregada." });
+        var valid = await documents.DocumentVersions.AsNoTracking()
+            .Where(x => x.Id == input.DocumentVersionId &&
+                x.DocumentId == assignmentId &&
+                x.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Available &&
+                x.Document.OrganizationId == assignment.OrganizationId &&
+                x.Document.Edition == requestId.ToString("N") &&
+                x.Document.DocumentType == "candidate_interview")
+            .Select(x => new
+            {
+                x.Document.DocumentDate, x.Document.AuthorName,
+                x.Document.ShortDescription, x.Document.OfficialDocumentType
+            }).SingleOrDefaultAsync(ct);
+        if (valid is null || valid.DocumentDate is null ||
+            valid.DocumentDate.Value < assignment.CouncilDecisionDate ||
+            valid.DocumentDate.Value > Today() ||
+            string.IsNullOrWhiteSpace(valid.ShortDescription) ||
+            valid.OfficialDocumentType is not ("favorable" or "desfavorable"))
+            return Results.Conflict(new { message = "El informe no cuenta con documento validado, fecha, resumen y resultado reglamentarios." });
+        var official = await db.Members.AsNoTracking().Where(x => x.Id == me.MemberId)
+            .Select(x => x.Person.FirstNames + " " + x.Person.LastNames)
+            .SingleOrDefaultAsync(ct);
+        if (!string.Equals(official?.Trim(), valid.AuthorName?.Trim(), StringComparison.OrdinalIgnoreCase))
+            return Results.Conflict(new { message = "El informe no identifica al Maestro designado." });
+        assignment.ReportDocumentVersionId = input.DocumentVersionId;
+        assignment.CompletedAtUtc = DateTimeOffset.UtcNow;
+        assignment.Status = CandidateInterviewAssignmentPolicy.Completed;
+        audit.Add(http, "candidate.interview.report.delivered",
+            nameof(CandidateInterviewAssignment), assignment.Id.ToString(),
+            assignment.OrganizationId, AuditResults.Success,
+            new { assignment.CeremonyRequestId, assignment.InterviewerMemberId, input.DocumentVersionId });
+        await db.SaveChangesAsync(ct);
+        http.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { assignment.Id, assignment.Status, assignment.CompletedAtUtc });
+    }
+
     private static async Task<IResult> MineAsync(
         HttpContext http, PmgmDbContext db,
         IInstitutionalMemberContextResolver identity, CancellationToken ct)
@@ -351,3 +402,5 @@ public sealed record AssignCandidateInterviewers(
     IReadOnlyList<Guid> InterviewerMemberIds,
     string CouncilBody, DateOnly CouncilDecisionDate, string CouncilMinuteReference,
     IReadOnlyList<DateOnly?>? ScheduledDates = null, string? ReplacementReason = null);
+
+public sealed record CompleteCandidateInterview(Guid DocumentVersionId);
