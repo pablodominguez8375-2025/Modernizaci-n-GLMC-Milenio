@@ -83,6 +83,20 @@ public sealed class CandidateRePresentationGateTests
         Assert.True(result.CanProceed);
     }
 
+    [Fact]
+    public void RePresentationProfileDates_CannotBeBackdatedBeforeAnniversary()
+    {
+        var prior = Prior(new DateOnly(2025, 9, 30));
+        Assert.NotNull(CandidateRePresentationGate.ValidateRePresentationProfileDates(
+            prior, new DateOnly(2026, 9, 29), null));
+        Assert.NotNull(CandidateRePresentationGate.ValidateRePresentationProfileDates(
+            prior, new DateOnly(2026, 9, 30), new DateOnly(2026, 9, 29)));
+        Assert.Null(CandidateRePresentationGate.ValidateRePresentationProfileDates(
+            prior, new DateOnly(2026, 9, 30), new DateOnly(2026, 10, 1)));
+        Assert.Null(CandidateRePresentationGate.ValidateRePresentationProfileDates(
+            null, new DateOnly(2025, 9, 1), null));
+    }
+
     private static CandidateRePresentationGate.PriorRejection Prior(DateOnly date)
         => new(PriorValidationId, PriorRequestId, date);
 }
