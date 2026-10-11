@@ -1,5 +1,6 @@
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
+using Xunit;
 
 namespace PMGM.Api.Tests.Ceremonies;
 
