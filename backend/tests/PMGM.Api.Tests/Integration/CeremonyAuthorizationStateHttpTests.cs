@@ -63,6 +63,19 @@ public sealed class CeremonyAuthorizationStateHttpTests
             Assert.Equal(CeremonyAuthorizationStatePolicy.RequirementCode, json.GetProperty("code").GetString());
             Assert.Equal(closed.Status, json.GetProperty("requestStatus").GetString());
 
+            var interior = await client.PostAsJsonAsync(
+                $"/api/ceremonias/solicitudes/{closed.Id}/validaciones/regimen-interior",
+                new { status = "approved", sourceReference = "ACTA-RI-CERRADA", notes = "No permitir" }, ct);
+            Assert.Equal(HttpStatusCode.Conflict, interior.StatusCode);
+            Assert.Equal(CeremonyAuthorizationStatePolicy.RequirementCode,
+                (await interior.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+                    .GetProperty("code").GetString());
+
+            var grandMaster = await client.PostAsJsonAsync(
+                $"/api/ceremonias/solicitudes/{closed.Id}/validaciones/gran-maestria",
+                new { status = "approved", sourceReference = "ACTA-GM-CERRADA", notes = "No permitir" }, ct);
+            Assert.Equal(HttpStatusCode.Conflict, grandMaster.StatusCode);
+
             var get = await client.GetAsync($"/api/ceremonias/solicitudes/{closed.Id}/elegibilidad", ct);
             Assert.Equal(HttpStatusCode.OK, get.StatusCode);
             var eligibility = await get.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
