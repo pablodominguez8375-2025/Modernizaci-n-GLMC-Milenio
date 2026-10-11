@@ -330,7 +330,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.101' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.102' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -417,11 +417,11 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'reports' && useReportsHub && <ReportsHub items={[
           ...(canReporting ? [{ icon: 'report' as InstitutionalIconName, label: 'Reportería Ejecutiva', hint: 'Indicadores y reportes de la Orden', onOpen: () => setView('reporting') }] : []),
           ...(canMemberControl ? [{ icon: 'memberControl' as InstitutionalIconName, label: 'Control de miembros', hint: 'Altas, bajas y cambios de estado', onOpen: () => setView('memberControl') }] : []),
-          ...((canDataQuality || canCaseQueue) ? [{ icon: 'dataQuality' as InstitutionalIconName, label: canDataQuality ? 'Calidad de datos' : 'Cola de corroboración', hint: 'Hallazgos y casos por corregir', onOpen: () => setView(canDataQuality ? 'dataQuality' : 'caseQueue') }] : []),
+          ...(canDataQuality ? [{ icon: 'dataQuality' as InstitutionalIconName, label: 'Calidad de datos', hint: 'Hallazgos de la base de miembros', onOpen: () => setView('dataQuality') }] : []),
+          ...(canCaseQueue ? [{ icon: 'check' as InstitutionalIconName, label: 'Cola de corroboración', hint: 'Casos por verificar y corregir', onOpen: () => setView('caseQueue') }] : []),
         ]} />}
         {view === 'reporting' && canReporting && <ExecutiveReportingPage reportingApi={reportingApi} />}
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
-        {(view === 'dataQuality' || view === 'caseQueue') && canDataQuality && canCaseQueue && <WorkspaceTabs label="Secciones de Calidad de datos" active={view} onChange={setView} tabs={[{ id: 'dataQuality' as View, label: 'Hallazgos' }, { id: 'caseQueue' as View, label: 'Cola de corroboración' }]} />}
         {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} caseApi={dataQualityCaseApi} onOpenCases={() => setView('caseQueue')} />}
         {view === 'caseQueue' && canCaseQueue && <DataQualityCaseQueuePage api={api} caseApi={dataQualityCaseApi} />}
         {view === 'notifications' && canNotifications && <NotificationsPage notificationApi={notificationApi} onAction={openNotificationAction} />}
