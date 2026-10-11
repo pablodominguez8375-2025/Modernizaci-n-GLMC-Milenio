@@ -58,6 +58,17 @@ public static class CandidateRePresentationGate
             prior, reference);
     }
 
+    public static string? ValidateRePresentationProfileDates(PriorRejection? prior,
+        DateOnly insinuationDate, DateOnly? firstDegreePresentationDate)
+    {
+        if (prior is null) return null;
+        var earliestDate = prior.RejectionDate.AddYears(1);
+        if (insinuationDate < earliestDate ||
+            firstDegreePresentationDate is not null && firstDegreePresentationDate.Value < earliestDate)
+            return $"Las fechas de la nueva insinuación y presentación en primer grado no pueden ser anteriores al {earliestDate:yyyy-MM-dd}, un año después del rechazo.";
+        return null;
+    }
+
     public static CeremonyValidation? AddEvidence(PmgmDbContext db, Guid newCeremonyRequestId,
         DateOnly presentationDate, Decision decision)
     {
