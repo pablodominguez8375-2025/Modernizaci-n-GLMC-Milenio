@@ -171,7 +171,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var authorizationJson = await authorizationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(GrandSecretariatCodes.DocumentType.Plancha, authorizationJson.GetProperty("documentType").GetString());
         Assert.Equal(GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization, authorizationJson.GetProperty("planchaKind").GetString());
-        Assert.Matches(@"^PLA-AUT-CER-\\d{4}-\\d{6}$",
+        Assert.Matches(@"^PLA-AUT-CER-\d{4}-\d{6}$",
             authorizationJson.GetProperty("documentCode").GetString()!);
         Assert.Contains("registro de auditoría", authorizationJson.GetProperty("content").GetString());
         Assert.Equal(ceremonyId, authorizationJson.GetProperty("relatedCeremonyRequestId").GetGuid());
@@ -332,7 +332,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 .ToListAsync(ct);
             Assert.Equal(2, rows.Count);
             Assert.DoesNotContain(rows, x => x.RelatedCeremonyRequestId == withoutAudit.Id);
-            Assert.All(rows, x => Assert.Matches(@"^PLA-AUT-CER-\\d{4}-\\d{6}$", x.DocumentCode));
+            Assert.All(rows, x => Assert.Matches(@"^PLA-AUT-CER-\d{4}-\d{6}$", x.DocumentCode));
             var audits = await db.AuditEvents.AsNoTracking()
                 .Where(x => x.Action == "grand_secretariat.ceremony_authorization.issued" &&
                             x.OrganizationId == org.Id).ToListAsync(ct);
