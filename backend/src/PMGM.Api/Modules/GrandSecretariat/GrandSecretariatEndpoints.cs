@@ -6,6 +6,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.GrandSecretariat.Entities;
 
 namespace PMGM.Api.Modules.GrandSecretariat;
@@ -429,26 +430,55 @@ public static class GrandSecretariatEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (!CanManage(access, httpContext.User))
-        {
-            return Results.Forbid();
-        }
+        if (!CanManage(access, httpContext.User)) return Results.Forbid();
 
-        var ceremony = await institutionalDb.CeremonyRequests
-            .AsNoTracking()
+        var ceremony = await institutionalDb.CeremonyRequests.AsNoTracking()
             .Include(x => x.Organization)
             .SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
-        if (ceremony is null)
-        {
-            return Results.NotFound();
-        }
+        if (ceremony is null) return Results.NotFound();
 
         if (ceremony.Status != CeremonyCodes.RequestStatus.Authorized)
+            return Results.Conflict(new { message = "Gran Secretaría sólo puede emitir una plancha para ceremonias autorizadas formalmente." });
+
+        // No basta modificar el estado del expediente: se exige el evento de autorización
+        // registrado después de evaluar los vistos buenos institucionales obligatorios.
+        var authorizationAudit = await institutionalDb.AuditEvents.AsNoTracking()
+            .Where(x => x.Action == "ceremony.authorization.approved" &&
+                        x.EntityType == nameof(CeremonyRequest) &&
+                        x.EntityId == requestId.ToString() &&
+                        x.OrganizationId == ceremony.OrganizationId &&
+                        x.Result == AuditResults.Success)
+            .OrderByDescending(x => x.OccurredAtUtc)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (authorizationAudit is null || string.IsNullOrWhiteSpace(authorizationAudit.MetadataJson))
+            return Results.Conflict(new { message = "Falta el registro verificable de autorización institucional y su snapshot. No es posible emitir la plancha." });
+
+        InstitutionalSpaceReservation? reservation = null;
+        if (request.SpaceReservationId is not null)
         {
-            return Results.Conflict(new { message = "Gran Secretaría sólo puede emitir la autorización formal de una ceremonia ya autorizada por el flujo institucional." });
+            reservation = await db.SpaceReservations.AsNoTracking()
+                .Include(x => x.Space)
+                .SingleOrDefaultAsync(x => x.Id == request.SpaceReservationId.Value, cancellationToken);
+            if (reservation is null)
+                return Results.NotFound(new { message = "La reserva de templo o sala indicada no existe." });
+            if (reservation.Status != GrandSecretariatCodes.ReservationStatus.Reserved ||
+                reservation.OrganizationId != ceremony.OrganizationId ||
+                reservation.CeremonyRequestId != ceremony.Id)
+                return Results.BadRequest(new { message = "La reserva indicada no corresponde a esta ceremonia autorizada." });
         }
 
-        var alreadyIssued = await db.SecretariatDocuments.AnyAsync(
+        // Un solo advisory lock transaccional para todas las emisiones, incluso
+        // durante la medianoche de cambio de año: serializa tanto las consultas
+        // de duplicado como la asignación del siguiente correlativo anual.
+        // El índice único de DocumentCode protege también ante anomalías de BD.
+        var chileYear = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+            DateTimeOffset.UtcNow, "America/Santiago").Year;
+        await using var transaction = await db.Database.BeginTransactionAsync(
+            IsolationLevel.ReadCommitted, cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock(714125, 1)", cancellationToken);
+
+        var alreadyIssued = await db.SecretariatDocuments.AsNoTracking().AnyAsync(
             x => x.RelatedCeremonyRequestId == requestId &&
                  ((x.DocumentType == GrandSecretariatCodes.DocumentType.Plancha &&
                    x.PlanchaKind == GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization) ||
@@ -457,45 +487,29 @@ public static class GrandSecretariatEndpoints
                  x.Status == GrandSecretariatCodes.DocumentStatus.Issued,
             cancellationToken);
         if (alreadyIssued)
-        {
             return Results.Conflict(new { message = "La ceremonia ya cuenta con una autorización formal vigente." });
-        }
 
-        InstitutionalSpaceReservation? reservation = null;
-        if (request.SpaceReservationId is not null)
-        {
-            reservation = await db.SpaceReservations
-                .AsNoTracking()
-                .Include(x => x.Space)
-                .SingleOrDefaultAsync(x => x.Id == request.SpaceReservationId.Value, cancellationToken);
-
-            if (reservation is null)
-            {
-                return Results.NotFound(new { message = "La reserva de templo o sala indicada no existe." });
-            }
-
-            if (reservation.Status != GrandSecretariatCodes.ReservationStatus.Reserved ||
-                reservation.OrganizationId != ceremony.OrganizationId ||
-                reservation.CeremonyRequestId != ceremony.Id)
-            {
-                return Results.BadRequest(new { message = "La reserva indicada no corresponde a esta ceremonia autorizada." });
-            }
-        }
-
+        var prefix = CeremonyAuthorizationPlanchaPolicy.Prefix(chileYear);
+        var previousCodes = await db.SecretariatDocuments.AsNoTracking()
+            .Where(x => x.DocumentCode.StartsWith(prefix))
+            .Select(x => x.DocumentCode)
+            .ToListAsync(cancellationToken);
+        var code = CeremonyAuthorizationPlanchaPolicy.NextCode(chileYear, previousCodes);
         var dateText = ceremony.ProposedDate?.ToString("dd-MM-yyyy") ?? "fecha por confirmar";
         var spaceText = reservation is null
-            ? "sin asignación de templo o sala en este documento"
+            ? "sin asignación de templo o sala en esta plancha"
             : $"en {reservation.Space.Name}, desde {reservation.StartsAtUtc:dd-MM-yyyy HH:mm} UTC hasta {reservation.EndsAtUtc:dd-MM-yyyy HH:mm} UTC";
+        var snapshotDigest = CeremonyAuthorizationPlanchaPolicy.SnapshotDigest(authorizationAudit.MetadataJson);
 
         var document = new SecretariatDocument
         {
             DocumentType = GrandSecretariatCodes.DocumentType.Plancha,
             PlanchaKind = GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization,
-            DocumentCode = NewDocumentCode(
-                GrandSecretariatCodes.DocumentType.Plancha,
-                GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization),
+            DocumentCode = code,
             Title = $"Plancha de Autorización de Ceremonia — {ceremony.CeremonyType}",
-            Content = $"Gran Secretaría autoriza oficialmente la realización de la ceremonia '{ceremony.CeremonyType}' solicitada por {ceremony.Organization.Name}, para {dateText}, {spaceText}. Esta Plancha de Autorización se emite una vez cumplidas las validaciones institucionales exigibles y no constituye Decreto.",
+            Content = CeremonyAuthorizationPlanchaPolicy.Render(
+                code, ceremony.Id, ceremony.Organization.Name, ceremony.CeremonyType,
+                dateText, spaceText, authorizationAudit.Id, snapshotDigest),
             OrganizationId = ceremony.OrganizationId,
             RelatedCeremonyRequestId = ceremony.Id,
             SpaceReservationId = reservation?.Id,
@@ -518,10 +532,12 @@ public static class GrandSecretariatEndpoints
                 document.DocumentType,
                 document.RelatedCeremonyRequestId,
                 document.SpaceReservationId,
-                document.Status
+                document.Status,
+                sourceAuthorizationAuditId = authorizationAudit.Id,
+                sourceAuthorizationSnapshotSha256 = snapshotDigest
             }));
-
         await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return Results.Created($"/api/gran-secretaria/documentos/{document.Id}", ToDocumentDto(document));
     }
 
