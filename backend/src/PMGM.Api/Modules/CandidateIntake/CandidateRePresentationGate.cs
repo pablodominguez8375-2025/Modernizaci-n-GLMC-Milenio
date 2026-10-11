@@ -58,7 +58,7 @@ public static class CandidateRePresentationGate
             prior, reference);
     }
 
-    public static CeremonyValidation? AddApproval(PmgmDbContext db, Guid newCeremonyRequestId,
+    public static CeremonyValidation? AddEvidence(PmgmDbContext db, Guid newCeremonyRequestId,
         DateOnly presentationDate, Decision decision)
     {
         if (!decision.CanProceed || !decision.IsRePresentation || decision.PriorRejection is null ||
@@ -69,7 +69,7 @@ public static class CandidateRePresentationGate
         {
             CeremonyRequestId = newCeremonyRequestId,
             ValidationType = CeremonyCodes.ValidationType.CandidateRepresentationReview,
-            Status = CeremonyCodes.ValidationStatus.Approved,
+            Status = CeremonyCodes.ValidationStatus.Observed,
             AsOfDate = presentationDate,
             SourceReference = decision.SourceReference,
             Notes = $"Constancia de subsanación declarada por Secretaría; antecedente de rechazo #{decision.PriorRejection.ValidationId} de fecha {decision.PriorRejection.RejectionDate:yyyy-MM-dd}. Requiere evaluación institucional posterior."
