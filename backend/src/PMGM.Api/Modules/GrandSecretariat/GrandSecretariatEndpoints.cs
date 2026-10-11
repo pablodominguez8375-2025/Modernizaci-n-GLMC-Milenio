@@ -6,6 +6,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.GrandSecretariat.Entities;
 
 namespace PMGM.Api.Modules.GrandSecretariat;
