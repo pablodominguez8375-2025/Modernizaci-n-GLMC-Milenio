@@ -115,6 +115,7 @@ public static class CandidateWorkshopIntakeEndpoints
         {
             OrganizationId = organization.Id,
             CeremonyType = CeremonyCodes.Type.Initiation,
+            RequiresFormalInterviewAssignments = true,
             CandidatePersonId = person.Id,
             Status = CeremonyCodes.RequestStatus.Draft,
             Notes = "Expediente de insinuación iniciado por Secretaría Logial."

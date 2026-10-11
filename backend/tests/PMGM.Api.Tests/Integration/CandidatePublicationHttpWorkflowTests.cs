@@ -229,9 +229,11 @@ internal sealed class CandidatePublicationTestFactory(string connection) : WebAp
             services.RemoveAll<PmgmDbContext>(); services.RemoveAll<DbContextOptions<PmgmDbContext>>();
             services.RemoveAll<CandidateIntakeDbContext>(); services.RemoveAll<DbContextOptions<CandidateIntakeDbContext>>();
             services.RemoveAll<DocumentManagementDbContext>(); services.RemoveAll<DbContextOptions<DocumentManagementDbContext>>();
+            services.RemoveAll<NotificationDbContext>(); services.RemoveAll<DbContextOptions<NotificationDbContext>>();
             services.AddDbContext<PmgmDbContext>(o => o.UseNpgsql(connection));
             services.AddDbContext<CandidateIntakeDbContext>(o => o.UseNpgsql(connection));
             services.AddDbContext<DocumentManagementDbContext>(o => o.UseNpgsql(connection));
+            services.AddDbContext<NotificationDbContext>(o => o.UseNpgsql(connection));
             services.RemoveAll<IDocumentObjectStore>(); services.AddSingleton<IDocumentObjectStore>(ObjectStore);
             services.AddAuthentication(o =>
             {
@@ -252,8 +254,10 @@ internal sealed class PublicationTestAuthentication(IOptionsMonitor<Authenticati
         if (!Guid.TryParse(Request.Headers["X-Publication-Test-Organization"].FirstOrDefault(), out var organization))
             return Task.FromResult(AuthenticateResult.NoResult());
         var role = Request.Headers["X-Publication-Test-Role"].FirstOrDefault() ?? "member";
-        var identity = new ClaimsIdentity(new[] { new Claim("sub", "ci-publication-member"),
-            new Claim(ClaimTypes.NameIdentifier, "ci-publication-member"),
+        var subject = Request.Headers["X-Publication-Test-Subject"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(subject)) subject = "ci-publication-member";
+        var identity = new ClaimsIdentity(new[] { new Claim("sub", subject),
+            new Claim(ClaimTypes.NameIdentifier, subject),
             new Claim(InstitutionalClaims.Organization, organization.ToString()),
             new Claim(InstitutionalClaims.Role, role) }, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));

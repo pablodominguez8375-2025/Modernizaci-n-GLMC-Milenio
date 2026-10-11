@@ -3,6 +3,7 @@ import {
   type CandidateIntakeApiClient,
   type CandidateIntakeProfile,
   type CandidateInterviewUploadMetadata,
+  type CandidateInterviewAssignment,
   type CandidateWorkflowResponse,
   type FinalBallotRoundPayload,
 } from './api/candidateIntakeApi'
@@ -44,6 +45,7 @@ export default function CandidateWorkflowPanel({ api, requestId, profile, reques
   const [deliberationReference, setDeliberationReference] = useState('')
 
   const [interviews, setInterviews] = useState<InterviewDraft[]>(() => [emptyInterview(), emptyInterview(), emptyInterview()])
+  const [assignments, setAssignments] = useState<CandidateInterviewAssignment[]>([])
   const [questionnaireReference, setQuestionnaireReference] = useState('')
   const [autobiographyReference, setAutobiographyReference] = useState('')
 
@@ -75,7 +77,11 @@ export default function CandidateWorkflowPanel({ api, requestId, profile, reques
   async function reload() {
     setLoading(true)
     try {
-      setWorkflow(await api.getWorkflow(requestId))
+      const [nextWorkflow, designated] = await Promise.all([
+        api.getWorkflow(requestId), api.getAssignedInterviewers(requestId),
+      ])
+      setWorkflow(nextWorkflow)
+      setAssignments(designated.items)
     } catch (reason) {
       setError(errorMessage(reason, 'No fue posible cargar el flujo reglamentario.'))
     } finally {
@@ -115,6 +121,35 @@ export default function CandidateWorkflowPanel({ api, requestId, profile, reques
   }
 
   async function submitInterviews() {
+    const active = assignments.filter(x => x.status === 'assigned' || x.status === 'completed')
+    if (active.length > 0) {
+      if (active.length < 3 || active.some(x => x.status !== 'completed' ||
+          !x.reportDocumentVersionId || !x.reportDate || !x.reportResult || !x.reportSummary)) {
+        setError('Faltan informes válidos de uno o más Maestros designados.')
+        return
+      }
+      if (!questionnaireReference.trim() || !autobiographyReference.trim()) {
+        setError('Debe registrar el Cuestionario Confidencial y la autobiografía.')
+        return
+      }
+      await runAction(() => api.recordInterviewPackage(requestId, {
+        asOfDate: chileToday(),
+        interviews: active.map(x => ({
+          interviewDate: x.reportDate!, interviewerDisplayName: x.interviewerName!,
+          documentVersionId: x.reportDocumentVersionId!, summary: x.reportSummary!,
+          result: x.reportResult as 'favorable' | 'desfavorable',
+        })),
+        confidentialQuestionnaireAvailable: true,
+        confidentialQuestionnaireReference: questionnaireReference.trim(),
+        autobiographyAvailable: true,
+        autobiographyReference: autobiographyReference.trim(),
+      }), 'Informes institucionales de Maestros designados y antecedentes privados registrados.')
+      return
+    }
+    if (!api.useMocks) {
+      setError('El Venerable Maestro debe designar formalmente a tres Maestros antes de registrar entrevistas.')
+      return
+    }
     if (interviews.length < 3 || interviews.some(item => !item.file || !item.interviewerDisplayName.trim() || !item.summary.trim())) {
       setError('Debe completar al menos tres entrevistas con responsable, resumen, resultado y archivo PDF/DOCX.')
       return
@@ -212,6 +247,16 @@ export default function CandidateWorkflowPanel({ api, requestId, profile, reques
       {workflow.publication && !workflow.interviewPackage && !rejected && <div className="candidate-workflow-action">
         <h3>Entrevistas y antecedentes privados</h3>
         <p>Publicación iniciada el {formatDateOnly(workflow.publication.publishedFromUtc.slice(0, 10))}. Han transcurrido {publicationElapsed ?? 0} de {workflow.publication.requiredDays} días. Las entrevistas pueden registrarse durante este período.</p>
+        {assignments.some(x => x.status === 'assigned' || x.status === 'completed') ?
+          <div className="candidate-interview-list">
+            {assignments.filter(x => x.status === 'assigned' || x.status === 'completed')
+              .map(x => <div className="candidate-interview-card" key={x.id}>
+                <strong>Entrevista {x.position} · {x.interviewerName}</strong>
+                <p>{x.status === 'completed' ? 'Informe entregado y validado.' : 'Informe pendiente del Maestro designado.'}</p>
+                <p>Fecha programada: {x.scheduledDate || 'Por coordinar'}</p>
+              </div>)}
+          </div>
+          : api.useMocks ? <>
         <div className="candidate-interview-list">
           {interviews.map((item, index) => <div className="candidate-interview-card" key={item.id}>
             <div className="candidate-interview-heading"><strong>Entrevista {index + 1}</strong>{interviews.length > 3 && <button type="button" className="candidate-link-button" onClick={() => setInterviews(current => current.filter(value => value.id !== item.id))}>Quitar</button>}</div>
@@ -225,11 +270,15 @@ export default function CandidateWorkflowPanel({ api, requestId, profile, reques
           </div>)}
         </div>
         <button className="candidate-secondary-button" type="button" disabled={busy} onClick={() => setInterviews(current => [...current, emptyInterview()])}>Agregar entrevista adicional</button>
+        </> : <p>La Secretaría debe esperar la designación formal por el Venerable Maestro. Los tres Maestros entregarán sus informes privados desde «Mis entrevistas».</p>}
         <div className="candidate-workflow-grid candidate-workflow-private-refs">
           <label><span>Referencia privada Cuestionario Confidencial</span><input value={questionnaireReference} onChange={event => setQuestionnaireReference(event.target.value)} placeholder="DOC-PRIVADO-..." /></label>
           <label><span>Referencia privada autobiografía</span><input value={autobiographyReference} onChange={event => setAutobiographyReference(event.target.value)} placeholder="DOC-PRIVADO-..." /></label>
         </div>
-        <button className="candidate-primary-button" type="button" disabled={busy} onClick={() => void submitInterviews()}>Guardar entrevistas y antecedentes</button>
+        {(api.useMocks || assignments.some(x => x.status === 'assigned' || x.status === 'completed')) &&
+          <button className="candidate-primary-button" type="button" disabled={busy ||
+            (!api.useMocks && assignments.some(x => x.status === 'assigned'))}
+            onClick={() => void submitInterviews()}>Validar los tres informes y antecedentes</button>}
       </div>}
 
       {workflow.interviewPackage?.status === 'approved' && !workflow.thirdDegreeReview && !rejected && <div className="candidate-workflow-action">

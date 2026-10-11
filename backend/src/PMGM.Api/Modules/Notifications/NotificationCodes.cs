@@ -44,10 +44,14 @@ public static class NotificationCodes
     public static class Template
     {
         public const string CandidatePublicationApproved = "candidate.publication.approved";
+        public const string CandidateInterviewAssigned = "candidate.interview.assigned";
+        public const string CandidateInterviewRescheduled = "candidate.interview.rescheduled";
     }
 
     public static class Type
     {
         public const string CandidatePublicationApproved = "candidate.publication.approved";
+        public const string CandidateInterviewAssigned = "candidate.interview.assigned";
+        public const string CandidateInterviewRescheduled = "candidate.interview.rescheduled";
     }
 }

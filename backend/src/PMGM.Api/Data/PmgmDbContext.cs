@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Audit.Entities;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
@@ -57,6 +58,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<DeathReplenishmentPayment> DeathReplenishmentPayments => Set<DeathReplenishmentPayment>();
     public DbSet<DeathReplenishmentTransfer> DeathReplenishmentTransfers => Set<DeathReplenishmentTransfer>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
+    public DbSet<CandidateInterviewAssignment> CandidateInterviewAssignments => Set<CandidateInterviewAssignment>();
     public DbSet<AdvancementPaperAttestation> AdvancementPaperAttestations => Set<AdvancementPaperAttestation>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
     public DbSet<CeremonyRightPayment> CeremonyRightPayments => Set<CeremonyRightPayment>();
@@ -111,6 +113,23 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.SourceReference).HasMaxLength(1200).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
             entity.Property(x => x.Payload).HasColumnType("jsonb").IsRequired();
+        });
+
+        modelBuilder.Entity<CandidateInterviewAssignment>(entity =>
+        {
+            entity.ToTable("candidate_interview_assignments");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.CouncilBody).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.CouncilMinuteReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.AssignedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ReplacedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReplacementReason).HasMaxLength(1000);
+            entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Member>().WithMany().HasForeignKey(x => x.InterviewerMemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CeremonyRequestId, x.Status });
+            entity.HasIndex(x => new { x.InterviewerMemberId, x.Status });
+            entity.HasIndex(x => x.OrganizationId);
         });
 
         modelBuilder.Entity<Person>(entity =>
