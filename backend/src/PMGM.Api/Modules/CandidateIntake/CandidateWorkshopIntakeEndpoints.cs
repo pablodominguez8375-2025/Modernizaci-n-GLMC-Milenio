@@ -121,7 +121,7 @@ public static class CandidateWorkshopIntakeEndpoints
             Notes = "Expediente de insinuación iniciado por Secretaría Logial."
         };
         coreDb.CeremonyRequests.Add(entity);
-        var rePresentationValidation = CandidateRePresentationGate.AddApproval(
+        var rePresentationValidation = CandidateRePresentationGate.AddEvidence(
             coreDb, entity.Id, presentationDate, rePresentation);
         if (rePresentationValidation is not null)
             audit.Add(httpContext, "candidate.representation.evidence_recorded", nameof(CeremonyValidation),
