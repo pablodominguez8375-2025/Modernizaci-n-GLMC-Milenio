@@ -190,6 +190,30 @@ it('posts the third-degree extract reference and aggregate vote to the protected
   expect(url).toBe('/api/insinuados/solicitudes/c1/revision-tercer-grado'); expect(options.method).toBe('POST'); expect(JSON.parse(options.body as string)).toMatchObject({ presentVoters: 12, votesInFavor: 10, votesAgainst: 2, sourceReference: 'EXTRACTO-10' })
 })
 
+it('demo eligibility shows and updates the latest first-degree ballot requirement', async () => {
+  const client = new PmgmApiClient({ useMocks: true })
+  const requestId = 'eeeeeeee-2222-2222-2222-222222222222'
+  const before = await client.getCeremonyEligibility(requestId)
+  expect(before.requirements.find(item => item.code === 'candidate_final_ballot')?.status).toBe('observed')
+  expect(before.canAuthorize).toBe(false)
+
+  await client.recordFinalBallot(requestId, {
+    ballotDate: '2026-09-20', sourceReference: 'EXTRACTO-DEMO-01', ballotApproved: true,
+    ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 12, blackBallots: 0 }],
+  })
+  const approved = await client.getCeremonyEligibility(requestId)
+  expect(approved.requirements.find(item => item.code === 'candidate_final_ballot')?.status).toBe('approved')
+  expect(approved.canAuthorize).toBe(false) // Siguen pendientes otras validaciones del expediente.
+
+  await client.recordFinalBallot(requestId, {
+    ballotDate: '2026-09-21', sourceReference: 'EXTRACTO-DEMO-02', ballotApproved: false,
+    ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 8, blackBallots: 4 }],
+  })
+  const rejected = await client.getCeremonyEligibility(requestId)
+  expect(rejected.requirements.find(item => item.code === 'candidate_final_ballot')?.status).toBe('rejected')
+  expect(rejected.canAuthorize).toBe(false)
+})
+
 it('validates anonymous final-ballot rounds without recording individual choices', async () => {
   const client = new PmgmApiClient({ useMocks: true })
   await expect(client.recordFinalBallot('c1', { ballotDate: '2026-10-12', ballots: [{ procedureNumber: 1, eligibleVoters: 12, whiteBallots: 10, blackBallots: 1 }], ballotApproved: true, sourceReference: 'EXTRACTO-10' })).rejects.toThrow('habilitadas')

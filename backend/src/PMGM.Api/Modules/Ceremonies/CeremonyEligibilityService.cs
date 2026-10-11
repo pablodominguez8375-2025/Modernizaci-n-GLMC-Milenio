@@ -104,7 +104,8 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             grandMasterStatus,
             publication,
             input.CeremonyRightPaid,
-            advancement);
+            advancement,
+            candidateFinalBallotStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateFinalBallot));
 
         var blockingReasons = decision.Requirements
             .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
@@ -150,6 +151,7 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             "gran_hospitalaria" => CeremonyCodes.ValidationType.Hospitalaria,
             "gran_maestria" => CeremonyCodes.ValidationType.GrandMaster,
             "publicacion_insinuado" => CeremonyCodes.ValidationType.CandidatePublication,
+            CeremonyCodes.ValidationType.CandidateFinalBallot => CeremonyCodes.ValidationType.CandidateFinalBallot,
             _ => code
         };
 }

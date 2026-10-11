@@ -30,7 +30,8 @@ public static class CeremonyEligibilityPolicy
         string? grandMasterStatus,
         CandidatePublicationEvidence? publication,
         bool ceremonyRightPaid = true,
-        AdvancementEligibilityDecision? advancement = null)
+        AdvancementEligibilityDecision? advancement = null,
+        string? candidateFinalBallotStatus = null)
     {
         var requirements = new List<CeremonyRequirementResult>
         {
@@ -44,6 +45,7 @@ public static class CeremonyEligibilityPolicy
         if (ceremonyType == CeremonyCodes.Type.Initiation)
         {
             requirements.Add(EvaluatePublication(publication));
+            requirements.Add(EvaluateFinalBallot(candidateFinalBallotStatus));
         }
 
         if (ceremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation)
@@ -173,6 +175,28 @@ public static class CeremonyEligibilityPolicy
 
         return new("gran_maestria", "Gran Maestría", CeremonyCodes.ValidationStatus.Rejected,
             "Gran Maestría no ha otorgado un visto bueno habilitante para la ceremonia.");
+    }
+
+
+    // La misma compuerta que exige POST /autorizar debe aparecer en la matriz GET /elegibilidad.
+    // Sólo el último balotaje formalmente aprobado habilita una Iniciación.
+    private static CeremonyRequirementResult EvaluateFinalBallot(string? status)
+    {
+        if (status == CeremonyCodes.ValidationStatus.Approved)
+        {
+            return new(CeremonyCodes.ValidationType.CandidateFinalBallot, "Balotaje de primer grado",
+                CeremonyCodes.ValidationStatus.Approved, "El balotaje definitivo fue aprobado y registrado.");
+        }
+
+        if (status == CeremonyCodes.ValidationStatus.Rejected)
+        {
+            return new(CeremonyCodes.ValidationType.CandidateFinalBallot, "Balotaje de primer grado",
+                CeremonyCodes.ValidationStatus.Rejected, "El último balotaje registrado no fue aprobado.");
+        }
+
+        return new(CeremonyCodes.ValidationType.CandidateFinalBallot, "Balotaje de primer grado",
+            CeremonyCodes.ValidationStatus.Observed,
+            "Se requiere registrar un balotaje de primer grado aprobado; sin resultado vigente no puede autorizarse la Iniciación.");
     }
 
     private static CeremonyRequirementResult EvaluatePublication(CandidatePublicationEvidence? publication)

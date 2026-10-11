@@ -1062,6 +1062,17 @@ public static class CeremonyEndpoints
             .OrderByDescending(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
+        // La consulta de elegibilidad y POST /autorizar deben compartir el último
+        // resultado del balotaje; nunca asumir aprobación cuando no existe.
+        var finalBallotStatus = ceremony.CeremonyType == CeremonyCodes.Type.Initiation
+            ? await db.CeremonyValidations.AsNoTracking()
+                .Where(x => x.CeremonyRequestId == requestId &&
+                            x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot)
+                .OrderByDescending(x => x.RecordedAtUtc)
+                .Select(x => x.Status)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         var treasury = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == ceremony.OrganizationId &&
@@ -1137,7 +1148,8 @@ public static class CeremonyEndpoints
             grandMaster?.Status,
             evidence,
             ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
-            advancement: advancement?.Decision);
+            advancement: advancement?.Decision,
+            candidateFinalBallotStatus: finalBallotStatus);
 
         return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
             right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today, advancement);

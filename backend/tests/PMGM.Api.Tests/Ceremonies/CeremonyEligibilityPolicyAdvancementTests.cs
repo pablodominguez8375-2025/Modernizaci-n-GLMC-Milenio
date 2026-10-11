@@ -36,7 +36,8 @@ public sealed class CeremonyEligibilityPolicyAdvancementTests
             HospitalariaCodes.RegularityStatus.UpToDate,
             CeremonyCodes.ValidationStatus.Approved,
             new CandidatePublicationEvidence(Guid.NewGuid(), CeremonyCodes.PublicationStatus.Completed, 20, 20, "pub-v1"),
-            ceremonyRightPaid: true);
+            ceremonyRightPaid: true,
+            candidateFinalBallotStatus: CeremonyCodes.ValidationStatus.Approved);
 
         Assert.True(result.CanAuthorize);
         Assert.DoesNotContain(result.Requirements,

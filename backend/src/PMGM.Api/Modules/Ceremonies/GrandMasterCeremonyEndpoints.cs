@@ -201,6 +201,17 @@ public static class GrandMasterCeremonyEndpoints
             .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
         var rightPaid = !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) ||
             (tariff is not null && paid >= tariff.Value.Amount);
+        // El endpoint de matriz utiliza la misma política que GET /elegibilidad,
+        // la bandeja y POST /autorizar. Sin duplicar requisitos.
+        CeremonyValidation? finalBallot = null;
+        if (ceremony.CeremonyType == CeremonyCodes.Type.Initiation)
+        {
+            finalBallot = await db.CeremonyValidations.AsNoTracking()
+                .Where(x => x.CeremonyRequestId == requestId && x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot)
+                .OrderByDescending(x => x.RecordedAtUtc)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         var decision = CeremonyEligibilityPolicy.Evaluate(
             ceremony.CeremonyType,
             internalAffairs?.Status,
@@ -209,41 +220,11 @@ public static class GrandMasterCeremonyEndpoints
             grandMaster?.Status,
             publicationEvidence,
             ceremonyRightPaid: rightPaid,
-            advancement: advancement?.Decision);
+            advancement: advancement?.Decision,
+            candidateFinalBallotStatus: finalBallot?.Status);
 
-        var requirements = decision.Requirements.ToList();
-        CeremonyValidation? finalBallot = null;
-        if (ceremony.CeremonyType == CeremonyCodes.Type.Initiation)
-        {
-            finalBallot = await db.CeremonyValidations.AsNoTracking()
-                .Where(x => x.CeremonyRequestId == requestId && x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot)
-                .OrderByDescending(x => x.RecordedAtUtc)
-                .FirstOrDefaultAsync(cancellationToken);
-
-            var ballotStatus = finalBallot?.Status == CeremonyCodes.ValidationStatus.Approved
-                ? CeremonyCodes.ValidationStatus.Approved
-                : finalBallot?.Status == CeremonyCodes.ValidationStatus.Rejected
-                    ? CeremonyCodes.ValidationStatus.Rejected
-                    : CeremonyCodes.ValidationStatus.Observed;
-
-            var ballotReason = ballotStatus == CeremonyCodes.ValidationStatus.Approved
-                ? "El balotaje de primer grado se encuentra aprobado y registrado."
-                : ballotStatus == CeremonyCodes.ValidationStatus.Rejected
-                    ? "El último balotaje registrado fue rechazado."
-                    : "El balotaje de primer grado aún no registra una aprobación habilitante.";
-
-            requirements.Add(new CeremonyRequirementResult(
-                "candidate_final_ballot",
-                "Balotaje de primer grado",
-                ballotStatus,
-                ballotReason));
-        }
-
-        var overall = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Rejected)
-            ? "does_not_comply"
-            : requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Observed)
-                ? "observed"
-                : "complies";
+        var requirements = decision.Requirements;
+        var overall = decision.Status;
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
