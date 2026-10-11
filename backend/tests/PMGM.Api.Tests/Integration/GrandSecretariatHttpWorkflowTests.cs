@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit.Entities;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
@@ -54,6 +55,17 @@ public sealed class GrandSecretariatHttpWorkflowTests
             };
 
             db.AddRange(organization, ceremony);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Action = "ceremony.authorization.approved",
+                EntityType = nameof(CeremonyRequest),
+                EntityId = ceremony.Id.ToString(),
+                OrganizationId = organization.Id,
+                Result = "success",
+                CorrelationId = Guid.NewGuid().ToString("D"),
+                ActorSubject = "ci-grand-secretariat-authorizer",
+                MetadataJson = "{\"grandMaster\":\"approved\",\"regularity\":\"approved\",\"evaluatedAsOf\":\"2026-10-11\"}"
+            });
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
             ceremonyId = ceremony.Id;
@@ -159,7 +171,9 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var authorizationJson = await authorizationResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(GrandSecretariatCodes.DocumentType.Plancha, authorizationJson.GetProperty("documentType").GetString());
         Assert.Equal(GrandSecretariatCodes.PlanchaKind.CeremonyAuthorization, authorizationJson.GetProperty("planchaKind").GetString());
-        Assert.StartsWith("PLA-AUT-CER-", authorizationJson.GetProperty("documentCode").GetString());
+        Assert.Matches(@"^PLA-AUT-CER-\\d{4}-\\d{6}$",
+            authorizationJson.GetProperty("documentCode").GetString()!);
+        Assert.Contains("registro de auditoría", authorizationJson.GetProperty("content").GetString());
         Assert.Equal(ceremonyId, authorizationJson.GetProperty("relatedCeremonyRequestId").GetGuid());
         Assert.Equal(reservationId, authorizationJson.GetProperty("spaceReservationId").GetGuid());
 
@@ -214,6 +228,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                     cancellationToken);
 
             Assert.Equal(GrandSecretariatCodes.DocumentStatus.Issued, authorization.Status);
+            Assert.Contains(authorization.DocumentCode, authorization.Content);
             Assert.Equal(reservationId, authorization.SpaceReservationId);
 
             var auditActions = await db.AuditEvents
