@@ -797,7 +797,12 @@ public static class CeremonyEndpoints
 
         if (!context.Decision.CanAuthorize)
         {
-            ceremony.Status = context.Decision.Status == "observed"
+            // Una observación/rechazo documental de subsanación se puede corregir
+            // por RI en el mismo expediente; no cerrarlo al intentar autorizar.
+            var rePresentationNeedsCorrection = context.Decision.Requirements.Any(x =>
+                x.Code == CeremonyCodes.ValidationType.CandidateRepresentationReview &&
+                x.Status != CeremonyCodes.ValidationStatus.Approved);
+            ceremony.Status = rePresentationNeedsCorrection || context.Decision.Status == "observed"
                 ? CeremonyCodes.RequestStatus.Observed
                 : CeremonyCodes.RequestStatus.Rejected;
 
@@ -1105,6 +1110,14 @@ public static class CeremonyEndpoints
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
 
+        var rePresentationReviewStatus = ceremony.CeremonyType == CeremonyCodes.Type.Initiation
+            ? await db.CeremonyValidations.AsNoTracking()
+                .Where(x => x.CeremonyRequestId == requestId &&
+                            x.ValidationType == CeremonyCodes.ValidationType.CandidateRepresentationReview)
+                .OrderByDescending(x => x.RecordedAtUtc)
+                .Select(x => x.Status).FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         var treasury = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == ceremony.OrganizationId &&
@@ -1181,7 +1194,8 @@ public static class CeremonyEndpoints
             evidence,
             ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
             advancement: advancement?.Decision,
-            candidateFinalBallotStatus: finalBallotStatus);
+            candidateFinalBallotStatus: finalBallotStatus,
+            candidateRePresentationReviewStatus: rePresentationReviewStatus);
 
         return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
             right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today, advancement);

@@ -72,7 +72,8 @@
       "RegimenInteriorMemberControlPostgreSqlTests",
       "CandidateInterviewAssignmentHttpTests",
       "CandidateInterviewAssignmentPositiveHttpTests",
-      "CandidateRePresentationHttpTests"
+      "CandidateRePresentationHttpTests",
+      "CandidateRePresentationReviewHttpTests"
     ]
   }
 }

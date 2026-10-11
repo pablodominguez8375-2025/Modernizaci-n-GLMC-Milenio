@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient, type RegimenInteriorSummary } from './api/pmgmApi'
-import type { OrderRejectionAlert } from './api/pmgmApi'
+import type { OrderRejectionAlert, RePresentationReviewRow, RePresentationReviewDecision } from './api/pmgmApi'
 import './regimen.css'
 import { organizationDisplayName } from './displayFormat'
 
@@ -14,6 +14,12 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [rejectionAlerts, setRejectionAlerts] = useState<OrderRejectionAlert[]>([])
+  const [rePresentationRows, setRePresentationRows] = useState<RePresentationReviewRow[]>([])
+  const [reviewId, setReviewId] = useState('')
+  const [reviewReference, setReviewReference] = useState('')
+  const [reviewNotes, setReviewNotes] = useState('')
+  const [reviewBusy, setReviewBusy] = useState(false)
+  const [reviewMessage, setReviewMessage] = useState<string|null>(null)
 
   const load = async (filters = { organizationId, from, asOf }) => {
     setLoading(true); setError(null)
@@ -24,14 +30,26 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
 
   useEffect(() => {
     let active = true
-    Promise.all([api.getOrganizationOptions(), api.getRegimenInteriorSummary({ from: `${today.slice(0, 4)}-01-01`, asOf: today }), api.getOrderRejectionAlerts()])
-      .then(([orgs, report, alerts]) => { if (active) { setOrganizations(orgs.items); setSummary(report); setRejectionAlerts(alerts.items) } })
+    Promise.all([api.getOrganizationOptions(), api.getRegimenInteriorSummary({ from: `${today.slice(0, 4)}-01-01`, asOf: today }), api.getOrderRejectionAlerts(), api.getRePresentationReviews()])
+      .then(([orgs, report, alerts, reReviews]) => { if (active) { setOrganizations(orgs.items); setSummary(report); setRejectionAlerts(alerts.items); setRePresentationRows(reReviews.items); setReviewId(reReviews.items[0]?.requestId ?? '') } })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible cargar Régimen Interior.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [api, today])
 
   const submit = (event: FormEvent) => { event.preventDefault(); void load() }
+  async function resolveReview(status:RePresentationReviewDecision['status']){
+    if(!reviewId || reviewBusy)return
+    setReviewBusy(true);setReviewMessage(null);setError(null)
+    try{
+      await api.resolveRePresentation(reviewId,{status,sourceReference:reviewReference.trim(),notes:reviewNotes.trim()||null})
+      const queue=await api.getRePresentationReviews()
+      setRePresentationRows(queue.items)
+      setReviewMessage('Resolución de Régimen Interior registrada con trazabilidad. La autorización continúa sujeta a los demás vistos buenos.')
+      setReviewReference('');setReviewNotes('')
+    }catch(reason){setError(reason instanceof Error?reason.message:'No fue posible registrar la resolución.')}
+    finally{setReviewBusy(false)}
+  }
 
   return <>
     <section className="page-heading"><div><p className="eyebrow">Control institucional agregado</p><h1>Régimen Interior</h1><p>Estado de membresía, movimientos, grados y regularidad financiera, por Orden o Taller.</p></div><span className="count-badge">Corte {formatDateOnly(summary?.asOf ?? asOf)}</span></section>
@@ -44,6 +62,35 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
     </form></section>
     {loading && !summary ? <div className="panel"><p>Cargando reporte institucional…</p></div> : summary && <Report summary={summary} />}
     <section className="panel report-wide"><div className="panel-heading"><div><p className="eyebrow">Antecedentes transversales · acceso restringido</p><h2>Alertas de candidatos rechazados en Cámara del Medio</h2><p>Consulta para detectar una ficha previa en otro Taller antes de autorizar una nueva presentación.</p></div><span className="count-badge">{rejectionAlerts.length} alertas</span></div>{rejectionAlerts.length === 0 ? <p className="muted">No hay rechazos registrados.</p> : <div className="table-wrap"><table><thead><tr><th>Candidato</th><th>Taller que rechazó</th><th>Fecha</th><th>Referencia</th></tr></thead><tbody>{rejectionAlerts.map((alert, index) => <tr key={`${alert.personId}-${alert.rejectionDate}-${index}`}><td><strong>{alert.firstNames} {alert.lastNames}</strong><small>ID transversal protegido</small></td><td>{organizationDisplayName(alert.workshopName, alert.workshopNumber)}</td><td>{formatDateOnly(alert.rejectionDate)}</td><td>{alert.sourceReference ?? 'Sin referencia'}</td></tr>)}</tbody></table></div>}</section>
+    <section className="panel report-wide" aria-label="Revisión de nuevas presentaciones">
+      <div className="panel-heading">
+        <div><p className="eyebrow">Régimen Interior · acceso restringido</p><h2>Revisión de reinsinuaciones</h2>
+          <p>Examine la constancia de subsanación de Secretaría. Sólo una resolución formal aprobada habilita el requisito; observar o rechazar mantiene bloqueada la autorización.</p></div>
+        <span className="count-badge">{rePresentationRows.filter(x=>x.status!=='approved').length} sin conformidad</span>
+      </div>
+      {rePresentationRows.length===0?<p className="muted">No hay constancias de nueva presentación pendientes de revisión.</p>:<>
+        <div className="table-wrap"><table><thead><tr><th>Persona</th><th>Taller</th><th>Estado RI</th><th>Respaldo</th><th>Revisar</th></tr></thead>
+        <tbody>{rePresentationRows.map(row=><tr key={row.requestId}>
+          <td>{row.personName}</td><td>{row.workshopName}</td>
+          <td><span className={row.status==='approved'?'status-pill complete':'status-pill attention'}>{row.status==='approved'?'Aprobada':row.status==='rejected'?'Rechazada':'Observada'}</span></td>
+          <td>{row.originalSourceReference??row.sourceReference??'Sin referencia'}{row.originalSourceReference&&row.sourceReference!==row.originalSourceReference?<small>Última resolución: {row.sourceReference}</small>:null}</td>
+          <td><button className="secondary-action" type="button" aria-label={`Revisar ${row.personName}`} onClick={()=>{setReviewId(row.requestId);setReviewReference('');setReviewNotes('');setReviewMessage(null)}}>Revisar</button></td>
+        </tr>)}</tbody></table></div>
+        {reviewId&&<article className="panel"><h3>Resolución institucional del expediente seleccionado</h3>
+          <p className="muted">{rePresentationRows.find(x=>x.requestId===reviewId)?.personName} · Las decisiones anteriores permanecen auditadas.</p>
+          <div className="report-filter-form">
+            <Field label="Referencia de resolución o acta *"><input maxLength={240} required value={reviewReference} onChange={e=>setReviewReference(e.target.value)} placeholder="ACTA-RI-2026-001"/></Field>
+            <Field label="Observaciones"><input maxLength={1000} value={reviewNotes} onChange={e=>setReviewNotes(e.target.value)} placeholder="Fundamento breve, sin datos sensibles"/></Field>
+          </div>
+          <div className="notification-actions">
+            <button type="button" disabled={reviewBusy||!reviewReference.trim()} onClick={()=>void resolveReview('approved')}>Aprobar subsanación</button>
+            <button type="button" disabled={reviewBusy||!reviewReference.trim()} onClick={()=>void resolveReview('observed')}>Observar</button>
+            <button type="button" disabled={reviewBusy||!reviewReference.trim()} onClick={()=>void resolveReview('rejected')}>Rechazar</button>
+          </div>
+          {reviewMessage&&<p role="status">{reviewMessage}</p>}
+        </article>}
+      </>}
+    </section>
     {api.useMocks && <AssemblyRosterDemo />}
   </>
 }

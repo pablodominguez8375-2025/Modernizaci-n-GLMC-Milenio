@@ -105,7 +105,8 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             publication,
             input.CeremonyRightPaid,
             advancement,
-            candidateFinalBallotStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateFinalBallot));
+            candidateFinalBallotStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateFinalBallot),
+            candidateRePresentationReviewStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateRepresentationReview));
 
         var blockingReasons = decision.Requirements
             .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)

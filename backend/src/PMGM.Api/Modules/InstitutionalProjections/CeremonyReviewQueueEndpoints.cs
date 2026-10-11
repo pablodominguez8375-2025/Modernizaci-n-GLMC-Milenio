@@ -126,6 +126,16 @@ public static class CeremonyReviewQueueEndpoints
             .GroupBy(x => x.CeremonyRequestId)
             .ToDictionary(x => x.Key, x => x.First().Status);
 
+        var rePresentationRows = await db.CeremonyValidations.AsNoTracking()
+            .Where(x => requestIds.Contains(x.CeremonyRequestId) &&
+                        x.ValidationType == CeremonyCodes.ValidationType.CandidateRepresentationReview)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(x => new { x.CeremonyRequestId, x.Status, x.RecordedAtUtc })
+            .ToListAsync(cancellationToken);
+        var rePresentationByRequest = rePresentationRows
+            .GroupBy(x => x.CeremonyRequestId)
+            .ToDictionary(x => x.Key, x => x.First().Status);
+
         var treasuryRows = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => organizationIds.Contains(x.OrganizationId) &&
@@ -186,6 +196,7 @@ public static class CeremonyReviewQueueEndpoints
             internalAffairsByRequest.TryGetValue(ceremony.Id, out var regimenStatus);
             grandMasterByRequest.TryGetValue(ceremony.Id, out var grandMasterStatus);
             finalBallotByRequest.TryGetValue(ceremony.Id, out var finalBallotStatus);
+            rePresentationByRequest.TryGetValue(ceremony.Id, out var rePresentationStatus);
             treasuryByOrganization.TryGetValue(ceremony.OrganizationId, out var treasuryStatus);
             hospitalariaByOrganization.TryGetValue(ceremony.OrganizationId, out var hospitalariaStatus);
             publicationByRequest.TryGetValue(ceremony.Id, out var publication);
@@ -227,7 +238,8 @@ public static class CeremonyReviewQueueEndpoints
                 grandMasterStatus,
                 publicationEvidence,
                 ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
-                candidateFinalBallotStatus: finalBallotStatus);
+                candidateFinalBallotStatus: finalBallotStatus,
+                candidateRePresentationReviewStatus: rePresentationStatus);
 
             var isFinal = ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected;
             var activePublication = publication is not null &&
