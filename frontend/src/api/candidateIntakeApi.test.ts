@@ -2,6 +2,44 @@ import { describe, expect, it, vi } from 'vitest'
 import { CandidateIntakeApiClient } from './candidateIntakeApi'
 
 describe('CandidateIntakeApiClient demo workflow', () => {
+
+  it('blocks a recent order-level rejection in the demo even with an acta', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    await expect(api.createWorkshopRequest({
+      organizationId: 'demo-workshop-23', firstNames: 'Persona', lastNames: 'Reciente',
+      rutOrInstitutionalId: 'RECHAZO2026', rejectionCausesRemedied: true,
+      rePresentationSourceReference: 'ACTA-2026',
+    })).rejects.toThrow('sólo puede efectuarse')
+  })
+
+  it('requires declaration and documentary evidence for a past rejection in demo', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const payload = {
+      organizationId: 'demo-workshop-23', firstNames: 'Persona', lastNames: 'Reingreso',
+      rutOrInstitutionalId: 'RECHAZO2025',
+    }
+    await expect(api.createWorkshopRequest(payload)).rejects.toThrow('subsanadas')
+    await expect(api.createWorkshopRequest({
+      ...payload, rejectionCausesRemedied: true,
+    })).rejects.toThrow('referencia documental')
+    const created = await api.createWorkshopRequest({
+      ...payload, rejectionCausesRemedied: true, rePresentationSourceReference: 'ACTA-REINGRESO-001',
+    })
+    expect(created.requestStatus).toBe('draft')
+    await expect(api.createWorkshopRequest({
+      ...payload, rejectionCausesRemedied: true, rePresentationSourceReference: 'ACTA-REINGRESO-001',
+    })).rejects.toThrow('Ya existe un expediente')
+  })
+
+  it('prevents invented remediation evidence for first-time candidates in demo', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    await expect(api.createWorkshopRequest({
+      organizationId: 'demo-workshop-23', firstNames: 'Primer', lastNames: 'Expediente',
+      rutOrInstitutionalId: 'DEMO-NUEVO-99', rejectionCausesRemedied: true,
+      rePresentationSourceReference: 'ACTA-NO-EXISTE',
+    })).rejects.toThrow('sólo corresponde')
+  })
+
   it('loads a fictitious Gran Secretaría queue and private profile', async () => {
     const api = new CandidateIntakeApiClient({ useMocks: true })
     const queue = await api.getGrandSecretariatQueue()

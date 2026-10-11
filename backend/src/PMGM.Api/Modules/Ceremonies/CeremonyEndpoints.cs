@@ -130,6 +130,8 @@ public static class CeremonyEndpoints
             return Results.NotFound(new { message = "El Taller u organización no existe." });
         }
 
+        CandidateRePresentationGate.Decision? rePresentation = null;
+        var presentationDate = ChileToday();
         if (request.CeremonyType == CeremonyCodes.Type.Initiation)
         {
             if (request.CandidatePersonId is null || request.MemberId is not null)
@@ -142,6 +144,21 @@ public static class CeremonyEndpoints
             {
                 return Results.NotFound(new { message = "La persona insinuada no existe en la base maestra." });
             }
+            var activeRequest = await db.CeremonyRequests.AnyAsync(x =>
+                x.CandidatePersonId == request.CandidatePersonId.Value &&
+                x.CeremonyType == CeremonyCodes.Type.Initiation &&
+                x.Status != CeremonyCodes.RequestStatus.Completed &&
+                x.Status != CeremonyCodes.RequestStatus.Rejected, cancellationToken);
+            if (activeRequest)
+                return Results.Conflict(new { message = "Ya existe un expediente de iniciación activo. Continúe el existente." });
+
+            var priorRejection = await CandidateRePresentationGate.FindLatestAsync(
+                db, request.CandidatePersonId.Value, cancellationToken);
+            rePresentation = CandidateRePresentationGate.Evaluate(
+                priorRejection, presentationDate, request.RejectionCausesRemedied,
+                request.RePresentationSourceReference);
+            if (!rePresentation.CanProceed)
+                return Results.Conflict(new { code = rePresentation.Code, message = rePresentation.Reason });
         }
         else
         {
@@ -175,6 +192,21 @@ public static class CeremonyEndpoints
         };
 
         db.CeremonyRequests.Add(entity);
+        if (rePresentation is not null)
+        {
+            var validation = CandidateRePresentationGate.AddEvidence(
+                db, entity.Id, presentationDate, rePresentation);
+            if (validation is not null)
+                audit.Add(httpContext, "candidate.representation.evidence_recorded",
+                    nameof(CeremonyValidation), validation.Id.ToString(), entity.OrganizationId,
+                    AuditResults.Success, new
+                    {
+                        previousRejectionValidationId = rePresentation.PriorRejection!.ValidationId,
+                        previousRequestId = rePresentation.PriorRejection.CeremonyRequestId,
+                        rePresentation.PriorRejection.RejectionDate,
+                        newRequestId = entity.Id, referenceRecorded = true
+                    });
+        }
         audit.Add(
             httpContext,
             "ceremony.request.created",
@@ -1272,7 +1304,9 @@ public sealed record CreateCeremonyRequest(
     Guid? MemberId,
     Guid? CandidatePersonId,
     DateOnly? ProposedDate,
-    string? Notes);
+    string? Notes,
+    bool RejectionCausesRemedied = false,
+    string? RePresentationSourceReference = null);
 
 public sealed record RecordCeremonyRightPaymentRequest(
     decimal Amount,

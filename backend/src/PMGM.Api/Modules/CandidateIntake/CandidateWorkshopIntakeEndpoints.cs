@@ -84,6 +84,8 @@ public static class CandidateWorkshopIntakeEndpoints
             .SingleOrDefaultAsync(cancellationToken);
         if (organization is null) return Results.NotFound(new { message = "El Taller seleccionado no existe." });
 
+        var presentationDate = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
         var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut != null &&
             x.Rut.Replace(".", "").Replace("-", "").Replace(" ", "").ToUpper() == normalizedId, cancellationToken);
         if (person is not null)
@@ -96,16 +98,14 @@ public static class CandidateWorkshopIntakeEndpoints
             if (activeRequest)
                 return Results.Conflict(new { message = "Ya existe un expediente de iniciación activo para esta identificación. Continúe el expediente existente." });
 
-            var recentRejection = await coreDb.CeremonyValidations.AnyAsync(x =>
-                x.CeremonyRequest.CandidatePersonId == person.Id &&
-                (x.ValidationType == CeremonyCodes.ValidationType.CandidateThirdDegreeReview ||
-                 x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot) &&
-                x.Status == CeremonyCodes.ValidationStatus.Rejected &&
-                x.AsOfDate > DateOnly.FromDateTime(DateTime.UtcNow.Date.AddYears(-1)), cancellationToken);
-            if (recentRejection)
-                return Results.Conflict(new { message = "Existe un rechazo previo en el último año. El protocolo requiere esperar un año y subsanar sus causas antes de una nueva insinuación." });
         }
-        else
+        var priorRejection = person is null ? null :
+            await CandidateRePresentationGate.FindLatestAsync(coreDb, person.Id, cancellationToken);
+        var rePresentation = CandidateRePresentationGate.Evaluate(
+            priorRejection, presentationDate, request.RejectionCausesRemedied, request.RePresentationSourceReference);
+        if (!rePresentation.CanProceed)
+            return Results.Conflict(new { code = rePresentation.Code, message = rePresentation.Reason });
+        if (person is null)
         {
             person = new Person { FirstNames = firstNames, LastNames = lastNames, Rut = rut };
             coreDb.People.Add(person);
@@ -121,6 +121,15 @@ public static class CandidateWorkshopIntakeEndpoints
             Notes = "Expediente de insinuación iniciado por Secretaría Logial."
         };
         coreDb.CeremonyRequests.Add(entity);
+        var rePresentationValidation = CandidateRePresentationGate.AddEvidence(
+            coreDb, entity.Id, presentationDate, rePresentation);
+        if (rePresentationValidation is not null)
+            audit.Add(httpContext, "candidate.representation.evidence_recorded", nameof(CeremonyValidation),
+                rePresentationValidation.Id.ToString(), organization.Id, AuditResults.Success,
+                new { priorValidationId = rePresentation.PriorRejection!.ValidationId,
+                    priorRequestId = rePresentation.PriorRejection.CeremonyRequestId,
+                    rePresentation.PriorRejection.RejectionDate,
+                    newCeremonyRequestId = entity.Id, referenceRecorded = true });
         audit.Add(httpContext, "candidate.intake.created", nameof(CeremonyRequest), entity.Id.ToString(),
             organization.Id, AuditResults.Success, new { entity.CandidatePersonId, entity.CeremonyType, entity.Status });
         await coreDb.SaveChangesAsync(cancellationToken);
@@ -311,7 +320,9 @@ public static class CandidateWorkshopIntakeEndpoints
 
 public sealed record CandidateWorkshopOrganizationDto(Guid Id, string Name, string? Number);
 
-public sealed record CreateCandidateWorkshopRequest(Guid OrganizationId, string FirstNames, string LastNames, string RutOrInstitutionalId);
+public sealed record CreateCandidateWorkshopRequest(
+    Guid OrganizationId, string FirstNames, string LastNames, string RutOrInstitutionalId,
+    bool RejectionCausesRemedied = false, string? RePresentationSourceReference = null);
 
 public sealed record CandidateWorkshopQueueItemDto(
     Guid CeremonyRequestId,

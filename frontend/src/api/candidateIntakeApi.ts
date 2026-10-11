@@ -246,7 +246,12 @@ export type CandidateReviewDecision = 'observed' | 'rejected'
 export type AccessTokenProvider = () => Promise<string | null>
 
 export interface CandidateWorkshopOrganization { id: string; name: string; number: string | null }
-export interface CreateCandidateWorkshopRequest { organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string }
+const chileToday = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago' }).format(new Date())
+
+export interface CreateCandidateWorkshopRequest {
+  organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string;
+  rejectionCausesRemedied?: boolean; rePresentationSourceReference?: string | null
+}
 
 export interface CandidateIntakeApiClientOptions {
   baseUrl?: string
@@ -605,8 +610,21 @@ export class CandidateIntakeApiClient {
 
   async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {
     if (this.useMocks) {
-      const duplicate = this.mockIdentifications.has(payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase())
+      const normalizedId = payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase()
+      const duplicate = this.mockIdentifications.has(normalizedId)
       if (duplicate) throw new CandidateIntakeApiHttpError(409, 'Ya existe un expediente demostrativo para este postulante.')
+      // Antecedentes sintéticos exclusivos de QA: permiten recorrer los casos antes y después del año.
+      const rejectionDate = normalizedId === 'RECHAZO2025' ? '2025-09-30'
+        : normalizedId === 'RECHAZO2026' ? '2026-09-30' : null
+      const reference = payload.rePresentationSourceReference?.trim() ?? ''
+      if (rejectionDate) {
+        const earliest = String(Number(rejectionDate.slice(0, 4)) + 1) + rejectionDate.slice(4)
+        if (chileToday() < earliest) throw new CandidateIntakeApiHttpError(409, `La nueva presentación sólo puede efectuarse desde el ${earliest}.`)
+        if (!payload.rejectionCausesRemedied) throw new CandidateIntakeApiHttpError(409, 'Debe quedar constancia de que fueron subsanadas las causas del rechazo anterior.')
+        if (!reference || reference.length > 240) throw new CandidateIntakeApiHttpError(409, 'Debe indicar una referencia documental de la subsanación (máximo 240 caracteres).')
+      } else if (payload.rejectionCausesRemedied || reference) {
+        throw new CandidateIntakeApiHttpError(409, 'La constancia de subsanación sólo corresponde a una nueva presentación después de un rechazo registrado.')
+      }
       const item: CandidateWorkshopQueueItem = {
         ceremonyRequestId: crypto.randomUUID(),
         firstNames: payload.firstNames.trim(),
@@ -623,7 +641,7 @@ export class CandidateIntakeApiClient {
         createdAtUtc: new Date().toISOString(),
         orderLevelAlert: null,
       }
-      this.mockIdentifications.add(payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase())
+      this.mockIdentifications.add(normalizedId)
       this.mockWorkshopQueue.unshift(item)
       return { ...item }
     }
