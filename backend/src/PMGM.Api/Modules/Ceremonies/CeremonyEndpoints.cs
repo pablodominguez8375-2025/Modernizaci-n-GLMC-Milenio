@@ -44,6 +44,7 @@ public static class CeremonyEndpoints
         AdvancementWorkPaperEndpoints.Map(group);
         AdvancementCertificationEndpoints.Map(group);
         AdvancementReviewEndpoints.Map(group);
+        AdvancementDispensationEndpoints.Map(group);
 
         return endpoints;
     }

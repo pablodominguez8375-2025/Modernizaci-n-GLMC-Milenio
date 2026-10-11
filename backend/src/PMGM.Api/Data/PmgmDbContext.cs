@@ -60,6 +60,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
     public DbSet<CandidateInterviewAssignment> CandidateInterviewAssignments => Set<CandidateInterviewAssignment>();
     public DbSet<AdvancementPaperAttestation> AdvancementPaperAttestations => Set<AdvancementPaperAttestation>();
+    public DbSet<AdvancementDispensationCase> AdvancementDispensationCases => Set<AdvancementDispensationCase>();
     public DbSet<CeremonyValidation> CeremonyValidations => Set<CeremonyValidation>();
     public DbSet<CeremonyRightPayment> CeremonyRightPayments => Set<CeremonyRightPayment>();
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
@@ -767,6 +768,23 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.CeremonyRequestId, x.WorkPaperDocumentId, x.RecordedAtUtc });
             entity.HasIndex(x => new { x.OrganizationId, x.MemberId });
+        });
+
+        modelBuilder.Entity<AdvancementDispensationCase>(entity =>
+        {
+            entity.ToTable("advancement_dispensation_cases");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Foundation).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.EligibleMasterIdsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.ReductionsJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.SubmittedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ResolvedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ResolutionReference).HasMaxLength(500);
+            entity.Property(x => x.ResolutionNotes).HasMaxLength(2000);
+            entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.CeremonyRequestId).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.Status });
         });
 
         modelBuilder.Entity<CeremonyRequest>(entity =>

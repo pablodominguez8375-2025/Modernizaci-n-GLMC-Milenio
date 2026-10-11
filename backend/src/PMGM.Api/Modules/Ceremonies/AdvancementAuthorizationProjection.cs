@@ -91,12 +91,23 @@ public static class AdvancementAuthorizationProjection
             attendance.Snapshot.Meetings.Present,
             attendance.Snapshot.Instructions.Present,
             papers.Count);
+        DispensationEvidence? dispensation = null;
+        var dispensationCase = await db.AdvancementDispensationCases.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.CeremonyRequestId == ceremony.Id, ct);
+        if (dispensationCase is not null)
+        {
+            var check = await AdvancementDispensationEvidenceService.ValidateAsync(
+                dispensationCase, ceremony, asOf, countRule, seniorityRule,
+                attendance.Snapshot, chronology, db, lodgeDb, ct);
+            if (check.Valid) dispensation = check.Evidence;
+        }
         var decision = AdvancementEligibilityPolicy.Evaluate(
-            ceremony.CeremonyType, countRule.Thresholds, evidence);
+            ceremony.CeremonyType, countRule.Thresholds, evidence, dispensation);
         // El mínimo parametrizable se aplica, y adicionalmente deben existir
         // los dos trabajos institucionales de clases diferentes. Las fechas
         // de membresía no se convierten automáticamente en un certificado.
-        if (!papers.TwoRequiredKinds || !continuityCertified)
+        if (!papers.TwoRequiredKinds || (!continuityCertified &&
+            decision.Mode != AdvancementEligibilityModes.Dispensation))
             decision = decision with { CanProceed = false,
                 Mode = AdvancementEligibilityModes.Blocked };
 

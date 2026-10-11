@@ -104,3 +104,30 @@ public sealed class AdvancementPaperAttestation
     public DateTimeOffset? ReviewedAtUtc { get; set; }
     public string? ReviewNotes { get; set; }
 }
+
+public sealed class AdvancementDispensationCase
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid CeremonyRequestId { get; set; }
+    public Guid OrganizationId { get; set; }
+    public Guid MemberId { get; set; }
+    public Guid InstitutionalRuleId { get; set; }
+    public Guid AdvancementRuleId { get; set; }
+    public Guid SeniorityRuleId { get; set; }
+    public required string Foundation { get; set; }
+    public Guid MeetingId { get; set; }
+    public Guid FullMinuteId { get; set; }
+    public Guid BallotId { get; set; }
+    public required string EligibleMasterIdsJson { get; set; }
+    public required string ReductionsJson { get; set; }
+    public int EligibleCount { get; set; }
+    public int PositiveCount { get; set; }
+    public int NegativeCount { get; set; }
+    public required string Status { get; set; }
+    public required string SubmittedBySubject { get; set; }
+    public DateTimeOffset SubmittedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public string? ResolvedBySubject { get; set; }
+    public DateTimeOffset? ResolvedAtUtc { get; set; }
+    public string? ResolutionReference { get; set; }
+    public string? ResolutionNotes { get; set; }
+}
