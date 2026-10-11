@@ -39,7 +39,7 @@ public static class CandidateRePresentationReviewEndpoints
                 x.Id, x.CeremonyRequestId, x.Status, x.SourceReference, x.RecordedAtUtc,
                 x.CeremonyRequest.OrganizationId,
                 WorkshopName = x.CeremonyRequest.Organization.Name,
-                x.CeremonyRequest.Status,
+                RequestStatus = x.CeremonyRequest.Status,
                 PersonName = x.CeremonyRequest.CandidatePerson == null ? "" :
                     x.CeremonyRequest.CandidatePerson.FirstNames + " " +
                     x.CeremonyRequest.CandidatePerson.LastNames
@@ -53,7 +53,7 @@ public static class CandidateRePresentationReviewEndpoints
             {
                 requestId = x.CeremonyRequestId, validationId = x.Id, x.OrganizationId,
                 x.WorkshopName, x.PersonName, x.Status, x.SourceReference,
-                x.RecordedAtUtc, requestStatus = x.Status
+                x.RecordedAtUtc, requestStatus = x.RequestStatus
             }).ToArray();
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { total = items.Length, items });
