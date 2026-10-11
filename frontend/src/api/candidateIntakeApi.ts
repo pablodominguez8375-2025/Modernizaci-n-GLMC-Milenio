@@ -246,6 +246,8 @@ export type CandidateReviewDecision = 'observed' | 'rejected'
 export type AccessTokenProvider = () => Promise<string | null>
 
 export interface CandidateWorkshopOrganization { id: string; name: string; number: string | null }
+const chileToday = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago' }).format(new Date())
+
 export interface CreateCandidateWorkshopRequest {
   organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string;
   rejectionCausesRemedied?: boolean; rePresentationSourceReference?: string | null
