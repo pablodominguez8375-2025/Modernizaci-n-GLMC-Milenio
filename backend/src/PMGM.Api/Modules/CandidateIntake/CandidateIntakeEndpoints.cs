@@ -59,6 +59,22 @@ public static class CandidateIntakeEndpoints
         var validationError = ValidateRequest(request);
         if (validationError is not null) return Results.BadRequest(new { message = validationError });
 
+        // El expediente de nueva presentación conserva su rechazo original.
+        // La ficha nunca puede afirmar una insinuación de fecha anterior al año reglamentario.
+        var hasRePresentationEvidence = await coreDb.CeremonyValidations.AsNoTracking()
+            .AnyAsync(x => x.CeremonyRequestId == requestId &&
+                           x.ValidationType == CeremonyCodes.ValidationType.CandidateRepresentationReview,
+                      cancellationToken);
+        if (hasRePresentationEvidence)
+        {
+            var prior = await CandidateRePresentationGate.FindLatestAsync(
+                coreDb, ceremony.CandidatePersonId.Value, cancellationToken);
+            var rePresentationDateError = CandidateRePresentationGate.ValidateRePresentationProfileDates(
+                prior, request.InsinuationDate, request.FirstDegreePresentationDate);
+            if (rePresentationDateError is not null)
+                return Results.Conflict(new { code = "representation.profile_dates", message = rePresentationDateError });
+        }
+
         var subject = GetSubject(httpContext.User);
         var now = DateTimeOffset.UtcNow;
         var presenters = request.Presenters
