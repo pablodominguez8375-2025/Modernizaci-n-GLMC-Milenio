@@ -212,6 +212,14 @@ public static class GrandMasterCeremonyEndpoints
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        var rePresentationReviewStatus = ceremony.CeremonyType == CeremonyCodes.Type.Initiation
+            ? await db.CeremonyValidations.AsNoTracking()
+                .Where(x => x.CeremonyRequestId == requestId &&
+                            x.ValidationType == CeremonyCodes.ValidationType.CandidateRepresentationReview)
+                .OrderByDescending(x => x.RecordedAtUtc)
+                .Select(x => x.Status).FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         var decision = CeremonyEligibilityPolicy.Evaluate(
             ceremony.CeremonyType,
             internalAffairs?.Status,
@@ -221,7 +229,8 @@ public static class GrandMasterCeremonyEndpoints
             publicationEvidence,
             ceremonyRightPaid: rightPaid,
             advancement: advancement?.Decision,
-            candidateFinalBallotStatus: finalBallot?.Status);
+            candidateFinalBallotStatus: finalBallot?.Status,
+            candidateRePresentationReviewStatus: rePresentationReviewStatus);
 
         var requirements = decision.Requirements;
         var overall = decision.Status;
