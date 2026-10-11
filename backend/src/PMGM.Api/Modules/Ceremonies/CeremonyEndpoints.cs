@@ -797,7 +797,12 @@ public static class CeremonyEndpoints
 
         if (!context.Decision.CanAuthorize)
         {
-            ceremony.Status = context.Decision.Status == "observed"
+            // Una observación/rechazo documental de subsanación se puede corregir
+            // por RI en el mismo expediente; no cerrarlo al intentar autorizar.
+            var rePresentationNeedsCorrection = context.Decision.Requirements.Any(x =>
+                x.Code == CeremonyCodes.ValidationType.CandidateRepresentationReview &&
+                x.Status != CeremonyCodes.ValidationStatus.Approved);
+            ceremony.Status = rePresentationNeedsCorrection || context.Decision.Status == "observed"
                 ? CeremonyCodes.RequestStatus.Observed
                 : CeremonyCodes.RequestStatus.Rejected;
 
