@@ -42,6 +42,15 @@ public sealed class CeremonyAuthorizationStateHttpTests
             await db.Database.MigrateAsync(ct);
             db.Organizations.Add(organization);
             db.CeremonyRequests.AddRange(ceremonies);
+            foreach (var item in ceremonies)
+                db.CeremonyValidations.Add(new CeremonyValidation
+                {
+                    CeremonyRequestId = item.Id,
+                    ValidationType = CeremonyCodes.ValidationType.GrandMaster,
+                    Status = CeremonyCodes.ValidationStatus.Approved,
+                    AsOfDate = DateOnly.FromDateTime(DateTime.UtcNow.Date),
+                    SourceReference = "ACTA-GM-HISTORICA-CI"
+                });
             await db.SaveChangesAsync(ct);
         }
 
@@ -93,11 +102,11 @@ public sealed class CeremonyAuthorizationStateHttpTests
         Assert.Equal(HttpStatusCode.OK, queue.StatusCode);
         var queueJson = await queue.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var rows = queueJson.GetProperty("items").EnumerateArray()
-            .Where(x => ceremonies.Select(c => c.Id).Contains(x.GetProperty("requestId").GetGuid())).ToArray();
+            .Where(x => ceremonies.Select(c => c.Id).Contains(x.GetProperty("id").GetGuid())).ToArray();
         Assert.Equal(ceremonies.Length, rows.Length);
         foreach (var closed in ceremonies.Skip(1))
         {
-            var row = Assert.Single(rows, x => x.GetProperty("requestId").GetGuid() == closed.Id);
+            var row = Assert.Single(rows, x => x.GetProperty("id").GetGuid() == closed.Id);
             Assert.False(row.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
         }
 
