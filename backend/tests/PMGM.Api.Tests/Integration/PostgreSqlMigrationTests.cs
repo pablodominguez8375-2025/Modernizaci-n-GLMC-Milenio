@@ -148,7 +148,15 @@ public sealed class PostgreSqlMigrationTests
             Status = CeremonyCodes.PublicationStatus.Published
         };
 
-        db.AddRange(internalAffairs, publication);
+        var finalBallot = new CeremonyValidation
+        {
+            CeremonyRequestId = ceremony.Id,
+            ValidationType = CeremonyCodes.ValidationType.CandidateFinalBallot,
+            Status = CeremonyCodes.ValidationStatus.Approved,
+            AsOfDate = today
+        };
+
+        db.AddRange(internalAffairs, finalBallot, publication);
 
         var httpContext = new DefaultHttpContext
         {
@@ -188,18 +196,23 @@ public sealed class PostgreSqlMigrationTests
         var persistedPublication = await db.CandidatePublications
             .AsNoTracking()
             .SingleAsync(x => x.Id == publication.Id, cancellationToken);
+        var persistedFinalBallot = await db.CeremonyValidations
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == finalBallot.Id, cancellationToken);
 
         var decision = CeremonyEligibilityPolicy.Evaluate(
             CeremonyCodes.Type.Initiation,
             persistedValidation.Status,
             persistedTreasury.Status,
             persistedHospitalaria.Status,
+            CeremonyCodes.ValidationStatus.Approved,
             new CandidatePublicationEvidence(
                 persistedPublication.Id,
                 persistedPublication.Status,
                 persistedPublication.RequiredDays,
                 21,
-                persistedPublication.RuleCode));
+                persistedPublication.RuleCode),
+            candidateFinalBallotStatus: persistedFinalBallot.Status);
 
         Assert.True(decision.CanAuthorize);
 
