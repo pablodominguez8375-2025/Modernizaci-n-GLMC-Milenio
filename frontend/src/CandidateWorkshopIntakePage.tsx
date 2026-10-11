@@ -41,7 +41,10 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [organizations, setOrganizations] = useState<CandidateWorkshopOrganization[]>([])
   const [createOpen, setCreateOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [newCandidate, setNewCandidate] = useState({ organizationId: '', firstNames: '', lastNames: '', rutOrInstitutionalId: '' })
+  const [newCandidate, setNewCandidate] = useState({
+    organizationId: '', firstNames: '', lastNames: '', rutOrInstitutionalId: '',
+    rejectionCausesRemedied: false, rePresentationSourceReference: '',
+  })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
@@ -97,12 +100,17 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
         firstNames: newCandidate.firstNames.trim(),
         lastNames: newCandidate.lastNames.trim(),
         rutOrInstitutionalId: newCandidate.rutOrInstitutionalId.trim(),
+        rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
+        rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
       })
       const result = await api.getWorkshopQueue()
       setQueue(result.items)
       setSelectedId(created.ceremonyRequestId)
       setCreateOpen(false)
-      setNewCandidate(current => ({ ...current, firstNames: '', lastNames: '', rutOrInstitutionalId: '' }))
+      setNewCandidate(current => ({
+        ...current, firstNames: '', lastNames: '', rutOrInstitutionalId: '',
+        rejectionCausesRemedied: false, rePresentationSourceReference: '',
+      }))
       setMessage('Expediente creado en borrador. Complete la ficha oficial de insinuación y sus patrocinantes para enviarlo a revisión.')
     } catch (reason) {
       setError(errorMessage(reason, 'No fue posible crear el expediente de iniciación.'))
@@ -274,6 +282,17 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
           <Field label="Nombres *"><input required maxLength={160} value={newCandidate.firstNames} onChange={event => setNewCandidate({ ...newCandidate, firstNames: event.target.value })} /></Field>
           <Field label="Apellidos *"><input required maxLength={160} value={newCandidate.lastNames} onChange={event => setNewCandidate({ ...newCandidate, lastNames: event.target.value })} /></Field>
           <Field label="RUT / pasaporte / identificación *"><input required maxLength={16} value={newCandidate.rutOrInstitutionalId} onChange={event => setNewCandidate({ ...newCandidate, rutOrInstitutionalId: event.target.value })} /></Field>
+          <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>
+            Si la persona registra un rechazo en otro Taller, el sistema revisará el antecedente a nivel de Orden y exigirá un año completo antes de una nueva presentación.
+            En la demo pueden probarse las identidades ficticias RECHAZO2025 y RECHAZO2026.
+          </div>
+          <label style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'start', gap: 10 }}>
+            <input type="checkbox" checked={newCandidate.rejectionCausesRemedied} onChange={event => setNewCandidate({ ...newCandidate, rejectionCausesRemedied: event.target.checked })} />
+            <span>Nueva presentación después de rechazo: declaro que las causas fueron subsanadas y existe respaldo documental. La revisión institucional posterior sigue siendo necesaria.</span>
+          </label>
+          {newCandidate.rejectionCausesRemedied && <Field label="Referencia de acta o constancia de subsanación *">
+            <input required maxLength={240} value={newCandidate.rePresentationSourceReference} onChange={event => setNewCandidate({ ...newCandidate, rePresentationSourceReference: event.target.value })} placeholder="Ej.: ACTA-REVISION-2026-001" />
+          </Field>}
           <div className="workshop-new-intake-actions">
             <button className="candidate-secondary-button" type="button" disabled={creating} onClick={() => setCreateOpen(false)}>Cancelar</button>
             <button className="candidate-primary-button" type="submit" disabled={creating || !organizations.length}>{creating ? 'Abriendo expediente…' : 'Crear expediente y completar ficha'}</button>
