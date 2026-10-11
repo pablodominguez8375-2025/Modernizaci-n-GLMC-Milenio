@@ -25,6 +25,7 @@ public static class CandidateWorkshopIntakeEndpoints
             .WithTags("Régimen Interior")
             .RequireAuthorization();
 
+        endpoints.MapCandidateRePresentationReviewEndpoints();
         return endpoints;
     }
 
