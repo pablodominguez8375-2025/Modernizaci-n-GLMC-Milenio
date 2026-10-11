@@ -122,6 +122,45 @@ public sealed class CeremonyEligibilityServiceTests
         Assert.Equal(20, result.PublicationElapsedDays);
     }
 
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(CeremonyCodes.ValidationStatus.Pending)]
+    [InlineData(CeremonyCodes.ValidationStatus.Observed)]
+    [InlineData(CeremonyCodes.ValidationStatus.Rejected)]
+    [InlineData(CeremonyCodes.ValidationStatus.NotApplicable)]
+    [InlineData(CeremonyCodes.ValidationStatus.ExceptionApproved)]
+    public void Initiation_EligibilityCannotAuthorizeWithoutLatestApprovedFirstDegreeBallot(string? ballotStatus)
+    {
+        var validations = FullyApprovedValidations();
+        if (ballotStatus is null)
+            validations.Remove(CeremonyCodes.ValidationType.CandidateFinalBallot);
+        else
+            validations[CeremonyCodes.ValidationType.CandidateFinalBallot] = ballotStatus;
+
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(CeremonyCodes.Type.Initiation, validations, Now.AddDays(-21), null, 20),
+            Now);
+
+        Assert.False(result.IsEligible);
+        Assert.Contains(result.BlockingReasons, x => x.Contains(CeremonyCodes.ValidationType.CandidateFinalBallot));
+    }
+
+    [Fact]
+    public void NonInitiationEligibility_DoesNotRequireCandidateFinalBallot()
+    {
+        var validations = FullyApprovedValidations();
+        validations.Remove(CeremonyCodes.ValidationType.CandidateFinalBallot);
+        var result = _service.Evaluate(
+            new CeremonyEligibilityInput(
+                CeremonyCodes.Type.WageIncrease, validations, null, null, 20,
+                AdvancementThresholds: new AdvancementThresholds(5, 3, 1, "rule-v3"),
+                AdvancementEvidence: new AdvancementEvidence(5, 3, 1)),
+            Now);
+
+        Assert.True(result.IsEligible);
+    }
+
     [Fact]
     public void FormalException_IsAnEnablingValidationStatus()
     {
@@ -268,6 +307,7 @@ public sealed class CeremonyEligibilityServiceTests
             [CeremonyCodes.ValidationType.Treasury] = CeremonyCodes.ValidationStatus.Approved,
             [CeremonyCodes.ValidationType.Hospitalaria] = CeremonyCodes.ValidationStatus.Approved,
             [CeremonyCodes.ValidationType.GrandMaster] = CeremonyCodes.ValidationStatus.Approved,
-            [CeremonyCodes.ValidationType.CandidatePublication] = CeremonyCodes.ValidationStatus.Approved
+            [CeremonyCodes.ValidationType.CandidatePublication] = CeremonyCodes.ValidationStatus.Approved,
+            [CeremonyCodes.ValidationType.CandidateFinalBallot] = CeremonyCodes.ValidationStatus.Approved
         };
 }

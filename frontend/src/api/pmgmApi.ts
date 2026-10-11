@@ -411,6 +411,7 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
       { code: 'gran_hospitalaria', name: 'Gran Hospitalaria', status: 'approved', reason: 'El Taller se encuentra al día en reposiciones u obligaciones hospitalarias.' },
       { code: 'ceremony_right_payment', name: 'Derecho de ceremonia', status: 'rejected', reason: 'El derecho de ceremonia registra saldo pendiente en Tesorería.' },
       { code: 'publicacion_insinuado', name: 'Publicación del insinuado', status: 'rejected', reason: 'Se requieren 20 días de publicación y se han cumplido 13 días válidos.' },
+      { code: 'candidate_final_ballot', name: 'Balotaje de primer grado', status: 'observed', reason: 'Se requiere registrar un balotaje de primer grado aprobado; sin resultado vigente no puede autorizarse la Iniciación.' },
     ] },
     actions: { canValidateInternalAffairs: true, canPublishCandidate: false, canAuthorize: false },
   },
@@ -917,6 +918,21 @@ export class PmgmApiClient {
       if (!payload.sourceReference.trim()) throw new Error('Debe indicar la referencia del extracto de acta.')
       if (payload.ballots.length < 1 || payload.ballots.length > 3 || new Set(payload.ballots.map(item => item.procedureNumber)).size !== payload.ballots.length) throw new Error('Debe registrar entre uno y tres trámites distintos.')
       if (payload.ballots.some(item => item.eligibleVoters <= 0 || item.whiteBallots < 0 || item.blackBallots < 0 || item.whiteBallots + item.blackBallots !== item.eligibleVoters)) throw new Error('Las balotas blancas y negras deben coincidir con las personas habilitadas.')
+      const initiation = this.mockReviewCeremonies.find(item => item.id === ceremonyRequestId && item.ceremonyType === 'initiation')
+      if (initiation) {
+        const status = payload.ballotApproved ? 'approved' : 'rejected'
+        const evidence = initiation.eligibility.requirements.find(value => value.code === 'candidate_final_ballot')
+        const requirement = {
+          code: 'candidate_final_ballot',
+          name: 'Balotaje de primer grado',
+          status,
+          reason: payload.ballotApproved ? 'El balotaje definitivo fue aprobado y registrado.' : 'El último balotaje registrado no fue aprobado.',
+        }
+        if (evidence) Object.assign(evidence, requirement)
+        else initiation.eligibility.requirements.push(requirement)
+        if (!payload.ballotApproved) initiation.status = 'rejected'
+        recomputeMockEligibility(initiation)
+      }
       return { id: ceremonyRequestId, validationStatus: payload.ballotApproved ? 'approved' : 'rejected', asOfDate: payload.ballotDate, code: payload.ballotApproved ? 'first_degree_ballot.approved' : 'first_degree_ballot.rejected', reason: payload.ballotApproved ? 'El balotaje definitivo fue favorable.' : 'El balotaje definitivo fue desfavorable.', ceremonyStatus: payload.ballotApproved ? 'under_review' : 'rejected' }
     }
     return this.postJson<FinalBallotResponse>(`/api/insinuados/solicitudes/${encodeURIComponent(ceremonyRequestId)}/balotaje`, payload)

@@ -112,6 +112,20 @@ public static class CeremonyReviewQueueEndpoints
             .GroupBy(x => x.CeremonyRequestId)
             .ToDictionary(x => x.Key, x => x.First().Status);
 
+        // Última decisión por expediente: misma fuente que la consulta de elegibilidad
+        // y el autorizador (evita mostrar un botón habilitado antes del balotaje).
+        var finalBallotRows = await db.CeremonyValidations
+            .AsNoTracking()
+            .Where(x => requestIds.Contains(x.CeremonyRequestId) &&
+                        x.ValidationType == CeremonyCodes.ValidationType.CandidateFinalBallot)
+            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(x => new { x.CeremonyRequestId, x.Status, x.RecordedAtUtc })
+            .ToListAsync(cancellationToken);
+
+        var finalBallotByRequest = finalBallotRows
+            .GroupBy(x => x.CeremonyRequestId)
+            .ToDictionary(x => x.Key, x => x.First().Status);
+
         var treasuryRows = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => organizationIds.Contains(x.OrganizationId) &&
@@ -171,6 +185,7 @@ public static class CeremonyReviewQueueEndpoints
         {
             internalAffairsByRequest.TryGetValue(ceremony.Id, out var regimenStatus);
             grandMasterByRequest.TryGetValue(ceremony.Id, out var grandMasterStatus);
+            finalBallotByRequest.TryGetValue(ceremony.Id, out var finalBallotStatus);
             treasuryByOrganization.TryGetValue(ceremony.OrganizationId, out var treasuryStatus);
             hospitalariaByOrganization.TryGetValue(ceremony.OrganizationId, out var hospitalariaStatus);
             publicationByRequest.TryGetValue(ceremony.Id, out var publication);
@@ -211,7 +226,8 @@ public static class CeremonyReviewQueueEndpoints
                 hospitalariaStatus,
                 grandMasterStatus,
                 publicationEvidence,
-                ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m));
+                ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
+                candidateFinalBallotStatus: finalBallotStatus);
 
             var isFinal = ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected;
             var activePublication = publication is not null &&
