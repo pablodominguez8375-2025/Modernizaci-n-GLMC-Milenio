@@ -558,3 +558,22 @@ main.content label > span { font-weight: 600; }
 .reports-hub-card small { font-size: .95rem; color: var(--muted, #475569); }
 .reports-hub-icon { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: .6rem; background: var(--brand-navy, #0b1a8c); color: var(--brand-gold, #f5b800); }
 .reports-back { justify-self: start; margin-bottom: .75rem; }
+
+/* PO 10-10-2026 · Mi mesa de trabajo (Gran Logia / Régimen Interior) */
+.workbench h2 { margin: 0 0 .25rem; }
+.workbench > p { margin: 0 0 1rem; color: var(--muted, #475569); }
+.workbench-today { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .8rem 1rem; margin-bottom: 1.25rem; border: 1px solid var(--brand-gold, #f5b800); border-radius: .75rem; background: var(--surface, #fff); }
+.workbench-today ul { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.workbench-today button { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.5rem; padding: .3rem .8rem; border-radius: 999px; border: 1px solid var(--line, #dbe3ef); background: var(--surface, #fff); color: var(--brand-ink, #0f172a); font-size: 1rem; cursor: pointer; }
+.workbench-count { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.5rem; margin-left: .4rem; padding: 0 .4rem; border-radius: 999px; background: var(--brand-gold, #f5b800); color: var(--brand-navy, #0b1a8c); font-size: .9rem; font-weight: 700; }
+.workbench-group { margin-bottom: 1.5rem; }
+.workbench-group h3 { margin: 0 0 .6rem; font-size: 1.05rem; color: var(--brand-navy, #0b1a8c); }
+.workbench-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); }
+.workbench-card { display: grid; gap: .35rem; justify-items: start; text-align: left; padding: 1.1rem 1.2rem; min-height: 8rem; min-width: 0; border-radius: .75rem; border: 1px solid var(--line, #dbe3ef); background: var(--surface, #fff); color: var(--brand-ink, #0f172a); cursor: pointer; }
+.workbench-card:hover, .workbench-card:focus-visible { border-color: var(--brand-gold, #f5b800); }
+.workbench-card strong { font-size: 1.15rem; overflow-wrap: anywhere; }
+.workbench-card small { font-size: .95rem; color: var(--muted, #475569); }
+.workbench-icon { display: inline-grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: .6rem; background: var(--brand-navy, #0b1a8c); color: var(--brand-gold, #f5b800); }
+.workbench-card { align-content: start; }
+.workbench-card strong { display: flex; align-items: center; flex-wrap: wrap; gap: .25rem; }
+.workbench-count { margin-left: 0; }

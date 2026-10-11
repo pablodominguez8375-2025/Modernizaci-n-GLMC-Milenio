@@ -6,6 +6,7 @@ import { useFinancialNavigationAccess } from './useFinancialNavigationAccess'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCollapsibleNavGroups } from './navGroups'
 import ReportsHub from './ReportsHub'
+import WorkbenchPage, { type WorkbenchItem } from './WorkbenchPage'
 import AdmissionsPage from './AdmissionsPage'
 import BootstrapPage from './BootstrapPage'
 import CalendarPage from './CalendarPage'
@@ -60,7 +61,7 @@ import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive'
+type View = 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'workbench'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
@@ -211,6 +212,23 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const pendingTasks = useMemo(() => buildPendingTasks(pendingFlags, pendingCounts), [pendingFlags, pendingCounts])
   const badges = useMemo(() => navigationBadges(pendingTasks), [pendingTasks])
   const pendingTotal = totalPending(pendingTasks)
+  /* PO 10-10-2026: «Mi mesa de trabajo» — los perfiles con muchas opciones de gestión las ven agrupadas en tarjetas con íconos, en una sola opción del menú. */
+  const workbenchCandidates: Array<WorkbenchItem & { show: boolean; views: View[] }> = [
+    { group: 'Personas', icon: 'candidate', label: 'Insinuaciones e Iniciación', hint: 'Candidatos, revisión y circuito de iniciación', show: initiationEntry !== null, views: initiationViews, onOpen: () => initiationEntry && setView(initiationEntry) },
+    { group: 'Personas', icon: 'member', label: 'Afiliación e incorporación', hint: 'Solicitudes de ingreso y traslado', show: (isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('admissions'), views: ['admissions'], onOpen: () => setView('admissions') },
+    { group: 'Personas', icon: 'members', label: 'Fichas de miembros', hint: 'Buscar y consultar a los hermanos', show: (canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('members'), views: ['members'], onOpen: () => setView('members') },
+    { group: 'Ceremonias y régimen', icon: 'ceremony', label: 'Ceremonias', hint: 'Revisar y autorizar ceremonias', show: (canCeremonies || isGrandSecretaryWorkspace) && canView('ceremonies'), views: ['ceremonies'], onOpen: () => setView('ceremonies') },
+    { group: 'Ceremonias y régimen', icon: 'shield', label: 'Régimen Interior', hint: 'Casos y procedimientos del régimen', show: canRegimen, views: ['regimen'], onOpen: () => setView('regimen') },
+    { group: 'Ceremonias y régimen', icon: 'report', label: 'Informes', hint: 'Reportería, control de miembros y calidad de datos', show: useReportsHub, views: ['reports', ...reportViews], onOpen: () => setView('reports') },
+    { group: 'Finanzas', icon: 'treasury', label: 'Gran Tesorería', hint: 'Cuotas, decretos y recaudación', show: canOpenGrandTreasury, views: ['treasury'], onOpen: () => setView('treasury') },
+    { group: 'Finanzas', icon: 'hospitalaria', label: 'Gran Hospitalaria', hint: 'Rendiciones y reposición por fallecimiento', show: canOpenGrandHospitalaria, views: ['hospitalaria'], onOpen: () => setView('hospitalaria') },
+    { group: 'Secretaría y Orden', icon: 'secretariat', label: 'Gran Secretaría', hint: 'Bandeja, Talleres y documentos', show: canSecretariat, views: ['secretariat'], onOpen: () => setView('secretariat') },
+    { group: 'Secretaría y Orden', icon: 'archive', label: 'Gran Archivero', hint: 'Archivo de la Orden', show: canGrandArchive, views: ['grandArchive'], onOpen: () => setView('grandArchive') },
+    { group: 'Secretaría y Orden', icon: 'library', label: 'Docencia de la Orden', hint: 'Instrucción por grado', show: canReadOrderInstructions, views: ['orderInstructionReport'], onOpen: () => setView('orderInstructionReport') },
+  ]
+  const workbenchItems = workbenchCandidates.filter(item => item.show).map(item => ({ ...item, badge: ({ 'Ceremonias': badges.ceremonies, 'Insinuaciones e Iniciación': badges.candidateProfile } as Record<string, number | undefined>)[item.label] }))
+  const useWorkbench = workbenchItems.length >= 5
+  const workbenchViews: View[] = ['workbench', ...(useWorkbench ? [...workbenchCandidates.flatMap(item => item.views), ...grandSecretariatViews] : [])]
 
   useEffect(() => {
     if (!effectiveProfile) return
@@ -309,7 +327,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.100' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.101' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -328,10 +346,11 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <ModuleAccess icon="calendar" label="Agenda" inTabbar allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="bell" label="Avisos" inTabbar badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label={canConfigureSystem ? 'Parámetros del sistema' : 'Configuración inicial'} allowed active={view === 'system' || view === 'bootstrap'} onOpen={() => setView(canConfigureSystem ? 'system' : 'bootstrap')} /></>}
-        <div className="nav-section">Trámites</div>
-        <ModuleAccess icon="candidate" label="Insinuaciones e Iniciación" allowed={initiationEntry !== null} active={isInitiationView} onOpen={initiationEntry ? () => setView(initiationEntry) : undefined} />
-            {(isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('admissions') && <ModuleAccess icon="member" label="Afiliación e incorporación" allowed active={view === 'admissions'} onOpen={() => setView('admissions')} />}
-        {hasInstitutionalManagement && <>
+        {useWorkbench && <><div className="nav-section">Gestión</div><ModuleAccess icon="tasks" label="Mi mesa de trabajo" allowed active={workbenchViews.includes(view)} onOpen={() => setView('workbench')} /></>}
+        {!useWorkbench && <div className="nav-section">Trámites</div>}
+        {!useWorkbench && <ModuleAccess icon="candidate" label="Insinuaciones e Iniciación" allowed={initiationEntry !== null} active={isInitiationView} onOpen={initiationEntry ? () => setView(initiationEntry) : undefined} />}
+            {!useWorkbench && (isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('admissions') && <ModuleAccess icon="member" label="Afiliación e incorporación" allowed active={view === 'admissions'} onOpen={() => setView('admissions')} />}
+        {hasInstitutionalManagement && !useWorkbench && <>
           <div className="nav-section">Gestión y consultas</div>
           <ModuleAccess icon="members" label="Fichas de miembros" allowed={(canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('members')} active={view === 'members'} onOpen={canMembers || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace ? () => setView('members') : undefined} />
           {useReportsHub
@@ -383,6 +402,8 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'admissions' && (canManageLodgeSecretariat || canSecretariat) && <AdmissionsPage demoProfileKey={api.useMocks ? demoProfileKey : undefined} api={api} membershipApi={membershipApi} documentApi={documentApi} />}
         {view === 'members' && canMembers && <MemberDirectoryPage key={memberQueryRevision} api={api} membershipApi={membershipApi} initialQuery={memberQuery} canExport={canSecretariat || canManageLodgeSecretariat || canConfigureSystem} allowTableView={canSecretariat || canConfigureSystem} />}
         {view === 'lodgeProfile' && canLodgeProfile && !canLodge && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
+        {useWorkbench && view !== 'workbench' && workbenchViews.includes(view) && !reportViews.includes(view) && <button type="button" className="secondary reports-back" onClick={() => setView('workbench')}>← Volver a Mi mesa de trabajo</button>}
+        {view === 'workbench' && useWorkbench && <WorkbenchPage items={workbenchItems} />}
         {useReportsHub && reportViews.includes(view) && <button type="button" className="secondary reports-back" onClick={() => setView('reports')}>← Volver a Informes</button>}
         {view === 'reports' && useReportsHub && <ReportsHub items={[
           ...(canReporting ? [{ icon: 'report' as InstitutionalIconName, label: 'Reportería Ejecutiva', hint: 'Indicadores y reportes de la Orden', onOpen: () => setView('reporting') }] : []),
