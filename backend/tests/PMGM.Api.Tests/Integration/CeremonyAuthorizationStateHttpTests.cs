@@ -88,11 +88,12 @@ public sealed class CeremonyAuthorizationStateHttpTests
             Assert.False(row.GetProperty("eligibility").GetProperty("canAuthorize").GetBoolean());
         }
 
+        var persistedIds = ceremonies.Select(y => y.Id).ToArray();
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             var persisted = await db.CeremonyRequests.AsNoTracking()
-                .Where(x => ceremonies.Select(y => y.Id).Contains(x.Id))
+                .Where(x => persistedIds.Contains(x.Id))
                 .ToDictionaryAsync(x => x.Id, x => x.Status, ct);
             Assert.Equal(CeremonyCodes.RequestStatus.Observed, persisted[open.Id]);
             foreach (var closed in ceremonies.Skip(1))
