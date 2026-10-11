@@ -466,15 +466,16 @@ public static class GrandSecretariatEndpoints
                 return Results.BadRequest(new { message = "La reserva indicada no corresponde a esta ceremonia autorizada." });
         }
 
-        // El advisory lock transaccional serializa todas las emisiones del año, tanto
-        // para el mismo expediente como para solicitudes distintas. El índice único
-        // DocumentCode sigue siendo el último resguardo de integridad de PostgreSQL.
+        // Un solo advisory lock transaccional para todas las emisiones, incluso
+        // durante la medianoche de cambio de año: serializa tanto las consultas
+        // de duplicado como la asignación del siguiente correlativo anual.
+        // El índice único de DocumentCode protege también ante anomalías de BD.
         var chileYear = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
             DateTimeOffset.UtcNow, "America/Santiago").Year;
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken);
         await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(714125, {chileYear})", cancellationToken);
+            $"SELECT pg_advisory_xact_lock(714125, 1)", cancellationToken);
 
         var alreadyIssued = await db.SecretariatDocuments.AsNoTracking().AnyAsync(
             x => x.RelatedCeremonyRequestId == requestId &&
