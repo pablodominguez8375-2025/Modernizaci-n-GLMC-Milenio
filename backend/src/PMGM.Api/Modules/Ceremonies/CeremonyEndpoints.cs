@@ -194,7 +194,7 @@ public static class CeremonyEndpoints
         db.CeremonyRequests.Add(entity);
         if (rePresentation is not null)
         {
-            var validation = CandidateRePresentationGate.AddApproval(
+            var validation = CandidateRePresentationGate.AddEvidence(
                 db, entity.Id, presentationDate, rePresentation);
             if (validation is not null)
                 audit.Add(httpContext, "candidate.representation.evidence_recorded",
