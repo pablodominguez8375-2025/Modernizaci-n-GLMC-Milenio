@@ -23,10 +23,10 @@ export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
     <TreasuryRoleNavigation
       title="Gran Tesorería"
       sections={[
-        { id:'statements', label:'Cuadros mensuales', description:'Montos por línea de cuota y conciliación' },
-        { id:'regularity', label:'Estado de Talleres', description:'Consulta y regularidad institucional' },
-        { id:'territories', label:'Tarifario por decreto', description:'Tarifario por decreto y ubicación desde la Ficha' },
-        { id:'rights', label:'Derechos ceremoniales', description:'Pagos y saldos por expediente' },
+        { id:'statements', label:'Cuadros mensuales', description:'Montos por línea de cuota y conciliación', icon:'report' },
+        { id:'regularity', label:'Estado de Talleres', description:'Consulta y regularidad institucional', icon:'members' },
+        { id:'territories', label:'Tarifario por decreto', description:'Tarifario por decreto y ubicación desde la Ficha', icon:'documents' },
+        { id:'rights', label:'Derechos ceremoniales', description:'Pagos y saldos por expediente', icon:'ceremony' },
       ]}
       active={section}
       onChange={id => setSection(id as GrandSection)}

@@ -67,7 +67,7 @@ const prScenarioSlugs = new Set([
   'gran-secretaria',
   'gran-archivero',
 ])
-const prViewportSuffixes = new Set(['360x800', '768x1024', '1440x900'])
+const prViewportSuffixes = new Set(['360x800', '390x844', '768x1024', '1440x900'])
 const scenarios = visualMode === 'pr' ? allScenarios.filter(scenario => prScenarioSlugs.has(scenario.slug)) : allScenarios
 const viewports = visualMode === 'pr' ? allViewports.filter(viewport => prViewportSuffixes.has(viewport.suffix)) : allViewports
 
@@ -248,8 +248,8 @@ async function assertNavigation(scenario) {
   const result = await evaluate(`(() => {
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
     const labels = [...document.querySelectorAll('nav.sidebar button')].map(button => normalize(button.textContent));
-    const tabs = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')]
-      .map(button => normalize(button.querySelector('span')?.textContent));
+    const tabs = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"], nav.sidebar ~ main .section-hub-card')]
+      .map(button => normalize(button.querySelector('span')?.textContent || button.querySelector('strong')?.textContent));
     const requiredSidebar = ${JSON.stringify(scenario.requiredSidebar ?? [])};
     const forbiddenSidebar = ${JSON.stringify(scenario.forbiddenSidebar ?? [])};
     const requiredTabs = ${JSON.stringify(scenario.requiredTabs ?? [])};
@@ -278,47 +278,54 @@ async function assertInitiationNavigation(scenario, viewport) {
   const open = async tab => {
     const clicked = await evaluate(`(() => {
       const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
-      const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
-      const button = [...(nav?.querySelectorAll('[role="tab"]') || [])].find(button => label(button) === ${JSON.stringify(tab)});
+      const button = [...(nav?.querySelectorAll('.section-hub-card') || [])].find(button => button.querySelector('strong')?.textContent.trim() === ${JSON.stringify(tab)});
       if (!button || button.disabled) return false;
       button.click(); return true;
     })()`);
-    if (!clicked) throw new Error(`Initiation tab missing for ${scenario.profile}: ${tab}`);
+    if (!clicked) throw new Error(`Initiation card missing for ${scenario.profile}: ${tab}`);
     await delay(350);
   };
+  const back = async () => {
+    const clicked = await evaluate(`(() => {
+      const button = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"] .section-hub-back');
+      if (!button) return false;
+      button.click(); return true;
+    })()`);
+    if (!clicked) throw new Error(`Initiation back button missing for ${scenario.profile}`);
+    await delay(250);
+  };
   const read = () => evaluate(`(() => {
-    const label = button => [...button.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
     const nav = document.querySelector('nav[aria-label="Secciones de Insinuaciones e Iniciación"]');
     const sidebar = [...document.querySelectorAll('nav.sidebar .nav-item')];
-    return { tabs: [...(nav?.querySelectorAll('[role="tab"]') || [])].map(label),
-      activeTabs: [...(nav?.querySelectorAll('[aria-selected="true"]') || [])].map(label),
+    return { cards: [...(nav?.querySelectorAll('.section-hub-card') || [])].map(button => button.querySelector('strong')?.textContent.trim()),
+      current: nav?.querySelector('.section-hub-current')?.textContent.trim() || null,
       activeSidebar: sidebar.filter(button => button.classList.contains('active')).map(button => button.querySelector('.nav-text')?.textContent.trim()),
       count: sidebar.length };
   })()`);
   const initial = await read();
-  if (JSON.stringify(initial.tabs) !== JSON.stringify(scenario.initiationTabs)) throw new Error(`Wrong initiation tabs for ${scenario.profile}: ${JSON.stringify(initial)}`);
+  if (JSON.stringify(initial.cards) !== JSON.stringify(scenario.initiationTabs)) throw new Error(`Wrong initiation cards for ${scenario.profile}: ${JSON.stringify(initial)}`);
   if (scenario.sidebarCount && initial.count !== scenario.sidebarCount) throw new Error(`Expected ${scenario.sidebarCount} sidebar entries for ${scenario.profile}, got ${initial.count}`);
-  for (const tab of scenario.initiationTabs) {
-    await open(tab);
+  for (const card of scenario.initiationTabs) {
+    await open(card);
     const state = await read();
-    if (JSON.stringify(state.activeTabs) !== JSON.stringify([tab]) || !['Insinuaciones e Iniciación', 'Mi mesa de trabajo'].includes(state.activeSidebar?.[0]) || state.activeSidebar.length !== 1) throw new Error(`Wrong initiation selection for ${scenario.profile}/${tab}: ${JSON.stringify(state)}`);
-    await assertNoGlobalHorizontalOverflow(`${scenario.profile}/${tab}`, viewport.suffix);
+    if (state.current !== card || !['Insinuaciones e Iniciación', 'Mi mesa de trabajo'].includes(state.activeSidebar?.[0]) || state.activeSidebar.length !== 1) throw new Error(`Wrong initiation selection for ${scenario.profile}/${card}: ${JSON.stringify(state)}`);
+    await assertNoGlobalHorizontalOverflow(`${scenario.profile}/${card}`, viewport.suffix);
+    await back();
   }
-  if (scenario.initiationTabs.length) await open('Publicados');
   console.log(`initiation navigation ${scenario.profile} ${viewport.suffix}: ${JSON.stringify(initial)}`);
 }
 
 async function openTreasuryCollection() {
   const clicked = await evaluate(`(() => {
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
-    const tab = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')]
-      .find(candidate => normalize(candidate.querySelector('span')?.textContent) === 'Cuotas y Cobranzas');
-    if (!tab) return false;
-    tab.click();
+    const card = [...document.querySelectorAll('nav[aria-label="Secciones de Tesorería del Taller"] .section-hub-card')]
+      .find(candidate => normalize(candidate.querySelector('strong')?.textContent) === 'Cuotas y Cobranzas');
+    if (!card) return false;
+    card.click();
     return true;
   })()`)
-  if (!clicked) throw new Error('Treasury tab not found: Cuotas y Cobranzas')
-  await waitForExpression(`[...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')].some(tab => tab.getAttribute('aria-selected') === 'true' && (tab.textContent || '').includes('Cuotas y Cobranzas'))`, 'active treasury collection tab')
+  if (!clicked) throw new Error('Treasury card not found: Cuotas y Cobranzas')
+  await waitForExpression(`document.querySelector('nav[aria-label="Secciones de Tesorería del Taller"] .section-hub-current')?.textContent.includes('Cuotas y Cobranzas')`, 'active treasury collection section')
   await waitForExpression(`!!document.querySelector('.treasury-collection-table .treasury-table')`, 'treasury collection table')
   await delay(300)
 }
@@ -373,10 +380,10 @@ async function assertTreasuryPaymentAction(viewport) {
 
 async function captureTariffWizard(viewport) {
   const opened = await evaluate(`(() => {
-    const tab=[...document.querySelectorAll('main [role="tab"]')].find(x=>(x.textContent||'').includes('Tarifario por decreto'));
-    if (!tab) return false; tab.click(); return true;
+    const card=[...document.querySelectorAll('nav[aria-label="Secciones de Gran Tesorería"] .section-hub-card')].find(x=>(x.textContent||'').includes('Tarifario por decreto'));
+    if (!card) return false; card.click(); return true;
   })()`)
-  if (!opened) throw new Error('Tariff decree tab not found')
+  if (!opened) throw new Error('Tariff decree card not found')
   await waitForExpression(`!!document.querySelector('.tariff-decree-panel .action-trigger:not(:disabled)')`, 'tariff decree list')
   await assertNoGlobalHorizontalOverflow('Tarifario por decreto', viewport.suffix)
   await capture(path.join(outputDir, `tarifario-decretos-${viewport.suffix}.png`), '.tariff-decree-panel')
@@ -411,14 +418,22 @@ async function captureTariffWizard(viewport) {
 }
 
 async function openGrandTreasuryRights() {
-  const clicked = await evaluate(`(() => {
-    const tab = [...document.querySelectorAll('nav.sidebar ~ main [role="tab"]')]
-      .find(candidate => (candidate.textContent || '').includes('Derechos ceremoniales'));
-    if (!tab) return false;
-    tab.click();
+  const returned = await evaluate(`(() => {
+    const back = document.querySelector('nav[aria-label="Secciones de Gran Tesorería"] .section-hub-back');
+    if (!back) return false;
+    back.click();
     return true;
   })()`)
-  if (!clicked) throw new Error('Grand Treasury tab not found: Derechos ceremoniales')
+  if (!returned) throw new Error('Grand Treasury back button not found')
+  await waitForExpression(`!!document.querySelector('nav[aria-label="Secciones de Gran Tesorería"] .section-hub-card')`, 'Grand Treasury cards')
+  const clicked = await evaluate(`(() => {
+    const card = [...document.querySelectorAll('nav[aria-label="Secciones de Gran Tesorería"] .section-hub-card')]
+      .find(candidate => (candidate.textContent || '').includes('Derechos ceremoniales'));
+    if (!card) return false;
+    card.click();
+    return true;
+  })()`)
+  if (!clicked) throw new Error('Grand Treasury card not found: Derechos ceremoniales')
   await waitForExpression(`!!document.querySelector('.ceremony-right-card')`, 'ceremony rights ledger')
   await delay(250)
 }
@@ -781,6 +796,11 @@ try {
       await openModule(scenario.label)
       await assertNavigation(scenario)
       if (scenario.initiationTabs) await assertInitiationNavigation(scenario, viewport)
+      if (scenario.treasuryCollection || scenario.grandTreasuryRights) {
+        const cardsPath = path.join(outputDir, `${scenario.slug}-tarjetas-${viewport.suffix}.png`)
+        await capture(cardsPath)
+        console.log(`captured ${path.basename(cardsPath)}`)
+      }
       if (scenario.admissions) await openAdmissionProcedure()
       if (scenario.slug === 'inicio') await assertDashboardMetricLayout(viewport)
       if (scenario.treasuryCollection) {

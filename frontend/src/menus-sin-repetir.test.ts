@@ -38,7 +38,7 @@ describe('PMGM-UX menús sin funciones repetidas (aprobado por el PO 03-10-2026)
 
   it('mantiene publicados para todos y pestañas privadas sólo por capacidades existentes', () => {
     expect(app).toContain('isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs')
-    expect(app).toContain("{ id: 'candidates' as View, label: 'Publicados' }")
+    expect(app).toContain("{ id: 'candidates' as View, label: 'Publicados', icon: 'candidate' as const }")
     expect(app).toContain("...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga'")
     expect(app).toContain("...((canCandidateProfile || canCeremonies) && canView('initiationcircuit') ? [{ id: 'initiationCircuit' as View")
     expect(app).toContain("view === 'candidateProfile' && canCandidateProfile")

@@ -10,9 +10,9 @@ describe('Secciones como tarjetas (opción C, PO 09-10-2026)', () => {
     expect(kit).toContain('section-hub-card')
     expect(kit).toContain('← Volver a {hub.title}')
   })
-  it('lo usan Gestión Logial, Gran Secretaría, Hospitalaria (Gran y del Taller) y Parámetros del sistema', () => {
-    for (const [file, title] of [['LodgeManagementPage.tsx', 'Gestión Logial'], ['GrandSecretariatPage.tsx', 'Gran Secretaría'], ['HospitalariaPage.tsx', 'Gran Hospitalaria'], ['HospitalariaPage.tsx', 'Hospitalaria del Taller'], ['SystemConfigurationPage.tsx', 'Parámetros del sistema']]) {
-      expect(read(file)).toContain(`hub={{ title: '${title}'`)
+  it('lo usan Gestión Logial, Gran Secretaría, Hospitalaria, Tesorería, Insinuaciones y Parámetros del sistema', () => {
+    for (const [file, title] of [['LodgeManagementPage.tsx', 'Gestión Logial'], ['GrandSecretariatPage.tsx', 'Gran Secretaría'], ['HospitalariaPage.tsx', 'Gran Hospitalaria'], ['HospitalariaPage.tsx', 'Hospitalaria del Taller'], ['TreasuryRoleNavigation.tsx', 'title'], ['App.tsx', 'Insinuaciones e Iniciación'], ['SystemConfigurationPage.tsx', 'Parámetros del sistema']]) {
+      expect(read(file)).toContain(title === 'title' ? 'hub={{ title, hints:' : `hub={{ title: '${title}'`)
     }
   })
   it('un acceso directo a una sección (initialTab / docencia) abre la sección y no las tarjetas', () => {
@@ -25,7 +25,7 @@ describe('Secciones como tarjetas (opción C, PO 09-10-2026)', () => {
   it('las tarjetas muestran íconos institucionales y cada módulo con tarjetas los asigna', () => {
     expect(kit).toContain('section-hub-icon')
     expect(kit).toContain('InstitutionalIcon')
-    for (const file of ['LodgeManagementPage.tsx', 'GrandSecretariatPage.tsx', 'HospitalariaPage.tsx', 'SystemConfigurationPage.tsx']) {
+    for (const file of ['LodgeManagementPage.tsx', 'GrandSecretariatPage.tsx', 'HospitalariaPage.tsx', 'GrandTreasuryPage.tsx', 'LodgeTreasuryPage.tsx', 'App.tsx', 'SystemConfigurationPage.tsx']) {
       expect(read(file)).toMatch(/icon: ?'/)
     }
   })

@@ -1,36 +1,25 @@
-import type { ReactNode } from 'react'
+import { WorkspaceTabs } from './actionKit'
+import type { InstitutionalIconName } from './InstitutionalIcon'
 
 export interface TreasuryRoleSection {
   id: string
   label: string
   description: string
-  badge?: string
+  icon: InstitutionalIconName
+  badge?: number
 }
 
-export default function TreasuryRoleNavigation({ title, sections, active, onChange, actions }: {
+export default function TreasuryRoleNavigation({ title, sections, active, onChange }: {
   title: string
   sections: TreasuryRoleSection[]
   active: string
   onChange: (id: string) => void
-  actions?: ReactNode
 }) {
-  return <section className="treasury-role-navigation" aria-label={title}>
-    <div className="treasury-role-navigation-heading">
-      <div><p className="eyebrow">Menú operativo</p><h2>{title}</h2></div>
-      {actions}
-    </div>
-    <div className="treasury-role-tabs" role="tablist" aria-label={title}>
-      {sections.map(section => <button
-        key={section.id}
-        type="button"
-        role="tab"
-        aria-selected={active === section.id}
-        className={active === section.id ? 'active' : ''}
-        onClick={() => onChange(section.id)}
-      >
-        <span>{section.label}{section.badge && <em>{section.badge}</em>}</span>
-        <small>{section.description}</small>
-      </button>)}
-    </div>
-  </section>
+  return <WorkspaceTabs
+    label={`Secciones de ${title}`}
+    active={active}
+    onChange={onChange}
+    hub={{ title, hints: Object.fromEntries(sections.map(section => [section.id, section.description])) }}
+    tabs={sections.map(({ id, label, icon, badge }) => ({ id, label, icon, badge }))}
+  />
 }
