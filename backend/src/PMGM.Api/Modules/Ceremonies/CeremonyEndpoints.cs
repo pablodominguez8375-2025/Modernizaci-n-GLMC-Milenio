@@ -1105,6 +1105,14 @@ public static class CeremonyEndpoints
                 .FirstOrDefaultAsync(cancellationToken)
             : null;
 
+        var rePresentationReviewStatus = ceremony.CeremonyType == CeremonyCodes.Type.Initiation
+            ? await db.CeremonyValidations.AsNoTracking()
+                .Where(x => x.CeremonyRequestId == requestId &&
+                            x.ValidationType == CeremonyCodes.ValidationType.CandidateRepresentationReview)
+                .OrderByDescending(x => x.RecordedAtUtc)
+                .Select(x => x.Status).FirstOrDefaultAsync(cancellationToken)
+            : null;
+
         var treasury = await db.FinancialRegularitySnapshots
             .AsNoTracking()
             .Where(x => x.OrganizationId == ceremony.OrganizationId &&
@@ -1181,7 +1189,8 @@ public static class CeremonyEndpoints
             evidence,
             ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
             advancement: advancement?.Decision,
-            candidateFinalBallotStatus: finalBallotStatus);
+            candidateFinalBallotStatus: finalBallotStatus,
+            candidateRePresentationReviewStatus: rePresentationReviewStatus);
 
         return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
             right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today, advancement);
