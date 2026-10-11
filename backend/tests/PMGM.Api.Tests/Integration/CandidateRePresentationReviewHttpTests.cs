@@ -59,6 +59,7 @@ public sealed class CandidateRePresentationReviewHttpTests
 
         var route = $"/api/insinuados/regimen-interior/reinsinuaciones/{ceremony.Id}/resolver";
         client.DefaultRequestHeaders.Add("X-Publication-Test-Organization", workshop.Id.ToString());
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Scope", "order");
         client.DefaultRequestHeaders.Add("X-Publication-Test-Subject", "creator-secretary");
         client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerSecretaria);
         var forbidden = await client.PostAsJsonAsync(route,
