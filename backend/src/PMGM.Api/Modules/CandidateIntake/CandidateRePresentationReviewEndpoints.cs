@@ -46,14 +46,17 @@ public static class CandidateRePresentationReviewEndpoints
             })
             .Take(1500).ToListAsync(ct);
         var items = rows.GroupBy(x => x.CeremonyRequestId)
-            .Select(x => x.First())
-            .OrderByDescending(x => x.RecordedAtUtc)
+            .Select(group => new { Latest = group.First(), Original = group.Last() })
+            .OrderByDescending(x => x.Latest.RecordedAtUtc)
             .Take(300)
             .Select(x => new
             {
-                requestId = x.CeremonyRequestId, validationId = x.Id, x.OrganizationId,
-                x.WorkshopName, x.PersonName, x.Status, x.SourceReference,
-                x.RecordedAtUtc, requestStatus = x.RequestStatus
+                requestId = x.Latest.CeremonyRequestId, validationId = x.Latest.Id,
+                x.Latest.OrganizationId, x.Latest.WorkshopName, x.Latest.PersonName,
+                x.Latest.Status, x.Latest.SourceReference, x.Latest.RecordedAtUtc,
+                requestStatus = x.Latest.RequestStatus,
+                originalEvidenceId = x.Original.Id,
+                originalSourceReference = x.Original.SourceReference
             }).ToArray();
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { total = items.Length, items });
