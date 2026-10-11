@@ -226,6 +226,12 @@ export interface InitiationRequestSubmission { submissionDate: string; proposedC
 export interface InitiationRequestSubmissionResponse { id: string; validationStatus: 'approved'; proposedDate: string; ceremonyStatus: string; alreadySubmitted: boolean }
 export interface OrderRejectionAlert { personId: string; firstNames: string; lastNames: string; workshopName: string; workshopNumber: string | null; rejectionDate: string; reason: string; sourceReference: string | null; notes: string | null }
 export interface OrderRejectionAlertResponse { total: number; items: OrderRejectionAlert[] }
+export interface RePresentationReviewRow {
+  requestId:string; validationId:string; organizationId:string; workshopName:string;
+  personName:string; status:string; sourceReference:string|null; recordedAtUtc:string; requestStatus:string
+}
+export interface RePresentationReviewResponse { total:number; items:RePresentationReviewRow[] }
+export interface RePresentationReviewDecision { status:'approved'|'observed'|'rejected'; sourceReference:string; notes?:string|null }
 export interface RegimenInteriorSummary {
   scope: 'order' | 'organization'; organizationId: string | null; asOf: string; period: { from: string; to: string }
   members: { totalRelated: number; currentlyAffiliated: number; active: number; inactive: number; currentWithBlockingStatus: number }
@@ -753,6 +759,34 @@ export class PmgmApiClient {
     const query = new URLSearchParams(); if (filters.organizationId) query.set('organizationId', filters.organizationId); if (filters.asOf) query.set('asOf', filters.asOf); if (filters.from) query.set('from', filters.from)
     return this.request<RegimenInteriorSummary>(`/api/regimen-interior/summary${query.size ? `?${query}` : ''}`)
   }
+  private readonly mockRePresentationReviews:RePresentationReviewRow[] = [{
+    requestId:'eeeeeeee-8888-4888-8888-888888888888',
+    validationId:'eeeeeeee-7777-4777-8777-777777777777',
+    organizationId:'demo-workshop-23', workshopName:'Taller Demostrativo Nº 23',
+    personName:'Persona Reinsinuada Demostrativa', status:'observed',
+    sourceReference:'ACTA-TALLER-DEMO-2026-001',
+    recordedAtUtc:'2026-10-10T12:00:00Z', requestStatus:'draft'
+  }]
+
+  async getRePresentationReviews():Promise<RePresentationReviewResponse> {
+    if(this.useMocks)return {total:this.mockRePresentationReviews.length,items:this.mockRePresentationReviews.map(x=>({...x}))}
+    return this.request('/api/insinuados/regimen-interior/reinsinuaciones')
+  }
+  async resolveRePresentation(requestId:string,payload:RePresentationReviewDecision):
+    Promise<{id:string;status:string;sourceReference:string;replayed:boolean}> {
+    if(this.useMocks){
+      const item=this.mockRePresentationReviews.find(x=>x.requestId===requestId)
+      if(!item)throw new Error('No existe constancia de nueva presentación.')
+      if(!['approved','observed','rejected'].includes(payload.status)||!payload.sourceReference.trim()||payload.sourceReference.trim().length>240)
+        throw new Error('La resolución requiere una referencia documental válida.')
+      const replayed=item.status===payload.status&&item.sourceReference===payload.sourceReference.trim()
+      if(!replayed){item.status=payload.status;item.sourceReference=payload.sourceReference.trim();item.validationId=crypto.randomUUID();item.recordedAtUtc=new Date().toISOString()}
+      return {id:item.validationId,status:item.status,sourceReference:item.sourceReference!,replayed}
+    }
+    return this.request('/api/insinuados/regimen-interior/reinsinuaciones/'+encodeURIComponent(requestId)+'/resolver',
+      {method:'POST',body:JSON.stringify(payload)})
+  }
+
   async getOrderRejectionAlerts(): Promise<OrderRejectionAlertResponse> {
     if (this.useMocks) return { total: 1, items: [{ personId: 'person-demo-blocked', firstNames: 'Persona Rechazada', lastNames: 'Demostrativa', workshopName: 'Taller Demostrativo Nº 7', workshopNumber: '7', rejectionDate: '2026-09-30', reason: 'Rechazo en Cámara del Medio / tercer grado', sourceReference: 'ACTA-RECHAZO-DEMO-2026-007', notes: 'Antecedente reservado para consulta de Régimen Interior.' }] }
     return this.request<OrderRejectionAlertResponse>('/api/insinuados/regimen-interior/alertas-rechazo')
