@@ -239,9 +239,10 @@ public static class CeremonyReviewQueueEndpoints
                 publicationEvidence,
                 ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
                 candidateFinalBallotStatus: finalBallotStatus,
-                candidateRePresentationReviewStatus: rePresentationStatus);
+                candidateRePresentationReviewStatus: rePresentationStatus,
+                requestStatus: ceremony.Status);
 
-            var isFinal = ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected;
+            var isFinal = !CeremonyAuthorizationStatePolicy.CanAttemptAuthorization(ceremony.Status);
             var activePublication = publication is not null &&
                                     publication.Status == CeremonyCodes.PublicationStatus.Published &&
                                     publication.PublishedFromUtc <= now &&
