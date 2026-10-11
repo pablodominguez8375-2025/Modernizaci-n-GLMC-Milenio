@@ -474,8 +474,8 @@ public static class GrandSecretariatEndpoints
             DateTimeOffset.UtcNow, "America/Santiago").Year;
         await using var transaction = await db.Database.BeginTransactionAsync(
             IsolationLevel.ReadCommitted, cancellationToken);
-        await db.Database.ExecuteSqlInterpolatedAsync(
-            $"SELECT pg_advisory_xact_lock(714125, 1)", cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT pg_advisory_xact_lock(714125, 1)", cancellationToken);
 
         var alreadyIssued = await db.SecretariatDocuments.AsNoTracking().AnyAsync(
             x => x.RelatedCeremonyRequestId == requestId &&
