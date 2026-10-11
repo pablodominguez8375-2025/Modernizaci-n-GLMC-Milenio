@@ -339,6 +339,11 @@ public static class CeremonyEndpoints
             return Results.NotFound();
         }
 
+        if (!CeremonyAuthorizationStatePolicy.CanAttemptAuthorization(ceremony.Status))
+            return Results.Conflict(new { code = CeremonyAuthorizationStatePolicy.RequirementCode,
+                message = "No se pueden agregar vistos buenos de Régimen Interior a un expediente cerrado.",
+                requestStatus = ceremony.Status });
+
         if (ceremony.CeremonyType == CeremonyCodes.Type.Initiation)
         {
             var finalBallotApproved = await db.CeremonyValidations.AsNoTracking().AnyAsync(
