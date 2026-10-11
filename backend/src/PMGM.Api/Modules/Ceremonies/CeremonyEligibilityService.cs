@@ -13,7 +13,8 @@ public sealed record CeremonyEligibilityInput(
     AdvancementThresholds? AdvancementThresholds = null,
     AdvancementEvidence? AdvancementEvidence = null,
     DispensationEvidence? Dispensation = null,
-    bool CeremonyRightPaid = true);
+    bool CeremonyRightPaid = true,
+    string? RequestStatus = null);
 
 public sealed record CeremonyEligibilityResult(
     bool IsEligible,
@@ -106,7 +107,8 @@ public sealed class CeremonyEligibilityService : ICeremonyEligibilityService
             input.CeremonyRightPaid,
             advancement,
             candidateFinalBallotStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateFinalBallot),
-            candidateRePresentationReviewStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateRepresentationReview));
+            candidateRePresentationReviewStatus: GetValidation(input, CeremonyCodes.ValidationType.CandidateRepresentationReview),
+            requestStatus: input.RequestStatus);
 
         var blockingReasons = decision.Requirements
             .Where(x => x.Status != CeremonyCodes.ValidationStatus.Approved)
