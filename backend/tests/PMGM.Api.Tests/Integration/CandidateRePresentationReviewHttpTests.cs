@@ -34,6 +34,19 @@ public sealed class CandidateRePresentationReviewHttpTests
             CandidatePerson = person, CandidatePersonId = person.Id,
             CeremonyType = CeremonyCodes.Type.Initiation, Status = CeremonyCodes.RequestStatus.Draft
         };
+        var historicalRequest = new CeremonyRequest
+        {
+            Organization = workshop, OrganizationId = workshop.Id,
+            CandidatePerson = person, CandidatePersonId = person.Id,
+            CeremonyType = CeremonyCodes.Type.Initiation, Status = CeremonyCodes.RequestStatus.Rejected
+        };
+        var historicalRejection = new CeremonyValidation
+        {
+            CeremonyRequest = historicalRequest, CeremonyRequestId = historicalRequest.Id,
+            ValidationType = CeremonyCodes.ValidationType.CandidateFinalBallot,
+            Status = CeremonyCodes.ValidationStatus.Rejected,
+            AsOfDate = today.AddYears(-1), SourceReference = "ACTA-RECHAZO-PREVIO"
+        };
         var original = new CeremonyValidation
         {
             CeremonyRequest = ceremony, CeremonyRequestId = ceremony.Id,
@@ -46,7 +59,7 @@ public sealed class CandidateRePresentationReviewHttpTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
-            db.AddRange(workshop, person, ceremony, original);
+            db.AddRange(workshop, person, ceremony, original, historicalRequest, historicalRejection);
             db.AuditEvents.Add(new AuditEvent
             {
                 Action = "candidate.intake.created", EntityType = nameof(CeremonyRequest),
