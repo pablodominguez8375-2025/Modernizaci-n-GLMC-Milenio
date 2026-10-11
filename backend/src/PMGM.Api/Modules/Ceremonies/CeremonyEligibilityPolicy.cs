@@ -32,7 +32,8 @@ public static class CeremonyEligibilityPolicy
         bool ceremonyRightPaid = true,
         AdvancementEligibilityDecision? advancement = null,
         string? candidateFinalBallotStatus = null,
-        string? candidateRePresentationReviewStatus = null)
+        string? candidateRePresentationReviewStatus = null,
+        string? requestStatus = null)
     {
         var requirements = new List<CeremonyRequirementResult>
         {
@@ -55,6 +56,9 @@ public static class CeremonyEligibilityPolicy
         {
             requirements.Add(EvaluateAdvancement(ceremonyType, advancement));
         }
+
+        var stateRequirement = CeremonyAuthorizationStatePolicy.EvaluateRequirement(requestStatus);
+        if (stateRequirement is not null) requirements.Add(stateRequirement);
 
         var overall = requirements.Any(x => x.Status == CeremonyCodes.ValidationStatus.Rejected)
             ? "does_not_comply"
