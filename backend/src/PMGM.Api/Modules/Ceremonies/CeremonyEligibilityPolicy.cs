@@ -31,7 +31,8 @@ public static class CeremonyEligibilityPolicy
         CandidatePublicationEvidence? publication,
         bool ceremonyRightPaid = true,
         AdvancementEligibilityDecision? advancement = null,
-        string? candidateFinalBallotStatus = null)
+        string? candidateFinalBallotStatus = null,
+        string? candidateRePresentationReviewStatus = null)
     {
         var requirements = new List<CeremonyRequirementResult>
         {
@@ -46,6 +47,8 @@ public static class CeremonyEligibilityPolicy
         {
             requirements.Add(EvaluatePublication(publication));
             requirements.Add(EvaluateFinalBallot(candidateFinalBallotStatus));
+            if (candidateRePresentationReviewStatus is not null)
+                requirements.Add(EvaluateRePresentationReview(candidateRePresentationReviewStatus));
         }
 
         if (ceremonyType is CeremonyCodes.Type.WageIncrease or CeremonyCodes.Type.Exaltation)
@@ -197,6 +200,18 @@ public static class CeremonyEligibilityPolicy
         return new(CeremonyCodes.ValidationType.CandidateFinalBallot, "Balotaje de primer grado",
             CeremonyCodes.ValidationStatus.Observed,
             "Se requiere registrar un balotaje de primer grado aprobado; sin resultado vigente no puede autorizarse la Iniciación.");
+    }
+
+    private static CeremonyRequirementResult EvaluateRePresentationReview(string status)
+    {
+        var normalized = PMGM.Api.Modules.CandidateIntake.CandidateRePresentationReviewPolicy.EligibilityStatus(status);
+        var reason = normalized == CeremonyCodes.ValidationStatus.Approved
+            ? "Régimen Interior verificó formalmente la subsanación documentada."
+            : normalized == CeremonyCodes.ValidationStatus.Rejected
+                ? "Régimen Interior rechazó la subsanación: la nueva presentación no está habilitada."
+                : "La constancia de subsanación espera resolución favorable de Régimen Interior.";
+        return new(CeremonyCodes.ValidationType.CandidateRepresentationReview,
+            "Revisión de nueva presentación", normalized, reason);
     }
 
     private static CeremonyRequirementResult EvaluatePublication(CandidatePublicationEvidence? publication)
