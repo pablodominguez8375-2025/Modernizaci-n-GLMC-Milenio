@@ -228,7 +228,8 @@ export interface OrderRejectionAlert { personId: string; firstNames: string; las
 export interface OrderRejectionAlertResponse { total: number; items: OrderRejectionAlert[] }
 export interface RePresentationReviewRow {
   requestId:string; validationId:string; organizationId:string; workshopName:string;
-  personName:string; status:string; sourceReference:string|null; recordedAtUtc:string; requestStatus:string
+  personName:string; status:string; sourceReference:string|null; recordedAtUtc:string; requestStatus:string;
+  originalEvidenceId?:string; originalSourceReference?:string|null
 }
 export interface RePresentationReviewResponse { total:number; items:RePresentationReviewRow[] }
 export interface RePresentationReviewDecision { status:'approved'|'observed'|'rejected'; sourceReference:string; notes?:string|null }
@@ -765,7 +766,9 @@ export class PmgmApiClient {
     organizationId:'demo-workshop-23', workshopName:'Taller Demostrativo Nº 23',
     personName:'Persona Reinsinuada Demostrativa', status:'observed',
     sourceReference:'ACTA-TALLER-DEMO-2026-001',
-    recordedAtUtc:'2026-10-10T12:00:00Z', requestStatus:'draft'
+    recordedAtUtc:'2026-10-10T12:00:00Z', requestStatus:'draft',
+    originalEvidenceId:'eeeeeeee-7777-4777-8777-777777777777',
+    originalSourceReference:'ACTA-TALLER-DEMO-2026-001'
   }]
 
   async getRePresentationReviews():Promise<RePresentationReviewResponse> {
