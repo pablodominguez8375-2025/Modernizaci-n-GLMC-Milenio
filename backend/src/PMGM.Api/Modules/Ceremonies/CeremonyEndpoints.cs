@@ -339,6 +339,11 @@ public static class CeremonyEndpoints
             return Results.NotFound();
         }
 
+        if (!CeremonyAuthorizationStatePolicy.CanAttemptAuthorization(ceremony.Status))
+            return Results.Conflict(new { code = CeremonyAuthorizationStatePolicy.RequirementCode,
+                message = "No se pueden agregar vistos buenos de Régimen Interior a un expediente cerrado.",
+                requestStatus = ceremony.Status });
+
         if (ceremony.CeremonyType == CeremonyCodes.Type.Initiation)
         {
             var finalBallotApproved = await db.CeremonyValidations.AsNoTracking().AnyAsync(
@@ -784,9 +789,11 @@ public static class CeremonyEndpoints
             return Results.NotFound();
         }
 
-        if (ceremony.Status == CeremonyCodes.RequestStatus.Authorized)
+        if (!CeremonyAuthorizationStatePolicy.CanAttemptAuthorization(ceremony.Status))
         {
-            return Results.Conflict(new { message = "La ceremonia ya se encuentra autorizada." });
+            return Results.Conflict(new { code = CeremonyAuthorizationStatePolicy.RequirementCode,
+                message = "El expediente está cerrado o tiene un estado incompatible con una nueva autorización.",
+                requestStatus = ceremony.Status });
         }
 
         var context = await BuildEligibilityContextAsync(requestId, db, lodgeDb, documentsDb, cancellationToken);
@@ -797,22 +804,17 @@ public static class CeremonyEndpoints
 
         if (!context.Decision.CanAuthorize)
         {
-            // Una observación/rechazo documental de subsanación se puede corregir
-            // por RI en el mismo expediente; no cerrarlo al intentar autorizar.
-            var rePresentationNeedsCorrection = context.Decision.Requirements.Any(x =>
-                x.Code == CeremonyCodes.ValidationType.CandidateRepresentationReview &&
-                x.Status != CeremonyCodes.ValidationStatus.Approved);
-            ceremony.Status = rePresentationNeedsCorrection || context.Decision.Status == "observed"
-                ? CeremonyCodes.RequestStatus.Observed
-                : CeremonyCodes.RequestStatus.Rejected;
+            // La falta de un visto bueno es corregible en el mismo expediente.
+            // Sólo el procedimiento formal de rechazo puede cerrar un expediente.
+            ceremony.Status = CeremonyAuthorizationStatePolicy.AfterUnmetRequirements(ceremony.Status);
 
             audit.Add(
                 httpContext,
-                "ceremony.authorization.rejected",
+                "ceremony.authorization.blocked",
                 nameof(CeremonyRequest),
                 ceremony.Id.ToString(),
                 ceremony.OrganizationId,
-                AuditResults.Rejected,
+                AuditResults.Observed,
                 new
                 {
                     ceremony.CeremonyType,
@@ -1195,7 +1197,8 @@ public static class CeremonyEndpoints
             ceremonyRightPaid: !GrandTreasuryFeeSchedule.IsChargedCeremony(ceremony.CeremonyType) || (right is not null && rightBalance == 0m),
             advancement: advancement?.Decision,
             candidateFinalBallotStatus: finalBallotStatus,
-            candidateRePresentationReviewStatus: rePresentationReviewStatus);
+            candidateRePresentationReviewStatus: rePresentationReviewStatus,
+            requestStatus: ceremony.Status);
 
         return new EligibilityContext(ceremony, internalAffairs, treasury, hospitalaria, grandMaster, publicationSnapshot,
             right?.Amount, right?.Currency, right?.SourceReference, rightPaid, rightBalance, decision, today, advancement);
@@ -1206,6 +1209,7 @@ public static class CeremonyEndpoints
         requestId = context.Request.Id,
         context.Request.CeremonyType,
         context.Request.OrganizationId,
+        requestStatus = context.Request.Status,
         evaluatedAsOf = context.AsOfDate,
         status = context.Decision.Status,
         canAuthorize = context.Decision.CanAuthorize,
