@@ -73,7 +73,8 @@
       "CandidateInterviewAssignmentHttpTests",
       "CandidateInterviewAssignmentPositiveHttpTests",
       "CandidateRePresentationHttpTests",
-      "CandidateRePresentationReviewHttpTests"
+      "CandidateRePresentationReviewHttpTests",
+      "CeremonyAuthorizationStateHttpTests"
     ]
   }
 }

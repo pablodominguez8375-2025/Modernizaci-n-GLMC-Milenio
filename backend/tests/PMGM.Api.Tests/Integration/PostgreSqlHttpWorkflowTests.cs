@@ -315,7 +315,7 @@ public sealed class PostgreSqlHttpWorkflowTests
             Assert.Contains("treasury.ceremony_right.payment_recorded", auditActions);
             Assert.Contains("ceremony.internal_affairs_validation.recorded", auditActions);
             Assert.Contains("ceremony.grand_master_validation.recorded", auditActions);
-            Assert.Contains("ceremony.authorization.rejected", auditActions);
+            Assert.Contains("ceremony.authorization.blocked", auditActions);
             Assert.DoesNotContain("ceremony.authorization.approved", auditActions);
         }
     }

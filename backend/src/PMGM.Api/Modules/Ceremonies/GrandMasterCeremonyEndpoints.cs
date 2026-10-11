@@ -39,8 +39,10 @@ public static class GrandMasterCeremonyEndpoints
 
         var ceremony = await db.CeremonyRequests.SingleOrDefaultAsync(x => x.Id == requestId, cancellationToken);
         if (ceremony is null) return Results.NotFound();
-        if (ceremony.Status == CeremonyCodes.RequestStatus.Authorized)
-            return Results.Conflict(new { message = "La ceremonia ya se encuentra autorizada." });
+        if (!CeremonyAuthorizationStatePolicy.CanAttemptAuthorization(ceremony.Status))
+            return Results.Conflict(new { code = CeremonyAuthorizationStatePolicy.RequirementCode,
+                message = "No se pueden agregar vistos buenos de Gran Maestría a un expediente cerrado.",
+                requestStatus = ceremony.Status });
 
         var validation = new CeremonyValidation
         {
@@ -230,7 +232,8 @@ public static class GrandMasterCeremonyEndpoints
             ceremonyRightPaid: rightPaid,
             advancement: advancement?.Decision,
             candidateFinalBallotStatus: finalBallot?.Status,
-            candidateRePresentationReviewStatus: rePresentationReviewStatus);
+            candidateRePresentationReviewStatus: rePresentationReviewStatus,
+            requestStatus: ceremony.Status);
 
         var requirements = decision.Requirements;
         var overall = decision.Status;
@@ -241,6 +244,7 @@ public static class GrandMasterCeremonyEndpoints
             requestId,
             ceremony.CeremonyType,
             ceremony.OrganizationId,
+            requestStatus = ceremony.Status,
             evaluatedAsOf = today,
             advancement,
             status = overall,
