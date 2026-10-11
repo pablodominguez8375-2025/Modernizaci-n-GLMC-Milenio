@@ -6,8 +6,8 @@ namespace PMGM.Api.Modules.CandidateIntake;
 public static class CandidateRePresentationReviewPolicy
 {
     public static bool CanResolve(string? status, string? sourceReference, string? notes)
-        => status is CeremonyCodes.ValidationStatus.Approved or CeremonyCodes.ValidationStatus.Observed
-            or CeremonyCodes.ValidationStatus.Rejected
+        => (status is CeremonyCodes.ValidationStatus.Approved or CeremonyCodes.ValidationStatus.Observed
+            or CeremonyCodes.ValidationStatus.Rejected)
             && !string.IsNullOrWhiteSpace(sourceReference)
             && sourceReference.Trim().Length <= 240
             && (notes is null || notes.Length <= 1000);
