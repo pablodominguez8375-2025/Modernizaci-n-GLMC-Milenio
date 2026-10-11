@@ -67,8 +67,10 @@ public sealed class AddAdvancementDispensationCases : Migration
 
     protected override void Down(MigrationBuilder m)
     {
-        m.Sql("""DELETE FROM core.institutional_rule_settings
-            WHERE "Id" = '48000000-0000-0000-0000-000000000034'::uuid;""");
+        m.Sql("""
+            DELETE FROM core.institutional_rule_settings
+            WHERE "Id" = '48000000-0000-0000-0000-000000000034'::uuid;
+            """);
         m.DropTable(name: "advancement_dispensation_cases", schema: "core");
     }
 }

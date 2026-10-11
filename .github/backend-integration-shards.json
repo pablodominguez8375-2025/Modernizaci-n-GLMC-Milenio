@@ -34,7 +34,8 @@
       "PostgreSqlMigrationTests",
       "TreasuryOrdinaryDuesEligibilityPostgreSqlTests",
       "CalendarPostgreSqlTests",
-      "AdvancementAttestationHttpTests"
+      "AdvancementAttestationHttpTests",
+      "AdvancementDispensationHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
