@@ -230,7 +230,8 @@ public static class GrandMasterCeremonyEndpoints
             ceremonyRightPaid: rightPaid,
             advancement: advancement?.Decision,
             candidateFinalBallotStatus: finalBallot?.Status,
-            candidateRePresentationReviewStatus: rePresentationReviewStatus);
+            candidateRePresentationReviewStatus: rePresentationReviewStatus,
+            requestStatus: ceremony.Status);
 
         var requirements = decision.Requirements;
         var overall = decision.Status;
@@ -241,6 +242,7 @@ public static class GrandMasterCeremonyEndpoints
             requestId,
             ceremony.CeremonyType,
             ceremony.OrganizationId,
+            requestStatus = ceremony.Status,
             evaluatedAsOf = today,
             advancement,
             status = overall,
