@@ -256,10 +256,17 @@ internal sealed class PublicationTestAuthentication(IOptionsMonitor<Authenticati
         var role = Request.Headers["X-Publication-Test-Role"].FirstOrDefault() ?? "member";
         var subject = Request.Headers["X-Publication-Test-Subject"].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(subject)) subject = "ci-publication-member";
-        var identity = new ClaimsIdentity(new[] { new Claim("sub", subject),
-            new Claim(ClaimTypes.NameIdentifier, subject),
-            new Claim(InstitutionalClaims.Organization, organization.ToString()),
-            new Claim(InstitutionalClaims.Role, role) }, SchemeName);
+        var claims = new List<Claim>
+        {
+            new("sub", subject),
+            new(ClaimTypes.NameIdentifier, subject),
+            new(InstitutionalClaims.Organization, organization.ToString()),
+            new(InstitutionalClaims.Role, role)
+        };
+        // Sólo en CI, opt-in explícito: simula una identidad con ámbito de Orden.
+        if (Request.Headers["X-Publication-Test-Scope"].FirstOrDefault() == "order")
+            claims.Add(new Claim(InstitutionalClaims.Scope, "order"));
+        var identity = new ClaimsIdentity(claims, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
 }
