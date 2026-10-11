@@ -86,8 +86,18 @@ public static class CandidateRePresentationReviewEndpoints
                         x.ValidationType == CeremonyCodes.ValidationType.CandidateRepresentationReview)
             .OrderBy(x => x.RecordedAtUtc)
             .FirstOrDefaultAsync(ct);
-        if (initialEvidence is null || initialEvidence.Status != CeremonyCodes.ValidationStatus.Observed)
-            return Results.Conflict(new { message = "La nueva presentación no tiene una constancia inicial de Secretaría." });
+        if (initialEvidence is null || initialEvidence.Status != CeremonyCodes.ValidationStatus.Observed ||
+            string.IsNullOrWhiteSpace(initialEvidence.SourceReference))
+            return Results.Conflict(new { message = "La nueva presentación no tiene una constancia inicial válida de Secretaría." });
+
+        if (ceremony.CandidatePersonId is null)
+            return Results.Conflict(new { message = "Falta la identidad institucional del expediente." });
+        var priorRejection = await CandidateRePresentationGate.FindLatestAsync(
+            db, ceremony.CandidatePersonId.Value, ct);
+        if (priorRejection is null ||
+            !CandidateIntakeWorkflowPolicy.EvaluateRePresentation(
+                priorRejection.RejectionDate, ChileToday(), true).CanProceed)
+            return Results.Conflict(new { message = "No se acreditó un rechazo histórico con un año reglamentario cumplido." });
 
         // Separación de funciones: ni Secretaría ni el creador del expediente pueden resolver su propio caso.
         var subject = httpContext.User.FindFirstValue("sub") ??
