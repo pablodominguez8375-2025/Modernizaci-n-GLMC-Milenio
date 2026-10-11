@@ -73,7 +73,7 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
         <tbody>{rePresentationRows.map(row=><tr key={row.requestId}>
           <td>{row.personName}</td><td>{row.workshopName}</td>
           <td><span className={row.status==='approved'?'status-pill complete':'status-pill attention'}>{row.status==='approved'?'Aprobada':row.status==='rejected'?'Rechazada':'Observada'}</span></td>
-          <td>{row.sourceReference??'Sin referencia'}</td>
+          <td>{row.originalSourceReference??row.sourceReference??'Sin referencia'}{row.originalSourceReference&&row.sourceReference!==row.originalSourceReference?<small>Última resolución: {row.sourceReference}</small>:null}</td>
           <td><button className="secondary-action" type="button" aria-label={`Revisar ${row.personName}`} onClick={()=>{setReviewId(row.requestId);setReviewReference('');setReviewNotes('');setReviewMessage(null)}}>Revisar</button></td>
         </tr>)}</tbody></table></div>
         {reviewId&&<article className="panel"><h3>Resolución institucional del expediente seleccionado</h3>
