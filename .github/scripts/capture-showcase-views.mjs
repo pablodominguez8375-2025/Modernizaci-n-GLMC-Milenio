@@ -796,6 +796,11 @@ try {
       await openModule(scenario.label)
       await assertNavigation(scenario)
       if (scenario.initiationTabs) await assertInitiationNavigation(scenario, viewport)
+      if (scenario.treasuryCollection || scenario.grandTreasuryRights) {
+        const cardsPath = path.join(outputDir, `${scenario.slug}-tarjetas-${viewport.suffix}.png`)
+        await capture(cardsPath)
+        console.log(`captured ${path.basename(cardsPath)}`)
+      }
       if (scenario.admissions) await openAdmissionProcedure()
       if (scenario.slug === 'inicio') await assertDashboardMetricLayout(viewport)
       if (scenario.treasuryCollection) {
