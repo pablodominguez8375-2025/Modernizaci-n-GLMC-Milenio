@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.LodgeManagement;
 using PMGM.Api.Modules.Membership;
