@@ -64,7 +64,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 Result = "success",
                 CorrelationId = Guid.NewGuid().ToString("D"),
                 ActorSubject = "ci-grand-secretariat-authorizer",
-                MetadataJson = "{\"grandMaster\":\"approved\",\"regularity\":\"approved\",\"evaluatedAsOf\":\"2026-10-11\"}"
+                MetadataJson = JsonSerializer.Serialize(new { evaluatedAsOf = "2026-10-11", approved = true })
             });
             await db.SaveChangesAsync(cancellationToken);
             organizationId = organization.Id;
@@ -294,7 +294,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                     OrganizationId = org.Id,
                     Result = "success",
                     CorrelationId = Guid.NewGuid().ToString(),
-                    MetadataJson = "{\\"evaluatedAsOf\\":\\"2026-10-11\\",\\"approved\\":true}"
+                    MetadataJson = JsonSerializer.Serialize(new { evaluatedAsOf = "2026-10-11", approved = true })
                 });
             await db.SaveChangesAsync(ct);
         }
