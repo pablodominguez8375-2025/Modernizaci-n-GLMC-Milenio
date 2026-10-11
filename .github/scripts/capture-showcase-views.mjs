@@ -199,10 +199,31 @@ async function openModule(label) {
     button.click();
     return true;
   })()`)
-  if (!clicked) throw new Error(`Navigation button not found or disabled: ${label}`)
+  let viaWorkbench = false
+  if (!clicked) {
+    // v0.101: los perfiles con muchas opciones de gestión entran por «Mi mesa de trabajo».
+    const opened = await evaluate(`(() => {
+      const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+      const desk = [...document.querySelectorAll('nav.sidebar button')].find(candidate => normalize(candidate.textContent) === 'Mi mesa de trabajo');
+      if (!desk) return false;
+      desk.click();
+      return true;
+    })()`)
+    if (!opened) throw new Error(`Navigation button not found or disabled: ${label}`)
+    await waitForExpression(`!!document.querySelector('.workbench-card')`, 'workbench cards')
+    const card = await evaluate(`(() => {
+      const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
+      const target = [...document.querySelectorAll('.workbench-card')].find(candidate => normalize(candidate.querySelector('strong')?.childNodes[0]?.textContent) === ${JSON.stringify(label)});
+      if (!target) return false;
+      target.click();
+      return true;
+    })()`)
+    if (!card) throw new Error(`Workbench card not found: ${label}`)
+    viaWorkbench = true
+  }
   await waitForExpression(`(() => {
     const normalize = value => (value || '').replace(/\\s+/g, ' ').trim();
-    return [...document.querySelectorAll('nav.sidebar button.active')].some(button => normalize(button.textContent) === ${JSON.stringify(label)});
+    return [...document.querySelectorAll('nav.sidebar button.active')].some(button => normalize(button.textContent) === ${JSON.stringify(viaWorkbench ? 'Mi mesa de trabajo' : label)});
   })()`, `active module ${label}`)
   await delay(650)
 }
@@ -280,7 +301,7 @@ async function assertInitiationNavigation(scenario, viewport) {
   for (const tab of scenario.initiationTabs) {
     await open(tab);
     const state = await read();
-    if (JSON.stringify(state.activeTabs) !== JSON.stringify([tab]) || JSON.stringify(state.activeSidebar) !== JSON.stringify(['Insinuaciones e Iniciación'])) throw new Error(`Wrong initiation selection for ${scenario.profile}/${tab}: ${JSON.stringify(state)}`);
+    if (JSON.stringify(state.activeTabs) !== JSON.stringify([tab]) || !['Insinuaciones e Iniciación', 'Mi mesa de trabajo'].includes(state.activeSidebar?.[0]) || state.activeSidebar.length !== 1) throw new Error(`Wrong initiation selection for ${scenario.profile}/${tab}: ${JSON.stringify(state)}`);
     await assertNoGlobalHorizontalOverflow(`${scenario.profile}/${tab}`, viewport.suffix);
   }
   if (scenario.initiationTabs.length) await open('Publicados');
