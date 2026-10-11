@@ -244,6 +244,103 @@ public sealed class GrandSecretariatHttpWorkflowTests
             Assert.Contains("grand_secretariat.document.issued", auditActions);
         }
     }
+
+    [Fact]
+    public async Task Concurrent_issuance_is_unique_sequential_and_requires_authorization_audit()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new GrandSecretariatWebApplicationFactory(connectionString);
+        using var firstClient = factory.CreateClient();
+        using var secondClient = factory.CreateClient();
+        var org = new Organization
+        {
+            Name = $"CI Correlativo GS {Guid.NewGuid():N}",
+            Type = "workshop"
+        };
+        var first = new CeremonyRequest
+        {
+            Organization = org,
+            OrganizationId = org.Id,
+            Status = CeremonyCodes.RequestStatus.Authorized,
+            CeremonyType = CeremonyCodes.Type.Initiation
+        };
+        var second = new CeremonyRequest
+        {
+            Organization = org,
+            OrganizationId = org.Id,
+            Status = CeremonyCodes.RequestStatus.Authorized,
+            CeremonyType = CeremonyCodes.Type.Exaltation
+        };
+        var withoutAudit = new CeremonyRequest
+        {
+            Organization = org,
+            OrganizationId = org.Id,
+            Status = CeremonyCodes.RequestStatus.Authorized,
+            CeremonyType = CeremonyCodes.Type.WageIncrease
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.AddRange(org, first, second, withoutAudit);
+            foreach (var authorized in new[] { first, second })
+                db.AuditEvents.Add(new AuditEvent
+                {
+                    Action = "ceremony.authorization.approved",
+                    EntityType = nameof(CeremonyRequest),
+                    EntityId = authorized.Id.ToString(),
+                    OrganizationId = org.Id,
+                    Result = "success",
+                    CorrelationId = Guid.NewGuid().ToString(),
+                    MetadataJson = "{\\"evaluatedAsOf\\":\\"2026-10-11\\",\\"approved\\":true}"
+                });
+            await db.SaveChangesAsync(ct);
+        }
+
+        var unaudited = await firstClient.PostAsJsonAsync(
+            $"/api/gran-secretaria/ceremonias/{withoutAudit.Id}/autorizacion",
+            new { spaceReservationId = (Guid?)null }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, unaudited.StatusCode);
+
+        var route = $"/api/gran-secretaria/ceremonias/{first.Id}/autorizacion";
+        var concurrent = await Task.WhenAll(
+            firstClient.PostAsJsonAsync(route, new { spaceReservationId = (Guid?)null }, ct),
+            secondClient.PostAsJsonAsync(route, new { spaceReservationId = (Guid?)null }, ct));
+        Assert.Equal(1, concurrent.Count(x => x.StatusCode == HttpStatusCode.Created));
+        Assert.Equal(1, concurrent.Count(x => x.StatusCode == HttpStatusCode.Conflict));
+        var created = await Assert.Single(concurrent, x => x.StatusCode == HttpStatusCode.Created)
+            .Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var issuedFirstCode = created.GetProperty("documentCode").GetString()!;
+        var issuedSecond = await firstClient.PostAsJsonAsync(
+            $"/api/gran-secretaria/ceremonias/{second.Id}/autorizacion",
+            new { spaceReservationId = (Guid?)null }, ct);
+        Assert.Equal(HttpStatusCode.Created, issuedSecond.StatusCode);
+        var issuedSecondCode = (await issuedSecond.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+            .GetProperty("documentCode").GetString()!;
+        Assert.Equal(issuedFirstCode[..^6], issuedSecondCode[..^6]);
+        Assert.Equal(int.Parse(issuedFirstCode[^6..]) + 1, int.Parse(issuedSecondCode[^6..]));
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
+            var rows = await db.SecretariatDocuments.AsNoTracking()
+                .Where(x => x.RelatedCeremonyRequestId == first.Id ||
+                            x.RelatedCeremonyRequestId == second.Id ||
+                            x.RelatedCeremonyRequestId == withoutAudit.Id)
+                .ToListAsync(ct);
+            Assert.Equal(2, rows.Count);
+            Assert.DoesNotContain(rows, x => x.RelatedCeremonyRequestId == withoutAudit.Id);
+            Assert.All(rows, x => Assert.Matches(@"^PLA-AUT-CER-\\d{4}-\\d{6}$", x.DocumentCode));
+            var audits = await db.AuditEvents.AsNoTracking()
+                .Where(x => x.Action == "grand_secretariat.ceremony_authorization.issued" &&
+                            x.OrganizationId == org.Id).ToListAsync(ct);
+            Assert.Equal(2, audits.Count);
+            Assert.All(audits, x => Assert.Contains("sourceAuthorizationSnapshotSha256", x.MetadataJson));
+        }
+    }
+
 }
 
 internal sealed class GrandSecretariatWebApplicationFactory(string connectionString) : WebApplicationFactory<Program>
