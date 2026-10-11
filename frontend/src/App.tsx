@@ -395,10 +395,14 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
         {(view === 'system' || view === 'bootstrap') && canConfigureSystem && <SystemConfigurationPage api={api} bootstrapSlot={canBootstrap ? <BootstrapPage bootstrapApi={bootstrapApi} /> : undefined} />}
         {view === 'bootstrap' && canBootstrap && !canConfigureSystem && <BootstrapPage bootstrapApi={bootstrapApi} />}
-        {isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs label="Secciones de Insinuaciones e Iniciación" active={view} onChange={setView} tabs={[
-          ...(canCandidates ? [{ id: 'candidates' as View, label: 'Publicados' }] : []),
-          ...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga', badge: badges.candidateProfile }] : []),
-          ...((canCandidateProfile || canCeremonies) && canView('initiationcircuit') ? [{ id: 'initiationCircuit' as View, label: 'Circuito de Iniciación' }] : []),
+        {isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs label="Secciones de Insinuaciones e Iniciación" active={view} onChange={setView} hub={{ title: 'Insinuaciones e Iniciación', hints: {
+          candidates: 'Consulta de insinuados publicados',
+          candidateProfile: canSecretariat ? 'Revisión de antecedentes y documentación' : 'Carga de antecedentes y documentación',
+          initiationCircuit: 'Seguimiento de hitos hasta la ceremonia',
+        } }} tabs={[
+          ...(canCandidates ? [{ id: 'candidates' as View, label: 'Publicados', icon: 'candidate' as const }] : []),
+          ...(canCandidateProfile ? [{ id: 'candidateProfile' as View, label: canSecretariat ? 'Revisión' : 'Carga', badge: badges.candidateProfile, icon: 'documents' as const }] : []),
+          ...((canCandidateProfile || canCeremonies) && canView('initiationcircuit') ? [{ id: 'initiationCircuit' as View, label: 'Circuito de Iniciación', icon: 'ceremony' as const }] : []),
         ]} />}
         {view === 'interviews' && canMemberPortal && <CandidateInterviewAssignmentsPage api={candidateIntakeApi} canDesignate={canManageLodgeSummaryAccess} />}
         {view === 'candidates' && <CandidatePortal portal={portal} loading={loading} api={candidateIntakeApi} />}

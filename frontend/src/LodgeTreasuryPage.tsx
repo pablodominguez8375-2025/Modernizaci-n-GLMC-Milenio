@@ -18,14 +18,14 @@ export default function LodgeTreasuryPage({api,canManage,canApproveExpenses}:{ap
  useEffect(()=>{if(organizationId)void api.getTreasuryTerritory(organizationId).then(result=>setTerritories(current=>({...current,[organizationId]:result.territory}))).catch(()=>setTerritories(current=>({...current,[organizationId]:null})))},[api,organizationId])
  const sections = canManage
   ? [
-    {id:'summary',label:'Resumen',description:'Estado del mes y cuotas vigentes'},
-    {id:'collection',label:'Cuotas y Cobranzas',description:'Saldos individuales y pagos'},
-    {id:'movements',label:'Ingresos y Egresos',description:'Caja local y aprobación de egresos'},
-    {id:'statement',label:'Cuadro mensual',description:'Pago y envío a Gran Tesorería'},
-    {id:'settings',label:'Configuraciones',description:'Cuotas, categorías y parámetros'},
-    {id:'reports',label:'Reportes',description:'Libro de movimientos y cuadratura'},
+    {id:'summary',label:'Resumen',description:'Estado del mes y cuotas vigentes',icon:'report' as const},
+    {id:'collection',label:'Cuotas y Cobranzas',description:'Saldos individuales y pagos',icon:'members' as const},
+    {id:'movements',label:'Ingresos y Egresos',description:'Caja local y aprobación de egresos',icon:'treasury' as const},
+    {id:'statement',label:'Cuadro mensual',description:'Pago y envío a Gran Tesorería',icon:'documents' as const},
+    {id:'settings',label:'Configuraciones',description:'Cuotas, categorías y parámetros',icon:'settings' as const},
+    {id:'reports',label:'Reportes',description:'Libro de movimientos y cuadratura',icon:'dataQuality' as const},
    ]
-  : [{id:'movements',label:'Egresos por autorizar',description:'Revisión exclusiva del Venerable Maestro'}]
+  : [{id:'movements',label:'Egresos por autorizar',description:'Revisión exclusiva del Venerable Maestro',icon:'check' as const}]
  return <div className="lodge-product-page"><section className="lodge-product-heading"><div><p className="lodge-product-breadcrumb">Taller <span>›</span> Tesorería</p><h1>{canManage?'Tesorería del Taller':'Revisión de egresos de Tesorería'}</h1><p>{canManage?'Todo lo necesario para recaudar, registrar y rendir la Tesorería del Taller.':'El Venerable Maestro revisa y autoriza egresos, sin modificar cuotas ni pagos.'}</p></div>{organizations.length===1?<div className="lodge-organization-select single-organization"><span>Taller</span><strong>{organizationDisplayName(organizations[0].name, organizations[0].number)}</strong></div>:<label className="lodge-organization-select"><span>Taller</span><select value={organizationId} onChange={e=>setOrganizationId(e.target.value)}><option value="">Seleccione…</option>{organizations.map(x=><option key={x.id} value={x.id}>{organizationDisplayName(x.name, x.number)}</option>)}</select></label>}</section>
  <TreasuryRoleNavigation title={canManage?'Tesorería del Taller':'Autorizaciones del Venerable'} sections={sections} active={section} onChange={id=>setSection(id as LocalSection)}/>
  {error&&<p role="alert">{error}</p>}
