@@ -36,7 +36,7 @@ public sealed class FormSubmissionPolicyTests
     public void DifferentVersionCannotBeUsedEvenWithMatchingFieldKeys()
     {
         var result = FormSubmissionPolicy.Validate(
-            Schema(new("name", "Nombre", "text")), 1, Values(("name", "Nombre")));
+            Schema(new FormFieldDefinition("name", "Nombre", "text")), 1, Values(("name", "Nombre")));
 
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, x => x.Contains("versión"));
@@ -135,7 +135,7 @@ public sealed class FormSubmissionPolicyTests
     public void SeparatorOnlyPhoneNumberIsNotAccepted()
     {
         var result = FormSubmissionPolicy.Validate(
-            Schema(new("phone", "Teléfono", "phone")), 2,
+            Schema(new FormFieldDefinition("phone", "Teléfono", "phone")), 2,
             Values(("phone", "------")));
 
         Assert.False(result.IsValid);
@@ -160,7 +160,7 @@ public sealed class FormSubmissionPolicyTests
     [Fact]
     public void InvalidRuntimeValueShapeIsRejectedWithoutReturningPrivateContent()
     {
-        var schema = Schema(new("name", "Nombre", "text"));
+        var schema = Schema(new FormFieldDefinition("name", "Nombre", "text"));
         var attempted = "secreto personal";
 
         var result = FormSubmissionPolicy.Validate(schema, 2,
