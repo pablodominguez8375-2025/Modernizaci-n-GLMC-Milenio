@@ -30,6 +30,16 @@ public sealed class FormSchemaVersionStore(PmgmDbContext db)
         if (string.IsNullOrWhiteSpace(correlationId) || correlationId.Length > 128)
             throw new ArgumentException("Se requiere un identificador de correlación válido.", nameof(correlationId));
 
+        // PostgreSQL timestamptz persists microseconds while .NET permits
+        // 100-ns ticks. Canonicalize BEFORE validation and serialization so
+        // historical metadata and SHA-256 agree after an EF readback.
+        var effectiveUtc = next.EffectiveFromUtc.ToUniversalTime();
+        var persistedTicks = effectiveUtc.Ticks - effectiveUtc.Ticks % 10;
+        next = next with
+        {
+            EffectiveFromUtc = new DateTimeOffset(persistedTicks, TimeSpan.Zero)
+        };
+
         var scope = FormSchemaScope.ForOrganization(organizationId);
         if (string.IsNullOrWhiteSpace(next.FormCode) || next.FormCode.Length > 64)
             throw new ArgumentException("Código de formulario inválido.", nameof(next));
