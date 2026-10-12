@@ -26,10 +26,11 @@ public static class FormSchemaScope
     /// Scope comes from a trusted server-side institutional decision, never from
     /// a client-supplied scope string. Workshop existence is checked by the store.
     /// </summary>
-    public static string ForOrganization(Guid? organizationId) => organizationId switch
+    public static string ForOrganization(Guid? organizationId)
     {
-        null => Order,
-        { } id when id != Guid.Empty => "lodge:" + id.ToString("N"),
-        _ => throw new ArgumentException("Se requiere un Taller válido.", nameof(organizationId))
-    };
+        if (organizationId is null) return Order;
+        if (organizationId.Value == Guid.Empty)
+            throw new ArgumentException("Se requiere un Taller válido.", nameof(organizationId));
+        return "lodge:" + organizationId.Value.ToString("N");
+    }
 }
