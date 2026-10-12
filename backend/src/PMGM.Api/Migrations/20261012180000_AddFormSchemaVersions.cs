@@ -25,7 +25,7 @@ public sealed class AddFormSchemaVersions : Migration
                 FormCode = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                 Version = table.Column<int>(type: "integer", nullable: false),
                 EffectiveFromUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
-                SchemaJson = table.Column<string>(type: "jsonb", nullable: false),
+                SchemaJson = table.Column<string>(type: "text", nullable: false),
                 PayloadSha256 = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                 RecordedBySubject = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: false),
                 RecordedAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
