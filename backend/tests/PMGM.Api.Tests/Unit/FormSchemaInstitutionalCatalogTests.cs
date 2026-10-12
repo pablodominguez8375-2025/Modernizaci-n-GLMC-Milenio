@@ -81,6 +81,14 @@ public sealed class FormSchemaInstitutionalCatalogTests
     }
 
     [Fact]
+    public void RejectsNullFieldsFromUntrustedJsonWithoutThrowing()
+    {
+        var fields = ValidFields().Concat([null!]).ToArray();
+        var result = FormSchemaInstitutionalCatalog.ValidateForPublication(Schema(fields));
+        Assert.False(result.IsValid);
+    }
+
+    [Fact]
     public void RejectsMissingMandatoryIdentityField()
     {
         var result = FormSchemaInstitutionalCatalog.ValidateForPublication(
