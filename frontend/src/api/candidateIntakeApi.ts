@@ -5,7 +5,7 @@ import {
   type CandidateFormCaptureHistory, type CandidateFormCaptureInfo,
   type SaveCandidateFormCapture,
 } from './candidateFormTypes'
-import { mockActiveCandidateSchema } from './candidateFormMock'
+import { mockActiveCandidateSchema, mockFormVersion } from './candidateFormMock'
 
 export type CandidateReviewStatus = 'pending_grand_secretariat' | 'observed' | 'rejected' | 'approved'
 
@@ -728,7 +728,7 @@ export class CandidateIntakeApiClient {
       const found = (this.mockCandidateFormCaptures.get(requestId) ?? [])
         .find(row => row.captureRevision === captureRevision)
       if (!found) throw new CandidateIntakeApiHttpError(404, 'No existe esa revisión histórica.')
-      return structuredClone(found)
+      return { ...structuredClone(found), fields: mockFormVersion(found.schemaVersion).fields.filter(field => !field.isCore) }
     }
     return this.request<CandidateFormCaptureDetail>(
       '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
