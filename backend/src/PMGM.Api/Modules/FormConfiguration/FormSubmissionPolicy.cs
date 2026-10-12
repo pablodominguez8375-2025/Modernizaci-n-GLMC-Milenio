@@ -60,7 +60,7 @@ public static partial class FormSubmissionPolicy
 
             if (field.DependsOnKey is { Length: > 0 } parentKey &&
                 (!submittedValues.TryGetValue(parentKey, out var parentValue) ||
-                 !IsProvided(parentValue)))
+                 !IsDependencyActive(parentValue)))
             {
                 errors.Add($"La dependencia de {key} no está satisfecha.");
                 continue;
@@ -76,7 +76,7 @@ public static partial class FormSubmissionPolicy
                 continue; // Server-owned institutional fields are checked by domain APIs.
 
             if (field.DependsOnKey is { Length: > 0 } parentKey &&
-                (!submittedValues.TryGetValue(parentKey, out var parent) || !IsProvided(parent)))
+                (!submittedValues.TryGetValue(parentKey, out var parent) || !IsDependencyActive(parent)))
                 continue; // A conditional child is not required until its parent is present.
 
             if (!submittedValues.TryGetValue(field.Key, out var value) || !IsProvided(value))
@@ -93,6 +93,12 @@ public static partial class FormSubmissionPolicy
         JsonValueKind.Array => value.GetArrayLength() > 0,
         _ => true // 0 and false are legitimate submitted values.
     };
+
+    // A boolean false does not activate a conditional child. A future
+    // condition-expression policy will specify precise option-based predicates.
+    private static bool IsDependencyActive(JsonElement value)
+        => IsProvided(value) && value.ValueKind != JsonValueKind.False &&
+           !(value.ValueKind == JsonValueKind.Number && value.TryGetDecimal(out var n) && n == 0);
 
     private static bool MatchesTypeAndOptions(FormFieldDefinition field, JsonElement value)
     {
@@ -138,7 +144,7 @@ public static partial class FormSubmissionPolicy
             "email" => text.Length <= 254 && !text.Any(char.IsWhiteSpace) &&
                 System.Net.Mail.MailAddress.TryCreate(text, out var mail) &&
                 string.Equals(mail.Address, text, StringComparison.Ordinal),
-            "phone" => PhonePattern().IsMatch(text),
+            "phone" => PhonePattern().IsMatch(text) && text.Count(char.IsDigit) >= 6,
             // Client-side uploads must refer to an opaque, server-authorized ID;
             // never accept inline base64, URLs, paths or document content here.
             "document" or "photo" or "reference" => Guid.TryParse(text, out _),
