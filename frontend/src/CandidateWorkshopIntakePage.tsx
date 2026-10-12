@@ -2,6 +2,7 @@ import { SectionIndex } from './listing'
 import { useEffect, useMemo, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
+import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 import './CandidateWorkshopIntakePage.css'
 import { organizationDisplayName } from './displayFormat'
 
@@ -388,10 +389,12 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             </div>
           </section>
 
-          <section className="candidate-product-card workshop-config-note">
-            <div className="candidate-section-title"><span>⚙</span><h2>Campos configurables</h2><em>PMGM-BLG-074</em></div>
-            <p>Los campos esenciales de identidad, Logia/Taller, estado del proceso, fechas y trazabilidad permanecen protegidos. La siguiente capa incorporará campos no esenciales configurables, listas institucionales, obligatoriedad, orden, visibilidad por rol y versionado sin perder el significado histórico de las fichas.</p>
-          </section>
+          {profile ? <CandidateFormCapturePanel key={selected.ceremonyRequestId}
+            requestId={selected.ceremonyRequestId} api={api} editable={!locked} />
+            : <section className="candidate-product-card workshop-config-note">
+                <div className="candidate-section-title"><span aria-hidden="true">⚙</span><h2>Campos adicionales configurables</h2></div>
+                <p>Primero guarde la ficha institucional. Después podrá completar los campos adicionales vigentes sin alterar la identidad ni los antecedentes oficiales.</p>
+              </section>}
         </>}
       </main>
     </section>
