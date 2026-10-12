@@ -21,6 +21,7 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
   const [draft, setDraft] = useState<FormValues>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -71,6 +72,35 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
       setSelected(capture)
     } catch (reason) {
       setError(toError(reason))
+    }
+  }
+
+  async function exportRevision() {
+    if (!selected || exporting) return
+    const captureRevision = selected.captureRevision
+    setExporting(true)
+    setError(null)
+    try {
+      const blob = await api.exportCandidateFormCaptureCsv(requestId, captureRevision)
+      const objectUrl = URL.createObjectURL(blob)
+      try {
+        const link = document.createElement('a')
+        link.href = objectUrl
+        link.download = 'insinuado-campos-adicionales-' + requestId +
+          '-r' + captureRevision + '.csv'
+        link.style.display = 'none'
+        document.body.appendChild(link)
+        try { link.click() } finally { link.remove() }
+      } finally {
+        // Revoke the sensitive blob URL as soon as the browser has started the download.
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+      }
+      setMessage('Exportación privada de revisión ' + captureRevision +
+        ' preparada. El archivo contiene datos del expediente: guárdelo únicamente en un lugar autorizado.')
+    } catch (reason) {
+      setError(toError(reason))
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -136,6 +166,14 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
             Revisión {item.captureRevision} · esquema v{item.schemaVersion} · {formatRecorded(item.capturedAtUtc)}
           </option>)}
         </select>
+        {selected && <div className="form-capture-history-actions">
+          <button className="candidate-secondary-button" type="button"
+            disabled={exporting} onClick={() => { void exportRevision() }}>
+            {exporting ? 'Preparando CSV privado…' : 'Exportar revisión CSV'}
+          </button>
+          <small>Exportación individual y auditable. El archivo descargado contiene
+            información privada y debe permanecer bajo custodia institucional.</small>
+        </div>}
         {selected && <div className="form-capture-historical">
           <p>Lectura histórica de revisión {selected.captureRevision}, bajo la versión {selected.schemaVersion} del formulario. Los valores permanecen protegidos.</p>
           <dl>{Object.entries(selected.values).map(([key, value]) => {
