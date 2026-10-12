@@ -106,6 +106,11 @@ public sealed class CandidateFormCaptureHttpTests
         var historicData = await historic.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         Assert.Equal(PrivateValue,
             historicData.GetProperty("values").GetProperty("custom_note").GetString());
+        var historicalFields = historicData.GetProperty("fields").EnumerateArray().ToArray();
+        Assert.Single(historicalFields);
+        Assert.Equal("custom_note", historicalFields[0].GetProperty("key").GetString());
+        Assert.Equal("Observación", historicalFields[0].GetProperty("label").GetString());
+        Assert.DoesNotContain(historicalFields, x => x.GetProperty("isCore").GetBoolean());
 
         var replay = await client.PostAsJsonAsync(route, Capture(1, 0), ct);
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);

@@ -1,0 +1,50 @@
+/* Issue #37 only; does not modify the global administration navigation or CSS cascade. */
+.form-schema-admin { display: grid; gap: 20px; min-width: 0; }
+.form-schema-heading { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 18px; }
+.form-schema-heading h2 { margin: 0 0 8px; }
+.form-schema-heading p { max-width: 74ch; line-height: 1.55; }
+.form-schema-info { border-left: 4px solid var(--gold, #f3c609); padding: 10px 14px; background: var(--gold-soft, #fff8d6); line-height: 1.55; }
+.form-schema-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+.form-schema-summary > * { background: var(--surface-soft, #f4f7fb); border: 1px solid var(--border, #cbd5e1); border-radius: 10px; padding: 10px 12px; font-size: .875rem; }
+.form-schema-core { border: 1px solid var(--border, #cbd5e1); padding: 12px; border-radius: 10px; }
+.form-schema-core summary { cursor: pointer; font-weight: 750; }
+.form-schema-core ul { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 12px 0 0; padding: 0; list-style: none; }
+.form-schema-core li { padding: 8px; background: var(--surface-soft, #f4f7fb); border-radius: 8px; }
+.form-schema-core code { display: block; font-size: .75rem; margin-top: 3px; }
+.form-schema-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 14px; min-width: 0; }
+.form-schema-card { border: 1px solid var(--border, #bdc6d7); border-radius: 12px; padding: 15px; display: grid; gap: 15px; min-width: 0; }
+.form-schema-card-head { display: grid; gap: 5px; min-width: 0; }
+.form-schema-card-head code { font-size: .8rem; overflow-wrap: anywhere; }
+.form-schema-card-head small { color: var(--muted, #66758a); }
+.form-schema-control-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.form-schema-control-grid label { min-width: 0; display: grid; gap: 5px; font-size: .875rem; }
+.form-schema-control-grid label > span { font-weight: 700; }
+.form-schema-control-grid input, .form-schema-control-grid select, .form-schema-control-grid textarea,
+.form-schema-submit input {
+  width: 100%; min-width: 0; box-sizing: border-box; border: 1px solid var(--border, #bcc7d3);
+  padding: 10px 12px; min-height: 42px; border-radius: 9px; font: inherit;
+  background: var(--surface, #fff); color: var(--text, #18243b);
+}
+.form-schema-wide { grid-column: 1 / -1; }
+.form-schema-toggles { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.form-schema-toggles label { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; font-size: .875rem; }
+.form-schema-toggles input { width: 18px; height: 18px; accent-color: var(--secondary, #004ad4); }
+.form-schema-add { margin: 0; border: 1px solid var(--border, #bcc7d3); border-radius: 12px; padding: 15px; display: grid; gap: 14px; min-width: 0; }
+.form-schema-add legend { padding: 0 7px; font-weight: 750; }
+.form-schema-add button { justify-self: start; }
+.form-schema-add small { color: var(--muted, #64748b); line-height: 1.5; }
+.form-schema-submit { border-top: 1px solid var(--border, #cbd5e1); padding-top: 16px; display: flex; gap: 14px; flex-wrap: wrap; align-items: end; justify-content: space-between; }
+.form-schema-submit label { flex: 1 1 230px; display: grid; gap: 6px; max-width: 420px; }
+.form-schema-submit label span { font-size: .875rem; font-weight: 700; }
+.form-schema-submit button { min-height: 44px; white-space: normal; }
+.form-schema-versions ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.form-schema-versions li { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px; border-bottom: 1px solid var(--border, #cbd5e1); font-size: .875rem; }
+.form-schema-versions small { font-size: .8rem; }
+.form-schema-admin :is(input, select, textarea, button, summary):focus-visible { outline: 3px solid var(--gold, #f3c609); outline-offset: 2px; }
+@media (max-width: 600px) {
+  .form-schema-cards, .form-schema-control-grid { grid-template-columns: minmax(0, 1fr); }
+  .form-schema-wide { grid-column: auto; }
+  .form-schema-submit button, .form-schema-add button { width: 100%; }
+  .form-schema-submit label { max-width: none; flex-basis: 100%; }
+  .form-schema-card { padding: 12px; }
+}

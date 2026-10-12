@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateReviewDecision, type CandidateReviewQueueItem } from './api/candidateIntakeApi'
 import './candidate-completeness.css'
 import { organizationDisplayName } from './displayFormat'
+import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 
 export const candidateCoreFields = [
   'passportPhoto',
@@ -298,6 +299,9 @@ export default function CandidateProfilePage({ api, canReview, onBack }: Candida
           ? <div className="candidate-protected-notice"><strong>Expediente completo.</strong> Gran Secretaría puede resolver su publicación.</div>
           : <><p>La aprobación permanece bloqueada hasta que Secretaría Logial corrija estos antecedentes en la misma ficha:</p><ul className="candidate-missing-list">{profile.missingRequirements.map(item => <li key={item}>{item}</li>)}</ul></>}
       </section>
+
+      <CandidateFormCapturePanel key={profile.ceremonyRequestId}
+        requestId={profile.ceremonyRequestId} api={api} editable={false} />
 
       {canReview && profile.reviewStatus !== 'approved' && <section className="candidate-product-card candidate-history-card">
         <div className="candidate-section-title"><span>✓</span><h2>Resolución de Gran Secretaría</h2><em>Auditable</em></div>

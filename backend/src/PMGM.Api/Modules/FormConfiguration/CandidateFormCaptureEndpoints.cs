@@ -131,7 +131,7 @@ public static class CandidateFormCaptureEndpoints
                  x.ScopeKey == row.ScopeKey && x.FormCode == FormCode, ct);
         if (schema is null)
             throw new InvalidDataException("La captura no conserva su referencia de esquema.");
-        _ = FormSchemaVersionStore.Decode(schema);
+        var historical = FormSchemaVersionStore.Decode(schema);
 
         var values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(row.ValuesJson)
             ?? throw new InvalidDataException("Los datos históricos no tienen una estructura válida.");
@@ -144,7 +144,8 @@ public static class CandidateFormCaptureEndpoints
         return Results.Ok(new
         {
             row.CeremonyRequestId, row.CaptureRevision, row.SchemaVersion,
-            row.ScopeKey, row.CapturedAtUtc, values
+            row.ScopeKey, row.CapturedAtUtc, values,
+            fields = historical.Fields.Where(x => !x.IsCore).ToArray()
         });
     }
 

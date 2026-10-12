@@ -1,4 +1,11 @@
 import type { CandidatePortalResponse } from './pmgmApi'
+import {
+  prepareCandidateFormCapture, visibleCandidateFormFields,
+  type ActiveCandidateFormSchema, type CandidateFormCaptureDetail,
+  type CandidateFormCaptureHistory, type CandidateFormCaptureInfo,
+  type SaveCandidateFormCapture,
+} from './candidateFormTypes'
+import { mockActiveCandidateSchema, mockFormVersion } from './candidateFormMock'
 
 export type CandidateReviewStatus = 'pending_grand_secretariat' | 'observed' | 'rejected' | 'approved'
 
@@ -583,6 +590,16 @@ export class CandidateIntakeApiClient {
   private readonly mockWorkflows = new Map<string, CandidateWorkflowResponse>([[demoRequestId, cloneWorkflow(demoWorkflowSeed)]])
   // QA only: browser-memory storage. Nothing is sent to or retained by the public demo.
   private readonly mockPhotos = new Map<string, Blob>()
+  private readonly mockCandidateFormCaptures = new Map<string, CandidateFormCaptureDetail[]>([
+    [demoRequestId, [{
+      ceremonyRequestId: demoRequestId, captureRevision: 1, schemaVersion: 1,
+      scopeKey: 'order', capturedAtUtc: '2026-10-08T14:00:00Z',
+      values: {
+        custom_motivation: 'Me interesa aprender y contribuir a proyectos solidarios. Dato completamente ficticio.',
+        custom_interest: 'Docencia', custom_volunteer: true,
+      },
+    }]],
+  ])
 
   constructor(options: CandidateIntakeApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -672,6 +689,79 @@ export class CandidateIntakeApiClient {
       return { ...profile, presenters: [...profile.presenters] }
     }
     return this.request<CandidateIntakeProfile>(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/ficha`)
+  }
+
+  /** Server is the only authority for fields, scope and active version. */
+  async getCandidateFormSchema(requestId: string): Promise<ActiveCandidateFormSchema> {
+    if (this.useMocks) {
+      if (!this.mockProfiles.has(requestId))
+        throw new CandidateIntakeApiHttpError(404, 'Primero debe ingresar la ficha institucional.')
+      const published = mockActiveCandidateSchema()
+      if (!published) throw new CandidateIntakeApiHttpError(404, 'Aún no hay una definición vigente.')
+      return {
+        formCode: 'candidate_profile', schemaVersion: published.version,
+        scopeKey: 'order', effectiveFromUtc: published.effectiveFromUtc,
+        expectedCaptureRevision: (this.mockCandidateFormCaptures.get(requestId) ?? []).at(-1)?.captureRevision ?? 0,
+        fields: structuredClone(visibleCandidateFormFields(published.fields)),
+      }
+    }
+    return this.request<ActiveCandidateFormSchema>(
+      '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/formularios/capturas/schema')
+  }
+
+  async getCandidateFormCaptureHistory(requestId: string): Promise<CandidateFormCaptureHistory> {
+    if (this.useMocks) {
+      if (!this.mockProfiles.has(requestId)) throw new CandidateIntakeApiHttpError(404, 'Expediente inexistente.')
+      const rows = this.mockCandidateFormCaptures.get(requestId) ?? []
+      const captures: CandidateFormCaptureInfo[] = [...rows].reverse().map(row => ({
+        captureRevision: row.captureRevision, schemaVersion: row.schemaVersion,
+        scopeKey: row.scopeKey, capturedAtUtc: row.capturedAtUtc, payloadSha256: 'b'.repeat(64),
+      }))
+      return { requestId, total: captures.length, captures }
+    }
+    return this.request<CandidateFormCaptureHistory>(
+      '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/formularios/capturas')
+  }
+
+  async getCandidateFormCapture(requestId: string, captureRevision: number): Promise<CandidateFormCaptureDetail> {
+    if (this.useMocks) {
+      const found = (this.mockCandidateFormCaptures.get(requestId) ?? [])
+        .find(row => row.captureRevision === captureRevision)
+      if (!found) throw new CandidateIntakeApiHttpError(404, 'No existe esa revisión histórica.')
+      return { ...structuredClone(found), fields: mockFormVersion(found.schemaVersion).fields.filter(field => !field.isCore) }
+    }
+    return this.request<CandidateFormCaptureDetail>(
+      '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/formularios/capturas/' + encodeURIComponent(String(captureRevision)))
+  }
+
+  async saveCandidateFormCapture(requestId: string, payload: SaveCandidateFormCapture): Promise<CandidateFormCaptureInfo> {
+    if (this.useMocks) {
+      const profile = this.mockProfiles.get(requestId)
+      if (!profile) throw new CandidateIntakeApiHttpError(404, 'Primero guarde la ficha institucional.')
+      if (profile.reviewStatus === 'approved' || profile.reviewStatus === 'rejected')
+        throw new CandidateIntakeApiHttpError(409, 'El expediente está cerrado o publicado.')
+      const schema = await this.getCandidateFormSchema(requestId)
+      if (schema.schemaVersion !== payload.schemaVersion)
+        throw new CandidateIntakeApiHttpError(409, 'La configuración cambió. Recargue antes de guardar.')
+      const rows = this.mockCandidateFormCaptures.get(requestId) ?? []
+      if ((rows.at(-1)?.captureRevision ?? 0) !== payload.expectedCaptureRevision)
+        throw new CandidateIntakeApiHttpError(409, 'Otra sesión actualizó la captura. Recargue el historial.')
+      const result = prepareCandidateFormCapture(schema.fields, payload.values)
+      if (result.errors.length > 0 || Object.keys(result.values).length === 0)
+        throw new CandidateIntakeApiHttpError(400, result.errors.join(' ') || 'La captura no tiene campos válidos.')
+      const row: CandidateFormCaptureDetail = {
+        ceremonyRequestId: requestId, captureRevision: rows.length + 1,
+        schemaVersion: schema.schemaVersion, scopeKey: schema.scopeKey,
+        capturedAtUtc: new Date().toISOString(), values: structuredClone(result.values),
+      }
+      this.mockCandidateFormCaptures.set(requestId, [...rows, row])
+      return { captureRevision: row.captureRevision, schemaVersion: row.schemaVersion,
+        scopeKey: row.scopeKey, capturedAtUtc: row.capturedAtUtc, payloadSha256: 'b'.repeat(64) }
+    }
+    return this.request<CandidateFormCaptureInfo>(
+      '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) + '/formularios/capturas',
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   }
 
   async saveProfile(requestId: string, payload: CandidateIntakeUpsertPayload): Promise<CandidateIntakeProfile> {
