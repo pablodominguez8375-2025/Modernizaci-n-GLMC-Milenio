@@ -12,7 +12,7 @@ public sealed class FormSchemaVersionPostgreSqlTests
     private static FormSchemaSnapshot Snapshot(string code, int version) => new(
         code,
         version,
-        new DateTimeOffset(2026, 10, version, 0, 0, 0, TimeSpan.Zero),
+        new DateTimeOffset(2026, 10, version, 0, 0, 0, TimeSpan.Zero).AddTicks(17),
         [new FormFieldDefinition("candidate_id", "Identidad del candidato", "reference",
             IsCore: true, Required: true, Classification: FormFieldClassification.Sensitive),
          new FormFieldDefinition("custom_note", "Anotación futura", "text",
@@ -40,6 +40,8 @@ public sealed class FormSchemaVersionPostgreSqlTests
 
         var first = await store.PublishAsync(
             Snapshot(code, 1), lodgeA.Id, ["candidate_id"], "admin-form-ci", "form-test-a1", ct);
+        Assert.Equal(0, first.EffectiveFromUtc.Ticks % 10);
+        Assert.Equal(0, (await store.ReadAsync(code, 1, lodgeA.Id, ct))!.EffectiveFromUtc.Ticks % 10);
         var second = await store.PublishAsync(
             Snapshot(code, 2), lodgeA.Id, ["candidate_id"], "admin-form-ci", "form-test-a2", ct);
 
