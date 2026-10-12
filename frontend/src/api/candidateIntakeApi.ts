@@ -6,6 +6,7 @@ import {
   type SaveCandidateFormCapture,
 } from './candidateFormTypes'
 import { mockActiveCandidateSchema, mockFormVersion } from './candidateFormMock'
+import { renderDemoCandidateCaptureCsv } from './candidateFormCsv'
 
 export type CandidateReviewStatus = 'pending_grand_secretariat' | 'observed' | 'rejected' | 'approved'
 
@@ -733,6 +734,24 @@ export class CandidateIntakeApiClient {
     return this.request<CandidateFormCaptureDetail>(
       '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
       '/formularios/capturas/' + encodeURIComponent(String(captureRevision)))
+  }
+
+  /**
+   * A one-revision export, authorized and audited by the backend.
+   * Mocks contain fabricated data and never contact a service.
+   */
+  async exportCandidateFormCaptureCsv(requestId: string, captureRevision: number): Promise<Blob> {
+    if (this.useMocks) {
+      const detail = await this.getCandidateFormCapture(requestId, captureRevision)
+      return new Blob([renderDemoCandidateCaptureCsv(detail)], { type: 'text/csv;charset=utf-8' })
+    }
+    const path = '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/formularios/capturas/' + encodeURIComponent(String(captureRevision)) + '/export.csv'
+    const response = await this.fetchAuthorized(path, { method: 'GET' })
+    if (!response.ok) throw await this.toError(response)
+    if (!(response.headers.get('Content-Type') ?? '').toLowerCase().startsWith('text/csv'))
+      throw new Error('La respuesta de exportación no es un archivo CSV autorizado.')
+    return response.blob()
   }
 
   async saveCandidateFormCapture(requestId: string, payload: SaveCandidateFormCapture): Promise<CandidateFormCaptureInfo> {
