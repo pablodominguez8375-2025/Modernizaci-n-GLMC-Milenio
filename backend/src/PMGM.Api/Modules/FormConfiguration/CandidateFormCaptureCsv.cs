@@ -66,8 +66,14 @@ public static class CandidateFormCaptureCsv
         // Spreadsheet formula injection: Excel and LibreOffice may execute a
         // leading =, +, -, or @ even after whitespace/control characters.
         // Prefix untrusted text before quoting, rather than altering stored data.
-        if (text.TrimStart().StartsWith('=') || text.TrimStart().StartsWith('+') ||
-            text.TrimStart().StartsWith('-') || text.TrimStart().StartsWith('@'))
+        var firstVisible = 0;
+        while (firstVisible < text.Length &&
+               (char.IsWhiteSpace(text[firstVisible]) ||
+                char.IsControl(text[firstVisible]) ||
+                System.Globalization.CharUnicodeInfo.GetUnicodeCategory(text[firstVisible]) ==
+                    System.Globalization.UnicodeCategory.Format))
+            firstVisible++;
+        if (firstVisible < text.Length && "=+-@".Contains(text[firstVisible]))
             text = "'" + text;
         return "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
     }
