@@ -31,7 +31,7 @@ describe('Issue #37 — exportación de revisión histórica aislada', () => {
   it.each([
     '=HYPERLINK("https://invalid.test","malicia")', '  +SUM(1,2)', '\t@IMPORTXML(1)',
     '\n-1+5',
-    '\\u200B=HYPERLINK(1)', '\\0=cmd',
+    '\u200B=HYPERLINK(1)', '\0=cmd',
   ])('neutralizes a potential spreadsheet formula: %s', value => {
     const csv = renderDemoCandidateCaptureCsv(detail(value))
     expect(csv).toContain('"\'' + value.replace(/"/g, '""') + '"')
