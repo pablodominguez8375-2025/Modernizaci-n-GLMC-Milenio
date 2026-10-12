@@ -3,10 +3,11 @@ import { ActionDrawer, HelpNote, WorkspacePanel, WorkspaceTabs } from './actionK
 import { type PmgmApiClient, type SystemSetting, type SystemSettingVersion } from './api/pmgmApi'
 import './systemConfiguration.css'
 import SystemOperationsPanel, { type Area } from './SystemOperationsPanel'
+import FormSchemaAdminPanel from './FormSchemaAdminPanel'
 
 /* PMGM-UX administración ordenada (04-10-2026): un solo menú de secciones (antes había tres niveles de pestañas)
    y ningún formulario abierto: cada parámetro se cambia desde «Cambiar valor». */
-type Section=Area|'profiles'|'settings'|'bootstrap'
+type Section=Area|'profiles'|'settings'|'forms'|'bootstrap'
 
 export default function SystemConfigurationPage({ api, bootstrapSlot }: { api: PmgmApiClient; bootstrapSlot?: ReactNode }) {
   const [items,setItems]=useState<SystemSetting[]>([])
@@ -37,10 +38,11 @@ export default function SystemConfigurationPage({ api, bootstrapSlot }: { api: P
   return <>
     <section className="page-heading"><div><p className="eyebrow">Administración · parámetros versionados</p><h1>Sistema</h1><p>Control central de reglas, flujos, catálogos, plazos, documentos y seguridad institucional.</p></div><span className="count-badge">{items.length} parámetros</span></section>
     {message&&<div className="regularity-success" role="status">{message}</div>}{error&&<div className="error-banner" role="alert">{error}</div>}
-    <WorkspaceTabs label="Secciones de Sistema" active={tab} onChange={setTab} hub={{ title: 'Parámetros del sistema' }} tabs={[{id:'backup',label:'Respaldos',icon:'archive' as const},{id:'users',label:'Usuarios',icon:'members' as const},{id:'profiles',label:'Perfiles y accesos',icon:'shield' as const},{id:'mail',label:'Correo',icon:'bell' as const},{id:'brand',label:'Logos y colores',icon:'home' as const},{id:'audit',label:'Auditoría de accesos',icon:'check' as const},{id:'settings',label:`Parámetros (${items.length})`,icon:'settings' as const},...(bootstrapSlot?[{id:'bootstrap' as Section,label:'Configuración inicial',icon:'tasks' as const}]:[])]} />
+    <WorkspaceTabs label="Secciones de Sistema" active={tab} onChange={setTab} hub={{ title: 'Parámetros del sistema' }} tabs={[{id:'backup',label:'Respaldos',icon:'archive' as const},{id:'users',label:'Usuarios',icon:'members' as const},{id:'profiles',label:'Perfiles y accesos',icon:'shield' as const},{id:'forms',label:'Formularios',icon:'settings' as const},{id:'mail',label:'Correo',icon:'bell' as const},{id:'brand',label:'Logos y colores',icon:'home' as const},{id:'audit',label:'Auditoría de accesos',icon:'check' as const},{id:'settings',label:`Parámetros (${items.length})`,icon:'settings' as const},...(bootstrapSlot?[{id:'bootstrap' as Section,label:'Configuración inicial',icon:'tasks' as const}]:[])]} />
     {/* La consola queda montada (oculta) para conservar lo escrito al cambiar de sección. */}
     <div hidden={!isOps}><SystemOperationsPanel api={api} area={lastOps.current} /></div>
     <WorkspacePanel id="profiles" active={tab==='profiles'}>{<section className="panel system-profile-matrix"><header><div><p className="eyebrow">Control de acceso</p><h2>Matriz vigente de perfiles</h2></div><span className="count-badge">{profiles.length} perfiles</span></header><div className="system-profile-table"><table><thead><tr><th>Perfil</th><th>Vistas y acciones habilitadas</th><th>Vigencia</th></tr></thead><tbody>{profiles.map(profile=><tr key={profile.code}><th>{profile.label}</th><td><div className="system-permission-chips">{profile.value.split('|').filter(Boolean).map(permission=><span key={permission}>{permission}</span>)}</div></td><td>{profile.effectiveFrom}</td></tr>)}</tbody></table></div><p className="system-profile-note">La matriz permite revisar el alcance completo antes de versionar cambios en las tarjetas inferiores. Las autorizaciones críticas continúan sujetas a segregación de funciones y auditoría.</p></section>}</WorkspacePanel>
+    <WorkspacePanel id="forms" active={tab==='forms'}><FormSchemaAdminPanel api={api} /></WorkspacePanel>
     <WorkspacePanel id="settings" active={tab==='settings'}>
     <HelpNote>Cada cambio crea una nueva versión auditada con fecha de vigencia. Los expedientes iniciados bajo una regla anterior no cambian.</HelpNote>
     <WorkspaceTabs label="Categorías de parámetros" active={activeCategory} onChange={setCategory} tabs={categories.map(value=>({id:value,label:`${value} (${items.filter(item=>item.category===value).length})`}))} />
