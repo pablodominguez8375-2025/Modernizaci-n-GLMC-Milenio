@@ -33,6 +33,6 @@ function format(value: FormValue): string {
 }
 
 function quote(value: string, numeric = false): string {
-  const neutralized = !numeric && /^[\s\u0000-\u001f]*[=+\-@]/u.test(value) ? "'" + value : value
+  const neutralized = !numeric && /^[\s\p{Cc}\p{Cf}]*[=+\-@]/u.test(value) ? "'" + value : value
   return '"' + neutralized.replace(/"/g, '""') + '"'
 }
