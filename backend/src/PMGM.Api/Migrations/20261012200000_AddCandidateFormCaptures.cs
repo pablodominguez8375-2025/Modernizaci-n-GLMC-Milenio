@@ -36,12 +36,20 @@ public sealed class AddCandidateFormCaptures : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_candidate_form_captures", x => x.Id);
-                table.ForeignKey("FK_candidate_form_captures_ceremony_requests_CeremonyRequestId",
-                    x => x.CeremonyRequestId, "ceremony_requests", "Id",
-                    principalSchema: "core", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_candidate_form_captures_form_schema_versions_SchemaVersionId",
-                    x => x.SchemaVersionId, "form_schema_versions", "Id",
-                    principalSchema: "core", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_candidate_form_captures_ceremony_requests_CeremonyRequestId",
+                    column: x => x.CeremonyRequestId,
+                    principalSchema: "core",
+                    principalTable: "ceremony_requests",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(
+                    name: "FK_candidate_form_captures_form_schema_versions_SchemaVersionId",
+                    column: x => x.SchemaVersionId,
+                    principalSchema: "core",
+                    principalTable: "form_schema_versions",
+                    principalColumn: "Id",
+                    onDelete: ReferentialAction.Restrict);
                 table.CheckConstraint("CK_candidate_form_captures_positive_revision",
                     "\"CaptureRevision\" >= 1 AND \"SchemaVersion\" >= 1");
                 table.CheckConstraint("CK_candidate_form_captures_valid_checksum",
