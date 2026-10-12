@@ -25,10 +25,61 @@ public static class CandidateFormCaptureEndpoints
             .WithTags("Insinuados — capturas privadas versionadas")
             .RequireAuthorization();
 
+        group.MapGet("/schema", GetActiveSchemaAsync);
         group.MapGet("/", GetCapturesAsync);
         group.MapGet("/{captureRevision:int}", GetCaptureAsync);
         group.MapPost("/", CreateCaptureAsync);
         return endpoints;
+    }
+
+    /// <summary>
+    /// Authorized metadata for a future responsive renderer. Returns ONLY
+    /// configurable fields; canonical candidate identity is read from the
+    /// existing protected candidate profile endpoints.
+    /// </summary>
+    private static async Task<IResult> GetActiveSchemaAsync(
+        Guid requestId, HttpContext http, CandidateIntakeDbContext intakeDb,
+        PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct)
+    {
+        var profile = await LoadAuthorizedProfileAsync(requestId, http, intakeDb, access,
+            allowGrandSecretariat: true, ct);
+        if (profile.Status == ProfileAccessStatus.Forbidden) return Results.Forbid();
+        if (profile.Profile is null) return Results.NotFound();
+
+        NoCache(http);
+        var lodgeScope = FormSchemaScope.ForOrganization(profile.Profile.OrganizationId);
+        var now = DateTimeOffset.UtcNow;
+        var active = await db.FormSchemaVersions.AsNoTracking()
+            .Where(x => x.FormCode == FormCode &&
+                x.ScopeKey == lodgeScope && x.EffectiveFromUtc <= now)
+            .OrderByDescending(x => x.Version)
+            .FirstOrDefaultAsync(ct);
+        active ??= await db.FormSchemaVersions.AsNoTracking()
+            .Where(x => x.FormCode == FormCode &&
+                x.ScopeKey == FormSchemaScope.Order && x.EffectiveFromUtc <= now)
+            .OrderByDescending(x => x.Version)
+            .FirstOrDefaultAsync(ct);
+        if (active is null) return Results.NotFound();
+
+        var trusted = FormSchemaVersionStore.Decode(active);
+        if (!FormSchemaInstitutionalCatalog.ValidateForPublication(trusted).IsValid)
+            throw new InvalidDataException("La definición vigente del formulario no cumple el catálogo institucional.");
+
+        var previous = await db.CandidateFormCaptures.AsNoTracking()
+            .Where(x => x.CeremonyRequestId == requestId)
+            .OrderByDescending(x => x.CaptureRevision)
+            .Select(x => x.CaptureRevision)
+            .FirstOrDefaultAsync(ct);
+        var visible = trusted.Fields.Where(x => !x.IsCore && x.Enabled && x.Visible).ToArray();
+        return Results.Ok(new
+        {
+            formCode = trusted.FormCode,
+            schemaVersion = trusted.Version,
+            scopeKey = active.ScopeKey,
+            trusted.EffectiveFromUtc,
+            expectedCaptureRevision = previous,
+            fields = visible
+        });
     }
 
     private static async Task<IResult> GetCapturesAsync(
