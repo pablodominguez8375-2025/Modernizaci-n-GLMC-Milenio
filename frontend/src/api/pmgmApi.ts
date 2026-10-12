@@ -1,4 +1,6 @@
 import { technicalGrant } from './dynamicAccess'
+import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
+import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
 import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated } from './userAccounts'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
@@ -540,6 +542,38 @@ export class PmgmApiClient {
   async getOfficialFeeSchedule(organizationId?:string,asOf=chileToday()):Promise<OfficialSchedule>{if(this.useMocks){if(organizationId)this.assertMockTreasuryAccess(organizationId,'view');const row=tariffAt(this.mockTariffs,asOf);if(!row)throw new Error('No existe un decreto publicado vigente para esta fecha.');const territory=organizationId?this.mockZone(organizationId):null;if(organizationId&&!territory)throw new Error('Complete el Oriente y país en la Ficha del Taller.');return{...structuredClone(row),asOf,territory,items:row.rates.filter(x=>!territory||x.territory===territory)}}return this.request(`/api/tesoreria/tarifario-cuotas?asOf=${asOf}${organizationId?`&organizationId=${encodeURIComponent(organizationId)}`:''}`)}
   async getTreasuryTerritories():Promise<{total:number;items:TreasuryTerritoryOption[]}>{if(this.useMocks){this.assertMockGrandTreasuryAccess('view');return{total:this.mockOrganizations.length,items:this.mockOrganizations.map(item=>({...item,...demoWorkshopLocation(item.id,item.treasuryTerritory),treasuryTerritory:this.mockZone(item.id)}))}};return this.request('/api/tesoreria/talleres/orientes')}
   async getTreasuryTerritory(organizationId:string):Promise<{organizationId:string;territory:TreasuryTerritory|null}>{if(this.useMocks){if(this.canMockManageGrandTreasury())this.assertMockGrandTreasuryAccess('view');const item=this.mockOrganizations.find(value=>value.id===organizationId);if(!item)throw new Error('El Taller no existe.');return{organizationId,territory:this.mockZone(organizationId)}}return this.request(`/api/tesoreria/talleres/${encodeURIComponent(organizationId)}/oriente`)}
+
+  /** Institutional form editing remains server-authorized by CanConfigureSystem. */
+  async getFormSchemaCatalog(): Promise<{ forms: { formCode: string; trustedCoreKeys: string[]; description: string }[] }> {
+    if (this.useMocks) return { forms: [{
+      formCode: 'candidate_profile', description: 'Ficha privada de Insinuado',
+      trustedCoreKeys: coreCandidateFormFields.map(field => field.key),
+    }] }
+    return this.request('/api/system/forms/catalog')
+  }
+
+  async getFormSchemaVersions(): Promise<FormSchemaVersionsResponse> {
+    if (this.useMocks) return mockFormHistory()
+    return this.request<FormSchemaVersionsResponse>('/api/system/forms/candidate_profile/versions')
+  }
+
+  async getFormSchemaVersion(version: number): Promise<FormSchemaSnapshot> {
+    if (this.useMocks) return mockFormVersion(version)
+    return this.request<FormSchemaSnapshot>(
+      '/api/system/forms/candidate_profile/versions/' + encodeURIComponent(String(version)))
+  }
+
+  async publishFormSchemaVersion(payload: PublishFormSchema): Promise<{ version: number }> {
+    if (this.useMocks) {
+      const saved = publishMockFormVersion(payload)
+      return { version: saved.version }
+    }
+    return this.request<{ version: number }>(
+      '/api/system/forms/candidate_profile/versions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+  }
 
   async getSystemSettings(): Promise<SystemSettingsResponse> {
     if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => {
