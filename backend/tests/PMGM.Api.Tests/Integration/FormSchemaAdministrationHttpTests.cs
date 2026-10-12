@@ -120,6 +120,9 @@ public sealed class FormSchemaAdministrationHttpTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = Factory(Connection);
         using var client = factory.CreateClient();
+        await using (var databaseScope = factory.Services.CreateAsyncScope())
+            await databaseScope.ServiceProvider.GetRequiredService<PmgmDbContext>()
+                .Database.MigrateAsync(ct);
 
         client.DefaultRequestHeaders.Add("X-Form-Role", InstitutionalRoles.TallerSecretaria);
         client.DefaultRequestHeaders.Add("X-Form-Scope", "lodge");
@@ -150,6 +153,9 @@ public sealed class FormSchemaAdministrationHttpTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = Factory(Connection);
         using var client = factory.CreateClient();
+        await using (var databaseScope = factory.Services.CreateAsyncScope())
+            await databaseScope.ServiceProvider.GetRequiredService<PmgmDbContext>()
+                .Database.MigrateAsync(ct);
         var unknown = BaseRoute + "?organizationId=" + Guid.NewGuid();
 
         Assert.Equal(HttpStatusCode.BadRequest,
