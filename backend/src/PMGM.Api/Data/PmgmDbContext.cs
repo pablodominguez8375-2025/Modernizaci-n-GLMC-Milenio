@@ -68,6 +68,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<InstitutionalRuleSetting> InstitutionalRuleSettings => Set<InstitutionalRuleSetting>();
     public DbSet<DynamicAccessSnapshot> DynamicAccessSnapshots => Set<DynamicAccessSnapshot>();
     public DbSet<FormSchemaVersion> FormSchemaVersions => Set<FormSchemaVersion>();
+    public DbSet<CandidateFormCapture> CandidateFormCaptures => Set<CandidateFormCapture>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<DataProcessingActivity> DataProcessingActivities => Set<DataProcessingActivity>();
     public DbSet<DataRetentionPolicy> DataRetentionPolicies => Set<DataRetentionPolicy>();
@@ -96,6 +97,23 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             e.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Rate).WithMany().HasForeignKey(x => x.RateId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth }).IsUnique();
+        });
+
+        modelBuilder.Entity<CandidateFormCapture>(entity =>
+        {
+            entity.ToTable("candidate_form_captures");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ScopeKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ValuesJson).HasColumnType("text").IsRequired();
+            entity.Property(x => x.PayloadSha256).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.CapturedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.CapturedAtUtc).IsRequired();
+            entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(x => x.CeremonyRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<FormSchemaVersion>().WithMany().HasForeignKey(x => x.SchemaVersionId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.CeremonyRequestId, x.CaptureRevision }).IsUnique();
+            entity.HasIndex(x => new { x.OrganizationId, x.CapturedAtUtc });
         });
 
         modelBuilder.Entity<FormSchemaVersion>(entity =>
