@@ -159,4 +159,4 @@ public sealed class FormSchemaVersionStore(PmgmDbContext db)
 }
 
 /// <summary>Optimistic publication conflict; no schema or audit row was committed.</summary>
-public sealed class FormSchemaVersionConflictException(string message) : InvalidOperationException(message);
+public sealed class FormSchemaVersionConflictException(string message) : InvalidOperationException(message) { }
