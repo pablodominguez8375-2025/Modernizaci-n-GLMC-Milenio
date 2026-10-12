@@ -197,6 +197,7 @@ api.MapLodgeHospitalariaEndpoints();
 api.MapHospitalariaEndpoints();
 api.MapInstitutionalRegularityProjectionEndpoints();
 api.MapCandidateIntakeEndpoints();
+api.MapCandidateFormCaptureEndpoints();
 api.MapCandidateWorkshopIntakeEndpoints();
 api.MapCandidateWorkflowEndpoints();
 api.MapAdmissionEndpoints();
