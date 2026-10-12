@@ -26,7 +26,7 @@ public sealed class CandidateFormCaptureHttpTests
         => new(FormSchemaInstitutionalCatalog.CandidateProfile, version, effective,
             FormSchemaInstitutionalCatalogTests.ValidFields());
 
-    private static object Capture(int version, int previous, object? value = PrivateValue)
+    private static object Capture(int version, int previous, string value = PrivateValue)
         => new { schemaVersion = version, expectedCaptureRevision = previous,
                  values = new Dictionary<string, object?> { ["custom_note"] = value } };
 
