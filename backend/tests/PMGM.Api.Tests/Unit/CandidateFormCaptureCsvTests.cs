@@ -47,6 +47,8 @@ public sealed class CandidateFormCaptureCsvTests
     [InlineData("   +SUM(1,2)")]
     [InlineData("\t@IMPORTXML(1)")]
     [InlineData("\r-1+2")]
+    [InlineData("\\0=cmd")]
+    [InlineData("\\u200B=HYPERLINK(1)")]
     public void NeutralizesSpreadsheetFormulaPayloadsWithoutChangingSource(string raw)
     {
         var values = new Dictionary<string, JsonElement>
