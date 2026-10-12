@@ -46,7 +46,7 @@ public static partial class FormSubmissionPolicy
         {
             if (!fields.TryGetValue(key, out var field))
             {
-                errors.Add($"El campo {key} no pertenece a esta versión del formulario.");
+                errors.Add("La captura contiene un campo no permitido por esta versión.");
                 continue;
             }
 
