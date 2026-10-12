@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Audit.Entities;
+using PMGM.Api.Modules.FormConfiguration;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Hospitalaria.Entities;
@@ -66,6 +67,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<CandidatePublication> CandidatePublications => Set<CandidatePublication>();
     public DbSet<InstitutionalRuleSetting> InstitutionalRuleSettings => Set<InstitutionalRuleSetting>();
     public DbSet<DynamicAccessSnapshot> DynamicAccessSnapshots => Set<DynamicAccessSnapshot>();
+    public DbSet<FormSchemaVersion> FormSchemaVersions => Set<FormSchemaVersion>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<DataProcessingActivity> DataProcessingActivities => Set<DataProcessingActivity>();
     public DbSet<DataRetentionPolicy> DataRetentionPolicies => Set<DataRetentionPolicy>();
@@ -94,6 +96,21 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             e.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne(x => x.Rate).WithMany().HasForeignKey(x => x.RateId).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(x => new { x.OrganizationId, x.PeriodYear, x.PeriodMonth }).IsUnique();
+        });
+
+        modelBuilder.Entity<FormSchemaVersion>(entity =>
+        {
+            entity.ToTable("form_schema_versions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ScopeKey).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.FormCode).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.SchemaJson).HasColumnType("text").IsRequired();
+            entity.Property(x => x.PayloadSha256).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.EffectiveFromUtc).IsRequired();
+            entity.Property(x => x.RecordedAtUtc).IsRequired();
+            entity.HasIndex(x => new { x.ScopeKey, x.FormCode, x.Version }).IsUnique();
+            entity.HasIndex(x => new { x.ScopeKey, x.FormCode, x.EffectiveFromUtc });
         });
 
         modelBuilder.Entity<DynamicAccessSnapshot>(entity =>
