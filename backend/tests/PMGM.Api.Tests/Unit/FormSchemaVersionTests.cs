@@ -49,7 +49,7 @@ public sealed class FormSchemaVersionTests
         Assert.Equal(snapshot.Fields.Count, roundTrip.Fields.Count);
 
         Assert.Throws<InvalidDataException>(() => FormSchemaVersionStore.Decode(
-            Row(snapshot).WithInvalidChecksum()));
+            WithInvalidChecksum(Row(snapshot))));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public sealed class FormSchemaVersionTests
         Assert.Throws<InvalidDataException>(() => FormSchemaVersionStore.Decode(other));
     }
 
-    private static FormSchemaVersion WithInvalidChecksum(this FormSchemaVersion row) => new()
+    private static FormSchemaVersion WithInvalidChecksum(FormSchemaVersion row) => new()
     {
         FormCode = row.FormCode,
         ScopeKey = row.ScopeKey,
