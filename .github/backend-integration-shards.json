@@ -36,7 +36,8 @@
       "CalendarPostgreSqlTests",
       "AdvancementAttestationHttpTests",
       "AdvancementDispensationHttpTests",
-      "FormSchemaVersionPostgreSqlTests"
+      "FormSchemaVersionPostgreSqlTests",
+      "FormSchemaAdministrationHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
