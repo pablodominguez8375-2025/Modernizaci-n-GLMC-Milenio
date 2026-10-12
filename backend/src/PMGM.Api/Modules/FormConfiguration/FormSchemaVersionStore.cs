@@ -21,7 +21,8 @@ public sealed class FormSchemaVersionStore(PmgmDbContext db)
         IReadOnlyCollection<string> trustedCoreKeys,
         string actorSubject,
         string correlationId,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? expectedPreviousVersion = null)
     {
         ArgumentNullException.ThrowIfNull(next);
         ArgumentNullException.ThrowIfNull(trustedCoreKeys);
@@ -59,6 +60,10 @@ public sealed class FormSchemaVersionStore(PmgmDbContext db)
             .Where(x => x.ScopeKey == scope && x.FormCode == next.FormCode)
             .OrderByDescending(x => x.Version)
             .FirstOrDefaultAsync(ct);
+
+        if (expectedPreviousVersion is int expected && expected != (last?.Version ?? 0))
+            throw new FormSchemaVersionConflictException(
+                "La definición cambió desde la última lectura. Recargue antes de publicar.");
 
         var current = last is null ? null : Decode(last);
         var validation = FormSchemaPolicy.ValidateNext(current, next, trustedCoreKeys);
@@ -152,3 +157,6 @@ public sealed class FormSchemaVersionStore(PmgmDbContext db)
             .ToLowerInvariant();
     }
 }
+
+/// <summary>Optimistic publication conflict; no schema or audit row was committed.</summary>
+public sealed class FormSchemaVersionConflictException(string message) : InvalidOperationException(message) { }
