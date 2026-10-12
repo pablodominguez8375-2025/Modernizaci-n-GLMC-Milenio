@@ -42,3 +42,12 @@
   .form-capture-actions button { width: 100%; }
   .form-capture-panel { overflow-wrap: anywhere; }
 }
+
+/* Restricted one-revision export: no new global controls or navigation. */
+.form-capture-history-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.form-capture-history-actions > button { min-height: 44px; white-space: normal; }
+.form-capture-history-actions > small { flex: 1 1 230px; color: var(--muted, #64748b); line-height: 1.55; }
+@media (max-width: 600px) {
+  .form-capture-history-actions { flex-direction: column; align-items: stretch; }
+  .form-capture-history-actions > button { width: 100%; }
+}

@@ -111,6 +111,18 @@ public sealed class CandidateFormCaptureHttpTests
         Assert.Equal("custom_note", historicalFields[0].GetProperty("key").GetString());
         Assert.Equal("Observación", historicalFields[0].GetProperty("label").GetString());
         Assert.DoesNotContain(historicalFields, x => x.GetProperty("isCore").GetBoolean());
+        var exported = await client.GetAsync(route + "/1/export.csv", ct);
+        Assert.Equal(HttpStatusCode.OK, exported.StatusCode);
+        Assert.Equal("text/csv", exported.Content.Headers.ContentType?.MediaType);
+        Assert.True(exported.Headers.CacheControl?.NoStore);
+        Assert.Equal("nosniff", exported.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("attachment", exported.Content.Headers.ContentDisposition?.DispositionType);
+        var csv = await exported.Content.ReadAsStringAsync(ct);
+        Assert.Contains("Observación", csv, StringComparison.Ordinal);
+        Assert.Contains(PrivateValue, csv, StringComparison.Ordinal);
+        Assert.Contains("restricted", csv, StringComparison.Ordinal);
+        Assert.DoesNotContain("first_names", csv, StringComparison.Ordinal);
+        Assert.DoesNotContain("rut_or_institutional_id", csv, StringComparison.Ordinal);
 
         var replay = await client.PostAsJsonAsync(route, Capture(1, 0), ct);
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
@@ -125,6 +137,8 @@ public sealed class CandidateFormCaptureHttpTests
         Authenticate(client, orgB.Id);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.GetAsync(route + "/1", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.PostAsJsonAsync(route, Capture(1, 1), ct)).StatusCode);
         Authenticate(client, orgA.Id);
@@ -150,6 +164,12 @@ public sealed class CandidateFormCaptureHttpTests
         Assert.Equal(1, original.GetProperty("schemaVersion").GetInt32());
         Assert.Equal(PrivateValue,
             original.GetProperty("values").GetProperty("custom_note").GetString());
+        // Historical export stays pinned to its original schema after a new publication.
+        var oldExport = await client.GetAsync(route + "/1/export.csv", ct);
+        Assert.Equal(HttpStatusCode.OK, oldExport.StatusCode);
+        var oldText = await oldExport.Content.ReadAsStringAsync(ct);
+        Assert.Contains("\"Observación\";\"custom_note\"", oldText, StringComparison.Ordinal);
+        Assert.Contains(PrivateValue, oldText, StringComparison.Ordinal);
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -167,6 +187,18 @@ public sealed class CandidateFormCaptureHttpTests
             Assert.Equal(2, audits.Count);
             Assert.All(audits, x => Assert.DoesNotContain(PrivateValue,
                 x.MetadataJson ?? string.Empty, StringComparison.Ordinal));
+            var exports = await db.AuditEvents.AsNoTracking()
+                .Where(x => x.EntityType == nameof(CandidateFormCapture) &&
+                    x.Action == "candidate.form_capture.export_csv" &&
+                    x.OrganizationId == orgA.Id)
+                .ToListAsync(ct);
+            Assert.Equal(2, exports.Count);
+            Assert.All(exports, x =>
+            {
+                Assert.DoesNotContain(PrivateValue, x.MetadataJson ?? string.Empty,
+                    StringComparison.Ordinal);
+                Assert.Contains("csv", x.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+            });
 
             await Assert.ThrowsAnyAsync<Exception>(() => db.Database.ExecuteSqlInterpolatedAsync(
                 $"DELETE FROM core.candidate_form_captures WHERE \"Id\" = {captures[0].Id}", ct));
@@ -203,9 +235,13 @@ public sealed class CandidateFormCaptureHttpTests
 
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.GetAsync(route, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
         Authenticate(client, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.GetAsync(route, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.PostAsJsonAsync(route, Capture(1, 0), ct)).StatusCode);
     }
