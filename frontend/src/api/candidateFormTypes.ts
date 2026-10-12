@@ -56,6 +56,7 @@ export interface CandidateFormCaptureDetail {
   scopeKey: string
   capturedAtUtc: string
   values: FormValues
+  fields?: FormFieldDefinition[]
 }
 export interface SaveCandidateFormCapture {
   schemaVersion: number
