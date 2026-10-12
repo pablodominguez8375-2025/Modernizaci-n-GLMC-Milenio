@@ -27,13 +27,14 @@ const nextDayLocal = () => {
 
 export default function FormSchemaAdminPanel({ api }: { api: PmgmApiClient }) {
   const [history, setHistory] = useState<FormSchemaVersionsResponse | null>(null)
-  const [fields, setFields] = useState<FormFieldDefinition[]>(() => structuredClone(coreCandidateFormFields))
+  const [fields, setFields] = useState<FormFieldDefinition[]>(() => coreCandidateFormFields.map(field => ({ ...field })))
   const [priorKeys, setPriorKeys] = useState<string[]>([])
   const [effectiveLocal, setEffectiveLocal] = useState(nextDayLocal)
   const [newKey, setNewKey] = useState('')
   const [newLabel, setNewLabel] = useState('')
   const [newType, setNewType] = useState<FormFieldType>('text')
   const [loading, setLoading] = useState(true)
+  const [catalogVerified, setCatalogVerified] = useState(false)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -41,7 +42,7 @@ export default function FormSchemaAdminPanel({ api }: { api: PmgmApiClient }) {
 
   useEffect(() => {
     let active = true
-    setLoading(true); setError(null)
+    setLoading(true); setError(null); setCatalogVerified(false)
     async function load() {
       try {
         const [catalog, versions] = await Promise.all([api.getFormSchemaCatalog(), api.getFormSchemaVersions()])
@@ -54,7 +55,8 @@ export default function FormSchemaAdminPanel({ api }: { api: PmgmApiClient }) {
           : null
         if (!active) return
         setHistory(versions)
-        setFields(current ? structuredClone(current.fields) : structuredClone(coreCandidateFormFields))
+        setFields(current ? structuredClone(current.fields) : coreCandidateFormFields.map(field => ({ ...field })))
+        setCatalogVerified(true)
         setPriorKeys(current?.fields.map(field => field.key) ?? [])
       } catch (reason) {
         if (active) setError(toMessage(reason))
@@ -95,7 +97,7 @@ export default function FormSchemaAdminPanel({ api }: { api: PmgmApiClient }) {
   }
 
   async function publish() {
-    if (busy || loading || error) return
+    if (busy || loading || !catalogVerified) return
     if (fields.length <= coreCandidateFormFields.length) {
       setError('Agregue al menos un campo adicional antes de publicar la primera configuración.')
       return
@@ -211,7 +213,7 @@ export default function FormSchemaAdminPanel({ api }: { api: PmgmApiClient }) {
     <div className="form-schema-submit">
       <label><span>Vigente desde (fecha y hora local)</span><input type="datetime-local" value={effectiveLocal}
         onChange={event => setEffectiveLocal(event.target.value)} /></label>
-      <button type="button" onClick={() => { void publish() }} disabled={busy || loading || Boolean(error)}>
+      <button type="button" onClick={() => { void publish() }} disabled={busy || loading || !catalogVerified}>
         {busy ? 'Publicando versión…' : 'Publicar nueva versión auditada'}
       </button>
     </div>
