@@ -104,7 +104,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasKey(x => x.Id);
             entity.Property(x => x.ScopeKey).HasMaxLength(100).IsRequired();
             entity.Property(x => x.FormCode).HasMaxLength(64).IsRequired();
-            entity.Property(x => x.SchemaJson).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.SchemaJson).HasColumnType("text").IsRequired();
             entity.Property(x => x.PayloadSha256).HasMaxLength(64).IsRequired();
             entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.EffectiveFromUtc).IsRequired();
