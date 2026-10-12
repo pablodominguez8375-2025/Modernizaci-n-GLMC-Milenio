@@ -103,10 +103,13 @@ public sealed class FormSubmissionPolicyTests
             Values(("has_other", true), ("other", "Detalle")));
         var missingChild = FormSubmissionPolicy.Validate(schema, 2,
             Values(("has_other", true)));
+        var notApplicable = FormSubmissionPolicy.Validate(schema, 2,
+            Values(("has_other", false)));
 
         Assert.False(withoutParent.IsValid);
         Assert.True(withParent.IsValid);
         Assert.False(missingChild.IsValid);
+        Assert.True(notApplicable.IsValid);
     }
 
     [Fact]
@@ -126,6 +129,16 @@ public sealed class FormSubmissionPolicyTests
 
         Assert.False(bad.IsValid);
         Assert.Equal(5, bad.Errors.Count);
+    }
+
+    [Fact]
+    public void SeparatorOnlyPhoneNumberIsNotAccepted()
+    {
+        var result = FormSubmissionPolicy.Validate(
+            Schema(new("phone", "Teléfono", "phone")), 2,
+            Values(("phone", "------")));
+
+        Assert.False(result.IsValid);
     }
 
     [Fact]
