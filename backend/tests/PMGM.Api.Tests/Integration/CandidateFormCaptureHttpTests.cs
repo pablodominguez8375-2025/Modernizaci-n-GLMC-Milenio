@@ -85,6 +85,14 @@ public sealed class CandidateFormCaptureHttpTests
 
         var route = $"/api/insinuados/solicitudes/{ceremony.Id}/formularios/capturas";
         Authenticate(client, orgA.Id);
+        var activeSchema = await client.GetAsync(route + "/schema", ct);
+        Assert.Equal(HttpStatusCode.OK, activeSchema.StatusCode);
+        Assert.True(activeSchema.Headers.CacheControl?.NoStore);
+        var activeDefinition = await activeSchema.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal(1, activeDefinition.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(0, activeDefinition.GetProperty("expectedCaptureRevision").GetInt32());
+        Assert.Single(activeDefinition.GetProperty("fields").EnumerateArray());
+        Assert.Equal("custom_note", activeDefinition.GetProperty("fields")[0].GetProperty("key").GetString());
         var first = await client.PostAsJsonAsync(route, Capture(1, 0), ct);
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
         var firstData = await first.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
@@ -178,6 +186,13 @@ public sealed class CandidateFormCaptureHttpTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = new CandidatePublicationTestFactory(Connection);
         using var client = factory.CreateClient();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>()
+                .Database.MigrateAsync(ct);
+            await scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>()
+                .Database.MigrateAsync(ct);
+        }
         var requestId = Guid.NewGuid();
         var route = $"/api/insinuados/solicitudes/{requestId}/formularios/capturas";
 
