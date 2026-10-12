@@ -39,8 +39,8 @@ public static class FormSchemaInstitutionalCatalog
             return new(false, ["El formulario no está habilitado en el catálogo institucional."]);
 
         var errors = new List<string>();
-        if (schema.Fields is null)
-            return new(false, ["El formulario requiere una definición de campos."]);
+        if (schema.Fields is null || schema.Fields.Any(field => field is null))
+            return new(false, ["El formulario requiere una lista válida de campos sin elementos nulos."]);
 
         var indexed = schema.Fields
             .Where(field => field is not null && field.Key is not null)
