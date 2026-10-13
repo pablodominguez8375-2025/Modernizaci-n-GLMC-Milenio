@@ -386,8 +386,7 @@ public sealed class CandidateInterviewAssignmentPositiveHttpTests
                 .ExecuteDeleteAsync(CancellationToken.None);
             await intake.CandidateIntakeProfiles.Where(x => x.CeremonyRequestId == ceremony.Id)
                 .ExecuteDeleteAsync(CancellationToken.None);
-            await db.AuditEvents.Where(x => x.OrganizationId == workshop.Id)
-                .ExecuteDeleteAsync(CancellationToken.None);
+            // Auditoría append-only: conservar eventos sintéticos; no limpiar core.audit_events.
             await db.CandidateInterviewAssignments.Where(x => x.CeremonyRequestId == ceremony.Id)
                 .ExecuteDeleteAsync(CancellationToken.None);
             await db.CandidatePublications.Where(x => x.CeremonyRequestId == ceremony.Id)
