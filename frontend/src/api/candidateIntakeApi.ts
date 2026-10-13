@@ -8,6 +8,7 @@ import {
 import { mockActiveCandidateSchema, mockFormVersion } from './candidateFormMock'
 import { renderDemoCandidateCaptureCsv } from './candidateFormCsv'
 import { PRIVATE_DOCX_MEDIA, renderDemoCandidateCaptureDocx } from './candidateFormDocx'
+import { PRIVATE_PDF_MEDIA, renderDemoCandidateCapturePdf } from './candidateFormPdf'
 
 export type CandidateReviewStatus = 'pending_grand_secretariat' | 'observed' | 'rejected' | 'approved'
 
@@ -776,6 +777,25 @@ export class CandidateIntakeApiClient {
         signature[2] !== 0x03 || signature[3] !== 0x04)
       throw new Error('El archivo Word recibido no tiene la estructura de un paquete válido.')
     return file
+  }
+
+  /** Export exactly one private historic revision; audited server-side. */
+  async exportCandidateFormCapturePdf(requestId: string, captureRevision: number): Promise<Blob> {
+    if (this.useMocks) {
+      const detail = await this.getCandidateFormCapture(requestId, captureRevision)
+      return renderDemoCandidateCapturePdf(detail)
+    }
+    const path = '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/formularios/capturas/' + encodeURIComponent(String(captureRevision)) + '/export.pdf'
+    const response = await this.fetchAuthorized(path, { method: 'GET' })
+    if (!response.ok) throw await this.toError(response)
+    if (!(response.headers.get('Content-Type') ?? '').toLowerCase().startsWith(PRIVATE_PDF_MEDIA))
+      throw new Error('La respuesta no corresponde a un PDF institucional autorizado.')
+    const blob = await response.blob()
+    const bytes = new Uint8Array(await blob.slice(0, 5).arrayBuffer())
+    if (new TextDecoder('ascii').decode(bytes) !== '%PDF-')
+      throw new Error('El archivo PDF recibido no tiene una cabecera válida.')
+    return blob
   }
 
   async saveCandidateFormCapture(requestId: string, payload: SaveCandidateFormCapture): Promise<CandidateFormCaptureInfo> {
