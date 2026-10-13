@@ -106,6 +106,9 @@ public sealed class TrustedProxyForwardingTests
 
         var http = new DefaultHttpContext();
         http.Connection.RemoteIpAddress = IPAddress.Parse(remote);
+        // DefaultHttpContext aislado no define esquema inicial; conservarlo prueba
+        // que solo se procesa X-Forwarded-For, no X-Forwarded-Proto.
+        http.Request.Scheme = "http";
         http.Request.Headers["X-Forwarded-For"] = forwarded;
         http.Request.Headers["X-Forwarded-Host"] = "fake-client.example";
         http.Request.Headers["X-Forwarded-Proto"] = "https";
