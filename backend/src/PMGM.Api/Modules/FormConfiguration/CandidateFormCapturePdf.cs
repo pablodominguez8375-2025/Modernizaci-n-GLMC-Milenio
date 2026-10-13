@@ -116,7 +116,7 @@ public static class CandidateFormCapturePdf
                 }
             }
             _y -= spaceAfter;
-            if (_y < Bottom + 9) NewPage();
+            // Page breaks are demand-driven; never append a blank final page.
         }
 
         private void EnsureSpace(double height)
@@ -136,7 +136,9 @@ public static class CandidateFormCapturePdf
     private static List<string> Wrap(string input, int fontSize)
     {
         if (input.Length == 0) return [string.Empty];
-        var maxUnits = BodyWidth / fontSize / 0.64;
+        // Helvetica's widest standard glyph fits within one font-size unit.
+        // Conservative wrapping prevents clipping for all-caps and narrow screens.
+        var maxUnits = BodyWidth / fontSize / 1.02;
         var result = new List<string>();
         var current = new StringBuilder();
         var length = 0.0;
