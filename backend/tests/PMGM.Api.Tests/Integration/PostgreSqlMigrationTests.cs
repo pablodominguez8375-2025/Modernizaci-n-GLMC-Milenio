@@ -226,4 +226,64 @@ public sealed class PostgreSqlMigrationTests
         Assert.Equal(AuditResults.Success, auditEvent.Result);
         Assert.Equal(organization.Id, auditEvent.OrganizationId);
     }
+
+    [Fact]
+    public async Task Audit_events_allow_insert_but_reject_update_delete_and_truncate()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            return;
+        }
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var options = new DbContextOptionsBuilder<PmgmDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+
+        await using var db = new PmgmDbContext(options);
+        await db.Database.MigrateAsync(cancellationToken);
+
+        var auditEvent = new PMGM.Api.Modules.Audit.Entities.AuditEvent
+        {
+            Action = "audit.append_only.integration",
+            EntityType = "MigrationTest",
+            EntityId = Guid.NewGuid().ToString(),
+            Result = AuditResults.Success,
+            CorrelationId = "test-audit-append-only"
+        };
+
+        db.AuditEvents.Add(auditEvent);
+        await db.SaveChangesAsync(cancellationToken);
+        db.ChangeTracker.Clear();
+
+        var tamperedAction = "audit.tampered";
+        var updateError = await Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE core.audit_events SET \"Action\" = {tamperedAction} WHERE \"Id\" = {auditEvent.Id}",
+                cancellationToken);
+        });
+        Assert.Equal("55000", updateError.SqlState);
+
+        var deleteError = await Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM core.audit_events WHERE \"Id\" = {auditEvent.Id}",
+                cancellationToken);
+        });
+        Assert.Equal("55000", deleteError.SqlState);
+
+        var truncateError = await Assert.ThrowsAsync<Npgsql.PostgresException>(async () =>
+        {
+            await db.Database.ExecuteSqlRawAsync(
+                "TRUNCATE TABLE core.audit_events", cancellationToken);
+        });
+        Assert.Equal("55000", truncateError.SqlState);
+
+        var persisted = await db.AuditEvents.AsNoTracking()
+            .SingleAsync(x => x.Id == auditEvent.Id, cancellationToken);
+        Assert.Equal("audit.append_only.integration", persisted.Action);
+        Assert.Equal("test-audit-append-only", persisted.CorrelationId);
+    }
 }
