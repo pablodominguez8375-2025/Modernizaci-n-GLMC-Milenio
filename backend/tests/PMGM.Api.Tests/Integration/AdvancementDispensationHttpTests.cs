@@ -129,8 +129,7 @@ public sealed class AdvancementDispensationHttpTests
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.AdvancementDispensationCases.Where(x => x.Id == caseRow.Id)
                 .ExecuteDeleteAsync(CancellationToken.None);
-            await db.AuditEvents.Where(x => x.EntityId == caseRow.Id.ToString())
-                .ExecuteDeleteAsync(CancellationToken.None);
+            // Auditoría append-only: conservar eventos sintéticos; no limpiar core.audit_events.
             await db.CeremonyRequests.Where(x => x.Id == ceremony.Id)
                 .ExecuteDeleteAsync(CancellationToken.None);
             await db.Members.Where(x => x.Id == member.Id)
