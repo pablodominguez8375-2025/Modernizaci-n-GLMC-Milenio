@@ -24,6 +24,16 @@ public sealed class TrustedProxyForwardingTests
     }
 
     [Fact]
+    public async Task IPv4_mapped_socket_address_is_still_the_same_exact_trusted_proxy()
+    {
+        var actual = await AuditIpAsync(
+            "10.40.0.11,10.40.0.10",
+            "::ffff:10.40.0.11",
+            "198.51.100.37, 10.40.0.10");
+        Assert.Equal("198.51.100.37", actual);
+    }
+
+    [Fact]
     public async Task Unknown_peer_cannot_spoof_audit_ip_or_proxy_headers()
     {
         var actual = await AuditIpAsync(
@@ -64,6 +74,7 @@ public sealed class TrustedProxyForwardingTests
     [InlineData("::")]
     [InlineData("10.40.0.11/24")]
     [InlineData("10.40.0.11,10.40.0.11")]
+    [InlineData("10.40.0.11,::ffff:10.40.0.11")]
     [InlineData("10.40.0.11,")]
     [InlineData("10.40.0.11,10.40.0.10,10.40.0.12")]
     public void Invalid_or_overly_broad_proxy_config_fails_closed_at_startup(string configured)
@@ -80,7 +91,7 @@ public sealed class TrustedProxyForwardingTests
         TrustedProxyForwarding.Configure(options, Configuration("10.40.0.11,10.40.0.10"));
         Assert.Equal(ForwardedHeaders.XForwardedFor, options.ForwardedHeaders);
         Assert.Empty(options.KnownIPNetworks);
-        Assert.Equal(2, options.KnownProxies.Count);
+        Assert.Equal(4, options.KnownProxies.Count);
         Assert.Equal(2, options.ForwardLimit);
     }
 
