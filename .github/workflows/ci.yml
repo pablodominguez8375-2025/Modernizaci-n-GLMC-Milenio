@@ -450,6 +450,9 @@ jobs:
           assert all('localhost' not in x for x in client['redirectUris'])
           PY
 
+      - name: Test Keycloak realm hardening policies
+        run: python3 -m unittest discover -s tests -p test_keycloak_realm_hardening.py
+
       - name: Validate backup, pilot and recovery Bash scripts
         shell: bash
         run: >-
