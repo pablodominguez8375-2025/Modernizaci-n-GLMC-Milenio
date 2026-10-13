@@ -75,28 +75,31 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
     }
   }
 
-  async function exportRevision() {
+  async function exportRevision(format: 'csv' | 'docx') {
     if (!selected || exporting) return
     const captureRevision = selected.captureRevision
     setExporting(true)
     setError(null)
     try {
-      const blob = await api.exportCandidateFormCaptureCsv(requestId, captureRevision)
+      const blob = format === 'csv'
+        ? await api.exportCandidateFormCaptureCsv(requestId, captureRevision)
+        : await api.exportCandidateFormCaptureDocx(requestId, captureRevision)
       const objectUrl = URL.createObjectURL(blob)
       try {
         const link = document.createElement('a')
         link.href = objectUrl
         link.download = 'insinuado-campos-adicionales-' + requestId +
-          '-r' + captureRevision + '.csv'
+          '-r' + captureRevision + '.' + format
         link.style.display = 'none'
         document.body.appendChild(link)
         try { link.click() } finally { link.remove() }
       } finally {
-        // Revoke the sensitive blob URL as soon as the browser has started the download.
+        // Short-lived object URLs; source data is not written to local storage.
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
       }
-      setMessage('Exportación privada de revisión ' + captureRevision +
-        ' preparada. El archivo contiene datos del expediente: guárdelo únicamente en un lugar autorizado.')
+      setMessage('Exportación privada ' + format.toUpperCase() + ' de revisión ' +
+        captureRevision + ' preparada. El documento contiene antecedentes reservados: ' +
+        'guárdelo únicamente en un lugar institucional autorizado.')
     } catch (reason) {
       setError(toError(reason))
     } finally {
@@ -168,11 +171,15 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
         </select>
         {selected && <div className="form-capture-history-actions">
           <button className="candidate-secondary-button" type="button"
-            disabled={exporting} onClick={() => { void exportRevision() }}>
-            {exporting ? 'Preparando CSV privado…' : 'Exportar revisión CSV'}
+            disabled={exporting} onClick={() => { void exportRevision('csv') }}>
+            {exporting ? 'Preparando descarga…' : 'Exportar revisión CSV'}
           </button>
-          <small>Exportación individual y auditable. El archivo descargado contiene
-            información privada y debe permanecer bajo custodia institucional.</small>
+          <button className="candidate-secondary-button" type="button"
+            disabled={exporting} onClick={() => { void exportRevision('docx') }}>
+            {exporting ? 'Preparando descarga…' : 'Exportar revisión Word'}
+          </button>
+          <small>Exportación individual y auditable a CSV o Word. Los archivos contienen
+            antecedentes privados y deben permanecer bajo custodia institucional.</small>
         </div>}
         {selected && <div className="form-capture-historical">
           <p>Lectura histórica de revisión {selected.captureRevision}, bajo la versión {selected.schemaVersion} del formulario. Los valores permanecen protegidos.</p>
