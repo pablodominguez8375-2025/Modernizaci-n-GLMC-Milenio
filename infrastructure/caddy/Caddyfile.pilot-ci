@@ -10,6 +10,9 @@ https://{$PMGM_PILOT_HOSTNAME} {
     }
 
     handle /identity/* {
+        # Denegar consola/admin master desde el único punto de entrada HTTPS público.
+        @denyIdentityAdmin path /identity/admin /identity/admin/* /identity/realms/master /identity/realms/master/*
+        respond @denyIdentityAdmin "Not Found" 404
         reverse_proxy keycloak:8080
     }
 
