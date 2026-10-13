@@ -11,6 +11,10 @@
 
     # Keycloak vive bajo /identity para no colisionar con /auth/callback del SPA.
     handle /identity/* {
+        # La consola de administración y el realm master no son públicos.
+        # La administración interna usa la red privada de Docker/VPN.
+        @denyIdentityAdmin path /identity/admin /identity/admin/* /identity/realms/master /identity/realms/master/*
+        respond @denyIdentityAdmin "Not Found" 404
         reverse_proxy keycloak:8080
     }
 

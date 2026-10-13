@@ -58,6 +58,17 @@ callback_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-callback.html -w 
 [ "$callback_status" = "200" ] || { echo "El callback SPA devolvió HTTP $callback_status." >&2; exit 1; }
 printf '✓ separación /auth (SPA) y /identity (Keycloak)\n'
 
+# Seguridad: las rutas de consola Keycloak y realm master no pueden salir por Caddy.
+# Se valida sobre HTTPS real y no solo por búsqueda estática en Caddyfile.
+for forbidden_path in /identity/admin /identity/admin/ /identity/realms/master /identity/realms/master/.well-known/openid-configuration; do
+  forbidden_status="$(curl "${curl_common[@]}" -o /dev/null -w '%{http_code}' "$PMGM_PILOT_PUBLIC_URL$forbidden_path")"
+  [ "$forbidden_status" = "404" ] || {
+    echo "Ruta administrativa expuesta: $forbidden_path respondió HTTP $forbidden_status (esperado 404)." >&2
+    exit 1
+  }
+done
+printf '✓ Keycloak admin/master no accesible públicamente (HTTP 404)\n'
+
 discovery="$(curl "${curl_common[@]}" --fail -H 'Accept: application/json' "$PMGM_PILOT_PUBLIC_URL/identity/realms/pmgm/.well-known/openid-configuration")"
 DISCOVERY="$discovery" EXPECTED="$PMGM_PILOT_PUBLIC_URL/identity/realms/pmgm" python3 - <<'PY'
 import json, os
