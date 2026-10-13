@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CandidateIntakeApiClient } from './api/candidateIntakeApi'
+import { LatestResponseGate } from './api/latestResponseGate'
 import {
   capturedValueTypes, isActiveDependency, isProvided,
   prepareCandidateFormCapture, visibleCandidateFormFields,
@@ -25,9 +26,12 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
+  // Never show an older private capture after switching expediente or revision.
+  const captureResponseGate = useRef(new LatestResponseGate())
 
   useEffect(() => {
     let live = true
+    const initialSelectionToken = captureResponseGate.current.begin()
     setSchema(null); setHistory([]); setSelected(null); setDraft({}); setLoading(true)
     setError(null)
     async function load() {
@@ -45,7 +49,7 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
         const historical = latest
           ? await api.getCandidateFormCapture(requestId, latest.captureRevision)
           : null
-        if (!live) return
+        if (!live || !captureResponseGate.current.isCurrent(initialSelectionToken)) return
         setSchema(definition)
         setHistory(past.captures)
         setSelected(historical)
@@ -58,7 +62,7 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
       }
     }
     void load()
-    return () => { live = false }
+    return () => { live = false; captureResponseGate.current.invalidate() }
   }, [api, requestId, revision])
 
   const fields = useMemo(() => visibleCandidateFormFields(schema?.fields ?? []), [schema])
@@ -66,12 +70,13 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
     field.editable && capturedValueTypes.has(field.typeCode))
 
   async function showRevision(next: number) {
+    const selectionToken = captureResponseGate.current.begin()
     setError(null)
     try {
       const capture = await api.getCandidateFormCapture(requestId, next)
-      setSelected(capture)
+      if (captureResponseGate.current.isCurrent(selectionToken)) setSelected(capture)
     } catch (reason) {
-      setError(toError(reason))
+      if (captureResponseGate.current.isCurrent(selectionToken)) setError(toError(reason))
     }
   }
 
