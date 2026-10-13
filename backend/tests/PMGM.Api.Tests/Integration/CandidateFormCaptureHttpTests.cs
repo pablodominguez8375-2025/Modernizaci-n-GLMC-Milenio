@@ -176,6 +176,24 @@ public sealed class CandidateFormCaptureHttpTests
         }, ct);
         Assert.Equal(HttpStatusCode.BadRequest, coreOverwrite.StatusCode);
 
+        // The Treasurer belongs to the SAME workshop but has no access to
+        // private candidate dossiers: organization membership is not sufficient.
+        Authenticate(client, orgA.Id, InstitutionalRoles.TallerTesoreria);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/schema", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1/export.pdf", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync(route, Capture(1, 1), ct)).StatusCode);
+
         Authenticate(client, orgB.Id);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.GetAsync(route + "/1", ct)).StatusCode);
