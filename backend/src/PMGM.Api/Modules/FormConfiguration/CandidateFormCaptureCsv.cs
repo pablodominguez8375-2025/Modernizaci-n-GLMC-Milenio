@@ -42,7 +42,12 @@ public static class CandidateFormCaptureCsv
                 capture.CaptureRevision.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 capture.CapturedAtUtc.ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture)
             };
-            builder.AppendLine(string.Join(";", cells.Select(EscapeCell)));
+            // A JSON number from a numeric field is a scalar, not a spreadsheet formula.
+            // Preserve its sign and numeric semantics; all untrusted text remains neutralized.
+            var trustedNumber = value.ValueKind == JsonValueKind.Number &&
+                (field.TypeCode == "number" || field.TypeCode == "currency" || field.TypeCode == "percentage");
+            builder.AppendLine(string.Join(";", cells.Select((cell, index) =>
+                EscapeCell(cell, trustedNumber && index == 2))));
         }
         // Excel's UTF-8 auto-detection requires BOM on many Spanish-language installations.
         return Encoding.UTF8.GetBytes("\uFEFF" + builder.ToString());
@@ -60,7 +65,7 @@ public static class CandidateFormCaptureCsv
         _ => throw new InvalidDataException("La captura histórica contiene un tipo de valor no exportable.")
     };
 
-    private static string EscapeCell(string? value)
+    private static string EscapeCell(string? value, bool trustedNumber = false)
     {
         var text = value ?? string.Empty;
         // Spreadsheet formula injection: Excel and LibreOffice may execute a
@@ -73,7 +78,7 @@ public static class CandidateFormCaptureCsv
                 System.Globalization.CharUnicodeInfo.GetUnicodeCategory(text[firstVisible]) ==
                     System.Globalization.UnicodeCategory.Format))
             firstVisible++;
-        if (firstVisible < text.Length && "=+-@".Contains(text[firstVisible]))
+        if (!trustedNumber && firstVisible < text.Length && "=+-@".Contains(text[firstVisible]))
             text = "'" + text;
         return "\"" + text.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
     }
