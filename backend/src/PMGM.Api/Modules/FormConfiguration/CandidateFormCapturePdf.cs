@@ -237,9 +237,9 @@ public static class CandidateFormCapturePdf
         // then a page object and one content stream per page.
         var objects = new List<byte[]>
         {
-            [],
+            Array.Empty<byte>(),
             Encoding.ASCII.GetBytes("<< /Type /Catalog /Pages 2 0 R >>"),
-            [],
+            Array.Empty<byte>(),
             Encoding.ASCII.GetBytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"),
             Encoding.ASCII.GetBytes("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>")
         };
