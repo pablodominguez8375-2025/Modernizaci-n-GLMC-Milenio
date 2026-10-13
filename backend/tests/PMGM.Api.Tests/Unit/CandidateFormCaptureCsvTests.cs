@@ -61,6 +61,31 @@ public sealed class CandidateFormCaptureCsvTests
         Assert.Equal(raw, values["custom_note"].GetString());
     }
 
+    [Theory]
+    [InlineData("number")]
+    [InlineData("currency")]
+    [InlineData("percentage")]
+    public void PreservesTrustedNegativeNumbersButEscapesTextThatLooksNumeric(string typeCode)
+    {
+        var trusted = Schema() with
+        {
+            Fields = FormSchemaInstitutionalCatalogTests.ValidFields().Append(
+                new FormFieldDefinition("custom_amount", "Monto", typeCode,
+                    Classification: FormFieldClassification.Restricted)).ToArray()
+        };
+        var values = new Dictionary<string, JsonElement>
+        {
+            ["custom_amount"] = JsonSerializer.SerializeToElement(-10.5m),
+            ["custom_note"] = JsonSerializer.SerializeToElement("-10.5")
+        };
+
+        var csv = Encoding.UTF8.GetString(CandidateFormCaptureCsv.Render(Row(), trusted, values));
+
+        Assert.Contains($";\"-10.5\";\"restricted\";\"{typeCode}\";", csv, StringComparison.Ordinal);
+        Assert.Contains(";\"'-10.5\";\"restricted\";\"multiline\";", csv, StringComparison.Ordinal);
+        Assert.DoesNotContain($";\"'-10.5\";\"restricted\";\"{typeCode}\";", csv, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void QuotesNewlinesDoubleQuotesAndSeparators()
     {
