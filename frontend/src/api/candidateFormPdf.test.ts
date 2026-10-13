@@ -27,8 +27,8 @@ describe('Issue #37 — PDF A4 histórico privado', () => {
     expect(pdf).not.toContain('/JavaScript')
     expect(pdf).not.toContain('/EmbeddedFile')
     const lines = [...pdf.matchAll(/<([0-9A-F]+)> Tj/g)]
-      .map(match => decoder.decode(Uint8Array.from(match[1].match(/.{2}/g) ?? [],
-        item => Number.parseInt(item, 16))))
+      .map(match => decoder.decode(Uint8Array.from((match[1].match(/.{2}/g) ?? [])
+        .map(item => Number.parseInt(item, 16)))))
     const printable = lines.join(' ')
     expect(printable).toContain('Motivación personal complementaria')
     expect(printable).toContain('Respuesta sintética á é í ó ú ñ')
@@ -46,8 +46,8 @@ describe('Issue #37 — PDF A4 histórico privado', () => {
     const blob = renderDemoCandidateCapturePdf(historical('Emoji 😀 símbolo <pdf> &'))
     const pdf = decoder.decode(await blob.arrayBuffer())
     const lines = [...pdf.matchAll(/<([0-9A-F]+)> Tj/g)]
-      .map(match => decoder.decode(Uint8Array.from(match[1].match(/.{2}/g) ?? [],
-        item => Number.parseInt(item, 16)))).join(' ')
+      .map(match => decoder.decode(Uint8Array.from((match[1].match(/.{2}/g) ?? [])
+        .map(item => Number.parseInt(item, 16))))).join(' ')
     expect(lines).toContain('[U+1F600]')
     expect(lines).toContain('<pdf> &')
     expect(pdf).not.toContain('/URI ')
