@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.IO.Compression;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -123,6 +124,28 @@ public sealed class CandidateFormCaptureHttpTests
         Assert.Contains("restricted", csv, StringComparison.Ordinal);
         Assert.DoesNotContain("first_names", csv, StringComparison.Ordinal);
         Assert.DoesNotContain("rut_or_institutional_id", csv, StringComparison.Ordinal);
+        var wordExport = await client.GetAsync(route + "/1/export.docx", ct);
+        Assert.Equal(HttpStatusCode.OK, wordExport.StatusCode);
+        Assert.Equal(CandidateFormCaptureDocx.MediaType,
+            wordExport.Content.Headers.ContentType?.MediaType);
+        Assert.True(wordExport.Headers.CacheControl?.NoStore);
+        Assert.Equal("nosniff", wordExport.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("attachment", wordExport.Content.Headers.ContentDisposition?.DispositionType);
+        var wordBytes = await wordExport.Content.ReadAsByteArrayAsync(ct);
+        using (var docxStream = new MemoryStream(wordBytes))
+        using (var archive = new ZipArchive(docxStream, ZipArchiveMode.Read))
+        {
+            Assert.NotNull(archive.GetEntry("[Content_Types].xml"));
+            var wordDocument = archive.GetEntry("word/document.xml");
+            Assert.NotNull(wordDocument);
+            using var reader = new StreamReader(wordDocument!.Open());
+            var wordXml = await reader.ReadToEndAsync(ct);
+            Assert.Contains(PrivateValue, wordXml, StringComparison.Ordinal);
+            Assert.Contains("Observación", wordXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("rut_or_institutional_id", wordXml, StringComparison.Ordinal);
+            Assert.DoesNotContain("first_names", wordXml, StringComparison.Ordinal);
+        }
+
 
         var replay = await client.PostAsJsonAsync(route, Capture(1, 0), ct);
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
@@ -139,6 +162,8 @@ public sealed class CandidateFormCaptureHttpTests
             (await client.GetAsync(route + "/1", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.PostAsJsonAsync(route, Capture(1, 1), ct)).StatusCode);
         Authenticate(client, orgA.Id);
@@ -170,6 +195,18 @@ public sealed class CandidateFormCaptureHttpTests
         var oldText = await oldExport.Content.ReadAsStringAsync(ct);
         Assert.Contains("\"Observación\";\"custom_note\"", oldText, StringComparison.Ordinal);
         Assert.Contains(PrivateValue, oldText, StringComparison.Ordinal);
+        var oldWord = await client.GetAsync(route + "/1/export.docx", ct);
+        Assert.Equal(HttpStatusCode.OK, oldWord.StatusCode);
+        using (var stream = new MemoryStream(await oldWord.Content.ReadAsByteArrayAsync(ct)))
+        using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
+        {
+            using var reader = new StreamReader(archive.GetEntry("word/document.xml")!.Open());
+            var xml = await reader.ReadToEndAsync(ct);
+            Assert.Contains("Observación", xml, StringComparison.Ordinal);
+            Assert.Contains("Versión del formulario: 1", xml, StringComparison.Ordinal);
+            Assert.Contains(PrivateValue, xml, StringComparison.Ordinal);
+        }
+
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -193,6 +230,18 @@ public sealed class CandidateFormCaptureHttpTests
                     x.OrganizationId == orgA.Id)
                 .ToListAsync(ct);
             Assert.Equal(2, exports.Count);
+            var wordExports = await db.AuditEvents.AsNoTracking()
+                .Where(x => x.EntityType == nameof(CandidateFormCapture) &&
+                    x.Action == "candidate.form_capture.export_docx" &&
+                    x.OrganizationId == orgA.Id)
+                .ToListAsync(ct);
+            Assert.Equal(2, wordExports.Count);
+            Assert.All(wordExports, x =>
+            {
+                Assert.Contains("docx", x.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+                Assert.DoesNotContain(PrivateValue, x.MetadataJson ?? string.Empty,
+                    StringComparison.Ordinal);
+            });
             Assert.All(exports, x =>
             {
                 Assert.DoesNotContain(PrivateValue, x.MetadataJson ?? string.Empty,
@@ -237,11 +286,15 @@ public sealed class CandidateFormCaptureHttpTests
             (await client.GetAsync(route, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
         Authenticate(client, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.GetAsync(route, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.PostAsJsonAsync(route, Capture(1, 0), ct)).StatusCode);
     }
