@@ -7,6 +7,7 @@ import {
 } from './candidateFormTypes'
 import { mockActiveCandidateSchema, mockFormVersion } from './candidateFormMock'
 import { renderDemoCandidateCaptureCsv } from './candidateFormCsv'
+import { PRIVATE_DOCX_MEDIA, renderDemoCandidateCaptureDocx } from './candidateFormDocx'
 
 export type CandidateReviewStatus = 'pending_grand_secretariat' | 'observed' | 'rejected' | 'approved'
 
@@ -752,6 +753,29 @@ export class CandidateIntakeApiClient {
     if (!(response.headers.get('Content-Type') ?? '').toLowerCase().startsWith('text/csv'))
       throw new Error('La respuesta de exportación no es un archivo CSV autorizado.')
     return response.blob()
+  }
+
+  /**
+   * Word export is produced by the protected backend, one revision at a time.
+   * The showcase variant is only fictional content in volatile memory.
+   */
+  async exportCandidateFormCaptureDocx(requestId: string, captureRevision: number): Promise<Blob> {
+    if (this.useMocks) {
+      const detail = await this.getCandidateFormCapture(requestId, captureRevision)
+      return renderDemoCandidateCaptureDocx(detail)
+    }
+    const path = '/api/insinuados/solicitudes/' + encodeURIComponent(requestId) +
+      '/formularios/capturas/' + encodeURIComponent(String(captureRevision)) + '/export.docx'
+    const response = await this.fetchAuthorized(path, { method: 'GET' })
+    if (!response.ok) throw await this.toError(response)
+    if (!(response.headers.get('Content-Type') ?? '').toLowerCase().startsWith(PRIVATE_DOCX_MEDIA))
+      throw new Error('La respuesta de exportación no es un documento Word autorizado.')
+    const file = await response.blob()
+    const signature = new Uint8Array(await file.slice(0, 4).arrayBuffer())
+    if (signature[0] !== 0x50 || signature[1] !== 0x4b ||
+        signature[2] !== 0x03 || signature[3] !== 0x04)
+      throw new Error('El archivo Word recibido no tiene la estructura de un paquete válido.')
+    return file
   }
 
   async saveCandidateFormCapture(requestId: string, payload: SaveCandidateFormCapture): Promise<CandidateFormCaptureInfo> {
