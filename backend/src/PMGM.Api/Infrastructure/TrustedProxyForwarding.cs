@@ -30,21 +30,29 @@ public static class TrustedProxyForwarding
 
         foreach (var token in addresses)
         {
-            if (!IPAddress.TryParse(token, out var address)
-                || IPAddress.Any.Equals(address)
-                || IPAddress.IPv6Any.Equals(address)
-                || IPAddress.None.Equals(address)
-                || IPAddress.IPv6None.Equals(address)
-                || IPAddress.IsLoopback(address)
-                || (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
-                    && address.GetAddressBytes()[0] >= 224)
-                || options.KnownProxies.Contains(address))
+            if (!IPAddress.TryParse(token, out var address))
+                throw new InvalidOperationException(
+                    "ForwardedHeaders:KnownProxies requiere IPs exactas, no nombres ni rangos.");
+
+            // Kestrel puede presentar IPv4 del socket como ::ffff:x.y.z.w.
+            // Confiar en ambas representaciones de la MISMA IP exacta, nunca en su CIDR.
+            var normalized = address.IsIPv4MappedToIPv6 ? address.MapToIPv4() : address;
+            if (IPAddress.Any.Equals(normalized)
+                || IPAddress.IPv6Any.Equals(normalized)
+                || IPAddress.None.Equals(normalized)
+                || IPAddress.IPv6None.Equals(normalized)
+                || IPAddress.IsLoopback(normalized)
+                || (normalized.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                    && normalized.GetAddressBytes()[0] >= 224)
+                || options.KnownProxies.Contains(normalized))
             {
                 throw new InvalidOperationException(
                     "ForwardedHeaders:KnownProxies solo admite IPs de proxy exactas, únicas y no loopback.");
             }
 
-            options.KnownProxies.Add(address);
+            options.KnownProxies.Add(normalized);
+            if (normalized.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                options.KnownProxies.Add(normalized.MapToIPv6());
         }
 
         // Uno para nginx→API, dos para Caddy→nginx→API.
