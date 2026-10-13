@@ -308,6 +308,87 @@ public sealed class CandidateFormCaptureHttpTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(route + "/1", ct)).StatusCode);
     }
 
+
+    [Fact]
+    public async Task ConcurrentCaptureRequestsOnlyAppendOneRevisionAndAuditOnce()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new CandidatePublicationTestFactory(Connection);
+
+        var organization = new Organization { Name = "Taller simultáneo sintético", Type = "workshop" };
+        var candidate = new Person { FirstNames = "Concurrente", LastNames = "Sintético" };
+        var ceremony = new CeremonyRequest
+        {
+            Organization = organization, CandidatePerson = candidate,
+            CeremonyType = CeremonyCodes.Type.Initiation,
+            Status = CeremonyCodes.RequestStatus.UnderReview
+        };
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var intake = scope.ServiceProvider.GetRequiredService<CandidateIntakeDbContext>();
+            await db.Database.MigrateAsync(ct);
+            await intake.Database.MigrateAsync(ct);
+            db.AddRange(organization, candidate, ceremony);
+            await db.SaveChangesAsync(ct);
+            intake.CandidateIntakeProfiles.Add(new CandidateIntakeProfile
+            {
+                CeremonyRequestId = ceremony.Id, OrganizationId = organization.Id,
+                PersonId = candidate.Id, InsinuationDate = new DateOnly(2026, 10, 1),
+                SubmittedBySubject = "concurrent-synthetic",
+                UpdatedBySubject = "concurrent-synthetic"
+            });
+            await intake.SaveChangesAsync(ct);
+            await new FormSchemaVersionStore(db).PublishAsync(
+                Schema(1, DateTimeOffset.UtcNow.AddDays(-1)), organization.Id,
+                FormSchemaInstitutionalCatalog.TrustedCoreKeys(
+                    FormSchemaInstitutionalCatalog.CandidateProfile),
+                "ci-admin", "capture-concurrency", ct);
+        }
+
+        // Two independent authenticated HTTP requests deliberately submit the
+        // same expected revision. Advisory locking must serialize the writes.
+        using var clientA = factory.CreateClient();
+        using var clientB = factory.CreateClient();
+        Authenticate(clientA, organization.Id);
+        Authenticate(clientB, organization.Id);
+        var route = $"/api/insinuados/solicitudes/{ceremony.Id}/formularios/capturas";
+        const string firstValue = "Concurrente privada A";
+        const string secondValue = "Concurrente privada B";
+        var responses = await Task.WhenAll(
+            clientA.PostAsJsonAsync(route, Capture(1, 0, firstValue), ct),
+            clientB.PostAsJsonAsync(route, Capture(1, 0, secondValue), ct));
+        try
+        {
+            Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Created);
+            Assert.Single(responses, response => response.StatusCode == HttpStatusCode.Conflict);
+        }
+        finally
+        {
+            foreach (var response in responses) response.Dispose();
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var capture = await db.CandidateFormCaptures.AsNoTracking()
+                .SingleAsync(row => row.CeremonyRequestId == ceremony.Id, ct);
+            Assert.Equal(1, capture.CaptureRevision);
+            var audits = await db.AuditEvents.AsNoTracking()
+                .Where(row => row.EntityType == nameof(CandidateFormCapture) &&
+                    row.Action == "candidate.form_capture.created" &&
+                    row.OrganizationId == organization.Id)
+                .ToListAsync(ct);
+            Assert.Single(audits);
+            Assert.DoesNotContain(firstValue, audits[0].MetadataJson ?? string.Empty,
+                StringComparison.Ordinal);
+            Assert.DoesNotContain(secondValue, audits[0].MetadataJson ?? string.Empty,
+                StringComparison.Ordinal);
+        }
+    }
+
     [Fact]
     public async Task AnonymousOrMissingProfileCannotReadOrCreateAndLegacyProfileRemainsIndependent()
     {
