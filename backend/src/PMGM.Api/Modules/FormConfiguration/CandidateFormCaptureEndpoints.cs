@@ -30,6 +30,7 @@ public static class CandidateFormCaptureEndpoints
         group.MapGet("/{captureRevision:int}", GetCaptureAsync);
         group.MapGet("/{captureRevision:int}/export.csv", ExportCaptureCsvAsync);
         group.MapGet("/{captureRevision:int}/export.docx", ExportCaptureDocxAsync);
+        group.MapGet("/{captureRevision:int}/export.pdf", ExportCapturePdfAsync);
         group.MapPost("/", CreateCaptureAsync);
         return endpoints;
     }
@@ -251,6 +252,55 @@ public static class CandidateFormCaptureEndpoints
 
         var filename = $"insinuado-campos-adicionales-{requestId:N}-r{captureRevision}.docx";
         return Results.File(content, contentType: CandidateFormCaptureDocx.MediaType, fileDownloadName: filename);
+    }
+
+    private static async Task<IResult> ExportCapturePdfAsync(
+        Guid requestId, int captureRevision, HttpContext http,
+        CandidateIntakeDbContext intakeDb, PmgmDbContext db,
+        IInstitutionalAccessService access, IAuditService audit, CancellationToken ct)
+    {
+        var profile = await LoadAuthorizedProfileAsync(requestId, http, intakeDb, access,
+            allowGrandSecretariat: true, ct);
+        if (profile.Status == ProfileAccessStatus.Forbidden) return Results.Forbid();
+        if (profile.Profile is null || captureRevision < 1) return Results.NotFound();
+
+        NoCache(http);
+        http.Response.Headers["X-Content-Type-Options"] = "nosniff";
+
+        var row = await db.CandidateFormCaptures.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.CeremonyRequestId == requestId &&
+                x.OrganizationId == profile.Profile.OrganizationId &&
+                x.CaptureRevision == captureRevision, ct);
+        if (row is null) return Results.NotFound();
+
+        if (!string.Equals(row.PayloadSha256,
+                FormSchemaVersionStore.Fingerprint(row.ValuesJson), StringComparison.Ordinal))
+            throw new InvalidDataException("La captura histórica no supera el control de integridad.");
+
+        var schema = await db.FormSchemaVersions.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == row.SchemaVersionId &&
+                x.Version == row.SchemaVersion &&
+                x.ScopeKey == row.ScopeKey &&
+                x.FormCode == FormCode, ct);
+        if (schema is null)
+            throw new InvalidDataException("La captura histórica no conserva la versión de su esquema.");
+
+        var historical = FormSchemaVersionStore.Decode(schema);
+        var values = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(row.ValuesJson)
+            ?? throw new InvalidDataException("La captura histórica no tiene valores exportables.");
+        var content = CandidateFormCapturePdf.Render(row, historical, values);
+
+        audit.Add(http, "candidate.form_capture.export_pdf", nameof(CandidateFormCapture),
+            row.Id.ToString("D"), row.OrganizationId, AuditResults.Success,
+            new
+            {
+                row.CeremonyRequestId, row.CaptureRevision,
+                row.SchemaVersion, format = "pdf", fieldCount = values.Count
+            });
+        await db.SaveChangesAsync(ct);
+
+        var filename = $"insinuado-campos-adicionales-{requestId:N}-r{captureRevision}.pdf";
+        return Results.File(content, contentType: CandidateFormCapturePdf.MediaType, fileDownloadName: filename);
     }
 
     private static async Task<IResult> CreateCaptureAsync(
