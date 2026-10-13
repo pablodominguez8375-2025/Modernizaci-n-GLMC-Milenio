@@ -37,7 +37,7 @@ export default function PrivacyPage({ onOpenProfile }: { onOpenProfile?: () => v
     </div>
     <div className="privacy-how" role="note">
       <strong>¿Cómo pedirlo?</strong>
-      <p>Por ahora, pídelo a la Secretaría de tu Taller o a la Gran Secretaría. Te responderemos dentro del plazo que fija la ley. Muy pronto podrás hacerlo desde esta misma pantalla.</p>
+      <p>Escríbenos a <a href="mailto:juridico@granlogiamixta.cl?subject=Solicitud%20sobre%20mis%20datos%20personales">juridico@granlogiamixta.cl</a> indicando qué quieres pedir. Te responderemos dentro del plazo que fija la ley. Muy pronto podrás hacerlo desde esta misma pantalla.</p>
       {onOpenProfile && <button type="button" className="secondary" onClick={onOpenProfile}>Revisar mis datos en Mi ficha</button>}
     </div>
   </section>

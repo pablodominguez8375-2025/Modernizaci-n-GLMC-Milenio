@@ -13,4 +13,7 @@ describe('Privacidad y mis datos (Ley 21.719)', () => {
     for (const title of ['Saber qué datos tenemos', 'Corregir un dato', 'Pedir que se elimine', 'Oponerte o limitar su uso', 'Llevar tus datos contigo']) expect(page).toContain(title)
     expect(page).not.toContain('<form')
   })
+  it('indica el correo del departamento jurídico para ejercer los derechos', () => {
+    expect(page).toContain('juridico@granlogiamixta.cl')
+  })
 })
