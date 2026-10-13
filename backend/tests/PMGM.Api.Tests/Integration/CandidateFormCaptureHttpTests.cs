@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.IO.Compression;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -147,6 +149,23 @@ public sealed class CandidateFormCaptureHttpTests
         }
 
 
+        var pdfExport = await client.GetAsync(route + "/1/export.pdf", ct);
+        Assert.Equal(HttpStatusCode.OK, pdfExport.StatusCode);
+        Assert.Equal(CandidateFormCapturePdf.MediaType,
+            pdfExport.Content.Headers.ContentType?.MediaType);
+        Assert.True(pdfExport.Headers.CacheControl?.NoStore);
+        Assert.Equal("nosniff", pdfExport.Headers.GetValues("X-Content-Type-Options").Single());
+        Assert.Equal("attachment", pdfExport.Content.Headers.ContentDisposition?.DispositionType);
+        var pdfContent = Encoding.Latin1.GetString(await pdfExport.Content.ReadAsByteArrayAsync(ct));
+        Assert.StartsWith("%PDF-1.4", pdfContent, StringComparison.Ordinal);
+        var pdfText = string.Join(" ", Regex.Matches(pdfContent, @"<([0-9A-F]+)> Tj")
+            .Select(match => Encoding.Latin1.GetString(
+                Convert.FromHexString(match.Groups[1].Value))));
+        Assert.Contains("Observación", pdfText, StringComparison.Ordinal);
+        Assert.Contains(PrivateValue, pdfText, StringComparison.Ordinal);
+        Assert.DoesNotContain("first_names", pdfText, StringComparison.Ordinal);
+        Assert.DoesNotContain("rut_or_institutional_id", pdfText, StringComparison.Ordinal);
+
         var replay = await client.PostAsJsonAsync(route, Capture(1, 0), ct);
         Assert.Equal(HttpStatusCode.Conflict, replay.StatusCode);
 
@@ -164,6 +183,8 @@ public sealed class CandidateFormCaptureHttpTests
             (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync(route + "/1/export.pdf", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await client.PostAsJsonAsync(route, Capture(1, 1), ct)).StatusCode);
         Authenticate(client, orgA.Id);
@@ -208,6 +229,16 @@ public sealed class CandidateFormCaptureHttpTests
         }
 
 
+        var oldPdf = await client.GetAsync(route + "/1/export.pdf", ct);
+        Assert.Equal(HttpStatusCode.OK, oldPdf.StatusCode);
+        var originalPdf = Encoding.Latin1.GetString(await oldPdf.Content.ReadAsByteArrayAsync(ct));
+        var originalText = string.Join(" ", Regex.Matches(originalPdf, @"<([0-9A-F]+)> Tj")
+            .Select(match => Encoding.Latin1.GetString(
+                Convert.FromHexString(match.Groups[1].Value))));
+        Assert.Contains("Observación", originalText, StringComparison.Ordinal);
+        Assert.Contains("Versión del esquema: 1", originalText, StringComparison.Ordinal);
+        Assert.Contains(PrivateValue, originalText, StringComparison.Ordinal);
+
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
@@ -236,6 +267,18 @@ public sealed class CandidateFormCaptureHttpTests
                     x.OrganizationId == orgA.Id)
                 .ToListAsync(ct);
             Assert.Equal(2, wordExports.Count);
+            var pdfExports = await db.AuditEvents.AsNoTracking()
+                .Where(x => x.EntityType == nameof(CandidateFormCapture) &&
+                    x.Action == "candidate.form_capture.export_pdf" &&
+                    x.OrganizationId == orgA.Id)
+                .ToListAsync(ct);
+            Assert.Equal(2, pdfExports.Count);
+            Assert.All(pdfExports, x =>
+            {
+                Assert.Contains("pdf", x.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+                Assert.DoesNotContain(PrivateValue,
+                    x.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+            });
             Assert.All(wordExports, x =>
             {
                 Assert.Contains("docx", x.MetadataJson ?? string.Empty, StringComparison.Ordinal);
@@ -288,6 +331,8 @@ public sealed class CandidateFormCaptureHttpTests
             (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized,
             (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            (await client.GetAsync(route + "/1/export.pdf", ct)).StatusCode);
         Authenticate(client, Guid.NewGuid());
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.GetAsync(route, ct)).StatusCode);
@@ -295,6 +340,8 @@ public sealed class CandidateFormCaptureHttpTests
             (await client.GetAsync(route + "/1/export.csv", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.GetAsync(route + "/1/export.docx", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,
+            (await client.GetAsync(route + "/1/export.pdf", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.PostAsJsonAsync(route, Capture(1, 0), ct)).StatusCode);
     }
