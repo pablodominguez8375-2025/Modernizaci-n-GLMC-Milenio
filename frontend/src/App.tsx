@@ -6,6 +6,7 @@ import { useFinancialNavigationAccess } from './useFinancialNavigationAccess'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCollapsibleNavGroups } from './navGroups'
 import ReportsHub from './ReportsHub'
+import PrivacyPage from './PrivacyPage'
 import WorkbenchPage, { type WorkbenchItem } from './WorkbenchPage'
 import AdmissionsPage from './AdmissionsPage'
 import BootstrapPage from './BootstrapPage'
@@ -62,7 +63,7 @@ import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'workbench'
+type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'workbench' | 'privacy'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
@@ -286,6 +287,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       ...entry(canMemberPortal, 'interviews', canManageLodgeSummaryAccess ? 'Designar entrevistadores' : 'Mis entrevistas', 'Mi Taller', 'candidate', 'designar maestros entrevistas insinuados informes'),
       ...entry(canMemberPortal, 'memberPayments', 'Mis pagos', 'Portal del Hermano', 'treasury', 'cuotas tesoreria estado de cuenta hospitalaria'),
       ...entry(canMemberPortal, 'memberAttendance', 'Mis asistencias', 'Portal del Hermano', 'calendar', 'asistencia tenidas instruccion justificada'),
+      ...entry(true, 'privacy', 'Privacidad y mis datos', 'Portal del Hermano', 'shield', 'ley 21.719 derechos datos personales politica proteccion'),
       ...entry(canCalendar, 'calendar', 'Agenda', 'Portal del Hermano', 'calendar', 'agenda tenidas eventos'),
       ...entry(canNotifications, 'notifications', 'Avisos', 'Portal del Hermano', 'bell', 'avisos alertas'),
       ...entry(canConfigureSystem, 'system', 'Parámetros del sistema', 'Sistema', 'settings', 'configuracion plazos reglas'),
@@ -330,7 +332,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.103' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.104' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -347,6 +349,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <ModuleAccess icon="member" label="Mi ficha" inTabbar={!operational} allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
         <ModuleAccess icon="treasury" label="Mis pagos" allowed={canMemberPortal} active={view === 'memberPayments'} onOpen={canMemberPortal ? () => setView('memberPayments') : undefined} />
         <ModuleAccess icon="calendar" label="Mis asistencias" allowed={canMemberPortal} active={view === 'memberAttendance'} onOpen={canMemberPortal ? () => setView('memberAttendance') : undefined} />
+        <ModuleAccess icon="shield" label="Privacidad y mis datos" allowed active={view === 'privacy'} onOpen={() => setView('privacy')} />
         <ModuleAccess icon="calendar" label="Agenda" inTabbar allowed={canCalendar} active={view === 'calendar'} onOpen={canCalendar ? () => setView('calendar') : undefined} />
         <ModuleAccess icon="bell" label="Avisos" inTabbar badge={unreadCount} allowed={canNotifications} active={view === 'notifications'} onOpen={canNotifications ? () => setView('notifications') : undefined} />
         {(canBootstrap||canConfigureSystem) && <><div className="nav-section">Sistema</div><ModuleAccess icon="settings" label={canConfigureSystem ? 'Parámetros del sistema' : 'Configuración inicial'} allowed active={view === 'system' || view === 'bootstrap'} onOpen={() => setView(canConfigureSystem ? 'system' : 'bootstrap')} /></>}
@@ -389,6 +392,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       </nav>
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
+        {view === 'privacy' && <PrivacyPage onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {activeViewAllowed && <>
