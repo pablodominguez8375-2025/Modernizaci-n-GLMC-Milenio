@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
@@ -33,6 +34,8 @@ using PMGM.Api.Modules.UserAccounts;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    TrustedProxyForwarding.Configure(options, builder.Configuration));
 builder.Services.AddLocalization();
 builder.Services.Configure<RequestLocalizationOptions>(options =>
 {
@@ -138,6 +141,8 @@ if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
     await scope.ServiceProvider.GetRequiredService<FirstImplementationSeedService>().SeedAsync();
 }
 
+// IP normalizada para auditoría y partición de rate limits. Solo proxies de confianza explícita.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
