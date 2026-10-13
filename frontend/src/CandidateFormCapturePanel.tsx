@@ -75,7 +75,7 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
     }
   }
 
-  async function exportRevision(format: 'csv' | 'docx') {
+  async function exportRevision(format: 'csv' | 'docx' | 'pdf') {
     if (!selected || exporting) return
     const captureRevision = selected.captureRevision
     setExporting(true)
@@ -83,7 +83,9 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
     try {
       const blob = format === 'csv'
         ? await api.exportCandidateFormCaptureCsv(requestId, captureRevision)
-        : await api.exportCandidateFormCaptureDocx(requestId, captureRevision)
+        : format === 'docx'
+          ? await api.exportCandidateFormCaptureDocx(requestId, captureRevision)
+          : await api.exportCandidateFormCapturePdf(requestId, captureRevision)
       const objectUrl = URL.createObjectURL(blob)
       try {
         const link = document.createElement('a')
@@ -178,7 +180,11 @@ export default function CandidateFormCapturePanel({ api, requestId, editable }: 
             disabled={exporting} onClick={() => { void exportRevision('docx') }}>
             {exporting ? 'Preparando descarga…' : 'Exportar revisión Word'}
           </button>
-          <small>Exportación individual y auditable a CSV o Word. Los archivos contienen
+          <button className="candidate-secondary-button" type="button"
+            disabled={exporting} onClick={() => { void exportRevision('pdf') }}>
+            {exporting ? 'Preparando descarga…' : 'Exportar revisión PDF'}
+          </button>
+          <small>Exportación individual y auditable a CSV, Word o PDF. Los archivos contienen
             antecedentes privados y deben permanecer bajo custodia institucional.</small>
         </div>}
         {selected && <div className="form-capture-historical">
