@@ -109,6 +109,12 @@ if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedSer
 
 var app = builder.Build();
 
+// Ejecutor efímero BD2: reutiliza los nueve DbContexts y abandona el proceso sin servir HTTP.
+// El runtime de API usa Database:ApplyMigrationsOnStartup=false y credenciales DML.
+var migrationsOnly = builder.Configuration.GetValue<bool>("Database:RunMigrationsAndExit");
+if (migrationsOnly && !builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+    throw new InvalidOperationException("El modo de migración requiere Database:ApplyMigrationsOnStartup=true.");
+
 if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
 {
     await using var scope = app.Services.CreateAsyncScope();
@@ -131,6 +137,9 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     var admissionsDb = scope.ServiceProvider.GetRequiredService<AdmissionsDbContext>();
     await admissionsDb.Database.MigrateAsync();
 }
+
+// No iniciar workers, rutas, listeners ni datos demo en un contenedor migrador one-shot.
+if (migrationsOnly) return;
 
 if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
 {
