@@ -41,8 +41,14 @@ trap cleanup_probe EXIT
 
 echo "=== Recovery drill piloto v0.32 (localhost/CI) ==="
 for database in pmgm pmgm_keycloak; do
+  # En DB Keycloak la sonda sintética debe pertenecer a su rol limitado:
+  # pg_restore --role=pmgm_keycloak no podría borrar objetos de un superusuario.
+  role_prefix=""
+  if [ "$database" = "pmgm_keycloak" ]; then
+    role_prefix="SET ROLE pmgm_keycloak; "
+  fi
   "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U pmgm_app -d "$database" \
-    -c "DROP TABLE IF EXISTS public.${probe_table}; CREATE TABLE public.${probe_table}(value text NOT NULL); INSERT INTO public.${probe_table}(value) VALUES ('${probe_value}');" >/dev/null
+    -c "${role_prefix}DROP TABLE IF EXISTS public.${probe_table}; CREATE TABLE public.${probe_table}(value text NOT NULL); INSERT INTO public.${probe_table}(value) VALUES ('${probe_value}');" >/dev/null
 done
 
 printf '%s\n' "$probe_value" | "${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
