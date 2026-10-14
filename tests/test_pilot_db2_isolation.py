@@ -128,7 +128,7 @@ class PilotDb2IsolationTests(unittest.TestCase):
                 "postgres:17",
             ], timeout=180)
             for _ in range(60):
-                ready = cmd(["docker", "exec", name, "pg_isready",
+                ready = cmd(["docker", "exec", name, "pg_isready", "-h", "127.0.0.1",
                              "-U", "pmgm_app", "-d", "pmgm"], check=False, timeout=8)
                 if ready.returncode == 0:
                     break
@@ -152,8 +152,8 @@ class PilotDb2IsolationTests(unittest.TestCase):
                 "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='pmgm';").stdout.strip())
 
             # DML permitido bajo contraseña runtime REAL.
-            self.assertEqual("1", psql("pmgm_runtime", runtime_pw,
-                "INSERT INTO core.audit_events(payload) VALUES ('synthetic') RETURNING id;").stdout.strip())
+            psql("pmgm_runtime", runtime_pw,
+                "INSERT INTO core.audit_events(payload) VALUES ('synthetic');")
             self.assertEqual("1", psql("pmgm_runtime", runtime_pw,
                 "SELECT count(*) FROM core.audit_events;").stdout.strip())
 
