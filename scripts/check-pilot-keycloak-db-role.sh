@@ -37,7 +37,14 @@ stray_tables="$(query "SELECT count(*) FROM pg_class c
   WHERE n.nspname='public' AND c.relkind IN ('r','p')
     AND pg_get_userbyid(c.relowner) <> 'pmgm_keycloak';" | tr -d '[:space:]')"
 [ "$stray_tables" = "0" ] || {
-  echo "Hay tablas Keycloak con propietario ajeno al rol restringido." >&2; exit 1;
+  echo "Hay $stray_tables tablas Keycloak con propietario ajeno al rol restringido." >&2
+  # Solo metadatos de tablas/roles: jamás extraer filas, credenciales ni datos de usuarios.
+  query "SELECT c.relname || ':' || pg_get_userbyid(c.relowner) FROM pg_class c
+    JOIN pg_namespace n ON c.relnamespace=n.oid
+    WHERE n.nspname='public' AND c.relkind IN ('r','p')
+      AND pg_get_userbyid(c.relowner) <> 'pmgm_keycloak'
+    ORDER BY c.relname LIMIT 12;" | sed 's/^/Tabla con propietario ajeno: /' >&2
+  exit 1
 }
 
 echo "Keycloak DB aislada: rol limitado, sin acceso a pmgm y propiedad de tablas verificada."
