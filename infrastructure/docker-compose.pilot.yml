@@ -34,11 +34,19 @@ services:
     environment:
       MINIO_ACCESS_KEY: ${PMGM_PILOT_MINIO_USER:?PMGM_PILOT_MINIO_USER es obligatorio}
       MINIO_SECRET_KEY: ${PMGM_PILOT_MINIO_PASSWORD:?PMGM_PILOT_MINIO_PASSWORD es obligatorio}
+      MINIO_APP_ACCESS_KEY: ${PMGM_PILOT_MINIO_APP_USER:?PMGM_PILOT_MINIO_APP_USER es obligatorio}
+      MINIO_APP_SECRET_KEY: ${PMGM_PILOT_MINIO_APP_PASSWORD:?PMGM_PILOT_MINIO_APP_PASSWORD es obligatorio}
+    volumes:
+      - ./minio/pmgm-documents-policy.json:/etc/pmgm/documents-policy.json:ro
     entrypoint: >
       /bin/sh -c "
-      until mc alias set pmgm http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done;
+      set -eu;
+      until mc alias set pmgm http://minio:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY; do sleep 2; done;
       mc mb --ignore-existing pmgm/pmgm-documents;
       mc anonymous set none pmgm/pmgm-documents;
+      mc admin policy create pmgm pmgm-documents-app /etc/pmgm/documents-policy.json;
+      mc admin user add pmgm $MINIO_APP_ACCESS_KEY $MINIO_APP_SECRET_KEY;
+      mc admin policy attach pmgm pmgm-documents-app --user $MINIO_APP_ACCESS_KEY;
       exit 0;
       "
     networks: [pmgm_pilot_internal]
@@ -124,8 +132,8 @@ services:
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
       DocumentStorage__Bucket: pmgm-documents
-      DocumentStorage__AccessKey: ${PMGM_PILOT_MINIO_USER:?PMGM_PILOT_MINIO_USER es obligatorio}
-      DocumentStorage__SecretKey: ${PMGM_PILOT_MINIO_PASSWORD:?PMGM_PILOT_MINIO_PASSWORD es obligatorio}
+      DocumentStorage__AccessKey: ${PMGM_PILOT_MINIO_APP_USER:?PMGM_PILOT_MINIO_APP_USER es obligatorio}
+      DocumentStorage__SecretKey: ${PMGM_PILOT_MINIO_APP_PASSWORD:?PMGM_PILOT_MINIO_APP_PASSWORD es obligatorio}
       DocumentStorage__ForcePathStyle: "true"
       DocumentStorage__MaxUploadBytes: "52428800"
       DocumentMalware__Host: clamav
