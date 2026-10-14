@@ -7,7 +7,7 @@ Estado: código propuesto en PR #479, Issue #470. **No equivale a despliegue/val
 - `PMGM_PILOT_MINIO_USER` / `PMGM_PILOT_MINIO_PASSWORD`: cuenta administradora del servidor S3 privado, **solo** en `minio` y `minio-init`; no entregar a la API.
 - `PMGM_PILOT_MINIO_APP_USER` / `PMGM_PILOT_MINIO_APP_PASSWORD`: cuenta de servicio exclusiva de la API documental. Debe ser distinta, con contraseña aleatoria única de 20 caracteres o más. La API recibe sólo estas credenciales.
 - `minio-init` crea el bucket privado y aplica `infrastructure/minio/pmgm-documents-policy.json` al nuevo usuario mediante `mc admin policy create`, `mc admin user add` y `mc admin policy attach`. El proceso no abre puertos públicos.
-- Política IAM: únicamente `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` sobre `arn:aws:s3:::pmgm-documents/*`. No `admin:*`, ni `s3:*`, ni permiso de objetos en otros buckets, ni `ListAllMyBuckets`. La lógica S3 del backend usa HEAD, PUT, GET, DELETE de claves conocidas; HEAD requiere `s3:GetObject`.
+- Política IAM: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject` únicamente sobre `arn:aws:s3:::pmgm-documents/*`, más `s3:ListBucket` exclusivamente en `arn:aws:s3:::pmgm-documents` para que HEAD de un objeto inexistente retorne 404 y no 403. No `admin:*`, ni `s3:*`, ni permiso de objetos en otros buckets, ni `ListAllMyBuckets`. La lógica S3 del backend usa HEAD, PUT, GET, DELETE de claves conocidas; HEAD requiere `s3:GetObject`.
 
 ## Procedimiento al preparar el piloto
 
@@ -15,7 +15,7 @@ Estado: código propuesto en PR #479, Issue #470. **No equivale a despliegue/val
 2. Ejecutar el preflight `PMGM_PILOT_ENV_FILE=/ruta/segura bash scripts/preflight-pilot.sh`; este verifica ambas cuentas distintas y unicidad/longitud de las contraseñas.
 3. Sólo con autorización de despliegue, arrancar el piloto con `scripts/start-pilot.sh`. `minio-init` debe terminar correctamente antes del servicio API. **Si en una instancia existente ya existe el nombre del usuario de servicio con políticas más amplias, no reutilizarlo sin auditar/remover esas concesiones**; los permisos efectivos incluyen asociaciones de usuario y grupo.
 4. Verificar en un ambiente de QA aislado con datos **sintéticos** la cuenta de servicio: escribir, consultar, leer y borrar un objeto bajo `pmgm-documents/`; intentar acceder a otro bucket de prueba, listar los buckets y ejecutar un comando administrativo con la cuenta restringida. Los tres últimos deben denegarse. El resultado debe registrarse sin copiar credenciales ni contenido personal.
-5. Validar operaciones normales de `S3DocumentObjectStore` tras la transición, incluso el caso en que una clave todavía no existe (HEAD puede retornar 403 en algunas configuraciones, que exige revisión de comportamiento). Nunca eliminar objetos históricos al cambiar credenciales.
+5. Validar operaciones normales de `S3DocumentObjectStore` tras la transición, incluso el caso en que una clave todavía no existe (la concesión limitada de `s3:ListBucket` en el bucket documental permite distinguir 404 de 403, sin permitir listar otros buckets). Nunca eliminar objetos históricos al cambiar credenciales.
 6. Si falla el acceso legítimo a documentos, detener el despliegue e investigar policy/identidad. La reversión debe preservar los objetos existentes; **no restituir indefinidamente credenciales root a la API ni ampliar policy a `s3:*`**. Escalar a operador para corregir permisos y relanzar con evidencia de mínimos privilegios.
 
 ## CI, límites y seguridad
