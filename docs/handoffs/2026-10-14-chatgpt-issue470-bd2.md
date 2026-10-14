@@ -27,3 +27,9 @@
 - Demo Pages no equivale a backends desplegados: no afirmar SHA Pages sin manifest `downloads/qa-current.json` leído y validado.
 - Ante bloqueo, próximo agente retoma de PR #484 e Issue #470, no reprogramar soluciones paralelas ni tocar archivos reservados por Claude/MinIO.
 
+
+## Extensión de pruebas — 14-10-2026, noche de Chile
+
+Después del primer corte se añadió al `tests/test_pilot_db2_isolation.py` una prueba de **PostgreSQL 17 real y efímero en GitHub Actions**, sin puertos abiertos ni volúmenes persistidos: inicializa ambos scripts `001`/ `002`, autentica migrador/runtime/reportes con claves CI sintéticas, crea una tabla de auditoría exclusivamente de prueba desde el rol migrador, ejecuta `grant-pilot-db2.sh` y verifica INSERT/SELECT runtime, denegación de DDL, DISABLE TRIGGER, UPDATE/DELETE/TRUNCATE, SELECT a reportes, y privilegios predeterminados para tablas posteriores. El contenedor y la red se eliminan siempre.
+
+La prueba verifica **roles/grants reales**, pero crea una tabla sintética: todavía **no valida las nueve migraciones EF Core completas sobre el nuevo perfil BD2**, el smoke HTTP de runtime ni restore de un volumen BD2. Permanecer DRAFT hasta cubrir esas brechas y el bloqueador MinIO #479. No se modificó `.github/workflows/ci.yml`, que sigue reservado por PR #479: la prueba se descubre desde la suite de infraestructura existente. El nuevo HEAD tras esta extensión es `29d52f98fbce2f53479e976861ff8880ef3942e9`; los gates de este HEAD deben verificarse, no reutilizar resultados del SHA anterior. 
