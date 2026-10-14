@@ -358,6 +358,7 @@ jobs:
       PMGM_PILOT_ALLOW_LOCALHOST: "true"
       PMGM_PILOT_INSECURE_TLS: "true"
       PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
+      PMGM_PILOT_KC_DB_PASSWORD: ci-keycloak-db-secret-2026-010
       PMGM_PILOT_MINIO_USER: ci-pilot-storage
       PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
       PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
@@ -390,6 +391,9 @@ jobs:
         run: |
           docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml config
           docker compose -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml config
+
+      - name: Test Keycloak PostgreSQL role and restore configuration
+        run: python3 -m unittest discover -s tests -p test_pilot_keycloak_db_isolation.py
 
       - name: Validate pilot Docker Compose
         shell: bash
@@ -544,6 +548,7 @@ jobs:
       PMGM_PILOT_INSECURE_TLS: "true"
       PMGM_PILOT_RECOVERY_DRILL_ALLOWED: "true"
       PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
+      PMGM_PILOT_KC_DB_PASSWORD: ci-keycloak-db-secret-2026-010
       PMGM_PILOT_MINIO_USER: ci-pilot-storage
       PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
       PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
@@ -571,6 +576,7 @@ jobs:
           PMGM_PILOT_INSECURE_TLS=$PMGM_PILOT_INSECURE_TLS
           PMGM_PILOT_RECOVERY_DRILL_ALLOWED=$PMGM_PILOT_RECOVERY_DRILL_ALLOWED
           PMGM_PILOT_DB_PASSWORD=$PMGM_PILOT_DB_PASSWORD
+          PMGM_PILOT_KC_DB_PASSWORD=$PMGM_PILOT_KC_DB_PASSWORD
           PMGM_PILOT_MINIO_USER=$PMGM_PILOT_MINIO_USER
           PMGM_PILOT_MINIO_PASSWORD=$PMGM_PILOT_MINIO_PASSWORD
           PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME=$PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME
@@ -587,11 +593,17 @@ jobs:
       - name: Build and start operational pilot
         run: docker compose --env-file "$PMGM_PILOT_ENV_FILE" -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml up -d --build
 
+      - name: Verify dedicated Keycloak PostgreSQL role before recovery
+        run: bash scripts/check-pilot-keycloak-db-role.sh
+
       - name: Run pilot HTTPS/OIDC smoke
         run: bash scripts/smoke-pilot.sh
 
       - name: Run pilot backup and recovery drill
         run: bash scripts/recovery-drill-pilot.sh "$RUNNER_TEMP/pmgm-pilot-recovery-drill"
+
+      - name: Verify Keycloak PostgreSQL role survives recovery
+        run: bash scripts/check-pilot-keycloak-db-role.sh
 
       - name: Show pilot logs on failure
         if: failure()
