@@ -5,6 +5,10 @@ Real owner/privilege checks also run in PMGM CI, before and after backup/restore
 import unittest
 from pathlib import Path
 
+# Ejecutar también la regresión estructural BD2 en el gate CI existente,
+# sin tocar el workflow compartido reservado por PR #479.
+from test_pilot_db2_isolation import PilotDb2IsolationTests  # noqa: F401
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
