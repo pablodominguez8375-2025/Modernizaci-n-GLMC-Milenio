@@ -12,7 +12,7 @@ fi
 
 query() {
   "${compose[@]}" exec -T postgres psql \
-    --username pmgm_app --dbname pmgm --set ON_ERROR_STOP=1 \
+    --username pmgm_app --dbname "${2:-pmgm}" --set ON_ERROR_STOP=1 \
     --tuples-only --no-align --command "$1"
 }
 
@@ -35,7 +35,7 @@ external_access="$(query "SELECT has_database_privilege('pmgm_keycloak','pmgm','
 stray_tables="$(query "SELECT count(*) FROM pg_class c
   JOIN pg_namespace n ON c.relnamespace=n.oid
   WHERE n.nspname='public' AND c.relkind IN ('r','p')
-    AND pg_get_userbyid(c.relowner) <> 'pmgm_keycloak';" | tr -d '[:space:]')"
+    AND pg_get_userbyid(c.relowner) <> 'pmgm_keycloak';" pmgm_keycloak | tr -d '[:space:]')"
 [ "$stray_tables" = "0" ] || {
   echo "Hay $stray_tables tablas Keycloak con propietario ajeno al rol restringido." >&2
   # Solo metadatos de tablas/roles: jamás extraer filas, credenciales ni datos de usuarios.
@@ -43,7 +43,7 @@ stray_tables="$(query "SELECT count(*) FROM pg_class c
     JOIN pg_namespace n ON c.relnamespace=n.oid
     WHERE n.nspname='public' AND c.relkind IN ('r','p')
       AND pg_get_userbyid(c.relowner) <> 'pmgm_keycloak'
-    ORDER BY c.relname LIMIT 12;" | sed 's/^/Tabla con propietario ajeno: /' >&2
+    ORDER BY c.relname LIMIT 12;" pmgm_keycloak | sed 's/^/Tabla con propietario ajeno: /' >&2
   exit 1
 }
 
