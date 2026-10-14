@@ -18,7 +18,7 @@ const dataGroups: Array<{ title: string; text: string }> = [
 ]
 
 /** Hallazgo 4 de la auditoría 13-10-2026 · Ley 21.719: política de privacidad en lenguaje simple y derechos del titular. */
-export default function PrivacyPage({ onOpenProfile }: { onOpenProfile?: () => void }) {
+export default function PrivacyPage({ contactEmail, onOpenProfile }: { contactEmail: string; onOpenProfile?: () => void }) {
   return <section className="privacy-page" aria-labelledby="privacidad-titulo">
     <h2 id="privacidad-titulo">Privacidad y mis datos</h2>
     <p>Tus datos son tuyos. Aquí te explicamos, en simple, cómo los cuidamos y qué puedes pedir.</p>
@@ -37,7 +37,7 @@ export default function PrivacyPage({ onOpenProfile }: { onOpenProfile?: () => v
     </div>
     <div className="privacy-how" role="note">
       <strong>¿Cómo pedirlo?</strong>
-      <p>Escríbenos a <a href="mailto:juridico@granlogiamixta.cl?subject=Solicitud%20sobre%20mis%20datos%20personales">juridico@granlogiamixta.cl</a> indicando qué quieres pedir. Te responderemos dentro del plazo que fija la ley. Muy pronto podrás hacerlo desde esta misma pantalla.</p>
+      <p>Escríbenos a <a href={`mailto:${contactEmail}?subject=Solicitud%20sobre%20mis%20datos%20personales`}>{contactEmail}</a> indicando qué quieres pedir. Te responderemos dentro del plazo que fija la ley. Muy pronto podrás hacerlo desde esta misma pantalla.</p>
       {onOpenProfile && <button type="button" className="secondary" onClick={onOpenProfile}>Revisar mis datos en Mi ficha</button>}
     </div>
   </section>

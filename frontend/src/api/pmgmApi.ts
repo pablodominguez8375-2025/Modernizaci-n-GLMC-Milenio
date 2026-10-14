@@ -382,8 +382,10 @@ const defaultMockSystemSettings: SystemSetting[] = [
   { code:'system.identity.require_mfa_admins',category:'Usuarios',label:'MFA obligatorio para administradores',valueType:'text',value:'Sí',effectiveFrom:'2026-01-01',sourceReference:'Política de seguridad',status:'default' },
   { code:'system.access.profile_definitions',category:'Usuarios',label:'Definiciones independientes de perfiles',valueType:'text',value:'[]',effectiveFrom:'2026-01-01',sourceReference:'Modelo de acceso Proyecto Centenario',status:'default' },
   { code:'system.access.user_assignments',category:'Usuarios',label:'Asignaciones de perfiles a usuarios',valueType:'text',value:'[]',effectiveFrom:'2026-01-01',sourceReference:'Modelo de acceso Proyecto Centenario',status:'default' },
+  { code:'system.privacy.contact_email',category:'Privacidad',label:'Correo de contacto para derechos del titular (Ley 21.719)',valueType:'text',value:'juridico@granlogiamixta.cl',effectiveFrom:'2026-01-01',sourceReference:'Departamento jurídico · indicado por el PO el 13-10-2026',status:'default' },
   { code:'system.access.review_frequency_days',category:'Auditoría de accesos',label:'Frecuencia de certificación (días)',valueType:'integer',value:'90',effectiveFrom:'2026-01-01',sourceReference:'Política de revisión de accesos',status:'default' },
 ]
+export const defaultPrivacyContactEmail = 'juridico@granlogiamixta.cl'
 type MockOrganizationOption = OrganizationOption & { treasuryTerritory: TreasuryTerritory | null }
 const defaultMockOrganizations: MockOrganizationOption[] = [1, ...Array.from({ length: 18 }, (_, index) => index + 2), 23].map(number => ({
   id: number === 1 ? '11111111-1111-1111-1111-111111111111' : number === 23 ? '23232323-2323-2323-2323-232323232323' : `00000000-0000-0000-0000-${String(number).padStart(12, '0')}`,
@@ -585,6 +587,11 @@ export class PmgmApiClient {
       return current ? { ...baseline, value: current.value, effectiveFrom: current.effectiveFrom, sourceReference: current.sourceReference, status: 'active' } : { ...baseline }
     }) }
     return this.request<SystemSettingsResponse>('/api/system/settings/')
+  }
+  /** Correo de contacto para los derechos del titular (parámetro «system.privacy.contact_email»). Si el servicio no responde, se usa el valor institucional por defecto. */
+  async getPrivacyContact(): Promise<{ email: string }> {
+    if (this.useMocks) return { email: this.mockSystemSettings.find(item => item.code === 'system.privacy.contact_email')?.value ?? defaultPrivacyContactEmail }
+    try { const response = await this.request<{ email?: string }>('/api/privacy/contact'); return { email: response.email || defaultPrivacyContactEmail } } catch { return { email: defaultPrivacyContactEmail } }
   }
   async createSystemSettingVersion(code: string, payload: CreateSystemSettingVersionRequest): Promise<SystemSetting> {
     if (this.useMocks) {
