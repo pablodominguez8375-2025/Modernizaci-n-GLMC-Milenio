@@ -1,5 +1,7 @@
 # Overlay OPT-IN: SOLO volúmenes piloto NUEVOS. No usar en srv01 ni en volúmenes persistidos.
 # docker compose -f docker-compose.pilot.yml -f docker-compose.pilot-db2.yml ...
+# Nombre de proyecto independiente: el arranque legacy no puede reutilizar el volumen BD2.
+name: pmgm-pilot-db2
 services:
   postgres:
     environment:
