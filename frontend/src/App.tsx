@@ -57,7 +57,7 @@ import { type LodgeApiClient } from './api/lodgeApi'
 import { type MembershipApiClient } from './api/membershipApi'
 import { type NotificationApiClient } from './api/notificationApi'
 import { type OrganizationProfileApiClient } from './api/organizationProfileApi'
-import { type CandidatePublication, type CandidatePortalResponse, type PmgmApiClient, type SessionProfile, type SystemInfo } from './api/pmgmApi'
+import { defaultPrivacyContactEmail, type CandidatePublication, type CandidatePortalResponse, type PmgmApiClient, type SessionProfile, type SystemInfo } from './api/pmgmApi'
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
@@ -92,6 +92,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const [pendingCounts, setPendingCounts] = useState<PendingCounts>({})
   const [unreadCount, setUnreadCount] = useState(0)
   const [portal, setPortal] = useState<CandidatePortalResponse | null>(null)
+  const [privacyEmail, setPrivacyEmail] = useState(defaultPrivacyContactEmail)
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)
   const [profile, setProfile] = useState<SessionProfile | null>(null)
   const [demoProfileKey, setDemoProfileKey] = useState<DemoProfileKey>('brother')
@@ -120,6 +121,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', interviews:'member', memberPayments:'member', memberAttendance:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
   const activeViewAllowed = !viewCodes[view] || canView(viewCodes[view]!)
   useEffect(() => { if (!activeViewAllowed) setView('dashboard') }, [activeViewAllowed])
+  useEffect(() => { if (view !== 'privacy') return; let active = true; api.getPrivacyContact().then(contact => { if (active) setPrivacyEmail(contact.email) }).catch(() => undefined); return () => { active = false } }, [view, api])
   useEffect(() => {
     let active = true
     Promise.all([rawApi.getSystemInfo(), rawApi.getSessionProfile()])
@@ -332,7 +334,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.105' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.106' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -392,7 +394,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       </nav>
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
-        {view === 'privacy' && <PrivacyPage onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
+        {view === 'privacy' && <PrivacyPage contactEmail={privacyEmail} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {activeViewAllowed && <>
