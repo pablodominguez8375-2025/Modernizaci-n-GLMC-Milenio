@@ -58,6 +58,36 @@ callback_status="$(curl "${curl_common[@]}" -o /tmp/pmgm-pilot-callback.html -w 
 [ "$callback_status" = "200" ] || { echo "El callback SPA devolvió HTTP $callback_status." >&2; exit 1; }
 printf '✓ separación /auth (SPA) y /identity (Keycloak)\n'
 
+# Seguridad: CSP exigida al documento SPA, pero no impuesta al realm Keycloak.
+for spa_path in / /auth/callback; do
+  spa_headers="$(curl "${curl_common[@]}" --fail --dump-header - --output /dev/null "$PMGM_PILOT_PUBLIC_URL$spa_path")"
+  SPA_HEADERS="$spa_headers" python3 - <<'PY'
+import os
+values = [line.split(':', 1)[1].strip() for line in os.environ['SPA_HEADERS'].splitlines()
+          if line.lower().startswith('content-security-policy:')]
+if len(values) != 1:
+    raise SystemExit(f"Se esperaba CSP única de la SPA, se encontraron {len(values)}")
+csp = values[0]
+for required in ("default-src 'self'", "script-src 'self'", "object-src 'none'",
+                 "base-uri 'self'", "connect-src 'self'", "frame-ancestors 'self'"):
+    if required not in csp:
+        raise SystemExit(f"CSP SPA incompleta: falta {required}")
+if "'unsafe-eval'" in csp:
+    raise SystemExit("La CSP del piloto no puede permitir unsafe-eval.")
+PY
+done
+identity_headers="$(curl "${curl_common[@]}" --fail --dump-header - --output /dev/null "$PMGM_PILOT_PUBLIC_URL/identity/realms/pmgm/.well-known/openid-configuration")"
+IDENTITY_HEADERS="$identity_headers" python3 - <<'PY'
+import os
+values = [line.split(':', 1)[1].strip() for line in os.environ['IDENTITY_HEADERS'].splitlines()
+          if line.lower().startswith('content-security-policy:')]
+# Keycloak puede proporcionar su propia CSP; no aplicar la CSP *de la SPA*.
+if any("base-uri 'self'; object-src 'none'; frame-ancestors 'self'" in value for value in values):
+    raise SystemExit("La CSP de la SPA no debe aplicarse a las rutas Keycloak.")
+PY
+printf '✓ CSP de SPA presente sin bloquear realm Keycloak\n'
+
+
 # Seguridad: las rutas de consola Keycloak y realm master no pueden salir por Caddy.
 # Se valida sobre HTTPS real y no solo por búsqueda estática en Caddyfile.
 for forbidden_path in /identity/admin /identity/admin/ /identity/realms/master /identity/realms/master/.well-known/openid-configuration; do
