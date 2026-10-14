@@ -8,6 +8,8 @@ import json
 import os
 import shutil
 import subprocess
+import time
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -77,6 +79,107 @@ class PilotDb2IsolationTests(unittest.TestCase):
         self.assertEqual("service_completed_successfully",
                          services["db-grants"]["depends_on"]["migrator"]["condition"])
         self.assertNotIn("PGPASSWORD", services["api"]["environment"])
+
+    @unittest.skipUnless(shutil.which("docker"), "Docker Engine no disponible")
+    def test_real_ephemeral_postgres_denies_runtime_ddl_and_report_reads(self):
+        """Prueba PostgreSQL 17 real sin puertos, volúmenes ni datos institucionales."""
+        name = "pmgm-bd2-ci-" + uuid.uuid4().hex[:10]
+        network = name + "-net"
+        runtime_pw = "CiRuntimeIsolatedPostgres2026!"
+        migrator_pw = "CiMigratorIsolatedPostgres2026!"
+        report_pw = "CiReportsIsolatedPostgres2026!"
+        admin_pw = "CiBootstrapIsolatedPostgres2026!"
+        kc_pw = "CiKeycloakIsolatedPostgres2026!"
+
+        def cmd(args, *, check=True, timeout=120):
+            result = subprocess.run(args, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True, timeout=timeout)
+            if check and result.returncode:
+                raise AssertionError(
+                    "Comando PostgreSQL sintético falló (sin credenciales): "
+                    + (result.stderr or result.stdout)[-1400:])
+            return result
+
+        def psql(role, password, sql, *, check=True):
+            return cmd([
+                "docker", "exec", "-e", "PGPASSWORD=" + password,
+                name, "psql", "-X", "-h", "127.0.0.1", "-U", role, "-d", "pmgm",
+                "-v", "ON_ERROR_STOP=1", "-tA", "-c", sql,
+            ], check=check)
+
+        cmd(["docker", "network", "create", network])
+        try:
+            init_dir = ROOT / "infrastructure/postgres"
+            cmd([
+                "docker", "run", "-d", "--name", name, "--network", network,
+                "--network-alias", "postgres",
+                "-e", "POSTGRES_DB=pmgm", "-e", "POSTGRES_USER=pmgm_app",
+                "-e", "POSTGRES_PASSWORD=" + admin_pw,
+                "-e", "PMGM_PILOT_KC_DB_PASSWORD=" + kc_pw,
+                "-e", "PMGM_PILOT_RUNTIME_DB_PASSWORD=" + runtime_pw,
+                "-e", "PMGM_PILOT_MIGRATOR_DB_PASSWORD=" + migrator_pw,
+                "-e", "PMGM_PILOT_REPORT_DB_PASSWORD=" + report_pw,
+                "-v", str(init_dir / "001-create-pilot-keycloak.sh")
+                      + ":/docker-entrypoint-initdb.d/001-create-pilot-keycloak.sh:ro",
+                "-v", str(init_dir / "002-create-pilot-db2.sh")
+                      + ":/docker-entrypoint-initdb.d/002-create-pilot-db2.sh:ro",
+                "-v", str(ROOT / "scripts/grant-pilot-db2.sh")
+                      + ":/scripts/grant-pilot-db2.sh:ro",
+                "postgres:17",
+            ], timeout=180)
+            for _ in range(60):
+                ready = cmd(["docker", "exec", name, "pg_isready",
+                             "-U", "pmgm_app", "-d", "pmgm"], check=False, timeout=8)
+                if ready.returncode == 0:
+                    break
+                time.sleep(2)
+            else:
+                logs = cmd(["docker", "logs", name], check=False).stderr
+                self.fail("PostgreSQL no arrancó el initdb BD2: " + logs[-1600:])
+
+            # Migrador real (sin superuser) debe poder crear estructura desde cero.
+            psql("pmgm_migrator", migrator_pw,
+                 "CREATE SCHEMA core; CREATE TABLE core.audit_events "
+                 "(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, payload text NOT NULL);")
+            cmd(["docker", "exec", "-e", "PGPASSWORD=" + admin_pw,
+                 name, "bash", "/scripts/grant-pilot-db2.sh"])
+
+            status = psql("pmgm_app", admin_pw,
+                "SELECT rolname FROM pg_roles WHERE rolname IN "
+                "('pmgm_runtime','pmgm_migrator','pmgm_reports') AND rolsuper;")
+            self.assertEqual("", status.stdout.strip(), "Rol BD2 no puede ser superuser")
+            self.assertEqual("pmgm_migrator", psql("pmgm_app", admin_pw,
+                "SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname='pmgm';").stdout.strip())
+
+            # DML permitido bajo contraseña runtime REAL.
+            self.assertEqual("1", psql("pmgm_runtime", runtime_pw,
+                "INSERT INTO core.audit_events(payload) VALUES ('synthetic') RETURNING id;").stdout.strip())
+            self.assertEqual("1", psql("pmgm_runtime", runtime_pw,
+                "SELECT count(*) FROM core.audit_events;").stdout.strip())
+
+            for sql in (
+                "CREATE TABLE core.should_not_exist(id int);",
+                "ALTER TABLE core.audit_events DISABLE TRIGGER ALL;",
+                "UPDATE core.audit_events SET payload='tamper' WHERE FALSE;",
+                "DELETE FROM core.audit_events WHERE FALSE;",
+                "TRUNCATE TABLE core.audit_events;",
+            ):
+                with self.subTest(sql=sql):
+                    response = psql("pmgm_runtime", runtime_pw, "BEGIN; " + sql + " ROLLBACK;", check=False)
+                    self.assertNotEqual(0, response.returncode, "API obtuvo privilegio prohibido")
+
+            self.assertNotEqual(0, psql("pmgm_reports", report_pw,
+                "SELECT * FROM core.audit_events LIMIT 0;", check=False).returncode)
+
+            # ACL por defecto: nuevas tablas migradas recibirán DML, no DDL ni SELECT de reportes.
+            psql("pmgm_migrator", migrator_pw,
+                 "CREATE TABLE core.created_after_grants (id bigint PRIMARY KEY);")
+            psql("pmgm_runtime", runtime_pw, "SELECT * FROM core.created_after_grants LIMIT 0;")
+            self.assertNotEqual(0, psql("pmgm_reports", report_pw,
+                "SELECT * FROM core.created_after_grants LIMIT 0;", check=False).returncode)
+        finally:
+            cmd(["docker", "rm", "-f", name], check=False, timeout=30)
+            cmd(["docker", "network", "rm", network], check=False, timeout=30)
 
     def test_initdb_roles_are_distinct_non_superusers_without_secrets(self):
         script = read("infrastructure/postgres/002-create-pilot-db2.sh")
