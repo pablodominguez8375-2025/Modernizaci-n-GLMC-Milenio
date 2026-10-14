@@ -15,8 +15,13 @@ class MinioPilotPolicyTests(unittest.TestCase):
     def test_documentary_policy_has_object_only_permissions(self):
         p = json.loads(POLICY.read_text(encoding="utf-8"))
         self.assertEqual("2012-10-17", p["Version"])
-        self.assertEqual(1, len(p["Statement"]))
-        statement = p["Statement"][0]
+        self.assertEqual(2, len(p["Statement"]))
+        statements = {item["Sid"]: item for item in p["Statement"]}
+        bucket = statements["BucketListingForNotFoundHead"]
+        self.assertEqual("Allow", bucket["Effect"])
+        self.assertEqual(["s3:ListBucket"], bucket["Action"])
+        self.assertEqual(["arn:aws:s3:::pmgm-documents"], bucket["Resource"])
+        statement = statements["AllowDocumentObjectsOnly"]
         self.assertEqual("Allow", statement["Effect"])
         self.assertEqual(
             {"s3:GetObject", "s3:PutObject", "s3:DeleteObject"},
