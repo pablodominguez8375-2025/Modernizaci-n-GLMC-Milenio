@@ -117,6 +117,9 @@ services:
       Authentication__Authority: http://keycloak:8080/identity/realms/pmgm
       Authentication__Audience: pmgm-api
       Authentication__RequireHttpsMetadata: "false"
+      # IPs exactas y verificadas del nginx/web y Caddy/gateway; vacío = ignorar X-Forwarded-For.
+      # La IP de cada proxy puede cambiar al recrear la red: ver runbook PMGM-SEC-470.
+      ForwardedHeaders__KnownProxies: ${PMGM_PILOT_TRUSTED_PROXY_IPS:-}
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_app;Password=${PMGM_PILOT_DB_PASSWORD:?PMGM_PILOT_DB_PASSWORD es obligatorio}
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
