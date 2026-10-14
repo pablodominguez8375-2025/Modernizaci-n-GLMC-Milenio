@@ -1,0 +1,49 @@
+# Overlay OPT-IN: SOLO volúmenes piloto NUEVOS. No usar en srv01 ni en volúmenes persistidos.
+# docker compose -f docker-compose.pilot.yml -f docker-compose.pilot-db2.yml ...
+services:
+  postgres:
+    environment:
+      PMGM_PILOT_RUNTIME_DB_PASSWORD: ${PMGM_PILOT_RUNTIME_DB_PASSWORD:?Clave runtime requerida}
+      PMGM_PILOT_MIGRATOR_DB_PASSWORD: ${PMGM_PILOT_MIGRATOR_DB_PASSWORD:?Clave migrador requerida}
+      PMGM_PILOT_REPORT_DB_PASSWORD: ${PMGM_PILOT_REPORT_DB_PASSWORD:?Clave reportes requerida}
+    volumes:
+      - ./postgres/002-create-pilot-db2.sh:/docker-entrypoint-initdb.d/002-create-pilot-db2.sh:ro
+
+  migrator:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["--migrate-only"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      Database__ApplyMigrationsOnStartup: "true"
+      Database__RunMigrationsAndExit: "true"
+      DemoData__Enabled: "false"
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_migrator;Password=${PMGM_PILOT_MIGRATOR_DB_PASSWORD:?Clave migrador requerida}
+    networks: [pmgm_pilot_internal]
+
+  db-grants:
+    image: postgres:17
+    restart: "no"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      PGPASSWORD: ${PMGM_PILOT_DB_PASSWORD:?Secreto de bootstrap requerido}
+    volumes:
+      - ../scripts/grant-pilot-db2.sh:/scripts/grant-pilot-db2.sh:ro
+    command: ["bash", "/scripts/grant-pilot-db2.sh"]
+    networks: [pmgm_pilot_internal]
+
+  api:
+    depends_on:
+      db-grants:
+        condition: service_completed_successfully
+    environment:
+      Database__ApplyMigrationsOnStartup: "false"
+      Database__RunMigrationsAndExit: "false"
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_runtime;Password=${PMGM_PILOT_RUNTIME_DB_PASSWORD:?Clave runtime requerida}
