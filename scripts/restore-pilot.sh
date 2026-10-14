@@ -61,9 +61,15 @@ for database in pmgm pmgm_keycloak; do
   tmp="/tmp/${database}-pilot-restore.dump"
   "${compose[@]}" exec -T postgres rm -f "$tmp"
   "${compose[@]}" cp "$BACKUP_DIR/database/${database}.dump" "postgres:$tmp" >/dev/null
+  # La restauración de Keycloak debe producir objetos propiedad de pmgm_keycloak,
+  # no del superusuario usado para el backup. Mantener privilegios mínimos.
+  restore_role=()
+  if [ "$database" = "pmgm_keycloak" ]; then
+    restore_role=(--role=pmgm_keycloak)
+  fi
   if ! "${compose[@]}" exec -T postgres pg_restore \
     --clean --if-exists --no-owner --no-privileges --exit-on-error \
-    -U pmgm_app -d "$database" "$tmp"; then
+    "${restore_role[@]}" -U pmgm_app -d "$database" "$tmp"; then
     "${compose[@]}" exec -T postgres rm -f "$tmp" >/dev/null 2>&1 || true
     echo "Falló restore de $database; gateway/web/api/keycloak permanecen detenidos." >&2
     exit 1
