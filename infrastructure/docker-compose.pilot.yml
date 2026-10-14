@@ -6,9 +6,11 @@ services:
       POSTGRES_DB: pmgm
       POSTGRES_USER: pmgm_app
       POSTGRES_PASSWORD: ${PMGM_PILOT_DB_PASSWORD:?PMGM_PILOT_DB_PASSWORD es obligatorio}
+      # Exclusiva del bootstrap inicial del rol no superusuario Keycloak.
+      PMGM_PILOT_KC_DB_PASSWORD: ${PMGM_PILOT_KC_DB_PASSWORD:?PMGM_PILOT_KC_DB_PASSWORD es obligatorio}
     volumes:
       - pmgm_pilot_postgres_data:/var/lib/postgresql/data
-      - ./postgres/001-create-pilot-keycloak.sql:/docker-entrypoint-initdb.d/001-create-pilot-keycloak.sql:ro
+      - ./postgres/001-create-pilot-keycloak.sh:/docker-entrypoint-initdb.d/001-create-pilot-keycloak.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pmgm_app -d pmgm"]
       interval: 5s
@@ -68,8 +70,8 @@ services:
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD:?PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD es obligatorio}
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/pmgm_keycloak
-      KC_DB_USERNAME: pmgm_app
-      KC_DB_PASSWORD: ${PMGM_PILOT_DB_PASSWORD:?PMGM_PILOT_DB_PASSWORD es obligatorio}
+      KC_DB_USERNAME: pmgm_keycloak
+      KC_DB_PASSWORD: ${PMGM_PILOT_KC_DB_PASSWORD:?PMGM_PILOT_KC_DB_PASSWORD es obligatorio}
       KC_HTTP_ENABLED: "true"
       KC_HTTP_RELATIVE_PATH: /identity
       KC_HEALTH_ENABLED: "true"
