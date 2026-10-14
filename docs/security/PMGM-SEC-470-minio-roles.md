@@ -20,7 +20,7 @@ Estado: código propuesto en PR #479, Issue #470. **No equivale a despliegue/val
 
 ## CI, límites y seguridad
 
-`tests/test_minio_pilot_policy.py` verifica acciones/recursos exactos y que Compose/preflight/CI no use credenciales de administración en DocumentStorage; el workflow CI valida Compose y Smoke piloto con `adobe/s3mock` por rapidez. **S3Mock no ejerce MinIO IAM**, por lo que no es correcto afirmar que una prueba CI confirma denegaciones por usuario en MinIO real. Un ensayo de MinIO real o revisión de una política efectiva en QA es requisito de aceptación antes de cerrar el criterio de #470.
+`tests/test_minio_pilot_policy.py` verifica acciones/recursos exactos y que Compose/preflight/CI no use credenciales de administración en DocumentStorage; el workflow CI valida Compose y Smoke piloto con `adobe/s3mock` por rapidez. **S3Mock no ejerce MinIO IAM**. Por eso, `scripts/ci-minio-policy.sh` ejecuta adicionalmente en CI una instancia MinIO real pero efímera, con credenciales sintéticas: verifica las operaciones documentales permitidas y la denegación de otro bucket, el inventario global y operaciones administrativas. Estas pruebas no sustituyen la aceptación de credenciales y políticas efectivas en el servidor QA operativo antes de cerrar #470.
 
 No se modifica el Compose de primera implementación, QA/srv01, Keycloak, reglas de Taller ni roles de PostgreSQL. Separar migraciones PostgreSQL, runtime de aplicación y Keycloak en distintas identidades queda para la siguiente entrega y necesita planificación para evitar pérdida de acceso.
 
