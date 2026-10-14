@@ -360,6 +360,8 @@ jobs:
       PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
       PMGM_PILOT_MINIO_USER: ci-pilot-storage
       PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
+      PMGM_PILOT_MINIO_APP_USER: ci-pilot-documents
+      PMGM_PILOT_MINIO_APP_PASSWORD: CiPilotDocs2026SecureOnly!
       PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
       PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD: ci-pilot-keycloak-secret-2026-003
       PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
@@ -390,6 +392,12 @@ jobs:
         run: |
           docker compose -f infrastructure/docker-compose.first.yml -f infrastructure/docker-compose.ci-s3mock.yml config
           docker compose -f infrastructure/docker-compose.pilot.yml -f infrastructure/docker-compose.ci-s3mock.yml config
+
+      - name: Test MinIO pilot documentary IAM policy
+        run: python3 -m unittest discover -s tests -p test_minio_pilot_policy.py
+
+      - name: Verify real MinIO documentary IAM
+        run: bash scripts/ci-minio-policy.sh
 
       - name: Validate pilot Docker Compose
         shell: bash
@@ -546,6 +554,8 @@ jobs:
       PMGM_PILOT_DB_PASSWORD: ci-pilot-db-secret-2026-001
       PMGM_PILOT_MINIO_USER: ci-pilot-storage
       PMGM_PILOT_MINIO_PASSWORD: ci-pilot-minio-secret-2026-002
+      PMGM_PILOT_MINIO_APP_USER: ci-pilot-documents
+      PMGM_PILOT_MINIO_APP_PASSWORD: CiPilotDocs2026SecureOnly!
       PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME: ci-kc-admin
       PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD: ci-pilot-keycloak-secret-2026-003
       PMGM_PILOT_ADMIN_USERNAME: ci.pilot.admin
@@ -573,6 +583,8 @@ jobs:
           PMGM_PILOT_DB_PASSWORD=$PMGM_PILOT_DB_PASSWORD
           PMGM_PILOT_MINIO_USER=$PMGM_PILOT_MINIO_USER
           PMGM_PILOT_MINIO_PASSWORD=$PMGM_PILOT_MINIO_PASSWORD
+          PMGM_PILOT_MINIO_APP_USER=$PMGM_PILOT_MINIO_APP_USER
+          PMGM_PILOT_MINIO_APP_PASSWORD=$PMGM_PILOT_MINIO_APP_PASSWORD
           PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME=$PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME
           PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD=$PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD
           PMGM_PILOT_ADMIN_USERNAME=$PMGM_PILOT_ADMIN_USERNAME
