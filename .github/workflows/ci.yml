@@ -396,6 +396,9 @@ jobs:
       - name: Test MinIO pilot documentary IAM policy
         run: python3 -m unittest discover -s tests -p test_minio_pilot_policy.py
 
+      - name: Verify real MinIO documentary IAM
+        run: bash scripts/ci-minio-policy.sh
+
       - name: Validate pilot Docker Compose
         shell: bash
         run: |
