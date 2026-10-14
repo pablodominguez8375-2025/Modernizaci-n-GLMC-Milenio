@@ -25,6 +25,7 @@ set +a
 required=(
   PMGM_PILOT_HOSTNAME PMGM_PILOT_PUBLIC_URL
   PMGM_PILOT_DB_PASSWORD PMGM_PILOT_MINIO_USER PMGM_PILOT_MINIO_PASSWORD
+  PMGM_PILOT_MINIO_APP_USER PMGM_PILOT_MINIO_APP_PASSWORD
   PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD
   PMGM_PILOT_ADMIN_USERNAME PMGM_PILOT_ADMIN_EMAIL PMGM_PILOT_ADMIN_PASSWORD
 )
@@ -83,6 +84,7 @@ for key, value in os.environ.items():
 secret_names = [
     "PMGM_PILOT_DB_PASSWORD",
     "PMGM_PILOT_MINIO_PASSWORD",
+    "PMGM_PILOT_MINIO_APP_PASSWORD",
     "PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD",
     "PMGM_PILOT_ADMIN_PASSWORD",
 ]
@@ -92,6 +94,12 @@ for name, value in zip(secret_names, secrets):
         fail(f"{name} debe tener al menos 20 caracteres.")
 if len(set(secrets)) != len(secrets):
     fail("Las contraseñas del piloto deben ser diferentes entre sí.")
+
+# La API no puede autenticarse con la identidad administradora de MinIO.
+app_user = os.environ["PMGM_PILOT_MINIO_APP_USER"].strip()
+root_user = os.environ["PMGM_PILOT_MINIO_USER"].strip()
+if not app_user or app_user == root_user:
+    fail("La cuenta MinIO documental debe tener un usuario distinto del administrador.")
 
 for user_key in ("PMGM_PILOT_KEYCLOAK_ADMIN_USERNAME", "PMGM_PILOT_ADMIN_USERNAME"):
     username = os.environ[user_key].strip()
