@@ -16,7 +16,7 @@ docker network create "$NETWORK" >/dev/null
 docker run -d --name "$SERVER" --network "$NETWORK" \
   -e MINIO_ROOT_USER=ci-minio-iam-root \
   -e MINIO_ROOT_PASSWORD=CiMinioIamRoot2026SecureOnly \
-  quay.io/minio/minio:latest server /data >/dev/null
+  minio/minio:RELEASE.2025-09-07T16-13-09Z server /data >/dev/null
 
 docker run --rm --network "$NETWORK" \
   -v "$ROOT/infrastructure/minio/pmgm-documents-policy.json:/policy.json:ro" \
@@ -24,7 +24,7 @@ docker run --rm --network "$NETWORK" \
   -e CI_MINIO_ROOT_PASSWORD=CiMinioIamRoot2026SecureOnly \
   -e CI_MINIO_APP_USER=ci-minio-iam-documents \
   -e CI_MINIO_APP_PASSWORD=CiMinioIamDocs2026SecureOnly \
-  --entrypoint /bin/sh quay.io/minio/mc:latest -c '
+  --entrypoint /bin/sh minio/mc:RELEASE.2025-08-13T08-35-41Z -c '
 set -eu
 
 ready=0
