@@ -587,3 +587,11 @@ main.content label > span { font-weight: 600; }
 .privacy-card h3, .privacy-card h4 { font-size: 1rem; color: #12305f; }
 .privacy-right { grid-template-columns: auto 1fr; align-items: start; gap: 0.75rem; }
 .privacy-how { background: #eef3fb; border: 1px solid #c7d3ea; border-radius: 0.75rem; padding: 0.875rem 1rem; display: grid; gap: 0.5rem; justify-items: start; font-size: 0.9375rem; }
+
+/* Mis asistencias: filtros plegados bajo «Filtrar» (lista primero) */
+.own-filter { margin: 0 0 12px; border: 1px solid var(--line, #d6dbe8); border-radius: 10px; background: #fff; }
+.own-filter > summary { min-height: 48px; display: flex; align-items: center; padding: 0 14px; font-weight: 700; color: #0a1a7a; cursor: pointer; list-style: none; }
+.own-filter > summary::-webkit-details-marker { display: none; }
+.own-filter > summary::after { content: '▾'; margin-left: auto; }
+.own-filter[open] > summary::after { content: '▴'; }
+.own-filter > .regularity-form { padding: 0 14px 14px; }
