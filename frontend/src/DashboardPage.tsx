@@ -3,6 +3,8 @@ import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIc
 import { type CalendarApiClient, type CalendarEvent } from './api/calendarApi'
 import { type NotificationApiClient, type NotificationInboxItem } from './api/notificationApi'
 import { type CandidatePortalResponse, type SessionProfile, type SystemInfo } from './api/pmgmApi'
+import { type MembershipApiClient } from './api/membershipApi'
+import { loadMemberIdentity, type MemberIdentity } from './memberIdentity'
 import { greetingFor, totalPending, type PendingTarget, type PendingTask } from './rolePendingTasks'
 
 interface DashboardPageProps {
@@ -21,6 +23,7 @@ interface DashboardPageProps {
   operational?: boolean
   administrator?: boolean
   onOpenPending?: (target: PendingTarget) => void
+  membershipApi?: MembershipApiClient
 }
 
 export default function DashboardPage(props: DashboardPageProps) {
@@ -34,6 +37,10 @@ export default function DashboardPage(props: DashboardPageProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [notifications, setNotifications] = useState<NotificationInboxItem[]>([])
   const [pulseLoading, setPulseLoading] = useState(true)
+  const [identity, setIdentity] = useState<MemberIdentity | null>(null)
+  const { membershipApi } = props
+  useEffect(() => { if (!membershipApi) return; let active = true; loadMemberIdentity(membershipApi).then(value => { if (active) setIdentity(value) }).catch(() => undefined); return () => { active = false } }, [membershipApi])
+  const identityParts = identity ? [identity.lodge, identity.degree, identity.office].filter((part): part is string => Boolean(part)) : []
 
   useEffect(() => {
     let active = true
@@ -72,7 +79,8 @@ export default function DashboardPage(props: DashboardPageProps) {
         <h1>{greeting}</h1>
         <p>{summary}</p>
       </div>
-      <p className="home-strip-meta"><span className="home-strip-date">{todayLabel}</span><span>{accessScopeLabel(profile?.accessScope)}</span></p>
+      <p className="home-strip-meta"><span className="home-strip-date">{todayLabel}</span>{identityParts.length === 0 && accessScopeLabel(profile?.accessScope) && <span>{accessScopeLabel(profile?.accessScope)}</span>}</p>
+      {identityParts.length > 0 && <ul className="home-identity" aria-label="Tu situación en la Orden">{identityParts.map(part => <li key={part}>{part}</li>)}</ul>}
       {administrator && <div className="executive-status-card home-strip-status">
         <span className="status-dot" aria-hidden="true" />
         <div><strong>{systemInfo ? 'Plataforma operativa' : loading ? 'Consultando plataforma' : 'Modo demostración'}</strong><small>{systemInfo?.runtime ?? '.NET 10'} · PostgreSQL · React</small></div>
@@ -80,9 +88,9 @@ export default function DashboardPage(props: DashboardPageProps) {
     </section>
 
     <section className="metric-grid home-shortcuts" aria-label="Accesos rápidos">
-      <Shortcut icon="calendar" value={pulseLoading ? '—' : String(upcoming.length)} label={nextEvent ? `Agenda · próxima ${shortDate(nextEvent.startsAtUtc)}` : 'Agenda · sin actividades próximas'} onClick={props.onOpenCalendar} />
-      <Shortcut icon="bell" value={pulseLoading ? '—' : String(unread)} label={unread === 1 ? 'Aviso sin leer' : 'Avisos sin leer'} onClick={props.onOpenNotifications} tone={unread > 0 ? 'attention' : undefined} />
-      <Shortcut icon="candidate" value={loading ? '—' : String(portal?.total ?? 0)} label="Insinuados publicados" onClick={props.onOpenCandidates} />
+      <Shortcut shortLabel="Agenda" icon="calendar" value={pulseLoading ? '—' : String(upcoming.length)} label={nextEvent ? `Agenda · próxima ${shortDate(nextEvent.startsAtUtc)}` : 'Agenda · sin actividades próximas'} onClick={props.onOpenCalendar} />
+      <Shortcut shortLabel="Avisos" icon="bell" value={pulseLoading ? '—' : String(unread)} label={unread === 1 ? 'Aviso sin leer' : 'Avisos sin leer'} onClick={props.onOpenNotifications} tone={unread > 0 ? 'attention' : undefined} />
+      <Shortcut shortLabel="Insinuados" icon="candidate" value={loading ? '—' : String(portal?.total ?? 0)} label="Insinuados publicados" onClick={props.onOpenCandidates} />
     </section>
 
     <section className={showPendingInbox ? 'home-grid has-inbox' : 'home-grid'}>
@@ -135,11 +143,11 @@ function shortDate(value: string) {
   return new Intl.DateTimeFormat('es-CL', { day: '2-digit', month: 'short', timeZone: 'America/Santiago' }).format(date).replace('.', '')
 }
 
-function Shortcut({ icon, value, label, onClick, tone }: { icon: InstitutionalIconName; value: string; label: string; onClick: () => void; tone?: 'attention' }) {
+function Shortcut({ icon, value, label, shortLabel, onClick, tone }: { icon: InstitutionalIconName; value: string; label: string; shortLabel: string; onClick: () => void; tone?: 'attention' }) {
   return <button type="button" className={`metric-card home-shortcut${tone ? ` metric-${tone}` : ''}`} onClick={onClick}>
     <span className="home-shortcut-icon" aria-hidden="true"><InstitutionalIcon name={icon} size={22} /></span>
     <strong>{value}</strong>
-    <span className="home-shortcut-label">{label}</span>
+    <span className="home-shortcut-label"><span className="home-shortcut-long">{label}</span><span className="home-shortcut-short" aria-hidden="true">{shortLabel}</span></span>
   </button>
 }
 
@@ -163,4 +171,4 @@ function LoadingRows() { return <div className="loading-rows"><span /><span /><s
 function truncate(value: string, length: number) { return value.length <= length ? value : `${value.slice(0, length - 1)}…` }
 function eventTypeLabel(value: string) { return value.includes('ceremony') ? 'Ceremonia' : value.includes('instruction') ? 'Docencia' : value.includes('meeting') ? 'Tenida' : value.includes('reservation') ? 'Reserva institucional' : 'Actividad institucional' }
 function statusLabel(value: string) { return value === 'tentative' ? 'Tentativo' : value === 'completed' ? 'Realizado' : value === 'draft' ? 'Borrador' : value }
-function accessScopeLabel(scope?: SessionProfile['accessScope']) { return scope === 'order' ? 'Orden' : scope === 'organization' ? 'Taller' : scope === 'authenticated' ? 'Autenticado' : '—' }
+function accessScopeLabel(scope?: SessionProfile['accessScope']) { return scope === 'order' ? 'Orden' : scope === 'organization' ? 'Taller' : scope === 'authenticated' ? '' : '' }

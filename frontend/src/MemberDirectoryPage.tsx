@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { officeLabel } from './officeLabels'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient } from './api/membershipApi'
 import './memberDirectory.css'
@@ -179,7 +180,6 @@ function initials(value: string) { return value.split(/\s+/).filter(Boolean).sli
 export function officePeriod(startDate: string, endDate: string | null) { return `${formatDate(startDate)} → ${endDate ? formatDate(endDate) : 'vigente'}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }
 function degreeLabel(value: string | null | undefined) { return value === 'master' ? 'Maestro/a' : value === 'fellowcraft' ? 'Compañero/a' : value === 'apprentice' ? 'Aprendiz' : value || 'Sin grado registrado' }
-function officeLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase()) }
 function membershipLabel(value: string) { return value === 'active' ? 'Activo' : value === 'transferred' ? 'Trasladado' : value === 'closed' ? 'Cerrado' : value || 'Sin estado' }
 function institutionalStatusLabel(value?: string | null) { return value === 'active' ? 'Activo' : value === 'inactive' ? 'Inactivo' : value === 'voluntary_withdrawal' ? 'Retiro voluntario' : value === 'forced_withdrawal' ? 'Retiro forzoso' : value === 'reinstated' ? 'Reintegrado' : value === 'deceased' ? 'Fallecido' : value === 'workshop_transfer' ? 'Cambio de Taller' : value || 'Sin evento' }
 function regularityLabel(value?: string | null) { return value === 'up_to_date' ? 'Al día' : value === 'delinquent' || value === 'overdue' ? 'Pendiente' : value === 'exempt' ? 'Exento' : value === 'pending' ? 'En revisión' : 'No visible' }

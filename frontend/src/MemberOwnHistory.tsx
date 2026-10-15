@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { MembershipApiClient, OwnOffice, OwnAttendanceResponse, OwnAttendance } from './api/membershipApi'
+import { officeLabel } from './officeLabels'
 const date = (s:string|null) => s ? s.split('-').reverse().join('-') : '—'
 const message = (e:unknown) => e instanceof Error ? e.message : 'No fue posible consultar tu historial.'
 export function OwnOffices({api}:{api:MembershipApiClient}) {
@@ -7,7 +8,7 @@ export function OwnOffices({api}:{api:MembershipApiClient}) {
  useEffect(()=>{let active=true;setResult(null);setError(null);api.getOwnOffices().then(r=>{if(active)setResult({api,items:r.items})}).catch(e=>{if(active)setError(message(e))});return()=>{active=false}},[api])
  if(error)return <p role="alert">{error}</p>
  if(result?.api!==api)return <p role="status">Consultando tus cargos…</p>
- return result.items.length ? <ul>{result.items.map(x=><li style={{overflowWrap:"anywhere"}} key={x.id}><strong>{x.cargo}</strong> · {x.taller} · Período {x.periodo} · {date(x.desde)} a {date(x.hasta)}</li>)}</ul> : <p>No tienes cargos registrados.</p>
+ return result.items.length ? <ul>{result.items.map(x=><li style={{overflowWrap:"anywhere"}} key={x.id}><strong>{officeLabel(x.cargo)}</strong> · {x.taller} · Período {x.periodo} · {date(x.desde)} a {date(x.hasta)}</li>)}</ul> : <p>No tienes cargos registrados.</p>
 }
 export function OwnAttendanceHistory({api}:{api:MembershipApiClient}) {
  const [tipo,setTipo]=useState<OwnAttendance['tipo']|''>(''),[desde,setDesde]=useState(''),[hasta,setHasta]=useState('')

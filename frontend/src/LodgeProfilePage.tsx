@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { officeLabel } from './officeLabels'
 import { ActionDrawer } from './actionKit'
 import { type LodgeSummaryAccess, type OrganizationProfile, type OrganizationProfileApiClient } from './api/organizationProfileApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
@@ -214,7 +215,6 @@ function Empty({ text }: { text: string }) { return <div className="empty-state 
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
 function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
 function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(item => item[0]?.toUpperCase()).join('') }
-function officeLabel(value: string) { return value.replaceAll('_', ' ').replace(/\b\w/g, char => char.toUpperCase()) }
 function degreeLabel(value: string) { return value === 'master' || value === 'third' ? 'Maestro/a' : value === 'fellowcraft' || value === 'second' ? 'Compañero/a' : value === 'apprentice' || value === 'first' ? 'Aprendiz' : value.replaceAll('_', ' ') }
 function meetingTypeLabel(value: string) { return value === 'regular' ? 'Tenida regular' : value === 'instruction' ? 'Tenida de instrucción' : value.replaceAll('_', ' ') }
 function regularityLabel(value?: string | null) { return value === 'up_to_date' ? 'Al día' : value === 'pending' ? 'Pendiente' : value === 'delinquent' || value === 'overdue' ? 'Morosidad' : value === 'exempt' ? 'Exento' : 'Sin dato' }
