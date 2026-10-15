@@ -13,6 +13,11 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DIGEST_PIN = re.compile(r"^quay\.io/minio/aistor/minio@sha256:[a-f0-9]{64}$")
 ACK_TEXT = "ACEPTO_SOLO_LAB_SIN_DESPLIEGUE"
+# Identidad OCI index exacta verificada en notas de release del proyecto Silo.
+# No equivale a comprobar el digest remoto ni a aprobar despliegue.
+SILO_PATCHED_IMAGE = "docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62"
+SILO_PATCHED_TAG = "RELEASE.2026-10-15T00-00-00Z"
+SILO_PATCHED_SOURCE = "7a3ca0f82100cce06289a465f54139da2639f642"
 
 
 def evaluate(provider, image="", license_file="", acknowledgment=""):
@@ -30,10 +35,30 @@ def evaluate(provider, image="", license_file="", acknowledgment=""):
             "MinIO Community upstream no se mantiene; antigua imagen de piloto bloqueada."
         )
     if provider == "silo":
-        return blocked(
-            "SN-2026-015: servidor Silo release 2026-09-16 afectado; "
-            "no hay release corregida verificada. Se exige reevaluación y nueva revisión."
-        )
+        if image != SILO_PATCHED_IMAGE:
+            return blocked(
+                "Silo: solo versión corregida 2026-10-15 fijada a digest OCI "
+                "aprobado para evaluación; se rechazan 2026-09-16, latest y digests distintos."
+            )
+        if acknowledgment != ACK_TEXT:
+            return blocked("Se requiere aceptación expresa de evaluación SOLO de laboratorio.")
+        return {
+            **base,
+            "status": "LAB_PRECHECK_ONLY",
+            "image": SILO_PATCHED_IMAGE,
+            "release": SILO_PATCHED_TAG,
+            "source_commit": SILO_PATCHED_SOURCE,
+            "requirements": [
+                "confirmar firma, procedencia, SBOM y digest remoto de Silo 2026-10-15",
+                "revisar licencia AGPLv3 y condiciones institucionales",
+                "revisar vulnerabilidades y correcciones vigentes al momento de prueba",
+                "probar IAM S3 con servidor real y credenciales sintéticas; exigir denegaciones",
+                "probar copia de seguridad, restauración, retención y rollback sintéticos",
+                "obtener autorización institucional separada antes de despliegue",
+            ],
+            "warning": "NO certifica origen remoto, seguridad, IAM ni licencia; "
+                       "no autoriza producción/UAT/srv01.",
+        }
     if provider != "aistor":
         return blocked("Proveedor no evaluado / no incluido en alcance.")
     if not DIGEST_PIN.fullmatch(image):
