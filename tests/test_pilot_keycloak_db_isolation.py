@@ -11,6 +11,8 @@ from test_pilot_db2_isolation import PilotDb2IsolationTests  # noqa: F401
 from test_pilot_db2_real_migrations import PilotDb2RealMigrationsTests  # noqa: F401
 # Evaluación de proveedores S3: pruebas offline de rechazo seguro sin tocar CI/MinIO.
 from test_s3_supplier_gate import S3SupplierSupplyGateTests  # noqa: F401
+# #470 — evidencia topológica Caddy/nginx/API antes de QA, solo lectura.
+from test_pilot_proxy_chain import PilotProxyChainEvidenceTests  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 
