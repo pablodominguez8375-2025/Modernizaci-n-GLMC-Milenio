@@ -93,12 +93,15 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   const [error, setError] = useState<string | null>(null)
   const [showOperations] = useState(true)
   const [tab, setTab] = useState<LodgeTab>(initialTab ?? (focusInstructions ? 'docencia' : 'resumen'))
+  const todayKey = todayInChile()
+  const pendingMeetings = meetings.filter(item => item.meetingDate <= todayKey && (item.status === 'scheduled' || item.status === 'open' || item.status === 'held')).length
+  const pendingInstructions = instructions.filter(item => item.status === 'scheduled' && item.instructionDate <= todayKey).length
   const lodgeTabs: WorkspaceTab<LodgeTab>[] = [
     { id: 'resumen', label: 'Resumen', icon: 'report' },
-    { id: 'tenidas', label: 'Tenidas y actas', icon: 'calendar' },
+    { id: 'tenidas', label: 'Tenidas y actas', icon: 'calendar', badge: pendingMeetings || undefined },
     ...(canReadSecretariat ? [{ id: 'correspondencia' as const, label: 'Correspondencia', icon: 'documents' as const }, { id: 'cuadro' as const, label: 'Cuadro y reuniones', icon: 'members' as const }, { id: 'archivo' as const, label: 'Archivo y cierre', icon: 'archive' as const }] : []),
     { id: 'consejo', label: 'Consejo', icon: 'shield' },
-    { id: 'docencia', label: 'Docencia', icon: 'library' },
+    { id: 'docencia', label: 'Docencia', icon: 'library', badge: pendingInstructions || undefined },
     { id: 'retiros', label: 'Cartas de retiro', icon: 'memberControl' },
     ...(profileSlot ? [{ id: 'ficha' as const, label: 'Ficha del Taller', icon: 'lodge' as const }] : []),
   ]
