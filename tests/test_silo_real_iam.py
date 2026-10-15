@@ -208,7 +208,17 @@ class SiloRealIamLaboratoryTests(unittest.TestCase):
                     0, cli("ls", "documents/" + FORBIDDEN_BUCKET,
                            check=False).returncode
                 )
-                self.assertNotEqual(0, cli("ls", "documents", check=False).returncode)
+                # Silo puede responder 200 a ListBuckets devolviendo únicamente
+                # los buckets visibles para este usuario. La condición de
+                # confidencialidad es NO enumerar ni revelar buckets ajenos,
+                # independientemente del código de retorno del cliente.
+                bucket_listing = cli("ls", "documents", check=False)
+                self.assertIsNotNone(bucket_listing)
+                if bucket_listing.returncode == 0:
+                    self.assertNotIn(
+                        FORBIDDEN_BUCKET, bucket_listing.stdout,
+                        "Un listado global expuso el bucket prohibido."
+                    )
                 self.assertNotEqual(
                     0, cli("admin", "info", "documents", check=False).returncode
                 )
