@@ -14,6 +14,28 @@ export interface NotificationInboxItem {
   readAtUtc: string | null
 }
 
+/**
+ * Demo pública: a quién le llega cada aviso. En el sistema real el backend entrega a cada persona solo sus
+ * propios avisos (/api/notifications/me); aquí se imita ese reparto para que la demo muestre lo que corresponde.
+ * 'todos' = cualquier perfil · 'gestion' = perfiles con funciones de gestión · 'administrador' = Administrador del sistema.
+ */
+export const demoNoticeAudience: Record<string, 'todos' | 'gestion' | 'administrador'> = {
+  'candidate.publication.approved': 'todos',
+  'calendar.space.reserved': 'todos',
+  'initiation.approval.required': 'gestion',
+  'ceremony.authorized': 'gestion',
+  'candidate.publication.deadline': 'gestion',
+  'lodge.minutes.approved': 'gestion',
+  'privacy.retention.review': 'administrador',
+}
+export function demoNoticeVisible(typeCode: string, profileKey: string): boolean {
+  const audience = demoNoticeAudience[typeCode] ?? 'gestion'
+  if (audience === 'todos') return true
+  if (profileKey === 'brother') return false
+  if (audience === 'administrador') return profileKey === 'systemAdmin'
+  return true
+}
+
 export type AccessTokenProvider = () => Promise<string | null>
 
 export interface NotificationApiClientOptions {
@@ -144,6 +166,7 @@ export class NotificationApiClient {
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
   private readonly mockInbox = demoInbox.map(item => ({ ...item }))
+  private mockProfileKey: string | null = null
 
   constructor(options: NotificationApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -152,14 +175,18 @@ export class NotificationApiClient {
     this.onUnauthorized = options.onUnauthorized
   }
 
+  /** Solo demo: perfil con el que se mira la bandeja. */
+  setMockProfile(profileKey: string) { this.mockProfileKey = profileKey }
+
   async getMine(filters: { unreadOnly?: boolean; limit?: number } = {}): Promise<NotificationInboxItem[]> {
     if (this.useMocks) {
       const unreadOnly = filters.unreadOnly ?? false
       const limit = Math.max(1, Math.min(filters.limit ?? 50, 100))
       return this.mockInbox
+        .filter(item => this.mockProfileKey === null || demoNoticeVisible(item.typeCode, this.mockProfileKey))
         .filter(item => !unreadOnly || item.readAtUtc === null)
         .slice(0, limit)
-        .map(item => ({ ...item }))
+        .map(item => this.mockProfileKey === 'brother' ? { ...item, mandatory: false, actionRequired: false, actionStatus: null } : { ...item })
     }
 
     const query = new URLSearchParams()

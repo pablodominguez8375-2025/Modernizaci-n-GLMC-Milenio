@@ -139,6 +139,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     return () => { active = false }
   }, [candidateIntakeApi, canCandidates, demoProfileKey])
 
+  if (api.useMocks) rawNotificationApi.setMockProfile?.(demoProfileKey)
   const effectiveProfile = api.useMocks ? getDemoProfile(demoProfileKey) : profile
   const capabilities = effectiveProfile?.capabilities as ExtendedCapabilities | undefined
   const hasInstitutionalScope = effectiveProfile?.accessScope === 'organization' || effectiveProfile?.accessScope === 'order'
@@ -334,7 +335,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.109' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.110' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -430,7 +431,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'memberControl' && canMemberControl && <InternalAffairsMemberControlPage api={api} internalAffairsApi={internalAffairsApi} />}
         {view === 'dataQuality' && canDataQuality && <InternalAffairsDataQualityPage api={api} internalAffairsApi={internalAffairsApi} caseApi={dataQualityCaseApi} onOpenCases={() => setView('caseQueue')} />}
         {view === 'caseQueue' && canCaseQueue && <DataQualityCaseQueuePage api={api} caseApi={dataQualityCaseApi} />}
-        {view === 'notifications' && canNotifications && <NotificationsPage notificationApi={notificationApi} onAction={openNotificationAction} />}
+        {view === 'notifications' && canNotifications && <NotificationsPage key={demoProfileKey} notificationApi={notificationApi} onAction={openNotificationAction} />}
         {view === 'calendar' && canCalendar && <CalendarPage api={api} calendarApi={calendarApi} canManage={canSecretariat} />}
         {view === 'ceremonies' && canCeremonies && <CeremoniesPage api={api} />}
         {view === 'regimen' && canRegimen && <RegimenInteriorPage api={api} />}
