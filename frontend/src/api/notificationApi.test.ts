@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NotificationApiClient } from './notificationApi'
 
 afterEach(() => vi.unstubAllGlobals())
@@ -43,4 +43,20 @@ it('demo mode includes the Gran Secretaría approval notice linked to published 
   expect(approval?.subject).toBe('Nueva insinuación publicada')
   expect(approval?.actionUrl).toBe('/candidates')
   expect(approval?.body).toContain('Gran Secretaría aprobó la ficha')
+})
+
+import { demoNoticeVisible, NotificationApiClient as DemoClient } from './notificationApi'
+describe('Avisos de la demo según el perfil', () => {
+  it('el hermano solo ve avisos de insinuaciones y agenda; no los de gestión ni administración', async () => {
+    const client = new DemoClient({ useMocks: true })
+    client.setMockProfile('brother')
+    const types = (await client.getMine()).map(item => item.typeCode).sort()
+    expect(types).toEqual(['calendar.space.reserved', 'candidate.publication.approved'])
+    expect((await client.getMine()).some(item => item.actionRequired || item.mandatory)).toBe(false)
+  })
+  it('los perfiles de gestión ven los avisos de gestión; solo el Administrador ve los de privacidad', () => {
+    expect(demoNoticeVisible('initiation.approval.required', 'lodge')).toBe(true)
+    expect(demoNoticeVisible('privacy.retention.review', 'lodge')).toBe(false)
+    expect(demoNoticeVisible('privacy.retention.review', 'systemAdmin')).toBe(true)
+  })
 })
