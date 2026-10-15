@@ -199,6 +199,21 @@ class PilotDb2IsolationTests(unittest.TestCase):
         self.assertIn("FROM pmgm_reports", script)
         self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pmgm_migrator", script)
 
+    def test_bd2_secrets_differ_from_all_existing_pilot_credentials(self):
+        source = read("scripts/preflight-pilot-db2.sh")
+        for key in (
+            "PMGM_PILOT_RUNTIME_DB_PASSWORD",
+            "PMGM_PILOT_MIGRATOR_DB_PASSWORD",
+            "PMGM_PILOT_REPORT_DB_PASSWORD",
+            "PMGM_PILOT_DB_PASSWORD",
+            "PMGM_PILOT_KC_DB_PASSWORD",
+            "PMGM_PILOT_MINIO_PASSWORD",
+            "PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD",
+            "PMGM_PILOT_ADMIN_PASSWORD",
+        ):
+            self.assertIn('"' + key + '"', source)
+        self.assertIn("len(set(secrets)) != len(secrets)", source)
+
     def test_bd2_restore_requires_explicit_opt_in_and_regrants_before_minio(self):
         restore = read("scripts/restore-pilot.sh")
         self.assertIn("PMGM_PILOT_DB2_RESTORE_APPROVED", restore)
