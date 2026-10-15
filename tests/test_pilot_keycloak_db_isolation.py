@@ -13,6 +13,8 @@ from test_pilot_db2_real_migrations import PilotDb2RealMigrationsTests  # noqa: 
 from test_s3_supplier_gate import S3SupplierSupplyGateTests  # noqa: F401
 # #470 — evidencia topológica Caddy/nginx/API antes de QA, solo lectura.
 from test_pilot_proxy_chain import PilotProxyChainEvidenceTests  # noqa: F401
+# S3 IAM real con servidor SILO corregido por digest y credenciales efímeras.
+from test_silo_real_iam import SiloRealIamLaboratoryTests  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 
