@@ -21,6 +21,8 @@ from test_silo_real_recovery import SiloObjectRecoveryLaboratoryTests  # noqa: F
 from test_silo_dotnet_sdk import SiloDotNetSdkRealIntegrationTests  # noqa: F401
 # #470 — ClamAV real sobre contenido Silo via SDK .NET, sin uso de S3Mock.
 from test_silo_dotnet_clamav import SiloDotNetClamAvLifecycleTests  # noqa: F401
+# #470 — flujos HTTP documentales con Silo, ClamAV y PostgreSQL reales.
+from test_silo_http_document_workflow import SiloDocumentHttpRealWorkflowTests  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 
