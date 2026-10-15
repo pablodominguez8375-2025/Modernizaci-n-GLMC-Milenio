@@ -141,6 +141,11 @@ class PilotDb2IsolationTests(unittest.TestCase):
             psql("pmgm_migrator", migrator_pw,
                  "CREATE SCHEMA core; CREATE TABLE core.audit_events "
                  "(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, payload text NOT NULL);")
+            # El smoke reducido no ejecuta EF Core: crear un historial ficticio
+            # bajo propiedad del migrador, como sí hace EF en la prueba completa.
+            psql("pmgm_migrator", migrator_pw,
+                 'CREATE TABLE public."__EFMigrationsHistory" '
+                 '("MigrationId" text PRIMARY KEY, "ProductVersion" text NOT NULL);')
             cmd(["docker", "exec", "-e", "PGPASSWORD=" + admin_pw,
                  name, "bash", "/scripts/grant-pilot-db2.sh"])
 
@@ -171,6 +176,15 @@ class PilotDb2IsolationTests(unittest.TestCase):
             self.assertNotEqual(0, psql("pmgm_reports", report_pw,
                 "SELECT * FROM core.audit_events LIMIT 0;", check=False).returncode)
 
+            for role, password in (("pmgm_runtime", runtime_pw),
+                                   ("pmgm_reports", report_pw)):
+                self.assertNotEqual(0, psql(role, password,
+                    'SELECT * FROM public."__EFMigrationsHistory" LIMIT 0;',
+                    check=False).returncode)
+            self.assertEqual("0", psql("pmgm_migrator", migrator_pw,
+                'SELECT count(*) FROM public."__EFMigrationsHistory";').stdout.strip())
+
+
             # ACL por defecto: nuevas tablas migradas recibirán DML, no DDL ni SELECT de reportes.
             psql("pmgm_migrator", migrator_pw,
                  "CREATE TABLE core.created_after_grants (id bigint PRIMARY KEY);")
@@ -195,6 +209,8 @@ class PilotDb2IsolationTests(unittest.TestCase):
         self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES", script)
         self.assertIn("REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON core.audit_events", script)
         self.assertIn("GRANT SELECT, INSERT ON core.audit_events", script)
+        self.assertIn('REVOKE ALL PRIVILEGES ON TABLE public."__EFMigrationsHistory"', script)
+        self.assertIn('FROM pmgm_runtime, pmgm_reports;', script)
         self.assertIn("REVOKE ALL ON ALL TABLES", script)
         self.assertIn("FROM pmgm_reports", script)
         self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pmgm_migrator", script)

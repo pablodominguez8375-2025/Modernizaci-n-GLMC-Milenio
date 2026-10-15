@@ -28,6 +28,11 @@ $grant$;
 -- El runtime NO posee el objeto y jamás modifica ni deshabilita triggers de auditoría.
 REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON core.audit_events FROM pmgm_runtime;
 GRANT SELECT, INSERT ON core.audit_events TO pmgm_runtime;
+-- El historial de EF Core controla qué migraciones se aplican. El runtime
+-- jamás debe consultarlo o alterarlo, incluso si recibe DML por esquema.
+-- El migrador mantiene ownership y permisos para nuevas migraciones.
+REVOKE ALL PRIVILEGES ON TABLE public."__EFMigrationsHistory"
+  FROM pmgm_runtime, pmgm_reports;
 COMMIT;
 SQL
 echo "Permisos BD2 aplicados: runtime DML sin DDL, auditoría append-only, informes sin tablas."

@@ -30,6 +30,17 @@ done
 [ "$(query "SELECT has_database_privilege('pmgm_runtime','pmgm','CREATE');")" = "f" ] || exit 1
 [ "$(query "SELECT has_database_privilege('pmgm_runtime','pmgm_keycloak','CONNECT');")" = "f" ] || exit 1
 [ "$(query "SELECT has_table_privilege('pmgm_reports', 'core.audit_events', 'SELECT');")" = "f" ] || exit 1
+# El runtime nunca consulta ni manipula el historial interno EF Core.
+# El migrador no pierde SELECT y puede continuar el versionado del esquema.
+[ "$(query "SELECT has_table_privilege('pmgm_migrator', 'public.\"__EFMigrationsHistory\"', 'SELECT');")" = "t" ] || exit 1
+for role in pmgm_runtime pmgm_reports; do
+  for denied in SELECT INSERT UPDATE DELETE TRUNCATE; do
+    [ "$(query "SELECT has_table_privilege('$role', 'public.\"__EFMigrationsHistory\"', '$denied');")" = "f" ] || {
+      echo "El rol $role posee $denied en el historial privado EF Core." >&2
+      exit 1
+    }
+  done
+done
 [ "$(query "SELECT pg_has_role('pmgm_runtime','pmgm_migrator','MEMBER');")" = "f" ] || exit 1
 
 # Las sentencias que inesperadamente pasen lo hacen dentro de BEGIN/ROLLBACK.

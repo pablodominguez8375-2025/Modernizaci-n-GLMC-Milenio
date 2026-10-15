@@ -115,6 +115,24 @@ class PilotDb2RealMigrationsTests(unittest.TestCase):
 
             run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
                  db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=90)
+            # Historial EF migrator-only: no SELECT ni DML para runtime/reportes.
+            # Comprobar tanto ACL como intentos SQL con identidades auténticas.
+            for role in ("runtime", "reports"):
+                for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+                    query = (
+                        "SELECT has_table_privilege('pmgm_" + role + "', "
+                        "'public.\"__EFMigrationsHistory\"', '" + privilege + "');"
+                    )
+                    with self.subTest(role=role, privilege=privilege):
+                        self.assertEqual("f", psql("pmgm_app", pw["admin"],
+                             query).stdout.strip())
+                self.assertNotEqual(0, psql("pmgm_" + role, pw[role],
+                    'SELECT count(*) FROM public."__EFMigrationsHistory";',
+                    check=False).returncode)
+            self.assertGreater(int(psql("pmgm_migrator", pw["migrator"],
+                'SELECT count(*) FROM public."__EFMigrationsHistory";'
+            ).stdout.strip()), 20)
+
 
             # API must run under DML-only, not bootstrap or migrator.
             run([
@@ -192,6 +210,10 @@ class PilotDb2RealMigrationsTests(unittest.TestCase):
             self.assertGreater(int(psql("pmgm_migrator", pw["migrator"],
                 'SELECT count(*) FROM public."__EFMigrationsHistory";'
             ).stdout.strip()), 20)
+            for role in ("runtime", "reports"):
+                self.assertNotEqual(0, psql("pmgm_" + role, pw[role],
+                    'SELECT * FROM public."__EFMigrationsHistory" LIMIT 0;',
+                    check=False).returncode)
             run(["docker", "start", api], timeout=45)
             for attempt in range(45):
                 try:
