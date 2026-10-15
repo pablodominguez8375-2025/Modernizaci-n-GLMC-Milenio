@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net;
 using Amazon.Runtime;
 using Amazon.S3;
@@ -40,16 +41,68 @@ public sealed class S3DocumentObjectStore : IDocumentObjectStore, IDisposable
         if (await ExistsAsync(objectKey, cancellationToken))
             throw new InvalidOperationException("El objeto documental ya existe y no puede sobrescribirse.");
 
-        var request = new PutObjectRequest
+        // ASP.NET Core HttpRequest.Body is normally non-seekable. PutObjectAsync
+        // can require a known length / rewindable stream for its SigV4 and
+        // checksum pipeline. Do NOT disable signing or integrity checks.
+        //
+        // The public HTTP endpoint enforces Content-Length and MaxUploadBytes;
+        // enforce the limit again here for all direct callers. Keep temporary
+        // content in process memory only (never plaintext scratch files).
+        MemoryStream? staging = null;
+        try
         {
-            BucketName = _options.Bucket,
-            Key = objectKey,
-            InputStream = content,
-            ContentType = contentType,
-            AutoCloseStream = false
-        };
+            Stream input = content;
+            if (!content.CanSeek)
+            {
+                if (_options.MaxUploadBytes <= 0)
+                    throw new InvalidOperationException("El límite de carga documental no está configurado.");
 
-        await _client.PutObjectAsync(request, cancellationToken);
+                staging = new MemoryStream();
+                var chunk = ArrayPool<byte>.Shared.Rent(64 * 1024);
+                try
+                {
+                    int read;
+                    while ((read = await content.ReadAsync(chunk.AsMemory(), cancellationToken)) > 0)
+                    {
+                        if (staging.Length > _options.MaxUploadBytes - read ||
+                            staging.Length > int.MaxValue - read)
+                            throw new InvalidDataException("El flujo excede el máximo permitido para una carga documental.");
+
+                        await staging.WriteAsync(chunk.AsMemory(0, read), cancellationToken);
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(chunk, clearArray: true);
+                }
+
+                staging.Position = 0;
+                input = staging;
+            }
+
+            var request = new PutObjectRequest
+            {
+                BucketName = _options.Bucket,
+                Key = objectKey,
+                InputStream = input,
+                ContentType = contentType,
+                AutoCloseStream = false
+            };
+
+            await _client.PutObjectAsync(request, cancellationToken);
+        }
+        finally
+        {
+            // The in-memory seekable copy may contain personal data. Scrub the
+            // allocated buffer even on exceptions/cancellation; the caller
+            // continues to own (and dispose) the original input stream.
+            if (staging is not null)
+            {
+                if (staging.TryGetBuffer(out var buffer))
+                    buffer.AsSpan().Clear();
+                await staging.DisposeAsync();
+            }
+        }
     }
 
     public async Task<Stream> OpenReadAsync(

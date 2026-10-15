@@ -46,19 +46,68 @@ def _start(container, network, root, password):
 
 
 def _provision(container, policy, admin, admin_password, app, app_password):
-    def cli(*args):
-        return run(["docker", "exec", container, "mcli", *args], timeout=45)
+    # Silo's readiness probe may pass a few seconds before the admin API is
+    # able to serve mcli requests on loaded GitHub runners. Retry ONLY the
+    # ephemeral provisioning operations for a bounded period, and always
+    # fail if none succeeds. Real IAM positive/negative checks stay mandatory.
+    def cli(step, *args):
+        last_result = None
+        for attempt in range(6):
+            last_result = run(
+                ["docker", "exec", container, "mcli", *args],
+                timeout=45, check=False
+            )
+            if last_result is not None and last_result.returncode == 0:
+                return
+            if attempt < 5:
+                time.sleep(2)
 
-    # Alias solo dentro del contenedor efímero.
-    cli("alias", "set", "admin", "http://127.0.0.1:9000",
+        # Never include CLI args/raw stdout/stderr: they can contain credentials.
+        # Emit only a tightly allowlisted failure category and return code.
+        error = (
+            (last_result.stderr or "") + "\n" + (last_result.stdout or "")
+            if last_result is not None else ""
+        ).lower()
+        reason = "other"
+        for needle, label in (
+            ("connection refused", "transport-refused"),
+            ("connection reset", "transport-reset"),
+            ("not initialized", "not-initialized"),
+            ("not ready", "not-ready"),
+            ("context deadline exceeded", "timeout"),
+            ("timed out", "timeout"),
+            ("access denied", "access-denied"),
+            ("invalid credentials", "invalid-credentials"),
+            ("permission denied", "permission-denied"),
+            ("already exists", "already-exists"),
+            ("error response from daemon", "docker-daemon"),
+            ("no space left on device", "disk-exhausted"),
+            ("out of memory", "memory-exhausted"),
+            ("killed", "process-killed"),
+            ("unknown command", "cli-version"),
+            ("failed to connect", "transport-failed"),
+            ("lookup", "dns-resolution"),
+        ):
+            if needle in error:
+                reason = label
+                break
+        exit_code = last_result.returncode if last_result is not None else "timeout"
+        raise AssertionError(
+            f"Silo provisioning failed (six attempts): {step}; "
+            f"exit={exit_code}; category={reason}"
+        )
+
+    # Alias is local to the disposable Silo container, not a host config.
+    cli("alias", "alias", "set", "admin", "http://127.0.0.1:9000",
         admin, admin_password)
-    cli("mb", "admin/" + BUCKET)
-    cli("mb", "admin/" + FORBIDDEN_BUCKET)
+    cli("admin-readiness", "admin", "info", "admin")
+    cli("bucket-docs", "mb", "admin/" + BUCKET)
+    cli("bucket-forbidden", "mb", "admin/" + FORBIDDEN_BUCKET)
     run(["docker", "cp", str(policy), container + ":/tmp/pmgm-policy.json"])
-    cli("admin", "policy", "create", "admin",
+    cli("policy-create", "admin", "policy", "create", "admin",
         "pmgm-documents-only", "/tmp/pmgm-policy.json")
-    cli("admin", "user", "add", "admin", app, app_password)
-    cli("admin", "policy", "attach", "admin",
+    cli("user-add", "admin", "user", "add", "admin", app, app_password)
+    cli("policy-attach", "admin", "policy", "attach", "admin",
         "pmgm-documents-only", "--user", app)
 
 
