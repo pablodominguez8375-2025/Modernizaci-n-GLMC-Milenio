@@ -236,7 +236,7 @@ export default function HospitalariaPage({api,canReadLocal,canManageLocal,canApp
   </>
 
   return <>
-    <section className="page-heading"><div><p className="eyebrow">{canManageLocal?'Hospitalaria del Taller':'Venerable Maestro · inspección Hospitalaria'}</p><h1>Tronco de Beneficencia y estado mensual</h1><p>Fondo independiente de Tesorería. Los antecedentes personales de socorros permanecen restringidos al Taller; Gran Hospitalaria recibe sólo la rendición agregada.</p></div><span className="count-badge">{period}</span></section>
+    <section className="page-heading"><div><p className="eyebrow">{canManageLocal?'Tronco de Beneficencia y estado mensual':'Venerable Maestro · inspección · Tronco de Beneficencia y estado mensual'}</p><h1>Hospitalaria del Taller</h1><p>Tronco de Beneficencia y estado mensual. Fondo independiente de Tesorería. Los antecedentes personales de socorros permanecen restringidos al Taller; Gran Hospitalaria recibe sólo la rendición agregada.</p></div><span className="count-badge">{period}</span></section>
     {message&&<div className="regularity-success" role="status">{message}</div>}{error&&<div className="error-banner" role="alert">{error}</div>}
     <section className="panel treasury-toolbar"><label className="regularity-field"><span>Taller</span><select value={organizationId} disabled={busy} onChange={e=>setOrganizationId(e.target.value)}>{organizations.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label className="regularity-field"><span>Período</span><input type="month" value={period} disabled={busy} onChange={e=>setPeriod(e.target.value)}/></label></section>
 

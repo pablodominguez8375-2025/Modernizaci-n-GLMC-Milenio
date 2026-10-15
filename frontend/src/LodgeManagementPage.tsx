@@ -339,7 +339,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   return <div className="lodge-product-page">
     <section className="lodge-product-heading">
       <div>
-        <p className="lodge-product-breadcrumb">Gestión Logial <span>›</span> Vista general</p>
+        <p className="lodge-product-breadcrumb">{pageTitle} <span>›</span> Vista general</p>
         <h1>{pageTitle}</h1>
         <p>Herramientas para la administración y operación del Taller en un solo lugar.</p>
       </div>
