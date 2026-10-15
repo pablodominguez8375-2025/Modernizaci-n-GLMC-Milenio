@@ -36,6 +36,20 @@ if [ -n "${PMGM_CI_COMPOSE_OVERRIDE:-}" ]; then
   compose+=(-f "$ROOT/$PMGM_CI_COMPOSE_OVERRIDE")
 fi
 
+# BD2 es una instalación opt-in: no restaurar con ownership de superusuario
+# ni ejecutar el flujo legacy en un volumen BD2 por simple cambio de overlay.
+db2_restore=false
+if [ "${PMGM_CI_COMPOSE_OVERRIDE:-}" = "infrastructure/docker-compose.pilot-db2.yml" ]; then
+  [ "${PMGM_PILOT_DB2_RESTORE_APPROVED:-}" = "CONFIRMO_RESTORE_BD2" ] || {
+    echo "BD2: falta PMGM_PILOT_DB2_RESTORE_APPROVED=CONFIRMO_RESTORE_BD2." >&2
+    exit 1
+  }
+  db2_restore=true
+elif [ -n "${PMGM_PILOT_DB2_RESTORE_APPROVED:-}" ]; then
+  echo "Se indicó restore BD2 sin overlay institucional BD2. Operación cancelada." >&2
+  exit 1
+fi
+
 running="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
 resume=()
 for service in gateway web api keycloak; do
@@ -66,6 +80,9 @@ for database in pmgm pmgm_keycloak; do
   restore_role=()
   if [ "$database" = "pmgm_keycloak" ]; then
     restore_role=(--role=pmgm_keycloak)
+  elif [ "$database" = "pmgm" ] && "$db2_restore"; then
+    # Restaurar objetos como su propietario EF restringido, nunca como superusuario.
+    restore_role=(--role=pmgm_migrator)
   fi
   if ! "${compose[@]}" exec -T postgres pg_restore \
     --clean --if-exists --no-owner --no-privileges --exit-on-error \
@@ -76,6 +93,17 @@ for database in pmgm pmgm_keycloak; do
   fi
   "${compose[@]}" exec -T postgres rm -f "$tmp"
 done
+
+# --no-privileges omite grants intencionalmente: reaplicar ACL estricta ANTES
+# de reabrir API o ejecutar cualquier smoke autenticado con BD restaurada.
+if "$db2_restore"; then
+  echo "BD2: restituyendo ACL de runtime y reportes tras pg_restore..."
+  if ! "${compose[@]}" run --rm -T --no-deps db-grants; then
+    echo "BD2: fallo reaplicando ACL; acceso público sigue detenido." >&2
+    exit 1
+  fi
+  bash "$ROOT/scripts/check-pilot-db2-roles.sh"
+fi
 
 echo "Restaurando MinIO..."
 if ! "${compose[@]}" run --rm -T --no-deps \
