@@ -17,6 +17,8 @@ from test_pilot_proxy_chain import PilotProxyChainEvidenceTests  # noqa: F401
 from test_silo_real_iam import SiloRealIamLaboratoryTests  # noqa: F401
 # #470: recuperación lógica S3 entre dos instancias Silo reales, datos sintéticos.
 from test_silo_real_recovery import SiloObjectRecoveryLaboratoryTests  # noqa: F401
+# Validar clase productiva .NET sobre Silo real, no S3Mock.
+from test_silo_dotnet_sdk import SiloDotNetSdkRealIntegrationTests  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 
