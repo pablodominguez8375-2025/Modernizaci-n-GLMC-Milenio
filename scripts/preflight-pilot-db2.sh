@@ -20,9 +20,12 @@ secrets = [os.environ.get(n, "") for n in (
     "PMGM_PILOT_REPORT_DB_PASSWORD",
     "PMGM_PILOT_DB_PASSWORD",
     "PMGM_PILOT_KC_DB_PASSWORD",
+    "PMGM_PILOT_MINIO_PASSWORD",
+    "PMGM_PILOT_KEYCLOAK_ADMIN_PASSWORD",
+    "PMGM_PILOT_ADMIN_PASSWORD",
 )]
-if any(len(s) < 20 or "REEMPLAZAR" in s or "CHANGE-ME" in s for s in secrets):
-    raise SystemExit("Se requieren cinco claves distintas de al menos 20 caracteres; sin ejemplos.")
+if any(len(s) < 20 or "REEMPLAZAR" in s.upper() or "CHANGE-ME" in s.upper() for s in secrets):
+    raise SystemExit("Se requieren ocho claves distintas de al menos 20 caracteres; sin ejemplos.")
 if len(set(secrets)) != len(secrets):
     raise SystemExit("Las credenciales del piloto BD2 no pueden reutilizarse.")
 PY
