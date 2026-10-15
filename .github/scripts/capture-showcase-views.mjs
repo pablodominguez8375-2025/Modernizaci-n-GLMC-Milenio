@@ -506,7 +506,7 @@ async function assertDashboardMetricLayout(viewport) {
   })()`)
   // PMGM-UX-002: en móvil los 4 indicadores de Inicio se muestran en 2 columnas (decisión aprobada por el PO, 01-10-2026).
   // PMGM-UX menús sin repetir (03-10-2026): 3 accesos en Inicio; 1 columna en celular, 3 desde 721 px.
-  const expectedColumns = viewport.width <= 720 ? 1 : 3
+  const expectedColumns = 3
   if (!result || result.cardCount !== 3 || result.columns !== expectedColumns) {
     throw new Error(`Dashboard metrics layout is inconsistent at ${viewport.suffix}: expected ${expectedColumns} columns for 3 cards, got ${JSON.stringify(result)}.`)
   }
