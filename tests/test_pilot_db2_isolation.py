@@ -195,6 +195,8 @@ class PilotDb2IsolationTests(unittest.TestCase):
         self.assertIn("GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES", script)
         self.assertIn("REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON core.audit_events", script)
         self.assertIn("GRANT SELECT, INSERT ON core.audit_events", script)
+        self.assertIn('REVOKE ALL PRIVILEGES ON TABLE public."__EFMigrationsHistory"', script)
+        self.assertIn('FROM pmgm_runtime, pmgm_reports;', script)
         self.assertIn("REVOKE ALL ON ALL TABLES", script)
         self.assertIn("FROM pmgm_reports", script)
         self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pmgm_migrator", script)
