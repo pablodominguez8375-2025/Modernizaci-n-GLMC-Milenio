@@ -54,3 +54,13 @@ describe('Gestión Logial product cockpit', () => {
     expect(minutes.items.some(item => item.status === 'approved')).toBe(true)
   })
 })
+
+describe('Pendientes en las pestañas de Gestión Logial', () => {
+  it('calcula pendientes con datos ya cargados, sin llamadas nuevas', async () => {
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync(new URL('./LodgeManagementPage.tsx', import.meta.url), 'utf8')
+    expect(src).toContain("badge: pendingMeetings || undefined")
+    expect(src).toContain("badge: pendingInstructions || undefined")
+    expect(src).toContain("item.status === 'scheduled' && item.instructionDate <= todayKey")
+  })
+})
