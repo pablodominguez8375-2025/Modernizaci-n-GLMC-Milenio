@@ -162,6 +162,49 @@ class PilotDb2RealMigrationsTests(unittest.TestCase):
             self.assertEqual("f", psql("pmgm_app", pw["admin"],
                  "SELECT has_database_privilege('pmgm_runtime','pmgm_keycloak','CONNECT');"
             ).stdout.strip())
+
+            # Backup / restore PostgreSQL-only with real EF schema and no persisted data.
+            # MinIO recovery remains a separate blocked, non-certified integration.
+            run(["docker", "stop", api], timeout=45)
+            backup_path = "/tmp/pmgm_bd2_ci_" + suffix + ".dump"
+            run(["docker", "exec", db, "pg_dump", "-U", "pmgm_app",
+                 "-d", "pmgm", "--format=custom", "--no-owner",
+                 "--no-privileges", "--file=" + backup_path], timeout=90)
+            run(["docker", "exec", db, "pg_restore", "-U", "pmgm_app",
+                 "-d", "pmgm", "--clean", "--if-exists", "--no-owner",
+                 "--no-privileges", "--exit-on-error",
+                 "--role=pmgm_migrator", backup_path], timeout=120)
+            run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
+                 db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=45)
+            restored_owner = psql("pmgm_app", pw["admin"],
+                 "SELECT pg_get_userbyid(relowner) FROM pg_class "
+                 "WHERE oid='core.audit_events'::regclass;").stdout.strip()
+            self.assertEqual("pmgm_migrator", restored_owner)
+            self.assertEqual("f", psql("pmgm_app", pw["admin"],
+                 "SELECT has_table_privilege('pmgm_runtime', "
+                 "'core.audit_events', 'UPDATE');").stdout.strip())
+            self.assertEqual("t", psql("pmgm_app", pw["admin"],
+                 "SELECT has_table_privilege('pmgm_runtime', "
+                 "'core.audit_events', 'INSERT');").stdout.strip())
+            self.assertEqual("f", psql("pmgm_app", pw["admin"],
+                 "SELECT has_table_privilege('pmgm_reports', "
+                 "'core.audit_events', 'SELECT');").stdout.strip())
+            self.assertGreater(int(psql("pmgm_migrator", pw["migrator"],
+                'SELECT count(*) FROM public."__EFMigrationsHistory";'
+            ).stdout.strip()), 20)
+            run(["docker", "start", api], timeout=45)
+            for attempt in range(45):
+                try:
+                    with urllib.request.urlopen(
+                        "http://" + ip + ":8080/health/ready", timeout=2
+                    ) as response:
+                        if response.status == 200:
+                            break
+                except (urllib.error.URLError, TimeoutError, OSError):
+                    pass
+                time.sleep(2)
+            else:
+                self.fail("API runtime no recuperó disponibilidad tras restore PostgreSQL BD2")
         finally:
             run(["docker", "rm", "-f", api], check=False, timeout=45)
             run(["docker", "rm", "-f", db], check=False, timeout=45)
