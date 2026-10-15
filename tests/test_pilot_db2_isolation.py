@@ -199,6 +199,18 @@ class PilotDb2IsolationTests(unittest.TestCase):
         self.assertIn("FROM pmgm_reports", script)
         self.assertIn("ALTER DEFAULT PRIVILEGES FOR ROLE pmgm_migrator", script)
 
+    def test_bd2_restore_requires_explicit_opt_in_and_regrants_before_minio(self):
+        restore = read("scripts/restore-pilot.sh")
+        self.assertIn("PMGM_PILOT_DB2_RESTORE_APPROVED", restore)
+        self.assertIn("CONFIRMO_RESTORE_BD2", restore)
+        self.assertIn("infrastructure/docker-compose.pilot-db2.yml", restore)
+        self.assertIn("restore_role=(--role=pmgm_migrator)", restore)
+        self.assertIn("restore_role=(--role=pmgm_keycloak)", restore)
+        self.assertIn('run --rm -T --no-deps db-grants', restore)
+        self.assertIn('bash "$ROOT/scripts/check-pilot-db2-roles.sh"', restore)
+        self.assertLess(restore.index("run --rm -T --no-deps db-grants"),
+                        restore.index('echo "Restaurando MinIO..."'))
+
     def test_start_refuses_old_volume_and_checks_real_denials(self):
         start = read("scripts/start-pilot-db2.sh")
         preflight = read("scripts/preflight-pilot-db2.sh")
