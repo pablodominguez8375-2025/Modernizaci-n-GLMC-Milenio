@@ -46,3 +46,8 @@ En PR #484 se verificó la triple compuerta sobre HEAD previo `9eb67d7a6ca9ee078
 **Prueba de recuperación en CI sintética:** ampliación `test_pilot_db2_real_migrations.py` incluye `pg_dump` del esquema EF creado realmente, `pg_restore` con rol migrador y `--no-owner --no-privileges`, nueva aplicación de grants, chequeo de propietario/auditoría/historial migraciones, y comprobación de recuperación API `/health/ready`. El test estructural `tests/test_pilot_db2_isolation.py` revisa el consentimiento BD2 y el orden de re-grants previo a MinIO. Esta extensión requiere gates NUEVOS exact-HEAD; nunca declarar SUCCESS antes de verificar.
 
 **Límites pendientes:** bloqueo MinIO imagen segura PR #479; por lo tanto no hay prueba real de IAM S3, backup/restore documental completo, ni UAT QA física srv01 #97. No modificar main, no migrar volúmenes existentes. La separación BD2 solo está en PR draft #484; el Issue #470 sigue abierto por IAM S3, IP real en infraestructura y aceptación operacional. Continuar desde último HEAD vivo de rama y evidencia GitHub Actions, no desde el SHA antiguo de este documento.
+
+
+## Hardening adicional 15-10-2026 — secretos (pendiente CI exact-head)
+
+El preflight BD2 ahora exige que las tres credenciales nuevas no repitan **ninguna de las cinco** contraseñas existentes del piloto (DB bootstrap, Keycloak DB, MinIO, administración Keycloak y administrador institucional), ocho claves distintas de al menos 20 caracteres en total; prueba estructural añadida en `tests/test_pilot_db2_isolation.py`. Se preservó el Compose original y la condición de solo volumen nuevo. Corrección en branch, no en dev; esperar triple gate nuevo antes de integrar.
