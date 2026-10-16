@@ -46,6 +46,27 @@ class SiloRebuildContractTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 select_limit.select_events(invalid)
 
+    def test_fixed_vex_rejects_unbound_binary_image_source_or_missing_regression(self):
+        image = 'sha256:' + 'a' * 64
+        evidence = {'vulnerability': 'CVE-2026-39414', 'source_commit': rebuild.SERVER_SOURCE,
+                    'fix_commit': rebuild.SERVER_FIX, 'fix_ancestry_verified': True,
+                    'server_binary_sha256': rebuild.SERVER_BINARY, 'candidate_image_id': image,
+                    'server_binary_preserved': True,
+                    'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
+                    'source_files': {k: {'git_blob': v} for k, v in rebuild.SERVER_BLOBS.items()}}
+        vex = rebuild.fixed_component_vex(evidence, image)
+        self.assertEqual('fixed', vex['statements'][0]['status'])
+        self.assertEqual(rebuild.SERVER_PURL, vex['statements'][0]['products'][0]['@id'])
+        self.assertEqual(1, len(vex['statements']))
+        for field in ('source_commit', 'fix_commit', 'fix_ancestry_verified', 'server_binary_sha256',
+                      'candidate_image_id', 'server_binary_preserved', 'binary_regression', 'source_files'):
+            changed = dict(evidence)
+            changed.pop(field)
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                rebuild.fixed_component_vex(changed, image)
+        with self.assertRaises(ValueError):
+            rebuild.fixed_component_vex(evidence, 'latest')
+
     def test_rebuild_does_not_publish_or_override_active_compose(self):
         dockerfile = (ROOT / 'infrastructure/silo/Dockerfile.qa-rebuild').read_text()
         workflow = (ROOT / '.github/workflows/qa-silo-rebuild.yml').read_text()
@@ -60,7 +81,8 @@ class SiloRebuildContractTests(unittest.TestCase):
         self.assertNotIn('docker-compose.srv01', script)
         self.assertIn('--ignorefile', script)
         self.assertNotIn('--ignore-unfixed', script)
-        self.assertNotIn('--vex', script)
+        self.assertIn('--vex', script)
+        self.assertIn('unexpected VEX filtering', script)
         self.assertIn('test_silo_dotnet_sdk', script)
 
 

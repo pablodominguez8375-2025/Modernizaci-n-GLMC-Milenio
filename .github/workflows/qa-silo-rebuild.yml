@@ -16,6 +16,10 @@ jobs:
   rebuild:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     env:
       QA_VALIDATED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
@@ -35,6 +39,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/qa/rebuild-silo-candidate.py --source artifacts/mcli-source --output artifacts/silo-rebuild
+      - name: Attest candidate image archive and fixed-component evidence
+        id: provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            artifacts/silo-rebuild/silo-qa-review-only.tar
+            artifacts/silo-rebuild/server-fixed.openvex.json
+            artifacts/silo-rebuild/server-cve-triage.json
+            artifacts/silo-rebuild/rebuild-report.json
+          push-to-registry: false
+      - name: Verify project provenance bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$PROVENANCE_BUNDLE" artifacts/silo-rebuild/project-provenance.sigstore.json
+          for subject in silo-qa-review-only.tar server-fixed.openvex.json server-cve-triage.json rebuild-report.json; do
+            gh attestation verify "artifacts/silo-rebuild/$subject" \
+              --repo "$GITHUB_REPOSITORY" --bundle "$PROVENANCE_BUNDLE" --format json \
+              > "artifacts/silo-rebuild/$subject.verification.json"
+          done
       - name: Preserve candidate evidence (not a deployment release)
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

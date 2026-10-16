@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build an isolated, review-only QA image; never publish or deploy it."""
 import argparse
+import datetime
 import hashlib
 import importlib.util
 import json
@@ -85,6 +86,59 @@ def server_patch_evidence(image, output):
     return evidence
 
 
+SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
+SERVER_PURL = 'pkg:golang/github.com/minio/minio@v0.0.0-20261015052015-7a3ca0f82100'
+
+
+def fixed_component_vex(evidence, image):
+    expected = {'vulnerability': 'CVE-2026-39414', 'source_commit': SERVER_SOURCE,
+                'fix_commit': SERVER_FIX, 'fix_ancestry_verified': True,
+                'server_binary_sha256': SERVER_BINARY, 'candidate_image_id': image,
+                'server_binary_preserved': True,
+                'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED'}
+    if re.fullmatch(r'sha256:[0-9a-f]{64}', image) is None:
+        raise ValueError('invalid VEX image binding')
+    if any(evidence.get(k) != v for k, v in expected.items()):
+        raise ValueError('unverified VEX binding')
+    blobs = evidence.get('source_files', {})
+    if set(blobs) != set(SERVER_BLOBS) or any(
+            blobs[k].get('git_blob') != v for k, v in SERVER_BLOBS.items()):
+        raise ValueError('unverified VEX source')
+    # This project-authored statement describes a patched fork, not an upstream
+    # vendor VEX or a waiver. The pipeline verifies its binary/image binding.
+    return {
+        '@context': 'https://openvex.dev/ns/v0.2.0',
+        '@id': 'https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/vex/' + image.split(':')[1],
+        'author': 'Proyecto Centenario security engineering',
+        'role': 'Document Creator',
+        'timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        'version': 1,
+        'statements': [{
+            'vulnerability': {'name': 'CVE-2026-39414'},
+            'products': [{'@id': SERVER_PURL, 'hashes': {'sha-256': SERVER_BINARY}}],
+            'status': 'fixed',
+            'status_notes': ('Patched pgsty/silo fork at ' + SERVER_SOURCE + ' inherits ' + SERVER_FIX +
+                             '; bounded CSV and JSON Lines routing confirmed by pinned blobs and real binary COUNT tests. '
+                             'Valid only for server SHA256 ' + SERVER_BINARY + ' in candidate ' + image +
+                             '. Project statement; not a vendor-authored VEX. See server-cve-triage.json.')
+        }]
+    }
+
+
+def evaluate_fixed_component(archive, image, evidence, output):
+    statement = fixed_component_vex(evidence, image)
+    vex_path = output / 'server-fixed.openvex.json'
+    vex_path.write_text(json.dumps(statement, indent=2) + '\n')
+    with tempfile.TemporaryDirectory(prefix='qa-rebuild-reviewed-scan-') as tmp:
+        scanner, _ = scanner_tools(Path(tmp))
+        run([str(scanner), 'image', '--input', str(archive), '--scanners', 'vuln',
+             '--timeout', '8m', '--cache-dir', str(Path(tmp) / 'cache'),
+             '--ignorefile', '/dev/null', '--vex', str(vex_path), '--format', 'json',
+             '--output', str(output / 'trivy-reviewed.json')],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=540)
+    return blocking_findings(json.loads((output / 'trivy-reviewed.json').read_text()))
+
+
 def scanner_tools(output):
     spec = importlib.util.spec_from_file_location('silo_supply', ROOT / 'scripts/qa/verify-silo-supply.py')
     supply = importlib.util.module_from_spec(spec)
@@ -157,7 +211,8 @@ def main():
         stage = 'save'
         archive = output / 'silo-qa-review-only.tar'
         run(['docker', 'save', '-o', str(archive), image], timeout=180)
-        report['archive_sha256'] = hashlib.file_digest(archive.open('rb'), 'sha256').hexdigest()
+        with archive.open('rb') as stream:
+            report['archive_sha256'] = hashlib.file_digest(stream, 'sha256').hexdigest()
         stage = 'scan'
         # Temporary tools/cache are not uploaded; no inherited Trivy ignore/VEX.
         with tempfile.TemporaryDirectory(prefix='qa-rebuild-scan-') as tmp:
@@ -186,11 +241,24 @@ def main():
                     stdout=stream, stderr=subprocess.STDOUT, timeout=900)
             report['real_iam_recovery_sdk'] = {'status': 'PASS', 'seconds': round(time.monotonic() - started, 3)}
             report['server_cve_triage'] = server_patch_evidence(image, output)
+            with archive.open('rb') as stream:
+                if hashlib.file_digest(stream, 'sha256').hexdigest() != report['archive_sha256']:
+                    raise ValueError('candidate archive changed after scan')
+            effective = evaluate_fixed_component(archive, image, report['server_cve_triage'], output)
+            # Prevent any unintended filtering beyond this one reviewed component.
+            removed = [v for v in report['blocking_findings'] if v not in effective]
+            if any(v['VulnerabilityID'] != 'CVE-2026-39414' or v['PkgName'] != 'github.com/minio/minio' or
+                   v['InstalledVersion'] != 'v0.0.0-20261015052015-7a3ca0f82100' or
+                   v['Target'] != 'usr/bin/silo' for v in removed):
+                raise ValueError('unexpected VEX filtering')
+            report['effective_blocking_findings'] = effective
+            report['fixed_component_statement'] = 'PROJECT_VEX_BOUND_TO_VERIFIED_SERVER_BINARY'
+
         except Exception as error:
             report['failures']['real_iam_recovery_sdk'] = {'type': type(error).__name__}
     if report['failures']:
         report['status'] = 'BLOCKED_INCOMPLETE_VALIDATION'
-    elif report.get('blocking_findings'):
+    elif report.get('effective_blocking_findings', report.get('blocking_findings')):
         report['status'] = 'BLOCKED_VULNERABILITIES'
     else:
         report['status'] = 'CANDIDATE_VALIDATED_NOT_DEPLOYED'
