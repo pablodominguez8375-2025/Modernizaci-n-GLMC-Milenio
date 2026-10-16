@@ -73,7 +73,7 @@ class QaReadonlyTests(unittest.TestCase):
     def test_listener_scope_recognizes_all_ipv4_loopback_and_ipv6(self):
         cases = {
             '127.0.0.1': 'loopback', '127.0.0.53': 'loopback',
-            '127.0.0.54': 'loopback', '127.22.99.250': 'loopback',
+            '127.0.0.54': 'loopback', '127.22.99.250': 'loopback', '127.0.0.53%lo': 'loopback',
             '::1': 'loopback', '0.0.0.0': 'wildcard', '::': 'wildcard',
             '*': 'wildcard', '192.0.2.1': 'specific',
             '2001:db8::1': 'specific', 'fe80::1%eth0': 'specific',
