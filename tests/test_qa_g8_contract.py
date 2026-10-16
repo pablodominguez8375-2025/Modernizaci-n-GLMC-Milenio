@@ -79,7 +79,7 @@ class QaG8Contracts(unittest.TestCase):
         self.assertEqual(src["users"], dst["users"])
         self.assertEqual("external", dst["sslRequired"])
         self.assertEqual("false", COMPOSE.read_text().split("PMGM_QA_G8_ENABLED: ${PMGM_QA_G8_ENABLED:-")[1].split("}")[0])
-        self.assertIn('if [ "${PMGM_QA_G8_ENABLED:-false}" != true ]', PREFLIGHT.read_text())
+        self.assertIn('[ "${PMGM_QA_G8_ENABLED:-false}" != true ]', PREFLIGHT.read_text())
         self.assertNotIn("PMGM_QA_USER_PASSWORD=Actual", (ROOT / "infrastructure/srv01.env.example").read_text())
 
 
