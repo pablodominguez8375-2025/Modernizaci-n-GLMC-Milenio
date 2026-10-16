@@ -81,27 +81,38 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     report = {'timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
               'source_sha': os.environ.get('QA_VALIDATED_SOURCE_SHA', 'local'), 'image': IMAGE, 'status': 'BLOCKED'}
-    stage = 'registry'
+    report['checks_failed'] = {}
+    def failed(stage, error):
+        report['checks_failed'][stage] = {'type': type(error).__name__}
+        if isinstance(error, urllib.error.HTTPError):
+            report['checks_failed'][stage]['http_status'] = error.code
     try:
         report['registry'] = registry_evidence()
-        stage = 'license'
+    except Exception as error:
+        failed('registry', error)
+    try:
         license_bytes = fetch('https://raw.githubusercontent.com/pgsty/silo/' + SOURCE + '/LICENSE')
         if b'GNU AFFERO GENERAL PUBLIC LICENSE' not in license_bytes or b'Version 3' not in license_bytes:
             raise ValueError('license unexpected')
         (output / 'Silo-LICENSE.txt').write_bytes(license_bytes)
         report['license'] = {'spdx': 'AGPL-3.0-or-later', 'source_commit': SOURCE, 'sha256': digest(license_bytes),
                              'scope': 'Technical identity check, not legal acceptance for production.'}
-        stage = 'attestation'
-        try:
-            verification = subprocess.run(['gh', 'attestation', 'verify', 'oci://' + IMAGE,
-                                           '--repo', 'pgsty/silo', '--format', 'json'],
-                                          stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=90)
-            report['publisher_signature_verified'] = verification.returncode == 0
-            if verification.returncode == 0:
-                (output / 'publisher-attestation.json').write_bytes(verification.stdout)
-        except (OSError, subprocess.TimeoutExpired):
-            report['publisher_signature_verified'] = False
-        stage = 'scanner_download'
+    except Exception as error:
+        failed('license', error)
+    try:
+        verification = subprocess.run(['gh', 'attestation', 'verify', 'oci://' + IMAGE,
+                                       '--repo', 'pgsty/silo', '--format', 'json'],
+                                      stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=90)
+        report['publisher_signature_verified'] = verification.returncode == 0
+        if verification.returncode == 0:
+            (output / 'publisher-attestation.json').write_bytes(verification.stdout)
+        else:
+            report['checks_failed']['publisher_signature'] = {'type': 'NoVerifiedPublisherAttestation'}
+    except (OSError, subprocess.TimeoutExpired) as error:
+        report['publisher_signature_verified'] = False
+        failed('publisher_signature', error)
+    stage = 'scanner_download'
+    try:
         with tempfile.TemporaryDirectory(prefix='qa-trivy-') as temporary:
             temporary = Path(temporary)
             binary_archive = fetch(TRIVY_URL, maximum=128 * 1024 * 1024)
@@ -125,21 +136,20 @@ def main():
             if scan.returncode:
                 raise ValueError('scanner incomplete')
             inventory = json.loads(scan_path.read_text())
-            findings = [v for result in inventory.get('Results', []) for v in result.get('Vulnerabilities', [])]
+            if not isinstance(inventory.get('Results'), list) or not inventory['Results']:
+                raise ValueError('empty vulnerability inventory')
+            findings = [{**v, 'Target': result.get('Target'), 'Class': result.get('Class')}
+                        for result in inventory['Results'] for v in result.get('Vulnerabilities', [])]
             report['scanner'] = {'version': '0.76.0', 'binary_sha256': TRIVY_SHA,
                                  'severity_counts': {s: sum(v.get('Severity') == s for v in findings)
                                                      for s in ['UNKNOWN', 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL']},
-                                 'blocking_findings': [{k: v.get(k) for k in ['VulnerabilityID', 'PkgName', 'InstalledVersion', 'FixedVersion', 'Severity']}
+                                 'blocking_findings': [{k: v.get(k) for k in ['Target', 'Class', 'VulnerabilityID', 'PkgName', 'InstalledVersion', 'FixedVersion', 'Severity', 'PrimaryURL']}
                                                        for v in findings if v.get('Severity') in ('HIGH', 'CRITICAL')]}
             report['status'] = 'BLOCKED_VULNERABILITIES' if report['scanner']['blocking_findings'] else 'SCANNED_NO_HIGH_CRITICAL'
-            if not report['publisher_signature_verified']:
-                report['status'] = 'BLOCKED_PUBLISHER_SIGNATURE'
-        stage = 'complete'
     except Exception as error:
-        report['failed_stage'] = stage
-        report['error_type'] = type(error).__name__
-        if isinstance(error, urllib.error.HTTPError):
-            report['http_status'] = error.code
+        failed(stage, error)
+    if report['checks_failed']:
+        report['status'] = 'BLOCKED_INCOMPLETE_SUPPLY_VERIFICATION'
     (output / 'supply-report.json').write_text(json.dumps(report, indent=2) + '\n')
     # Public metadata only. Never emit token, registry diagnostics or container env.
     print(json.dumps(report, separators=(',', ':')))

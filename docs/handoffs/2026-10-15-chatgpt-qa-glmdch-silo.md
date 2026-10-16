@@ -14,3 +14,10 @@ Handoff a completar con HEAD, pruebas CI, listado de archivos, incompatibilidade
 - Último CI completo antes de commit reciente: sobre SHA eb329932ee3f9aaf7ad8391d6ba2f8d9963ffae9 Showcase 38844061309 y QA Installable 38844061290 SUCCESS; PMGM CI 38844061284 IN_PROGRESS al corte. Commits posteriores invalidan gates anteriores; comprobar CI+Showcase+QA exact HEAD final. La fixture tests/test_qa_storage_guards.py mantiene credenciales MinIO históricas y requiere ajuste/validación; una edición de esa fixture fue rechazada por el conector.
 - Sin comandos SSH, cuentas, credenciales, contenedores, servicios, firewall, datos o instalaciones en glmdch ejecutados por ChatGPT desde este chat. Lo entregado es PR candidata, no QA montado. Issue #505 abierto y #97 seguimiento físico.
 - Registro gemelo en Drive: https://docs.google.com/document/d/1I9bcJ7lKH4T2iQvxafY63HbOBr0ZsGZ8lDX3tSe2UfM ; registro PR #506 comentario 6207177980.
+
+
+## Continuación de adaptación aprobada y verificación independiente — 16-10-2026
+
+Se continuó la misma PR #506 y se preservaron commits concurrentes hasta 9dc8e94 con lease. Silo sólo QA aprobado, sin producción/main. 22 tests locales PASS; nuevo workflow dedicado ejecutó Docker 29.9.1/Compose 5.6.0 y el provisioning/IAM/backup/restore reales: 1/1 PASS. Ver informe docs/security/PMGM-SEC-470-silo-supply-validation.md y runbook actualizado. Índice, manifest amd64, config, LICENSE y attestation del publicador verificadas. **Trivy 0.76.0 detectó 11 HIGH y 0 CRITICAL en la imagen clásica fijada; gate BLOQUEADO, sin excepción ni despliegue propuesto.** Las dependencias PCRE2/Go/mcli y la coincidencia del módulo MinIO/fork se detallan en el informe. Se requiere artefacto corregido y repetir gates/instalable. No se abrió otra implementación ni se tocó reserva piloto #479, servidor o secretos institucionales.
+
+La evidencia de cada HEAD final (CI, paquete, informe security) se registra en PR/#97/Drive; no atribuir al código posterior los resultados del run inicial b03e295. Recuperación actual lógica de QA no acredita versionado/retención/IAM/KMS completo ni respaldo cifrado externo.
