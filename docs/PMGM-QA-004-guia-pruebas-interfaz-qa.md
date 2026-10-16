@@ -111,3 +111,13 @@ Severidad: **P1** impide trabajar o expone datos que no corresponden; **P2** con
 
 ## 8. Resultado
 Al terminar una pasada, dejar en #97: SHA probado, perfiles recorridos, anchos revisados, hallazgos con su Issue y conclusión («apto para continuar con UAT» o «con observaciones»). Esa conclusión es de interfaz; no acredita QA/UAT ni autoriza promover a `main`.
+
+## 9. Pasada automatizada (opcional, de solo lectura)
+
+`scripts/qa-ui/pasada-ui-qa.mjs` repite en el navegador las comprobaciones de §5 y §6 que se pueden automatizar: pantalla de ingreso (un botón, 48 px, ayuda a soporte, uso restringido), versión visible, «Tu situación», menú sin repetidos, título igual al menú, sin desborde horizontal a 360/390/768/1440 px, textos menores de 13 px, formularios abiertos fuera de panel y los grados visibles en Agenda. No escribe nada.
+
+- Requiere `npm i playwright` fuera del repo y un Chromium (`CHROME_PATH` opcional).
+- QA real: `QA_BASE_URL=https://sistema.granlogiamixta.cl QA_USER=… QA_PASSWORD=… QA_LABEL="hermano sin cargo grado 1" node scripts/qa-ui/pasada-ui-qa.mjs`. Las credenciales van **solo por variables de entorno**; el script exige HTTPS y no guarda ni imprime credenciales ni cookies.
+- Demostración: `QA_MODE=demo QA_BASE_URL=<url de la demo> node scripts/qa-ui/pasada-ui-qa.mjs`.
+- Salida en `QA_OUT` (`informe.json` e `informe.md`). Capturas solo con `QA_SCREENSHOTS=1` y únicamente con cuentas y datos sintéticos.
+- Un «warn» pide mirar; un «fail» es un hallazgo. Para cada uno, un Issue según §7. El script no reemplaza el recorrido humano ni el UAT; la lectura de Agenda debe contrastarse con el grado y cargo de la cuenta usada.
