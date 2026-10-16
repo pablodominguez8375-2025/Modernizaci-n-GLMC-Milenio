@@ -170,7 +170,7 @@
     {
       "username": "qa.admin",
       "enabled": true,
-      "firstName": "Administraci\u00f3n",
+      "firstName": "Administración",
       "lastName": "QA Milenio",
       "email": "qa.admin@pmgm.invalid",
       "emailVerified": true,
@@ -196,12 +196,13 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000001"
     },
     {
       "username": "qa.taller23",
       "enabled": true,
-      "firstName": "Secretar\u00eda",
+      "firstName": "Secretaría",
       "lastName": "Taller QA 23",
       "email": "qa.taller23@pmgm.invalid",
       "emailVerified": true,
@@ -223,7 +224,8 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000002"
     },
     {
       "username": "qa.venerable23",
@@ -249,7 +251,8 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000003"
     },
     {
       "username": "qa.exvenerable23",
@@ -275,7 +278,8 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000004"
     },
     {
       "username": "qa.primer23",
@@ -301,7 +305,8 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000005"
     },
     {
       "username": "qa.segundo23",
@@ -327,7 +332,8 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000006"
     },
     {
       "username": "qa.orador23",
@@ -353,12 +359,13 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000007"
     },
     {
       "username": "qa.secretaria23",
       "enabled": true,
-      "firstName": "Secretar\u00eda",
+      "firstName": "Secretaría",
       "lastName": "Taller QA 23",
       "email": "qa.secretaria23@pmgm.invalid",
       "emailVerified": true,
@@ -379,12 +386,13 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000008"
     },
     {
       "username": "qa.tesoreria23",
       "enabled": true,
-      "firstName": "Tesorer\u00eda",
+      "firstName": "Tesorería",
       "lastName": "Taller QA 23",
       "email": "qa.tesoreria23@pmgm.invalid",
       "emailVerified": true,
@@ -405,7 +413,8 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000009"
     },
     {
       "username": "qa.hospitalaria23",
@@ -431,7 +440,228 @@
           "value": "${PMGM_QA_USER_PASSWORD}",
           "temporary": false
         }
-      ]
+      ],
+      "id": "aa820001-0000-4000-8000-000000000010"
+    },
+    {
+      "username": "qa.hermano1",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.hermano1@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000011"
+    },
+    {
+      "username": "qa.hermano2",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.hermano2@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000012"
+    },
+    {
+      "username": "qa.hermano3",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.hermano3@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000013"
+    },
+    {
+      "username": "qa.cargovencido23",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.cargovencido23@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "organization"
+        ],
+        "pmgm_org": [
+          "23232323-2323-2323-2323-232323232323"
+        ]
+      },
+      "realmRoles": [],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000014"
+    },
+    {
+      "username": "qa.gransecretaria",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.gransecretaria@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "grand_secretariat"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000015"
+    },
+    {
+      "username": "qa.regimeninterior",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.regimeninterior@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "internal_affairs"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000016"
+    },
+    {
+      "username": "qa.granarchivero",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.granarchivero@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "grand_archivist"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000017"
+    },
+    {
+      "username": "qa.bibliotecaeditor",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.bibliotecaeditor@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "document_manager"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000018"
+    },
+    {
+      "username": "qa.bibliotecarevisor",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.bibliotecarevisor@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "document_manager"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000019"
     }
   ],
   "smtpServer": {

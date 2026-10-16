@@ -51,4 +51,7 @@ services:
     environment:
       Database__ApplyMigrationsOnStartup: "false"
       Database__RunMigrationsAndExit: "false"
+      PMGM_QA_G8_ENABLED: ${PMGM_QA_G8_ENABLED:-false}
+      PMGM_QA_HTTPS: ${PMGM_QA_HTTPS:-false}
+      PMGM_QA_DB2: "true"
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_runtime;Password=${PMGM_QA_RUNTIME_DB_PASSWORD:?Secreto runtime}

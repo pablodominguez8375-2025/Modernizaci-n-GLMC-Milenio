@@ -159,7 +159,23 @@ def main():
             import base64
             claims = json.loads(base64.urlsafe_b64decode(token.split('.')[1] + '=='))
             assert claims['iss'] == issuer and 'pmgm-api' in claims['aud']
+            # Real Keycloak import must honor the immutable synthetic subject;
+            # the backend uses exactly this iss+sub to resolve the QA member.
+            assert claims['sub'] == 'aa820001-0000-4000-8000-000000000001', 'stable QA admin subject changed'
+            for username, index in [('qa.hermano1', 11), ('qa.hermano2', 12),
+                                    ('qa.hermano3', 13), ('qa.cargovencido23', 14)]:
+                status, _, body = request('/identity/realms/pmgm/protocol/openid-connect/token',
+                    {'client_id': 'pmgm-web', 'grant_type': 'password',
+                     'username': username, 'password': env['PMGM_QA_USER_PASSWORD']},
+                    method='POST')
+                assert status == 200, 'synthetic member login failed'
+                claims = json.loads(base64.urlsafe_b64decode(
+                    json.loads(body)['access_token'].split('.')[1] + '=='))
+                assert claims['iss'] == issuer
+                assert claims['sub'] == f'aa820001-0000-4000-8000-{index:012d}'
+                assert 'platform_superadmin' not in claims.get('realm_access', {}).get('roles', [])
             evidence['checks'].append('SYNTHETIC_TOKEN_ISSUER_AND_AUDIENCE')
+            evidence['checks'].append('G8_FOUR_SYNTHETIC_MEMBER_SUBJECTS')
             evidence['status'] = 'PASS_NOT_DEPLOYED'
             output = ROOT / 'artifacts/qa-public-ingress.json'
             output.parent.mkdir(exist_ok=True)

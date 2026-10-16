@@ -52,6 +52,9 @@ if [ -f "$ENV_FILE" ]; then
   if [ "${PMGM_QA_HTTPS:-false}" = true ] && [ "${PMGM_QA_DB2:-false}" != true ]; then
     fail "Ingreso HTTPS QA requiere segregación PostgreSQL G4 BD2"
   fi
+  if [ "${PMGM_QA_HTTPS:-false}" = true ] && [ "${PMGM_QA_G8_ENABLED:-false}" != true ]; then
+    fail "Ingreso HTTPS QA requiere G8: cuentas ficticias con issuer+sub y grados"
+  fi
   if [ "${PMGM_QA_DB2:-false}" = true ]; then
     python3 - <<'PY'
 import os

@@ -42,6 +42,7 @@ public sealed class FirstImplementationSeedService(
     public async Task SeedAsync(CancellationToken cancellationToken = default)
     {
         await SeedCoreAsync(cancellationToken);
+        await QaIdentitySeedService.SeedAsync(coreDb, cancellationToken);
         await SeedSecretariatAsync(cancellationToken);
         await SeedLodgeAsync(cancellationToken);
         await SeedDocumentsAndArchiveAsync(cancellationToken);
