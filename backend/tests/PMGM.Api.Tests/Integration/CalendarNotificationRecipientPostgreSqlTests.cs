@@ -4,6 +4,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.InstitutionalCalendar;
 using PMGM.Api.Modules.InstitutionalCalendar.Entities;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Notifications;
 using Xunit;
 
