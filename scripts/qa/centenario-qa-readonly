@@ -2,6 +2,7 @@
 """Forced SSH command. Install root-owned only after separate authorization."""
 import datetime
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,17 @@ def command(args):
     if len(result.stdout) > 65536:
         raise ValueError('oversize')
     return result.returncode, result.stdout
+
+
+def listener_scope(address):
+    # Keep wildcard distinct: ipaddress does not consider unspecified addresses loopback.
+    if address in ('*', '0.0.0.0', '::'):
+        return 'wildcard'
+    try:
+        return 'loopback' if ipaddress.ip_address(address).is_loopback else 'specific'
+    except ValueError:
+        # Unknown listener formats never qualify as safely loopback.
+        return 'specific'
 
 
 def collect():
@@ -45,7 +57,7 @@ def collect():
         parts = line.split()
         address, port = parts[4].rsplit(':', 1)
         address = address.strip('[]')
-        scope = 'loopback' if address in ('127.0.0.1', '::1') else 'wildcard' if address in ('*', '0.0.0.0', '::') else 'specific'
+        scope = listener_scope(address)
         listeners.add((parts[0], int(port), scope))
     return dict(schema=1, helper_version=VERSION,
                 helper_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
