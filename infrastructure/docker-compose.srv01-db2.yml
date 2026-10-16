@@ -1,0 +1,54 @@
+# Opt-in G4 EXCLUSIVO de glmdch QA sintético. Requiere volumen nuevo.
+# Se combina sobre docker-compose.srv01.yml ANTES de public-ingress.py.
+services:
+  postgres:
+    environment:
+      PMGM_QA_KC_DB_PASSWORD: ${PMGM_QA_KC_DB_PASSWORD:?Secreto QA Keycloak BD requerido}
+      PMGM_QA_RUNTIME_DB_PASSWORD: ${PMGM_QA_RUNTIME_DB_PASSWORD:?Secreto QA runtime BD requerido}
+      PMGM_QA_MIGRATOR_DB_PASSWORD: ${PMGM_QA_MIGRATOR_DB_PASSWORD:?Secreto QA migrador BD requerido}
+      PMGM_QA_REPORT_DB_PASSWORD: ${PMGM_QA_REPORT_DB_PASSWORD:?Secreto QA reportes BD requerido}
+    volumes:
+      - ./postgres/05-create-qa-db2.sh:/docker-entrypoint-initdb.d/05-create-qa-db2.sh:ro
+
+  keycloak:
+    environment:
+      KC_DB_USERNAME: pmgm_keycloak
+      KC_DB_PASSWORD: ${PMGM_QA_KC_DB_PASSWORD:?Secreto QA Keycloak BD requerido}
+
+  migrator:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Staging
+      Database__ApplyMigrationsOnStartup: "true"
+      Database__RunMigrationsAndExit: "true"
+      DemoData__Enabled: "false"
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_migrator;Password=${PMGM_QA_MIGRATOR_DB_PASSWORD:?Secreto migrador}
+    networks: [pmgm_srv01_internal]
+
+  db-grants:
+    image: postgres:17
+    restart: "no"
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      PGPASSWORD: ${PMGM_QA_DB_PASSWORD:?Secreto bootstrap requerido}
+    volumes:
+      - ../scripts/grant-pilot-db2.sh:/scripts/grant-pilot-db2.sh:ro
+    command: ["bash", "/scripts/grant-pilot-db2.sh"]
+    networks: [pmgm_srv01_internal]
+
+  api:
+    depends_on:
+      db-grants:
+        condition: service_completed_successfully
+    environment:
+      Database__ApplyMigrationsOnStartup: "false"
+      Database__RunMigrationsAndExit: "false"
+      ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=pmgm;Username=pmgm_runtime;Password=${PMGM_QA_RUNTIME_DB_PASSWORD:?Secreto runtime}
