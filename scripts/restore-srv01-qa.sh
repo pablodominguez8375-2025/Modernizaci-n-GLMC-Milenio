@@ -54,7 +54,7 @@ done
 # Reject non-empty/unavailable destination bucket before any database restore.
 # Operator must provision Silo accounts on the new, isolated QA volume first.
 "${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh storage-backup-client -ec \
-  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; test -z "$(mcli ls qa/pmgm-documents)"' \
+  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; listing="$(mcli ls qa/pmgm-documents 2>/dev/null)" || exit 1; test -z "$listing"' \
   || { echo "Restauración bloqueada: bucket inexistente, inaccesible o no vacío." >&2; exit 1; }
 for database in pmgm pmgm_keycloak; do
   echo "Restaurando PostgreSQL: $database"
