@@ -16,31 +16,54 @@ services:
       retries: 20
     networks: [pmgm_srv01_internal]
 
+  # QA glmdch candidate only. Vendor selection/licensing/backup acceptance are pending.
+  # MinIO-compatible network alias preserved for historical script compatibility.
   minio:
-    image: quay.io/minio/minio:latest
+    image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
-      MINIO_ROOT_PASSWORD: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
+      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:?PMGM_QA_STORAGE_ADMIN_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
     volumes:
       - pmgm_srv01_minio_data:/data
+    healthcheck:
+      test: ["CMD", "silo", "healthcheck", "ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     networks: [pmgm_srv01_internal]
 
+  # Root is used exclusively for private bucket/IAM provisioning, never by API.
   minio-init:
-    image: quay.io/minio/mc:latest
-    depends_on: [minio]
+    image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
+    depends_on:
+      minio:
+        condition: service_healthy
     restart: "no"
     environment:
-      MINIO_ACCESS_KEY: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
-      MINIO_SECRET_KEY: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set pmgm http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done;
-      mc mb --ignore-existing pmgm/pmgm-documents;
-      mc anonymous set none pmgm/pmgm-documents;
-      exit 0;
-      "
+      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:?PMGM_QA_STORAGE_ADMIN_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
+      DOCUMENT_ACCESS_KEY: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
+      DOCUMENT_SECRET_KEY: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
+    volumes:
+      - ./silo/pmgm-qa-documents-policy.json:/policies/documents.json:ro
+    entrypoint: ["/bin/sh", "-ec"]
+    command: |
+      set -eu
+      # All mcli steps must pass. No infinite retries or IAM fallback.
+      ready=0
+      for i in 1 2 3 4 5 6 7 8 9 10; do
+        if mcli alias set qa http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 &&
+           mcli admin info qa >/dev/null 2>&1; then ready=1; break; fi
+        sleep 2
+      done
+      test "$ready" = 1
+      mcli mb --ignore-existing qa/pmgm-documents
+      mcli anonymous set none qa/pmgm-documents
+      mcli admin policy create qa pmgm-qa-documents /policies/documents.json
+      mcli admin user add qa "$DOCUMENT_ACCESS_KEY" "$DOCUMENT_SECRET_KEY"
+      mcli admin policy attach qa pmgm-qa-documents --user "$DOCUMENT_ACCESS_KEY"
     networks: [pmgm_srv01_internal]
 
   clamav:
@@ -119,8 +142,8 @@ services:
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
       DocumentStorage__Bucket: pmgm-documents
-      DocumentStorage__AccessKey: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
-      DocumentStorage__SecretKey: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
+      DocumentStorage__AccessKey: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
+      DocumentStorage__SecretKey: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
       DocumentStorage__ForcePathStyle: "true"
       DocumentStorage__MaxUploadBytes: "52428800"
       DocumentMalware__Host: clamav
