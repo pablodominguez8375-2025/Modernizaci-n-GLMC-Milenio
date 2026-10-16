@@ -19,6 +19,7 @@ command -v zip >/dev/null 2>&1 || { echo "zip es obligatorio" >&2; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum es obligatorio" >&2; exit 1; }
 # Gate offline BD2 G4: shell, aislamiento de roles y modelo Compose sin secretos.
 python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_db2_contract.py'
+python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_db2_runtime.py'
 
 mkdir -p "$OUT_DIR" "$STAGING/$PACKAGE_NAME"
 
