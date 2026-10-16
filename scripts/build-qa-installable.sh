@@ -17,6 +17,8 @@ command -v git >/dev/null 2>&1 || { echo "git es obligatorio" >&2; exit 1; }
 command -v tar >/dev/null 2>&1 || { echo "tar es obligatorio" >&2; exit 1; }
 command -v zip >/dev/null 2>&1 || { echo "zip es obligatorio" >&2; exit 1; }
 command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum es obligatorio" >&2; exit 1; }
+# Public QA probe unit suite (no network for PRs or local builds).
+python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_public_readiness.py'
 # QA G8: synthetic member identity/degree fixture and public realm parity gate.
 python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_g8_contract.py'
 # Gate offline BD2 G4: shell, aislamiento de roles y modelo Compose sin secretos.
@@ -60,6 +62,18 @@ DemoData: habilitado sólo para datos ficticios QA.
 El paquete no implica despliegue ni UAT completados.
 Verificar BUILD-INFO.txt y MANIFEST.sha256 antes de instalar.
 EOF
+
+# On a trusted push to dev, probe the canonical QA public entry from the
+# GitHub runner without secrets. Always record NOT_VERIFIED for physical QA.
+# A DNS/TLS/OIDC block must not destroy the buildable signed candidate.
+QA_NETWORK_ARGS=()
+if [ "${GITHUB_EVENT_NAME:-}" = push ] && [ "${GITHUB_REF:-}" = refs/heads/dev ]; then
+  QA_NETWORK_ARGS=(--probe)
+fi
+python3 "$ROOT/scripts/qa/check-public-readiness.py" \
+  --source-sha "$SOURCE_SHA" \
+  --output "$STAGING/$PACKAGE_NAME/QA-EXTERNAL-READINESS.json" \
+  "${QA_NETWORK_ARGS[@]}"
 
 if [ -n "${QA_SILO_BUNDLE_DIR:-}" ]; then
   python3 "$ROOT/scripts/qa/prepare-silo-archive.py" --bundle "$QA_SILO_BUNDLE_DIR" --source-sha "$SOURCE_SHA" >/dev/null
