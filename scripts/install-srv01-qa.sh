@@ -69,8 +69,13 @@ qa_silo_require_bundle
 
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
+# --import-realm skips existing realms; first HTTPS installs need empty volumes.
+source "$ROOT/scripts/qa/public-ingress-guards.sh"
+qa_https_require_empty_volume
+
 echo "Descargando imágenes base..."
 "${compose[@]}" pull postgres clamav keycloak
+if [ "${PMGM_QA_HTTPS:-false}" = true ]; then "${compose[@]}" pull gateway; fi
 
 echo "Construyendo API y frontend..."
 "${compose[@]}" build api web

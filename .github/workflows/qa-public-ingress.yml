@@ -1,0 +1,41 @@
+name: QA canonical HTTPS and OIDC
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infrastructure/caddy/Caddyfile.qa'
+      - 'infrastructure/keycloak/pmgm*realm.json'
+      - 'infrastructure/docker-compose.srv01.yml'
+      - 'infrastructure/srv01.env.example'
+      - 'scripts/qa/**'
+      - 'scripts/install-srv01-qa.sh'
+      - 'tests/*qa_public_ingress*'
+      - '.github/workflows/qa-public-ingress.yml'
+permissions:
+  contents: read
+concurrency:
+  group: qa-public-ingress-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  https-oidc:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Contract and storage regression
+        run: |
+          python3 -m unittest discover -s tests -p test_qa_public_ingress.py -v
+          python3 -m unittest discover -s tests -p test_silo_archive_contract.py -v
+      - name: Real ephemeral HTTPS and OIDC
+        run: python3 tests/qa_public_ingress_runtime.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa-https-oidc-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          path: artifacts/qa-public-ingress.json
+          retention-days: 7
+          if-no-files-found: error
