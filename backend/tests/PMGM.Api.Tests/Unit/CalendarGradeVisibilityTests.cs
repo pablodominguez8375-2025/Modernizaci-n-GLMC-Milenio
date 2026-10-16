@@ -51,6 +51,18 @@ public sealed class CalendarGradeVisibilityTests
     }
 
     [Fact]
+    public void Institutional_general_event_with_organization_id_is_not_mistaken_for_lodge_event()
+    {
+        var institutionalOrganization = Guid.NewGuid();
+        var reader = new CalendarGradeReader(false, 1,
+            new HashSet<Guid> { Guid.NewGuid() }, new HashSet<Guid>());
+        var institutionalEvent = BuildEvent(institutionalOrganization, null);
+        institutionalEvent.ScopeType = CalendarCodes.ScopeType.GrandLodge;
+        institutionalEvent.Visibility = CalendarCodes.Visibility.Institutional;
+        Assert.True(reader.CanSee(institutionalEvent));
+    }
+
+    [Fact]
     public void Officer_with_current_assignment_can_see_all_degrees_only_in_own_lodge()
     {
         var lodge = Guid.NewGuid();
