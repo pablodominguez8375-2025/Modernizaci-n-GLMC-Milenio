@@ -24,7 +24,7 @@ set -a
 . "$ENV_FILE"
 set +a
 python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
-compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 if [ -z "$OUTPUT" ]; then
   OUTPUT="/opt/centenario/backups/qa-srv01-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -46,6 +46,7 @@ restart_runtime(){
 }
 trap restart_runtime EXIT
 
+umask 077
 mkdir -p "$OUTPUT/database" "$OUTPUT/objects/pmgm-documents"
 chmod 700 "$OUTPUT" 2>/dev/null || true
 

@@ -1,0 +1,70 @@
+name: QA Silo supply and recovery
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infrastructure/docker-compose.srv01.yml'
+      - 'infrastructure/silo/**'
+      - 'scripts/qa/**'
+      - 'scripts/*srv01*'
+      - 'tests/test_qa*silo*'
+      - '.github/workflows/qa-silo-validation.yml'
+permissions:
+  contents: read
+concurrency:
+  group: qa-silo-validation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install exact QA Docker/Compose on this ephemeral runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Replace only Docker apt source entries inside this disposable GitHub runner.
+          for source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            if [ -f "$source" ] && grep -q 'download.docker.com' "$source"; then sudo rm -f "$source"; fi
+          done
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/qa-docker.asc >/dev/null
+          echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/qa-docker.asc] https://download.docker.com/linux/ubuntu noble stable' | sudo tee /etc/apt/sources.list.d/qa-docker.list >/dev/null
+          sudo apt-get update -qq
+          # GitHub runners may provide Moby packages that conflict with Docker CE.
+          packages=()
+          for package in moby-engine moby-cli moby-buildx moby-compose moby-containerd moby-runc docker.io containerd runc; do
+            if dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed; then packages+=("$package"); fi
+          done
+          if [ "${#packages[@]}" -gt 0 ]; then sudo apt-get remove -y "${packages[@]}"; fi
+          version='5:29.9.1-1~ubuntu.24.04~noble'
+          sudo apt-get install -y --allow-downgrades docker-ce="$version" docker-ce-cli="$version" containerd.io
+          curl -fsSL https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64 -o "$RUNNER_TEMP/docker-compose-5.6.0"
+          echo '40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a  '"$RUNNER_TEMP/docker-compose-5.6.0" | sha256sum -c -
+          mkdir -p "$HOME/.docker/cli-plugins"
+          install -m 0755 "$RUNNER_TEMP/docker-compose-5.6.0" "$HOME/.docker/cli-plugins/docker-compose"
+          sudo systemctl restart docker
+          test "$(docker version --format '{{.Server.Version}}')" = '29.9.1'
+          test "$(docker compose version --short)" = '5.6.0'
+      - name: Validate actual QA provisioning and logical data recovery
+        env:
+          QA_SILO_RUNTIME_REQUIRED: '1'
+          QA_SILO_EVIDENCE_DIR: artifacts/qa-silo-validation
+        run: python3 -m unittest discover -s tests -p test_qa_silo_runtime.py -v
+      - name: Verify platform, license, publisher and current vulnerabilities
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/qa/verify-silo-supply.py --output artifacts/qa-silo-validation
+      - name: Preserve evidence without credentials
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qa-silo-validation-${{ github.event.pull_request.head.sha }}
+          path: artifacts/qa-silo-validation/
+          retention-days: 14
+          if-no-files-found: error

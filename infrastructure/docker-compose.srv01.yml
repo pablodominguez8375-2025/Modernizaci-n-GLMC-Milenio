@@ -16,15 +16,16 @@ services:
       retries: 20
     networks: [pmgm_srv01_internal]
 
-  # QA glmdch candidate only. Vendor selection/licensing/backup acceptance are pending.
+  # Silo approved by Sponsor for synthetic QA only (#97/#479, 16-10-2026).
+  # Supply/security and recovery checks remain mandatory before deployment.
   # MinIO-compatible network alias preserved for historical script compatibility.
   minio:
     image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:-REEMPLAZAR_STORAGE_ADMIN_USER}
-      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:-REEMPLAZAR_STORAGE_ADMIN_PASSWORD}
+      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:?PMGM_QA_STORAGE_ADMIN_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
     volumes:
       - pmgm_srv01_minio_data:/data
     healthcheck:
@@ -42,14 +43,15 @@ services:
         condition: service_healthy
     restart: "no"
     environment:
-      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:-REEMPLAZAR_STORAGE_ADMIN_USER}
-      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:-REEMPLAZAR_STORAGE_ADMIN_PASSWORD}
-      DOCUMENT_ACCESS_KEY: ${PMGM_QA_DOCUMENT_ACCESS_KEY:-REEMPLAZAR_DOCUMENT_ACCESS_KEY}
-      DOCUMENT_SECRET_KEY: ${PMGM_QA_DOCUMENT_SECRET_KEY:-REEMPLAZAR_DOCUMENT_SECRET_KEY}
-      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:-REEMPLAZAR_BACKUP_ACCESS_KEY}
-      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:-REEMPLAZAR_BACKUP_SECRET_KEY}
+      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:?PMGM_QA_STORAGE_ADMIN_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
+      DOCUMENT_ACCESS_KEY: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
+      DOCUMENT_SECRET_KEY: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
+      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:?PMGM_QA_BACKUP_ACCESS_KEY es obligatorio}
+      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
     volumes:
       - ./silo/pmgm-qa-documents-policy.json:/policies/documents.json:ro
+      - ./silo/pmgm-qa-backup-policy.json:/policies/backup.json:ro
       - ../scripts/qa/qa-provision-silo.sh:/scripts/qa-provision-silo.sh:ro
     # Script avoids Compose interpolating shell variables.
     entrypoint: ["/bin/sh", "/scripts/qa-provision-silo.sh"]
@@ -60,8 +62,8 @@ services:
     image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
     profiles: ["qa-backup"]
     environment:
-      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:-REEMPLAZAR_BACKUP_ACCESS_KEY}
-      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:-REEMPLAZAR_BACKUP_SECRET_KEY}
+      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:?PMGM_QA_BACKUP_ACCESS_KEY es obligatorio}
+      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
     entrypoint: ["/bin/sh"]
     networks: [pmgm_srv01_internal]
 
@@ -141,8 +143,8 @@ services:
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
       DocumentStorage__Bucket: pmgm-documents
-      DocumentStorage__AccessKey: ${PMGM_QA_DOCUMENT_ACCESS_KEY:-REEMPLAZAR_DOCUMENT_ACCESS_KEY}
-      DocumentStorage__SecretKey: ${PMGM_QA_DOCUMENT_SECRET_KEY:-REEMPLAZAR_DOCUMENT_SECRET_KEY}
+      DocumentStorage__AccessKey: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
+      DocumentStorage__SecretKey: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
       DocumentStorage__ForcePathStyle: "true"
       DocumentStorage__MaxUploadBytes: "52428800"
       DocumentMalware__Host: clamav

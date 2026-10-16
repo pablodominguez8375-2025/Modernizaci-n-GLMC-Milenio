@@ -6,13 +6,15 @@ ENV_FILE="${PMGM_QA_ENV_FILE:-/etc/pmgm/srv01.env}"
 COMPOSE_FILE="$ROOT/infrastructure/docker-compose.srv01.yml"
 BACKUP_DIR=""
 CONFIRMED=false
+DATA_ONLY=false
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --env) ENV_FILE="${2:?Falta ruta para --env}"; shift 2 ;;
     --backup) BACKUP_DIR="${2:?Falta ruta para --backup}"; shift 2 ;;
     --yes) CONFIRMED=true; shift ;;
-    -h|--help) echo "Uso: bash scripts/restore-srv01-qa.sh --backup RUTA --yes [--env RUTA]"; exit 0 ;;
+    --data-only) DATA_ONLY=true; shift ;;
+    -h|--help) echo "Uso: bash scripts/restore-srv01-qa.sh --backup RUTA --yes [--env RUTA] [--data-only: no reinicia aplicación ni hace smoke]"; exit 0 ;;
     *) echo "Argumento no reconocido: $1" >&2; exit 2 ;;
   esac
 done
@@ -32,7 +34,7 @@ set +a
 # Validate storage before stopping services, restoring databases or starting containers.
 python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
 
-compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 running="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
 resume=()
@@ -70,6 +72,10 @@ echo "Restaurando objetos Silo sintéticos en bucket vacío..."
   -v "$BACKUP_DIR/objects:/backup:ro" --entrypoint /bin/sh storage-backup-client -ec \
   'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; mcli mirror --overwrite /backup/pmgm-documents qa/pmgm-documents'
 
+if [ "$DATA_ONLY" = true ]; then
+  echo "RESTORE DATOS QA COMPLETADO; aplicación detenida, smoke PENDIENTE"
+  exit 0
+fi
 if [ "${#resume[@]}" -gt 0 ]; then
   "${compose[@]}" up -d "${resume[@]}" >/dev/null
 fi

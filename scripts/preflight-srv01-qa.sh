@@ -42,7 +42,7 @@ else fail "Espacio libre ~${free_gib} GiB; mínimo QA recomendado: 15 GiB"; fi
 [ -f "$ENV_FILE" ] || fail "No existe archivo de entorno: $ENV_FILE"
 if [ -f "$ENV_FILE" ]; then
   perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || true)"
-  case "$perms" in 600|640) ok "Permisos de entorno: $perms" ;; *) warn "Permisos $perms; se recomienda 600/640" ;; esac
+  case "$perms" in 600|640) ok "Permisos de entorno: $perms" ;; *) fail "Permisos de entorno inseguros; se requiere 600/640" ;; esac
   set -a
   # shellcheck disable=SC1090
   . "$ENV_FILE"
