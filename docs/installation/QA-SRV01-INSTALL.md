@@ -1,5 +1,7 @@
 # Proyecto Centenario — instalación QA en srv01
 
+> Nota 16-10-2026: el dominio público del QA es `https://sistema.granlogiamixta.cl` (solo HTTPS, un único punto de entrada). Este perfil HTTP con puertos 8081/8180 es interno; el orden y las puertas del montaje están en PMGM-QA-005.
+
 Este procedimiento corresponde al entorno **QA operacional** del Proyecto Centenario. No es producción y utiliza identidades/datos de prueba.
 
 ## Baseline srv01
