@@ -78,7 +78,8 @@
       "CandidateRePresentationHttpTests",
       "CandidateRePresentationReviewHttpTests",
       "CeremonyAuthorizationStateHttpTests",
-      "CalendarGradeAccessPostgreSqlTests"
+      "CalendarGradeAccessPostgreSqlTests",
+      "CalendarNotificationRecipientPostgreSqlTests"
     ]
   }
 }
