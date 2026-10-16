@@ -124,15 +124,24 @@ public sealed class CalendarSourceSyncPostgreSqlTests
                  x.SourceEntityType == "lodge-instruction" &&
                  x.SourceEntityId == instruction.Id.ToString("N"), cancellationToken);
         Assert.Equal(CalendarCodes.Status.Confirmed, instructionProjection.Status);
+        Assert.Equal(CalendarCodes.Grade.Apprentice, instructionProjection.Grade);
+
+        var meetingProjection = await calendarDb.CalendarEvents.AsNoTracking().SingleAsync(
+            x => x.SourceModule == "lodge-management" &&
+                 x.SourceEntityType == "lodge-meeting" &&
+                 x.SourceEntityId == meeting.Id.ToString("N"), cancellationToken);
+        Assert.Null(meetingProjection.Grade); // "all" se conserva como general.
 
         instruction.Status = LodgeManagementCodes.InstructionStatus.Held;
         await lodgeDb.SaveChangesAsync(cancellationToken);
         await service.ReconcileAsync(cancellationToken);
         await calendarDb.Entry(instructionProjection).ReloadAsync(cancellationToken);
         Assert.Equal(CalendarCodes.Status.Completed, instructionProjection.Status);
+        Assert.Equal(CalendarCodes.Grade.Apprentice, instructionProjection.Grade);
 
         var ceremonyProjection = await calendarDb.CalendarEvents.AsNoTracking().SingleAsync(
             x => x.SourceModule == "ceremonies" && x.SourceEntityId == ceremony.Id.ToString("N"), cancellationToken);
+        Assert.Equal(CalendarCodes.Grade.Apprentice, ceremonyProjection.Grade);
         var santiago = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
         Assert.Equal(new DateOnly(2026, 9, 20), DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ceremonyProjection.StartsAtUtc, santiago).DateTime));
         Assert.Equal(new DateOnly(2026, 9, 21), DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(ceremonyProjection.EndsAtUtc, santiago).DateTime));

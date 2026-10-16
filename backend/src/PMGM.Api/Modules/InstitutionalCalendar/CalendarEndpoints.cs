@@ -32,6 +32,7 @@ public static class CalendarEndpoints
         HttpContext httpContext,
         CalendarDbContext db,
         IInstitutionalCalendarProjectionService projection,
+        ICalendarGradeVisibilityService gradeVisibility,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -47,12 +48,15 @@ public static class CalendarEndpoints
         }
 
         var rows = await LoadWindowAsync(db, window.FromUtc, window.ToUtc, organizationId, cancellationToken);
+        var gradeReader = await gradeVisibility.ForUserAsync(httpContext.User, cancellationToken);
         var visible = rows
+            .Where(gradeReader.CanSee)
             .Select(x => projection.Project(x, httpContext.User))
             .Where(x => x is not null)
             .Cast<CalendarEventProjection>()
             .ToArray();
 
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
             fromUtc = window.FromUtc,
@@ -70,6 +74,7 @@ public static class CalendarEndpoints
         CalendarDbContext db,
         PmgmDbContext auditDb,
         IInstitutionalCalendarProjectionService projection,
+        ICalendarGradeVisibilityService gradeVisibility,
         IInstitutionalAccessService access,
         IAuditService audit,
         CancellationToken cancellationToken)
@@ -86,7 +91,9 @@ public static class CalendarEndpoints
         }
 
         var rows = await LoadWindowAsync(db, window.FromUtc, window.ToUtc, organizationId, cancellationToken);
+        var gradeReader = await gradeVisibility.ForUserAsync(httpContext.User, cancellationToken);
         var visible = rows
+            .Where(gradeReader.CanSee)
             .Select(x => projection.Project(x, httpContext.User))
             .Where(x => x is not null)
             .Cast<CalendarEventProjection>()
@@ -97,6 +104,7 @@ public static class CalendarEndpoints
             new { window.FromUtc, window.ToUtc, organizationId, eventCount = visible.Length });
         await auditDb.SaveChangesAsync(cancellationToken);
 
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         httpContext.Response.Headers.ContentDisposition = "attachment; filename=pmgm-calendar.ics";
         return Results.Text(BuildIcs(visible), "text/calendar; charset=utf-8", Encoding.UTF8);
     }
@@ -125,7 +133,8 @@ public static class CalendarEndpoints
             request.OrganizationId,
             request.ScopeType,
             request.Visibility,
-            status);
+            status,
+            request.Grade);
         if (validationError is not null)
         {
             return Results.BadRequest(new { message = validationError });
@@ -135,6 +144,7 @@ public static class CalendarEndpoints
         {
             Title = request.Title.Trim(),
             EventType = request.EventType.Trim(),
+            Grade = request.Grade,
             StartsAtUtc = request.StartsAtUtc,
             EndsAtUtc = request.EndsAtUtc,
             TimeZoneId = request.TimeZoneId,
@@ -195,7 +205,8 @@ public static class CalendarEndpoints
             request.OrganizationId,
             request.ScopeType,
             request.Visibility,
-            request.Status);
+            request.Status,
+            request.Grade);
         if (validationError is not null)
         {
             return Results.BadRequest(new { message = validationError });
@@ -218,6 +229,7 @@ public static class CalendarEndpoints
             {
                 Title = request.Title.Trim(),
                 EventType = request.EventType.Trim(),
+            Grade = request.Grade,
                 StartsAtUtc = request.StartsAtUtc,
                 EndsAtUtc = request.EndsAtUtc,
                 TimeZoneId = request.TimeZoneId,
@@ -247,6 +259,7 @@ public static class CalendarEndpoints
             calendarEvent = existing;
             calendarEvent.Title = request.Title.Trim();
             calendarEvent.EventType = request.EventType.Trim();
+            calendarEvent.Grade = request.Grade;
             calendarEvent.StartsAtUtc = request.StartsAtUtc;
             calendarEvent.EndsAtUtc = request.EndsAtUtc;
             calendarEvent.TimeZoneId = request.TimeZoneId;
@@ -270,6 +283,7 @@ public static class CalendarEndpoints
             new
             {
                 calendarEvent.EventType,
+                calendarEvent.Grade,
                 calendarEvent.Status,
                 calendarEvent.SourceModule,
                 calendarEvent.SourceEntityType,
@@ -369,7 +383,8 @@ public static class CalendarEndpoints
         Guid? organizationId,
         string scopeType,
         string visibility,
-        string status)
+        string status,
+        string? grade)
     {
         if (string.IsNullOrWhiteSpace(title) || title.Length > 500)
         {
@@ -396,6 +411,11 @@ public static class CalendarEndpoints
             !CalendarCodes.Status.IsValid(status))
         {
             return "Ámbito, visibilidad o estado de calendario no válido.";
+        }
+
+        if (!CalendarCodes.Grade.IsValid(grade))
+        {
+            return "El grado de Agenda no es válido.";
         }
 
         if ((scopeType == CalendarCodes.ScopeType.Lodge || visibility == CalendarCodes.Visibility.Lodge) &&
@@ -482,7 +502,8 @@ public sealed record CreateManualCalendarEventRequest(
     string Visibility,
     string? Status,
     bool OccupancyOnlyWhenRestricted,
-    string? ResponsibleSubject);
+    string? ResponsibleSubject,
+    string? Grade = null);
 
 public sealed record UpsertSourceCalendarEventRequest(
     string Title,
@@ -501,6 +522,7 @@ public sealed record UpsertSourceCalendarEventRequest(
     string? ResponsibleSubject,
     string SourceModule,
     string SourceEntityType,
-    string SourceEntityId);
+    string SourceEntityId,
+    string? Grade = null);
 
 internal sealed record CalendarWindow(bool IsValid, DateTimeOffset FromUtc, DateTimeOffset ToUtc, string? Error);

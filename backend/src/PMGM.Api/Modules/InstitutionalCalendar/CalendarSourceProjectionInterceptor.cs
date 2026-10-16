@@ -104,6 +104,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     ceremony.OrganizationId,
                     CalendarCodes.Visibility.Restricted,
                     MapCeremonyStatus(ceremony.Status),
+                    CalendarCodes.Grade.FromCeremony(ceremony.CeremonyType),
                     false,
                     false));
             }
@@ -126,6 +127,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     meeting.OrganizationId,
                     CalendarCodes.Visibility.Lodge,
                     MapMeetingStatus(meeting.Status),
+                    CalendarCodes.Grade.FromLodgeGrade(meeting.Grade),
                     false,
                     false));
             }
@@ -146,6 +148,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     instruction.OrganizationId,
                     CalendarCodes.Visibility.Lodge,
                     MapInstructionStatus(instruction.Status),
+                    CalendarCodes.Grade.FromLodgeGrade(instruction.Grade),
                     false,
                     false));
             }
@@ -199,6 +202,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                     {
                         Title = snapshot.Title,
                         EventType = snapshot.EventType,
+                        Grade = snapshot.Grade,
                         StartsAtUtc = snapshot.StartsAtUtc!.Value,
                         EndsAtUtc = snapshot.EndsAtUtc!.Value,
                         OrganizationId = snapshot.OrganizationId,
@@ -216,6 +220,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                 {
                     existing.Title = snapshot.Title;
                     existing.EventType = snapshot.EventType;
+                    existing.Grade = snapshot.Grade;
                     existing.StartsAtUtc = snapshot.StartsAtUtc!.Value;
                     existing.EndsAtUtc = snapshot.EndsAtUtc!.Value;
                     existing.OrganizationId = snapshot.OrganizationId;
@@ -271,6 +276,7 @@ public sealed class CalendarSourceProjectionInterceptor(
         Guid OrganizationId,
         string Visibility,
         string Status,
+        string? Grade,
         bool OccupancyOnlyWhenRestricted,
         bool CancelOnly)
     {
@@ -290,6 +296,7 @@ public sealed class CalendarSourceProjectionInterceptor(
                 organizationId,
                 CalendarCodes.Visibility.Restricted,
                 CalendarCodes.Status.Cancelled,
+                null,
                 false,
                 true);
     }
