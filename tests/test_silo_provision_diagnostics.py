@@ -23,6 +23,26 @@ class SiloProvisionDiagnosticsTests(unittest.TestCase):
         self.assertEqual('transport-refused', lab._failure_category(result(stderr='connection refused')))
         self.assertEqual('timeout-or-exec-unavailable', lab._failure_category(None))
 
+    def test_credentials_with_hyphens_remain_positional(self):
+        calls = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            return result(0)
+        with patch.object(lab, 'run', side_effect=fake_run):
+            lab._provision('disposable', Path('policy'), 'syntheticadmin',
+                           '--synthetic-admin', 'syntheticdocs', '-synthetic-docs')
+        aliases = [args for args in calls if 'alias' in args]
+        users = [args for args in calls if 'add' in args]
+        self.assertEqual(1, len(aliases))
+        self.assertEqual(1, len(users))
+        for args in aliases + users:
+            self.assertIn('--', args)
+            self.assertEqual('admin', args[args.index('--') + 1])
+        self.assertEqual('--synthetic-admin', aliases[0][-1])
+        self.assertEqual('-synthetic-docs', users[0][-1])
+        self.assertEqual('cli-argument-parsing', lab._failure_category(
+            result(stderr='flag provided but not defined: ' + SECRET)))
+
     def test_only_known_protocol_code_survives_json_projection(self):
         payload = {'error': {'cause': {'error': {'Code': 'AccessDenied', 'Message': SECRET}}}}
         self.assertEqual('AccessDenied', lab._mcli_error_code(result(stdout=json.dumps(payload))))

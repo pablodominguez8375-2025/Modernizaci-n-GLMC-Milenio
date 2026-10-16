@@ -53,6 +53,7 @@ def _failure_category(result):
         return "timeout-or-exec-unavailable"
     error = ((result.stderr or "") + "\n" + (result.stdout or "")).lower()
     for needle, label in (
+        ("flag provided but not defined", "cli-argument-parsing"),
         ("connection refused", "transport-refused"),
         ("connection reset", "transport-reset"),
         ("no such host", "dns-resolution"),
@@ -168,7 +169,7 @@ def _provision(container, policy, admin, admin_password, app, app_password):
         )
 
     # Alias is local to the disposable Silo container, not a host config.
-    cli("alias", "alias", "set", "admin", "http://127.0.0.1:9000",
+    cli("alias", "alias", "set", "--", "admin", "http://127.0.0.1:9000",
         admin, admin_password)
     cli("admin-readiness", "admin", "info", "admin")
     cli("bucket-docs", "mb", "admin/" + BUCKET)
@@ -176,7 +177,7 @@ def _provision(container, policy, admin, admin_password, app, app_password):
     run(["docker", "cp", str(policy), container + ":/tmp/pmgm-policy.json"])
     cli("policy-create", "admin", "policy", "create", "admin",
         "pmgm-documents-only", "/tmp/pmgm-policy.json")
-    cli("user-add", "admin", "user", "add", "admin", app, app_password)
+    cli("user-add", "admin", "user", "add", "--", "admin", app, app_password)
     cli("policy-attach", "admin", "policy", "attach", "admin",
         "pmgm-documents-only", "--user", app)
 
@@ -196,10 +197,10 @@ class SiloObjectRecoveryLaboratoryTests(unittest.TestCase):
         root_after = "root" + secrets.token_hex(8)
         app_before = "docs" + secrets.token_hex(8)
         app_after = "docs" + secrets.token_hex(8)
-        pw_before = secrets.token_urlsafe(28)
-        pw_after = secrets.token_urlsafe(28)
-        app_pw_before = secrets.token_urlsafe(28)
-        app_pw_after = secrets.token_urlsafe(28)
+        pw_before = "-" + secrets.token_urlsafe(28)
+        pw_after = "--" + secrets.token_urlsafe(28)
+        app_pw_before = "-" + secrets.token_urlsafe(28)
+        app_pw_after = "--" + secrets.token_urlsafe(28)
         object_key = "synthetic/recovery-" + suffix + ".bin"
         payload = secrets.token_bytes(128 * 1024)
 
@@ -212,6 +213,15 @@ class SiloObjectRecoveryLaboratoryTests(unittest.TestCase):
                 run(["docker", "pull", IMAGE], timeout=240)
 
                 first_ip = _start(original, network, root_before, pw_before)
+                # Deterministically reproduce the legacy CLI bug with a valid
+                # synthetic secret beginning '-'. The parser rejects it before
+                # network auth; neither provider output nor the secret is logged.
+                legacy = run(["docker", "exec", original, "mcli", "--json",
+                              "alias", "set", "admin", "http://127.0.0.1:9000",
+                              root_before, pw_before], check=False)
+                self.assertIsNotNone(legacy)
+                self.assertNotEqual(0, legacy.returncode)
+                self.assertEqual("cli-argument-parsing", _failure_category(legacy))
                 _provision(original, policy, root_before, pw_before,
                            app_before, app_pw_before)
 
@@ -297,7 +307,7 @@ class SiloObjectRecoveryLaboratoryTests(unittest.TestCase):
                         self.assertEqual(403, code,
                             "Cuenta documental accedió a un bucket ajeno.")
                 admin_denial = run(
-                    ["docker", "exec", restored, "mcli", "alias", "set",
+                    ["docker", "exec", restored, "mcli", "alias", "set", "--",
                      "documents", "http://127.0.0.1:9000",
                      app_after, app_pw_after], check=False
                 )

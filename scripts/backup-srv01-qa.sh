@@ -67,7 +67,7 @@ done
 echo "Respaldando objetos sintéticos Silo QA; no sustituye backup integral de versiones/IAM..."
 "${compose[@]}" run --rm -T --no-deps \
   -v "$OUTPUT/objects:/backup" --entrypoint /bin/sh storage-backup-client -ec \
-  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; mkdir -p /backup/pmgm-documents; mcli mirror --overwrite qa/pmgm-documents /backup/pmgm-documents'
+  'set -eu; mcli alias set -- qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; mkdir -p /backup/pmgm-documents; mcli mirror --overwrite qa/pmgm-documents /backup/pmgm-documents'
 
 source_sha="unknown"
 if [ -f "$ROOT/BUILD-INFO.txt" ]; then

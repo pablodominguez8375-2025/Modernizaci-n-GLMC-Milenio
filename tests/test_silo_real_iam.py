@@ -156,17 +156,17 @@ class SiloRealIamLaboratoryTests(unittest.TestCase):
                     return run(["docker", "exec", server, "mcli", *cmd],
                                timeout=45, check=check)
 
-                cli("alias", "set", "admin", "http://127.0.0.1:9000",
+                cli("alias", "set", "--", "admin", "http://127.0.0.1:9000",
                     root_user, root_pw)
                 cli("mb", "admin/" + BUCKET)
                 cli("mb", "admin/" + FORBIDDEN_BUCKET)
                 run(["docker", "cp", str(policy), server + ":/tmp/policy.json"])
                 cli("admin", "policy", "create", "admin",
                     "pmgm-documents-app", "/tmp/policy.json")
-                cli("admin", "user", "add", "admin", app_user, app_pw)
+                cli("admin", "user", "add", "--", "admin", app_user, app_pw)
                 cli("admin", "policy", "attach", "admin", "pmgm-documents-app",
                     "--user", app_user)
-                cli("alias", "set", "documents", "http://127.0.0.1:9000",
+                cli("alias", "set", "--", "documents", "http://127.0.0.1:9000",
                     app_user, app_pw)
 
                 # La cuenta documental tiene operaciones sobre SU bucket.

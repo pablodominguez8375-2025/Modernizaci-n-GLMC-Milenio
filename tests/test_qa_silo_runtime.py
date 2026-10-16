@@ -24,6 +24,10 @@ class QaSiloRuntimeTests(unittest.TestCase):
             values = {key: secrets.token_urlsafe(24) for key in (
                 'PMGM_QA_DB_PASSWORD', 'PMGM_QA_STORAGE_ADMIN_PASSWORD', 'PMGM_QA_DOCUMENT_SECRET_KEY',
                 'PMGM_QA_BACKUP_SECRET_KEY', 'PMGM_QA_KEYCLOAK_ADMIN_PASSWORD', 'PMGM_QA_USER_PASSWORD')}
+            # Exercise actual scripts with option-looking synthetic secrets.
+            for key in ('PMGM_QA_STORAGE_ADMIN_PASSWORD', 'PMGM_QA_DOCUMENT_SECRET_KEY',
+                        'PMGM_QA_BACKUP_SECRET_KEY'):
+                values[key] = '--' + values[key]
             values.update(PMGM_QA_STORAGE_ADMIN_USER='admin' + secrets.token_hex(6),
                           PMGM_QA_DOCUMENT_ACCESS_KEY='docs' + secrets.token_hex(6),
                           PMGM_QA_BACKUP_ACCESS_KEY='backup' + secrets.token_hex(6),
@@ -59,7 +63,7 @@ class QaSiloRuntimeTests(unittest.TestCase):
                 ip = next(iter(metadata.values()))['IPAddress']
                 self.assertFalse(json.loads(run(['docker', 'inspect', '--format', '{{json .HostConfig.PortBindings}}', container]).stdout))
                 admin = ['docker', 'exec', container, 'mcli']
-                run(admin + ['alias', 'set', 'qa-admin', 'http://127.0.0.1:9000',
+                run(admin + ['alias', 'set', '--', 'qa-admin', 'http://127.0.0.1:9000',
                              values['PMGM_QA_STORAGE_ADMIN_USER'], values['PMGM_QA_STORAGE_ADMIN_PASSWORD']])
                 run(admin + ['mb', 'qa-admin/qa-forbidden'])
                 stage = 'iam_positive_negative'
@@ -74,7 +78,7 @@ class QaSiloRuntimeTests(unittest.TestCase):
                 self.assertEqual(404, s3_request(ip, 'HEAD', 'pmgm-documents', 'absent', user, password)[0])
                 for method in ('GET', 'PUT', 'DELETE'):
                     self.assertEqual(403, s3_request(ip, method, 'qa-forbidden', 'forbidden', user, password, b'x' if method == 'PUT' else b'')[0])
-                run(admin + ['alias', 'set', 'qa-docs', 'http://127.0.0.1:9000', user, password])
+                run(admin + ['alias', 'set', '--', 'qa-docs', 'http://127.0.0.1:9000', user, password])
                 self.assertNotEqual(0, run(admin + ['admin', 'info', 'qa-docs'], check=False).returncode)
                 listed = run(admin + ['ls', 'qa-docs'], check=False)
                 self.assertNotIn('qa-forbidden', listed.stdout)
