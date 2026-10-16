@@ -92,6 +92,7 @@ builder.Services.AddScoped<FormSchemaVersionStore>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
 builder.Services.AddScoped<IInstitutionalCalendarProjectionService, InstitutionalCalendarProjectionService>();
+builder.Services.AddScoped<ICalendarGradeVisibilityService, CalendarGradeVisibilityService>();
 builder.Services.AddScoped<IInstitutionalCalendarSourceSyncService, InstitutionalCalendarSourceSyncService>();
 builder.Services.AddScoped<IExecutiveReportingService, ExecutiveReportingService>();
 builder.Services.AddScoped<IRegimenInteriorMemberControlService, RegimenInteriorMemberControlService>();

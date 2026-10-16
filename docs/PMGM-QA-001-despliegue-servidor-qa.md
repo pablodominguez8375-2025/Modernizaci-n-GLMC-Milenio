@@ -1,6 +1,8 @@
 # PMGM-QA-001 — Despliegue de Proyecto Milenio en servidor QA
 
 **Estado:** Activo  
+**Nota 16-10-2026:** el orden, las puertas y los responsables del montaje del QA funcional están en PMGM-QA-005; este documento queda como manual técnico de referencia.
+
 **Objetivo:** permitir que un administrador técnico levante un ambiente de pruebas reproducible sin depender de conocimiento oral del proyecto.
 
 ## 1. Alcance

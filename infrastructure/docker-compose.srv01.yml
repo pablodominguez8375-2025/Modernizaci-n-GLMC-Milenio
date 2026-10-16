@@ -16,31 +16,55 @@ services:
       retries: 20
     networks: [pmgm_srv01_internal]
 
+  # Silo approved by Sponsor for synthetic QA only (#97/#479, 16-10-2026).
+  # Supply/security and recovery checks remain mandatory before deployment.
+  # MinIO-compatible network alias preserved for historical script compatibility.
   minio:
-    image: quay.io/minio/minio:latest
+    image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
-      MINIO_ROOT_PASSWORD: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
+      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:?PMGM_QA_STORAGE_ADMIN_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
     volumes:
       - pmgm_srv01_minio_data:/data
+    healthcheck:
+      test: ["CMD", "silo", "healthcheck", "ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
     networks: [pmgm_srv01_internal]
 
+  # Root is used exclusively for private bucket/IAM provisioning, never by API.
   minio-init:
-    image: quay.io/minio/mc:latest
-    depends_on: [minio]
+    image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
+    depends_on:
+      minio:
+        condition: service_healthy
     restart: "no"
     environment:
-      MINIO_ACCESS_KEY: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
-      MINIO_SECRET_KEY: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
-    entrypoint: >
-      /bin/sh -c "
-      until mc alias set pmgm http://minio:9000 $$MINIO_ACCESS_KEY $$MINIO_SECRET_KEY; do sleep 2; done;
-      mc mb --ignore-existing pmgm/pmgm-documents;
-      mc anonymous set none pmgm/pmgm-documents;
-      exit 0;
-      "
+      MINIO_ROOT_USER: ${PMGM_QA_STORAGE_ADMIN_USER:?PMGM_QA_STORAGE_ADMIN_USER es obligatorio}
+      MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
+      DOCUMENT_ACCESS_KEY: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
+      DOCUMENT_SECRET_KEY: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
+      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:?PMGM_QA_BACKUP_ACCESS_KEY es obligatorio}
+      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
+    volumes:
+      - ./silo/pmgm-qa-documents-policy.json:/policies/documents.json:ro
+      - ./silo/pmgm-qa-backup-policy.json:/policies/backup.json:ro
+      - ../scripts/qa/qa-provision-silo.sh:/scripts/qa-provision-silo.sh:ro
+    # Script avoids Compose interpolating shell variables.
+    entrypoint: ["/bin/sh", "/scripts/qa-provision-silo.sh"]
+    networks: [pmgm_srv01_internal]
+
+  # On-demand client for synthetic QA backups only; receives NO administrator credentials.
+  storage-backup-client:
+    image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
+    profiles: ["qa-backup"]
+    environment:
+      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:?PMGM_QA_BACKUP_ACCESS_KEY es obligatorio}
+      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
+    entrypoint: ["/bin/sh"]
     networks: [pmgm_srv01_internal]
 
   clamav:
@@ -80,7 +104,7 @@ services:
     volumes:
       - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
     ports:
-      - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_OIDC_PORT:-8180}:8080"
+      - "${PMGM_QA_BIND_ADDRESS:-127.0.0.1}:${PMGM_QA_OIDC_PORT:-8180}:8080"
     networks: [pmgm_srv01_internal]
 
   api:
@@ -119,8 +143,8 @@ services:
       DocumentStorage__ServiceUrl: http://minio:9000
       DocumentStorage__Region: us-east-1
       DocumentStorage__Bucket: pmgm-documents
-      DocumentStorage__AccessKey: ${PMGM_QA_MINIO_USER:?PMGM_QA_MINIO_USER es obligatorio}
-      DocumentStorage__SecretKey: ${PMGM_QA_MINIO_PASSWORD:?PMGM_QA_MINIO_PASSWORD es obligatorio}
+      DocumentStorage__AccessKey: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
+      DocumentStorage__SecretKey: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
       DocumentStorage__ForcePathStyle: "true"
       DocumentStorage__MaxUploadBytes: "52428800"
       DocumentMalware__Host: clamav
@@ -143,7 +167,7 @@ services:
     restart: unless-stopped
     depends_on: [api, keycloak]
     ports:
-      - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_WEB_PORT:-8081}:80"
+      - "${PMGM_QA_BIND_ADDRESS:-127.0.0.1}:${PMGM_QA_WEB_PORT:-8081}:80"
     networks: [pmgm_srv01_internal]
 
 networks:

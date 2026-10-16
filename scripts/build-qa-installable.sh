@@ -44,12 +44,21 @@ GENERATED_AT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
 cat > "$STAGING/$PACKAGE_NAME/ESTADO-PAQUETE.txt" <<EOF
-Paquete QA operacional para srv01.
+Paquete de código QA para glmdch (srv01 es nombre histórico).
+La instalación requiere storage-bundle firmado del mismo SHA.
+Sin ese directorio el instalador bloquea el perfil vendor.
 Datos personales reales: PROHIBIDOS.
 DemoData: habilitado sólo para datos ficticios QA.
 El paquete no implica despliegue ni UAT completados.
 Verificar BUILD-INFO.txt y MANIFEST.sha256 antes de instalar.
 EOF
+
+if [ -n "${QA_SILO_BUNDLE_DIR:-}" ]; then
+  python3 "$ROOT/scripts/qa/prepare-silo-archive.py" --bundle "$QA_SILO_BUNDLE_DIR" --source-sha "$SOURCE_SHA" >/dev/null
+  mkdir "$STAGING/$PACKAGE_NAME/storage-bundle"
+  cp -a "$QA_SILO_BUNDLE_DIR/." "$STAGING/$PACKAGE_NAME/storage-bundle/"
+  echo 'STORAGE=SIGNED_REBUILT_SILO_ARCHIVE_SYNTHETIC_QA' >> "$STAGING/$PACKAGE_NAME/BUILD-INFO.txt"
+fi
 
 git -C "$ROOT" bundle create "$STAGING/$PACKAGE_NAME/pmgm-repository.bundle" --all
 

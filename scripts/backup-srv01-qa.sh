@@ -23,7 +23,13 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
-compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+
+# Select only a same-source, cryptographically verified local Silo archive when supplied.
+source "$ROOT/scripts/qa/silo-compose.sh"
+qa_silo_prepare
+python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
+qa_silo_require_bundle
+compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 if [ -z "$OUTPUT" ]; then
   OUTPUT="/opt/centenario/backups/qa-srv01-$(date -u +%Y%m%dT%H%M%SZ)"
@@ -43,8 +49,9 @@ done
 restart_runtime(){
   if [ "${#resume[@]}" -gt 0 ]; then "${compose[@]}" up -d "${resume[@]}" >/dev/null || true; fi
 }
-trap restart_runtime EXIT
+trap 'restart_runtime; qa_silo_cleanup' EXIT
 
+umask 077
 mkdir -p "$OUTPUT/database" "$OUTPUT/objects/pmgm-documents"
 chmod 700 "$OUTPUT" 2>/dev/null || true
 
@@ -62,8 +69,10 @@ for database in pmgm pmgm_keycloak; do
   "${compose[@]}" exec -T postgres rm -f "$tmp"
 done
 
-echo "Respaldando MinIO pmgm-documents..."
-"${compose[@]}" run --rm -T --no-deps   -v "$OUTPUT/objects:/backup"   --entrypoint /bin/sh minio-init   -c 'set -eu; mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null; mkdir -p /backup/pmgm-documents; mc mirror --overwrite pmgm/pmgm-documents /backup/pmgm-documents'
+echo "Respaldando objetos sintéticos Silo QA; no sustituye backup integral de versiones/IAM..."
+"${compose[@]}" run --rm -T --no-deps \
+  -v "$OUTPUT/objects:/backup" --entrypoint /bin/sh storage-backup-client -ec \
+  'set -eu; mcli alias set -- qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; mkdir -p /backup/pmgm-documents; mcli mirror --overwrite qa/pmgm-documents /backup/pmgm-documents'
 
 source_sha="unknown"
 if [ -f "$ROOT/BUILD-INFO.txt" ]; then
@@ -91,7 +100,7 @@ manifest={
   "sourceSha":os.environ.get("SOURCE_SHA","unknown"),
   "components":{
     "postgres":{"databases":["pmgm","pmgm_keycloak"],"format":"pg_dump-custom"},
-    "minio":{"bucket":"pmgm-documents","format":"s3-object-mirror"}
+    "silo":{"bucket":"pmgm-documents","format":"s3-object-mirror-current-objects-only"}
   },
   "fileCount":len(files),
   "totalBytes":sum(x["sizeBytes"] for x in files),

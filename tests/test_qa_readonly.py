@@ -78,6 +78,9 @@ class QaReadonlyTests(unittest.TestCase):
             '*': 'wildcard', '192.0.2.1': 'specific',
             '2001:db8::1': 'specific', 'fe80::1%eth0': 'specific',
             'invalid-address': 'specific',
+            '::1%lo': 'loopback', '[::1]%lo': 'loopback', '[::1]': 'loopback',
+            '0.0.0.0%eth0': 'wildcard', '::%eth0': 'wildcard', '[::]%eth0': 'wildcard', '*%eth0': 'wildcard',
+            '[fe80::1]%eth0': 'specific', '%lo': 'specific',
         }
         for address, expected in cases.items():
             with self.subTest(address=address):
@@ -104,6 +107,26 @@ class QaReadonlyTests(unittest.TestCase):
         self.assertNotIn('127.0.0.53', json.dumps(data))
         self.assertIn({'protocol': 'udp', 'port': 53, 'scope': 'loopback'}, data['listeners'])
         validator.validate(json.dumps(data), data['helper_sha256'])
+
+    def test_collect_parses_ss_ipv6_and_interface_suffixes(self):
+        ss = ('tcp LISTEN 0 128 [::1]%lo:631 [::]:*\n'
+              'tcp LISTEN 0 128 0.0.0.0%eth0:22 0.0.0.0:*\n'
+              'tcp LISTEN 0 128 [fe80::1]%eth0:8080 [::]:*\n')
+        def fake_command(args):
+            if args[0] == '/usr/bin/ss':
+                return 0, ss
+            if args[0] == '/usr/bin/systemctl':
+                return 3, 'inactive\n'
+            return 1, ''
+        original_read = Path.read_text
+        def read(path, *args, **kwargs):
+            return 'MemTotal: 7600780 kB\n' if str(path) == '/proc/meminfo' else original_read(path, *args, **kwargs)
+        with patch.object(helper.socket, 'gethostname', return_value='glmdch'), patch.object(helper, 'command', side_effect=fake_command), patch.object(Path, 'read_text', read):
+            data = helper.collect()
+        self.assertEqual(data['listeners'], [
+            {'protocol': 'tcp', 'port': 22, 'scope': 'wildcard'},
+            {'protocol': 'tcp', 'port': 631, 'scope': 'loopback'},
+            {'protocol': 'tcp', 'port': 8080, 'scope': 'specific'}])
 
     def test_client_cleans_key_and_suppresses_failed_ssh_output(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -17,3 +17,19 @@ Dev observado al cierre técnico conserva 77557f87d2979b6ef23f636c7c99bec329f706
 Hallazgo previamente registrado en PR #501 y adenda QA Drive: 127.0.0.53/.54 se clasificaban erróneamente `specific`. Modificado helper con `ipaddress.ip_address(...).is_loopback` para cubrir IPv4 127/8 y ::1; wildcard prioritario; formatos desconocidos `specific`. Prueba sintética adicional en `tests/test_qa_readonly.py` y aserción de sanitización DNS local. Runbook actualiza Docker reportado por operador y requiere verificar hash exacto del helper si se instala tras aprobación separada.
 
 PR #501 continúa OPEN y no activada; gates del nuevo HEAD se consultan en GitHub. Sin merge ni cambios dev/main, SSH, cuentas, secretos, servidores o QA real. PR #500 mantiene un fallo independiente de infraestructura Keycloak/PostgreSQL que no se corrige en esta rama.
+
+
+## Seguimiento 16-10-2026 — revisión #514 sobre #501
+A pedido del seguimiento #97/Claude, se integra el parche fuente #514 y se
+reconcilia dev@9a81721d. Sólo se mueve la rama de #501; no se integra #501 en dev
+ni se modifica main. Comodines con %iface y IPv6 [::1]%lo quedan clasificados;
+10 pruebas del contrato PASS local. SHA256 helper final:
+e58cf77909cc9a98e76b3afd597ae761526ad9c92c4b4d0eca761e0cb727a00d.
+Se conserva parentage de #514 pero se omiten sus tres __pycache__/*.pyc del árbol
+final; no se modifica la rama de Claude. Nuevos gates del HEAD consultar en PR501.
+PR518 permanece borrador hacia main y no se fusiona: requiere instrucción expresa
+separada. Cuenta/clave/Environment/conectividad/sshd/hostkey siguen sin provisionar
+ni verificar desde esta sesión. No hubo SSH ni lectura de secretos o cambios en
+servidor. El suministro Silo #506 ya se integró en dev y su archivo firmado/carga
+en frío pasaron; esa validación no equivale a G7 ni a QA operativo. Siguiente
+implementación de ingress/cuentas/corte sigue en #517. Despliegue QA pendiente.

@@ -59,11 +59,18 @@ if [ -f "$ROOT/MANIFEST.sha256" ]; then
 fi
 
 PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/preflight-srv01-qa.sh"
+set -a
+# shellcheck disable=SC1090
+. "$ENV_FILE"
+set +a
+source "$ROOT/scripts/qa/silo-compose.sh"
+qa_silo_prepare
+qa_silo_require_bundle
 
-compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 echo "Descargando imágenes base..."
-"${compose[@]}" pull postgres minio minio-init clamav keycloak
+"${compose[@]}" pull postgres clamav keycloak
 
 echo "Construyendo API y frontend..."
 "${compose[@]}" build api web

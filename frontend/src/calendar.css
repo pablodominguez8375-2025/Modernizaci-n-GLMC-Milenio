@@ -84,3 +84,13 @@
   .month-weekdays, .month-grid { min-width: 700px; }
   .dashboard-calendar-cta { align-items: stretch; flex-direction: column; }
 }
+
+/* Agenda por grado (#499): etiqueta del grado, resumen de alcance y selector solo de demostración */
+.calendar-scope { margin: 6px 0 0; padding: 8px 12px; border-left: 4px solid var(--brand-gold, #F3C609); background: var(--brand-canvas, #F5F8FF); border-radius: 0 8px 8px 0; color: var(--brand-navy, #06148E); font-weight: 700; font-size: 1rem; }
+.event-grade { display: inline-block; padding: 2px 9px; border-radius: 999px; font-weight: 700; font-size: 0.875rem; border: 1px solid transparent; }
+.event-grade.grade-all { background: #eef1f6; color: #4a5468; border-color: #d5dbe6; }
+.event-grade.grade-1 { background: #e8f3ff; color: #0b3f8f; border-color: #b4d0f4; }
+.event-grade.grade-2 { background: #fff6dc; color: #7a5200; border-color: #f0d68a; }
+.event-grade.grade-3 { background: #ece9ff; color: #2d1b8a; border-color: #c9c1f2; }
+.calendar-demo-viewer label { display: grid; gap: 6px; font-weight: 700; }
+.calendar-demo-viewer select { min-height: 48px; }

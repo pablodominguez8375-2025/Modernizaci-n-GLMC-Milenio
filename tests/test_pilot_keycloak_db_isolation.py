@@ -23,6 +23,10 @@ from test_silo_dotnet_sdk import SiloDotNetSdkRealIntegrationTests  # noqa: F401
 from test_silo_dotnet_clamav import SiloDotNetClamAvLifecycleTests  # noqa: F401
 # #470 — flujos HTTP documentales con Silo, ClamAV y PostgreSQL reales.
 from test_silo_http_document_workflow import SiloDocumentHttpRealWorkflowTests  # noqa: F401
+# QA glmdch: candidate Silo config checks, NO real deployment.
+from test_qa_glmdch_silo_candidate import QaGlmdchSiloCandidateTests  # noqa: F401
+
+from test_qa_storage_guards import QaStorageConfigTests, QaBackupIntegrityTests  # noqa: F401
 
 ROOT = Path(__file__).resolve().parents[1]
 

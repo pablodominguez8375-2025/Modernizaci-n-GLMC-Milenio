@@ -17,7 +17,14 @@ export interface CalendarEvent {
   sourceEntityId: string | null
   responsibleSubject: string | null
   isMasked: boolean
+  /** null o 'all' = general; el servidor decide qué grados ve cada persona. */
+  grade?: CalendarGrade | null
 }
+
+export type CalendarGrade = 'all' | 'apprentice' | 'fellow_craft' | 'master'
+
+/** Quién mira la agenda en la demostración (en el sistema real lo decide el servidor). */
+export type CalendarDemoViewer = 'apprentice' | 'fellow_craft' | 'master' | 'office'
 
 export interface CalendarResponse {
   fromUtc: string
@@ -86,6 +93,7 @@ const demoEvents: CalendarEvent[] = [
   {
     id: 'ca000002-0000-0000-0000-000000000002',
     title: 'Docencia de Compañeros',
+    grade: 'fellow_craft',
     eventType: 'lodge_instruction_day',
     startsAtUtc: '2026-09-12T03:00:00Z',
     endsAtUtc: '2026-09-13T03:00:00Z',
@@ -188,9 +196,21 @@ function rollingDemoEvents(now: Date = new Date()): CalendarEvent[] {
   const base = { timeZoneId: 'America/Santiago', spaceId: null, organizationId: demoOrganizations.libertad23, responsibleSubject: null, isMasked: false } as const
   return [
     { ...base, id: 'ca100001-0000-0000-0000-000000000001', title: 'Tenida Regular — Libertad Nº 23', eventType: 'lodge_meeting_day', ...at(4, 22, 3), locationDisplay: 'Templo Principal — Sede institucional', visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-meeting', sourceEntityId: 'demo-meeting-23-next' },
-    { ...base, id: 'ca100002-0000-0000-0000-000000000002', title: 'Docencia de Aprendices', eventType: 'lodge_instruction_day', ...at(9, 22, 2), locationDisplay: null, visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-instruction', sourceEntityId: 'demo-instruction-23-next' },
+    { ...base, grade: 'apprentice', id: 'ca100002-0000-0000-0000-000000000002', title: 'Docencia de Aprendices', eventType: 'lodge_instruction_day', ...at(9, 22, 2), locationDisplay: null, visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-instruction', sourceEntityId: 'demo-instruction-23-next' },
     { ...base, id: 'ca100003-0000-0000-0000-000000000003', title: 'Tenida de Iniciación', eventType: 'ceremony_day', ...at(16, 22, 3), locationDisplay: 'Templo Principal — Sede institucional', visibility: 'restricted', status: 'tentative', sourceModule: 'ceremonies', sourceEntityType: 'ceremony-request', sourceEntityId: 'demo-ceremony-23-next' },
+    { ...base, grade: 'fellow_craft', id: 'ca100004-0000-0000-0000-000000000004', title: 'Docencia de Compañeros — Segundo viaje', eventType: 'lodge_instruction_day', ...at(11, 22, 2), locationDisplay: null, visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-instruction', sourceEntityId: 'demo-instruction-23-fellow' },
+    { ...base, grade: 'master', id: 'ca100005-0000-0000-0000-000000000005', title: 'Docencia de Maestros', eventType: 'lodge_instruction_day', ...at(13, 22, 2), locationDisplay: null, visibility: 'lodge', status: 'confirmed', sourceModule: 'lodge-management', sourceEntityType: 'lodge-instruction', sourceEntityId: 'demo-instruction-23-master' },
+    { ...base, grade: 'master', id: 'ca100006-0000-0000-0000-000000000006', title: 'Tenida de Maestros — Exaltación', eventType: 'ceremony_day', ...at(20, 22, 3), locationDisplay: 'Templo Principal — Sede institucional', visibility: 'restricted', status: 'tentative', sourceModule: 'ceremonies', sourceEntityType: 'ceremony-request', sourceEntityId: 'demo-ceremony-23-master' },
   ]
+}
+
+const gradeLevel: Record<string, number> = { apprentice: 1, fellow_craft: 2, master: 3 }
+
+/** Solo demostración: imita la regla del servidor (grado propio e inferiores; sin grado = general; cargo vigente = todos). */
+function demoCanSee(event: CalendarEvent, viewer: CalendarDemoViewer): boolean {
+  const level = event.grade ? gradeLevel[event.grade] : undefined
+  if (!level || viewer === 'office') return true
+  return level <= gradeLevel[viewer]
 }
 
 export class CalendarApiClient {
@@ -198,6 +218,7 @@ export class CalendarApiClient {
   private readonly getAccessToken?: AccessTokenProvider
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
+  private demoViewer: CalendarDemoViewer = 'master'
 
   constructor(options: CalendarApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -206,11 +227,14 @@ export class CalendarApiClient {
     this.onUnauthorized = options.onUnauthorized
   }
 
+  setDemoViewer(viewer: CalendarDemoViewer) { this.demoViewer = viewer }
+
   async getCalendar(filters: { fromUtc: string; toUtc: string; organizationId?: string } ): Promise<CalendarResponse> {
     if (this.useMocks) {
       const from = new Date(filters.fromUtc).getTime()
       const to = new Date(filters.toUtc).getTime()
       const events = [...demoEvents, ...rollingDemoEvents()].filter(event => {
+        if (!demoCanSee(event, this.demoViewer)) return false
         const inWindow = new Date(event.endsAtUtc).getTime() > from && new Date(event.startsAtUtc).getTime() < to
         const inOrganization = !filters.organizationId || event.organizationId === filters.organizationId || event.organizationId === null
         return inWindow && inOrganization
