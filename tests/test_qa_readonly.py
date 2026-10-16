@@ -69,10 +69,24 @@ class QaReadonlyTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validator.validate(raw, HASH)
 
+
+    def test_listener_scope_recognizes_all_ipv4_loopback_and_ipv6(self):
+        cases = {
+            '127.0.0.1': 'loopback', '127.0.0.53': 'loopback',
+            '127.0.0.54': 'loopback', '127.22.99.250': 'loopback',
+            '::1': 'loopback', '0.0.0.0': 'wildcard', '::': 'wildcard',
+            '*': 'wildcard', '192.0.2.1': 'specific',
+            '2001:db8::1': 'specific', 'fe80::1%eth0': 'specific',
+            'invalid-address': 'specific',
+        }
+        for address, expected in cases.items():
+            with self.subTest(address=address):
+                self.assertEqual(helper.listener_scope(address), expected)
+
     def test_collect_sanitizes_addresses_and_queries_only_allowlist(self):
         def fake_command(args):
             if args[0] == '/usr/bin/ss':
-                return 0, 'tcp LISTEN 0 128 192.0.2.1:22 0.0.0.0:*\nudp UNCONN 0 0 127.0.0.1:53 0.0.0.0:*\n'
+                return 0, 'tcp LISTEN 0 128 192.0.2.1:22 0.0.0.0:*\nudp UNCONN 0 0 127.0.0.53:53 0.0.0.0:*\n'
             if args[0] == '/usr/bin/systemctl':
                 self.assertIn(args[-1], [s + '.service' for s in helper.SERVICES])
                 return 3, 'inactive\n'
@@ -87,6 +101,8 @@ class QaReadonlyTests(unittest.TestCase):
         with patch.object(helper.socket, 'gethostname', return_value='glmdch'), patch.object(helper, 'command', side_effect=fake_command), patch.object(Path, 'read_text', read):
             data = helper.collect()
         self.assertNotIn('192.0.2.1', json.dumps(data))
+        self.assertNotIn('127.0.0.53', json.dumps(data))
+        self.assertIn({'protocol': 'udp', 'port': 53, 'scope': 'loopback'}, data['listeners'])
         validator.validate(json.dumps(data), data['helper_sha256'])
 
     def test_client_cleans_key_and_suppresses_failed_ssh_output(self):
