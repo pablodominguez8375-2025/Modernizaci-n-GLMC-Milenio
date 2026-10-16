@@ -46,6 +46,8 @@ services:
       MINIO_ROOT_PASSWORD: ${PMGM_QA_STORAGE_ADMIN_PASSWORD:?PMGM_QA_STORAGE_ADMIN_PASSWORD es obligatorio}
       DOCUMENT_ACCESS_KEY: ${PMGM_QA_DOCUMENT_ACCESS_KEY:?PMGM_QA_DOCUMENT_ACCESS_KEY es obligatorio}
       DOCUMENT_SECRET_KEY: ${PMGM_QA_DOCUMENT_SECRET_KEY:?PMGM_QA_DOCUMENT_SECRET_KEY es obligatorio}
+      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:?PMGM_QA_BACKUP_ACCESS_KEY es obligatorio}
+      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
     volumes:
       - ./silo/pmgm-qa-documents-policy.json:/policies/documents.json:ro
     entrypoint: ["/bin/sh", "-ec"]
@@ -64,6 +66,16 @@ services:
       mcli admin policy create qa pmgm-qa-documents /policies/documents.json
       mcli admin user add qa "$DOCUMENT_ACCESS_KEY" "$DOCUMENT_SECRET_KEY"
       mcli admin policy attach qa pmgm-qa-documents --user "$DOCUMENT_ACCESS_KEY"
+    networks: [pmgm_srv01_internal]
+
+  # On-demand client for synthetic QA backups only; receives NO administrator credentials.
+  storage-backup-client:
+    image: docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62
+    profiles: ["qa-backup"]
+    environment:
+      BACKUP_ACCESS_KEY: ${PMGM_QA_BACKUP_ACCESS_KEY:?PMGM_QA_BACKUP_ACCESS_KEY es obligatorio}
+      BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
+    entrypoint: ["/bin/sh"]
     networks: [pmgm_srv01_internal]
 
   clamav:
