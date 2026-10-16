@@ -24,7 +24,9 @@ public sealed record CalendarGradeReader(
         // First validate current lodge membership for EVERY lodge-bound event,
         // including historical/null and explicitly general ('all') events.
         // Grade is a SECOND filter, never a substitute for lodge membership.
-        if (item.OrganizationId is Guid lodgeId && !ActiveLodges.Contains(lodgeId))
+        if ((item.ScopeType == CalendarCodes.ScopeType.Lodge ||
+             item.Visibility == CalendarCodes.Visibility.Lodge) &&
+            item.OrganizationId is Guid lodgeId && !ActiveLodges.Contains(lodgeId))
             return false;
 
         if (item.Grade is null or CalendarCodes.Grade.All) return true;
