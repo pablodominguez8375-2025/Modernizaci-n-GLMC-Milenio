@@ -87,7 +87,7 @@ def main():
             raw = sys.stdin.buffer.read(8 * 1024 * 1024 + 1)
         elif not args.stdin and args.compose_file and args.env_file:
             result = subprocess.run(['docker', 'compose', '-p', 'pmgm-srv01', '--env-file', args.env_file,
-                                     '-f', args.compose_file, 'config', '--format', 'json'],
+                                     '-f', args.compose_file, '--profile', '*', 'config', '--format', 'json'],
                                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                                     timeout=30, check=False)
             if result.returncode:

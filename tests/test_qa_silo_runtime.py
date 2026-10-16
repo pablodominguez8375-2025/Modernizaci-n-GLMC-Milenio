@@ -61,8 +61,11 @@ class QaSiloRuntimeTests(unittest.TestCase):
                 return run(compose + ['exec', '-T', 'postgres', 'psql', '-U', 'pmgm_app', '-d', database,
                                       '-At', '-v', 'ON_ERROR_STOP=1'], input=query).stdout.strip()
             try:
-                model = json.loads(run(compose + ['config', '--format', 'json']).stdout)
-                guard = run(['python3', 'scripts/check-qa-storage-config.py', '--stdin'], input=json.dumps(model))
+                # Inspect inactive clients too; this does not enable them for `up`.
+                model = json.loads(run(compose + ['--profile', '*', 'config', '--format', 'json']).stdout)
+                guard = run(['python3', 'scripts/check-qa-storage-config.py', '--stdin'], input=json.dumps(model), check=False)
+                self.assertEqual(0, guard.returncode, 'Storage guard rejected configuration: ' +
+                                 ','.join(json.loads(guard.stdout).get('errors', [])))
                 self.assertEqual('CONFIG_CHECK_ONLY', json.loads(guard.stdout)['status'])
                 stage = 'start_private_storage_and_postgres'
                 run(compose + ['up', '-d', '--wait', '--wait-timeout', '120', 'postgres', 'minio'], timeout=240)

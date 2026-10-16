@@ -121,7 +121,7 @@ def prepare(directory, source_sha, output):
         raise ValueError('loaded server binary mismatch')
     # Render without interpolation: no credentials are written to this temporary model.
     rendered = run(['docker', 'compose', '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml'),
-                    'config', '--no-interpolate', '--format', 'json'], text=True)
+                    '--profile', '*', 'config', '--no-interpolate', '--format', 'json'], text=True)
     model = json.loads(rendered.stdout)
     for name in SERVICES:
         service = model['services'][name]

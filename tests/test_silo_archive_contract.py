@@ -128,6 +128,9 @@ class SiloArchiveContractTests(unittest.TestCase):
             **{n: {'image': image, 'pull_policy': 'never'} for n in archive.SERVICES}}}
         self.assertTrue(guard.evaluate(model))
         self.assertEqual([], guard.evaluate(model, image))
+        missing = copy.deepcopy(model)
+        del missing['services']['storage-backup-client']
+        self.assertIn('SIGNED_ARCHIVE_SERVICES_REQUIRED', guard.evaluate(missing, image))
         for name in archive.SERVICES:
             bad = copy.deepcopy(model)
             bad['services'][name]['image'] = 'sha256:' + 'b' * 64
