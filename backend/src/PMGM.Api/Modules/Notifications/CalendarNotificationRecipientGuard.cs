@@ -101,6 +101,9 @@ public static class CalendarNotificationRecipientGuard
                 StringComparison.OrdinalIgnoreCase) ||
             !Guid.TryParse(request.RelatedResourceId, out var eventId) ||
             eventId == Guid.Empty || request.Channels is null ||
+            !string.IsNullOrWhiteSpace(request.RecipientEmail) ||
+            (request.SourceEventId is not null &&
+             (!Guid.TryParse(request.SourceEventId, out var sourceId) || sourceId != eventId)) ||
             request.Channels.Any(x => !string.Equals(x, NotificationCodes.Channel.Internal,
                 StringComparison.OrdinalIgnoreCase)))
             return false;
