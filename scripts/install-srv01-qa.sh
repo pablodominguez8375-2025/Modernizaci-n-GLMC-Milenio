@@ -110,6 +110,9 @@ echo "Levantando QA srv01..."
 if [ "${PMGM_QA_DB2:-false}" = true ]; then
   PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/check-qa-db2-roles.sh"
 fi
+if [ "${PMGM_QA_HTTPS:-false}" = true ]; then
+  PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/qa/check-g8-identities.sh"
+fi
 
 if [ "$SKIP_SMOKE" = false ]; then
   PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/smoke-srv01-qa.sh"
