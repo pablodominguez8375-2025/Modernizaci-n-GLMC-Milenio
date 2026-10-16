@@ -61,6 +61,13 @@ if [ -f "$ENV_FILE" ]; then
     [[ "$url" != */ ]] || fail "$url_var no debe terminar en /"
   done
 
+  # Guard captures the expanded model privately; never log credentials or raw errors.
+  if python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"; then
+    ok "Configuración S3 sin imágenes mutables ni credenciales administrativas reutilizadas; IAM/proveedor pendientes de aceptación"
+  else
+    fail "Configuración de almacenamiento bloqueada; revisar contrato #470/#479 antes de instalar"
+  fi
+
   python3 - <<'PY'
 import os, ipaddress
 from ipaddress import ip_network
@@ -95,12 +102,6 @@ if any(len(i) < 8 for i in identities):
     raise SystemExit("Identidades QA de almacenamiento deben tener mínimo 8 caracteres")
 PY
 
-  # Guard captures the expanded model privately; never log credentials or raw errors.
-  if python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"; then
-    ok "Configuración S3 sin imágenes mutables ni credenciales administrativas reutilizadas; IAM/proveedor pendientes de aceptación"
-  else
-    fail "Configuración de almacenamiento bloqueada; revisar contrato #470/#479 antes de instalar"
-  fi
 fi
 
 printf '\nResumen: %d fallo(s), %d advertencia(s).\n' "$failures" "$warnings"
