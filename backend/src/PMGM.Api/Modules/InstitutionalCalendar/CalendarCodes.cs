@@ -25,6 +25,42 @@ public static class CalendarCodes
             => value is Public or Institutional or Lodge or Restricted;
     }
 
+    public static class Grade
+    {
+        public const string All = "all";
+        public const string Apprentice = "apprentice";
+        public const string FellowCraft = "fellow_craft";
+        public const string Master = "master";
+
+        public static bool IsValid(string? value)
+            => value is null or All or Apprentice or FellowCraft or Master;
+
+        public static int? ToNumeric(string? value) => value switch
+        {
+            Apprentice => 1,
+            FellowCraft => 2,
+            Master => 3,
+            _ => null
+        };
+
+        public static string? FromLodgeGrade(string value) => value switch
+        {
+            "all" => null,
+            "apprentice" => Apprentice,
+            "fellowcraft" => FellowCraft,
+            "master" => Master,
+            _ => "invalid_source_grade" // Denegar por defecto ante datos históricos no reconocidos.
+        };
+
+        public static string? FromCeremony(string type) => type switch
+        {
+            "initiation" => Apprentice,
+            "wage_increase" => FellowCraft,
+            "exaltation" => Master,
+            _ => null // Afiliación e incorporación no asignan grado de convocatoria.
+        };
+    }
+
     public static class Status
     {
         public const string Draft = "draft";

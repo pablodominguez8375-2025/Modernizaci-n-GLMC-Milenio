@@ -28,6 +28,7 @@ public sealed class CalendarPostgreSqlTests
 
         var applied = (await db.Database.GetAppliedMigrationsAsync(cancellationToken)).ToList();
         Assert.Contains("20260909112500_AddInstitutionalCalendar", applied);
+        Assert.Contains("20261015230000_AddCalendarEventGrade", applied);
 
         var sourceId = $"qa-{Guid.NewGuid():N}";
         var calendarEvent = new InstitutionalCalendarEvent
@@ -54,5 +55,6 @@ public sealed class CalendarPostgreSqlTests
         Assert.Equal(calendarEvent.Id, stored.Id);
         Assert.Equal("America/Santiago", stored.TimeZoneId);
         Assert.True(stored.SourceControlled);
+        Assert.Null(stored.Grade); // compatibilidad con eventos históricos sin grado.
     }
 }

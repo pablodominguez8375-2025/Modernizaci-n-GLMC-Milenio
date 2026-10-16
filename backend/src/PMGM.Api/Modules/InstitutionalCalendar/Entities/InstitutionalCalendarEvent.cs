@@ -5,6 +5,8 @@ public sealed class InstitutionalCalendarEvent
     public Guid Id { get; init; } = Guid.NewGuid();
     public required string Title { get; set; }
     public required string EventType { get; set; }
+    // null representa un evento general anterior o sin grado asignado.
+    public string? Grade { get; set; }
     public DateTimeOffset StartsAtUtc { get; set; }
     public DateTimeOffset EndsAtUtc { get; set; }
     public string TimeZoneId { get; set; } = "America/Santiago";

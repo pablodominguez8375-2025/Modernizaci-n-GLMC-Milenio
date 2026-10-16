@@ -47,6 +47,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
                 locationDisplay: BuildSpaceDisplay(reservation.Space.Name, reservation.Space.Location),
                 visibility: CalendarCodes.Visibility.Restricted,
                 status: status,
+                grade: null,
                 occupancyOnlyWhenRestricted: true,
                 cancellationToken: cancellationToken);
             Count(result, ref created, ref updated);
@@ -79,6 +80,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
                 locationDisplay: null,
                 visibility: CalendarCodes.Visibility.Restricted,
                 status: MapCeremonyStatus(ceremony.Status),
+                grade: CalendarCodes.Grade.FromCeremony(ceremony.CeremonyType),
                 occupancyOnlyWhenRestricted: false,
                 cancellationToken: cancellationToken);
             Count(result, ref created, ref updated);
@@ -101,6 +103,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
                 locationDisplay: null,
                 visibility: CalendarCodes.Visibility.Lodge,
                 status: MapMeetingStatus(meeting.Status),
+                grade: CalendarCodes.Grade.FromLodgeGrade(meeting.Grade),
                 occupancyOnlyWhenRestricted: false,
                 cancellationToken: cancellationToken);
             Count(result, ref created, ref updated);
@@ -129,6 +132,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
                     LodgeManagementCodes.InstructionStatus.Cancelled => CalendarCodes.Status.Cancelled,
                     _ => CalendarCodes.Status.Tentative
                 },
+                grade: CalendarCodes.Grade.FromLodgeGrade(instruction.Grade),
                 occupancyOnlyWhenRestricted: false,
                 cancellationToken: cancellationToken);
             Count(result, ref created, ref updated);
@@ -152,6 +156,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
         string? locationDisplay,
         string visibility,
         string status,
+        string? grade,
         bool occupancyOnlyWhenRestricted,
         CancellationToken cancellationToken)
     {
@@ -167,6 +172,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
             {
                 Title = title,
                 EventType = eventType,
+                Grade = grade,
                 StartsAtUtc = startsAtUtc,
                 EndsAtUtc = endsAtUtc,
                 OrganizationId = organizationId,
@@ -186,6 +192,7 @@ public sealed class InstitutionalCalendarSourceSyncService(
 
         existing.Title = title;
         existing.EventType = eventType;
+        existing.Grade = grade;
         existing.StartsAtUtc = startsAtUtc;
         existing.EndsAtUtc = endsAtUtc;
         existing.OrganizationId = organizationId;

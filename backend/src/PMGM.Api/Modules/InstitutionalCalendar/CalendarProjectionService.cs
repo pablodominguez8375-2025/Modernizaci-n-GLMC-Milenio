@@ -54,7 +54,8 @@ public sealed class InstitutionalCalendarProjectionService(IInstitutionalAccessS
                 null,
                 null,
                 null,
-                true);
+                true,
+                null);
         }
 
         return new CalendarEventProjection(
@@ -73,7 +74,8 @@ public sealed class InstitutionalCalendarProjectionService(IInstitutionalAccessS
             calendarEvent.SourceEntityType,
             calendarEvent.SourceEntityId,
             calendarEvent.ResponsibleSubject,
-            false);
+            false,
+            calendarEvent.Grade);
     }
 
     public bool CanManage(InstitutionalCalendarEvent calendarEvent, ClaimsPrincipal user)
@@ -121,4 +123,5 @@ public sealed record CalendarEventProjection(
     string? SourceEntityType,
     string? SourceEntityId,
     string? ResponsibleSubject,
-    bool IsMasked);
+    bool IsMasked,
+    string? Grade = null);
