@@ -20,6 +20,9 @@ command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum es obligatorio" >&2; e
 # Gate offline BD2 G4: shell, aislamiento de roles y modelo Compose sin secretos.
 python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_db2_contract.py'
 python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_db2_runtime.py'
+# G4 full-stack lab: real .NET migrations/API and Keycloak with segregated DB users,
+# dual PostgreSQL backup/restore; never contacts glmdch.
+python3 -m unittest discover -s "$ROOT/tests" -p 'test_qa_db2_ef_runtime.py'
 
 mkdir -p "$OUT_DIR" "$STAGING/$PACKAGE_NAME"
 
