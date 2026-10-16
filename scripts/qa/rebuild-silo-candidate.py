@@ -32,6 +32,59 @@ def check_source(source):
     return hashlib.sha256(archive).hexdigest()
 
 
+SERVER_SOURCE = '7a3ca0f82100cce06289a465f54139da2639f642'
+SERVER_FIX = '3252d5b7f349e0ea41987761e4487972ea977e15'
+SERVER_BLOBS = {
+    'internal/s3select/select.go': 'a7abcbeb078224b3b35dbf750b840c2c2ca15221',
+    'internal/s3select/json/preader.go': '9f982893a9524fbd856f10467cb29c2a90681e41',
+    'internal/s3select/csv/reader.go': '161ecc16fd975eea4091ad9b4f83f017cb923902',
+}
+
+
+def server_patch_evidence(image, output):
+    # Reuse the checksum-bounded downloader, never fetch an unpinned branch.
+    spec = importlib.util.spec_from_file_location('silo_supply', ROOT / 'scripts/qa/verify-silo-supply.py')
+    supply = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(supply)
+    comparison = json.loads(supply.fetch('https://api.github.com/repos/pgsty/silo/compare/' +
+                                        SERVER_FIX + '...' + SERVER_SOURCE))
+    if comparison.get('status') not in ('ahead', 'identical') or comparison.get('behind_by') != 0:
+        raise ValueError('server does not inherit the fix')
+    if SERVER_SOURCE not in (output / 'vendor-attestation.json').read_text():
+        raise ValueError('vendor attestation does not identify expected server source')
+    files = {}
+    for path, expected in SERVER_BLOBS.items():
+        content = supply.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/' + path)
+        blob = hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
+        if blob != expected:
+            raise ValueError('server source blob mismatch')
+        text = content.decode()
+        if path.endswith('select.go'):
+            if 'json.NewPReader' not in text or 'simdj.NewReader' in text:
+                raise ValueError('JSON Lines bounded routing not established')
+        elif 'const maxCharsPerRecord = 1 << 20' not in text or 'errOverMaxRecordSize' not in text:
+            raise ValueError('bounded input parsing not established')
+        files[path] = {'git_blob': blob, 'sha256': hashlib.sha256(content).hexdigest()}
+    hashes = []
+    for identity in (VENDOR, image):
+        result = subprocess.check_output(['docker', 'run', '--rm', '--entrypoint', '/usr/bin/sha256sum',
+                                          identity, '/usr/bin/silo'], text=True).split()[0]
+        if re.fullmatch(r'[0-9a-f]{64}', result) is None:
+            raise ValueError('invalid server binary digest')
+        hashes.append(result)
+    if hashes[0] != hashes[1]:
+        raise ValueError('rebuilt server differs from signed vendor binary')
+    evidence = {'vulnerability': 'CVE-2026-39414', 'source_commit': SERVER_SOURCE,
+                'fix_commit': SERVER_FIX, 'fix_ancestry_verified': True,
+                'source_files': files, 'server_binary_sha256': hashes[0],
+                'candidate_image_id': image, 'server_binary_preserved': True,
+                'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
+                'status': 'FIX_EVIDENCE_FOR_COMPONENT_REVIEW',
+                'scanner_exception_applied': False}
+    (output / 'server-cve-triage.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    return evidence
+
+
 def scanner_tools(output):
     spec = importlib.util.spec_from_file_location('silo_supply', ROOT / 'scripts/qa/verify-silo-supply.py')
     supply = importlib.util.module_from_spec(spec)
@@ -129,9 +182,10 @@ def main():
             started = time.monotonic()
             with (output / 'runtime-tests.log').open('w') as stream:
                 run(['python3', '-m', 'unittest', 'test_silo_real_iam', 'test_silo_real_recovery',
-                     'test_silo_dotnet_sdk', '-v'], cwd=ROOT, env=environment,
+                     'test_silo_dotnet_sdk', 'test_silo_select_record_limit', '-v'], cwd=ROOT, env=environment,
                     stdout=stream, stderr=subprocess.STDOUT, timeout=900)
             report['real_iam_recovery_sdk'] = {'status': 'PASS', 'seconds': round(time.monotonic() - started, 3)}
+            report['server_cve_triage'] = server_patch_evidence(image, output)
         except Exception as error:
             report['failures']['real_iam_recovery_sdk'] = {'type': type(error).__name__}
     if report['failures']:

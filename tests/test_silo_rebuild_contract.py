@@ -3,6 +3,9 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import patch
 import unittest
+import struct
+import zlib
+import test_silo_select_record_limit as select_limit
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('rebuild', ROOT / 'scripts/qa/rebuild-silo-candidate.py')
@@ -29,6 +32,19 @@ class SiloRebuildContractTests(unittest.TestCase):
         rows = rebuild.blocking_findings(scan)
         self.assertEqual(1, len(rows))
         self.assertIsNone(rows[0]['FixedVersion'])
+
+    def test_select_event_parser_verifies_crc_and_error_headers(self):
+        headers = bytearray()
+        for key, value in ((':message-type', 'error'), (':error-code', 'OverMaxRecordSize')):
+            name, data = key.encode(), value.encode()
+            headers.extend(bytes([len(name)]) + name + bytes([7]) + struct.pack('!H', len(data)) + data)
+        prelude = struct.pack('!II', 16 + len(headers), len(headers))
+        frame = prelude + struct.pack('!I', zlib.crc32(prelude)) + headers
+        frame += struct.pack('!I', zlib.crc32(frame))
+        self.assertEqual('OverMaxRecordSize', select_limit.select_events(frame)[0][':error-code'])
+        for invalid in (b'', frame[:-1], frame[:-4] + bytes(4)):
+            with self.assertRaises(ValueError):
+                select_limit.select_events(invalid)
 
     def test_rebuild_does_not_publish_or_override_active_compose(self):
         dockerfile = (ROOT / 'infrastructure/silo/Dockerfile.qa-rebuild').read_text()

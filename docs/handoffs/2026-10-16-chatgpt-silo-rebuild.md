@@ -29,3 +29,11 @@ Workflow nuevo `QA Silo rebuilt candidate`, sólo pull_request hacia dev, runner
 5. BD2/OIDC, backup externo cifrado/RPO-RTO y smoke/UAT integral siguen pendientes separados del laboratorio de datos.
 
 **Despliegue QA pendiente.** No conexión ni cambios en glmdch, DNS, cuentas, secretos, firewall, servicios, datos reales ni main. #506 DRAFT, sin merge hasta superar suministro. Registrar avance y bloqueo en GitHub y adenda QA Drive.
+
+## Continuación de triage, mismo lote
+
+Se preservaron commits concurrentes ef24927d/e315793e de dominio/plantilla y se integró dev@db82dd1c (PR513) antes de publicar4b0cf521. El objeto inicial6802f3e NO fue HEAD. Rebuild4b0cf521, run38906552281/artifact12048552098, completó build y laboratorio IAM/recovery/SDK PASS56.325s. Escaneo de imagen reconstruida: **1 HIGH/0 CRITICAL**, CVE-2026-39414 del servidor; los10HIGH de base/cliente no aparecen. Image ID073c28f9..., archiveSHA25604ae83cc36dbd7e7f9cb641dc2b808fc48db8f1e49cb85b247394ede225f4944, artifactZIP SHA256b29b9825c93fe61e43253738f36ec8370ca7470a594f3a33aed6ff5098563458. Estos datos NO validan commits posteriores.
+
+Prueba adicional real `test_silo_select_record_limit.py`: S3 Select COUNT(*) para CSV y JSON Lines, controles normales y registros de1MiB+1byte, exige frames event-stream con CRC válido y OverMaxRecordSize del input, salud posterior. Usa credenciales sintéticas '-'/'--' y cuenta limitada en servidor efímero. Parser CRC/errores tiene regresión offline; el workflow ejecuta la prueba binaria junto con los laboratorios anteriores.
+
+`server_patch_evidence` contrasta patch ancestry contra fuente exacta7a3ca, tres blobs por hash Git, límites de1MiB y ruta JSON PReader sin SIMD, source commit en attestation del proveedor y SHA256 de binario server idéntico entre imagen firmada y reconstruida. Sólo después de prueba binaria PASS genera `server-cve-triage.json` como evidencia para revisión específica; NO añade ignore/VEX, NO filtra el hallazgo del escaneo ni cambia el gate. El servidor sigue bloqueado hasta resolver esa clasificación e identidad de publicación/adopción de imagen; no usar el tar de revisión como release.
