@@ -13,6 +13,9 @@ export interface AccessScreenProps {
   loginLabel?: string
 }
 
+/** Correo de soporte para quienes no logran ingresar. */
+export const accessSupportEmail = 'soporte@granlogiamixta.cl'
+
 const logoSrc = `${import.meta.env.BASE_URL}brand/logo-glmch-reducido-v2-azul.svg`
 
 /**
@@ -43,7 +46,7 @@ export default function AccessScreen({ message, tone = 'info', onLogin, loginLab
       <button className="access-button" type="button" onClick={onLogin} disabled={!onLogin} aria-busy={loading}>
         {loading ? 'Preparando acceso…' : loginLabel}
       </button>
-      <p className="access-help">¿No puedes ingresar? Pide ayuda a la Secretaría de tu Taller.</p>
+      <p className="access-help">¿No puedes ingresar? Escribe a <a href={`mailto:${accessSupportEmail}?subject=Ayuda%20para%20ingresar%20a%20la%20plataforma`}>{accessSupportEmail}</a></p>
       <p className="access-legal">Uso restringido a personas autorizadas de la Orden. Tu actividad en la plataforma queda registrada.</p>
     </section>
   </main>

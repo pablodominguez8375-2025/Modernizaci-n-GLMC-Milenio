@@ -9,6 +9,7 @@ describe('Pantalla de ingreso corporativa', () => {
     expect(html).toContain('Proyecto Centenario')
     expect(html).toContain('Ingresar con mi cuenta')
     expect(html).toContain('Uso restringido')
+    expect(html).toContain('mailto:soporte@granlogiamixta.cl')
     expect((html.match(/<button/g) ?? []).length).toBe(1)
     expect(html).toContain('role="status"')
   })
