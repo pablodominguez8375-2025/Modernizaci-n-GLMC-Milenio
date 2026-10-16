@@ -51,14 +51,11 @@ for _ in $(seq 1 40); do
 done
 [ "$ready" = true ] || { echo "PostgreSQL no quedó disponible." >&2; exit 1; }
 
-# Restore requires an already-provisioned EMPTY target bucket before any DB writes.
-# Never use mirror --remove with QA history or real data.
-"${compose[@]}" run --rm -T --no-deps \
-  -v "$BACKUP_DIR/objects:/backup:ro" --entrypoint /bin/sh storage-backup-client -ec \
-  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; mcli mirror --overwrite /backup/pmgm-documents qa/pmgm-documents'
-  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; contents="$(mcli ls qa/pmgm-documents)"; test -z "$contents"' \
+# Reject non-empty/unavailable destination bucket before any database restore.
+# Operator must provision Silo accounts on the new, isolated QA volume first.
+"${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh storage-backup-client -ec \
+  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; test -z "$(mcli ls qa/pmgm-documents)"' \
   || { echo "Restauración bloqueada: bucket inexistente, inaccesible o no vacío." >&2; exit 1; }
-
 for database in pmgm pmgm_keycloak; do
   echo "Restaurando PostgreSQL: $database"
   tmp="/tmp/${database}-srv01-restore.dump"
@@ -68,8 +65,10 @@ for database in pmgm pmgm_keycloak; do
   "${compose[@]}" exec -T postgres rm -f "$tmp"
 done
 
-echo "Restaurando objetos QA Silo en bucket vacío..."
-"${compose[@]}" run --rm -T --no-deps   -v "$BACKUP_DIR/objects:/backup:ro"   --entrypoint /bin/sh minio-init   -c 'set -eu; until mc alias set pmgm http://minio:9000 "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" >/dev/null 2>&1; do sleep 2; done; mc mb --ignore-existing pmgm/pmgm-documents >/dev/null; mc anonymous set none pmgm/pmgm-documents >/dev/null; mc mirror --overwrite --remove /backup/pmgm-documents pmgm/pmgm-documents'
+echo "Restaurando objetos Silo sintéticos en bucket vacío..."
+"${compose[@]}" run --rm -T --no-deps \
+  -v "$BACKUP_DIR/objects:/backup:ro" --entrypoint /bin/sh storage-backup-client -ec \
+  'set -eu; mcli alias set qa http://minio:9000 "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY" >/dev/null; mcli mirror --overwrite /backup/pmgm-documents qa/pmgm-documents'
 
 if [ "${#resume[@]}" -gt 0 ]; then
   "${compose[@]}" up -d "${resume[@]}" >/dev/null
