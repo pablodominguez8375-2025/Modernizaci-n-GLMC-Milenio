@@ -1,0 +1,29 @@
+name: QA Silo supply and recovery
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'infrastructure/docker-compose.srv01.yml'
+      - 'infrastructure/silo/**'
+      - 'scripts/qa/**'
+      - 'scripts/*srv01*'
+      - 'scripts/build-qa-installable.sh'
+      - 'scripts/check-qa-storage-config.py'
+      - 'tests/test_qa*silo*'
+      - 'tests/test_qa_storage_guards.py'
+      - 'tests/test_silo*'
+      - '.github/workflows/qa-silo-validation.yml'
+      - '.github/workflows/qa-silo-rebuild.yml'
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+concurrency:
+  group: qa-silo-validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    # Gate the archive actually selected by the installer; no vendor fallback.
+    uses: ./.github/workflows/qa-silo-rebuild.yml

@@ -113,8 +113,12 @@ class QaStorageConfigTests(unittest.TestCase):
             values = dict(PMGM_QA_WEB_PUBLIC_URL='https://web.example.invalid',
                           PMGM_QA_OIDC_PUBLIC_URL='https://identity.example.invalid',
                           PMGM_QA_DB_PASSWORD='synthetic-db-password-0001',
-                          PMGM_QA_MINIO_USER='synthetic-admin',
-                          PMGM_QA_MINIO_PASSWORD='synthetic-storage-password-0002',
+                          PMGM_QA_STORAGE_ADMIN_USER='synthetic-admin',
+                          PMGM_QA_STORAGE_ADMIN_PASSWORD='synthetic-storage-password-0002',
+                          PMGM_QA_DOCUMENT_ACCESS_KEY='synthetic-documents',
+                          PMGM_QA_DOCUMENT_SECRET_KEY='synthetic-document-password-0005',
+                          PMGM_QA_BACKUP_ACCESS_KEY='synthetic-backup',
+                          PMGM_QA_BACKUP_SECRET_KEY='synthetic-backup-password-0006',
                           PMGM_QA_KEYCLOAK_ADMIN_PASSWORD='synthetic-oidc-password-0003',
                           PMGM_QA_USER_PASSWORD='synthetic-user-password-0004')
             envfile.write_text(''.join(k + '=' + v + '\n' for k, v in values.items()))

@@ -1,0 +1,178 @@
+name: QA Silo rebuilt candidate
+on:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: qa-silo-rebuild-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      QA_VALIDATED_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ env.QA_VALIDATED_SOURCE_SHA }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: pgsty/mc
+          ref: 0e24a70a0a428de4ae2b7853db3499ba1cb34f37
+          path: artifacts/mcli-source
+          persist-credentials: false
+      - name: Validate rebuild contract offline
+        run: |
+          python3 -m unittest discover -s tests -p test_silo_rebuild_contract.py -v
+          python3 -m unittest discover -s tests -p test_silo_archive_contract.py -v
+          python3 -m unittest discover -s tests -p test_silo_provision_diagnostics.py -v
+          python3 -m unittest discover -s tests -p test_qa_silo_supply.py -v
+          python3 -m unittest discover -s tests -p test_qa_storage_guards.py -v
+          python3 -m unittest discover -s tests -p test_qa_glmdch_silo_candidate.py -v
+      - name: Install exact QA Docker/Compose on this ephemeral runner only
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Replace only Docker apt source entries inside this disposable GitHub runner.
+          for source in /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources; do
+            if [ -f "$source" ] && grep -q 'download.docker.com' "$source"; then sudo rm -f "$source"; fi
+          done
+          sudo install -m 0755 -d /etc/apt/keyrings
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/qa-docker.asc >/dev/null
+          echo 'deb [arch=amd64 signed-by=/etc/apt/keyrings/qa-docker.asc] https://download.docker.com/linux/ubuntu noble stable' | sudo tee /etc/apt/sources.list.d/qa-docker.list >/dev/null
+          sudo apt-get update -qq
+          # GitHub runners may provide Moby packages that conflict with Docker CE.
+          packages=()
+          for package in moby-engine moby-cli moby-buildx moby-compose moby-containerd moby-runc docker.io containerd runc; do
+            if dpkg-query -W -f='${db:Status-Status}' "$package" 2>/dev/null | grep -qx installed; then packages+=("$package"); fi
+          done
+          if [ "${#packages[@]}" -gt 0 ]; then sudo apt-get remove -y "${packages[@]}"; fi
+          version='5:29.9.1-1~ubuntu.24.04~noble'
+          sudo apt-get install -y --allow-downgrades docker-ce="$version" docker-ce-cli="$version" containerd.io
+          curl -fsSL https://github.com/docker/compose/releases/download/v5.6.0/docker-compose-linux-x86_64 -o "$RUNNER_TEMP/docker-compose-5.6.0"
+          echo '40343e21ca777173e69cff5dbafeb37c6f81f3b0d57d9e597f036e95eb63e76a  '"$RUNNER_TEMP/docker-compose-5.6.0" | sha256sum -c -
+          mkdir -p "$HOME/.docker/cli-plugins"
+          install -m 0755 "$RUNNER_TEMP/docker-compose-5.6.0" "$HOME/.docker/cli-plugins/docker-compose"
+          sudo systemctl restart docker
+          test "$(docker version --format '{{.Server.Version}}')" = '29.9.1'
+          test "$(docker compose version --short)" = '5.6.0'
+      - name: Rebuild, scan and exercise real IAM and recovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/qa/rebuild-silo-candidate.py --source artifacts/mcli-source --output artifacts/silo-rebuild
+      - name: Attest candidate image archive and fixed-component evidence
+        id: provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: |
+            artifacts/silo-rebuild/silo-qa-review-only.tar
+            artifacts/silo-rebuild/server-fixed.openvex.json
+            artifacts/silo-rebuild/server-cve-triage.json
+            artifacts/silo-rebuild/rebuild-report.json
+          push-to-registry: false
+      - name: Verify project provenance bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$PROVENANCE_BUNDLE" artifacts/silo-rebuild/project-provenance.sigstore.json
+          for subject in silo-qa-review-only.tar server-fixed.openvex.json server-cve-triage.json rebuild-report.json; do
+            gh attestation verify "artifacts/silo-rebuild/$subject" \
+              --repo "$GITHUB_REPOSITORY" --bundle "$PROVENANCE_BUNDLE" --format json \
+              > "artifacts/silo-rebuild/$subject.verification.json"
+          done
+      - name: Verify archive and remove only this candidate before cold load
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/qa/prepare-silo-archive.py --bundle artifacts/silo-rebuild --source-sha "$QA_VALIDATED_SOURCE_SHA"
+          python3 - <<'PYTHON'
+          import json, os, shutil, subprocess, tempfile
+          from pathlib import Path
+          # Real signature negative: valid JSON with changed bytes must fail at gh,
+          # before any image load or Compose output is produced.
+          with tempfile.TemporaryDirectory(prefix='qa-silo-tamper-') as temporary:
+              changed = Path(temporary) / 'evidence'
+              shutil.copytree('artifacts/silo-rebuild', changed)
+              report_path = changed / 'rebuild-report.json'
+              report_path.write_text(report_path.read_text() + '\n')
+              model = Path(temporary) / 'forbidden-compose.json'
+              rejected = subprocess.run(['python3', 'scripts/qa/prepare-silo-archive.py', '--bundle', str(changed),
+                  '--source-sha', os.environ['QA_VALIDATED_SOURCE_SHA'], '--compose-output', str(model)],
+                  capture_output=True, text=True, timeout=90)
+              diagnostic = json.loads(rejected.stdout)
+              if rejected.returncode == 0 or diagnostic.get('error_type') != 'CalledProcessError' or model.exists():
+                  raise SystemExit('Tampered signature was not rejected before Compose preparation')
+          report = json.loads(Path('artifacts/silo-rebuild/rebuild-report.json').read_text())
+          subprocess.run(['docker', 'image', 'rm', report['local_image_id']], check=True)
+          result = subprocess.run(['docker', 'image', 'inspect', report['local_image_id']],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          if result.returncode == 0:
+              raise SystemExit('Candidate still present: cold-load proof unavailable')
+          PYTHON
+      - name: Exercise signed archive through actual QA Compose, backup and restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          QA_SILO_RUNTIME_REQUIRED: '1'
+          QA_SILO_REQUIRE_COLD_LOAD: '1'
+          PMGM_QA_SILO_BUNDLE_DIR: ${{ github.workspace }}/artifacts/silo-rebuild
+          QA_SILO_EVIDENCE_DIR: artifacts/silo-rebuild
+        run: python3 -m unittest discover -s tests -p test_qa_silo_runtime.py -v
+      - name: Build same-source QA installable including signed Silo archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ env.QA_VALIDATED_SOURCE_SHA }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+          QA_SILO_BUNDLE_DIR: ${{ github.workspace }}/artifacts/silo-rebuild
+        run: |
+          set -euo pipefail
+          bash scripts/build-qa-installable.sh
+          temporary="$(mktemp -d)"
+          trap 'rm -rf "$temporary"' EXIT
+          unzip -q artifacts/qa-installable/*.zip -d "$temporary"
+          package="$(find "$temporary" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+          grep -qx "SOURCE_SHA=$SOURCE_SHA" "$package/BUILD-INFO.txt"
+          (cd "$package" && sha256sum -c MANIFEST.sha256 > /dev/null)
+          python3 "$package/scripts/qa/prepare-silo-archive.py" --bundle "$package/storage-bundle" --source-sha "$SOURCE_SHA"
+      - name: Attest complete QA candidate installable
+        id: installable-provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a
+        with:
+          subject-path: artifacts/qa-installable/*.zip
+          push-to-registry: false
+      - name: Verify and preserve installable provenance
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INSTALLABLE_BUNDLE: ${{ steps.installable-provenance.outputs.bundle-path }}
+        run: |
+          set -euo pipefail
+          cp "$INSTALLABLE_BUNDLE" artifacts/qa-installable/installable-provenance.sigstore.json
+          for package in artifacts/qa-installable/*.zip; do
+            gh attestation verify "$package" --repo "$GITHUB_REPOSITORY" --bundle "$INSTALLABLE_BUNDLE" \
+              --source-digest "$GITHUB_SHA" --deny-self-hosted-runners --format json \
+              > "$package.verification.json"
+          done
+      - name: Preserve QA candidate installable (deployment pending)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qa-glmdch-signed-storage-${{ env.QA_VALIDATED_SOURCE_SHA }}
+          path: artifacts/qa-installable/
+          retention-days: 30
+          if-no-files-found: error
+      - name: Preserve candidate evidence (not a deployment release)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: silo-rebuild-review-${{ env.QA_VALIDATED_SOURCE_SHA }}
+          path: artifacts/silo-rebuild/
+          retention-days: 7
+          if-no-files-found: error

@@ -42,13 +42,17 @@ else fail "Espacio libre ~${free_gib} GiB; mínimo QA recomendado: 15 GiB"; fi
 [ -f "$ENV_FILE" ] || fail "No existe archivo de entorno: $ENV_FILE"
 if [ -f "$ENV_FILE" ]; then
   perms="$(stat -c '%a' "$ENV_FILE" 2>/dev/null || true)"
-  case "$perms" in 600|640) ok "Permisos de entorno: $perms" ;; *) warn "Permisos $perms; se recomienda 600/640" ;; esac
+  case "$perms" in 600|640) ok "Permisos de entorno: $perms" ;; *) fail "Permisos de entorno inseguros; se requiere 600/640" ;; esac
   set -a
   # shellcheck disable=SC1090
   . "$ENV_FILE"
   set +a
 
-  required=(PMGM_QA_WEB_PUBLIC_URL PMGM_QA_OIDC_PUBLIC_URL PMGM_QA_DB_PASSWORD PMGM_QA_MINIO_USER PMGM_QA_MINIO_PASSWORD PMGM_QA_KEYCLOAK_ADMIN_PASSWORD PMGM_QA_USER_PASSWORD)
+  # Select only a same-source, cryptographically verified local Silo archive when supplied.
+  source "$ROOT/scripts/qa/silo-compose.sh"
+  qa_silo_prepare
+
+  required=(PMGM_QA_WEB_PUBLIC_URL PMGM_QA_OIDC_PUBLIC_URL PMGM_QA_DB_PASSWORD PMGM_QA_STORAGE_ADMIN_USER PMGM_QA_STORAGE_ADMIN_PASSWORD PMGM_QA_DOCUMENT_ACCESS_KEY PMGM_QA_DOCUMENT_SECRET_KEY PMGM_QA_BACKUP_ACCESS_KEY PMGM_QA_BACKUP_SECRET_KEY PMGM_QA_KEYCLOAK_ADMIN_PASSWORD PMGM_QA_USER_PASSWORD)
   for name in "${required[@]}"; do
     value="${!name:-}"
     [ -n "$value" ] || fail "$name es obligatorio"
@@ -61,11 +65,30 @@ if [ -f "$ENV_FILE" ]; then
     [[ "$url" != */ ]] || fail "$url_var no debe terminar en /"
   done
 
+  # Guard captures the expanded model privately; never log credentials or raw errors.
+  if python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"; then
+    qa_silo_require_bundle
+    ok "Configuración S3 sin imágenes mutables ni credenciales administrativas reutilizadas; IAM/proveedor pendientes de aceptación"
+  else
+    fail "Configuración de almacenamiento bloqueada; revisar contrato #470/#479 antes de instalar"
+  fi
+
   python3 - <<'PY'
-import os
+import os, ipaddress
+from ipaddress import ip_network
+bind = os.environ.get("PMGM_QA_BIND_ADDRESS", "127.0.0.1")
+try:
+    address = ipaddress.ip_address(bind)
+except ValueError:
+    raise SystemExit("QA requiere IP concreta de enlace privado")
+private_ranges = [ip_network(v) for v in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+if not (address.is_loopback or any(address in n for n in private_ranges)):
+    raise SystemExit("QA HTTP debe enlazar loopback o IPv4 privada RFC1918, no wildcard ni IP pública")
 names = [
     "PMGM_QA_DB_PASSWORD",
-    "PMGM_QA_MINIO_PASSWORD",
+    "PMGM_QA_STORAGE_ADMIN_PASSWORD",
+    "PMGM_QA_DOCUMENT_SECRET_KEY",
+    "PMGM_QA_BACKUP_SECRET_KEY",
     "PMGM_QA_KEYCLOAK_ADMIN_PASSWORD",
     "PMGM_QA_USER_PASSWORD",
 ]
@@ -75,14 +98,15 @@ for name, value in zip(names, values):
         raise SystemExit(f"{name} debe tener al menos 16 caracteres")
 if len(set(values)) != len(values):
     raise SystemExit("Las contraseñas QA deben ser distintas entre sí")
+identities = [os.environ.get(k, "") for k in ("PMGM_QA_STORAGE_ADMIN_USER", "PMGM_QA_DOCUMENT_ACCESS_KEY", "PMGM_QA_BACKUP_ACCESS_KEY")]
+if len(set(identities)) != len(identities):
+    raise SystemExit("La identidad documental no puede ser root/admin")
+if any(identity in values for identity in identities):
+    raise SystemExit("Identidad de cuenta no debe repetirse como contraseña")
+if any(len(i) < 8 for i in identities):
+    raise SystemExit("Identidades QA de almacenamiento deben tener mínimo 8 caracteres")
 PY
 
-  # Guard captures the expanded model privately; never log credentials or raw errors.
-  if python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"; then
-    ok "Configuración S3 sin imágenes mutables ni credenciales administrativas reutilizadas; IAM/proveedor pendientes de aceptación"
-  else
-    fail "Configuración de almacenamiento bloqueada; revisar contrato #470/#479 antes de instalar"
-  fi
 fi
 
 printf '\nResumen: %d fallo(s), %d advertencia(s).\n' "$failures" "$warnings"

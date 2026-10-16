@@ -28,6 +28,8 @@ jobs:
 
       - name: Validate QA scripts
         run: |
+          sh -n scripts/qa/qa-provision-silo.sh
+          python3 -m py_compile scripts/qa/verify-silo-supply.py
           bash -n scripts/preflight-srv01-qa.sh
           bash -n scripts/install-srv01-qa.sh
           bash -n scripts/smoke-srv01-qa.sh
@@ -51,8 +53,12 @@ jobs:
           PMGM_QA_WEB_PUBLIC_URL=http://127.0.0.1:18081
           PMGM_QA_OIDC_PUBLIC_URL=http://127.0.0.1:18180
           PMGM_QA_DB_PASSWORD=ci-only-db-password-001
-          PMGM_QA_MINIO_USER=ciqa
-          PMGM_QA_MINIO_PASSWORD=ci-only-minio-password-002
+          PMGM_QA_STORAGE_ADMIN_USER=ciqaadmin
+          PMGM_QA_STORAGE_ADMIN_PASSWORD=ci-only-admin-password-002
+          PMGM_QA_DOCUMENT_ACCESS_KEY=ciqadocuments
+          PMGM_QA_DOCUMENT_SECRET_KEY=ci-only-document-password-005
+          PMGM_QA_BACKUP_ACCESS_KEY=ciqabackup
+          PMGM_QA_BACKUP_SECRET_KEY=ci-only-backup-password-006
           PMGM_QA_KEYCLOAK_ADMIN_PASSWORD=ci-only-keycloak-password-003
           PMGM_QA_USER_PASSWORD=ci-only-users-password-004
           EOF
@@ -66,6 +72,7 @@ jobs:
           grep -q 'jdbc:postgresql://postgres:5432/pmgm_keycloak' "$RUNNER_TEMP/srv01-compose.rendered.yml"
           grep -q '10-init-srv01.sql' "$RUNNER_TEMP/srv01-compose.rendered.yml"
           test -s infrastructure/postgres/init-srv01.sql
+          python3 scripts/check-qa-storage-config.py --compose-file infrastructure/docker-compose.srv01.yml --env-file "$RUNNER_TEMP/srv01.env"
 
       - name: Validate QA realm roles and users
         shell: bash
@@ -130,6 +137,10 @@ jobs:
           test -f "$root/scripts/restore-srv01-qa.sh"
           test -f "$root/scripts/deploy-srv01-from-pages.sh"
           test -f "$root/scripts/rollback-srv01-qa.sh"
+          test -f "$root/scripts/qa/qa-provision-silo.sh"
+          test -f "$root/scripts/qa/verify-silo-supply.py"
+          test -f "$root/infrastructure/silo/pmgm-qa-documents-policy.json"
+          test -f "$root/infrastructure/silo/pmgm-qa-backup-policy.json"
 
       - name: Upload QA installable
         uses: actions/upload-artifact@v4

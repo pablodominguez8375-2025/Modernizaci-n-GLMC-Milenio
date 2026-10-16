@@ -3,13 +3,18 @@ set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 ENV_FILE="${PMGM_QA_ENV_FILE:-/etc/pmgm/srv01.env}"
-LODGE23="23232323-2323-2323-2323-232323232323"\nCOMPOSE_FILE="$ROOT/infrastructure/docker-compose.srv01.yml"
+LODGE23="23232323-2323-2323-2323-232323232323"
+COMPOSE_FILE="$ROOT/infrastructure/docker-compose.srv01.yml"
 
 [ -f "$ENV_FILE" ] || { echo "No existe $ENV_FILE" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+
+# Select only a same-source, cryptographically verified local Silo archive when supplied.
+source "$ROOT/scripts/qa/silo-compose.sh"
+qa_silo_prepare
 
 : "${PMGM_QA_WEB_PUBLIC_URL:?PMGM_QA_WEB_PUBLIC_URL es obligatorio}"
 : "${PMGM_QA_OIDC_PUBLIC_URL:?PMGM_QA_OIDC_PUBLIC_URL es obligatorio}"
@@ -52,7 +57,9 @@ json_get(){
   curl -fsS --max-time 20 -H "Authorization: Bearer $token" -H 'Accept: application/json' "$PMGM_QA_WEB_PUBLIC_URL$path"
 }
 
-compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
+qa_silo_require_bundle
+compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 dbs="$("${compose[@]}" exec -T postgres psql -U pmgm_app -d pmgm -Atqc "select datname from pg_database where datname in ('pmgm','pmgm_keycloak') order by datname" 2>/dev/null || true)"
 printf '%s\n' "$dbs" | grep -qx 'pmgm' || { echo "✗ Falta base pmgm" >&2; exit 1; }
 printf '%s\n' "$dbs" | grep -qx 'pmgm_keycloak' || { echo "✗ Falta base pmgm_keycloak" >&2; exit 1; }

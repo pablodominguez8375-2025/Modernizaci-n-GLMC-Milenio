@@ -9,6 +9,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -23,6 +24,15 @@ import uuid
 
 IMAGE = ("docker.io/pgsty/silo@sha256:"
          "aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62")
+# Only the isolated rebuild workflow may select an already-built image by ID.
+# No arbitrary tag/registry override and no deployment configuration is changed.
+_lab_image = os.environ.get("PMGM_SILO_REBUILD_IMAGE_ID")
+if _lab_image:
+    if (os.environ.get("PMGM_SILO_REBUILD_LAB") != "1" or
+            re.fullmatch(r"sha256:[0-9a-f]{64}", _lab_image) is None):
+        raise RuntimeError("Invalid isolated Silo rebuild image identity")
+    IMAGE = _lab_image
+
 BUCKET = "pmgm-documents"
 FORBIDDEN_BUCKET = "pmgm-iam-forbidden"
 
@@ -44,6 +54,10 @@ POLICY = {
 
 
 def run(args, *, timeout=60, check=True):
+    if _lab_image and args == ["docker", "pull", IMAGE]:
+        # Content-addressed local image from the current build; inspect it rather
+        # than asking a registry to pull a config ID. All IAM operations stay real.
+        args = ["docker", "image", "inspect", IMAGE]
     try:
         r = subprocess.run(args, capture_output=True, text=True,
                            timeout=timeout, check=False)
@@ -156,17 +170,17 @@ class SiloRealIamLaboratoryTests(unittest.TestCase):
                     return run(["docker", "exec", server, "mcli", *cmd],
                                timeout=45, check=check)
 
-                cli("alias", "set", "admin", "http://127.0.0.1:9000",
+                cli("alias", "set", "--", "admin", "http://127.0.0.1:9000",
                     root_user, root_pw)
                 cli("mb", "admin/" + BUCKET)
                 cli("mb", "admin/" + FORBIDDEN_BUCKET)
                 run(["docker", "cp", str(policy), server + ":/tmp/policy.json"])
                 cli("admin", "policy", "create", "admin",
                     "pmgm-documents-app", "/tmp/policy.json")
-                cli("admin", "user", "add", "admin", app_user, app_pw)
+                cli("admin", "user", "add", "--", "admin", app_user, app_pw)
                 cli("admin", "policy", "attach", "admin", "pmgm-documents-app",
                     "--user", app_user)
-                cli("alias", "set", "documents", "http://127.0.0.1:9000",
+                cli("alias", "set", "--", "documents", "http://127.0.0.1:9000",
                     app_user, app_pw)
 
                 # La cuenta documental tiene operaciones sobre SU bucket.
