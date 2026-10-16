@@ -17,7 +17,7 @@ for cmd in docker curl python3 sha256sum; do
   command -v "$cmd" >/dev/null 2>&1 && ok "Comando disponible: $cmd" || fail "Falta comando obligatorio: $cmd"
 done
 if command -v docker >/dev/null 2>&1; then
-  docker compose version >/dev/null 2>&1 && ok "Docker Compose v2 disponible" || fail "Docker Compose v2 no disponible"
+  docker compose version >/dev/null 2>&1 && ok "Docker Compose plugin disponible" || fail "Docker Compose plugin no disponible"
   docker info >/dev/null 2>&1 && ok "Docker daemon accesible" || fail "El usuario no puede acceder al Docker daemon"
 fi
 
@@ -77,7 +77,12 @@ if len(set(values)) != len(values):
     raise SystemExit("Las contraseñas QA deben ser distintas entre sí")
 PY
 
-  docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE" config >/dev/null && ok "Docker Compose srv01 válido" || fail "Docker Compose srv01 inválido"
+  # Guard captures the expanded model privately; never log credentials or raw errors.
+  if python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"; then
+    ok "Configuración S3 sin imágenes mutables ni credenciales administrativas reutilizadas; IAM/proveedor pendientes de aceptación"
+  else
+    fail "Configuración de almacenamiento bloqueada; revisar contrato #470/#479 antes de instalar"
+  fi
 fi
 
 printf '\nResumen: %d fallo(s), %d advertencia(s).\n' "$failures" "$warnings"

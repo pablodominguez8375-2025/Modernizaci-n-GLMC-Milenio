@@ -28,6 +28,10 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+
+# Validate storage before stopping services, restoring databases or starting containers.
+python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
+
 compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 running="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
