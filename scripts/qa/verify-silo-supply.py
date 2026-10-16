@@ -10,6 +10,7 @@ import subprocess
 import tarfile
 import tempfile
 import urllib.request
+import urllib.error
 
 IMAGE = 'docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62'
 SOURCE = '7a3ca0f82100cce06289a465f54139da2639f642'
@@ -79,7 +80,7 @@ def main():
     output = Path(args.output)
     output.mkdir(parents=True, exist_ok=True)
     report = {'timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
-              'source_sha': os.environ.get('GITHUB_SHA', 'local'), 'image': IMAGE, 'status': 'BLOCKED'}
+              'source_sha': os.environ.get('QA_VALIDATED_SOURCE_SHA', 'local'), 'image': IMAGE, 'status': 'BLOCKED'}
     stage = 'registry'
     try:
         report['registry'] = registry_evidence()
@@ -134,8 +135,11 @@ def main():
             if not report['publisher_signature_verified']:
                 report['status'] = 'BLOCKED_PUBLISHER_SIGNATURE'
         stage = 'complete'
-    except Exception:
+    except Exception as error:
         report['failed_stage'] = stage
+        report['error_type'] = type(error).__name__
+        if isinstance(error, urllib.error.HTTPError):
+            report['http_status'] = error.code
     (output / 'supply-report.json').write_text(json.dumps(report, indent=2) + '\n')
     # Public metadata only. Never emit token, registry diagnostics or container env.
     print(json.dumps(report, separators=(',', ':')))

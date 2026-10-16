@@ -106,7 +106,7 @@ class QaSiloRuntimeTests(unittest.TestCase):
                 evidence = Path(os.environ.get('QA_SILO_EVIDENCE_DIR', temporary / 'evidence'))
                 evidence.mkdir(parents=True, exist_ok=True)
                 (evidence / 'qa-runtime-report.json').write_text(json.dumps({
-                    'status': 'PASS_SYNTHETIC_DATA_RECOVERY', 'source_sha': os.getenv('GITHUB_SHA'),
+                    'status': 'PASS_SYNTHETIC_DATA_RECOVERY', 'source_sha': os.getenv('QA_VALIDATED_SOURCE_SHA'),
                     'docker': run(['docker', 'version', '--format', '{{.Server.Version}}']).stdout.strip(),
                     'compose': run(['docker', 'compose', 'version', '--short']).stdout.strip(),
                     'object_sha256': expected_hash, 'document_iam': 'PASS', 'backup_delete_denied': True,

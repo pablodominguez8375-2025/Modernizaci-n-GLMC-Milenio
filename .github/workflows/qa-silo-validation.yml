@@ -18,11 +18,15 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      QA_VALIDATED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - name: Verify negative supply checks offline
+        run: python3 -m unittest discover -s tests -p test_qa_silo_supply.py -v
       - name: Install exact QA Docker/Compose on this ephemeral runner only
         shell: bash
         run: |
