@@ -50,24 +50,9 @@ services:
       BACKUP_SECRET_KEY: ${PMGM_QA_BACKUP_SECRET_KEY:?PMGM_QA_BACKUP_SECRET_KEY es obligatorio}
     volumes:
       - ./silo/pmgm-qa-documents-policy.json:/policies/documents.json:ro
-    entrypoint: ["/bin/sh", "-ec"]
-    command: |
-      set -eu
-      # All mcli steps must pass. No infinite retries or IAM fallback.
-      ready=0
-      for i in 1 2 3 4 5 6 7 8 9 10; do
-        if mcli alias set qa http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null 2>&1 &&
-           mcli admin info qa >/dev/null 2>&1; then ready=1; break; fi
-        sleep 2
-      done
-      test "$ready" = 1
-      mcli mb --ignore-existing qa/pmgm-documents
-      mcli anonymous set none qa/pmgm-documents
-      mcli admin policy create qa pmgm-qa-documents /policies/documents.json
-      mcli admin user add qa "$DOCUMENT_ACCESS_KEY" "$DOCUMENT_SECRET_KEY"
-      mcli admin policy attach qa pmgm-qa-documents --user "$DOCUMENT_ACCESS_KEY"
-      mcli admin user add qa "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY"
-      mcli admin policy attach qa pmgm-qa-documents --user "$BACKUP_ACCESS_KEY"
+      - ../scripts/qa/qa-provision-silo.sh:/scripts/qa-provision-silo.sh:ro
+    # Script avoids Compose interpolating shell variables.
+    entrypoint: ["/bin/sh", "/scripts/qa-provision-silo.sh"]
     networks: [pmgm_srv01_internal]
 
   # On-demand client for synthetic QA backups only; receives NO administrator credentials.
