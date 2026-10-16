@@ -44,7 +44,9 @@ GENERATED_AT_UTC=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 
 cat > "$STAGING/$PACKAGE_NAME/ESTADO-PAQUETE.txt" <<EOF
-Paquete QA operacional para srv01.
+Paquete de código QA para glmdch (srv01 es nombre histórico).
+La instalación requiere storage-bundle firmado del mismo SHA.
+Sin ese directorio el instalador bloquea el perfil vendor.
 Datos personales reales: PROHIBIDOS.
 DemoData: habilitado sólo para datos ficticios QA.
 El paquete no implica despliegue ni UAT completados.

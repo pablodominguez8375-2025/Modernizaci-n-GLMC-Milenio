@@ -67,6 +67,7 @@ if [ -f "$ENV_FILE" ]; then
 
   # Guard captures the expanded model privately; never log credentials or raw errors.
   if python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"; then
+    qa_silo_require_bundle
     ok "Configuración S3 sin imágenes mutables ni credenciales administrativas reutilizadas; IAM/proveedor pendientes de aceptación"
   else
     fail "Configuración de almacenamiento bloqueada; revisar contrato #470/#479 antes de instalar"

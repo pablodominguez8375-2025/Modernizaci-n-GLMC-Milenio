@@ -65,15 +65,12 @@ set -a
 set +a
 source "$ROOT/scripts/qa/silo-compose.sh"
 qa_silo_prepare
+qa_silo_require_bundle
 
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 echo "Descargando imágenes base..."
-if [ -n "${PMGM_QA_SILO_BUNDLE_DIR:-}" ]; then
-  "${compose[@]}" pull postgres clamav keycloak
-else
-  "${compose[@]}" pull postgres minio minio-init clamav keycloak
-fi
+"${compose[@]}" pull postgres clamav keycloak
 
 echo "Construyendo API y frontend..."
 "${compose[@]}" build api web

@@ -3,9 +3,17 @@
 qa_silo_cleanup(){
   if [ -n "${QA_SILO_MODEL_DIR:-}" ]; then rm -rf -- "$QA_SILO_MODEL_DIR"; fi
 }
+qa_silo_require_bundle(){
+  [ -n "${PMGM_QA_SILO_BUNDLE_DIR:-}" ] || {
+    echo 'Falta storage-bundle firmado: perfil vendor bloqueado para operación QA.' >&2
+    return 1
+  }
+}
 qa_silo_prepare(){
   local bundle="${PMGM_QA_SILO_BUNDLE_DIR:-}"
   if [ -z "$bundle" ] && [ -d "$ROOT/storage-bundle" ]; then bundle="$ROOT/storage-bundle"; fi
+  # Existing configuration diagnostics run first; the caller then requires the
+  # verified bundle before any pull, build, up, backup or database restore.
   [ -n "$bundle" ] || return 0
   if [ -f "$ROOT/BUILD-INFO.txt" ]; then
     PMGM_QA_SILO_EXPECTED_SOURCE_SHA="$(awk -F= '$1=="SOURCE_SHA" {print $2}' "$ROOT/BUILD-INFO.txt")"

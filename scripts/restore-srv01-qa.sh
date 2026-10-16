@@ -37,6 +37,7 @@ qa_silo_prepare
 
 # Validate storage before stopping services, restoring databases or starting containers.
 python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
+qa_silo_require_bundle
 
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 

@@ -195,6 +195,18 @@ def main():
             run(['gh', 'attestation', 'verify', 'oci://' + VENDOR, '--repo', 'pgsty/silo',
                  '--format', 'json'], stdout=stream, stderr=subprocess.DEVNULL)
         report['vendor_signature_verified'] = True
+        stage = 'vendor_platform_and_license'
+        spec = importlib.util.spec_from_file_location('silo_vendor', ROOT / 'scripts/qa/verify-silo-supply.py')
+        supplier = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(supplier)
+        report['vendor_registry'] = supplier.registry_evidence()
+        license_bytes = supplier.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/LICENSE')
+        license_sha = hashlib.sha256(license_bytes).hexdigest()
+        if license_sha != '0d96a4ff68ad6d4b6f1f30f713b18d5184912ba8dd389f86aa7710db079abcb0':
+            raise ValueError('vendor license mismatch')
+        (output / 'Silo-LICENSE.txt').write_bytes(license_bytes)
+        report['vendor_license'] = {'source_commit': SERVER_SOURCE, 'spdx': 'AGPL-3.0-or-later',
+                                    'sha256': license_sha, 'scope': 'TECHNICAL_IDENTITY_QA_ONLY'}
         stage = 'build'
         tag = 'pmgm-silo-qa-rebuild:' + report['source_sha'][:12]
         with (output / 'build.log').open('w') as stream:

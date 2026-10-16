@@ -44,6 +44,12 @@ class QaSiloRuntimeTests(unittest.TestCase):
                 spec.loader.exec_module(archive)
                 source_sha = os.environ['QA_VALIDATED_SOURCE_SHA']
                 compose_file = temporary / 'verified-compose.json'
+                initially_absent = False
+                if os.getenv('QA_SILO_REQUIRE_COLD_LOAD') == '1':
+                    report = archive.verify_bundle(os.environ['PMGM_QA_SILO_BUNDLE_DIR'], source_sha)
+                    initially_absent = subprocess.run(['docker', 'image', 'inspect', report['local_image_id']],
+                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30).returncode != 0
+                    self.assertTrue(initially_absent, 'Cold-load test requires this candidate to be absent')
                 archive.prepare(os.environ['PMGM_QA_SILO_BUNDLE_DIR'], source_sha, compose_file)
                 environment['PMGM_QA_SILO_EXPECTED_SOURCE_SHA'] = source_sha
             compose = ['docker', 'compose', '-p', project, '--env-file', str(envfile),
@@ -129,7 +135,8 @@ class QaSiloRuntimeTests(unittest.TestCase):
                     'object_sha256': expected_hash, 'document_iam': 'PASS', 'backup_delete_denied': True,
                     'postgres_and_keycloak_data': 'PASS', 'application_oidc_smoke': 'NOT_RUN_BY_THIS_TEST',
                     'scope': 'NO_INSTITUTIONAL_DEPLOYMENT',
-                    'storage_supply': 'SIGNED_ARCHIVE' if os.getenv('PMGM_QA_SILO_BUNDLE_DIR') else 'VENDOR_IMAGE'}, indent=2) + '\n')
+                    'storage_supply': 'SIGNED_ARCHIVE' if os.getenv('PMGM_QA_SILO_BUNDLE_DIR') else 'VENDOR_IMAGE',
+                    'verified_cold_load': initially_absent if os.getenv('PMGM_QA_SILO_BUNDLE_DIR') else False}, indent=2) + '\n')
             finally:
                 # Only the UUID-named synthetic project created in this test.
                 run(compose + ['down', '--volumes', '--remove-orphans'], check=False, timeout=90)

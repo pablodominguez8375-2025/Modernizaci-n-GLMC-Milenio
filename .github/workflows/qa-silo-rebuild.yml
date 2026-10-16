@@ -1,21 +1,10 @@
 name: QA Silo rebuilt candidate
 on:
-  pull_request:
-    branches: [dev]
-    paths:
-      - '.github/workflows/qa-silo-rebuild.yml'
-      - 'infrastructure/silo/Dockerfile.qa-rebuild'
-      - 'scripts/qa/**'
-      - 'scripts/*srv01*'
-      - 'scripts/check-qa-storage-config.py'
-      - 'scripts/build-qa-installable.sh'
-      - 'infrastructure/docker-compose.srv01.yml'
-      - 'tests/test_qa*silo*'
-      - 'tests/test_silo*'
+  workflow_call:
 permissions:
   contents: read
 concurrency:
-  group: qa-silo-rebuild-${{ github.event.pull_request.number }}
+  group: qa-silo-rebuild-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   rebuild:
@@ -26,11 +15,11 @@ jobs:
       id-token: write
       attestations: write
     env:
-      QA_VALIDATED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+      QA_VALIDATED_SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ env.QA_VALIDATED_SOURCE_SHA }}
           persist-credentials: false
           fetch-depth: 0
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -43,6 +32,10 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p test_silo_rebuild_contract.py -v
           python3 -m unittest discover -s tests -p test_silo_archive_contract.py -v
+          python3 -m unittest discover -s tests -p test_silo_provision_diagnostics.py -v
+          python3 -m unittest discover -s tests -p test_qa_silo_supply.py -v
+          python3 -m unittest discover -s tests -p test_qa_storage_guards.py -v
+          python3 -m unittest discover -s tests -p test_qa_glmdch_silo_candidate.py -v
       - name: Install exact QA Docker/Compose on this ephemeral runner only
         shell: bash
         run: |
@@ -96,18 +89,49 @@ jobs:
               --repo "$GITHUB_REPOSITORY" --bundle "$PROVENANCE_BUNDLE" --format json \
               > "artifacts/silo-rebuild/$subject.verification.json"
           done
+      - name: Verify archive and remove only this candidate before cold load
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/qa/prepare-silo-archive.py --bundle artifacts/silo-rebuild --source-sha "$QA_VALIDATED_SOURCE_SHA"
+          python3 - <<'PYTHON'
+          import json, os, shutil, subprocess, tempfile
+          from pathlib import Path
+          # Real signature negative: valid JSON with changed bytes must fail at gh,
+          # before any image load or Compose output is produced.
+          with tempfile.TemporaryDirectory(prefix='qa-silo-tamper-') as temporary:
+              changed = Path(temporary) / 'evidence'
+              shutil.copytree('artifacts/silo-rebuild', changed)
+              report_path = changed / 'rebuild-report.json'
+              report_path.write_text(report_path.read_text() + '\n')
+              model = Path(temporary) / 'forbidden-compose.json'
+              rejected = subprocess.run(['python3', 'scripts/qa/prepare-silo-archive.py', '--bundle', str(changed),
+                  '--source-sha', os.environ['QA_VALIDATED_SOURCE_SHA'], '--compose-output', str(model)],
+                  capture_output=True, text=True, timeout=90)
+              diagnostic = json.loads(rejected.stdout)
+              if rejected.returncode == 0 or diagnostic.get('error_type') != 'CalledProcessError' or model.exists():
+                  raise SystemExit('Tampered signature was not rejected before Compose preparation')
+          report = json.loads(Path('artifacts/silo-rebuild/rebuild-report.json').read_text())
+          subprocess.run(['docker', 'image', 'rm', report['local_image_id']], check=True)
+          result = subprocess.run(['docker', 'image', 'inspect', report['local_image_id']],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+          if result.returncode == 0:
+              raise SystemExit('Candidate still present: cold-load proof unavailable')
+          PYTHON
       - name: Exercise signed archive through actual QA Compose, backup and restore
         env:
           GH_TOKEN: ${{ github.token }}
           QA_SILO_RUNTIME_REQUIRED: '1'
+          QA_SILO_REQUIRE_COLD_LOAD: '1'
           PMGM_QA_SILO_BUNDLE_DIR: ${{ github.workspace }}/artifacts/silo-rebuild
           QA_SILO_EVIDENCE_DIR: artifacts/silo-rebuild
         run: python3 -m unittest discover -s tests -p test_qa_silo_runtime.py -v
       - name: Build same-source QA installable including signed Silo archive
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
-          SOURCE_REF: ${{ github.head_ref }}
+          SOURCE_SHA: ${{ env.QA_VALIDATED_SOURCE_SHA }}
+          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
           QA_SILO_BUNDLE_DIR: ${{ github.workspace }}/artifacts/silo-rebuild
         run: |
           set -euo pipefail
@@ -140,7 +164,7 @@ jobs:
       - name: Preserve QA candidate installable (deployment pending)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: qa-glmdch-signed-storage-${{ github.event.pull_request.head.sha }}
+          name: qa-glmdch-signed-storage-${{ env.QA_VALIDATED_SOURCE_SHA }}
           path: artifacts/qa-installable/
           retention-days: 30
           if-no-files-found: error
@@ -148,7 +172,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: silo-rebuild-review-${{ github.event.pull_request.head.sha }}
+          name: silo-rebuild-review-${{ env.QA_VALIDATED_SOURCE_SHA }}
           path: artifacts/silo-rebuild/
           retention-days: 7
           if-no-files-found: error

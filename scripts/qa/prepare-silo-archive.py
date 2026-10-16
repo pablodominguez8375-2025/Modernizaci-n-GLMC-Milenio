@@ -62,6 +62,14 @@ def verify_bundle(directory, source_sha):
             re.fullmatch(r'sha256:[0-9a-f]{64}', image) is None):
         raise ValueError('candidate gates or source mismatch')
     rebuild = module()
+    registry = report.get('vendor_registry', {})
+    license_info = report.get('vendor_license', {})
+    license_path = directory / 'Silo-LICENSE.txt'
+    if (registry.get('image') != rebuild.VENDOR or registry.get('os') != 'linux' or
+            registry.get('architecture') != 'amd64' or license_info.get('source_commit') != rebuild.SERVER_SOURCE or
+            license_info.get('spdx') != 'AGPL-3.0-or-later' or license_path.is_symlink() or
+            hashlib.sha256(license_path.read_bytes()).hexdigest() != license_info.get('sha256')):
+        raise ValueError('vendor platform or license evidence mismatch')
     for name in ('trivy-raw.json', 'trivy-reviewed.json', 'sbom.cdx.json', 'runtime-binaries-and-rpms.txt'):
         path = directory / name
         if (path.is_symlink() or not path.is_file() or

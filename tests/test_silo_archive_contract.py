@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import tarfile
@@ -42,6 +43,7 @@ def fixture(directory):
                'trivy-raw.json': {'Results': [{'Target': 'synthetic', 'Vulnerabilities': []}]},
                'trivy-reviewed.json': {'Results': [{'Target': 'synthetic', 'Vulnerabilities': []}]},
                'sbom.cdx.json': {'synthetic': True}, 'runtime-binaries-and-rpms.txt': 'synthetic',
+               'Silo-LICENSE.txt': 'synthetic-license-fixture',
                'project-provenance.sigstore.json': {'test-only': True}}
     for name, data in objects.items():
         (directory / name).write_text(json.dumps(data))
@@ -49,6 +51,9 @@ def fixture(directory):
               'status': 'CANDIDATE_VALIDATED_NOT_DEPLOYED', 'scope': 'SYNTHETIC_QA_RUNNER_ONLY',
               'failures': {}, 'blocking_findings': [], 'effective_blocking_findings': [],
               'real_iam_recovery_sdk': {'status': 'PASS'}, 'vendor_signature_verified': True,
+              'vendor_registry': {'image': rebuild.VENDOR, 'os': 'linux', 'architecture': 'amd64'},
+              'vendor_license': {'source_commit': rebuild.SERVER_SOURCE, 'spdx': 'AGPL-3.0-or-later',
+                  'sha256': hashlib.sha256((directory / 'Silo-LICENSE.txt').read_bytes()).hexdigest()},
               'local_image_id': image, 'server_cve_triage': triage,
               'archive_sha256': hashlib.sha256((directory / 'silo-qa-review-only.tar').read_bytes()).hexdigest(),
               'evidence_sha256': {n: hashlib.sha256((directory / n).read_bytes()).hexdigest() for n in (
@@ -58,6 +63,24 @@ def fixture(directory):
 
 
 class SiloArchiveContractTests(unittest.TestCase):
+    def test_missing_bundle_blocks_before_any_docker_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            binary = directory / 'bin'
+            binary.mkdir()
+            marker = directory / 'docker-was-called'
+            docker = binary / 'docker'
+            docker.write_text('#!/bin/sh\ntouch "' + str(marker) + '"\nexit 99\n')
+            docker.chmod(0o700)
+            environment = dict(os.environ, PATH=str(binary) + ':' + os.environ['PATH'])
+            environment.pop('PMGM_QA_SILO_BUNDLE_DIR', None)
+            result = subprocess.run(['bash', '-c', 'ROOT="$1"; source "$2"; qa_silo_prepare; qa_silo_require_bundle', 'qa-test',
+                                     str(directory), str(ROOT / 'scripts/qa/silo-compose.sh')],
+                                    env=environment, capture_output=True, text=True)
+            self.assertNotEqual(0, result.returncode)
+            self.assertIn('Falta storage-bundle firmado', result.stderr)
+            self.assertFalse(marker.exists())
+
     def test_verifier_policy_binds_workflow_merge_and_signed_checkout_separately(self):
         with tempfile.TemporaryDirectory() as tmp, patch.object(archive, 'run') as verify:
             directory = Path(tmp)

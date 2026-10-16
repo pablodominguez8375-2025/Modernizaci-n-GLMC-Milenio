@@ -80,3 +80,29 @@ Pruebas locales: cinco negativas de archivo (firma, SHA, scans, tar, VEX, client
 pull policy) + cinco contrato reconstrucción + trece guards previos PASS. Se corrigió
 además un separador literal \n en smoke que pegaba COMPOSE_FILE a LODGE23, encontrado
 al conectar la selección de almacenamiento. No hubo acceso a glmdch, DNS o firewall.
+
+
+## Adopción del archivo como único suministro operacional permitido
+bcb42c29 corrigió la diferencia de perfiles Compose: --no-interpolate incluye todo,
+config normal omite clientes inactivos. --profile '*' se usa sólo para evaluación,
+nunca para iniciar servicios. Run38944278428 SUCCESS probó Compose real, IAM,
+backup/restore de dos BD+objetos y empaquetó/verificó/firmó ZIP con storage-bundle.
+El intento a2890d29 falló antes de arrancar por cliente oculto; no produjo ese ZIP.
+
+Incremento posterior: qa-silo-validation pasa a delegar en qa-silo-rebuild como
+workflow reutilizable, con los controles del suministro seleccionado y sin doble
+construcción. Se conserva la verificación de manifests/digests/plataforma y licencia
+AGPL del vendor como entrada; se firma ese resultado en el reporte. Firma alterada
+(valid JSON distinto) debe fallar realmente con gh antes de preparar Compose. Se
+elimina sólo la imagen candidata del runner y se exige que esté ausente antes de
+probar docker load del archivo firmado; runtime report indicará verified_cold_load.
+
+Instalador/preflight/backup/restore/smoke exigen bundle verificado tras diagnósticos
+existentes y antes de mutaciones. **Se retira el fallback operacional anterior**:
+sin storage-bundle no se instala ni restaura el perfil vendor. La plantilla base
+se conserva para composición y construcción, no como destino desplegable. El
+instalable ordinario de código sin bundle queda marcado y bloqueado; el candidato
+con almacenamiento es el artefacto qa-glmdch-signed-storage-<SHA>. En push a dev el
+nuevo gate lo genera desde ese SHA; aún no implica publicación Pages ni host.
+Smoke respeta PMGM_QA_COMPOSE_PROJECT. HTTPS/OIDC/BD2, acceso#501 y custodia externa
+siguen pendientes; main y glmdch intactos. Resultados de este incremento: pendientes.

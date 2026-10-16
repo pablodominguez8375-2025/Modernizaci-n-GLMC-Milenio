@@ -57,7 +57,9 @@ json_get(){
   curl -fsS --max-time 20 -H "Authorization: Bearer $token" -H 'Accept: application/json' "$PMGM_QA_WEB_PUBLIC_URL$path"
 }
 
-compose=(docker compose -p pmgm-srv01 --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
+qa_silo_require_bundle
+compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 dbs="$("${compose[@]}" exec -T postgres psql -U pmgm_app -d pmgm -Atqc "select datname from pg_database where datname in ('pmgm','pmgm_keycloak') order by datname" 2>/dev/null || true)"
 printf '%s\n' "$dbs" | grep -qx 'pmgm' || { echo "✗ Falta base pmgm" >&2; exit 1; }
 printf '%s\n' "$dbs" | grep -qx 'pmgm_keycloak' || { echo "✗ Falta base pmgm_keycloak" >&2; exit 1; }
