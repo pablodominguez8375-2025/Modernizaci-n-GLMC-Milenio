@@ -9,7 +9,7 @@ Estado: preparado en PR #501 hacia `dev`, asociado a #97. Sin aprovisionamiento 
 - `scripts/qa/check-qa.sh` y `validate-report.py`: conexión estricta y validación cerrada de identidad/esquema/hash. La salida cruda y stderr SSH no se publican. Archivos SSH temporales modo privado, limpieza con trap incluso ante error. Un fallo de runner puede impedir el trap: usar exclusivamente runners efímeros.
 - `qa-readonly-tests.yml`: pruebas sintéticas de PR sin Environment ni secretos; no altera `ci.yml`, reservado por #479.
 
-El resumen separa comprobación PASS/FAIL de QA NO_VERIFICADO y firewall NO_VERIFICADO_REQUIERE_OPERADOR. SSH exitoso no acredita preparación, instalación, smoke ni aceptación QA. Ausencia de Docker observada en inventario previo sigue pendiente; revisar el mapa de paquetes/servicios del informe sin confundirlo con disponibilidad de un daemon.
+El resumen separa comprobación PASS/FAIL de QA NO_VERIFICADO y firewall NO_VERIFICADO_REQUIERE_OPERADOR. SSH exitoso no acredita preparación, instalación, smoke ni aceptación QA. El operador aportó evidencia de Docker 29.9.1, Docker Compose 5.6.0 y servicios docker/containerd activos en glmdch (15-10). Esa evidencia no acredita despliegue de la aplicación, compatibilidad del instalable ni QA/UAT. La inspección sigue requiriendo validación independiente.
 
 ## Configuración futura — requiere aprobación aparte; no ejecutada
 
@@ -52,6 +52,10 @@ bash -n scripts/qa/check-qa.sh
 python3 -m unittest discover -s tests -p test_qa_readonly.py -v
 ```
 
-Ocho pruebas cubren contrato válido, comandos prohibidos/argumentos/SFTP/SCP/PTY, identidad/hash, campos inesperados, estados falsos, tamaño/JSON inválido, sanitización y rechazo de host malformado antes de SSH y limpieza/supresión de salida ante fallo SSH simulado. `actionlint` no está instalado en la estación: pendiente su ejecución por revisor/CI equipado. No se certifica configuración SSH real ni primera ejecución Actions.
+Nueve pruebas cubren contrato válido, comandos prohibidos/argumentos/SFTP/SCP/PTY, identidad/hash, campos inesperados, estados falsos, tamaño/JSON inválido, sanitización, clasificación loopback IPv4 127/8 e IPv6 ::1, direcciones desconocidas como specific y rechazo de host malformado antes de SSH y limpieza/supresión de salida ante fallo SSH simulado. `actionlint` no está instalado en la estación: pendiente su ejecución por revisor/CI equipado. No se certifica configuración SSH real ni primera ejecución Actions.
 
 Fuentes: [workflow_dispatch y sintaxis GitHub](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#onworkflow_dispatch), [protecciones de Environments](https://docs.github.com/en/actions/how-tos/deploy/configure-and-manage-deployments/manage-environments), [authorized_keys restrict/command](https://man.openbsd.org/sshd.8). Los SHA de checkout v4.2.2 y upload-artifact v4.6.2 fueron contrastados con los refs oficiales al preparar esta entrega.
+
+## Revisión seguridad P2 — 15-10-2026
+
+Corregida clasificación de listeners: 127.0.0.0/8 (incluidos 127.0.0.53 y .54 de systemd-resolved) se informa `loopback`, igual que `::1`; wildcard tiene prioridad y las direcciones desconocidas se clasifican conservadoramente como `specific`. Se agregaron tests sintéticos. Cambiar el helper altera su SHA-256: el hash remoto deberá corresponder exactamente al commit revisado si el Sponsor aprueba su futura instalación. No habilitar SSH/QA por estos tests ni dar por exitosos los gates sin consulta exact-head.
