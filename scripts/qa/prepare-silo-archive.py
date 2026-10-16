@@ -131,6 +131,10 @@ def prepare(directory, source_sha, output):
     rendered = run(['docker', 'compose', '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml'),
                     '--profile', '*', 'config', '--no-interpolate', '--format', 'json'], text=True)
     model = json.loads(rendered.stdout)
+    spec = importlib.util.spec_from_file_location('qa_ingress', ROOT / 'scripts/qa/public-ingress.py')
+    ingress = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ingress)
+    model = ingress.configure(model)
     for name in SERVICES:
         service = model['services'][name]
         service['image'] = image

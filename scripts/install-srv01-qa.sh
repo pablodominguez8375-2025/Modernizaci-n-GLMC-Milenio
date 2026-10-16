@@ -69,8 +69,20 @@ qa_silo_require_bundle
 
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
+# --import-realm skips existing realms: never expose a historical realm by accident.
+# This first HTTPS increment supports EMPTY QA volumes only. Existing data needs a
+# separately reviewed realm/BD migration, not an implicit overwrite or volume deletion.
+if [ "${PMGM_QA_HTTPS:-false}" = true ]; then
+  qa_volume="${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}_pmgm_srv01_postgres_data"
+  if docker volume inspect "$qa_volume" >/dev/null 2>&1; then
+    echo 'HTTPS QA bloqueado: volumen existente requiere migración revisada del realm/BD.' >&2
+    exit 1
+  fi
+fi
+
 echo "Descargando imágenes base..."
 "${compose[@]}" pull postgres clamav keycloak
+if [ "${PMGM_QA_HTTPS:-false}" = true ]; then "${compose[@]}" pull gateway; fi
 
 echo "Construyendo API y frontend..."
 "${compose[@]}" build api web
