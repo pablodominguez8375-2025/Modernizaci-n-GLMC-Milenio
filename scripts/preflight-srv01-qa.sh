@@ -48,7 +48,7 @@ if [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 
-  required=(PMGM_QA_WEB_PUBLIC_URL PMGM_QA_OIDC_PUBLIC_URL PMGM_QA_DB_PASSWORD PMGM_QA_STORAGE_ADMIN_USER PMGM_QA_STORAGE_ADMIN_PASSWORD PMGM_QA_DOCUMENT_ACCESS_KEY PMGM_QA_DOCUMENT_SECRET_KEY PMGM_QA_KEYCLOAK_ADMIN_PASSWORD PMGM_QA_USER_PASSWORD)
+  required=(PMGM_QA_WEB_PUBLIC_URL PMGM_QA_OIDC_PUBLIC_URL PMGM_QA_DB_PASSWORD PMGM_QA_STORAGE_ADMIN_USER PMGM_QA_STORAGE_ADMIN_PASSWORD PMGM_QA_DOCUMENT_ACCESS_KEY PMGM_QA_DOCUMENT_SECRET_KEY PMGM_QA_BACKUP_ACCESS_KEY PMGM_QA_BACKUP_SECRET_KEY PMGM_QA_KEYCLOAK_ADMIN_PASSWORD PMGM_QA_USER_PASSWORD)
   for name in "${required[@]}"; do
     value="${!name:-}"
     [ -n "$value" ] || fail "$name es obligatorio"
@@ -67,6 +67,7 @@ names = [
     "PMGM_QA_DB_PASSWORD",
     "PMGM_QA_STORAGE_ADMIN_PASSWORD",
     "PMGM_QA_DOCUMENT_SECRET_KEY",
+    "PMGM_QA_BACKUP_SECRET_KEY",
     "PMGM_QA_KEYCLOAK_ADMIN_PASSWORD",
     "PMGM_QA_USER_PASSWORD",
 ]
@@ -76,7 +77,7 @@ for name, value in zip(names, values):
         raise SystemExit(f"{name} debe tener al menos 16 caracteres")
 if len(set(values)) != len(values):
     raise SystemExit("Las contraseñas QA deben ser distintas entre sí")
-identities = [os.environ.get(k, "") for k in ("PMGM_QA_STORAGE_ADMIN_USER", "PMGM_QA_DOCUMENT_ACCESS_KEY")]
+identities = [os.environ.get(k, "") for k in ("PMGM_QA_STORAGE_ADMIN_USER", "PMGM_QA_DOCUMENT_ACCESS_KEY", "PMGM_QA_BACKUP_ACCESS_KEY")]
 if len(set(identities)) != len(identities):
     raise SystemExit("La identidad documental no puede ser root/admin")
 if any(identity in values for identity in identities):
