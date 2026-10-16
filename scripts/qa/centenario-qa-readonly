@@ -25,11 +25,14 @@ def command(args):
 
 
 def listener_scope(address):
-    # Keep wildcard distinct: ipaddress does not consider unspecified addresses loopback.
+    # ss prints IPv6 as [addr]%iface and IPv4 as addr%iface. Remove brackets and the
+    # interface suffix first, then keep wildcard distinct: ipaddress does not consider
+    # unspecified addresses loopback.
+    address = address.replace('[', '').replace(']', '').split('%', 1)[0]
     if address in ('*', '0.0.0.0', '::'):
         return 'wildcard'
     try:
-        return 'loopback' if ipaddress.ip_address(address.split('%', 1)[0]).is_loopback else 'specific'
+        return 'loopback' if ipaddress.ip_address(address).is_loopback else 'specific'
     except ValueError:
         # Unknown listener formats never qualify as safely loopback.
         return 'specific'
