@@ -69,6 +69,17 @@ public sealed class CalendarNotificationRecipientPostgreSqlTests
         Assert.False(await CalendarNotificationRecipientGuard.AuthorizeQueueAsync(
             CreateRequest(subject, evt.Id, NotificationCodes.Channel.Email),
             sender, db, calendar, visibility, ct));
+        Assert.False(await CalendarNotificationRecipientGuard.AuthorizeQueueAsync(
+            request with { RecipientEmail = "other@example.invalid" },
+            sender, db, calendar, visibility, ct));
+        Assert.False(await CalendarNotificationRecipientGuard.AuthorizeQueueAsync(
+            request with { SourceEventId = Guid.NewGuid().ToString("D") },
+            sender, db, calendar, visibility, ct));
+        var wrongIssuer = new ClaimsPrincipal(new ClaimsIdentity(
+            [new Claim("iss", "https://untrusted.example.invalid"),
+             new Claim("sub", "qa-sender")], "qa"));
+        Assert.False(await CalendarNotificationRecipientGuard.AuthorizeQueueAsync(
+            request, wrongIssuer, db, calendar, visibility, ct));
 
         evt.Grade = CalendarCodes.Grade.Master;
         await calendar.SaveChangesAsync(ct);
