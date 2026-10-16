@@ -128,7 +128,19 @@ def main():
                 status, headers, _ = request(auth, params | {'redirect_uri': bad})
                 assert status == 400 and '\nlocation:' not in headers, 'unsafe callback accepted'
             without_pkce = {k: v for k, v in params.items() if not k.startswith('code_challenge')}
-            assert request(auth, without_pkce)[0] == 400, 'PKCE challenge not enforced'
+            status, headers, _ = request(auth, without_pkce)
+            # OIDC may reject at the validated callback with error=invalid_request.
+            # A bare 302 is not evidence of rejection: bind origin/path and error, no code.
+            locations = [h.split(':', 1)[1].strip() for h in headers.splitlines() if h.startswith('location:')]
+            denied_redirect = False
+            if status == 302 and len(locations) == 1:
+                location = urllib.parse.urlsplit(locations[0])
+                query = urllib.parse.parse_qs(location.query)
+                denied_redirect = (location.scheme + '://' + location.netloc == ORIGIN and
+                                   location.path == '/auth/callback' and
+                                   query.get('error') == ['invalid_request'] and 'code' not in query)
+            assert status == 400 or denied_redirect, 'PKCE omission not rejected with an OIDC error'
+            evidence['pkce_omission_http_status'] = status
             evidence['checks'].append('PKCE_AUTHORIZATION_PAGE_AND_INVALID_CALLBACKS')
             status, _, _ = request('/identity/realms/pmgm/protocol/openid-connect/logout',
                 {'client_id': 'pmgm-web', 'post_logout_redirect_uri': ORIGIN + '/auth/logout'})
