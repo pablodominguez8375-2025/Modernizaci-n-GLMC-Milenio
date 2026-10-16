@@ -2,6 +2,15 @@
 
 Estado: guía preparada por Claude el 15-10-2026, a pedido del Sponsor / Product Owner (autorización registrada en #97). No instala ni despliega nada: complementa PMGM-QA-001 (despliegue), PMGM-QA-002 (checklist de ambiente) y PMGM-QA-003 (UAT de flujos). El montaje físico y los accesos al servidor los define ChatGPT en #501 con aprobaciones del PO por separado.
 
+## 0. Dirección pública del QA (decisión del PO, 16-10-2026)
+
+El dominio público del ambiente QA es **https://sistema.granlogiamixta.cl/**. Es la única dirección que se entrega a quienes prueban; la demo de Pages sigue siendo aparte y ficticia.
+
+- Configuración: `PMGM_QA_WEB_PUBLIC_URL=https://sistema.granlogiamixta.cl` (alimenta las URL de retorno y los orígenes web de Keycloak en `infrastructure/keycloak/pmgm-realm.json`) y, si se usa el perfil piloto, `PMGM_PILOT_HOSTNAME=sistema.granlogiamixta.cl` y `PMGM_PILOT_PUBLIC_URL=https://sistema.granlogiamixta.cl`.
+- Solo HTTPS con certificado válido; ninguna otra dirección ni IP se registra como URL de retorno.
+- El QA expuesto en Internet usa **solo datos sintéticos** y las cuentas `qa.*`; no se publica sin cerrar los hallazgos de seguridad que aplican (consola de Keycloak, #469; auditoría, #470).
+- El montaje, el DNS y el certificado los ejecuta ChatGPT con aprobación del PO (#97, #501). Esta guía no toca el servidor.
+
 ## 1. Reglas que no cambian
 
 - Solo datos sintéticos. Capturas sin datos personales reales.
