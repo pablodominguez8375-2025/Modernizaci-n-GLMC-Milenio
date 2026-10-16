@@ -1,0 +1,74 @@
+#!/usr/bin/python3 -I
+"""Forced SSH command. Install root-owned only after separate authorization."""
+import datetime
+import hashlib
+import json
+import os
+from pathlib import Path
+import socket
+import subprocess
+import sys
+
+VERSION = 'centenario-qa-readonly-v1'
+SERVICES = ('ssh', 'ufw', 'docker', 'containerd')
+PACKAGES = ('docker-ce', 'docker.io', 'docker-compose-plugin', 'containerd.io', 'podman')
+
+
+def command(args):
+    result = subprocess.run(args, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, timeout=5, check=False,
+                            env={'PATH': '/usr/bin:/bin', 'LC_ALL': 'C'}, text=True)
+    if len(result.stdout) > 65536:
+        raise ValueError('oversize')
+    return result.returncode, result.stdout
+
+
+def collect():
+    if socket.gethostname() != 'glmdch':
+        raise ValueError('host')
+    memory = next(int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()
+                  if line.startswith('MemTotal:'))
+    disk = os.statvfs('/opt')
+    services = {}
+    for name in SERVICES:
+        _, value = command(['/usr/bin/systemctl', 'is-active', name + '.service'])
+        services[name] = value.strip() if value.strip() in ('active', 'inactive', 'failed') else 'unknown'
+    packages = {}
+    for name in PACKAGES:
+        code, value = command(['/usr/bin/dpkg-query', '-W', '-f=${db:Status-Status}', name])
+        packages[name] = code == 0 and value == 'installed'
+    code, value = command(['/usr/bin/ss', '-H', '-lntu'])
+    if code:
+        raise ValueError('listeners')
+    listeners = set()
+    for line in value.splitlines():
+        parts = line.split()
+        address, port = parts[4].rsplit(':', 1)
+        address = address.strip('[]')
+        scope = 'loopback' if address in ('127.0.0.1', '::1') else 'wildcard' if address in ('*', '0.0.0.0', '::') else 'specific'
+        listeners.add((parts[0], int(port), scope))
+    return dict(schema=1, helper_version=VERSION,
+                helper_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                timestamp=datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                hostname='glmdch', cpu_count=os.cpu_count(), mem_total_kib=memory,
+                opt_total_bytes=disk.f_blocks * disk.f_frsize,
+                opt_available_bytes=disk.f_bavail * disk.f_frsize,
+                services=services, packages=packages,
+                listeners=[dict(protocol=p, port=n, scope=s) for p, n, s in sorted(listeners)],
+                firewall='NO_VERIFICADO_REQUIERE_OPERADOR', qa='NO_VERIFICADO')
+
+
+def main():
+    if (len(sys.argv) != 1 or os.environ.get('SSH_ORIGINAL_COMMAND') != VERSION
+            or os.environ.get('SSH_TTY')):
+        return 64
+    try:
+        print(json.dumps(collect(), separators=(',', ':')))
+        return 0
+    except Exception:
+        print('QA inspection failed', file=sys.stderr)
+        return 1
+
+
+if __name__ == '__main__':
+    sys.exit(main())
