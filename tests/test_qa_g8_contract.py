@@ -81,6 +81,11 @@ class QaG8Contracts(unittest.TestCase):
         self.assertEqual("false", COMPOSE.read_text().split("PMGM_QA_G8_ENABLED: ${PMGM_QA_G8_ENABLED:-")[1].split("}")[0])
         self.assertIn('[ "${PMGM_QA_G8_ENABLED:-false}" != true ]', PREFLIGHT.read_text())
         self.assertNotIn("PMGM_QA_USER_PASSWORD=Actual", (ROOT / "infrastructure/srv01.env.example").read_text())
+        self.assertIn("check-g8-identities.sh", (ROOT / "scripts/install-srv01-qa.sh").read_text())
+        checker = (ROOT / "scripts/qa/check-g8-identities.sh").read_text()
+        self.assertIn("core.member_identity_links", checker)
+        self.assertIn("public.user_entity", checker)
+        self.assertIn('[ "$members" = 18 ] && [ "$kc_users" = 19 ]', checker)
 
 
 if __name__ == "__main__":
