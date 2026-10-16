@@ -1,0 +1,45 @@
+name: QA Silo rebuilt candidate
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - '.github/workflows/qa-silo-rebuild.yml'
+      - 'infrastructure/silo/Dockerfile.qa-rebuild'
+      - 'scripts/qa/rebuild-silo-candidate.py'
+      - 'tests/test_silo*'
+permissions:
+  contents: read
+concurrency:
+  group: qa-silo-rebuild-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  rebuild:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      QA_VALIDATED_SOURCE_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: pgsty/mc
+          ref: 0e24a70a0a428de4ae2b7853db3499ba1cb34f37
+          path: artifacts/mcli-source
+          persist-credentials: false
+      - name: Validate rebuild contract offline
+        run: python3 -m unittest discover -s tests -p test_silo_rebuild_contract.py -v
+      - name: Rebuild, scan and exercise real IAM and recovery
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/qa/rebuild-silo-candidate.py --source artifacts/mcli-source --output artifacts/silo-rebuild
+      - name: Preserve candidate evidence (not a deployment release)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: silo-rebuild-review-${{ github.event.pull_request.head.sha }}
+          path: artifacts/silo-rebuild/
+          retention-days: 7
+          if-no-files-found: error

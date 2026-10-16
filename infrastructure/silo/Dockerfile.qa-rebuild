@@ -1,0 +1,42 @@
+# Experimental QA-only rebuild. No registry push or deployment until all gates pass.
+# Preserve the signed vendor server; rebuild its independently versioned client.
+FROM docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62 AS vendor
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS mcli-build
+ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+WORKDIR /source
+COPY --from=mcli_source . .
+RUN test "$(go env GOVERSION)" = go1.27.2 && \
+    go build -mod=readonly -trimpath -buildvcs=false -o /out/mcli . && \
+    go version -m /out/mcli > /out/mcli-buildinfo.txt
+
+FROM registry.access.redhat.com/ubi9/ubi:latest@sha256:206b65b8ee0f04b992818c9a51b29081b14974630d4850bc358097d0c44ea156 AS patched
+COPY --from=vendor / /rootfs/
+# Repositories and package signatures come from the official pinned UBI build image.
+# Final RPM versions/inventory are retained; updated repository contents are not
+# claimed to be bit-for-bit reproducible across future build dates.
+RUN dnf -y --installroot=/rootfs --releasever=9 \
+      --setopt=reposdir=/etc/yum.repos.d --setopt=install_weak_deps=False \
+      upgrade pcre2 pcre2-syntax && \
+    rpm --root /rootfs -qa --qf '%{NAME} %{VERSION}-%{RELEASE} %{ARCH}\n' \
+      | sort > /rootfs/licenses/qa-runtime-rpms.txt && \
+    rm -rf /rootfs/var/cache/dnf /rootfs/var/log/dnf* /rootfs/var/log/hawkey*
+COPY --from=mcli-build /out/mcli /rootfs/usr/bin/mcli
+COPY --from=mcli-build /out/mcli-buildinfo.txt /rootfs/licenses/mcli-buildinfo.txt
+COPY --from=mcli-build /source/LICENSE /source/NOTICE /source/CREDITS /rootfs/licenses/mcli/
+# One final rootfs copy excludes the vulnerable client from historical final layers.
+FROM scratch
+COPY --from=patched /rootfs/ /
+LABEL org.opencontainers.image.title="PMGM Silo synthetic QA rebuild candidate" \
+      org.opencontainers.image.licenses="AGPL-3.0-or-later" \
+      org.opencontainers.image.source="https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio" \
+      org.pmgm.qa.mcli-source="0e24a70a0a428de4ae2b7853db3499ba1cb34f37" \
+      org.pmgm.qa.vendor-image="sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62"
+ENV MINIO_ACCESS_KEY_FILE=access_key MINIO_SECRET_KEY_FILE=secret_key \
+    MINIO_ROOT_USER_FILE=access_key MINIO_ROOT_PASSWORD_FILE=secret_key \
+    MINIO_KMS_SECRET_KEY_FILE=kms_master_key MINIO_CONFIG_ENV_FILE=config.env \
+    HOME=/tmp MC_CONFIG_DIR=/tmp/.mc \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EXPOSE 9000
+VOLUME ["/data"]
+ENTRYPOINT ["/usr/bin/docker-entrypoint.sh"]
+CMD ["silo"]
