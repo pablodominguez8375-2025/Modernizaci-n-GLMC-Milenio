@@ -41,9 +41,15 @@ qa_silo_prepare
 # Validate storage before stopping services, restoring databases or starting containers.
 python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
 qa_silo_require_bundle
+if [ "${PMGM_QA_HTTPS:-false}" = true ] && [ "${PMGM_QA_DB2:-false}" != true ]; then
+  echo 'Restore HTTPS QA bloqueado: BD2 no habilitado' >&2; exit 1
+fi
 
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
+if [ "${PMGM_QA_DB2:-false}" = true ]; then
+  PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/check-qa-db2-roles.sh"
+fi
 running="$("${compose[@]}" ps --status running --services 2>/dev/null || true)"
 resume=()
 for service in web api keycloak; do
@@ -71,9 +77,20 @@ for database in pmgm pmgm_keycloak; do
   tmp="/tmp/${database}-srv01-restore.dump"
   "${compose[@]}" exec -T postgres rm -f "$tmp"
   "${compose[@]}" cp "$BACKUP_DIR/database/${database}.dump" "postgres:$tmp" >/dev/null
-  "${compose[@]}" exec -T postgres pg_restore     --clean --if-exists --no-owner --no-privileges --exit-on-error     -U pmgm_app -d "$database" "$tmp"
+  restore_role=()
+  if [ "${PMGM_QA_DB2:-false}" = true ]; then
+    if [ "$database" = pmgm ]; then restore_role=(--role=pmgm_migrator)
+    else restore_role=(--role=pmgm_keycloak); fi
+  fi
+  "${compose[@]}" exec -T postgres pg_restore --clean --if-exists --no-owner --no-privileges \
+    --exit-on-error "${restore_role[@]}" -U pmgm_app -d "$database" "$tmp"
   "${compose[@]}" exec -T postgres rm -f "$tmp"
 done
+
+if [ "${PMGM_QA_DB2:-false}" = true ]; then
+  "${compose[@]}" run --rm -T --no-deps db-grants
+  PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/check-qa-db2-roles.sh"
+fi
 
 echo "Restaurando objetos Silo sintéticos en bucket vacío..."
 "${compose[@]}" run --rm -T --no-deps \

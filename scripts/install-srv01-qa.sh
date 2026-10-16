@@ -66,12 +66,17 @@ set +a
 source "$ROOT/scripts/qa/silo-compose.sh"
 qa_silo_prepare
 qa_silo_require_bundle
+if [ "${PMGM_QA_HTTPS:-false}" = true ] && [ "${PMGM_QA_DB2:-false}" != true ]; then
+  echo "Ingreso HTTPS QA bloqueado: falta habilitar roles BD2 segregados (#470)." >&2
+  exit 1
+fi
 
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
 # --import-realm skips existing realms; first HTTPS installs need empty volumes.
 source "$ROOT/scripts/qa/public-ingress-guards.sh"
 qa_https_require_empty_volume
+qa_db2_require_empty_volume
 
 echo "Descargando imágenes base..."
 "${compose[@]}" pull postgres clamav keycloak
@@ -94,11 +99,17 @@ done
 
 if ! "${compose[@]}" exec -T postgres psql -U pmgm_app -d pmgm -Atqc "select 1 from pg_database where datname='pmgm_keycloak'" | grep -qx 1; then
   echo "Creando base pmgm_keycloak..."
+  if [ "${PMGM_QA_DB2:-false}" = true ]; then
+    echo "BD2 QA incompleto: bootstrap no creó Keycloak con rol propio." >&2; exit 1
+  fi
   "${compose[@]}" exec -T postgres createdb -U pmgm_app -O pmgm_app pmgm_keycloak
 fi
 
 echo "Levantando QA srv01..."
 "${compose[@]}" up -d
+if [ "${PMGM_QA_DB2:-false}" = true ]; then
+  PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/check-qa-db2-roles.sh"
+fi
 
 if [ "$SKIP_SMOKE" = false ]; then
   PMGM_QA_ENV_FILE="$ENV_FILE" bash "$ROOT/scripts/smoke-srv01-qa.sh"

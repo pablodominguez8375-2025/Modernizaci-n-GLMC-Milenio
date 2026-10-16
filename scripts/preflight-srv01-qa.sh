@@ -48,6 +48,28 @@ if [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 
+  # Fail closed before attempting signed-model generation or any deployment.
+  if [ "${PMGM_QA_HTTPS:-false}" = true ] && [ "${PMGM_QA_DB2:-false}" != true ]; then
+    fail "Ingreso HTTPS QA requiere segregación PostgreSQL G4 BD2"
+  fi
+  if [ "${PMGM_QA_DB2:-false}" = true ]; then
+    python3 - <<'PY'
+import os
+names = (
+    'PMGM_QA_DB_PASSWORD', 'PMGM_QA_KC_DB_PASSWORD',
+    'PMGM_QA_RUNTIME_DB_PASSWORD', 'PMGM_QA_MIGRATOR_DB_PASSWORD',
+    'PMGM_QA_REPORT_DB_PASSWORD', 'PMGM_QA_STORAGE_ADMIN_PASSWORD',
+    'PMGM_QA_DOCUMENT_SECRET_KEY', 'PMGM_QA_BACKUP_SECRET_KEY',
+    'PMGM_QA_KEYCLOAK_ADMIN_PASSWORD', 'PMGM_QA_USER_PASSWORD'
+)
+values = [os.environ.get(k, '') for k in names]
+if any(len(v) < 20 or 'REEMPLAZAR' in v or 'CHANGE-ME' in v.upper() for v in values):
+    raise SystemExit('QA BD2: se requieren 10 contraseñas distintas >=20 caracteres, no placeholders')
+if len(values) != len(set(values)):
+    raise SystemExit('QA BD2: secretos reutilizados')
+PY
+  fi
+
   # Select only a same-source, cryptographically verified local Silo archive when supplied.
   source "$ROOT/scripts/qa/silo-compose.sh"
   qa_silo_prepare

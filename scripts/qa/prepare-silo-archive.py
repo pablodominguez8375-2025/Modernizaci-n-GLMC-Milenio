@@ -128,8 +128,10 @@ def prepare(directory, source_sha, output):
     if binary != report['server_cve_triage']['server_binary_sha256']:
         raise ValueError('loaded server binary mismatch')
     # Render without interpolation: no credentials are written to this temporary model.
-    rendered = run(['docker', 'compose', '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml'),
-                    '--profile', '*', 'config', '--no-interpolate', '--format', 'json'], text=True)
+    command = ['docker', 'compose', '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml')]
+    if os.environ.get('PMGM_QA_DB2', 'false') == 'true':
+        command += ['-f', str(ROOT / 'infrastructure/docker-compose.srv01-db2.yml')]
+    rendered = run(command + ['--profile', '*', 'config', '--no-interpolate', '--format', 'json'], text=True)
     model = json.loads(rendered.stdout)
     spec = importlib.util.spec_from_file_location('qa_ingress', ROOT / 'scripts/qa/public-ingress.py')
     ingress = importlib.util.module_from_spec(spec)
