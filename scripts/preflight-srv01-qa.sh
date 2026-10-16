@@ -64,7 +64,7 @@ if [ -f "$ENV_FILE" ]; then
   python3 - <<'PY'
 import os, ipaddress
 from ipaddress import ip_network
-bind = os.environ.get("PMGM_QA_BIND_ADDRESS", "")
+bind = os.environ.get("PMGM_QA_BIND_ADDRESS", "127.0.0.1")
 try:
     address = ipaddress.ip_address(bind)
 except ValueError:
