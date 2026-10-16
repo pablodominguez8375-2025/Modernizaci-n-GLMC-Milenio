@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { type CalendarApiClient, type CalendarEvent } from './api/calendarApi'
+import { type CalendarApiClient, type CalendarDemoViewer, type CalendarEvent } from './api/calendarApi'
+import type { MembershipApiClient } from './api/membershipApi'
+import { loadMemberIdentity, type MemberIdentity } from './memberIdentity'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { organizationDisplayName } from './displayFormat'
 
 type CalendarMode = 'agenda' | 'month'
 
-export default function CalendarPage({ api, calendarApi, canManage }: { api: PmgmApiClient; calendarApi: CalendarApiClient; canManage: boolean }) {
+export default function CalendarPage({ api, calendarApi, membershipApi, canManage }: { api: PmgmApiClient; calendarApi: CalendarApiClient; membershipApi?: MembershipApiClient; canManage: boolean }) {
   const [mode, setMode] = useState<CalendarMode>('agenda')
   const [anchor, setAnchor] = useState(() => monthStart(new Date()))
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -17,8 +19,17 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
   const [error, setError] = useState<string | null>(null)
   const [operationMessage, setOperationMessage] = useState<string | null>(null)
   const [conflictCount, setConflictCount] = useState<number | null>(null)
+  const [identity, setIdentity] = useState<MemberIdentity | null>(null)
+  const [demoViewer, setDemoViewer] = useState<CalendarDemoViewer>('master')
 
   const window = useMemo(() => calendarWindow(anchor), [anchor])
+
+  useEffect(() => {
+    if (!membershipApi) return
+    let active = true
+    loadMemberIdentity(membershipApi).then(value => { if (active) setIdentity(value) }).catch(() => undefined)
+    return () => { active = false }
+  }, [membershipApi])
 
   useEffect(() => {
     let active = true
@@ -32,12 +43,13 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
     let active = true
     setLoading(true)
     setError(null)
+    if (calendarApi.useMocks) calendarApi.setDemoViewer(demoViewer)
     calendarApi.getCalendar({ fromUtc: window.fromUtc, toUtc: window.toUtc, organizationId: organizationId || undefined })
       .then(response => { if (active) setEvents(response.events) })
       .catch((reason: unknown) => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible cargar el calendario.') })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [calendarApi, organizationId, window.fromUtc, window.toUtc])
+  }, [calendarApi, demoViewer, organizationId, window.fromUtc, window.toUtc])
 
   const filtered = useMemo(() => events.filter(event => {
     const statusMatch = status === '' || (status === 'active' ? event.status !== 'cancelled' : event.status === status)
@@ -79,6 +91,7 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
         <p className="eyebrow">Agenda institucional unificada</p>
         <h1>Agenda</h1>
         <p>Tenidas, ceremonias, docencia y reservas de espacios, con visibilidad controlada por ámbito y permisos.</p>
+        {scopeSummary(calendarApi.useMocks ? demoIdentity(demoViewer) : identity) && <p className="calendar-scope" role="note">{scopeSummary(calendarApi.useMocks ? demoIdentity(demoViewer) : identity)}</p>}
       </div>
       <div className="calendar-heading-actions">
         <div className="segmented" aria-label="Vista de calendario">
@@ -104,6 +117,11 @@ export default function CalendarPage({ api, calendarApi, canManage }: { api: Pmg
       </div>
       {canManage && <div className="calendar-admin-actions"><button type="button" className="secondary-button" onClick={() => void inspectConflicts()}>Revisar conflictos{conflictCount !== null ? ` (${conflictCount})` : ''}</button><button type="button" onClick={() => void reconcile()}>Reconciliar fuentes</button></div>}
     </section>
+    {calendarApi.useMocks && <section className="panel calendar-demo-viewer" aria-label="Demostración: quién mira la agenda">
+      <label><span>Ver la agenda como (solo demostración)</span><select value={demoViewer} onChange={event => setDemoViewer(event.target.value as CalendarDemoViewer)}>
+        <option value="apprentice">Aprendiz (1°) sin cargo</option><option value="fellow_craft">Compañero (2°) sin cargo</option><option value="master">Maestro (3°) sin cargo</option><option value="office">Con cargo vigente en el Taller</option>
+      </select></label>
+    </section>}
     <section className="metric-grid calendar-metrics">
       <Metric label="Eventos visibles" value={String(filtered.length)} detail={monthLabel(anchor)} />
       <Metric label="Confirmados" value={String(confirmedCount)} detail="Incluye reservas y actividades vigentes" />
@@ -150,7 +168,7 @@ function EventCard({ event, organization }: { event: CalendarEvent; organization
   return <article className={event.isMasked ? 'calendar-event-card masked' : 'calendar-event-card'}>
     <div className="event-time"><strong>{allDay ? 'Todo el día' : timeRange(event)}</strong><small>{event.locationDisplay ?? (event.spaceId ? 'Espacio institucional' : 'Sin espacio asignado')}</small></div>
     <div className="event-main"><div className="event-title-row"><div><span className={`event-kind kind-${eventKind(event.eventType)}`}>{eventTypeLabel(event.eventType)}</span><h3>{event.title}</h3></div><span className={`status-pill calendar-status ${statusClass(event.status)}`}>{statusLabel(event.status)}</span></div>
-      {!event.isMasked && <div className="event-meta"><span>{organization ? `${organizationDisplayName(organization.name, organization.number)}` : 'Ámbito institucional'}</span>{event.sourceModule && <span>Fuente: {sourceLabel(event.sourceModule)}</span>}</div>}
+      {!event.isMasked && <div className="event-meta"><span className={`event-grade ${gradeClass(event.grade)}`}>{gradeLabel(event.grade)}</span><span>{organization ? `${organizationDisplayName(organization.name, organization.number)}` : 'Ámbito institucional'}</span>{event.sourceModule && <span>Fuente: {sourceLabel(event.sourceModule)}</span>}</div>}
       {event.isMasked && <p className="privacy-note">Detalle protegido. Sólo se expone la ocupación necesaria para coordinar agenda y espacios.</p>}
     </div>
   </article>
@@ -195,3 +213,15 @@ function statusLabel(status: string) { return status === 'confirmed' ? 'Confirma
 function eventKind(type: string) { return type.includes('ceremony') ? 'ceremony' : type.includes('meeting') ? 'meeting' : type.includes('instruction') ? 'instruction' : type.includes('reservation') ? 'space' : 'other' }
 function eventTypeLabel(type: string) { return type === 'ceremony_day' ? 'Ceremonia' : type === 'ceremony_reservation' ? 'Reserva ceremonia' : type === 'space_reservation' ? 'Reserva espacio' : type === 'lodge_meeting_day' ? 'Tenida' : type === 'lodge_instruction_day' ? 'Docencia' : type === 'occupancy' ? 'Ocupación protegida' : type.replaceAll('_', ' ') }
 function sourceLabel(source: string) { return source === 'grand-secretariat' ? 'Gran Secretaría' : source === 'lodge-management' ? 'Gestión Logial' : source === 'ceremonies' ? 'Ceremonias' : source }
+
+function gradeClass(grade?: string | null) { return grade === 'apprentice' ? 'grade-1' : grade === 'fellow_craft' ? 'grade-2' : grade === 'master' ? 'grade-3' : 'grade-all' }
+/** Etiqueta simple del grado del evento; sin grado = general (lo ve todo hermano del Taller). */
+export function gradeLabel(grade?: string | null) { return grade === 'apprentice' ? 'Aprendices (1°)' : grade === 'fellow_craft' ? 'Compañeros (2°)' : grade === 'master' ? 'Maestros (3°)' : 'General' }
+function demoIdentity(viewer: CalendarDemoViewer): MemberIdentity { return { lodge: null, degree: viewer === 'apprentice' ? 'Aprendiz (1°)' : viewer === 'fellow_craft' ? 'Compañero (2°)' : 'Maestro (3°)', office: viewer === 'office' ? 'Cargo vigente' : null } }
+/** Explica qué agenda ve la persona. El filtro real lo aplica el servidor; esto solo lo describe. */
+export function scopeSummary(identity: MemberIdentity | null): string | null {
+  if (!identity) return null
+  if (identity.office) return 'Mostrando: todos los grados de tu Taller'
+  if (identity.degree) return 'Mostrando: tu grado y los inferiores, más lo general'
+  return null
+}
