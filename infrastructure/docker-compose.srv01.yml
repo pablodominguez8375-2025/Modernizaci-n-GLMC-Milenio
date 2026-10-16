@@ -66,6 +66,8 @@ services:
       mcli admin policy create qa pmgm-qa-documents /policies/documents.json
       mcli admin user add qa "$DOCUMENT_ACCESS_KEY" "$DOCUMENT_SECRET_KEY"
       mcli admin policy attach qa pmgm-qa-documents --user "$DOCUMENT_ACCESS_KEY"
+      mcli admin user add qa "$BACKUP_ACCESS_KEY" "$BACKUP_SECRET_KEY"
+      mcli admin policy attach qa pmgm-qa-documents --user "$BACKUP_ACCESS_KEY"
     networks: [pmgm_srv01_internal]
 
   # On-demand client for synthetic QA backups only; receives NO administrator credentials.
