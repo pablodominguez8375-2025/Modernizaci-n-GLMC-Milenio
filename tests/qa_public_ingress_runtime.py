@@ -127,7 +127,12 @@ def main():
                         ORIGIN + '/unexpected'):
                 status, headers, _ = request(auth, params | {'redirect_uri': bad})
                 assert status == 400 and '\nlocation:' not in headers, 'unsafe callback accepted'
-            evidence['checks'].append('PKCE_LOGIN_AND_INVALID_CALLBACKS')
+            without_pkce = {k: v for k, v in params.items() if not k.startswith('code_challenge')}
+            assert request(auth, without_pkce)[0] == 400, 'PKCE challenge not enforced'
+            evidence['checks'].append('PKCE_AUTHORIZATION_PAGE_AND_INVALID_CALLBACKS')
+            status, _, _ = request('/identity/realms/pmgm/protocol/openid-connect/logout',
+                {'client_id': 'pmgm-web', 'post_logout_redirect_uri': ORIGIN + '/auth/logout'})
+            assert status in (200, 302), 'valid logout redirect rejected'
             for bad in ('http://localhost:8081/auth/logout', 'https://evil.invalid/auth/logout'):
                 status, headers, _ = request('/identity/realms/pmgm/protocol/openid-connect/logout',
                     {'client_id': 'pmgm-web', 'post_logout_redirect_uri': bad})
