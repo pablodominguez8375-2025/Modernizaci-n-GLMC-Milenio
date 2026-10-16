@@ -62,7 +62,16 @@ if [ -f "$ENV_FILE" ]; then
   done
 
   python3 - <<'PY'
-import os
+import os, ipaddress
+from ipaddress import ip_network
+bind = os.environ.get("PMGM_QA_BIND_ADDRESS", "")
+try:
+    address = ipaddress.ip_address(bind)
+except ValueError:
+    raise SystemExit("QA requiere IP concreta de enlace privado")
+private_ranges = [ip_network(v) for v in ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")]
+if not (address.is_loopback or any(address in n for n in private_ranges)):
+    raise SystemExit("QA HTTP debe enlazar loopback o IPv4 privada RFC1918, no wildcard ni IP pública")
 names = [
     "PMGM_QA_DB_PASSWORD",
     "PMGM_QA_STORAGE_ADMIN_PASSWORD",
