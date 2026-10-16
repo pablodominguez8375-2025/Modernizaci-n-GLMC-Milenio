@@ -16,7 +16,7 @@ El instalador existente `INSTALAR.sh` selecciona el modelo público sólo despu�
 
 Keycloak usa `start`, proxy `xforwarded`, hostname estricto y `/identity`. La API obtiene metadata por red Docker, la SPA exige HTTPS y PKCE S256. El realm público deriva del realm QA vigente, preserva usuarios/roles y sólo admite callback `/auth/callback`, logout `/auth/logout` y webOrigin del dominio canónico; no localhost/IP/HTTP. Regeneración reproducible: `python3 scripts/qa/public-ingress.py`; tests bloquean deriva.
 
-**Sólo volúmenes PostgreSQL vacíos en esta fase.** Keycloak omite imports de realms existentes: el instalador rechaza el volumen previo antes de pull/build/up. No borrar volúmenes para sortearlo. La migración de un QA existente, cambios de issuer y recuperación de sus identidades requieren entrega revisada; el perfil no la inventa ni la ejecuta. Backup/smoke pueden reconstruir el modelo ya instalado sin reimportar ni modificar roles.
+**Sólo volúmenes PostgreSQL vacíos en esta fase.** Keycloak omite imports de realms existentes: el instalador rechaza el volumen previo antes de pull/build/up. No borrar volúmenes para sortearlo. La migración de un QA existente, cambios de issuer y recuperación de sus identidades requieren entrega revisada; el perfil no la inventa ni la ejecuta. Backup/smoke pueden reconstruir el modelo ya instalado sin reimportar ni modificar roles. Restore público exige `--data-only`: detiene la aplicación y no la reabre automáticamente. Antes de reabrir se debe revisar el realm restaurado; la recuperación pública completa y rollback permanecen pendientes. El perfil privado conserva su flujo previo.
 
 ## Evidencia automatizada
 

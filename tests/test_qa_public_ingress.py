@@ -3,6 +3,9 @@ import importlib.util
 import json
 from pathlib import Path
 import unittest
+import os
+import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('ingress', ROOT / 'scripts/qa/public-ingress.py')
@@ -67,3 +70,26 @@ class PublicIngressTests(unittest.TestCase):
         self.assertEqual([ingress.ORIGIN], client['webOrigins'])
         self.assertEqual(ingress.ORIGIN + '/auth/logout', client['attributes']['post.logout.redirect.uris'])
         self.assertNotIn('localhost', json.dumps(client))
+
+
+class PublicIngressLifecycleTests(unittest.TestCase):
+    def test_first_install_guard_checks_real_volume_and_errors_fail_closed(self):
+        guard = ROOT / 'scripts/qa/public-ingress-guards.sh'
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / 'docker'
+            binary.write_text('#!/bin/sh\n[ "$1 $2" = "volume ls" ] || exit 99\n[ "$MODE" != error ] || exit 1\n[ "$MODE" != existing ] || echo pmgm-srv01_pmgm_srv01_postgres_data\n')
+            binary.chmod(0o755)
+            for mode, expected in [('empty', 0), ('existing', 1), ('error', 1)]:
+                env = os.environ | {'PATH': directory + ':' + os.environ['PATH'],
+                                   'PMGM_QA_HTTPS': 'true', 'MODE': mode}
+                result = subprocess.run(['bash', '-c', 'source "$1"; qa_https_require_empty_volume',
+                                         'guard', str(guard)], env=env, capture_output=True)
+                self.assertEqual(expected, result.returncode, mode)
+
+    def test_public_restore_requires_data_only_but_private_restore_unchanged(self):
+        guard = ROOT / 'scripts/qa/public-ingress-guards.sh'
+        for public, data, expected in [('true', 'false', 1), ('true', 'true', 0), ('false', 'false', 0)]:
+            result = subprocess.run(['bash', '-c', 'source "$1"; qa_https_require_data_only_restore',
+                                     'guard', str(guard)], capture_output=True,
+                                    env=os.environ | {'PMGM_QA_HTTPS': public, 'DATA_ONLY': data})
+            self.assertEqual(expected, result.returncode)

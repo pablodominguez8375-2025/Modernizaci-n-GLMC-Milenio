@@ -30,6 +30,9 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+# Do not automatically republish a historical realm restored from a backup.
+source "$ROOT/scripts/qa/public-ingress-guards.sh"
+qa_https_require_data_only_restore
 
 # Select only a same-source, cryptographically verified local Silo archive when supplied.
 source "$ROOT/scripts/qa/silo-compose.sh"
