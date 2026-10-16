@@ -102,7 +102,7 @@ services:
     volumes:
       - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
     ports:
-      - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_OIDC_PORT:-8180}:8080"
+      - "${PMGM_QA_BIND_ADDRESS:-127.0.0.1}:${PMGM_QA_OIDC_PORT:-8180}:8080"
     networks: [pmgm_srv01_internal]
 
   api:
@@ -165,7 +165,7 @@ services:
     restart: unless-stopped
     depends_on: [api, keycloak]
     ports:
-      - "${PMGM_QA_BIND_ADDRESS:-0.0.0.0}:${PMGM_QA_WEB_PORT:-8081}:80"
+      - "${PMGM_QA_BIND_ADDRESS:-127.0.0.1}:${PMGM_QA_WEB_PORT:-8081}:80"
     networks: [pmgm_srv01_internal]
 
 networks:
