@@ -8,6 +8,7 @@ on:
       - 'scripts/qa/**'
       - 'scripts/*srv01*'
       - 'tests/test_qa*silo*'
+      - 'tests/test_silo*'
       - '.github/workflows/qa-silo-validation.yml'
 permissions:
   contents: read
@@ -25,6 +26,8 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
+      - name: Verify provisioning diagnostics never disclose credentials
+        run: python3 -m unittest discover -s tests -p test_silo_provision_diagnostics.py -v
       - name: Verify negative supply checks offline
         run: python3 -m unittest discover -s tests -p test_qa_silo_supply.py -v
       - name: Install exact QA Docker/Compose on this ephemeral runner only

@@ -45,6 +45,90 @@ def _start(container, network, root, password):
     raise AssertionError("La instancia Silo efímera no inicia a tiempo.")
 
 
+
+# Diagnostics are deliberately projections, never redacted raw provider output.
+# Unknown values must collapse to a constant rather than becoming log content.
+def _failure_category(result):
+    if result is None:
+        return "timeout-or-exec-unavailable"
+    error = ((result.stderr or "") + "\n" + (result.stdout or "")).lower()
+    for needle, label in (
+        ("connection refused", "transport-refused"),
+        ("connection reset", "transport-reset"),
+        ("no such host", "dns-resolution"),
+        ("temporary failure in name resolution", "dns-resolution"),
+        ("not initialized", "not-initialized"),
+        ("not ready", "not-ready"),
+        ("context deadline exceeded", "timeout"),
+        ("timed out", "timeout"),
+        ("access denied", "access-denied"),
+        ("invalid credentials", "invalid-credentials"),
+        ("permission denied", "permission-denied"),
+        ("already exists", "already-exists"),
+        ("error response from daemon", "docker-daemon"),
+        ("no space left on device", "disk-exhausted"),
+        ("out of memory", "memory-exhausted"),
+        ("unknown command", "cli-version"),
+    ):
+        if needle in error:
+            return label
+    return "other"
+
+
+def _safe_exit(result):
+    code = getattr(result, "returncode", None)
+    return code if type(code) is int and -255 <= code <= 255 else None
+
+
+def _mcli_error_code(result):
+    # --json output differs between CLI versions. Never emit a value supplied
+    # by the provider unless it is one of these known protocol codes.
+    allowed = {"AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch",
+               "ServerNotInitialized", "ServiceUnavailable", "InternalError",
+               "RequestTimeTooSkewed", "BucketAlreadyOwnedByYou",
+               "BucketAlreadyExists", "XMinioAdminNoSuchUser"}
+    if result is not None:
+        for line in (result.stdout or "").splitlines():
+            try:
+                entry = json.loads(line)
+                code = entry["error"]["cause"]["error"]["Code"]
+                if type(code) is str and code in allowed:
+                    return code
+            except (ValueError, KeyError, TypeError):
+                pass
+    return "unclassified"
+
+
+def _provision_snapshot(container):
+    # State-only inspection avoids Config.Env, command arguments and logs.
+    state_result = run(["docker", "inspect", "--format", "{{json .State}}",
+                        container], timeout=7, check=False)
+    snapshot = {"container_state": "unknown", "oom_killed": None,
+                "container_exit": None}
+    if state_result is not None and state_result.returncode == 0:
+        try:
+            state = json.loads(state_result.stdout)
+            if isinstance(state, dict):
+                status = state.get("Status")
+                if type(status) is str and status in {
+                    "created", "running", "paused", "restarting", "removing", "exited", "dead"
+                }:
+                    snapshot["container_state"] = status
+                oom = state.get("OOMKilled")
+                if type(oom) is bool:
+                    snapshot["oom_killed"] = oom
+                code = state.get("ExitCode")
+                if type(code) is int and -255 <= code <= 255:
+                    snapshot["container_exit"] = code
+        except (ValueError, TypeError):
+            pass
+    health = run(["docker", "exec", container, "silo", "healthcheck", "ready"],
+                 timeout=7, check=False)
+    snapshot["ready"] = health is not None and health.returncode == 0
+    snapshot["health_exit"] = _safe_exit(health)
+    return snapshot
+
+
 def _provision(container, policy, admin, admin_password, app, app_password):
     # Silo's readiness probe may pass a few seconds before the admin API is
     # able to serve mcli requests on loaded GitHub runners. Retry ONLY the
@@ -52,49 +136,35 @@ def _provision(container, policy, admin, admin_password, app, app_password):
     # fail if none succeeds. Real IAM positive/negative checks stay mandatory.
     def cli(step, *args):
         last_result = None
+        history = []
         for attempt in range(6):
+            started = time.monotonic()
             last_result = run(
-                ["docker", "exec", container, "mcli", *args],
+                ["docker", "exec", container, "mcli", "--json", *args],
                 timeout=45, check=False
             )
+            elapsed_ms = round((time.monotonic() - started) * 1000)
             if last_result is not None and last_result.returncode == 0:
+                if history:
+                    print(json.dumps({"event": "silo-provision-recovered",
+                                      "step": step, "attempt": attempt + 1}), flush=True)
                 return
+            diagnostic = {
+                "event": "silo-provision-failure", "step": step,
+                "attempt": attempt + 1, "exit": _safe_exit(last_result),
+                "elapsed_ms": elapsed_ms,
+                "category": _failure_category(last_result),
+                "mcli_code": _mcli_error_code(last_result),
+                **_provision_snapshot(container),
+            }
+            history.append(diagnostic)
+            print(json.dumps(diagnostic, sort_keys=True), flush=True)
             if attempt < 5:
                 time.sleep(2)
-
-        # Never include CLI args/raw stdout/stderr: they can contain credentials.
-        # Emit only a tightly allowlisted failure category and return code.
-        error = (
-            (last_result.stderr or "") + "\n" + (last_result.stdout or "")
-            if last_result is not None else ""
-        ).lower()
-        reason = "other"
-        for needle, label in (
-            ("connection refused", "transport-refused"),
-            ("connection reset", "transport-reset"),
-            ("not initialized", "not-initialized"),
-            ("not ready", "not-ready"),
-            ("context deadline exceeded", "timeout"),
-            ("timed out", "timeout"),
-            ("access denied", "access-denied"),
-            ("invalid credentials", "invalid-credentials"),
-            ("permission denied", "permission-denied"),
-            ("already exists", "already-exists"),
-            ("error response from daemon", "docker-daemon"),
-            ("no space left on device", "disk-exhausted"),
-            ("out of memory", "memory-exhausted"),
-            ("killed", "process-killed"),
-            ("unknown command", "cli-version"),
-            ("failed to connect", "transport-failed"),
-            ("lookup", "dns-resolution"),
-        ):
-            if needle in error:
-                reason = label
-                break
-        exit_code = last_result.returncode if last_result is not None else "timeout"
+        # Only allowlisted values; no exception/args/provider text interpolation.
         raise AssertionError(
-            f"Silo provisioning failed (six attempts): {step}; "
-            f"exit={exit_code}; category={reason}"
+            "Silo provisioning failed (six attempts): " +
+            json.dumps({"step": step, "attempts": history}, sort_keys=True)
         )
 
     # Alias is local to the disposable Silo container, not a host config.

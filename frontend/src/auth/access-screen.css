@@ -1,0 +1,86 @@
+/* Pantalla de ingreso corporativa — GLMCh. Una columna en celular; dos paneles desde 860 px. */
+.access-shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  background: var(--brand-canvas, #F5F8FF);
+  color: var(--brand-ink, #17223B);
+  font-family: var(--font-ui, Cambria, Georgia, serif);
+}
+.access-brand {
+  position: relative;
+  display: grid;
+  gap: 16px;
+  align-content: center;
+  padding: 24px 16px 28px;
+  color: #fff;
+  background: linear-gradient(160deg, var(--brand-navy, #06148E) 0%, #0a2bb8 100%);
+  border-bottom: 4px solid var(--brand-gold, #F3C609);
+}
+.access-logo {
+  width: fit-content;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 22%);
+}
+.access-logo img { display: block; height: 56px; width: auto; max-width: 100%; }
+.access-brand-text { display: grid; gap: 4px; }
+.access-kicker { margin: 0; color: var(--brand-gold, #F3C609); font-size: 0.95rem; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+.access-brand h2 { margin: 0; font-family: var(--font-display, Cambria, Georgia, serif); font-size: 1.9rem; line-height: 1.15; color: #fff; }
+.access-tagline { margin: 0; color: var(--brand-blue-light, #B4D0F4); font-size: 1.05rem; }
+.access-points { display: none; margin: 0; padding: 0; list-style: none; gap: 10px; }
+.access-points li { position: relative; padding-left: 22px; font-size: 1.05rem; line-height: 1.35; }
+.access-points li::before { content: ''; position: absolute; left: 0; top: 0.5em; width: 10px; height: 10px; border-radius: 50%; background: var(--brand-gold, #F3C609); }
+
+.access-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  align-self: start;
+  width: min(calc(100% - 32px), 460px);
+  margin: -14px auto 24px;
+  padding: 24px 20px;
+  border: 1px solid var(--brand-line, #D8E1F4);
+  border-top: 4px solid var(--brand-gold, #F3C609);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(6 20 142 / 12%);
+  box-sizing: border-box;
+}
+.access-eyebrow { margin: 0; color: var(--brand-muted, #586680); font-size: 0.95rem; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.access-card h1 { margin: 0; font-family: var(--font-display, Cambria, Georgia, serif); font-size: 2rem; color: var(--brand-navy, #06148E); }
+.access-message { margin: 0; padding: 12px 14px; border-radius: 10px; background: var(--brand-canvas, #F5F8FF); border: 1px solid var(--brand-line, #D8E1F4); font-size: 1.05rem; line-height: 1.4; overflow-wrap: anywhere; }
+.access-message.error { background: #fdf0f1; border-color: #e2b7bc; color: var(--brand-danger, #a13b45); font-weight: 700; }
+.access-button {
+  min-height: 52px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--brand-gold, #F3C609), var(--brand-gold-strong, #FBAE17));
+  color: var(--brand-navy, #06148E);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgb(251 174 23 / 35%);
+}
+.access-button:hover:not(:disabled) { filter: brightness(1.04); }
+.access-button:focus-visible { outline: 3px solid var(--brand-blue, #004AD4); outline-offset: 3px; }
+.access-button:disabled { cursor: progress; opacity: 0.75; box-shadow: none; }
+.access-help a { color: var(--brand-blue, #004AD4); font-weight: 700; overflow-wrap: anywhere; }
+.access-help a:focus-visible { outline: 3px solid var(--brand-blue, #004AD4); outline-offset: 2px; }
+.access-help { margin: 0; color: var(--brand-ink, #17223B); font-size: 1rem; line-height: 1.4; }
+.access-legal { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--brand-line, #D8E1F4); color: var(--brand-muted, #586680); font-size: 0.9rem; line-height: 1.4; }
+
+@media (min-width: 860px) {
+  .access-shell { grid-template-columns: minmax(340px, 5fr) minmax(420px, 6fr); grid-template-rows: 1fr; }
+  .access-brand { padding: 48px clamp(32px, 5vw, 72px); border-bottom: 0; border-right: 4px solid var(--brand-gold, #F3C609); gap: 28px; }
+  .access-logo img { height: 72px; }
+  .access-brand h2 { font-size: 2.6rem; }
+  .access-points { display: grid; }
+  .access-card { margin: auto; align-self: center; padding: 32px 30px; }
+}
+@media (prefers-reduced-motion: reduce) { .access-button { transition: none; } }

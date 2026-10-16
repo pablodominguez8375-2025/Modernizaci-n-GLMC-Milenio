@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 import App from '../App'
 import { LodgeCouncilApiProvider } from '../LodgeCouncilApiContext'
 import { createDefaultBootstrapApiClient } from '../api/bootstrapApi'
@@ -15,6 +15,7 @@ import { createDefaultNotificationApiClient } from '../api/notificationApi'
 import { createDefaultOrganizationProfileApiClient } from '../api/organizationProfileApi'
 import { createDefaultPmgmApiClient } from '../api/pmgmApi'
 import { createDefaultReportingApiClient } from '../api/reportingApi'
+import AccessScreen from './AccessScreen'
 import { readAuthConfig } from './config'
 import { createUserManager, OidcSession } from './session'
 
@@ -54,8 +55,8 @@ function RuntimeApp({ onLogout }: { onLogout?: () => void }) {
 }
 
 export default function AuthRoot() {
-  if (!runtimeReady()) return <AccessScreen message={runtime.error} />
-  if (!runtime.session) return <RuntimeApp />
+  if (!runtimeReady()) return <AccessScreen tone="error" message={runtime.error} />
+  if (!runtime.session) return <DemoRoot />
   return <AuthenticatedApp session={runtime.session} />
 }
 
@@ -65,9 +66,24 @@ function AuthenticatedApp({ session }: { session: OidcSession }) {
   if (state.status === 'authenticated' && runtimeReady()) {
     return <RuntimeApp onLogout={() => { void session.logout() }} />
   }
-  return <AccessScreen message={state.message ?? (state.status === 'loading' ? 'Preparando acceso…' : 'Ingrese con su cuenta institucional.')} onLogin={state.status === 'loading' ? undefined : () => { void session.login() }} />
+  return <AccessScreen tone={state.status === 'error' ? 'error' : 'info'} message={state.message ?? (state.status === 'loading' ? 'Preparando acceso…' : 'Ingrese con su cuenta institucional.')} onLogin={state.status === 'loading' ? undefined : () => { void session.login() }} />
 }
 
-function AccessScreen({ message, onLogin }: { message: string; onLogin?: () => void }) {
-  return <main className="content"><section className="panel"><h1>Proyecto Centenario</h1><p role="status">{message}</p>{onLogin && <button type="button" onClick={onLogin}>Ingresar</button>}</section></main>
+
+/**
+ * Demo pública (sin sesión): muestra la aplicación. Solo para revisión de QA, la pantalla de ingreso se ve en
+ * `#acceso`, `#acceso-cargando` y `#acceso-error`; nunca existe en el sistema real (allí manda la sesión).
+ */
+function DemoRoot() {
+  const [hash, setHash] = useState(window.location.hash)
+  useEffect(() => {
+    const onChange = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onChange)
+    return () => window.removeEventListener('hashchange', onChange)
+  }, [])
+  const enter = () => { window.location.hash = '' }
+  if (hash === '#acceso') return <AccessScreen message="Ingrese con su cuenta institucional." onLogin={enter} />
+  if (hash === '#acceso-cargando') return <AccessScreen message="Preparando acceso…" />
+  if (hash === '#acceso-error') return <AccessScreen tone="error" message="No se pudo completar el ingreso. Intente nuevamente." onLogin={enter} loginLabel="Intentar de nuevo" />
+  return <RuntimeApp />
 }
