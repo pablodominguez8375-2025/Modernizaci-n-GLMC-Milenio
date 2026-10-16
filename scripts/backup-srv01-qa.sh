@@ -23,6 +23,10 @@ set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+
+# Select only a same-source, cryptographically verified local Silo archive when supplied.
+source "$ROOT/scripts/qa/silo-compose.sh"
+qa_silo_prepare
 python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
 compose=(docker compose -p "${PMGM_QA_COMPOSE_PROJECT:-pmgm-srv01}" --env-file "$ENV_FILE" -f "$COMPOSE_FILE")
 
@@ -44,7 +48,7 @@ done
 restart_runtime(){
   if [ "${#resume[@]}" -gt 0 ]; then "${compose[@]}" up -d "${resume[@]}" >/dev/null || true; fi
 }
-trap restart_runtime EXIT
+trap 'restart_runtime; qa_silo_cleanup' EXIT
 
 umask 077
 mkdir -p "$OUTPUT/database" "$OUTPUT/objects/pmgm-documents"

@@ -49,3 +49,34 @@ El VEX lo emite ingeniería del Proyecto Centenario y NO se presenta como docume
 Workflow añade permiso OIDC+attestations:write sólo para vincular tar, declaración, evidencia y reporte mediante acción GitHub attest-build-provenance v3 fijada a977bb373ede98d70efdf65b84cb5f73e068dcc2a. Verifica cada subject con el bundle generado, conserva bundle/resultados. No packages:write, push-registry, secretos institucionales ni main. Nuevo build/escaneo/revisión/pruebas/procedencia deben pasar en el mismo SHA antes de adoptar; el Compose sigue con digest antiguo y NO se considera corregido aún. Publicación/adopción controlada de la imagen, ingreso HTTPS/OIDC/BD2 y acceso glmdch siguen pendientes.
 
 Fuentes primarias del formato/consumo: https://github.com/openvex/spec/blob/main/OPENVEX-SPEC.md y https://github.com/aquasecurity/trivy/blob/v0.76.0/pkg/vex/openvex.go (acepta estados fixed/not_affected); no se depende de supresión automática de VEX externo no verificado.
+
+
+## Continuación — archivo firmado incorporado al instalable candidato
+Se reconcilia dev@fbf39788 sin tocar main ni las reservas piloto. Nuevo preparador
+`prepare-silo-archive.py`: verifica criptográficamente cuatro subjects con GitHub CLI,
+workflow permitido, runner hospedado y digest del workflow. En PR, el certificado
+liga el SHA de merge del workflow; el reporte firmado liga por separado el checkout
+HEAD probado. No confundir ambos SHA ni usar verification.json como autoridad.
+El reporte firmado incluye hashes de scans/SBOM/inventario. Rechaza fuente distinta,
+gates incompletos, VEX ajeno, tar/config/plataforma/binario distintos o evidencia
+alterada. Carga imagen sólo tras verificación y genera Compose privado temporal,
+con ID sha256 de config y pull_policy=never para servidor y ambos clientes.
+
+El instalador, preflight, backup/restore y smoke usan ese modelo cuando hay
+`storage-bundle` en el paquete o PMGM_QA_SILO_BUNDLE_DIR explícito. El preparador
+puede cargar la imagen y ejecutar sha256sum en contenedor aislado sin red; no inicia
+servicios. Requiere gh con soporte attestation y sus raíces de confianza accesibles;
+no necesita contraseña de registry. Sin bundle sigue el perfil anterior, todavía
+bloqueado por su control de suministro. ID config local no es digest OCI de registry.
+
+El workflow reconstruye en Docker29.9.1/Compose5.6.0, firma, ejecuta el Compose QA
+real con IAM y backup/restore de PostgreSQL×2+objetos, empaqueta código+archivo+firmas
+del mismo SHA, verifica MANIFEST y vuelve a verificar las firmas desde el paquete
+extraído; firma también el ZIP final. Artefacto candidato con retención30d; no lo
+sustituir por el instalable histórico sin bundle. No implica HTTPS/OIDC/BD2/host ni
+aprobación de instalación/UAT. Resultados de este incremento: pendientes de Actions.
+
+Pruebas locales: cinco negativas de archivo (firma, SHA, scans, tar, VEX, cliente/ID/
+pull policy) + cinco contrato reconstrucción + trece guards previos PASS. Se corrigió
+además un separador literal \n en smoke que pegaba COMPOSE_FILE a LODGE23, encontrado
+al conectar la selección de almacenamiento. No hubo acceso a glmdch, DNS o firewall.

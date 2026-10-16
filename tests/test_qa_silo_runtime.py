@@ -1,5 +1,6 @@
 """Real approved QA Compose/provisioning/recovery in an isolated CI project."""
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -36,8 +37,17 @@ class QaSiloRuntimeTests(unittest.TestCase):
             envfile.write_text(''.join(k + '=' + v + '\n' for k, v in values.items()))
             envfile.chmod(0o600)
             environment = dict(os.environ, PMGM_QA_COMPOSE_PROJECT=project)
+            compose_file = ROOT / 'infrastructure/docker-compose.srv01.yml'
+            if os.getenv('PMGM_QA_SILO_BUNDLE_DIR'):
+                spec = importlib.util.spec_from_file_location('qa_silo_archive', ROOT / 'scripts/qa/prepare-silo-archive.py')
+                archive = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(archive)
+                source_sha = os.environ['QA_VALIDATED_SOURCE_SHA']
+                compose_file = temporary / 'verified-compose.json'
+                archive.prepare(os.environ['PMGM_QA_SILO_BUNDLE_DIR'], source_sha, compose_file)
+                environment['PMGM_QA_SILO_EXPECTED_SOURCE_SHA'] = source_sha
             compose = ['docker', 'compose', '-p', project, '--env-file', str(envfile),
-                       '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml')]
+                       '-f', str(compose_file)]
             def run(args, *, check=True, input=None, timeout=180):
                 try:
                     result = subprocess.run(args, capture_output=True, text=True, input=input,
@@ -115,7 +125,8 @@ class QaSiloRuntimeTests(unittest.TestCase):
                     'compose': run(['docker', 'compose', 'version', '--short']).stdout.strip(),
                     'object_sha256': expected_hash, 'document_iam': 'PASS', 'backup_delete_denied': True,
                     'postgres_and_keycloak_data': 'PASS', 'application_oidc_smoke': 'NOT_RUN_BY_THIS_TEST',
-                    'scope': 'NO_INSTITUTIONAL_DEPLOYMENT'}, indent=2) + '\n')
+                    'scope': 'NO_INSTITUTIONAL_DEPLOYMENT',
+                    'storage_supply': 'SIGNED_ARCHIVE' if os.getenv('PMGM_QA_SILO_BUNDLE_DIR') else 'VENDOR_IMAGE'}, indent=2) + '\n')
             finally:
                 # Only the UUID-named synthetic project created in this test.
                 run(compose + ['down', '--volumes', '--remove-orphans'], check=False, timeout=90)

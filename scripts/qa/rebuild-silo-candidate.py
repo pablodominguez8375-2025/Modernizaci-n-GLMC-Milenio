@@ -181,11 +181,14 @@ def main():
         'Review-only candidate. No registry push or institutional deployment.\n'
         'Raw scan findings and real runtime results must be reviewed separately.\n')
     report = {'source_sha': os.environ.get('QA_VALIDATED_SOURCE_SHA'),
+              'workflow_sha': os.environ.get('GITHUB_SHA'),
               'vendor_image': VENDOR, 'client_source': CLIENT_SOURCE,
               'status': 'BLOCKED', 'failures': {}, 'scope': 'SYNTHETIC_QA_RUNNER_ONLY'}
     stage = 'source'
     image = None
     try:
+        if subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip() != report['source_sha']:
+            raise ValueError('checkout source mismatch')
         report['client_git_archive_sha256'] = check_source(args.source)
         stage = 'vendor_signature'
         with (output / 'vendor-attestation.json').open('w') as stream:
@@ -262,6 +265,10 @@ def main():
         report['status'] = 'BLOCKED_VULNERABILITIES'
     else:
         report['status'] = 'CANDIDATE_VALIDATED_NOT_DEPLOYED'
+    report['evidence_sha256'] = {}
+    for name in ('trivy-raw.json', 'trivy-reviewed.json', 'sbom.cdx.json', 'runtime-binaries-and-rpms.txt'):
+        if (output / name).is_file():
+            report['evidence_sha256'][name] = hashlib.sha256((output / name).read_bytes()).hexdigest()
     (output / 'rebuild-report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, separators=(',', ':')))
     return 0 if report['status'] == 'CANDIDATE_VALIDATED_NOT_DEPLOYED' else 1

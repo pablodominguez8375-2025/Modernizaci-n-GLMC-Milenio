@@ -3,13 +3,18 @@ set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 ENV_FILE="${PMGM_QA_ENV_FILE:-/etc/pmgm/srv01.env}"
-LODGE23="23232323-2323-2323-2323-232323232323"\nCOMPOSE_FILE="$ROOT/infrastructure/docker-compose.srv01.yml"
+LODGE23="23232323-2323-2323-2323-232323232323"
+COMPOSE_FILE="$ROOT/infrastructure/docker-compose.srv01.yml"
 
 [ -f "$ENV_FILE" ] || { echo "No existe $ENV_FILE" >&2; exit 1; }
 set -a
 # shellcheck disable=SC1090
 . "$ENV_FILE"
 set +a
+
+# Select only a same-source, cryptographically verified local Silo archive when supplied.
+source "$ROOT/scripts/qa/silo-compose.sh"
+qa_silo_prepare
 
 : "${PMGM_QA_WEB_PUBLIC_URL:?PMGM_QA_WEB_PUBLIC_URL es obligatorio}"
 : "${PMGM_QA_OIDC_PUBLIC_URL:?PMGM_QA_OIDC_PUBLIC_URL es obligatorio}"

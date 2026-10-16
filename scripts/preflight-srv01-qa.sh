@@ -48,6 +48,10 @@ if [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 
+  # Select only a same-source, cryptographically verified local Silo archive when supplied.
+  source "$ROOT/scripts/qa/silo-compose.sh"
+  qa_silo_prepare
+
   required=(PMGM_QA_WEB_PUBLIC_URL PMGM_QA_OIDC_PUBLIC_URL PMGM_QA_DB_PASSWORD PMGM_QA_STORAGE_ADMIN_USER PMGM_QA_STORAGE_ADMIN_PASSWORD PMGM_QA_DOCUMENT_ACCESS_KEY PMGM_QA_DOCUMENT_SECRET_KEY PMGM_QA_BACKUP_ACCESS_KEY PMGM_QA_BACKUP_SECRET_KEY PMGM_QA_KEYCLOAK_ADMIN_PASSWORD PMGM_QA_USER_PASSWORD)
   for name in "${required[@]}"; do
     value="${!name:-}"

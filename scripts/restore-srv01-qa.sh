@@ -31,6 +31,10 @@ set -a
 . "$ENV_FILE"
 set +a
 
+# Select only a same-source, cryptographically verified local Silo archive when supplied.
+source "$ROOT/scripts/qa/silo-compose.sh"
+qa_silo_prepare
+
 # Validate storage before stopping services, restoring databases or starting containers.
 python3 "$ROOT/scripts/check-qa-storage-config.py" --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE"
 
