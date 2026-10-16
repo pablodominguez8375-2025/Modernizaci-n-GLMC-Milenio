@@ -159,6 +159,9 @@ def main():
             import base64
             claims = json.loads(base64.urlsafe_b64decode(token.split('.')[1] + '=='))
             assert claims['iss'] == issuer and 'pmgm-api' in claims['aud']
+            # Real Keycloak import must honor the immutable synthetic subject;
+            # the backend uses exactly this iss+sub to resolve the QA member.
+            assert claims['sub'] == 'aa820001-0000-4000-8000-000000000001', 'stable QA admin subject changed'
             evidence['checks'].append('SYNTHETIC_TOKEN_ISSUER_AND_AUDIENCE')
             evidence['status'] = 'PASS_NOT_DEPLOYED'
             output = ROOT / 'artifacts/qa-public-ingress.json'
