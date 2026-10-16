@@ -2,6 +2,15 @@
 
 Fecha de trabajo: 15/16-10-2026. Issue #505, PR #506 (DRAFT). Fuente: dev desde #503 (controles de almacenamiento), Silo 20261015. El nombre `srv01` en Compose/scripts es histórico; servidor designado `glmdch`.
 
+## Dirección pública aprobada del QA — 16-10-2026
+
+El Sponsor estableció **https://sistema.granlogiamixta.cl/** como URL pública única y canónica de QA glmdch para pruebas **solo con datos sintéticos**. Origen sin slash terminal para la configuración: `PMGM_QA_WEB_PUBLIC_URL=https://sistema.granlogiamixta.cl`. Fuente de verdad: PR documental [#513](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/513) integrada en `dev@db82dd1c826ba1a8c1bbc610ea8536078fefe3e0`, Issue #97 y adenda QA Drive.
+
+**Estado distinto de DNS o despliegue:** solo hay una decisión y plantilla; NO se ha verificado que el sitio esté publicado ni se han configurado DNS, certificados, firewall o proxies en `glmdch` desde esta sesión. El servicio QA histórico expone web en 8081 y Keycloak en 8180 **únicamente en loopback**. No publicar estos HTTP directamente ni cambiar `PMGM_QA_BIND_ADDRESS` a `0.0.0.0` para abrir el dominio.
+
+**Dependencias técnicas de publicación segura:** reservar una entrada TLS 443 con reverse proxy autorizado (Caddy/Nginx) y verificar DNS A/AAAA/CNAME, certificado con cadena correcta y renovación, HTTPS/HSTS sin mezclas inseguras, frontend, API privada, Keycloak OIDC y issuer externo real. La plantilla deja `PMGM_QA_OIDC_PUBLIC_URL=REEMPLAZAR_URL_HTTPS_OIDC_VALIDADA` **a propósito**: el QA Compose actual NO sirve automáticamente Keycloak en `/identity`. No suponer ese path ni añadirlo a `KC_HOSTNAME` sin configurar y probar `KC_HTTP_RELATIVE_PATH`, routing del proxy y la URL del backend. Una vez montado el ingreso, ajustar en el realm los `redirectUris`, `post.logout.redirect.uris` y `webOrigins` para el dominio HTTPS QA, retirando las autorizaciones `localhost`/IP por HTTP en la configuración PUBLICADA. No modificar el realm del piloto o producción por arrastre.
+
+**Puertas pendientes:** PR #506 continúa bloqueada por 11 HIGH en Trivy del candidato Silo, además de pruebas de IAM/backup coherente, OIDC/BD2 y preflight host; la selección del dominio no exime de esos gates. `main` no se modifica ni el QA se declara operativo por este registro.
 ## Estado: implementación candidata en rama, sin QA real
 El Sponsor aprobó Silo exclusivamente para QA glmdch y datos sintéticos el 16-10-2026 (#97 comentario 6207122522 y #479 comentario 6207124434). Esta selección no acredita servidor operativo, suministro, licencia efectiva del artefacto, IAM, restauración integral o UAT. **No ejecutar INSTALAR.sh ni docker compose up**, incluso con `--skip-smoke`, hasta documentar las aceptaciones de más abajo. La existencia de ZIP instalable y un CI parcial/verde no son aprobación de instalación.
 
