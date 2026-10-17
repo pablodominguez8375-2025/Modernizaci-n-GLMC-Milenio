@@ -32,6 +32,33 @@ def reject_duplicates(pairs):
     return result
 
 
+
+def is_systemd_credential_copy(path, st):
+    """Accept the systemd ACL-backed, read-only transient copy, not arbitrary files.
+
+    Persistent source is still required to be root:root 0600 by the
+    administrator. Newer systemd versions may copy the credential as
+    root-owned mode 0440 with an ACL for the service user.
+    """
+    directory = os.environ.get("CREDENTIALS_DIRECTORY", "")
+    if (not directory.startswith("/run/credentials/") or
+            path != Path(directory) / "qa-baseline" or
+            st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o440):
+        return False
+    try:
+        parent = os.stat(directory, follow_symlinks=False)
+        if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != 0 or
+                stat.S_IMODE(parent.st_mode) & 0o022):
+            return False
+        # Require an immutable read-only credential filesystem; a normal
+        # root-owned 0440 file is not a substitute for systemd's copy.
+        if not (os.statvfs(path).f_flag & os.ST_RDONLY):
+            return False
+    except OSError:
+        return False
+    return True
+
+
 def baseline(path):
     path = Path(path)
     try:
@@ -42,9 +69,12 @@ def baseline(path):
         raise Blocked("BASELINE_UNAVAILABLE") from None
     with os.fdopen(fd, "rb") as stream:
         st = os.fstat(stream.fileno())
-        if (not stat.S_ISREG(st.st_mode) or st.st_uid != os.geteuid() or
-                (stat.S_IMODE(st.st_mode) & 0o077) or st.st_size > 2048 or
-                st.st_size == 0 or st.st_nlink != 1):
+        strict_private = (st.st_uid == os.geteuid() and
+                          not (stat.S_IMODE(st.st_mode) & 0o077))
+        systemd_copy = is_systemd_credential_copy(path, st)
+        if (not stat.S_ISREG(st.st_mode) or
+                not (strict_private or systemd_copy) or
+                st.st_size > 2048 or st.st_size == 0 or st.st_nlink != 1):
             raise Blocked("BASELINE_OWNER_MODE_OR_SIZE")
         raw = stream.read(2049)
     try:
