@@ -2,6 +2,8 @@
 
 **Issue:** #531. **Estado:** fase de implementación, NO desplegado. **Fuente:** PO Opción B 16-10-2026; `PMGM-REQ-022`; formulario Drive `FORMULARIO-USO-GRAN-TEMPLO-2026.docx`. Rama inicial desde `dev@346912923c43c6b6bb9537d5e3fadc9429396356`.
 
+**Guardia de seguridad de esta fase:** toda solicitud con espacio de tipo `temple` se admite como `pending`, pero el endpoint de aprobación devuelve 409 hasta identificar formalmente el Gran Templo, su calendario de días hábiles/feriados, la autorización V:.M:. y los requisitos técnicos. Para `secretariat_room`, la aprobación funciona con disponibilidad y rol institucional.
+
 ## Antes / después
 **Antes:** `core.institutional_spaces` y `core.institutional_space_reservations` pertenecen a Gran Secretaría; no existe solicitud editable desde el Taller. **Después propuesto:** tabla aditiva `core.institutional_space_requests`, sin tocar las reservas históricas; transiciones `pending → approved/rejected/cancelled`; aprobar referencia una reserva existente nueva `SpaceReservationId` confirmada por Gran Secretaría. Sin cambio del mecanismo de titularidad ni voto, ni migración destructiva.
 
