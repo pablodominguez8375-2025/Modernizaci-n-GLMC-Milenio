@@ -46,6 +46,24 @@ class AntirollbackTests(unittest.TestCase):
         with self.assertRaisesRegex(policy.Blocked, "OWNER_MODE"):
             policy.baseline(self.state)
 
+    def test_systemd_exception_never_accepts_local_0440_file(self):
+        self.save()
+        self.state.chmod(0o440)
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"CREDENTIALS_DIRECTORY": str(self.root)}):
+            self.assertFalse(policy.is_systemd_credential_copy(
+                self.state, self.state.stat()))
+            with self.assertRaisesRegex(policy.Blocked, "OWNER_MODE"):
+                policy.baseline(self.state)
+
+    def test_systemd_exception_requires_exact_credential_name(self):
+        self.save()
+        self.state.chmod(0o440)
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"CREDENTIALS_DIRECTORY": "/run/credentials/mock.service"}):
+            self.assertFalse(policy.is_systemd_credential_copy(
+                self.state, self.state.stat()))
+
     def test_symlink_refused(self):
         self.save()
         link = self.root / "link.json"
