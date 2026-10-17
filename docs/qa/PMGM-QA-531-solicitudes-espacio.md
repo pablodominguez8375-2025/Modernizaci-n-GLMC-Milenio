@@ -2,6 +2,8 @@
 
 **Estado:** contrato en PR #539, QA sintético mediante CI; despliegue físico `glmdch` **NO validado**. Baseline `dev@346912923c43c6b6bb9537d5e3fadc9429396356`. Fuente del requisito: Issue #531, `PMGM-REQ-022`, formulario Gran Templo 2026 de Drive.
 
+**Guardia de seguridad de esta fase:** toda solicitud con espacio de tipo `temple` se admite como `pending`, pero el endpoint de aprobación devuelve 409 hasta identificar formalmente el Gran Templo, su calendario de días hábiles/feriados, la autorización V:.M:. y los requisitos técnicos. Para `secretariat_room`, la aprobación funciona con disponibilidad y rol institucional.
+
 ## Matriz de aceptación (entorno sintético)
 
 | Código | Actor / operación | Resultado esperado |
