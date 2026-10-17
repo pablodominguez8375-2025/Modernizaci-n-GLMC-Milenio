@@ -1,0 +1,64 @@
+name: Comprobar QA
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: qa-check-glmdch
+  cancel-in-progress: false
+jobs:
+  inspect:
+    # Activation on main requires a separate, expressly approved minimal PR.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: qa-readonly
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Inspect glmdch through forced command
+        shell: bash
+        env:
+          QA_READONLY_SSH_KEY: ${{ secrets.QA_READONLY_SSH_KEY }}
+          QA_SSH_HOST: ${{ vars.QA_SSH_HOST }}
+          QA_SSH_PORT: ${{ vars.QA_SSH_PORT }}
+          QA_SSH_USER: ${{ vars.QA_SSH_USER }}
+          QA_SSH_KNOWN_HOSTS: ${{ vars.QA_SSH_KNOWN_HOSTS }}
+        run: bash scripts/qa/check-qa.sh
+      - name: Record inspection and readiness separately
+        if: always()
+        shell: bash
+        env:
+          INSPECTION_STATUS: ${{ job.status }}
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          python3 - <<'PY'
+          import datetime, hashlib, json, os
+          from pathlib import Path
+          evidence = Path(os.environ['RUNNER_TEMP']) / 'qa-evidence'
+          evidence.mkdir(exist_ok=True)
+          status = 'PASS' if os.environ['INSPECTION_STATUS'] == 'success' else 'FAIL'
+          receipt = dict(timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                         run_id=os.environ['RUN_ID'], run_attempt=os.environ['RUN_ATTEMPT'],
+                         workflow_sha=os.environ['WORKFLOW_SHA'], source_sha=os.environ['SOURCE_SHA'],
+                         helper_version='centenario-qa-readonly-v1',
+                         helper_sha256=hashlib.sha256(Path('scripts/qa/centenario-qa-readonly').read_bytes()).hexdigest(),
+                         inspection=status, qa='NO_VERIFICADO', firewall='NO_VERIFICADO_REQUIERE_OPERADOR')
+          (evidence / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write(f"Comprobación: {status}\n\nPreparación QA: NO_VERIFICADO\n\nFirewall/NAT: requiere operador.\n\n")
+              summary.write(f"Run {receipt['run_id']}, intento {receipt['run_attempt']}; workflow {receipt['workflow_sha']}\n")
+          PY
+      - name: Preserve sanitized evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: qa-readonly-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/qa-evidence/*.json
+          retention-days: 7
+          if-no-files-found: error

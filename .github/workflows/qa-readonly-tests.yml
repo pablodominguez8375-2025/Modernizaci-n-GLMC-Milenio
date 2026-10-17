@@ -1,0 +1,22 @@
+name: QA readonly contract tests
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/**'
+      - 'tests/test_qa_readonly.py'
+      - '.github/workflows/check-qa.yml'
+      - '.github/workflows/qa-readonly-tests.yml'
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: bash -n scripts/qa/check-qa.sh
+      - run: python3 -m unittest discover -s tests -p test_qa_readonly.py -v
