@@ -224,6 +224,7 @@ api.MapGrandMasterCeremonyEndpoints();
 api.MapCandidatePublicationEndpoints();
 api.MapCeremonyReviewQueueEndpoints();
 api.MapGrandSecretariatEndpoints();
+    api.MapSpaceRequestEndpoints();
 api.MapGrandSecretariatQueryEndpoints();
 api.MapGrandSecretariatCeremonyQueueEndpoints();
 api.MapLodgeManagementEndpoints();
