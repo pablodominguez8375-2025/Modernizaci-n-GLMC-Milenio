@@ -209,11 +209,11 @@ internal sealed class SpaceRequestTestFactory(string connectionString) : WebAppl
             services.AddDbContext<GrandSecretariatDbContext>(options => options.UseNpgsql(connectionString));
             services.AddAuthentication(options =>
             {
-                options.DefaultAuthenticateScheme = SyntheticHeaderAuthenticationHandler.Scheme;
-                options.DefaultChallengeScheme = SyntheticHeaderAuthenticationHandler.Scheme;
-                options.DefaultForbidScheme = SyntheticHeaderAuthenticationHandler.Scheme;
+                options.DefaultAuthenticateScheme = SyntheticHeaderAuthenticationHandler.SchemeName;
+                options.DefaultChallengeScheme = SyntheticHeaderAuthenticationHandler.SchemeName;
+                options.DefaultForbidScheme = SyntheticHeaderAuthenticationHandler.SchemeName;
             }).AddScheme<AuthenticationSchemeOptions, SyntheticHeaderAuthenticationHandler>(
-                SyntheticHeaderAuthenticationHandler.Scheme, _ => { });
+                SyntheticHeaderAuthenticationHandler.SchemeName, _ => { });
         });
     }
 }
@@ -223,7 +223,7 @@ public sealed class SyntheticHeaderAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
-    public const string Scheme = "SyntheticSpaceRequestTest";
+    public const string SchemeName = "SyntheticSpaceRequestTest";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -236,8 +236,8 @@ public sealed class SyntheticHeaderAuthenticationHandler(
             claims.Add(new Claim(InstitutionalClaims.Organization, org));
         if (role == InstitutionalRoles.GranSecretaria)
             claims.Add(new Claim(InstitutionalClaims.Scope, "order"));
-        var identity = new ClaimsIdentity(claims, Scheme);
+        var identity = new ClaimsIdentity(claims, SchemeName);
         return Task.FromResult(AuthenticateResult.Success(
-            new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme)));
+            new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
 }
