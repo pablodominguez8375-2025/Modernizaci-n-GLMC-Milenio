@@ -522,6 +522,44 @@ public sealed class GrandSecretariatHttpWorkflowTests
             new { spaceId = templeId }, ct);
         Assert.Equal(HttpStatusCode.Conflict, templeBlocked.StatusCode);
 
+        // La ceremonia sin expediente es inválida incluso si el usuario omite ceremonyRequestId.
+        var missingCeremonyId = await a.PostAsJsonAsync("/api/secretaria/solicitudes-espacio",
+            new {
+                spaceType = "secretariat_room", preferredSpaceId = spaceId,
+                startsAtUtc = start.AddMonths(3), endsAtUtc = start.AddMonths(3).AddHours(2),
+                purpose = "ceremonia", ceremonyRequestId = (Guid?)null,
+                notes = (string?)null, expectedAttendees = 20,
+                equipmentRequest = (string?)null, equipmentResponsible = (string?)null,
+                vmApprovalReference = (string?)null
+            }, ct);
+        Assert.Equal(HttpStatusCode.BadRequest, missingCeremonyId.StatusCode);
+
+        // Una solicitud aún pending puede quedar con su fecha vencida; jamás confirmar en retrospectiva.
+        var futurePending = await a.PostAsJsonAsync("/api/secretaria/solicitudes-espacio",
+            new {
+                spaceType = "secretariat_room", preferredSpaceId = spaceId,
+                startsAtUtc = start.AddMonths(4), endsAtUtc = start.AddMonths(4).AddHours(2),
+                purpose = "tenida", ceremonyRequestId = (Guid?)null,
+                notes = (string?)null, expectedAttendees = 25,
+                equipmentRequest = (string?)null, equipmentResponsible = (string?)null,
+                vmApprovalReference = (string?)null
+            }, ct);
+        Assert.Equal(HttpStatusCode.Created, futurePending.StatusCode);
+        var staleId = (await futurePending.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+            .GetProperty("id").GetGuid();
+        await using (var staleScope = factory.Services.CreateAsyncScope())
+        {
+            var updateDb = staleScope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
+            var stale = await updateDb.SpaceRequests.SingleAsync(x => x.Id == staleId, ct);
+            stale.StartsAtUtc = DateTimeOffset.UtcNow.AddHours(-3);
+            stale.EndsAtUtc = DateTimeOffset.UtcNow.AddHours(-1);
+            await updateDb.SaveChangesAsync(ct);
+        }
+        var staleResponse = await grand.PostAsJsonAsync(
+            "/api/gran-secretaria/solicitudes-espacio/" + staleId + "/aprobar",
+            new { spaceId }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, staleResponse.StatusCode);
+
         await using var checkScope = factory.Services.CreateAsyncScope();
         var checkDb = checkScope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
         Assert.Equal(1, await checkDb.SpaceReservations.AsNoTracking()
