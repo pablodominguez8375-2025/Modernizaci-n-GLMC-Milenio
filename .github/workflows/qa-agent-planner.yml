@@ -35,7 +35,7 @@ jobs:
           python3 -m py_compile scripts/qa/qa-agent-plan.py tests/test_qa_agent_plan.py tests/test_qa_agent_plan_units.py
           python3 -m unittest discover -s tests -p 'test_qa_agent_plan*.py' -v
   runtime-credentials:
-    name: systemd LoadCredential runtime: root-only source, isolated copy
+    name: "systemd LoadCredential runtime: root-only source, isolated copy"
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
