@@ -357,6 +357,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var lodgeA = Guid.NewGuid();
         var lodgeB = Guid.NewGuid();
         var spaceId = Guid.NewGuid();
+        var templeId = Guid.NewGuid();
         var ceremonyId = Guid.NewGuid();
 
         await using (var scope = factory.Services.CreateAsyncScope())
@@ -379,6 +380,12 @@ public sealed class GrandSecretariatHttpWorkflowTests
             {
                 Id = spaceId, Code = "QA-ROOM-" + Guid.NewGuid().ToString("N")[..8],
                 Name = "Sala de test aislada", SpaceType = "secretariat_room", Capacity = 40,
+                Status = "active"
+            });
+            gs.InstitutionalSpaces.Add(new InstitutionalSpace
+            {
+                Id = templeId, Code = "QA-TEMP-" + Guid.NewGuid().ToString("N")[..8],
+                Name = "Gran Templo QA (ficticio)", SpaceType = "temple", Capacity = 80,
                 Status = "active"
             });
             await gs.SaveChangesAsync(ct);
@@ -496,6 +503,24 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal("cancelled",
             (await cancellation.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
                 .GetProperty("status").GetString());
+
+        var templeBody = new {
+            spaceType = "temple", preferredSpaceId = templeId,
+            startsAtUtc = start.AddMonths(2), endsAtUtc = start.AddMonths(2).AddHours(2),
+            purpose = "tenida", notes = "Solicitud de templo ficticia",
+            expectedAttendees = 45, ceremonyRequestId = (Guid?)null,
+            equipmentRequest = "Amplificación",
+            equipmentResponsible = "Responsable QA",
+            vmApprovalReference = "Referencia QA no firmada"
+        };
+        var templeCreated = await a.PostAsJsonAsync("/api/secretaria/solicitudes-espacio", templeBody, ct);
+        Assert.Equal(HttpStatusCode.Created, templeCreated.StatusCode);
+        var templeRequestId = (await templeCreated.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+            .GetProperty("id").GetGuid();
+        var templeBlocked = await grand.PostAsJsonAsync(
+            "/api/gran-secretaria/solicitudes-espacio/" + templeRequestId + "/aprobar",
+            new { spaceId = templeId }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, templeBlocked.StatusCode);
 
         await using var checkScope = factory.Services.CreateAsyncScope();
         var checkDb = checkScope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
