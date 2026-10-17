@@ -11,8 +11,10 @@ Type=oneshot
 User=pmgm-qa-agent
 Group=pmgm-qa-agent
 WorkingDirectory=/opt/centenario/qa-agent
+# systemd reads the root-owned 0600 original and supplies an immutable per-unit copy.
+LoadCredential=qa-baseline:/var/lib/pmgm-qa-agent/last-deployed.json
 Environment=PYTHONDONTWRITEBYTECODE=1
-ExecStart=/usr/bin/python3 -B /opt/centenario/qa-agent/scripts/qa/qa-agent-plan.py --last-deployed /var/lib/pmgm-qa-agent/last-deployed.json
+ExecStart=/usr/bin/python3 -B /opt/centenario/qa-agent/scripts/qa/qa-agent-plan.py --last-deployed ${CREDENTIALS_DIRECTORY}/qa-baseline
 NoNewPrivileges=yes
 PrivateTmp=yes
 PrivateDevices=yes
