@@ -86,11 +86,16 @@ def evaluate(previous_sha, candidate_sha, compare=fetch_compare):
         return {"status": "ALREADY_DEPLOYED_NO_ACTION", "candidate_sha": candidate_sha,
                 "scope": "NO_INSTALLATION_NO_HOST_CHANGE"}
     result = compare(previous_sha, candidate_sha)
+    commits = result.get("commits") if isinstance(result, dict) else None
     if (not isinstance(result, dict) or result.get("status") != "ahead" or
             type(result.get("ahead_by")) is not int or result["ahead_by"] <= 0 or
-            result.get("base_commit", {}).get("sha") != previous_sha or
-            result.get("merge_base_commit", {}).get("sha") != previous_sha or
-            result.get("commits", [{}])[-1].get("sha") != candidate_sha):
+            not isinstance(result.get("base_commit"), dict) or
+            result["base_commit"].get("sha") != previous_sha or
+            not isinstance(result.get("merge_base_commit"), dict) or
+            result["merge_base_commit"].get("sha") != previous_sha or
+            not isinstance(commits, list) or not commits or
+            not isinstance(commits[-1], dict) or
+            commits[-1].get("sha") != candidate_sha):
         raise Blocked("NON_FAST_FORWARD_QA_UPDATE")
     return {"status": "FAST_FORWARD_CANDIDATE_ONLY",
             "candidate_sha": candidate_sha, "previous_deployed_sha": previous_sha,
