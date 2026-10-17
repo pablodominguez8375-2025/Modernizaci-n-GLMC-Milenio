@@ -38,9 +38,12 @@ def plan(baseline_reader, readiness_selector, compare):
     candidate = selected.get("source_sha")
     artifact = selected.get("artifact_id")
     digest = selected.get("artifact_sha256")
+    import re
     if (not isinstance(candidate, str) or
+            re.fullmatch(r"[a-f0-9]{40}", candidate) is None or
             not isinstance(artifact, int) or isinstance(artifact, bool) or artifact <= 0 or
-            not isinstance(digest, str)):
+            not isinstance(digest, str) or
+            re.fullmatch(r"sha256:[a-f0-9]{64}", digest) is None):
         raise Blocked("INVALID_CANDIDATE_METADATA")
     decision = compare(prior, candidate)
     if not isinstance(decision, dict):
