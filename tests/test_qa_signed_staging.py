@@ -139,14 +139,25 @@ class QaSignedStagingTests(unittest.TestCase):
             qa.stage(archive, digest, SHA, self.out)
         self.assertEqual("do not erase", (self.out / "sentinel").read_text())
 
-    def test_silo_evidence_is_required_even_when_manifest_matches(self):
-        archive, digest = fixture(self.dir, changes={"storage-bundle/silo-qa-review-only.tar": "replaced"}, wrong_manifest=False)
-        # The stage checks the presence and checksum of all Silo proof files;
-        # a rebuilt/tampered archive still requires the real Sigstore bundle
-        # and will be rejected by subsequent Silo preflight on the host.
+    def test_missing_silo_evidence_blocks_after_manifest_verification(self):
+        archive, _ = fixture(self.dir)
+        with zipfile.ZipFile(archive) as outer:
+            contents = {n: outer.read(n) for n in outer.namelist()}
+        inner_data = contents[INNER]
+        with zipfile.ZipFile(io.BytesIO(inner_data)) as nested:
+            files = {n: nested.read(n) for n in nested.namelist()
+                     if not n.endswith("storage-bundle/silo-qa-review-only.tar")}
+        inner_output = io.BytesIO()
+        with zipfile.ZipFile(inner_output, "w") as z:
+            for name, value in files.items():
+                z.writestr(name, value)
+        contents[INNER] = inner_output.getvalue()
+        with zipfile.ZipFile(archive, "w") as z:
+            for name, value in contents.items():
+                z.writestr(name, value)
         with patch.object(qa.subprocess, "run", side_effect=attestation_ok):
-            self.assertEqual("SIGNED_CODE_STAGED_NOT_INSTALLED",
-                             qa.stage(archive, digest, SHA, self.out)["status"])
+            with self.assertRaisesRegex(qa.Blocked, "FILE_SET_MISMATCH"):
+                qa.stage(archive, "sha256:" + qa.sha256_file(archive), SHA, self.out)
 
 
 if __name__ == "__main__":
