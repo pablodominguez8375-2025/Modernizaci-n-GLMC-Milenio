@@ -1,0 +1,30 @@
+name: QA antirollback and supervised baseline contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-antirollback.py'
+      - 'tests/test_qa_antirollback.py'
+      - 'docs/qa/QA-AUTO-ANTIROLLBACK.md'
+      - '.github/workflows/qa-antirollback.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-antirollback.py'
+      - 'tests/test_qa_antirollback.py'
+      - '.github/workflows/qa-antirollback.yml'
+permissions:
+  contents: read
+jobs:
+  antirollback:
+    name: Offline QA antirollback tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Validate explicit baseline and ancestry contract
+        run: |
+          python3 -m py_compile scripts/qa/qa-antirollback.py tests/test_qa_antirollback.py
+          python3 -m unittest discover -s tests -p test_qa_antirollback.py -v
