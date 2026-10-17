@@ -8,6 +8,7 @@ public sealed class GrandSecretariatDbContext(DbContextOptions<GrandSecretariatD
 {
     public DbSet<InstitutionalSpace> InstitutionalSpaces => Set<InstitutionalSpace>();
     public DbSet<InstitutionalSpaceReservation> SpaceReservations => Set<InstitutionalSpaceReservation>();
+    public DbSet<InstitutionalSpaceRequest> SpaceRequests => Set<InstitutionalSpaceRequest>();
     public DbSet<SecretariatDocument> SecretariatDocuments => Set<SecretariatDocument>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
@@ -46,6 +47,29 @@ public sealed class GrandSecretariatDbContext(DbContextOptions<GrandSecretariatD
             entity.HasIndex(x => new { x.SpaceId, x.StartsAtUtc, x.EndsAtUtc });
             entity.HasIndex(x => new { x.OrganizationId, x.StartsAtUtc });
             entity.HasIndex(x => x.CeremonyRequestId);
+        });
+
+        modelBuilder.Entity<InstitutionalSpaceRequest>(entity =>
+        {
+            entity.ToTable("institutional_space_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.PreferredSpaceType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Purpose).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.Property(x => x.EquipmentRequest).HasMaxLength(500);
+            entity.Property(x => x.EquipmentResponsible).HasMaxLength(240);
+            entity.Property(x => x.VmApprovalReference).HasMaxLength(240);
+            entity.Property(x => x.ResponseReason).HasMaxLength(500);
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.DecidedBySubject).HasMaxLength(320);
+            entity.HasOne<InstitutionalSpace>().WithMany()
+                .HasForeignKey(x => x.PreferredSpaceId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<InstitutionalSpaceReservation>().WithMany()
+                .HasForeignKey(x => x.SpaceReservationId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.OrganizationId, x.CreatedAtUtc });
+            entity.HasIndex(x => new { x.Status, x.StartsAtUtc });
+            entity.HasIndex(x => x.SpaceReservationId).IsUnique();
         });
 
         modelBuilder.Entity<SecretariatDocument>(entity =>
