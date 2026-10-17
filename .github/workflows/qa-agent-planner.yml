@@ -1,0 +1,80 @@
+name: QA agent read-only planner and timer contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-agent-plan.py'
+      - 'tests/test_qa_agent_plan.py'
+      - 'tests/test_qa_agent_plan_units.py'
+      - 'tests/qa_systemd_credential_probe.py'
+      - 'infrastructure/systemd/pmgm-qa-agent-plan.*'
+      - 'docs/qa/QA-AGENT-PLANNER-SYSTEMD.md'
+      - '.github/workflows/qa-agent-planner.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-agent-plan.py'
+      - 'tests/test_qa_agent_plan.py'
+      - 'tests/test_qa_agent_plan_units.py'
+      - 'tests/qa_systemd_credential_probe.py'
+      - 'infrastructure/systemd/pmgm-qa-agent-plan.*'
+      - '.github/workflows/qa-agent-planner.yml'
+permissions:
+  contents: read
+jobs:
+  plan:
+    name: Offline planner and service isolation tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Validate planner and security contract
+        run: |
+          python3 -m py_compile scripts/qa/qa-agent-plan.py tests/test_qa_agent_plan.py tests/test_qa_agent_plan_units.py
+          python3 -m unittest discover -s tests -p 'test_qa_agent_plan*.py' -v
+  runtime-credentials:
+    name: "systemd LoadCredential runtime: root-only source, isolated copy"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Confirm runner uses systemd and validate source syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d /run/systemd/system
+          command -v systemd-run
+          python3 -m py_compile tests/qa_systemd_credential_probe.py scripts/qa/qa-antirollback.py
+          python3 -m unittest discover -s tests -p 'test_qa_agent_plan_units.py' -v
+      - name: Probe protected credential copy with VALID and INVALID synthetic baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d /tmp/pmgm-qa-credential-XXXXXX)"
+          chmod 0755 "$workdir"
+          trap 'sudo rm -rf -- "$workdir"' EXIT
+          install -m 0644 tests/qa_systemd_credential_probe.py "$workdir/probe.py"
+          install -m 0644 scripts/qa/qa-antirollback.py "$workdir/qa-antirollback.py"
+          sudo install -d -o root -g root -m 0700 "$workdir/private"
+          source_file="$workdir/private/last-deployed.json"
+          printf '%s\n' '{"version":1,"last_deployed_sha":"0123456789abcdef0123456789abcdef01234567","qa_only":true}' | sudo tee "$source_file" > /dev/null
+          sudo chown root:root "$source_file"
+          sudo chmod 0600 "$source_file"
+          sudo systemd-run --system --wait --collect --pipe \
+            --unit=pmgm-qa-cred-valid-ci \
+            -p User=nobody -p Group=nogroup -p NoNewPrivileges=yes \
+            -p ProtectSystem=strict -p Type=oneshot \
+            -p "LoadCredential=qa-baseline:$source_file" \
+            /usr/bin/python3 -B "$workdir/probe.py" valid "$source_file" "$workdir/qa-antirollback.py"
+          printf '%s\n' '{"version":1,"last_deployed_sha":"0123456789abcdef0123456789abcdef01234567","qa_only":false}' | sudo tee "$source_file" > /dev/null
+          sudo chmod 0600 "$source_file"
+          sudo systemd-run --system --wait --collect --pipe \
+            --unit=pmgm-qa-cred-invalid-ci \
+            -p User=nobody -p Group=nogroup -p NoNewPrivileges=yes \
+            -p ProtectSystem=strict -p Type=oneshot \
+            -p "LoadCredential=qa-baseline:$source_file" \
+            /usr/bin/python3 -B "$workdir/probe.py" invalid "$source_file" "$workdir/qa-antirollback.py"

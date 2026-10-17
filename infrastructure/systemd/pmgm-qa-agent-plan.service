@@ -1,0 +1,34 @@
+# Reference-only template: DO NOT enable before QA physical acceptance.
+# Runs the read-only planner; it cannot download, install or start Docker.
+[Unit]
+Description=Proyecto Centenario QA signed candidate planner (read only)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/lib/pmgm-qa-agent/last-deployed.json
+
+[Service]
+Type=oneshot
+User=pmgm-qa-agent
+Group=pmgm-qa-agent
+WorkingDirectory=/opt/centenario/qa-agent
+# systemd reads the root-owned 0600 original and supplies an immutable per-unit copy.
+LoadCredential=qa-baseline:/var/lib/pmgm-qa-agent/last-deployed.json
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -B /opt/centenario/qa-agent/scripts/qa/qa-agent-plan.py --last-deployed ${CREDENTIALS_DIRECTORY}/qa-baseline
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+TimeoutStartSec=65

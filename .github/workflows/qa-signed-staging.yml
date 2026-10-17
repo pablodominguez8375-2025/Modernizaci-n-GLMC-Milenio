@@ -1,0 +1,30 @@
+name: QA signed staging contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-signed-staging.py'
+      - 'tests/test_qa_signed_staging.py'
+      - 'docs/qa/QA-SIGNED-STAGING.md'
+      - '.github/workflows/qa-signed-staging.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-signed-staging.py'
+      - 'tests/test_qa_signed_staging.py'
+      - '.github/workflows/qa-signed-staging.yml'
+permissions:
+  contents: read
+jobs:
+  stage-contract:
+    name: Offline signed staging tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Syntax and adversarial ZIP tests
+        run: |
+          python3 -m py_compile scripts/qa/qa-signed-staging.py tests/test_qa_signed_staging.py
+          python3 -m unittest discover -s tests -p test_qa_signed_staging.py -v

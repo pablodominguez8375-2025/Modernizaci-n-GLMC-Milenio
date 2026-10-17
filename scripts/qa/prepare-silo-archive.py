@@ -10,6 +10,7 @@ import re
 import subprocess
 import sys
 import tarfile
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 REPO = 'pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio'
@@ -112,25 +113,84 @@ def verify_bundle(directory, source_sha):
     return report
 
 
+def resolve_loaded_image(directory, report):
+    """Resolve a local image by its *signed config*, not its Docker store ID.
+
+    Docker's classic image store uses the config SHA as its image ID, while
+    containerd-backed Docker 29 can expose an OCI manifest SHA instead.
+    Require signed config bytes, rootfs diff IDs, OS and architecture. Never
+    accept a mutable tag, pull an alternative or trust a saved verification.
+    """
+    expected = report['local_image_id']
+    with tarfile.open(Path(directory) / 'silo-qa-review-only.tar') as signed_tar:
+        manifest = json.load(signed_tar.extractfile('manifest.json'))
+        if len(manifest) != 1:
+            raise ValueError('signed archive must contain exactly one image')
+        signed_config = signed_tar.extractfile(manifest[0]['Config']).read()
+    if 'sha256:' + hashlib.sha256(signed_config).hexdigest() != expected:
+        raise ValueError('signed config mismatch')
+    metadata = json.loads(signed_config)
+    layers = metadata.get('rootfs', {}).get('diff_ids')
+    if not isinstance(layers, list) or not layers:
+        raise ValueError('signed rootfs diff IDs missing')
+
+    listing = run(['docker', 'image', 'ls', '-a', '--no-trunc', '--format', '{{.ID}}'], text=True)
+    candidates = sorted(set(listing.stdout.splitlines()))
+    matches = []
+    for candidate in candidates:
+        if re.fullmatch(r'sha256:[0-9a-f]{64}', candidate) is None:
+            continue
+        inspected = json.loads(run(['docker', 'image', 'inspect', '--format', '{{json .}}',
+                                    candidate], text=True).stdout)
+        if (inspected.get('Os') != metadata.get('os') or
+                inspected.get('Architecture') != metadata.get('architecture') or
+                inspected.get('RootFS', {}).get('Layers') != layers):
+            continue
+        # docker save is read-only; do not trust an OCI manifest ID simply
+        # because its platform and layer count look plausible.
+        with tempfile.TemporaryDirectory(prefix='qa-silo-image-check-') as temporary:
+            exported = Path(temporary) / 'candidate.tar'
+            run(['docker', 'image', 'save', '--output', str(exported), candidate], timeout=180)
+            with tarfile.open(exported) as exported_tar:
+                exported_manifest = json.load(exported_tar.extractfile('manifest.json'))
+                if len(exported_manifest) != 1:
+                    continue
+                exported_config = exported_tar.extractfile(
+                    exported_manifest[0]['Config']).read()
+            if hashlib.sha256(exported_config).hexdigest() != expected.split(':', 1)[1]:
+                continue
+            if json.loads(exported_config).get('rootfs', {}).get('diff_ids') != layers:
+                continue
+        matches.append(candidate)
+    if not matches:
+        raise LookupError('signed Silo image absent in local Docker store')
+    if len(matches) != 1:
+        raise ValueError('ambiguous signed Silo image identities')
+    return matches[0]
+
+
 def prepare(directory, source_sha, output):
     report = verify_bundle(directory, source_sha)
-    image = report['local_image_id']
-    # No mutable tag or registry digest is inferred from a local config ID.
-    present = subprocess.run(['docker', 'image', 'inspect', image], stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, timeout=30).returncode == 0
-    if not present:
+    try:
+        image = resolve_loaded_image(directory, report)
+    except LookupError:
+        # Archive was already signed and content-verified by verify_bundle.
         run(['docker', 'load', '--input', str(Path(directory) / 'silo-qa-review-only.tar')])
-    actual = run(['docker', 'image', 'inspect', '--format', '{{.Id}}', image], text=True).stdout.strip()
-    if actual != image:
-        raise ValueError('loaded image identity mismatch')
+        image = resolve_loaded_image(directory, report)
     binary = run(['docker', 'run', '--rm', '--network', 'none', '--entrypoint', 'sha256sum',
                   image, '/usr/bin/silo'], text=True).stdout.split()[0]
     if binary != report['server_cve_triage']['server_binary_sha256']:
         raise ValueError('loaded server binary mismatch')
     # Render without interpolation: no credentials are written to this temporary model.
-    rendered = run(['docker', 'compose', '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml'),
-                    '--profile', '*', 'config', '--no-interpolate', '--format', 'json'], text=True)
+    command = ['docker', 'compose', '-f', str(ROOT / 'infrastructure/docker-compose.srv01.yml')]
+    if os.environ.get('PMGM_QA_DB2', 'false') == 'true':
+        command += ['-f', str(ROOT / 'infrastructure/docker-compose.srv01-db2.yml')]
+    rendered = run(command + ['--profile', '*', 'config', '--no-interpolate', '--format', 'json'], text=True)
     model = json.loads(rendered.stdout)
+    spec = importlib.util.spec_from_file_location('qa_ingress', ROOT / 'scripts/qa/public-ingress.py')
+    ingress = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ingress)
+    model = ingress.configure(model)
     for name in SERVICES:
         service = model['services'][name]
         service['image'] = image
@@ -148,7 +208,6 @@ def prepare(directory, source_sha, output):
         json.dump(model, stream, indent=2)
         stream.write('\n')
     return image
-
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)

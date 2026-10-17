@@ -103,8 +103,11 @@ def main():
                 Path(__file__).resolve().parent / 'qa/prepare-silo-archive.py')
             archive = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(archive)
-            verified_image = archive.verify_bundle(os.environ['PMGM_QA_SILO_BUNDLE_DIR'],
-                os.environ.get('PMGM_QA_SILO_EXPECTED_SOURCE_SHA'))['local_image_id']
+            bundle = os.environ['PMGM_QA_SILO_BUNDLE_DIR']
+            report = archive.verify_bundle(bundle, os.environ.get('PMGM_QA_SILO_EXPECTED_SOURCE_SHA'))
+            # Docker 29 containerd uses the OCI manifest ID; bind the
+            # generated Compose image to the locally verified signed config.
+            verified_image = archive.resolve_loaded_image(bundle, report)
         errors = evaluate(json.loads(raw), verified_image)
     except Exception:
         errors = ['INVALID_OR_UNAVAILABLE_COMPOSE_CONFIG']

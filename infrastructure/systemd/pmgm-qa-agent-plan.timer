@@ -1,0 +1,13 @@
+# Reference-only template: installing this file never enables it.
+# No install actions; it triggers ONLY a read-only planner after approval.
+[Unit]
+Description=Proyecto Centenario QA readiness check (hourly; no deployment)
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=10m
+Persistent=false
+Unit=pmgm-qa-agent-plan.service
+
+[Install]
+WantedBy=timers.target
