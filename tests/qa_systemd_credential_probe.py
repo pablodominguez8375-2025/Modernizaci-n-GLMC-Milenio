@@ -31,15 +31,13 @@ def main():
     require(not credential.is_symlink(), "CREDENTIAL_IS_SYMLINK")
     st = credential.stat()
     require(stat.S_ISREG(st.st_mode), "CREDENTIAL_NOT_REGULAR")
-    # Metadata only: safe diagnostics to distinguish idmapped systemd copies.
-    print(json.dumps({"status": "CREDENTIAL_METADATA",
-                      "owner_is_root": st.st_uid == 0,
-                      "owner_is_service": st.st_uid == os.geteuid(),
-                      "mode": format(stat.S_IMODE(st.st_mode), "04o"),
-                      "parent_owner_is_root": credential.parent.stat().st_uid == 0}),
-          flush=True)
-    require(st.st_uid == os.geteuid(), "CREDENTIAL_NOT_OWNED_BY_SERVICE_UID")
-    require(stat.S_IMODE(st.st_mode) & 0o077 == 0, "CREDENTIAL_GROUP_OR_OTHER_ACCESS")
+    # New systemd uses root:root ACL-backed mode 0440 on a read-only
+    # credential mount, rather than setting the service UID as owner.
+    require(st.st_uid == 0, "CREDENTIAL_NOT_ROOT_OWNED")
+    require(stat.S_IMODE(st.st_mode) == 0o440, "CREDENTIAL_UNEXPECTED_MODE")
+    require(credential.parent.stat().st_uid == 0, "CREDENTIAL_DIRECTORY_NOT_ROOT")
+    require(os.statvfs(credential).f_flag & os.ST_RDONLY,
+            "CREDENTIAL_MOUNT_NOT_READ_ONLY")
     require(st.st_nlink == 1, "CREDENTIAL_HARDLINK")
     require(st.st_size <= 2048, "CREDENTIAL_TOO_LARGE")
 
@@ -67,6 +65,8 @@ def main():
     require(spec is not None and spec.loader is not None, "MODULE_UNAVAILABLE")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    require(module.is_systemd_credential_copy(credential, st),
+            "CREDENTIAL_SOURCE_NOT_VERIFIED")
     if mode == "valid":
         require(module.baseline(credential) == EXPECTED_SHA, "BASELINE_READ_MISMATCH")
     else:
