@@ -96,7 +96,7 @@ export function TreasuryPayments({ account, fallback, api }: { account?: MemberT
             disabled={receiptAction.busyId !== null}
             onClick={() => void receiptAction.download(r.id)}
             aria-label={`Descargar comprobante original ${r.receiptNumber}`}>
-            {receiptAction.busyId === r.id ? 'Preparando…' : 'Descargar comprobante'}
+            {receiptAction.busyId === r.id ? 'Preparando…' : 'Descargar comprobante PDF'}
           </button>}
         </li>)}</ul>
         <ShowMore total={receipts.length} open={all} onToggle={() => setAll(v => !v)} />
@@ -175,7 +175,7 @@ export function HospitalariaPayments({ api, fallback }: { api: MembershipApiClie
           <button type="button" className="member-pay-more" disabled={receiptAction.busyId !== null}
             aria-label={`Descargar comprobante de Hospitalaria ${p.receiptNumber}`}
             onClick={() => void receiptAction.download(p.id)}>
-            {receiptAction.busyId === p.id ? 'Preparando…' : 'Descargar comprobante'}
+            {receiptAction.busyId === p.id ? 'Preparando…' : 'Descargar comprobante PDF'}
           </button>
         </li>)}</ul>
         <ShowMore total={paid.length} open={all} onToggle={() => setAll(v => !v)} />
