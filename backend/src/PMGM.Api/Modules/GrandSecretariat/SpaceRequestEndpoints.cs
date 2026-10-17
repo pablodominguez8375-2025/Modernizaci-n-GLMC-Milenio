@@ -232,6 +232,9 @@ public static class SpaceRequestEndpoints
             if (item is null) return Results.NotFound();
             if (item.Status != "pending")
                 return Results.Conflict(new { message = "La solicitud ya fue resuelta." });
+            // Una solicitud pendiente no habilita confirmar una reserva cuyo inicio ya pasó.
+            if (item.StartsAtUtc <= DateTimeOffset.UtcNow)
+                return Results.Conflict(new { message = "El inicio solicitado ya pasó; debe presentarse una nueva solicitud." });
 
             var space = await db.InstitutionalSpaces.AsNoTracking()
                 .SingleOrDefaultAsync(x => x.Id == body.SpaceId, ct);
