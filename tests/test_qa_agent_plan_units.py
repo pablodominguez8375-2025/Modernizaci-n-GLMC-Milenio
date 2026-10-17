@@ -32,8 +32,14 @@ class QaPlanUnitContractTests(unittest.TestCase):
         unit = read("pmgm-qa-agent-plan.service")
         self.assertEqual("/var/lib/pmgm-qa-agent/last-deployed.json",
                          unit["Unit"]["ConditionPathExists"])
-        self.assertIn("--last-deployed /var/lib/pmgm-qa-agent/last-deployed.json",
+        self.assertEqual("qa-baseline:/var/lib/pmgm-qa-agent/last-deployed.json",
+                         unit["Service"]["LoadCredential"])
+        self.assertIn("--last-deployed ${CREDENTIALS_DIRECTORY}/qa-baseline",
                       unit["Service"]["ExecStart"])
+        self.assertNotIn("--last-deployed /var/lib/pmgm-qa-agent/last-deployed.json",
+                         unit["Service"]["ExecStart"])
+        self.assertNotIn("ExecStartPre", unit["Service"])
+        self.assertNotIn("RootDirectory", unit["Service"])
 
     def test_timer_only_calls_planner(self):
         timer = read("pmgm-qa-agent-plan.timer")
