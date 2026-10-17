@@ -59,6 +59,10 @@ public sealed class SpaceRequestPolicyTests
         Assert.NotNull(SpaceRequestEndpoints.Validate(source with { Purpose = "undefined" }));
         Assert.NotNull(SpaceRequestEndpoints.Validate(source with {
             CeremonyRequestId = Guid.NewGuid(), Purpose = "tenida" }));
+        Assert.NotNull(SpaceRequestEndpoints.Validate(source with {
+            Purpose = "ceremonia", CeremonyRequestId = null }));
+        Assert.Null(SpaceRequestEndpoints.Validate(source with {
+            Purpose = "ceremonia", CeremonyRequestId = Guid.NewGuid() }));
         Assert.NotNull(SpaceRequestEndpoints.Validate(source with { Notes = new string('x', 501) }));
         Assert.NotNull(SpaceRequestEndpoints.Validate(source with { ExpectedAttendees = 0 }));
     }
