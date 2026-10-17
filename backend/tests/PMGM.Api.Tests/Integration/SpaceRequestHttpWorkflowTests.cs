@@ -15,6 +15,8 @@ using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.GrandSecretariat.Entities;
 using Xunit;
 
@@ -33,6 +35,7 @@ public sealed class SpaceRequestHttpWorkflowTests
         var lodgeA = Guid.NewGuid();
         var lodgeB = Guid.NewGuid();
         var spaceId = Guid.NewGuid();
+        var ceremonyId = Guid.NewGuid();
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -41,6 +44,13 @@ public sealed class SpaceRequestHttpWorkflowTests
             db.Organizations.AddRange(
                 new Organization { Id = lodgeA, Name = "Taller QA A", Number = "QA-A", Type = "workshop" },
                 new Organization { Id = lodgeB, Name = "Taller QA B", Number = "QA-B", Type = "workshop" });
+            db.CeremonyRequests.Add(new CeremonyRequest
+            {
+                Id = ceremonyId, OrganizationId = lodgeA,
+                CeremonyType = CeremonyCodes.Type.WageIncrease,
+                ProposedDate = new DateOnly(2035, 12, 5),
+                Status = CeremonyCodes.RequestStatus.Authorized
+            });
             await db.SaveChangesAsync(ct);
             var gs = scope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
             gs.InstitutionalSpaces.Add(new InstitutionalSpace
@@ -131,6 +141,39 @@ public sealed class SpaceRequestHttpWorkflowTests
         Assert.False((await after.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
             .GetProperty("items").EnumerateArray().Single(x => x.GetProperty("id").GetGuid() == spaceId)
             .GetProperty("isAvailable").GetBoolean());
+
+        var rejected = await grand.PostAsJsonAsync(
+            "/api/gran-secretaria/solicitudes-espacio/" + conflictingId + "/rechazar",
+            new { reason = "Horario ocupado; buscar nueva fecha" }, ct);
+        Assert.Equal(HttpStatusCode.OK, rejected.StatusCode);
+        var rejectedJson = await rejected.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal("rejected", rejectedJson.GetProperty("status").GetString());
+
+        var ceremonyBody = new
+        {
+            spaceType = "secretariat_room", preferredSpaceId = spaceId,
+            startsAtUtc = start.AddMonths(1), endsAtUtc = start.AddMonths(1).AddHours(2),
+            purpose = "ceremonia", ceremonyRequestId = ceremonyId,
+            notes = "Solicitud ficticia sin Plancha",
+            expectedAttendees = 20,
+            equipmentRequest = (string?)null, equipmentResponsible = (string?)null,
+            vmApprovalReference = (string?)null
+        };
+        var ceremonyCreated = await a.PostAsJsonAsync("/api/secretaria/solicitudes-espacio", ceremonyBody, ct);
+        Assert.Equal(HttpStatusCode.Created, ceremonyCreated.StatusCode);
+        var ceremonySpaceId = (await ceremonyCreated.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+            .GetProperty("id").GetGuid();
+        var blockedWithoutPlancha = await grand.PostAsJsonAsync(
+            "/api/gran-secretaria/solicitudes-espacio/" + ceremonySpaceId + "/aprobar",
+            new { spaceId }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, blockedWithoutPlancha.StatusCode);
+
+        var cancellation = await a.PostAsync(
+            "/api/secretaria/solicitudes-espacio/" + ceremonySpaceId + "/cancelar", null, ct);
+        Assert.Equal(HttpStatusCode.OK, cancellation.StatusCode);
+        Assert.Equal("cancelled",
+            (await cancellation.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+                .GetProperty("status").GetString());
 
         await using var checkScope = factory.Services.CreateAsyncScope();
         var checkDb = checkScope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
