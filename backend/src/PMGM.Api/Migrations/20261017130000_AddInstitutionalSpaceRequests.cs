@@ -40,10 +40,10 @@ public sealed class AddInstitutionalSpaceRequests : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_institutional_space_requests", x => x.Id);
-                table.ForeignKey("FK_space_requests_organizations", x => x.OrganizationId, "core", "organizations", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_space_requests_spaces", x => x.PreferredSpaceId, "core", "institutional_spaces", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_space_requests_ceremonies", x => x.CeremonyRequestId, "core", "ceremony_requests", "Id", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_space_requests_reservations", x => x.SpaceReservationId, "core", "institutional_space_reservations", "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_space_requests_organizations", column: x => x.OrganizationId, principalSchema: "core", principalTable: "organizations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_space_requests_spaces", column: x => x.PreferredSpaceId, principalSchema: "core", principalTable: "institutional_spaces", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_space_requests_ceremonies", column: x => x.CeremonyRequestId, principalSchema: "core", principalTable: "ceremony_requests", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey(name: "FK_space_requests_reservations", column: x => x.SpaceReservationId, principalSchema: "core", principalTable: "institutional_space_reservations", principalColumn: "Id", onDelete: ReferentialAction.Restrict);
             });
         migrationBuilder.CreateIndex(name: "IX_space_requests_OrganizationId_CreatedAtUtc",
             schema: "core", table: "institutional_space_requests", columns: new[] { "OrganizationId", "CreatedAtUtc" });
