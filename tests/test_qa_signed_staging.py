@@ -103,7 +103,7 @@ class QaSignedStagingTests(unittest.TestCase):
     def test_rejects_non_matching_source_sha(self):
         archive, digest = fixture(self.dir)
         with patch.object(qa.subprocess, "run", side_effect=attestation_ok):
-            with self.assertRaisesRegex(qa.Blocked, "SOURCE_OR_SILO_BINDING"):
+            with self.assertRaisesRegex(qa.Blocked, "UNEXPECTED_OUTER_ARTIFACT_CONTENT"):
                 qa.stage(archive, digest, "b" * 40, self.out)
 
     def test_rejects_extra_outer_file_and_traversal(self):
