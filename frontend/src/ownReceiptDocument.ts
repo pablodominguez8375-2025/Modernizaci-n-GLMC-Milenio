@@ -1,4 +1,5 @@
 import type { OwnReceiptDocument } from './api/membershipApi'
+import { renderOwnReceiptPdf } from './api/ownReceiptPdf'
 
 const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -31,15 +32,14 @@ ${adjustments ? `<h2>Ajustes posteriores</h2><table><thead><tr><th>Movimiento</t
 </body></html>`
 }
 
+/** Descarga el comprobante como PDF (se puede reimprimir cuantas veces se necesite). */
 export function downloadOwnReceiptDocument(item: OwnReceiptDocument): void {
-  const html = ownReceiptHtml(item)
-  const blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }))
+  const blobUrl = URL.createObjectURL(renderOwnReceiptPdf(item))
   const link = document.createElement('a')
   link.href = blobUrl
-  link.download = `comprobante-${item.kind}-${item.receiptNumber.replace(/[^A-Za-z0-9_-]/g, '-')}.html`
+  link.download = `comprobante-${item.kind}-${item.receiptNumber.replace(/[^A-Za-z0-9_-]/g, '-')}.pdf`
   document.body.append(link)
   link.click()
   link.remove()
-  // El navegador puede iniciar la lectura del archivo después del click.
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
 }
