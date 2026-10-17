@@ -55,6 +55,8 @@ public static class SpaceRequestEndpoints
             return "Tipo de espacio no permitido.";
         if (body.Purpose is not ("tenida" or "docencia" or "ceremonia" or "otro"))
             return "Tipo de actividad no permitido.";
+        if (body.Purpose == "ceremonia" && body.CeremonyRequestId is null)
+            return "La solicitud de ceremonia requiere un expediente de ceremonia.";
         if (body.CeremonyRequestId is not null && body.Purpose != "ceremonia")
             return "Una ceremonia solo puede vincularse a una solicitud de tipo ceremonia.";
         if (body.Notes?.Length > 500 || body.EquipmentRequest?.Length > 500 ||
@@ -246,6 +248,9 @@ public static class SpaceRequestEndpoints
             if (item.ExpectedAttendees is not null && space.Capacity is not null &&
                 item.ExpectedAttendees > space.Capacity)
                 return Results.Conflict(new { message = "El espacio no tiene capacidad suficiente." });
+
+            if (item.Purpose == "ceremonia" && item.CeremonyRequestId is null)
+                return Results.Conflict(new { message = "La solicitud ceremonial no tiene expediente autorizado." });
 
             if (item.CeremonyRequestId is not null)
             {
