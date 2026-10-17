@@ -30,7 +30,7 @@ public static class SpaceRequestEndpoints
 
     // Se exige un Taller inequívoco en la sesión; no se acepta un OrganizationId enviado por el cliente.
     // El rol institucional del mismo Taller, no un permiso heredado de superadministrador, es obligatorio.
-    internal static bool TryLodge(ClaimsPrincipal user, IInstitutionalAccessService access, out Guid organizationId)
+    public static bool TryLodge(ClaimsPrincipal user, IInstitutionalAccessService access, out Guid organizationId)
     {
         organizationId = Guid.Empty;
         if (!user.Claims.Any(x => x.Type == InstitutionalClaims.Role &&
@@ -44,7 +44,7 @@ public static class SpaceRequestEndpoints
         return access.CanManageLodgeSecretariat(user, organizationId);
     }
 
-    internal static string? Validate(CreateWorkshopSpaceRequest body)
+    public static string? Validate(CreateWorkshopSpaceRequest body)
     {
         if (body.StartsAtUtc.Offset != TimeSpan.Zero || body.EndsAtUtc.Offset != TimeSpan.Zero ||
             body.EndsAtUtc <= body.StartsAtUtc)
