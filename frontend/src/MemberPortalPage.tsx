@@ -6,7 +6,7 @@ import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
-import { TreasuryPayments, HospitalariaPayments } from './MemberPayments'
+import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './MemberPayments'
 import { institutionalStatusLabel } from './institutionalStatus'
 import { ActionDrawer, WorkspacePanel } from './actionKit'
 import './memberPortalInstruction.css'
@@ -288,6 +288,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
       <div className="member-pay-grid">
         <TreasuryPayments account={treasuryAccount} fallback={treasury} api={membershipApi} />
         <HospitalariaPayments api={membershipApi} fallback={hospitalaria} />
+        <CeremonyPayments api={membershipApi} />
       </div>
     </WorkspacePanel>
 

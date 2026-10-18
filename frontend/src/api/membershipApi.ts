@@ -6,7 +6,7 @@ export interface OwnHospitalaria { id:string; caseId:string; tallerId:string; ta
 export interface OwnReceiptLine { description: string; amount: number; periodYear: number | null; periodMonth: number | null }
 export interface OwnReceiptCorrection { kind: string; date: string; cashAmount: number }
 export interface OwnReceiptDocument {
-  kind: 'tesoreria' | 'hospitalaria'
+  kind: 'tesoreria' | 'hospitalaria' | 'ceremonia'
   receiptNumber: string
   organization: string
   currency: 'CLP' | 'USD'
@@ -16,6 +16,11 @@ export interface OwnReceiptDocument {
   unallocatedAmount: number
   lines: OwnReceiptLine[]
   corrections: OwnReceiptCorrection[]
+}
+
+export interface OwnCeremonyReceipt {
+  id: string; ceremonyRequestId: string; receiptNumber: string; organization: string
+  ceremonyType: string; currency: 'CLP' | 'USD'; paymentDate: string; amount: number; paymentMethod: string
 }
 
 export type MembershipStatus = 'active' | 'transferred' | 'closed'
@@ -209,10 +214,23 @@ export class MembershipApiClient {
     return this.request('/api/membership/me/hospitalaria')
   }
 
+  /** Recibos de derechos de ceremonia del propio hermano (identidad por token). */
+  async getOwnCeremonyReceipts(): Promise<{ total: number; items: OwnCeremonyReceipt[] }> {
+    if (this.useMocks) return { total: 1, items: [{ id: 'ceremony-payment-demo', ceremonyRequestId: 'ceremony-demo-1', receiptNumber: 'CER-2026-DEMO01', organization: 'Taller Demostrativo Nº 23', ceremonyType: 'wage_increase', currency: 'CLP', paymentDate: '2026-08-20', amount: 35000, paymentMethod: 'transferencia' }] }
+    return this.request('/api/membership/me/comprobantes/ceremonia')
+  }
+
   /** El identificador selecciona un movimiento propio, jamás un hermano arbitrario. */
-  async getOwnReceipt(kind: 'tesoreria' | 'hospitalaria', id: string): Promise<OwnReceiptDocument> {
+  async getOwnReceipt(kind: 'tesoreria' | 'hospitalaria' | 'ceremonia', id: string): Promise<OwnReceiptDocument> {
     if (this.useMocks) {
-      if (kind === 'hospitalaria') {
+      if (kind === 'ceremonia') {
+        const own = await this.getOwnCeremonyReceipts()
+        const payment = own.items.find(value => value.id === id)
+        if (payment) return { kind, receiptNumber: payment.receiptNumber, organization: payment.organization,
+          currency: payment.currency, paymentDate: payment.paymentDate, receivedAmount: payment.amount,
+          paymentMethod: payment.paymentMethod, unallocatedAmount: 0, corrections: [],
+          lines: [{ description: 'Derecho de ceremonia: Aumento de salario', amount: payment.amount, periodYear: null, periodMonth: null }] }
+      } else if (kind === 'hospitalaria') {
         const own = await this.getOwnHospitalaria()
         for (const item of own.items) {
           const payment = item.comprobantes.find(value => value.id === id)

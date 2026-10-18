@@ -51,4 +51,24 @@ describe('comprobantes propios de Mi ficha', () => {
     expect(credit.unallocatedAmount).toBe(3.5)
     await expect(api.getOwnReceipt('tesoreria', 'not-own')).rejects.toThrow('no existe')
   })
+
+  it('la demostración entrega recibos de ceremonia propios y su comprobante', async () => {
+    const api = new MembershipApiClient({ useMocks: true })
+    const list = await api.getOwnCeremonyReceipts()
+    expect(list.total).toBe(1)
+    const receipt = await api.getOwnReceipt('ceremonia', list.items[0].id)
+    expect(receipt.kind).toBe('ceremonia')
+    expect(receipt.receivedAmount).toBe(35000)
+    expect(ownReceiptHtml(receipt)).toContain('Derechos de ceremonia')
+  })
+
+  it('en el servidor usa los endpoints propios de ceremonia sin memberId', async () => {
+    const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ total: 0, items: [] }) })
+    vi.stubGlobal('fetch', fetch)
+    const api = new MembershipApiClient({ getAccessToken: async () => 'own-token' })
+    await api.getOwnCeremonyReceipts()
+    expect(fetch.mock.calls[0][0]).toBe('/api/membership/me/comprobantes/ceremonia')
+    expect(fetch.mock.calls[0][0]).not.toContain('memberId=')
+    vi.unstubAllGlobals()
+  })
 })

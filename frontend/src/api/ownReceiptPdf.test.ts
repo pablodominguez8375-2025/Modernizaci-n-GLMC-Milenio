@@ -25,4 +25,10 @@ describe('comprobante PDF', () => {
     const text = await renderOwnReceiptPdf({ ...own, lines }).text()
     expect(Number(/\/Count (\d+)/.exec(text)?.[1])).toBeGreaterThan(1)
   })
+  it('el comprobante de ceremonia se rotula como derechos de ceremonia', async () => {
+    const item: OwnReceiptDocument = { ...own, kind: 'ceremonia', unallocatedAmount: 0, corrections: [], lines: [{ description: 'Derecho de ceremonia: Exaltación', amount: 25000, periodYear: null, periodMonth: null }] }
+    expect(ownReceiptSummary(item)).toContain('por derechos de ceremonia')
+    const text = await renderOwnReceiptPdf(item).text()
+    expect(text).toContain(Buffer.from('Comprobante de Derechos de ceremonia', 'latin1').toString('hex').toUpperCase())
+  })
 })
