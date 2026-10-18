@@ -133,8 +133,8 @@ SELECT (
 """)
     print('G8_KEYCLOAK_USERS: '+('PASS' if kc=='19' else 'PENDING'),flush=True)
     print('G8_MEMBER_LINKS_AND_GRADES: '+('PASS' if members=='18' else 'PENDING'),flush=True)
-    print('G8_ACTIVE_AND_EXPIRED_OFFICES: '+('PASS' if offices=='t' else 'PENDING'),flush=True)
-    guard(kc=='19' and members=='18' and offices=='t','G8_FIXTURES_NOT_READY')
+    print('G8_ACTIVE_AND_EXPIRED_OFFICES: '+('PASS' if offices=='true' else 'PENDING'),flush=True)
+    guard(kc=='19' and members=='18' and offices=='true','G8_FIXTURES_NOT_READY')
 
 class LoopbackTLS(http.client.HTTPSConnection):
     def __init__(self):
