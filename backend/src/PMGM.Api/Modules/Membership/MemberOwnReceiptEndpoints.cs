@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Ceremonies;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -15,6 +16,8 @@ public static class MemberOwnReceiptEndpoints
             .WithTags("Comprobantes de Mi ficha").RequireAuthorization();
         group.MapGet("/tesoreria/{id:guid}", TreasuryAsync);
         group.MapGet("/hospitalaria/{id:guid}", HospitalariaAsync);
+        group.MapGet("/ceremonia", ListCeremonyAsync);
+        group.MapGet("/ceremonia/{id:guid}", CeremonyAsync);
         return endpoints;
     }
 
@@ -65,6 +68,81 @@ public static class MemberOwnReceiptEndpoints
         return Results.Ok(oldView);
     }
 
+    // Derechos de ceremonia: recibos ya vinculados a un hermano institucional.
+    // Los candidatos todavía no iniciados no tienen MemberId: no se hacen
+    // coincidencias débiles con nombre/RUT/persona candidata ni se acepta un
+    // identificador de miembro remitido desde el navegador.
+    private static async Task<IResult> ListCeremonyAsync(HttpContext http, PmgmDbContext db,
+        IInstitutionalMemberContextResolver resolver, CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        var own = await resolver.ResolveAsync(http.User, ct);
+        if (own is null) return Results.NotFound();
+
+        var rows = await db.CeremonyRightPayments.AsNoTracking()
+            .Where(x => x.CeremonyRequest.MemberId == own.MemberId)
+            .OrderByDescending(x => x.PaymentDate).ThenByDescending(x => x.RecordedAtUtc)
+            .Select(x => new
+            {
+                x.Id, x.CeremonyRequestId, x.ReceiptNumber,
+                x.PaymentDate, x.Amount, x.Currency, x.PaymentMethod,
+                x.CeremonyRequest.CeremonyType,
+                Organization = x.CeremonyRequest.Organization.Name
+            })
+            .ToListAsync(ct);
+
+        var items = rows.Select(x => new OwnCeremonyReceiptSummary(
+            x.Id, x.CeremonyRequestId, x.ReceiptNumber,
+            x.Organization, x.CeremonyType, x.Currency,
+            x.PaymentDate, x.Amount, x.PaymentMethod)).ToList();
+        return Results.Ok(new { total = items.Count, items });
+    }
+
+    private static async Task<IResult> CeremonyAsync(Guid id, HttpContext http, PmgmDbContext db,
+        IInstitutionalMemberContextResolver resolver, IAuditService audit, CancellationToken ct)
+    {
+        http.Response.Headers.CacheControl = "private, no-store";
+        var own = await resolver.ResolveAsync(http.User, ct);
+        if (own is null) return Results.NotFound();
+
+        var payment = await db.CeremonyRightPayments.AsNoTracking()
+            .Where(x => x.Id == id && x.CeremonyRequest.MemberId == own.MemberId)
+            .Select(x => new
+            {
+                x.Id, x.ReceiptNumber, x.Currency, x.PaymentDate,
+                x.Amount, x.PaymentMethod,
+                x.CeremonyRequest.CeremonyType,
+                x.CeremonyRequest.OrganizationId,
+                Organization = x.CeremonyRequest.Organization.Name
+            })
+            .SingleOrDefaultAsync(ct);
+        if (payment is null) return Results.NotFound();
+
+        var view = new OwnReceiptView("ceremonia", payment.ReceiptNumber,
+            payment.Organization, payment.Currency, payment.PaymentDate,
+            payment.Amount, payment.PaymentMethod, 0m,
+            new List<OwnReceiptLine>
+            {
+                new($"Derecho de ceremonia: {CeremonyLabel(payment.CeremonyType)}", payment.Amount)
+            },
+            new List<OwnReceiptCorrection>());
+        audit.Add(http, "member.self.receipt.downloaded", "CeremonyRightPayment",
+            payment.Id.ToString(), payment.OrganizationId, AuditResults.Success,
+            new { origin = "ceremony" });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(view);
+    }
+
+    private static string CeremonyLabel(string type) => type switch
+    {
+        CeremonyCodes.Type.Initiation => "Iniciación",
+        CeremonyCodes.Type.Affiliation => "Afiliación",
+        CeremonyCodes.Type.WageIncrease => "Aumento de salario",
+        CeremonyCodes.Type.Exaltation => "Exaltación",
+        CeremonyCodes.Type.Incorporation => "Incorporación",
+        _ => "Ceremonia"
+    };
+
     private static async Task<IResult> HospitalariaAsync(Guid id, HttpContext http, PmgmDbContext db,
         IInstitutionalMemberContextResolver resolver, IAuditService audit, CancellationToken ct)
     {
@@ -96,3 +174,7 @@ public sealed record OwnReceiptCorrection(string Kind, DateOnly Date, decimal Ca
 public sealed record OwnReceiptView(string Kind, string ReceiptNumber, string Organization, string Currency,
     DateOnly PaymentDate, decimal ReceivedAmount, string PaymentMethod, decimal UnallocatedAmount,
     IReadOnlyList<OwnReceiptLine> Lines, IReadOnlyList<OwnReceiptCorrection> Corrections);
+
+public sealed record OwnCeremonyReceiptSummary(Guid Id, Guid CeremonyRequestId,
+    string ReceiptNumber, string Organization, string CeremonyType, string Currency,
+    DateOnly PaymentDate, decimal Amount, string PaymentMethod);
