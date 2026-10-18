@@ -57,6 +57,7 @@
       "InstitutionalStatusHttpWorkflowTests",
       "HospitalariaMonthlyWorkflowPostgreSqlTests",
       "MemberSelfServicePostgreSqlTests",
+      "MemberOwnCeremonyReceiptPostgreSqlTests",
       "PrivacyRequestReadAuditPostgreSqlTests",
       "LibraryDegreeAuthorizationTests",
       "AdmissionPersonLookupHttpTests",
