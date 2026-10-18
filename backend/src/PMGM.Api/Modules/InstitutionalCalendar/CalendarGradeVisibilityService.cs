@@ -35,9 +35,16 @@ public sealed record CalendarGradeReader(
             return true;
 
         var eventDegree = CalendarCodes.Grade.ToNumeric(item.Grade);
-        return eventDegree is not null &&
-               EffectiveDegree is not null &&
-               EffectiveDegree.Value >= eventDegree.Value;
+        if (eventDegree is null || EffectiveDegree is null) return false;
+
+        // Docencia: una instrucción corresponde exclusivamente al grado exacto
+        // del hermano. Tenidas, ceremonias y otros eventos graduados conservan
+        // la regla de grado propio e inferiores. La excepción para cargos
+        // vigentes y administradores se evaluó antes de esta condición.
+        if (item.EventType == "lodge_instruction_day")
+            return EffectiveDegree.Value == eventDegree.Value;
+
+        return EffectiveDegree.Value >= eventDegree.Value;
     }
 }
 
