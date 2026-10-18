@@ -100,8 +100,8 @@ def preflight():
     require(len(KEY.read_bytes().strip()) >= 36, 'KEY_MISSING_OR_SHORT')
     require(ARCHIVE.is_file() and not ARCHIVE.is_symlink(), 'ARCHIVE_MISSING')
     require(sha256(ARCHIVE) == ARCHIVE_SHA, 'ARCHIVE_SHA256_MISMATCH')
-    safe_file(REPORT) if REPORT.exists() else None
-    require(not REPORT.exists(), 'RESTORE_RECEIPT_ALREADY_EXISTS')
+    require(not REPORT.exists() and not REPORT.is_symlink(),
+            'RESTORE_RECEIPT_ALREADY_EXISTS')
     state = json.loads(QA_STATUS.read_text())
     require(state.get('status') == 'PRIVATE_LAB_SMOKE_PASS' and
             state.get('project') == QA and state.get('source_sha') == SHA,
@@ -141,7 +141,10 @@ def preflight():
 
 def safe_extract_encrypted_archive(path, target):
     """Manually extract regular files and dirs only, rejecting tar traversal and links."""
-    target.mkdir(mode=0o700)
+    target.mkdir(mode=0o700, exist_ok=True)
+    require(target.is_dir() and not target.is_symlink() and
+            stat.S_IMODE(target.stat().st_mode) == 0o700,
+            'ARCHIVE_EXTRACT_DIRECTORY_UNSAFE')
     count = 0
     total = 0
     with tarfile.open(path, 'r:gz') as archive:
