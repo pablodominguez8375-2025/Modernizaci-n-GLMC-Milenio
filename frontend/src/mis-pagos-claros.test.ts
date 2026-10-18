@@ -21,7 +21,7 @@ describe('PMGM-UX Mis pagos claros, Tesorería y Hospitalaria separadas', () => 
   it('cada bloque dice el estado en una frase y separa «Lo que debo» de «Mis pagos realizados»', () => {
     expect(payments).toContain('text="Estás al día"')
     expect(payments.match(/<h3>Lo que debo<\/h3>/g)).toHaveLength(2)
-    expect(payments.match(/<h3>Mis pagos realizados<\/h3>/g)).toHaveLength(2)
+    expect(payments.match(/<h3>Mis pagos realizados<\/h3>/g)).toHaveLength(3)
   })
 
   it('la cartola completa y los decretos se abren en panel; sin el botón «Ver detalle» que no hacía nada', () => {

@@ -11,7 +11,7 @@ const month = (year?: number | null, month?: number | null) => year && month ? `
 
 /** Comprobante con datos originales de recepción, no con montos reconstruidos desde cuotas. */
 export function ownReceiptHtml(item: OwnReceiptDocument): string {
-  const title = item.kind === 'hospitalaria' ? 'Comprobante de Hospitalaria' : 'Comprobante de Tesorería'
+  const title = item.kind === 'hospitalaria' ? 'Comprobante de Hospitalaria' : item.kind === 'ceremonia' ? 'Comprobante de Derechos de ceremonia' : 'Comprobante de Tesorería'
   const lineRows = item.lines.map(line => `<tr><td>${escapeHtml(line.description + month(line.periodYear, line.periodMonth))}</td><td class="amount">${escapeHtml(money(line.amount, item.currency))}</td></tr>`).join('')
   const adjustments = item.corrections.map(change => `<tr><td>${escapeHtml(change.kind === 'void' ? 'Anulación' : 'Corrección')} · ${escapeHtml(date(change.date))}</td><td class="amount">${escapeHtml(money(change.cashAmount, item.currency))}</td></tr>`).join('')
   return `<!doctype html>
