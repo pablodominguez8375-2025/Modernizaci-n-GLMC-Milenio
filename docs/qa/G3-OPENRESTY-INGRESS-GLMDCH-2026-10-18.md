@@ -45,3 +45,17 @@ Si falta alguno de los cuatro datos, **G3 HOLD**. No asumir topología por un me
 Documento derivado del diagnóstico y mensajes registrados el 18-10-2026 en issues #97 y #517 y bitácora de QA: https://docs.google.com/document/d/1I9bcJ7lKH4T2iQvxafY63HbOBr0ZsGZ8lDX3tSe2UfM/edit
 
 Corte consultado: **dev f32da189e6b82ea34098ff5417db45f9c377eb98**; **main 6dfb9546a4873baff15955cf86abfd7d47e3d111** sin modificación; LAB2 firmado instalado sobre **4ef456fee3a578a9e6418f3f7072af5dd79eb045**. No equiparar este diseño con cambios físicos verificados.
+
+## 6. Ejecución sin Jorge, autorizada por Sponsor solo para QA port80 (18-10-2026)
+
+La restricción operativa cambió: no existe acceso a Jorge; el Sponsor pide expresamente resolver mediante el puerto 80 desde la VM. Por lo tanto se preparó **un instalador opt-in con retorno automático**, no un ajuste de OpenResty ni de firewall. Está en `scripts/qa/install-g3-port80-bridge.sh`, con prueba estática en `tests/test_qa_g3_port80_bridge.py`, ambos en esta misma PR DRAFT. La ejecución física exige que un administrador del host lo lance mediante el canal existente Termius; el conector GitHub/Drive de ChatGPT **no ejecuta comandos en glmdch**.
+
+Su contrato es intencionalmente restringido:
+- Verifica IP privada exacta `172.17.5.107/24`, puerto TCP 80 libre y que exista un único contenedor Caddy activo que publica `127.0.0.1:18443->443/tcp`.
+- Reutiliza **la misma imagen Docker local** del gateway vigente, con `--pull never`; combina CA pública del host y root CA local pública de Caddy si existe; exige `curl --cacert` con SNI institucional + respuesta health 200 antes de permitir nuevo listener.
+- Levanta contenedor **separado** `centenario-qa-g3-port80` en modo host-net para alcanzar loopback, con rootfs read-only, caps mínimas, usuario numérico aislado, Caddy admin/auto_https apagados. Su socket queda ligado exclusivamente a `172.17.5.107:80` y su origen TCP admitido es **solo la red `172.17.5.0/24`**. Si el proxy externo tiene otra IP de origen, responderá 403 (no prometer 200 público): ampliar ACL solo tras comprobar IP concreta de la conexión.
+- Filtra consola Keycloak y realm master, preserva Host institucional y X-Forwarded-Proto=https, y reenvía a gateway QA **por HTTPS con validación CA y nombre**. No confía ciegamente en headers de cliente. Esto **no prueba la auditoría de IP real** #470 ni la seguridad de un posible tramo perimetral HTTP sin cifrar; ambos deben resolverse antes de cerrar G3 como puerta institucional.
+- Validación de sintaxis Caddy previa y health a través de TCP80; si falla la prueba posterior, retira automáticamente el contenedor nuevo. No reinicia ni cambia LAB2. No modifica UFW, DNS, NAT, Docker Compose ni volúmenes. Reversión explícita: `sudo docker rm -f centenario-qa-g3-port80`.
+- **Salida esperada con éxito local:** `G3: PUENTE_LOCAL_PASS TCP 172.17.5.107:80 -> HTTPS 127.0.0.1:18443`. Solo la prueba desde red externa del FQDN permite determinar si el 502 se resolvió. Si 502 persiste, faltan permisos de red/NAT/upstream del perímetro, inaccesibles mediante SSH a la VM, por lo cual no inventar reparación de ese componente.
+
+**G3 no está aprobado por preparar ni ejecutar el bridge**: aún deben pasar controles de IP real #470, IAM #479, OIDC, accesos negativos, G8 ampliado/G10 y una prueba externa de ruta. El acceso HTTP proxy→VM en red interna se acepta aquí únicamente como candidato limitado a QA sintético; validar aislamiento y origen real. Queda prohibida la apertura wildcard o por IP pública sin controles comprobados.
