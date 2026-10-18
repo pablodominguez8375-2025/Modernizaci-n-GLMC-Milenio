@@ -53,11 +53,23 @@ class QaG8Lab2ProbeTests(unittest.TestCase):
                 self.assertEqual(scope,'organization' if index<=14 else 'order')
         self.assertEqual(19, len(set(range(1,20))))
 
-    def test_full_database_inventory_pass_and_fail(self):
+    def test_office_boolean_text_cast_regression(self):
+        """psql SELECT (boolean)::text returns 'true'/'false', not 't'/'f'."""
+        source = SCRIPT.read_text()
+        self.assertIn("offices=='true'", source)
+        self.assertNotIn("offices=='t'", source)
+        canonical = (ROOT / 'scripts/qa/check-g8-identities.sh').read_text()
+        self.assertIn('[ "$offices" = true ]', canonical)
         with patch.object(PROBE,'scalar',side_effect=['19','18','t']), \
              patch('builtins.print'):
+            with self.assertRaisesRegex(PROBE.Blocked,'G8_FIXTURES_NOT_READY'):
+                PROBE.check_institutional_data()
+
+    def test_full_database_inventory_pass_and_fail(self):
+        with patch.object(PROBE,'scalar',side_effect=['19','18','true']), \
+             patch('builtins.print'):
             PROBE.check_institutional_data()
-        with patch.object(PROBE,'scalar',side_effect=['19','0','t']), \
+        with patch.object(PROBE,'scalar',side_effect=['19','0','true']), \
              patch('builtins.print'):
             with self.assertRaisesRegex(PROBE.Blocked,'G8_FIXTURES_NOT_READY'):
                 PROBE.check_institutional_data()
