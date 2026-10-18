@@ -210,6 +210,8 @@ const gradeLevel: Record<string, number> = { apprentice: 1, fellow_craft: 2, mas
 function demoCanSee(event: CalendarEvent, viewer: CalendarDemoViewer): boolean {
   const level = event.grade ? gradeLevel[event.grade] : undefined
   if (!level || viewer === 'office') return true
+  // Docencia: cada hermano ve solo las instrucciones de su grado exacto.
+  if (event.eventType === 'lodge_instruction_day') return level === gradeLevel[viewer]
   return level <= gradeLevel[viewer]
 }
 
