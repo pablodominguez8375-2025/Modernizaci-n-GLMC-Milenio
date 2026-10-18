@@ -5,6 +5,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Notifications.Entities;
+using PMGM.Api.Modules.InstitutionalCalendar;
 
 namespace PMGM.Api.Modules.Notifications;
 
@@ -95,6 +96,8 @@ public static class NotificationEndpoints
         HttpContext httpContext,
         IInstitutionalAccessService access,
         IInstitutionalNotificationService service,
+        ICalendarGradeVisibilityService gradeVisibility,
+        CalendarDbContext calendarDb,
         IAuditService audit,
         PmgmDbContext auditDb,
         CancellationToken cancellationToken)
@@ -106,6 +109,12 @@ public static class NotificationEndpoints
         {
             return Results.Forbid();
         }
+
+        // Check protected Agenda/Docencia notices BEFORE queue, email or audit side effects.
+        // No client-supplied degree, organization role or recipient-email is trusted.
+        if (!await CalendarNotificationRecipientGuard.AuthorizeQueueAsync(
+                request, httpContext.User, auditDb, calendarDb, gradeVisibility, cancellationToken))
+            return Results.Forbid();
 
         var correlationId = httpContext.Request.Headers["X-Correlation-ID"].FirstOrDefault()
                             ?? httpContext.TraceIdentifier;
@@ -155,6 +164,9 @@ public static class NotificationEndpoints
         int? limit,
         HttpContext httpContext,
         NotificationDbContext notificationDb,
+        PmgmDbContext institutionalDb,
+        CalendarDbContext calendarDb,
+        ICalendarGradeVisibilityService gradeVisibility,
         CancellationToken cancellationToken)
     {
         var subject = httpContext.User.FindFirstValue("sub");
@@ -182,7 +194,39 @@ public static class NotificationEndpoints
                 x.RelatedResourceType, x.RelatedResourceId, x.CreatedAtUtc, x.ReadAtUtc))
             .ToListAsync(cancellationToken);
 
-        return Results.Ok(rows);
+        // A previously queued notice may no longer be visible after a membership,
+        // degree or office change. Revalidate on inbox read, without leaking its body.
+        var protectedRows = rows.Where(x => CalendarNotificationRecipientGuard.IsProtected(
+            x.TypeCode, x.RelatedResourceType, x.ActionUrl)).ToArray();
+        if (protectedRows.Length == 0)
+            return Results.Ok(rows);
+
+        var issuer = httpContext.User.FindFirstValue("iss");
+        if (!await CalendarNotificationRecipientGuard.HasUniqueRecipientLinkAsync(
+                institutionalDb, subject, issuer, cancellationToken))
+            return Results.Ok(rows.Where(x => !CalendarNotificationRecipientGuard.IsProtected(
+                x.TypeCode, x.RelatedResourceType, x.ActionUrl)).ToArray());
+
+        var gradeReader = await gradeVisibility.ForUserAsync(httpContext.User, cancellationToken);
+        var ids = protectedRows
+            .Select(x => Guid.TryParse(x.RelatedResourceId, out var id) ? id : Guid.Empty)
+            .Where(x => x != Guid.Empty).Distinct().ToArray();
+        var events = await calendarDb.CalendarEvents.AsNoTracking()
+            .Where(x => ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, cancellationToken);
+        var visible = rows.Where(x =>
+        {
+            if (!CalendarNotificationRecipientGuard.IsProtected(
+                    x.TypeCode, x.RelatedResourceType, x.ActionUrl))
+                return true;
+            return string.Equals(x.RelatedResourceType, "calendar_event",
+                       StringComparison.OrdinalIgnoreCase) &&
+                   Guid.TryParse(x.RelatedResourceId, out var eventId) &&
+                   events.TryGetValue(eventId, out var item) &&
+                   CalendarNotificationRecipientGuard.CanDeliver(
+                       gradeReader, item, new[] { NotificationCodes.Channel.Internal });
+        }).ToArray();
+        return Results.Ok(visible);
     }
 
     private static async Task<IResult> MarkReadAsync(
