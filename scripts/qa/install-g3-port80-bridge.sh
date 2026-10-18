@@ -69,12 +69,11 @@ http://sistema.granlogiamixta.cl:80 {
     bind 172.17.5.107
     # Usar peer TCP real, nunca cabeceras declaradas por cliente.
     @outside not remote_ip 172.17.5.0/24
-    respond @outside "Forbidden" 403
-
     @deny_identity path /identity/admin /identity/admin/* /identity/realms/master /identity/realms/master/*
-    respond @deny_identity "Not Found" 404
-
-    reverse_proxy https://127.0.0.1:18443 {
+    route {
+      respond @outside "Forbidden" 403
+      respond @deny_identity "Not Found" 404
+      reverse_proxy https://127.0.0.1:18443 {
         header_up Host sistema.granlogiamixta.cl
         header_up X-Forwarded-Proto https
         header_up X-Forwarded-Host sistema.granlogiamixta.cl
@@ -84,11 +83,12 @@ http://sistema.granlogiamixta.cl:80 {
             tls_server_name sistema.granlogiamixta.cl
             tls_trust_pool file /etc/caddy/trust.pem
         }
+      }
     }
 }
 CADDY
 chmod 0444 "$DIR/Caddyfile"
-docker run --rm --pull never --network none --read-only \
+docker run --rm --pull never --network none --read-only --tmpfs /config:rw,nosuid,nodev,size=2m --tmpfs /data:rw,nosuid,nodev,size=2m \
   --mount type=bind,source="$DIR/Caddyfile",target=/etc/caddy/Caddyfile,readonly \
   --mount type=bind,source="$DIR/trust.pem",target=/etc/caddy/trust.pem,readonly \
   "$GATEWAY_IMAGE" caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile ||
@@ -96,6 +96,7 @@ docker run --rm --pull never --network none --read-only \
 
 docker run -d --name "$NAME" --pull never --network host \
   --restart unless-stopped --read-only --user 10001:10001 \
+  --tmpfs /config:rw,nosuid,nodev,size=2m --tmpfs /data:rw,nosuid,nodev,size=2m \
   --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges \
   --mount type=bind,source="$DIR/Caddyfile",target=/etc/caddy/Caddyfile,readonly \
   --mount type=bind,source="$DIR/trust.pem",target=/etc/caddy/trust.pem,readonly \
