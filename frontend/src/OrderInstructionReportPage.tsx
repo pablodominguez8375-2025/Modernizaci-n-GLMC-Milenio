@@ -32,7 +32,7 @@ export default function OrderInstructionReportPage({ lodgeApi, allowedGrades, ca
   }, [lodgeApi, grade, organizationId, from, to])
 
   return <div className="lodge-product-page">
-    <section className="lodge-product-heading"><div><p className="lodge-product-breadcrumb">Orden <span>›</span> Docencia</p><h1>Instrucciones por Taller</h1><p>Consulta de solo lectura de las sesiones realizadas y la asistencia registrada.</p></div><span className="lodge-live-chip">Solo consulta</span></section>
+    <section className="lodge-product-heading"><div><p className="lodge-product-breadcrumb">Orden <span>›</span> Docencia</p><h1>Docencia</h1><p>Consulta de solo lectura de las sesiones realizadas y la asistencia registrada.</p></div><span className="lodge-live-chip">Solo consulta</span></section>
     {error && <div className="error-banner" role="alert">{error}</div>}
     <section className="lodge-instruction-workspace">
       <div className="lodge-instruction-heading"><div><p className="lodge-kicker">Reporte de Orden</p><h2>Actividad de docencia</h2><p>El reporte no incluye nombres ni datos personales de los hermanos.</p></div></div>

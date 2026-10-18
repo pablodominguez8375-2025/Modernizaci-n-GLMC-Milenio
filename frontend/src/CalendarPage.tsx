@@ -222,6 +222,6 @@ function demoIdentity(viewer: CalendarDemoViewer): MemberIdentity { return { lod
 export function scopeSummary(identity: MemberIdentity | null): string | null {
   if (!identity) return null
   if (identity.office) return 'Mostrando: todos los grados de tu Taller'
-  if (identity.degree) return 'Mostrando: tu grado y los inferiores, más lo general'
+  if (identity.degree) return 'Mostrando: tu grado y los inferiores, más lo general. Las instrucciones: solo las de tu grado'
   return null
 }

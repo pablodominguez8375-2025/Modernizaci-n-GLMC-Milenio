@@ -208,7 +208,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const isGrandSupervision = canLodge && !isLodgeSecretaryWorkspace && !canOpenLodgeTreasury && (canSecretariat || canTreasury || canHospitalaria || canRegimen || canMemberControl)
   const lodgeMenuLabel = isLodgeSecretaryWorkspace ? 'Secretaría' : isGrandSupervision ? 'Talleres (supervisión)' : 'Gestión Logial'
   const grandSecretariatViews: View[] = ['secretariat', 'candidateProfile', 'initiationCircuit', 'admissions', 'ceremonies', 'members', 'documents']
-  const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive || canManageAnyInstruction || canReadOrderInstructions
+  const hasInstitutionalManagement = canMembers || canReporting || canMemberControl || canDataQuality || canCaseQueue || canCeremonies || canRegimen || canTreasury || canHospitalaria || canSecretariat || canGrandArchive || canManageAnyInstruction
 
   const pendingFlags: PendingTaskFlags = useMemo(() => ({ canApproveLodgeExpenses:canApproveLodgeExpenses&&canOpenLodgeTreasury, canLodgeTreasury:canLodgeTreasury&&canOpenLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap }), [canApproveLodgeExpenses, canLodgeTreasury, canSecretariat, canCeremonies, canLodge, canManageLodgeSecretariat, canConfigureSystem, canBootstrap, canOpenLodgeTreasury])
   const operational = isOperationalProfile(pendingFlags)
@@ -229,7 +229,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     { group: 'Finanzas', icon: 'hospitalaria', label: 'Gran Hospitalaria', hint: 'Rendiciones y reposición por fallecimiento', show: canOpenGrandHospitalaria, views: ['hospitalaria'], onOpen: () => setView('hospitalaria') },
     { group: 'Secretaría y Orden', icon: 'secretariat', label: 'Gran Secretaría', hint: 'Bandeja, Talleres y documentos', show: canSecretariat, views: ['secretariat'], onOpen: () => setView('secretariat') },
     { group: 'Secretaría y Orden', icon: 'archive', label: 'Gran Archivero', hint: 'Archivo de la Orden', show: canGrandArchive, views: ['grandArchive'], onOpen: () => setView('grandArchive') },
-    { group: 'Secretaría y Orden', icon: 'library', label: 'Docencia de la Orden', hint: 'Instrucción por grado', show: canReadOrderInstructions, views: ['orderInstructionReport'], onOpen: () => setView('orderInstructionReport') },
+    { group: 'Docencia', icon: 'library', label: 'Docencia', hint: 'Instrucción por grado en todos los Talleres', show: canReadOrderInstructions, views: ['orderInstructionReport'], onOpen: () => setView('orderInstructionReport') },
   ]
   const workbenchItems = workbenchCandidates.filter(item => item.show).map(item => ({ ...item, badge: ({ 'Ceremonias': badges.ceremonies, 'Insinuaciones e Iniciación': badges.candidateProfile } as Record<string, number | undefined>)[item.label] }))
   const useWorkbench = workbenchItems.length >= 5
@@ -307,10 +307,10 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       ...entry(canHospitalariaWorkspace, 'hospitalaria', canOpenGrandHospitalaria ? 'Gran Hospitalaria' : 'Hospitalaria del Taller', canOpenGrandHospitalaria ? 'Gestión institucional' : 'Taller', 'hospitalaria'),
       ...entry(canSecretariat, 'secretariat', 'Gran Secretaría', 'Gestión institucional', 'secretariat', 'planchas templos salas'),
       ...entry(canGrandArchive, 'grandArchive', 'Gran Archivero', 'Gestión institucional', 'archive', 'archivo'),
-      ...entry(canReadOrderInstructions, 'orderInstructionReport', 'Docencia de la Orden', 'Gestión institucional', 'library'),
+      ...entry(canReadOrderInstructions, 'orderInstructionReport', 'Docencia', 'Docencia', 'library', 'instruccion grado talleres'),
       ...entry(canLodgeProfile && !canLodge, 'lodgeProfile', 'Ficha del Taller', 'Taller', 'lodge'),
       ...entry(canLodge, 'lodge', lodgeMenuLabel, 'Taller', 'lodge', 'tenidas actas asistencia'),
-      ...entry(canManageAnyInstruction, 'lodgeInstruction', 'Docencia', 'Taller', 'library', 'instruccion'),
+      ...entry(canManageAnyInstruction, 'lodgeInstruction', 'Docencia del Taller', 'Taller', 'library', 'instruccion'),
       ...entry(canOpenLodgeTreasury, 'lodgeTreasury', 'Tesorería', 'Taller', 'treasury', 'egresos cuotas recibos'),
       ...entry(canLibrary, 'library', 'Biblioteca Virtual', 'Conocimiento', 'library', 'libros planchas'),
       ...entry(canDocuments, 'documents', 'Gestor Documental', 'Conocimiento', 'documents', 'pdf archivos'),
@@ -335,7 +335,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.113' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.114' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -376,8 +376,9 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
           <ModuleAccess icon="hospitalaria" label="Gran Hospitalaria" allowed={canOpenGrandHospitalaria} active={view === 'hospitalaria'} onOpen={canOpenGrandHospitalaria ? () => setView('hospitalaria') : undefined} />
           <ModuleAccess icon="secretariat" label="Gran Secretaría" allowed={canSecretariat} active={!isInitiationView && (isGrandSecretaryWorkspace ? grandSecretariatViews.includes(view) : view === 'secretariat')} onOpen={canSecretariat ? () => setView('secretariat') : undefined} />
           <ModuleAccess icon="archive" label="Gran Archivero" allowed={canGrandArchive} active={view === 'grandArchive'} onOpen={canGrandArchive ? () => setView('grandArchive') : undefined} />
-          <ModuleAccess icon="library" label="Docencia de la Orden" allowed={canReadOrderInstructions} active={view === 'orderInstructionReport'} onOpen={canReadOrderInstructions ? () => setView('orderInstructionReport') : undefined} />
         </>}
+        {!useWorkbench && canReadOrderInstructions && <div className="nav-section">Docencia</div>}
+        {!useWorkbench && <ModuleAccess icon="library" label="Docencia" allowed={canReadOrderInstructions} active={view === 'orderInstructionReport'} onOpen={canReadOrderInstructions ? () => setView('orderInstructionReport') : undefined} />}
         {(canLodgeProfile || canLodge || canLodgeTreasury || canApproveLodgeExpenses || canReadLodgeHospitalaria || canManageAnyInstruction) && <>
           <div className="nav-section">Mi Taller</div>
           <ModuleAccess icon="lodge" label="Ficha del Taller" allowed={canLodgeProfile && !canLodge} active={view === 'lodgeProfile'} onOpen={canLodgeProfile ? () => setView('lodgeProfile') : undefined} />
@@ -486,11 +487,11 @@ const NAV_HINTS: Record<string, string> = {
   'Gran Hospitalaria': 'Ayuda solidaria de la Orden',
   'Gran Secretaría': 'Planchas, documentos y templos',
   'Gran Archivero': 'Archivo histórico de la Orden',
-  'Docencia de la Orden': 'Instrucción en todos los Talleres',
+  'Docencia': 'Instrucción por grado en todos los Talleres',
   'Ficha del Taller': 'Datos y cargos de tu Taller',
   'Secretaría': 'Tenidas, actas y correspondencia',
   'Gestión Logial': 'Administración del Taller',
-  'Docencia': 'Instrucción de tu Taller',
+  'Docencia del Taller': 'Instrucción de tu Taller',
   'Tesorería': 'Cuotas, pagos y gastos del Taller',
   'Hospitalaria del Taller': 'Ayuda solidaria del Taller',
   'Biblioteca Virtual': 'Libros y trabajos para leer',
