@@ -9,6 +9,7 @@ import {
   type SpaceAvailabilityResponse,
 } from './api/pmgmApi'
 import './secretariat.css'
+import { GrandSpaceRequests } from './SpaceRequestPanels'
 import { ceremonyTypeLabel } from './ceremonyTypes'
 import { countLabel, organizationDisplayName } from './displayFormat'
 import { ActionBar, ActionDrawer, ConfirmAction, HelpNote, RowMenu, WorkspaceTabs, type WorkspaceTab } from './actionKit'
@@ -95,6 +96,7 @@ export default function GrandSecretariatPage({ api }: { api: PmgmApiClient }) {
       </section>
 
       <section className="secretariat-grid workspace-panel" hidden={tab !== 'templos'}>
+        <GrandSpaceRequests api={api} organizations={organizations} onChanged={refreshAvailability} />
         <article className="panel secretariat-wide">
           <div className="panel-heading">
             <div><p className="eyebrow">Calendario</p><h2>Disponibilidad de templos y salas</h2></div>

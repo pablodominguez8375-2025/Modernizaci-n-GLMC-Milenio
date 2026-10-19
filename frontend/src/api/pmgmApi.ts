@@ -17,6 +17,7 @@ import { affiliationModeForDate } from '../admissionDates'
 import { ExternalIncorporationDemo, type ExternalIncorporationRequest } from './externalIncorporation'
 export type { ExternalIncorporationRequest } from './externalIncorporation'
 import { lookupDemoAdmissionPeople, validateDemoAdmissionIdentity, type AdmissionPersonSearch, type AdmissionPersonSearchResponse } from './admissionLookup'
+import { type SpaceRequest, type SpaceRequestList, type SpaceRequestStatus, mockSpaceRequests } from './spaceRequests'
 export type { AdmissionPersonOption } from './admissionLookup'
 export interface CandidatePublication { displayName: string; workshopName: string; workshopNumber: string | null; publishedFromUtc: string; publishedUntilUtc: string | null; requiredDays: number; elapsedDays: number; complianceDateUtc: string; ruleCode: string; status: string }
 export interface CandidatePortalResponse { culture: string; portal: string; total: number; items: CandidatePublication[] }
@@ -1274,6 +1275,18 @@ export class PmgmApiClient {
   }
   private requireMockHospitalariaMovement(id:string):LodgeHospitalariaMovement{for(const rows of this.mockLodgeHospitalariaMovements.values()){const item=rows.find(x=>x.id===id);if(item)return item}throw new Error('El movimiento de Hospitalaria no existe.')}
   private requireMockHospitalariaSubmission(id:string):HospitalariaMonthlySubmission{const item=[...this.mockHospitalariaSubmissions.values()].find(x=>x.id===id);if(!item)throw new Error('La rendición de Hospitalaria no existe.');return item}
+  async listAllSpaceRequests(status?: SpaceRequestStatus): Promise<SpaceRequestList> {
+    if (this.useMocks) { const items = mockSpaceRequests.listAll(status); return { total: items.length, items } }
+    return this.request<SpaceRequestList>(`/api/gran-secretaria/solicitudes-espacio${status ? `?status=${status}` : ''}`)
+  }
+  async approveSpaceRequest(id: string, spaceId: string): Promise<SpaceRequest> {
+    if (this.useMocks) return mockSpaceRequests.decide(id, 'approved', null)
+    return this.postJson<SpaceRequest>(`/api/gran-secretaria/solicitudes-espacio/${encodeURIComponent(id)}/aprobar`, { spaceId })
+  }
+  async rejectSpaceRequest(id: string, reason: string): Promise<SpaceRequest> {
+    if (this.useMocks) return mockSpaceRequests.decide(id, 'rejected', reason)
+    return this.postJson<SpaceRequest>(`/api/gran-secretaria/solicitudes-espacio/${encodeURIComponent(id)}/rechazar`, { reason })
+  }
   private postJson<T>(path: string, payload: unknown): Promise<T> { return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }) }
   private async optionalGet<T>(path: string): Promise<T | null> { try { return await this.request<T>(path) } catch (error) { if (error instanceof PmgmApiHttpError && error.status === 404) return null; throw error } }
   async createAdmissionCase(payload: CreateAdmissionCaseRequest): Promise<AdmissionCaseResponse> {
