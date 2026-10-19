@@ -14,6 +14,7 @@ public static class PrivacyEndpoints
             .WithTags("Privacidad y Ley 21.719")
             .RequireAuthorization();
 
+        group.MapGet("/contact", GetContactAsync);
         group.MapGet("/dashboard", GetDashboardAsync);
         group.MapGet("/processing-activities", GetProcessingActivitiesAsync);
         group.MapPost("/processing-activities", CreateProcessingActivityAsync);
@@ -21,6 +22,34 @@ public static class PrivacyEndpoints
         group.MapPost("/data-subject-requests", CreateDataSubjectRequestAsync);
 
         return endpoints;
+    }
+
+    /// <summary>
+    /// Consulta mínima accesible a todo usuario autenticado, sin permiso de
+    /// administración del sistema ni exposición del resto de parámetros.
+    /// </summary>
+    private static async Task<IResult> GetContactAsync(
+        PmgmDbContext db, CancellationToken cancellationToken)
+    {
+        var today = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+                DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+
+        var configured = await db.InstitutionalRuleSettings.AsNoTracking()
+            .Where(x => x.Code == PrivacyContactPolicy.Code &&
+                x.EffectiveFrom <= today &&
+                (x.EffectiveTo == null || x.EffectiveTo >= today) &&
+                (x.Status == "active" || x.Status == "scheduled" || x.Status == "retired"))
+            .OrderByDescending(x => x.EffectiveFrom)
+            .ThenByDescending(x => x.CreatedAtUtc)
+            .Select(x => x.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return Results.Ok(new
+        {
+            email = PrivacyContactPolicy.Normalize(configured)
+                ?? PrivacyContactPolicy.DefaultEmail
+        });
     }
 
     private static async Task<IResult> GetDashboardAsync(
