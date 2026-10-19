@@ -130,7 +130,7 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
                 .HasPrincipalKey(x => new { x.AssemblyId, x.OrganizationId, x.Id })
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.OccurredAtUtc });
-            entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.ProposalEventId, x.Action })
+            entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.ProposalEventId })
                 .IsUnique().HasFilter("\"ProposalEventId\" IS NOT NULL");
         });
 
