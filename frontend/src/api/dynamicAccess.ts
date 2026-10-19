@@ -19,18 +19,19 @@ export function technicalGrant(c:DynamicCatalog,subject:string,viewCode:string,a
  return c.assignments.filter(a=>a.isActive&&a.subject===subject&&a.organizationId===organizationId&&a.effectiveFrom<=today&&(!a.effectiveTo||a.effectiveTo>=today)).some(a=>c.profiles.some(p=>p.code===a.profileCode&&p.isActive&&!p.isSystem&&p.menuCodes.includes(menu.code)&&(p.scope==='lodge'?organizationId!==null:organizationId===null)&&p.grants.some(g=>g.viewCode===viewCode&&g.actions.includes('view')&&g.actions.includes(action))))
 }
 type Transport=<T>(path:string,init?:RequestInit)=>Promise<T>
+export type CatalogUpdateReason = 'load' | 'mutation'
 export class DynamicAccessClient {
  private catalog=initialDynamicCatalog()
- private listeners=new Set<()=>void>()
+ private listeners=new Set<(reason:CatalogUpdateReason)=>void>()
  constructor(private transport:Transport,private useMocks:boolean,private organizationExists:(id:string)=>boolean = id=>/^[0-9a-f-]{36}$/i.test(id)){}
- subscribe(listener:()=>void){this.listeners.add(listener);return()=>{this.listeners.delete(listener)}}
+ subscribe(listener:(reason:CatalogUpdateReason)=>void){this.listeners.add(listener);return()=>{this.listeners.delete(listener)}}
  snapshot(){return structuredClone(this.catalog)}
- private emit(){for(const fn of this.listeners)fn()}
- async load(){if(!this.useMocks)this.catalog=await this.transport<DynamicCatalog>('/api/system/access/catalog');this.emit();return this.snapshot()}
+ private emit(reason:CatalogUpdateReason){for(const fn of this.listeners)fn(reason)}
+ async load(){if(!this.useMocks)this.catalog=await this.transport<DynamicCatalog>('/api/system/access/catalog');this.emit('load');return this.snapshot()}
  private async mutate(path:string,method:string,expectedVersion:number,payload?:object,apply?:(c:DynamicCatalog)=>void){
   if(this.useMocks){if(expectedVersion!==this.catalog.version)throw new Error('El catálogo cambió. Recargue antes de guardar.');const next=this.snapshot();apply?.(next);next.version++;this.catalog=next}
   else this.catalog=await this.transport<DynamicCatalog>(path,{method,headers:payload?{'Content-Type':'application/json'}:undefined,body:payload?JSON.stringify({...payload,expectedVersion}):undefined})
-  this.emit();return this.snapshot()
+  this.emit('mutation');return this.snapshot()
  }
  async create(d:ProfileDraft,version:number){return this.mutate('/api/system/access/profiles','POST',version,d,c=>{
   this.validate(d,c);if(c.profiles.some(p=>p.code===d.code))throw new Error('El código del perfil ya existe.')
