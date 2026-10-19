@@ -88,6 +88,60 @@ public sealed class AssemblyFoundationPostgreSqlTests
     }
 
     [Fact]
+    public async Task Eligibility_cannot_reference_a_member_status_from_another_assembly()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var ct = TestContext.Current.CancellationToken;
+        var options = new DbContextOptionsBuilder<RegimenInteriorDbContext>()
+            .UseNpgsql(connectionString).Options;
+        await using var db = new RegimenInteriorDbContext(options);
+        await db.Database.MigrateAsync(ct);
+
+        AssemblyRecord MakeAssembly(string name) => new()
+        {
+            Name = name,
+            MeetingDate = new DateOnly(2026, 12, 31),
+            CutoffDate = new DateOnly(2026, 10, 19),
+            CreatedBySubject = "qa-regimen-interior"
+        };
+        var origin = MakeAssembly("Asamblea original de ensayo");
+        var target = MakeAssembly("Otra Asamblea de ensayo");
+        var member = new AssemblyMemberStatusRecord
+        {
+            Assembly = origin,
+            PersonId = Guid.NewGuid(),
+            MemberId = Guid.NewGuid(),
+            OrganizationId = Guid.NewGuid(),
+            Category = "representative",
+            SourceOfficeAssignmentId = Guid.NewGuid(),
+            SourceEvidenceReference = "PL-FICTICIA",
+            FirstNamesAtCutoff = "Marta",
+            LastNamesAtCutoff = "Álvarez",
+            RutAtCutoff = "22.222.222-2",
+            WorkshopAtCutoff = "Taller sintético",
+            VerifiedAtUtc = DateTimeOffset.UtcNow
+        };
+        db.AddRange(origin, target, member);
+        await db.SaveChangesAsync(ct);
+
+        db.AssemblyEligibilities.Add(new AssemblyEligibilityRecord
+        {
+            AssemblyId = target.Id,
+            MemberStatusId = member.Id,
+            Status = "pendiente",
+            MayAttend = false,
+            MayVote = false,
+            ReasonCode = "EVIDENCIA_PENDIENTE",
+            EvaluatedBySubject = "qa-regimen-interior"
+        });
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        var postgres = Assert.IsType<PostgresException>(error.InnerException);
+        Assert.Equal("23503", postgres.SqlState); // Violación de FK compuesta.
+    }
+
+    [Fact]
     public async Task Closed_assembly_without_evidence_is_rejected_at_database_level()
     {
         var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
