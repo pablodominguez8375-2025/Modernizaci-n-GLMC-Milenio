@@ -103,6 +103,9 @@ public sealed class AssemblyGrandTreasuryReviewSignaturePolicyTests
         r.ReviewNote = "Revisión de evidencia ficticia, no certificado financiero";
         p.SourceEvidenceReference = "Referencia alterada";
         Assert.Contains("INVALID_SIGNATURE", Verify(p, r, signed, Key(rsa)).BlockingReasons);
+        p.SourceEvidenceReference = "GT-DOCUMENTO-SINTETICO";
+        p.OpeningPendingAmount = 0.01m;
+        Assert.Contains("INVALID_SIGNATURE", Verify(p, r, signed, Key(rsa)).BlockingReasons);
     }
 
     [Fact]
