@@ -13,6 +13,33 @@ namespace PMGM.Api.Tests.Integration;
 public sealed class PrivacyContactEmailHttpTests
 {
     [Fact]
+    public async Task Setting_rejects_multiple_recipients_at_http_boundary()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new PmgmWebApplicationFactory(cs);
+        using var client = factory.CreateClient();
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>()
+                .Database.MigrateAsync(ct);
+        }
+        var today = DateOnly.FromDateTime(
+            TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+                DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        var response = await client.PostAsJsonAsync(
+            "/api/system/settings/system.privacy.contact_email",
+            new
+            {
+                value = "uno@ejemplo.cl, dos@ejemplo.cl",
+                effectiveFrom = today,
+                sourceReference = "Prueba sintética"
+            }, ct);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Contact_get_returns_default_or_active_version_without_system_settings_payload()
     {
         var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
