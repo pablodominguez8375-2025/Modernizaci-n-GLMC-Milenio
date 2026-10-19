@@ -13,6 +13,7 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
     public DbSet<AssemblyDebtDecisionEventRecord> AssemblyDebtDecisionEvents => Set<AssemblyDebtDecisionEventRecord>();
     public DbSet<InstitutionalRestrictionRecord> InstitutionalRestrictions => Set<InstitutionalRestrictionRecord>();
     public DbSet<AssemblyTreasuryCertificationEventRecord> AssemblyTreasuryCertificationEvents => Set<AssemblyTreasuryCertificationEventRecord>();
+    public DbSet<AssemblyTreasurySignedReviewRecord> AssemblyTreasurySignedReviews => Set<AssemblyTreasurySignedReviewRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -132,6 +133,26 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.OccurredAtUtc });
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.ProposalEventId })
                 .IsUnique().HasFilter("\"ProposalEventId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<AssemblyTreasurySignedReviewRecord>(entity =>
+        {
+            entity.ToTable("assembly_treasury_signed_reviews");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.ReviewerSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.TrustedKeyId).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.DocumentSha256Hex).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.SignatureBase64).HasMaxLength(2048).IsRequired();
+            entity.HasOne(x => x.ProposalEvent).WithMany()
+                .HasForeignKey(x => new { x.AssemblyId, x.OrganizationId, x.ProposalEventId })
+                .HasPrincipalKey(x => new { x.AssemblyId, x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ReviewEvent).WithMany()
+                .HasForeignKey(x => new { x.AssemblyId, x.OrganizationId, x.ReviewEventId })
+                .HasPrincipalKey(x => new { x.AssemblyId, x.OrganizationId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.ReviewEventId).IsUnique();
+            entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.RecordedAtUtc });
         });
 
         modelBuilder.Entity<InstitutionalRestrictionRecord>(entity =>
