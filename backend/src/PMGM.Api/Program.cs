@@ -88,6 +88,8 @@ builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilitySe
 builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
 builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+// Solo configuración confiable del proceso; ningún controlador aporta claves GT.
+builder.Services.AddSingleton<AssemblyGrandTreasuryServerTrustRegistry>();
 builder.Services.AddScoped<FormSchemaVersionStore>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
