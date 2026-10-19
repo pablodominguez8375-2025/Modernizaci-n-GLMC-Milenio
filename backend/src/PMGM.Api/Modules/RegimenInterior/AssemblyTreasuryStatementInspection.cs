@@ -80,7 +80,7 @@ public sealed class AssemblyTreasuryStatementInspection(PmgmDbContext db)
         if (items.Any(x => string.IsNullOrWhiteSpace(x.SourceReference)))
             issues.Add("MISSING_STATEMENT_REFERENCE");
 
-        var currencies = items.Select(x => x.Currency.Trim().ToUpperInvariant())
+        var currencies = items.Select(x => x.Currency?.Trim().ToUpperInvariant() ?? "")
             .Where(x => x.Length > 0).Distinct(StringComparer.Ordinal).ToArray();
         if (currencies.Length != 1 || items.Any(x => string.IsNullOrWhiteSpace(x.Currency)))
             issues.Add("INCOMPATIBLE_CURRENCY");
