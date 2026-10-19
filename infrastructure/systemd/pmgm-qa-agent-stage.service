@@ -1,0 +1,35 @@
+# REFERENCE ONLY: DO NOT install or enable before supervised QA and G6 recovery.
+# Purpose: acquire signed complete QA package. NEVER deploy, start Docker or migrate.
+[Unit]
+Description=Proyecto Centenario QA: verify and stage signed dev release (no deployment)
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/lib/pmgm-qa-agent/last-deployed.json
+
+[Service]
+Type=oneshot
+User=pmgm-qa-agent
+Group=pmgm-qa-agent
+WorkingDirectory=/opt/centenario/qa-agent
+LoadCredential=qa-baseline:/var/lib/pmgm-qa-agent/last-deployed.json
+LoadCredential=qa-token:/etc/pmgm/qa-agent-actions-readonly.token
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 -B /opt/centenario/qa-agent/scripts/qa/qa-agent-sync.py --last-deployed ${CREDENTIALS_DIRECTORY}/qa-baseline --token-file ${CREDENTIALS_DIRECTORY}/qa-token --staging-root /var/lib/pmgm-qa-agent/staging
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/pmgm-qa-agent/staging
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+UMask=0077
+TimeoutStartSec=600
