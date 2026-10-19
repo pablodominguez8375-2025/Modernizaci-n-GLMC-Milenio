@@ -7,6 +7,11 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
 {
     public DbSet<DataQualityCase> DataQualityCases => Set<DataQualityCase>();
     public DbSet<DataQualityCaseEvent> DataQualityCaseEvents => Set<DataQualityCaseEvent>();
+    public DbSet<AssemblyRecord> Assemblies => Set<AssemblyRecord>();
+    public DbSet<AssemblyMemberStatusRecord> AssemblyMemberStatuses => Set<AssemblyMemberStatusRecord>();
+    public DbSet<AssemblyEligibilityRecord> AssemblyEligibilities => Set<AssemblyEligibilityRecord>();
+    public DbSet<AssemblyDebtDecisionEventRecord> AssemblyDebtDecisionEvents => Set<AssemblyDebtDecisionEventRecord>();
+    public DbSet<InstitutionalRestrictionRecord> InstitutionalRestrictions => Set<InstitutionalRestrictionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +40,79 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.HasIndex(x => x.IssueFingerprint)
                 .IsUnique()
                 .HasFilter("\"Status\" IN ('open','under_review')");
+        });
+
+
+        modelBuilder.Entity<AssemblyRecord>(entity =>
+        {
+            entity.ToTable("assemblies");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(24).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ClosedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ClosureEvidenceDigest).HasMaxLength(96);
+            entity.HasIndex(x => new { x.Status, x.CutoffDate });
+        });
+
+        modelBuilder.Entity<AssemblyMemberStatusRecord>(entity =>
+        {
+            entity.ToTable("assembly_member_statuses");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Category).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.SourceEvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.LastNamesAtCutoff).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.FirstNamesAtCutoff).HasMaxLength(240).IsRequired();
+            entity.Property(x => x.RutAtCutoff).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.WorkshopAtCutoff).HasMaxLength(240).IsRequired();
+            entity.HasOne(x => x.Assembly).WithMany(x => x.Members)
+                .HasForeignKey(x => x.AssemblyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AssemblyId, x.PersonId }).IsUnique();
+            entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId });
+        });
+
+        modelBuilder.Entity<AssemblyEligibilityRecord>(entity =>
+        {
+            entity.ToTable("assembly_eligibilities");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ReasonCode).HasMaxLength(160).IsRequired();
+            entity.Property(x => x.GrandTreasuryPendingAmount).HasPrecision(18, 2);
+            entity.Property(x => x.GrandTreasuryCurrency).HasMaxLength(12);
+            entity.Property(x => x.GrandTreasurySourceReference).HasMaxLength(500);
+            entity.Property(x => x.InstitutionalRightsSourceReference).HasMaxLength(500);
+            entity.Property(x => x.HonorRightsSourceReference).HasMaxLength(500);
+            entity.Property(x => x.EvaluatedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne(x => x.MemberStatus).WithMany(x => x.EligibilityHistory)
+                .HasForeignKey(x => x.MemberStatusId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AssemblyId, x.MemberStatusId, x.EvaluatedAtUtc });
+            entity.HasIndex(x => x.SupersedesEligibilityId).IsUnique()
+                .HasFilter("\"SupersedesEligibilityId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<AssemblyDebtDecisionEventRecord>(entity =>
+        {
+            entity.ToTable("assembly_debt_decision_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Authority).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.DecidedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.OccurredAtUtc });
+            entity.HasIndex(x => x.ReversesEventId).IsUnique()
+                .HasFilter("\"ReversesEventId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<InstitutionalRestrictionRecord>(entity =>
+        {
+            entity.ToTable("institutional_restrictions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.SourceAuthority).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.RestrictionType).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasIndex(x => new { x.PersonId, x.StartsOn, x.EndsOn });
         });
 
         modelBuilder.Entity<DataQualityCaseEvent>(entity =>
