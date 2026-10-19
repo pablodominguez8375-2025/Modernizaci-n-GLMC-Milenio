@@ -14,3 +14,14 @@
 
 ## Continuidad
 - Issue #533, PR #562 integrada a dev, PR nueva para C1; registro espejo Drive en Línea Base Maestra; ningún QA físico.
+
+## Contrato publicado en PR #563
+- Clase interna `AssemblyTreasuryStatementInspection` consulta `PmgmDbContext.TreasuryMonthlyStatements` con filtro por OrganizationId y meses; `AsNoTracking` + `AsSplitQuery`. Inspecciona detalles en memoria del backend, pero la respuesta diagnóstica no incorpora RUT, nombre del pagador, referencias bancarias ni detalle por hermano.
+- Invariantes: cobertura mensual completa, Taller único, monedas homogéneas, estado reconciliado/cerrado, sin duplicados/rectificaciones irresueltas, fechas dentro del corte, recepción bancaria registrada, identidades conciliadas y diferencia cero en cuadros observados.
+- La respuesta tiene `MayAuthorizeSuffrage=false` de forma **incondicional**. Una diferencia cero en los cuadros observados nunca produce `AssemblyGrandTreasuryBalance`, ni permite saltarse `AssemblyVoterEligibilityPolicy`. Reporta siempre `HISTORICAL_CERTIFICATION_REQUIRED`, incluso cuando `ObservedRowsConsistent=true`.
+- Unit `AssemblyTreasuryStatementInspectionTests`: meses faltantes/duplicados, moneda extranjera, Taller ajeno, estado borrador, fechas bancarias tardías, pago posterior al corte y saldos incompletos; real PostgreSQL `AssemblyTreasuryStatementInspectionPostgreSqlTests`: lectura aislada entre dos Talleres sintéticos. Registrada en shard b de `.github/backend-integration-shards.json`.
+- No guardar transacciones individuales ni guardar identidad del pagador en vistas de Asamblea. Revisar la futura proyección de BD para seleccionar solo campos mínimos antes de exponer un endpoint protegido.
+- CI exact-head requerido y pendiente al publicar; no fusionar ni alterar host QA si no aprueba.
+
+## Estado y bloqueo siguiente
+El único mecanismo autorizado para `AssemblyGrandTreasuryLedgerPolicy.Project` será un **certificado de cobertura histórica y saldo** que Gran Tesorería emita expresamente: identidad verificada del emisor, atribución de Taller, oriente/moneda, inicio de cobertura, corte, rectificaciones y pagos de períodos anteriores. Esa certificación debe estar auditada y protegida contra modificaciones retroactivas. La fuente de cuadros actuales no acredita, por sí sola, inexistencia de deuda histórica. Quedan pendientes diseño de acto de cierre financiero y autorización RBAC institucional, además de integración de Oficina V.M. y Tribunal de Honor.
