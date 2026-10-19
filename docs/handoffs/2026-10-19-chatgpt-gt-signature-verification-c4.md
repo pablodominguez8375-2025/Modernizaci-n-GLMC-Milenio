@@ -1,9 +1,11 @@
-# Handoff C4 — vínculo documental preliminar, NO firma verificada (19-10-2026)
+# #533 — Handoff C4: integridad documental, no firma digital (19-10-2026)
 
-Base dev: 8cf1cfa805a90a16b2edf3c4317bb44dcb013f72. PR #567 en borrador.
+Rama PR #567, reconciliada sobre dev@11035fafa877a5d042a302ba3217c45538f3191f. QA físico se trabaja en otro hilo. No modificar main.
 
-Se publicó `AssemblyGrandTreasuryDocumentBindingPolicy.cs` que comprueba los bytes de un respaldo contra su SHA-256 registrado y verifica relación de propuesta/revisión, misma Asamblea y Taller y autores diferentes. Su resultado `MayAuthorizeSuffrage` permanece siempre falso.
+Código: `AssemblyGrandTreasuryDocumentBindingPolicy.cs` comprueba SHA-256 real de los bytes, propuesta documental GT, revisión separada de segundo funcionario y coincidencia de Taller/Asamblea. La salida `MayAuthorizeSuffrage` es false incondicional. No hay endpoint ni tabla adicional.
 
-No se publicó el verificador de firma digital RSA-PSS ni sus pruebas: dos intentos de escritura de archivos fueron rechazados por los controles de la conexión. No se intentará fusionar sin pruebas unitarias aprobadas ni constancia de firma digital verificada. No confundir SHA-256 con autenticidad del emisor: un hash por sí solo no acredita firma, saldo de Gran Tesorería ni derechos electorales.
+Pruebas en `AssemblyDocumentBindingPolicyTests.cs`: bytes originales, alteración, autorrevisión, organización ajena y digest inválido. Integración y CI exact-head pendientes de confirmación tras rebase. **No fusionar hasta aprobación de los tres controles**.
 
-Pendiente: firma digital con llaves públicas confiables gestionadas en servidor, pruebas negativas de alteración/firma/claves, autorización dinámica y auditoría, certificación de historial financiero, integración derechos/Tribunal y cierre. Sin endpoints, QA físico, main, srv01 ni datos reales modificados.
+Advertencia: **integridad SHA-256 no equivale a autenticidad de emisor ni firma digital**. Verificador de firmas RSA-PSS, registro de claves públicas confiables con revocación/vigencia, cadena de auditoría y certificación histórica GT quedan pendientes. El bloqueo previo de la conexión impidió publicar el primer diseño de verificación de firmas, así que C4 se delimitó correctamente a vínculo documental.
+
+Para completar #533 faltan: firma digital verificable, fuente oficial histórica de saldo por moneda/corte/rectificaciones, acto de certificación definitivo por Gran Tesorería con autorización dinámica; derechos y períodos V.M. acreditados, Tribunal, decisión RI auditada, cierre de padrón y PDF/CSV con acceso autorizado. No usar preflight o review como habilitación de voto. Sin tocar QA/srv01/producción ni datos reales.
