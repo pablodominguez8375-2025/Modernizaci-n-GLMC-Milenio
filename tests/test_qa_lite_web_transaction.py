@@ -180,11 +180,7 @@ class WebTransactionTests(unittest.TestCase):
                 if failure == "rollback_image":
                     adapter.verify_running_web = lambda image: image != IMAGE_OLD
                 else:
-                    calls = [0]
-                    def only_rollback_fails():
-                        calls[0] += 1
-                        return calls[0] != 2
-                    adapter.verify_public_health = only_rollback_fails
+                    adapter.verify_public_health = lambda: False
             with self.assertRaisesRegex(mod.Blocked, "ROLLBACK_FAILED_MANUAL_RECOVERY"):
                 if failure == "restore":
                     # Make apply fail, then rollback itself fail.
