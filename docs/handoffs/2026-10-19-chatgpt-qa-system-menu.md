@@ -28,3 +28,24 @@
 5. GitHub #97 registra avances QA. Drive documento de bitácora `1I9bcJ7lKH4T2iQvxafY63HbOBr0ZsGZ8lDX3tSe2UfM`.
 
 `main` no se modifica sin orden expresa; `srv01` pausado, Silo solamente sintético. 
+
+
+## Hallazgo nuevo: capturas del Sponsor, 19-10-2026 (09:52-09:53)
+
+Dos imágenes del navegador móvil evidencian que el usuario YA ESTÁ dentro de la página «Sistema» y aparecen tarjetas «Respaldos», «Usuarios», «Perfiles y accesos», «Formularios», más «44 parámetros». Logo institucional restaurado. Por tanto, la hipótesis de que seleccionaba el mero encabezado «Sistema» se descarta para estas capturas; la acción problemática específica es elegir «Usuarios».
+
+**Cadena de ejecución demostrada por lectura estática de código dev:**
+1. Tarjeta Usuarios `WorkspaceTabs` cambia `tab='users'`.
+2. `SystemOperationsPanel` activa `UserAccountsPanel` y `UserAccessAssignments`.
+3. `UserAccessAssignments` invoca `useDynamicCatalog`, cuyo efecto ejecuta `api.dynamicAccess.load()`.
+4. `DynamicAccessClient.load()` emite evento incluso siendo lectura; `useViewAccess` está suscrito con `refresh()` que invalida de inmediato el snapshot `setState(null)`.
+5. `App.tsx` recibe `activeViewAllowed=false` y el efecto anterior llama `setView('dashboard')`. Así regresa a Inicio sin error aparente.
+
+**Fix adicional en PR #559:**
+- `DynamicAccessClient` diferencia eventos `load` (solo lectura) vs `mutation` (cambio real de permisos).
+- `useViewAccess` refresca `refresh(false)` al recibir una lectura para **conservar el snapshot anterior hasta que la nueva consulta termine**; usa `refresh(true)` y bloquea autorización inmediatamente ante una mutación.
+- `App.tsx` mantiene diagnóstico explícito si hay falta real o transitoria de permisos. No se altera Keycloak ni roles ni backend.
+- Pruebas `dynamicAccessEvents.test.ts` de clasificación de eventos + `systemNavigationGate.test.ts`.
+- Revalidar que Usuario sigue abierto tras carga del catálogo y que mutación de grants corta acceso.
+- Confirmar CI exact-head, integración controlada dev y despliegue QA firmado antes de pedir repetir prueba al Sponsor.
+- Las capturas son evidencia aportada en chat, no se suben/copían en GitHub/Drive; registrar solo conclusiones técnicas.
