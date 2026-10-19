@@ -15,7 +15,11 @@ public sealed class AssemblyGrandTreasuryLedgerPolicyTests
 
     private static AssemblyTreasuryCertifiedLedger Ledger(params AssemblyTreasuryCertifiedPeriod[] months) =>
         new(Workshop, new DateOnly(2026, 8, 1), Cutoff, "CLP",
-            "GT-CERTIFICACION-CORTE-19-10", true, true, months);
+            "GT-CERTIFICACION-CORTE-19-10", true, true, months,
+            OpeningBalanceAsOf: new DateOnly(2026, 7, 31),
+            OpeningPendingAmount: 0m,
+            OpeningBalanceSourceReference: "GT-SALDO-APERTURA-31-07",
+            OpeningBalanceCertified: true);
 
     [Fact]
     public void Every_completed_certified_period_with_zero_balance_allows_zero()
@@ -26,6 +30,52 @@ public sealed class AssemblyGrandTreasuryLedgerPolicyTests
         Assert.Equal(AssemblyVoterEligibilityPolicy.GrandTreasurySource, result.SourceSystem);
         Assert.True(AssemblyVoterEligibilityPolicy.Evaluate(new(
             Workshop, Cutoff, true, true, true, true, true, true, true, result, null)).MayVote);
+    }
+
+    [Fact]
+    public void Certified_old_debt_is_added_to_monthly_outstanding_amount()
+    {
+        var ledger = Ledger(Month(8), Month(9), Month(10)) with
+        { OpeningPendingAmount = 1500m };
+        var result = AssemblyGrandTreasuryLedgerPolicy.Project(ledger);
+        Assert.NotNull(result);
+        Assert.Equal(1500m, result.AmountPending);
+        var decision = AssemblyVoterEligibilityPolicy.Evaluate(
+            new(Workshop, Cutoff, true, true, true, true, true, true, true, result, null));
+        Assert.True(decision.MayAttend);
+        Assert.False(decision.MayVote);
+        Assert.Equal("MOROSIDAD_GRAN_TESORERIA", decision.ReasonCode);
+    }
+
+    [Fact]
+    public void Missing_opening_debt_evidence_must_not_be_treated_as_zero()
+    {
+        var known = Ledger(Month(8), Month(9), Month(10));
+        var cases = new[]
+        {
+            known with { OpeningPendingAmount = null },
+            known with { OpeningPendingAmount = -1m },
+            known with { OpeningBalanceCertified = false },
+            known with { OpeningBalanceSourceReference = "" },
+            known with { OpeningBalanceAsOf = null },
+            known with { OpeningBalanceAsOf = new DateOnly(2026, 8, 1) },
+            known with { CoverageFrom = new DateOnly(2026, 8, 15) },
+            known with { CoverageFrom = DateOnly.MinValue },
+            known with { OpeningBalanceAsOf = new DateOnly(2026, 8, 1),
+                         OpeningPendingAmount = 0m, OpeningBalanceCertified = false }
+        };
+        foreach (var ledger in cases)
+            Assert.Null(AssemblyGrandTreasuryLedgerPolicy.Project(ledger));
+    }
+
+    [Fact]
+    public void Legacy_eight_argument_ledger_fails_closed_without_opening_certificate()
+    {
+        var oldShape = new AssemblyTreasuryCertifiedLedger(
+            Workshop, new DateOnly(2026, 8, 1), Cutoff, "CLP",
+            "GT-CERTIFICACION-CORTE-19-10", true, true,
+            [Month(8), Month(9), Month(10)]);
+        Assert.Null(AssemblyGrandTreasuryLedgerPolicy.Project(oldShape));
     }
 
     [Fact]

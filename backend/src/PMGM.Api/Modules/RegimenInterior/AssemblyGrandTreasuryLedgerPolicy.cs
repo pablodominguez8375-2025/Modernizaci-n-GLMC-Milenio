@@ -4,13 +4,21 @@ namespace PMGM.Api.Modules.RegimenInterior;
 /// Contrato de saldo por taller acreditado por Gran Tesorería. NO es una lectura
 /// de estado cualitativo: cada mes debe estar incluido y certificado.
 /// La futura capa de infraestructura es responsable de autenticar la fuente,
-/// comprobar rectificaciones y construir este paquete en servidor.
+/// comprobar rectificaciones, certificar la deuda de apertura anterior a la
+/// cobertura y construir este paquete en servidor. No aceptar flags del cliente.
 /// </summary>
 public static class AssemblyGrandTreasuryLedgerPolicy
 {
     public static AssemblyGrandTreasuryBalance? Project(AssemblyTreasuryCertifiedLedger ledger)
     {
-        if (ledger.OrganizationId == Guid.Empty || ledger.CoverageFrom > ledger.Cutoff ||
+        if (ledger.OrganizationId == Guid.Empty ||
+            ledger.CoverageFrom == DateOnly.MinValue ||
+            ledger.CoverageFrom > ledger.Cutoff ||
+            ledger.CoverageFrom.Day != 1 ||
+            !ledger.OpeningBalanceCertified ||
+            ledger.OpeningBalanceAsOf != ledger.CoverageFrom.AddDays(-1) ||
+            ledger.OpeningPendingAmount is null || ledger.OpeningPendingAmount < 0m ||
+            string.IsNullOrWhiteSpace(ledger.OpeningBalanceSourceReference) ||
             !ledger.SourceAuthenticated || !ledger.CompletenessCertified ||
             string.IsNullOrWhiteSpace(ledger.CertificationReference) ||
             string.IsNullOrWhiteSpace(ledger.Currency) ||
@@ -43,7 +51,10 @@ public static class AssemblyGrandTreasuryLedgerPolicy
                 return null;
         }
 
-        var amount = ledger.Periods.Sum(x => x.ExpectedAmount - x.PaidAmount);
+        // La deuda de apertura certificada por GT forma parte del saldo:
+        // no se infiere deuda cero a partir de cuadros mensuales parciales.
+        var amount = ledger.OpeningPendingAmount.Value +
+            ledger.Periods.Sum(x => x.ExpectedAmount - x.PaidAmount);
         return new AssemblyGrandTreasuryBalance(
             ledger.OrganizationId, ledger.Cutoff,
             AssemblyVoterEligibilityPolicy.GrandTreasurySource,
@@ -59,7 +70,11 @@ public sealed record AssemblyTreasuryCertifiedLedger(
     string CertificationReference,
     bool SourceAuthenticated,
     bool CompletenessCertified,
-    IReadOnlyList<AssemblyTreasuryCertifiedPeriod> Periods);
+    IReadOnlyList<AssemblyTreasuryCertifiedPeriod> Periods,
+    DateOnly? OpeningBalanceAsOf = null,
+    decimal? OpeningPendingAmount = null,
+    string? OpeningBalanceSourceReference = null,
+    bool OpeningBalanceCertified = false);
 
 public sealed record AssemblyTreasuryCertifiedPeriod(
     Guid OrganizationId,
