@@ -103,6 +103,7 @@ services:
       KC_HOSTNAME_STRICT: "true"
     volumes:
       - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
+      - ./keycloak/themes/glmch:/opt/keycloak/themes/glmch:ro
     ports:
       - "${PMGM_QA_BIND_ADDRESS:-127.0.0.1}:${PMGM_QA_OIDC_PORT:-8180}:8080"
     networks: [pmgm_srv01_internal]

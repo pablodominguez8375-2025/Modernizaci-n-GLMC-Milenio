@@ -1,6 +1,6 @@
 {
   "realm": "pmgm",
-  "displayName": "Proyecto Milenio QA",
+  "displayName": "Proyecto Centenario QA",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -19,6 +19,12 @@
   "adminEventsDetailsEnabled": false,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 28800,
+  "loginTheme": "glmch",
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "es"
+  ],
+  "defaultLocale": "es",
   "resetPasswordAllowed": true,
   "rememberMe": false,
   "loginWithEmailAllowed": true,
