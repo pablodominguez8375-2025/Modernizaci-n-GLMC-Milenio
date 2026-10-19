@@ -24,6 +24,8 @@ RUN npm run build
 FROM nginx:stable-alpine AS final
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# Permisos legibles para el worker de nginx (QA 19-10-2026: /brand/* quedó 0600 y devolvía 403, #553).
+RUN find /usr/share/nginx/html -type d -exec chmod 755 {} + && find /usr/share/nginx/html -type f -exec chmod 644 {} +
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
