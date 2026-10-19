@@ -84,7 +84,7 @@ public sealed class AddAssemblyGrandTreasuryReviewEvents : Migration
         migrationBuilder.CreateIndex("UX_assembly_gt_events_Proposal",
             schema: "core", table: "assembly_treasury_certification_events",
             columns: new[] { "AssemblyId", "OrganizationId", "ProposalEventId" },
-            unique: true, filter: """"ProposalEventId" IS NOT NULL""");
+            unique: true, filter: "\"ProposalEventId\" IS NOT NULL");
 
         migrationBuilder.Sql("""
             CREATE FUNCTION core.check_gt_cert_review_insert()
