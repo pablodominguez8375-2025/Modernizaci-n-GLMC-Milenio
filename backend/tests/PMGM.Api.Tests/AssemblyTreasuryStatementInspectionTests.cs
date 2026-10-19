@@ -83,6 +83,12 @@ public sealed class AssemblyTreasuryStatementInspectionTests
         Assert.Contains("INCOMPATIBLE_CURRENCY", mixed.BlockingReasons);
         Assert.False(mixed.MayAuthorizeSuffrage);
 
+        var nullCurrency = Statement(9);
+        nullCurrency.Currency = null!;
+        var rejectedNull = Inspect(Statement(8), nullCurrency, Statement(10));
+        Assert.Contains("INCOMPATIBLE_CURRENCY", rejectedNull.BlockingReasons);
+        Assert.False(rejectedNull.MayAuthorizeSuffrage);
+
         var foreign = Statement(9);
         foreign.OrganizationId = Guid.NewGuid();
         var result = Inspect(Statement(8), foreign, Statement(10));
