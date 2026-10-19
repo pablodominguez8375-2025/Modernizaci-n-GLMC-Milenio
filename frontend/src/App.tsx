@@ -1,5 +1,6 @@
 import { LodgeCouncilApiProvider, useLodgeCouncilApi } from './LodgeCouncilApiContext'
 import { useViewAccess } from './useViewAccess'
+import { shouldReturnHomeForDeniedView, systemNavigationGate } from './systemNavigationGate'
 import { restrictClient } from './api/dynamicViewAccess'
 import { useTreasuryNavigationAccess } from './useTreasuryAccess'
 import { useFinancialNavigationAccess } from './useFinancialNavigationAccess'
@@ -120,7 +121,10 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const canView = (code: string) => viewAccess?.views[code]?.includes('view') ?? false
   const viewCodes: Partial<Record<View,string>> = { memberPortal:'member', interviews:'member', memberPayments:'member', memberAttendance:'member', calendar:'calendar', notifications:'notifications', bootstrap:'system', system:'system', candidates:'candidates', candidateProfile:'candidateprofile', initiationCircuit:'initiationcircuit', admissions:'admissions', members:'members', lodge:'lodge', lodgeInstruction:'lodge', orderInstructionReport:'lodge', lodgeProfile:'lodgeprofile', reporting:'regimen', memberControl:'regimen', dataQuality:'regimen', caseQueue:'regimen', regimen:'regimen', ceremonies:'ceremonies', secretariat:'secretariat', library:'library', documents:'documentmanager', grandArchive:'grandarchive' }
   const activeViewAllowed = !viewCodes[view] || canView(viewCodes[view]!)
-  useEffect(() => { if (!activeViewAllowed) setView('dashboard') }, [activeViewAllowed])
+  // Una lectura de permisos sin resultado no es una denegación. No expulsar de la vista por un refresh.
+  useEffect(() => {
+    if (shouldReturnHomeForDeniedView(view, Boolean(viewCodes[view]), viewAccess !== null, activeViewAllowed)) setView('dashboard')
+  }, [view, viewAccess, activeViewAllowed])
   useEffect(() => { if (view !== 'privacy') return; let active = true; api.getPrivacyContact().then(contact => { if (active) setPrivacyEmail(contact.email) }).catch(() => undefined); return () => { active = false } }, [view, api])
   useEffect(() => {
     let active = true
@@ -146,6 +150,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const canMemberPortal = (effectiveProfile !== null) && canView('member')
   const canBootstrap = (capabilities?.canBootstrapInstitutional ?? false) && canView('system')
   const canConfigureSystem = (capabilities?.canConfigureSystem ?? canBootstrap) && canView('system')
+  const systemGate = systemNavigationGate(view, viewAccess !== null, activeViewAllowed && (canConfigureSystem || canBootstrap))
   const canCalendar = (effectiveProfile !== null) && canView('calendar')
   const canNotifications = (effectiveProfile !== null) && canView('notifications')
   const canLodgeOperations = (capabilities?.canManageLodgeOperations ?? false) && canView('lodge')
@@ -396,6 +401,13 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       </nav>
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
+         {(systemGate === 'checking' || systemGate === 'denied') && <section className="panel" role={systemGate === 'denied' ? 'alert' : 'status'}>
+           <h2>{systemGate === 'checking' ? 'Verificando acceso a Sistema…' : 'Acceso a Sistema no confirmado'}</h2>
+           <p>{systemGate === 'checking'
+             ? 'Estamos comprobando los permisos de esta sesión. La vista administrativa permanecerá protegida hasta recibir una respuesta.'
+             : 'La sesión no tiene autorización confirmada para abrir Sistema. No se han cambiado permisos ni datos; solicita una revisión de acceso QA.'}</p>
+           <button type="button" className="secondary" onClick={() => setView('dashboard')}>Volver a Inicio</button>
+         </section>}
         {view === 'privacy' && <PrivacyPage contactEmail={privacyEmail} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLibrary={canLibrary ? () => setView('library') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage membershipApi={membershipApi} pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}

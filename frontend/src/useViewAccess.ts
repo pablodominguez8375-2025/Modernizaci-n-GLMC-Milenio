@@ -17,7 +17,9 @@ export function useViewAccess(api: PmgmApiClient, profileKey: string) {
       } catch { if (active && current === generation) setState(null) }
     }
     void refresh()
-    const unsubscribe = api.dynamicAccess.subscribe(() => void refresh())
+    // Leer el catálogo (por ejemplo al abrir Usuarios) NO revoca los permisos.
+    // Un cambio real sí invalida la vista en espera de una nueva autorización.
+    const unsubscribe = api.dynamicAccess.subscribe(reason => void refresh(reason === 'mutation'))
     const focus = () => void refresh(false)
     window.addEventListener('focus', focus)
     const interval = window.setInterval(focus, 30000)
