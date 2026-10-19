@@ -59,6 +59,7 @@
       "MemberSelfServicePostgreSqlTests",
       "MemberOwnCeremonyReceiptPostgreSqlTests",
       "PrivacyRequestReadAuditPostgreSqlTests",
+      "PrivacyContactEmailHttpTests",
       "LibraryDegreeAuthorizationTests",
       "AdmissionPersonLookupHttpTests",
       "DocumentContentHttpWorkflowTests",

@@ -4,6 +4,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
+using PMGM.Api.Modules.Privacy;
 
 namespace PMGM.Api.Modules.SystemConfiguration;
 
@@ -42,6 +43,7 @@ public static class SystemConfigurationEndpoints
         ["system.mail.smtp_host"] = new("Correo electrónico", "Servidor SMTP", "text", "smtp.ejemplo.cl"),
         ["system.mail.smtp_port"] = new("Correo electrónico", "Puerto SMTP", "integer", "587"),
         ["system.mail.sender_address"] = new("Correo electrónico", "Cuenta remitente", "text", "notificaciones@ejemplo.cl"),
+        [PrivacyContactPolicy.Code] = new("Privacidad", "Correo de contacto para derechos del titular (Ley 21.719)", "text", PrivacyContactPolicy.DefaultEmail),
         ["system.mail.sender_name"] = new("Correo electrónico", "Nombre del remitente", "text", "Gran Logia Mixta de Chile"),
         ["system.mail.security"] = new("Correo electrónico", "Seguridad de transporte", "list", "STARTTLS"),
         ["system.brand.organization_name"] = new("Identidad visual", "Nombre institucional", "text", "Gran Logia Mixta de Chile"),
@@ -69,10 +71,15 @@ public static class SystemConfigurationEndpoints
     private static async Task<IResult> GetAsync(HttpContext context, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken cancellationToken)
     {
         if (!access.CanConfigureSystem(context.User)) return Results.Forbid();
-        var stored = await db.InstitutionalRuleSettings.AsNoTracking()
-            .Where(x => x.Code.StartsWith("system.") && x.Status == "active" && x.EffectiveFrom <= DateOnly.FromDateTime(DateTime.UtcNow))
-            .OrderByDescending(x => x.EffectiveFrom).ToListAsync(cancellationToken);
         var chileToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        var stored = await db.InstitutionalRuleSettings.AsNoTracking()
+            .Where(x => x.Code.StartsWith("system.") &&
+                x.EffectiveFrom <= chileToday &&
+                (x.EffectiveTo == null || x.EffectiveTo >= chileToday) &&
+                (x.Status == "active" ||
+                    (x.Code == PrivacyContactPolicy.Code &&
+                     (x.Status == "scheduled" || x.Status == "retired"))))
+            .OrderByDescending(x => x.EffectiveFrom).ToListAsync(cancellationToken);
         CandidatePublicationFieldPolicy publicationPolicy;
         try { publicationPolicy = await CandidatePublicationEvidenceStore.ResolvePolicyAsync(db, chileToday, cancellationToken); }
         catch (InvalidOperationException exception) { return Results.Conflict(new { message = exception.Message }); }
@@ -108,7 +115,15 @@ public static class SystemConfigurationEndpoints
         var value = request.Value.Trim();
         if (string.IsNullOrWhiteSpace(value) || string.IsNullOrWhiteSpace(request.SourceReference)) return Results.BadRequest(new { message = "Valor y fundamento son obligatorios." });
         if (definition.ValueType == "integer" && (!int.TryParse(value, out var number) || number < 0 || number > 3650)) return Results.BadRequest(new { message = "El valor numérico configurado no es válido." });
+        if (string.Equals(code, PrivacyContactPolicy.Code, StringComparison.OrdinalIgnoreCase))
+        {
+            var email = PrivacyContactPolicy.Normalize(value);
+            if (email is null) return Results.BadRequest(new { message = "El contacto de privacidad debe ser un único correo electrónico válido de máximo 254 caracteres." });
+            value = email;
+            code = PrivacyContactPolicy.Code;
+        }
         var isPublicationPolicy = string.Equals(code, CandidatePublicationEvidenceStore.FieldsCode, StringComparison.OrdinalIgnoreCase);
+        var isPrivacyContact = string.Equals(code, PrivacyContactPolicy.Code, StringComparison.OrdinalIgnoreCase);
         if (isPublicationPolicy) code = CandidatePublicationEvidenceStore.FieldsCode;
         var chileToday = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
         if (isPublicationPolicy)
@@ -120,13 +135,23 @@ public static class SystemConfigurationEndpoints
                 return Results.Conflict(new { message = "La nueva vigencia debe ser posterior a las versiones ya registradas." });
             value = normalized;
         }
+        if (isPrivacyContact)
+        {
+            if (request.EffectiveFrom < chileToday)
+                return Results.BadRequest(new { message = "La vigencia del contacto de privacidad no puede comenzar en el pasado." });
+            if (await db.InstitutionalRuleSettings.AnyAsync(x =>
+                    x.Code == code && x.EffectiveFrom >= request.EffectiveFrom, cancellationToken))
+                return Results.Conflict(new { message = "La nueva vigencia debe ser posterior a todas las versiones registradas." });
+        }
         var duplicate = await db.InstitutionalRuleSettings.AnyAsync(x => x.Code == code && x.EffectiveFrom == request.EffectiveFrom, cancellationToken);
         if (duplicate) return Results.Conflict(new { message = "Ya existe una versión del parámetro con esa fecha de vigencia." });
         var previous = await db.InstitutionalRuleSettings.Where(x => x.Code == code &&
-            (isPublicationPolicy ? x.Status == "active" || x.Status == "scheduled" || x.Status == "retired" : x.Status == "active") &&
+            ((isPublicationPolicy || isPrivacyContact)
+                ? x.Status == "active" || x.Status == "scheduled" || x.Status == "retired"
+                : x.Status == "active") &&
             (x.EffectiveTo == null || x.EffectiveTo >= request.EffectiveFrom)).OrderByDescending(x => x.EffectiveFrom).FirstOrDefaultAsync(cancellationToken);
         if (previous is not null) { previous.EffectiveTo = request.EffectiveFrom.AddDays(-1); previous.Status = "retired"; }
-        var status = request.EffectiveFrom > (isPublicationPolicy ? chileToday : DateOnly.FromDateTime(DateTime.UtcNow)) ? "scheduled" : "active";
+        var status = request.EffectiveFrom > ((isPublicationPolicy || isPrivacyContact) ? chileToday : DateOnly.FromDateTime(DateTime.UtcNow)) ? "scheduled" : "active";
         var entity = new InstitutionalRuleSetting { Code = code, Value = value, EffectiveFrom = request.EffectiveFrom, Status = status, SourceReference = request.SourceReference.Trim() };
         db.InstitutionalRuleSettings.Add(entity);
         audit.Add(context, "system.setting.version_created", nameof(InstitutionalRuleSetting), entity.Id.ToString(), null, AuditResults.Success, new { entity.Code, entity.Value, entity.EffectiveFrom, entity.SourceReference, previousId = previous?.Id });
