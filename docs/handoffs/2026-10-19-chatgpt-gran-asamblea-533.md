@@ -1,0 +1,6 @@
+# #533 — Padrón Gran Asamblea: Etapa A de políticas verificables
+**Inicio:** 19-10-2026. Base dev: `cc9796ce01b6589708e7e0a20b7b0edea43c5e7d`. Responsable: ChatGPT. Sin trabajo QA.
+**Frontera multi-IA:** backend de Régimen Interior, tests unitarios y documentación específica. Claude mantiene UI; migraciones y endpoints futuros exclusivamente después de políticas y datos reales auditables.
+**Decisiones PO registradas:** saldo Gran Tesorería > 0 impide sufragio; solo Régimen Interior levanta/restablece con motivo, fuente y auditoría; dos listados de asambleístas y sufragantes; orden es-CL por apellidos, luego nombres, desempate RUT; firma en blanco; voto anónimo.
+**Riesgos:** FinancialRegularitySnapshot no contiene monto, y OfficeAssignment con EndDate anterior no demuestra período cumplido. La Etapa A se niega a inferir esos hechos. Sin snapshot financiero verificable y acreditación institucional de cumplimiento, no existe padrón aprobado.
+**Pendiente posterior:** tablas, migraciones sin destrucción, lecturas Gran Tesorería con balance, integración Tribunal de Honor, seguridad RBAC, decisiones persistidas y PDF/CSV, bloqueo de cierre con pendientes y pruebas PostgreSQL/HTTP. No marcar Issue #533 como completado.
