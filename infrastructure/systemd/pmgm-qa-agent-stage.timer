@@ -1,0 +1,12 @@
+# REFERENCE ONLY. Disabled by default; no automatic installation or QA deployment.
+[Unit]
+Description=Proyecto Centenario QA: check new signed dev package hourly (stage-only)
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=10m
+Persistent=false
+Unit=pmgm-qa-agent-stage.service
+
+[Install]
+WantedBy=timers.target
