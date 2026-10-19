@@ -59,8 +59,6 @@ public static class AssemblyVoterEligibilityPolicy
         exception.OrganizationId == organizationId &&
         exception.Authority == RegimenInteriorAuthority &&
         exception.DecidedAt <= cutoff &&
-        (exception.RevokedAt is null || exception.RevokedAt.Value <= exception.DecidedAt ||
-         exception.RevokedAt.Value > cutoff) &&
         (exception.RevokedAt is null || exception.RevokedAt.Value > cutoff) &&
         !string.IsNullOrWhiteSpace(exception.DecidedBy) &&
         !string.IsNullOrWhiteSpace(exception.Reason) &&
