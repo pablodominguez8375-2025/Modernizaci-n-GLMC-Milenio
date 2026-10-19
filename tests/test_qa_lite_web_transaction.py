@@ -49,6 +49,8 @@ class FakeAdapter:
     def __init__(self, fail=None):
         self.fail = fail
         self.log = []
+        self.dependency_checks = 0
+        self.health_checks = 0
 
     def reverify(self, plan):
         self.log.append("reverify")
@@ -67,13 +69,13 @@ class FakeAdapter:
 
     def verify_untouched_dependencies(self):
         self.log.append("dependencies")
-        return self.fail != "dependencies"
+        self.dependency_checks += 1
+        return not (self.fail == "dependencies" and self.dependency_checks == 1)
 
     def verify_public_health(self):
         self.log.append("health")
-        if self.fail == "health":
-            return False
-        return self.fail != "rollback_health"
+        self.health_checks += 1
+        return not (self.fail == "health" and self.health_checks == 1)
 
     def restore_previous_web(self, plan):
         self.log.append("restore")
