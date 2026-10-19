@@ -52,7 +52,9 @@ public static class AssemblyGrandTreasuryCertificationPreflight
             proposal.Currency.Any(x => x is < 'A' or > 'Z'))
             issues.Add("INVALID_CURRENCY");
 
-        if (proposal.OpeningDebtAsOf != proposal.CoverageFrom.AddDays(-1) ||
+        if (proposal.CoverageFrom == DateOnly.MinValue ||
+            proposal.OpeningDebtAsOf != (proposal.CoverageFrom == DateOnly.MinValue
+                ? DateOnly.MinValue : proposal.CoverageFrom.AddDays(-1)) ||
             proposal.OpeningPendingAmount is null ||
             proposal.OpeningPendingAmount < 0m)
             issues.Add("OPENING_BALANCE_NOT_EVIDENCED");
