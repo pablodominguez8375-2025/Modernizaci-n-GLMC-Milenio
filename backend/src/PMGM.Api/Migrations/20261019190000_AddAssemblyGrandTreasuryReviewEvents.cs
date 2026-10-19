@@ -55,7 +55,8 @@ public sealed class AddAssemblyGrandTreasuryReviewEvents : Migration
                 t.CheckConstraint("CK_assembly_gt_actor",
                     """length(trim("ActorSubject")) > 0""");
                 t.CheckConstraint("CK_assembly_gt_shape",
-                    """(
+                    """
+                    (
                         "Action" = 'proposed' AND "ProposalEventId" IS NULL AND
                         "CoverageFrom" IS NOT NULL AND "CutoffDate" IS NOT NULL AND
                         "CoverageFrom" <= "CutoffDate" AND
@@ -68,7 +69,8 @@ public sealed class AddAssemblyGrandTreasuryReviewEvents : Migration
                         "SourceEvidenceReference" IS NULL AND "EvidenceDigestSha256" IS NULL AND
                         "ReviewEvidenceReference" IS NOT NULL AND length(trim("ReviewEvidenceReference")) > 0 AND
                         "ReviewNote" IS NOT NULL AND length(trim("ReviewNote")) > 0
-                    )""");
+                    )
+                    """);
             });
 
         migrationBuilder.CreateIndex("IX_assembly_gt_events_Assembly_Org_Occurred",
