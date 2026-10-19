@@ -1,3 +1,4 @@
+import { type CreateSpaceRequestPayload, type SpaceOption, type SpaceRequest, type SpaceRequestList, mockSpaceOptions, mockSpaceRequests } from './spaceRequests'
 export type LodgeMeetingType = 'regular' | 'solemn' | 'instruction' | 'anniversary' | 'funeral' | 'special'
 export type LodgeGrade = 'apprentice' | 'fellowcraft' | 'master' | 'all'
 export type LodgeMeetingStatus = 'scheduled' | 'open' | 'held' | 'closed' | 'cancelled'
@@ -208,6 +209,7 @@ export const demoLodgeSeed = {
     { id: 'eeeeeeee-0002-0002-0002-000000000002', organizationId: DEMO_LODGE_23_ID, instructionDate: '2026-09-26', grade: 'fellowcraft' as const, topic: 'Las artes liberales', responsibleOffice: 'first_warden' as const, instructorMemberId: null, status: 'scheduled' as const },
   ] satisfies LodgeInstruction[],
 } as const
+
 
 export class LodgeApiClient {
   private readonly baseUrl: string
@@ -582,6 +584,24 @@ export class LodgeApiClient {
     const meeting = this.mockMeetings.find(item => item.id === id)
     if (!meeting) throw new Error('La tenida indicada no existe.')
     return meeting
+  }
+
+  async listSpaceRequests(organizationId: string): Promise<SpaceRequestList> {
+    if (this.useMocks) { const items = mockSpaceRequests.list(organizationId); return { total: items.length, items } }
+    return this.request<SpaceRequestList>('/api/secretaria/solicitudes-espacio')
+  }
+  async createSpaceRequest(organizationId: string, payload: CreateSpaceRequestPayload): Promise<SpaceRequest> {
+    if (this.useMocks) return mockSpaceRequests.create(organizationId, payload)
+    return this.postJson<SpaceRequest>('/api/secretaria/solicitudes-espacio', payload)
+  }
+  async cancelSpaceRequest(id: string): Promise<SpaceRequest> {
+    if (this.useMocks) return mockSpaceRequests.decide(id, 'cancelled', null)
+    return this.postJson<SpaceRequest>(`/api/secretaria/solicitudes-espacio/${encodeURIComponent(id)}/cancelar`, {})
+  }
+  async getSpaceOptions(fromUtc: string, toUtc: string): Promise<SpaceOption[]> {
+    if (this.useMocks) return mockSpaceOptions.map(x => ({ ...x }))
+    const query = new URLSearchParams({ fromUtc, toUtc })
+    return (await this.request<{ items: SpaceOption[] }>(`/api/secretaria/espacios/disponibilidad?${query}`)).items
   }
 
   private postJson<T>(path: string, payload: unknown): Promise<T> {

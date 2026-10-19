@@ -14,6 +14,7 @@ import {
 import { useLodgeCouncilApi } from './LodgeCouncilApiContext'
 import './lodgeSecretariat.css'
 import OperationalSecretariatPanel from './OperationalSecretariatPanel'
+import { LodgeSpaceRequests } from './SpaceRequestPanels'
 import { ActionDrawer, ConfirmAction } from './actionKit'
 
 type Props = {
@@ -292,6 +293,7 @@ export default function LodgeSecretariatPanel({ organizationId, lodgeApi, docume
     {message && <div className="regularity-success" role="status">{message}</div>}
 
     {show('daily') && <OperationalSecretariatPanel organizationId={organizationId} api={lodgeApi} meetings={meetings} canManage={canManage} />}
+    {show('daily') && <LodgeSpaceRequests organizationId={organizationId} api={lodgeApi} canManage={canManage} ceremonies={ceremonyAuthorizations.map(x => ({ ceremonyRequestId: x.ceremonyRequestId, label: `${x.title}${x.proposedDate ? ` · ${x.proposedDate}` : ''}` }))} />}
 
     {show('roster') && <div className="lodge-secretariat-grid">
       <article className="panel">
