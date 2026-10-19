@@ -112,6 +112,7 @@ public static class AssemblyGrandTreasuryReviewSignaturePolicy
             signature.ReviewEventId.ToString("D"),
             proposal.Action,
             proposal.ActorSubject,
+            proposal.OccurredAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture),
             proposal.CoverageFrom?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
             proposal.CutoffDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "",
             proposal.Currency ?? "",
