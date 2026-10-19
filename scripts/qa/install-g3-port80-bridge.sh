@@ -13,7 +13,7 @@ info() { printf 'G3: %s\n' "$*"; }
 
 [ "$EUID" -eq 0 ] || die "requiere sudo/root"
 [ "$#" -eq 0 ] || die "sin argumentos; no acepta cambios arbitrarios"
-for cmd in docker ip ss curl install mktemp cp cat grep awk wc; do
+for cmd in docker ip ss curl install mktemp cp cat grep awk wc seq sleep; do
   command -v "$cmd" >/dev/null 2>&1 || die "falta herramienta: $cmd"
 done
 ip -4 -o addr show dev ens18 | grep -Fq " $PRIVATE_IP/24 " ||
@@ -95,7 +95,7 @@ docker run --rm --pull never --network none --read-only --tmpfs /config:rw,nosui
   die "Caddyfile invalido; no se instalo puente"
 
 docker run -d --name "$NAME" --pull never --network host \
-  --restart unless-stopped --read-only --user 10001:10001 \
+  --restart no --read-only --user 10001:10001 \
   --tmpfs /config:rw,nosuid,nodev,size=2m --tmpfs /data:rw,nosuid,nodev,size=2m \
   --cap-drop ALL --cap-add NET_BIND_SERVICE --security-opt no-new-privileges \
   --mount type=bind,source="$DIR/Caddyfile",target=/etc/caddy/Caddyfile,readonly \
@@ -103,15 +103,34 @@ docker run -d --name "$NAME" --pull never --network host \
   "$GATEWAY_IMAGE" caddy run --config /etc/caddy/Caddyfile --adapter caddyfile >/dev/null ||
   die "no se pudo iniciar puente"
 
-# Rollback automatico del NUEVO puente si falla health TCP 80; no toca LAB2.
-status="$(curl --noproxy '*' --silent --show-error --max-time 12 \
-  --resolve "$HOST:80:$PRIVATE_IP" \
-  --output /dev/null --write-out '%{http_code}' \
-  "http://$HOST/health/web")" || status="000"
-if [ "$status" != 200 ]; then
+# Health con ventana de arranque acotada: docker run -d no garantiza Caddy LISTEN.
+# Por seguridad el nuevo contenedor NO tiene politica de reinicio hasta pasar health.
+# Capturar diagnosticos de arranque ANTES de limpiar contenedor fallido.
+status="000"
+ready=false
+for intento in $(seq 1 24); do
+  status="$(curl --noproxy '*' --silent --max-time 2 \
+    --resolve "$HOST:80:$PRIVATE_IP" \
+    --output /dev/null --write-out '%{http_code}' \
+    "http://$HOST/health/web")" || status="000"
+  if [ "$status" = 200 ]; then
+    ready=true
+    break
+  fi
+  sleep 0.5
+done
+if [ "$ready" != true ]; then
+  info "DIAGNOSTICO: no se obtuvo HTTP 200 por TCP80 en 24 intentos (ultimo: $status)"
+  if [ -r /proc/sys/net/ipv4/ip_unprivileged_port_start ]; then
+    info "Host ip_unprivileged_port_start=$(cat /proc/sys/net/ipv4/ip_unprivileged_port_start)"
+  fi
+  docker inspect --format 'G3_CONTENEDOR estado={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}' "$NAME" >&2 || true
+  docker logs --tail 20 "$NAME" >&2 || true
   docker rm -f "$NAME" >/dev/null 2>&1 || true
-  die "puente fallo health HTTP 200 (fue $status); retirado"
+  die "puente no paso health, contenedor nuevo retirado; revisar DIAGNOSTICO"
 fi
+docker update --restart unless-stopped "$NAME" >/dev/null ||
+  { docker rm -f "$NAME" >/dev/null 2>&1 || true; die "no se pudo habilitar reinicio controlado"; }
 info "PUENTE_LOCAL_PASS TCP $PRIVATE_IP:80 -> HTTPS 127.0.0.1:18443"
 info "IP privada solamente; origen permitido $PRIVATE_CIDR"
 info "No se modificaron DNS, NAT, UFW, main, volumenes, BD ni gateway QA"
