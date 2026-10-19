@@ -60,6 +60,7 @@
       "MemberOwnCeremonyReceiptPostgreSqlTests",
       "PrivacyRequestReadAuditPostgreSqlTests",
       "PrivacyContactEmailHttpTests",
+      "PrivacyContactMemberAccessHttpTests",
       "LibraryDegreeAuthorizationTests",
       "AdmissionPersonLookupHttpTests",
       "DocumentContentHttpWorkflowTests",
