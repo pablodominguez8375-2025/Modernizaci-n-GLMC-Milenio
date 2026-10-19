@@ -37,6 +37,26 @@ class G3Port80BridgeContract(unittest.TestCase):
         self.assertIn('--security-opt no-new-privileges', SCRIPT)
         self.assertIn('--read-only', SCRIPT)
 
+    def test_retry_and_diagnostics_before_rollback(self):
+        # Prevent first-sample startup races observed physically on 18-10.
+        self.assertIn('for intento in $(seq 1 24); do', SCRIPT)
+        self.assertIn('sleep 0.5', SCRIPT)
+        self.assertIn('docker logs --tail 20 "$NAME"', SCRIPT)
+        self.assertIn('docker inspect --format', SCRIPT)
+        self.assertIn('ip_unprivileged_port_start', SCRIPT)
+        self.assertLess(
+            SCRIPT.index('docker logs --tail 20 "$NAME"'),
+            SCRIPT.index('docker rm -f "$NAME"'),
+        )
+
+    def test_restart_policy_only_after_health_success(self):
+        self.assertIn('--restart no --read-only --user 10001:10001', SCRIPT)
+        self.assertIn('docker update --restart unless-stopped "$NAME"', SCRIPT)
+        self.assertGreater(
+            SCRIPT.index('docker update --restart unless-stopped "$NAME"'),
+            SCRIPT.index('if [ "$ready" != true ]; then'),
+        )
+
     def test_rollback_without_db_or_firewall_changes(self):
         self.assertIn('docker rm -f "$NAME"', SCRIPT)
         for forbidden in ('ufw allow', 'iptables -A', 'docker compose down', 'docker volume rm',
