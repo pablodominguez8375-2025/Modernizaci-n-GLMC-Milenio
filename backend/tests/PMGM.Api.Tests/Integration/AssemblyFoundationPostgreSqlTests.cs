@@ -162,6 +162,18 @@ public sealed class AssemblyFoundationPostgreSqlTests
             CreatedBySubject = "qa-regimen-interior"
         };
         db.Assemblies.Add(invalid);
-        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        var failure = await Record.ExceptionAsync(() => db.SaveChangesAsync(ct));
+        Assert.NotNull(failure);
+        var postgres = WalkToPostgresException(failure);
+        Assert.NotNull(postgres);
+        Assert.Equal("55000", postgres.SqlState); // Cierre no autorizado por el trigger.
+
+        static PostgresException? WalkToPostgresException(Exception exception)
+        {
+            for (Exception? current = exception; current is not null; current = current.InnerException)
+                if (current is PostgresException postgresException)
+                    return postgresException;
+            return null;
+        }
     }
 }
