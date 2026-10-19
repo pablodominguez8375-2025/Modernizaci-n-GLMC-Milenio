@@ -73,6 +73,7 @@
       "CandidatePublishedLockPostgreSqlTests",
       "RegimenInteriorReinstatementMovementPostgreSqlTests",
       "RegimenInteriorDataQualityPostgreSqlTests",
+      "AssemblyFoundationPostgreSqlTests",
       "RegimenInteriorMemberControlPostgreSqlTests",
       "CandidateInterviewAssignmentHttpTests",
       "CandidateInterviewAssignmentPositiveHttpTests",
