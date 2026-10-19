@@ -34,7 +34,7 @@ public static class AssemblyGrandTreasuryLedgerPolicy
         var from = new DateOnly(ledger.CoverageFrom.Year, ledger.CoverageFrom.Month, 1);
         var until = new DateOnly(ledger.Cutoff.Year, ledger.Cutoff.Month, 1);
         int expectedMonths = (until.Year - from.Year) * 12 + until.Month - from.Month + 1;
-        if (expectedMonths <= 0 || expectedMonths > 120 || byPeriod.Length != expectedMonths)
+        if (expectedMonths <= 0 || byPeriod.Length != expectedMonths)
             return null;
 
         for (var month = from; month <= until; month = month.AddMonths(1))
