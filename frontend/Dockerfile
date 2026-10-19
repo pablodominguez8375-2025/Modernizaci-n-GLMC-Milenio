@@ -25,6 +25,16 @@ FROM nginx:stable-alpine AS final
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# QA #553: los assets publicos pueden llegar al build con modo 0600.
+# Nginx sirve ficheros como usuario no-root; evitar 403 sin ampliar secretos
+# ni cambiar permisos de otras rutas de la imagen.
+RUN chmod 0755 /usr/share/nginx/html/brand \
+    && find /usr/share/nginx/html/brand -maxdepth 1 -type f -exec chmod 0644 {} + \
+    && test -r /usr/share/nginx/html/brand/logo-glmch-reducido-v2-azul.svg \
+    && test -r /usr/share/nginx/html/brand/favicon-glmch.svg \
+    && test -r /usr/share/nginx/html/brand/favicon-32.png \
+    && test -r /usr/share/nginx/html/brand/apple-touch-icon.png
+
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1/health/web >/dev/null || exit 1
