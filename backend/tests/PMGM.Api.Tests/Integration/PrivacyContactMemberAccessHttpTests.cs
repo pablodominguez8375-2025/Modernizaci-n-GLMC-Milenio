@@ -27,11 +27,11 @@ public sealed class PrivacyContactMemberAccessHttpTests
             {
                 s.AddAuthentication(o =>
                 {
-                    o.DefaultAuthenticateScheme = WorkshopMemberAuth.Scheme;
-                    o.DefaultChallengeScheme = WorkshopMemberAuth.Scheme;
-                    o.DefaultForbidScheme = WorkshopMemberAuth.Scheme;
+                    o.DefaultAuthenticateScheme = WorkshopMemberAuth.SchemeName;
+                    o.DefaultChallengeScheme = WorkshopMemberAuth.SchemeName;
+                    o.DefaultForbidScheme = WorkshopMemberAuth.SchemeName;
                 }).AddScheme<AuthenticationSchemeOptions, WorkshopMemberAuth>(
-                    WorkshopMemberAuth.Scheme, _ => {});
+                    WorkshopMemberAuth.SchemeName, _ => {});
             }));
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -50,7 +50,7 @@ public sealed class PrivacyContactMemberAccessHttpTests
         ILoggerFactory logger, UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
-        public const string Scheme = "PMGM-Privacy-Member";
+        public const string SchemeName = "PMGM-Privacy-Member";
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
             var identity = new ClaimsIdentity(
@@ -58,9 +58,9 @@ public sealed class PrivacyContactMemberAccessHttpTests
                 new Claim("sub", "member-privacy-test"),
                 new Claim(InstitutionalClaims.Scope, "lodge"),
                 new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerTesoreria)
-            ], Scheme);
+            ], SchemeName);
             return Task.FromResult(AuthenticateResult.Success(
-                new AuthenticationTicket(new ClaimsPrincipal(identity), Scheme)));
+                new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
         }
     }
 }
