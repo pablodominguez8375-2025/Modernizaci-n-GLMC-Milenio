@@ -1,0 +1,123 @@
+/* Tema de login GLMCh: misma identidad que la pantalla de ingreso de la aplicación (access-screen.css).
+   Azul #06148E, dorado #F3C609/#FBAE17, fondo #F5F8FF, texto #17223B, líneas #D8E1F4, error #a13b45. */
+:root {
+  --glmch-navy: #06148E;
+  --glmch-navy-2: #0a2bb8;
+  --glmch-blue: #004AD4;
+  --glmch-gold: #F3C609;
+  --glmch-gold-strong: #FBAE17;
+  --glmch-canvas: #F5F8FF;
+  --glmch-ink: #17223B;
+  --glmch-muted: #586680;
+  --glmch-line: #D8E1F4;
+  --glmch-danger: #a13b45;
+  --pf-v5-global--primary-color--100: var(--glmch-navy);
+  --pf-v5-global--primary-color--200: var(--glmch-navy-2);
+  --pf-v5-global--link--Color: var(--glmch-blue);
+  --pf-v5-global--link--Color--hover: var(--glmch-navy);
+  --pf-v5-global--FontFamily--sans-serif: Cambria, Georgia, serif;
+  --pf-v5-global--FontFamily--heading--sans-serif: Cambria, Georgia, serif;
+  --pf-v5-global--FontFamily--text: Cambria, Georgia, serif;
+  --pf-v5-global--FontFamily--heading: Cambria, Georgia, serif;
+}
+
+html, body, body#keycloak-bg { font-family: Cambria, Georgia, serif; color: var(--glmch-ink); font-size: 18px; }
+
+/* Fondo: franja azul arriba con borde dorado, lienzo claro abajo. */
+.pf-v5-c-login {
+  min-height: 100dvh;
+  background: linear-gradient(160deg, var(--glmch-navy) 0, var(--glmch-navy-2) 100%) top / 100% 250px no-repeat,
+              linear-gradient(var(--glmch-gold), var(--glmch-gold)) 0 250px / 100% 4px no-repeat,
+              var(--glmch-canvas);
+}
+.pf-v5-c-login__container { display: block; width: min(calc(100% - 32px), 460px); margin: 0 auto; padding: 24px 0 32px; }
+
+/* Logo sobre placa blanca en lugar del nombre del realm (el texto sigue disponible para lectores de pantalla). */
+.pf-v5-c-login__header { margin: 0 0 20px; padding: 0; }
+#kc-header-wrapper {
+  display: block;
+  height: 84px;
+  width: fit-content;
+  min-width: 260px;
+  max-width: 100%;
+  margin: 0 auto;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
+  border-radius: 12px;
+  background: #fff url("../img/logo.svg") center / contain no-repeat;
+  background-origin: content-box;
+  padding: 10px 14px;
+  box-sizing: border-box;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 22%);
+}
+
+/* Tarjeta de ingreso. */
+.pf-v5-c-login__main {
+  margin: 0;
+  padding: 8px 4px 4px;
+  border: 1px solid var(--glmch-line);
+  border-top: 4px solid var(--glmch-gold);
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(6 20 142 / 12%);
+}
+.pf-v5-c-login__main-header { padding: 20px 20px 4px; border: 0; }
+#kc-page-title, .pf-v5-c-login__main-header .pf-v5-c-title { margin: 0; font-size: 2rem; line-height: 1.15; color: var(--glmch-navy); font-family: Cambria, Georgia, serif; }
+.pf-v5-c-login__main-body { padding: 12px 20px 20px; }
+
+/* Campos grandes y legibles. */
+.pf-v5-c-form__label-text { font-size: 1.05rem; font-weight: 700; color: var(--glmch-ink); }
+.pf-v5-c-form-control, .pf-v5-c-form-control input, .pf-v5-c-form-control select { font-size: 1.1rem; }
+.pf-v5-c-form-control input, input#username, input#password { min-height: 48px; padding: 8px 12px; color: var(--glmch-ink); }
+.pf-v5-c-form-control { --pf-v5-c-form-control--BorderColor: var(--glmch-line); border-radius: 8px; }
+.pf-v5-c-form-control:focus-within { outline: 3px solid var(--glmch-blue); outline-offset: 2px; }
+.pf-v5-c-input-group__item .pf-v5-c-button.pf-m-control { min-width: 48px; min-height: 48px; }
+
+/* Botón principal dorado de 52 px. */
+.pf-v5-c-button.pf-m-primary, #kc-login {
+  min-height: 52px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--glmch-gold), var(--glmch-gold-strong));
+  color: var(--glmch-navy);
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgb(251 174 23 / 35%);
+}
+.pf-v5-c-button.pf-m-primary:hover, #kc-login:hover { filter: brightness(1.04); background: linear-gradient(180deg, var(--glmch-gold), var(--glmch-gold-strong)); color: var(--glmch-navy); }
+.pf-v5-c-button:focus-visible, a:focus-visible { outline: 3px solid var(--glmch-blue); outline-offset: 3px; }
+.pf-v5-c-button.pf-m-secondary { min-height: 48px; border-radius: 10px; color: var(--glmch-navy); font-weight: 700; }
+
+/* Enlaces y ayudas. */
+.pf-v5-c-helper-text__item-text, .pf-v5-c-helper-text__item-text a, #kc-registration, #kc-info { font-size: 1rem; }
+a { color: var(--glmch-blue); font-weight: 700; }
+
+/* Mensajes de error y de aviso. */
+.pf-v5-c-alert { border-radius: 10px; font-size: 1.05rem; }
+.pf-v5-c-alert.pf-m-danger { background: #fdf0f1; border: 1px solid #e2b7bc; --pf-v5-c-alert--m-danger--BorderTopColor: var(--glmch-danger); }
+.pf-v5-c-alert.pf-m-danger .pf-v5-c-alert__title { color: var(--glmch-danger); font-weight: 700; }
+.pf-v5-c-form__helper-text .pf-m-error, .pf-v5-c-helper-text__item.pf-m-error { color: var(--glmch-danger); font-weight: 700; }
+
+/* Aviso de uso restringido al pie. */
+.pf-v5-c-login__container::after {
+  content: "Uso restringido a personas autorizadas de la Orden. Tu actividad en la plataforma queda registrada.";
+  display: block;
+  margin: 16px 4px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--glmch-line);
+  color: var(--glmch-muted);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  text-align: center;
+}
+
+/* Selector de idioma: la plataforma es solo en español. */
+#kc-locale { display: none; }
+
+@media (max-width: 380px) {
+  .pf-v5-c-login__main-header { padding: 16px 14px 4px; }
+  .pf-v5-c-login__main-body { padding: 10px 14px 16px; }
+  #kc-header-wrapper { min-width: 0; width: 100%; }
+}

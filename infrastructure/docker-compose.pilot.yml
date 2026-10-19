@@ -85,6 +85,7 @@ services:
       PMGM_PILOT_ADMIN_PASSWORD: ${PMGM_PILOT_ADMIN_PASSWORD:?PMGM_PILOT_ADMIN_PASSWORD es obligatorio}
     volumes:
       - ./keycloak/pmgm-pilot-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
+      - ./keycloak/themes/glmch:/opt/keycloak/themes/glmch:ro
     networks: [pmgm_pilot_internal]
 
   api:
