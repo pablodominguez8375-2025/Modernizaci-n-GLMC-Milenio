@@ -63,6 +63,8 @@ public sealed class AddAssemblyRosterFoundations : Migration
             constraints: t =>
             {
                 t.PrimaryKey("PK_assembly_member_statuses", x => x.Id);
+                t.UniqueConstraint("AK_assembly_member_statuses_AssemblyId_Id",
+                    x => new { x.AssemblyId, x.Id });
                 t.ForeignKey("FK_assembly_member_statuses_assemblies", x => x.AssemblyId,
                     principalSchema: "core", principalTable: "assemblies", principalColumn: "Id",
                     onDelete: ReferentialAction.Restrict);
@@ -94,9 +96,11 @@ public sealed class AddAssemblyRosterFoundations : Migration
             constraints: t =>
             {
                 t.PrimaryKey("PK_assembly_eligibilities", x => x.Id);
-                t.ForeignKey("FK_assembly_eligibilities_members", x => x.MemberStatusId,
+                t.ForeignKey("FK_assembly_eligibilities_members",
+                    x => new { x.AssemblyId, x.MemberStatusId },
                     principalSchema: "core", principalTable: "assembly_member_statuses",
-                    principalColumn: "Id", onDelete: ReferentialAction.Restrict);
+                    principalColumns: new[] { "AssemblyId", "Id" },
+                    onDelete: ReferentialAction.Restrict);
                 t.CheckConstraint("CK_assembly_eligibility_status",
                     "\"Status\" IN ('habilitado','inhabilitado','pendiente','solo_asistencia')");
                 t.CheckConstraint("CK_assembly_vote_requires_eligibility",
@@ -123,6 +127,9 @@ public sealed class AddAssemblyRosterFoundations : Migration
             constraints: t =>
             {
                 t.PrimaryKey("PK_assembly_debt_decision_events", x => x.Id);
+                t.ForeignKey("FK_assembly_debt_events_assemblies", x => x.AssemblyId,
+                    principalSchema: "core", principalTable: "assemblies",
+                    principalColumn: "Id", onDelete: ReferentialAction.Restrict);
                 t.CheckConstraint("CK_assembly_debt_action", "\"Action\" IN ('lift','revoke')");
                 t.CheckConstraint("CK_assembly_debt_authority", "\"Authority\" = 'regimen_interior'");
             });
@@ -178,6 +185,24 @@ public sealed class AddAssemblyRosterFoundations : Migration
             schema: "core", table: "institutional_restrictions",
             columns: new[] { "PersonId", "StartsOn", "EndsOn" });
 
+        // La etapa B no tiene todavía el cierre transaccional de padrón.
+        // Una clave privilegiada tampoco debe poder crear un falso cierre.
+        migrationBuilder.Sql("""
+            CREATE FUNCTION core.reject_unverified_assembly_closure()
+            RETURNS trigger LANGUAGE plpgsql AS $
+            BEGIN
+                IF NEW."Status" <> 'draft' THEN
+                    RAISE EXCEPTION 'Assembly closure requires audited service'
+                        USING ERRCODE = '55000';
+                END IF;
+                RETURN NEW;
+            END $;
+            CREATE TRIGGER trg_assembly_draft_only
+            BEFORE INSERT OR UPDATE ON core.assemblies
+            FOR EACH ROW
+            EXECUTE FUNCTION core.reject_unverified_assembly_closure();
+            """);
+
         // Una decisión del órgano no puede modificarse retroactivamente por
         // SQL ni por futuras rutas administrativas.
         migrationBuilder.Sql("""
@@ -196,6 +221,10 @@ public sealed class AddAssemblyRosterFoundations : Migration
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
+        migrationBuilder.Sql("""
+            DROP TRIGGER IF EXISTS trg_assembly_draft_only ON core.assemblies;
+            DROP FUNCTION IF EXISTS core.reject_unverified_assembly_closure();
+            """);
         migrationBuilder.Sql("""
             DROP TRIGGER IF EXISTS trg_assembly_debt_event_immutable
                 ON core.assembly_debt_decision_events;
