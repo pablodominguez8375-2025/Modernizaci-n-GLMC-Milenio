@@ -11,3 +11,10 @@ El resultado exclusivamente indica si los hechos están listos para ser procesad
 Casos positivos y negativos: actor no autenticado, admin plataforma y roles ajenos, sin rol/scope/sub, catálogo sin asignación, permiso vista solamente, asignación caducada/inactiva, perfil retirado, taller versus Gran Logia, propuesta documental inválida, autorrevisión y revisor que no coincide con la firma. El gate final será triple PMGM CI/Showcase/Instalable PASS exact SHA. No alterar QA, main, producción, secretos o los archivos UI Clau.
 
 Trabajo posterior: persistencia de atestación firmada append-only auditada, rol y RBAC en ruta HTTP, facturación histórica GT con saldo de apertura/corte/moneda, revisiones/resoluciones RI, cierre congelado, PDF/CSV.
+
+## Código entregado
+- `AssemblyGrandTreasuryWriteAdmissionPolicy.AssessProposal`: exige simultáneamente identidad GT explícita y permiso dinámico `treasury/view+write` vigente de alcance Gran Logia (`IsGranted`), más el preflight de documentación C2. Sin perfil, aun cuando `DynamicGrandTreasuryAccess.Allows` heredado responda verdadero, la solicitud queda bloqueada.
+- `AssessSignedReview`: aplica los mismos controles al revisor autenticado, comprueba `sub` contra el autor de la revisión y el sujeto del sobre firmado; verifica documento/eventos/clave pública aprobada con registro servidor C7 y firma C6.
+- Ambas rutas devuelven únicamente `ReadyForAuditedProcessing`, jamás una decisión electoral; `MayAuthorizeSuffrage=false`. No son escritura persistida, endpoint ni certificado de saldo.
+- `AssemblyGrandTreasuryWriteAdmissionPolicyTests`: positiva documental/firmada con RSA efímera; sin perfil dinámico, solo lectura, asignación vencida, desactivada, perfil desactivado, alcance Taller, identidad sin scope o sin autenticar, administradores sin rol GT, documento incompleto, autor actor distinto de firma y firma inválida.
+- PR [#575](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/575) es DRAFT. CI del commit exacto se requiere antes de integración. QA físico fuera de este hilo. No declarar Issue #533 concluido.
