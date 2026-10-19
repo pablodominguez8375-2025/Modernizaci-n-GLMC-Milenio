@@ -189,14 +189,14 @@ public sealed class AddAssemblyRosterFoundations : Migration
         // Una clave privilegiada tampoco debe poder crear un falso cierre.
         migrationBuilder.Sql("""
             CREATE FUNCTION core.reject_unverified_assembly_closure()
-            RETURNS trigger LANGUAGE plpgsql AS $
+            RETURNS trigger LANGUAGE plpgsql AS $assembly_close_guard$
             BEGIN
                 IF NEW."Status" <> 'draft' THEN
                     RAISE EXCEPTION 'Assembly closure requires audited service'
                         USING ERRCODE = '55000';
                 END IF;
                 RETURN NEW;
-            END $;
+            END $assembly_close_guard$;
             CREATE TRIGGER trg_assembly_draft_only
             BEFORE INSERT OR UPDATE ON core.assemblies
             FOR EACH ROW
@@ -207,11 +207,11 @@ public sealed class AddAssemblyRosterFoundations : Migration
         // SQL ni por futuras rutas administrativas.
         migrationBuilder.Sql("""
             CREATE FUNCTION core.reject_assembly_debt_event_mutation()
-            RETURNS trigger LANGUAGE plpgsql AS $$
+            RETURNS trigger LANGUAGE plpgsql AS $assembly_debt_guard$
             BEGIN
                 RAISE EXCEPTION 'assembly_debt_decision_events is append-only'
                     USING ERRCODE = '55000';
-            END $$;
+            END $assembly_debt_guard$;
             CREATE TRIGGER trg_assembly_debt_event_immutable
             BEFORE UPDATE OR DELETE OR TRUNCATE ON core.assembly_debt_decision_events
             FOR EACH STATEMENT
