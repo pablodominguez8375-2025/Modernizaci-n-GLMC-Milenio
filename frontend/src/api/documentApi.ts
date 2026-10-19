@@ -497,6 +497,7 @@ function canonicalCatalogType(value: string) {
   if (['work_paper', 'working_paper', 'plancha', 'plancha_de_trabajo'].includes(normalized)) return 'work_paper'
   if (['book', 'books', 'libro', 'libros'].includes(normalized)) return 'book'
   if (['official_document', 'documento_oficial', 'regulation', 'reglamento', 'constitution', 'constitucion', 'ritual'].includes(normalized)) return 'official_document'
+  if (['magazine', 'magazines', 'revista', 'revistas'].includes(normalized)) return 'magazine'
   if (['video', 'videos'].includes(normalized)) return 'video'
   return normalized
 }
