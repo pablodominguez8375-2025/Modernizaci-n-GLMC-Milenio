@@ -67,6 +67,7 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.Property(x => x.WorkshopAtCutoff).HasMaxLength(240).IsRequired();
             entity.HasOne(x => x.Assembly).WithMany(x => x.Members)
                 .HasForeignKey(x => x.AssemblyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasAlternateKey(x => new { x.AssemblyId, x.Id });
             entity.HasIndex(x => new { x.AssemblyId, x.PersonId }).IsUnique();
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId });
         });
@@ -84,7 +85,9 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.Property(x => x.HonorRightsSourceReference).HasMaxLength(500);
             entity.Property(x => x.EvaluatedBySubject).HasMaxLength(320).IsRequired();
             entity.HasOne(x => x.MemberStatus).WithMany(x => x.EligibilityHistory)
-                .HasForeignKey(x => x.MemberStatusId).OnDelete(DeleteBehavior.Restrict);
+                .HasForeignKey(x => new { x.AssemblyId, x.MemberStatusId })
+                .HasPrincipalKey(x => new { x.AssemblyId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.AssemblyId, x.MemberStatusId, x.EvaluatedAtUtc });
             entity.HasIndex(x => x.SupersedesEligibilityId).IsUnique()
                 .HasFilter("\"SupersedesEligibilityId\" IS NOT NULL");
@@ -99,6 +102,8 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.Property(x => x.DecidedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.Reason).HasMaxLength(2000).IsRequired();
             entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.HasOne<AssemblyRecord>().WithMany()
+                .HasForeignKey(x => x.AssemblyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.OccurredAtUtc });
             entity.HasIndex(x => x.ReversesEventId).IsUnique()
                 .HasFilter("\"ReversesEventId\" IS NOT NULL");
