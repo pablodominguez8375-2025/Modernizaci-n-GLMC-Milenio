@@ -161,6 +161,76 @@ public sealed class LibraryCatalogMetadataHttpTests
         Assert.Equal(2, persistedWorkPaper.MinimumDegreeRequired);
     }
 
+    [Fact]
+    public async Task Magazine_aliases_have_distinct_kind_search_and_canonical_facets()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var cancellationToken = TestContext.Current.CancellationToken;
+        using var factory = new DocumentManagementWebApplicationFactory(connectionString);
+        using var client = factory.CreateClient();
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(cancellationToken);
+        }
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var collectionId = await CreateCollectionAsync(client, suffix, cancellationToken);
+        var rawTypes = new[] { "magazine", "magazines", "revista", "revistas" };
+
+        foreach (var rawType in rawTypes)
+        {
+            var documentId = await CreateDocumentAsync(
+                client, collectionId, $"Revista {suffix} {rawType}", rawType, cancellationToken);
+            var metadataResponse = await client.PutAsJsonAsync(
+                $"/api/documentos/{documentId}/metadatos-biblioteca",
+                new
+                {
+                    minimumDegreeRequired = (int?)null,
+                    authorName = "Equipo editorial",
+                    documentDate = "2026-10-20",
+                    topic = "Cultura",
+                    edition = "Número 4",
+                    shortDescription = "Publicación institucional",
+                    abstractText = "Resumen del número"
+                },
+                cancellationToken);
+
+            Assert.Equal(HttpStatusCode.OK, metadataResponse.StatusCode);
+            var metadata = await metadataResponse.Content.ReadFromJsonAsync<JsonElement>(
+                cancellationToken: cancellationToken);
+            Assert.Equal("Magazine", metadata.GetProperty("catalogKind").GetString());
+            Assert.Equal("Número 4", metadata.GetProperty("edition").GetString());
+            Assert.Equal("Resumen del número", metadata.GetProperty("abstractText").GetString());
+            Assert.Equal("Publicación institucional", metadata.GetProperty("shortDescription").GetString());
+            await MakeAvailableAndPublishAsync(client, documentId, cancellationToken);
+        }
+
+        foreach (var filter in new[] { "magazine", "revista", "revistas" })
+        {
+            var response = await client.GetAsync(
+                $"/api/biblioteca/buscar?documentType={filter}&q={suffix}&pageSize=10",
+                cancellationToken);
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            var search = await response.Content.ReadFromJsonAsync<JsonElement>(
+                cancellationToken: cancellationToken);
+            Assert.Equal(rawTypes.Length, search.GetProperty("total").GetInt32());
+        }
+
+        var facets = await client.GetFromJsonAsync<JsonElement>(
+            "/api/biblioteca/facetas", cancellationToken);
+        var magazineFacets = facets.GetProperty("documentTypes")
+            .EnumerateArray()
+            .Where(item => item.GetProperty("value").GetString() == "magazine")
+            .ToArray();
+        Assert.Single(magazineFacets);
+        Assert.Equal("Revistas", magazineFacets[0].GetProperty("label").GetString());
+        Assert.True(magazineFacets[0].GetProperty("count").GetInt32() >= rawTypes.Length);
+    }
+
     private static async Task<Guid> CreateCollectionAsync(
         HttpClient client,
         string suffix,
