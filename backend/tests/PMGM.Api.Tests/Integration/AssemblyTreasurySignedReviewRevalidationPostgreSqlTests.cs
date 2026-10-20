@@ -23,7 +23,8 @@ public sealed class AssemblyTreasurySignedReviewRevalidationPostgreSqlTests
         await using var db = new RegimenInteriorDbContext(options);
         await db.Database.MigrateAsync(ct);
 
-        var moment = DateTimeOffset.UtcNow.AddMinutes(-1);
+        var utc = DateTimeOffset.UtcNow;
+        var moment = new DateTimeOffset(utc.Ticks - utc.Ticks % 10, TimeSpan.Zero).AddMinutes(-1);
         var content = Encoding.UTF8.GetBytes("Solo datos sintéticos C11, sin RUT");
         using var rsa = RSA.Create(2048);
         var workshopId = Guid.NewGuid();
