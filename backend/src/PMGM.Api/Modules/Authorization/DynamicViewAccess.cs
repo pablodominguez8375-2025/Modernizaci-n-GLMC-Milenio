@@ -265,6 +265,25 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
                     http.User, access, catalog, document);
         }
 
+        // Retiro institucional reversible: misma autorización de publicación,
+        // sobre el documento persistido, sin delegar a colaboradores.
+        if (!allowed &&
+            route.Equals(
+                "/api/biblioteca/editorial/revistas/{documentId:guid}/retirar-publicacion",
+                StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var withdrawingDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == withdrawingDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+                    http.User, access, catalog, document);
+        }
+
         // Alta editorial específica. Sólo la categoría Revista puede sustituir
         // el permiso genérico library/create, y el endpoint revalida con DB.
         if (!allowed &&
