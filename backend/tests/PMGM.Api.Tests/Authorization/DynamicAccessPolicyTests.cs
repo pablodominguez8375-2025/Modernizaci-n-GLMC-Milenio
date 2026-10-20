@@ -15,6 +15,52 @@ public sealed class DynamicAccessPolicyTests
         c.Menus[0] = c.Menus[0] with { IsActive = false }; Assert.False(Grant());
     }
     [Fact]
+    public void Library_magazine_grant_never_elevates_to_unscoped_write_or_other_category()
+    {
+        var today = new DateOnly(2026, 10, 20);
+        var catalog = DynamicAccessEndpoints.CreateCatalog();
+        var profile = new DynamicProfile(
+            Guid.NewGuid(), "revistas", "Editor de revistas", "order",
+            false, true, ["documents"],
+            [new DynamicGrant("library", ["view", "create", "edit"], ["magazine"])]);
+        catalog.Profiles.Add(profile);
+        catalog.Assignments.Add(new DynamicAssignment(
+            Guid.NewGuid(), "comunicaciones", "revistas", null,
+            today.AddDays(-1), today.AddDays(1), true));
+
+        bool Scoped(string category, string action = "edit", DateOnly? date = null) =>
+            DynamicAccessEndpoints.IsCategoryGranted(
+                catalog, "comunicaciones", "library", action, category, null, date ?? today);
+
+        Assert.True(Scoped("magazine"));
+        Assert.True(Scoped("magazine", "create"));
+        Assert.True(Scoped("magazine", "view"));
+        Assert.False(Scoped("book"));
+        Assert.False(Scoped("official_document"));
+        Assert.False(Scoped("revista")); // las APIs normalizan antes de evaluar
+        Assert.False(Scoped("magazine", "delete"));
+        Assert.False(Scoped("magazine", date: today.AddDays(2)));
+        Assert.False(DynamicAccessEndpoints.IsCategoryGranted(
+            catalog, "comunicaciones", "documentmanager", "edit", "magazine", null, today));
+        Assert.False(DynamicAccessEndpoints.IsCategoryGranted(
+            catalog, "otro", "library", "edit", "magazine", null, today));
+
+        Assert.True(DynamicAccessEndpoints.IsGranted(
+            catalog, "comunicaciones", "library", "view", null, today));
+        Assert.False(DynamicAccessEndpoints.IsGranted(
+            catalog, "comunicaciones", "library", "edit", null, today));
+
+        // El grant histórico sin categorías no se interpreta como delegación de categoría.
+        catalog.Profiles[^1] = profile with
+        {
+            Grants = [new DynamicGrant("library", ["view", "edit"])]
+        };
+        Assert.False(Scoped("magazine"));
+        Assert.True(DynamicAccessEndpoints.IsGranted(
+            catalog, "comunicaciones", "library", "edit", null, today));
+    }
+
+    [Fact]
     public void Revoked_assignments_inactive_profiles_missing_view_and_unselected_menus_deny()
     {
         var c = DynamicAccessEndpoints.CreateCatalog(); var today = new DateOnly(2026, 10, 4);
