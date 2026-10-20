@@ -18,6 +18,13 @@ describe('PMGM-UX administración ordenada (04-10-2026)', () => {
     expect(page).not.toContain("useState('Todos')")
   })
 
+  it('el diseñador de perfiles vive en «Perfiles y accesos», no en «Usuarios»', () => {
+    const users = ops.split("area==='users'")[1].split("area==='profiles'")[0]
+    expect(users).not.toContain('Diseñar perfiles de acceso')
+    expect(ops.split("area==='profiles'")[1]).toContain('<ActionDrawer label="Diseñar perfiles de acceso"')
+    expect(page).toContain("['backup','users','profiles'")
+  })
+
   it('restauración, correo e identidad se abren en panel', () => {
     for (const label of ['Restaurar un respaldo', 'Editar configuración de correo', 'Editar logos y colores', 'Diseñar perfiles de acceso']) expect(ops).toContain(`<ActionDrawer label="${label}"`)
   })
