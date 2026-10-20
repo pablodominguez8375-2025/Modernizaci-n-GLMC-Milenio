@@ -137,6 +137,48 @@ public sealed class LibraryMagazineMetadataAuthorizationTests
             Identity(InstitutionalRoles.Librarian), access, grants, doc));
     }
     [Fact]
+    public void Write_grant_stages_draft_magazine_but_cannot_stage_other_documents()
+    {
+        var access = new InstitutionalAccessService();
+        var me = Identity("collaborator");
+        var grant = MagazineGrant();
+        grant.Profiles[^1] = grant.Profiles[^1] with
+        {
+            Grants = [new DynamicGrant("library", ["view", "write"], ["magazine"])]
+        };
+        Assert.True(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, Document()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            me, access, grant)); // write no implica create
+        Assert.False(LibraryMagazineMetadataAuthorization.CanEditMetadata(
+            me, access, grant, Document())); // ni editar
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            Identity("collaborator", "otro"), access, grant, Document()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, MagazineGrant(), Document())); // solo edit
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, Document("book")));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, Document(workshop: true)));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, Document(activeCollection: false)));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, Document(classification: DocumentManagementCodes.Classification.Confidential)));
+        var published = Document();
+        published.Status = DocumentManagementCodes.DocumentStatus.Published;
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, published));
+        var doc = Document();
+        Assert.True(LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+            me, access, grant, new DocumentVersion { Document = doc, CreatedBySubject = "colaborador" }));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+            me, access, grant, new DocumentVersion { Document = doc, CreatedBySubject = "otro" }));
+        grant.Assignments[0] = grant.Assignments[0] with { IsActive = false };
+        Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+            me, access, grant, Document()));
+    }
+
+    [Fact]
     public void Create_draft_is_separate_from_edit_and_requires_live_category_grant()
     {
         var access = new InstitutionalAccessService();

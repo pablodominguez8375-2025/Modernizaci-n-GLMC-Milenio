@@ -12,3 +12,9 @@ Fecha 2026-10-20. Fuente `dev@27af98f835edbc0320b535dd6855ab0e71117cad`, `main` 
 
 ## Archivos previstos
 `DocumentAreaCollaboratorEndpoints.cs`, `LibraryMagazineMetadataAuthorization.cs`, `DynamicViewAccess.cs`, `DocumentManagementEndpoints.cs`, `DocumentContentEndpoints.cs`, tests de autorización e integración del área, este handoff. Sin migraciones ni frontend ni modificación de main/servidor QA.
+
+## Implementación inicial PR #602
+- `library/write/magazine` delegable por Bibliotecario sólo para categoría revista. Extensión de tabla permitida restringida: para otras categorías/áreas `write` retorna 400.
+- Excepción puntual de filtro dinámico para reservar versión, cargar contenido propio y solicitar scanner propio, con búsqueda de documento real/colección. La capa de endpoint repite evaluación. `/estado`, publicar y descarga administrativa permanecen sin privilegios del colaborador.
+- Todo archivo se somete a controles existentes de Content-Length, MIME, firma, integridad SHA-256, escaneo antimalware y auditoría. La concesión puede revocarse antes de cargar/analizar. Sin migraciones.
+- Evidencia CI y test HTTP pendiente en este momento.
