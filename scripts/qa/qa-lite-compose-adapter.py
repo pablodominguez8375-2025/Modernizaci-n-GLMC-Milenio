@@ -24,6 +24,7 @@ IMAGE = re.compile(r"sha256:[a-f0-9]{64}\Z")
 CID = re.compile(r"[a-f0-9]{64}\Z")
 SHA = re.compile(r"[a-f0-9]{40}\Z")
 DOCKER = "/usr/bin/docker"
+COMPLETED_JOBS = frozenset({"db-grants", "migrator", "minio-init"})
 
 
 class Blocked(Exception):
@@ -95,10 +96,11 @@ def metadata(run=docker):
     template = "[" + ",".join(
         "{{json " + ("(index " + f + ")" if f.startswith(".Config.Labels") else f) + "}}"
         for f in fields) + ",{{json .Mounts}},{{json .NetworkSettings.Networks}}," \
-        "{{json .NetworkSettings.Ports}}]"
+        "{{json .NetworkSettings.Ports}},{{json .State.ExitCode}}]"
     for cid in service_ids(run):
         value = json.loads(run(["inspect", "--format", template, cid]))
-        require(isinstance(value, list) and len(value) == 11, "METADATA_INVALID")
+        require(isinstance(value, list) and len(value) == 12
+                and type(value[11]) is int, "METADATA_INVALID")
         service = value[5]
         require(isinstance(service, str) and service not in result,
                 "DUPLICATE_OR_UNNAMED_SERVICE")
@@ -204,7 +206,11 @@ class ComposeWebAdapter:
                     "COMPOSE_BINDING_CHANGED")
             actual_files = actual_files[:-1]
         require(actual_files == allowed, "COMPOSE_BINDING_CHANGED")
-        require(all(v[2] == "running" for v in state.values()), "DEPENDENCY_NOT_RUNNING")
+        # These three physical Compose jobs must finish successfully. They are
+        # kept in the baseline, never restarted by this WEB-only transaction.
+        require(all((v[2] == "exited" and v[11] == 0) if name in COMPLETED_JOBS
+                    else v[2] == "running" for name, v in state.items()),
+                "DEPENDENCY_NOT_RUNNING")
         self.dependencies = {k: v for k, v in state.items() if k != "web"}
         require(self.dependencies, "DEPENDENCY_BASELINE_EMPTY")
         self.web_boundary = self.boundary(web)

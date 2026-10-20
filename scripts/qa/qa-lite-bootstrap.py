@@ -21,7 +21,7 @@ STATE = Path("/opt/centenario/qa-auto-lite")
 PINNED_CODE = {
     "check-public-readiness.py": "5006417c6e5a3c5620d669d0028ab8044bd5cd210a0cc7ccdbbbe80612db34e3",
     "qa-agent-readiness.py": "afc1d54a90696a4a33bdfe689c47406b5dc0aaf8838426f907761adab20ddd55",
-    "qa-lite-compose-adapter.py": "117a347b00264f63bc710b5f06f87749e6c6d4748a3f34bcc47b73ca6cd946e7",
+    "qa-lite-compose-adapter.py": "5fa03db393159a49c3606276635248467f6cada8ffdbd5ccaded5afb8b68ed7d",
     "qa-lite-install.py": "0162384605473b15ded3602207be5a978d9ddbcb0bfd59aa5de7bfd8f6551388",
     "qa-lite-web-build.py": "299aa40b12df1ae615a8aaa1cbc6437effc2fd0bf1d83211b5a97550084c1aef",
     "qa-lite-web-transaction.py": "a06fd6faec00e3a58e5ecd9f3b4fa3f26e7ab869b7afe8b1402e73cd974ddae5",
