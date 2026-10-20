@@ -1,0 +1,137 @@
+import { useState, type FormEvent } from 'react'
+import { ActionBar, ActionDrawer, ConfirmAction, HelpNote } from './actionKit'
+import type { LibraryCatalogItem } from './api/documentApi'
+
+export type LibraryCategory = { value: string; label: string; base: boolean; future?: boolean; active: boolean }
+export type LibrarySubmission = { id: string; kind: 'taller' | 'borrador'; title: string; documentType: string; author: string; lodge?: string; degree: number | null; description: string; sentAt: string; item: LibraryCatalogItem }
+
+type Props = {
+  categories: LibraryCategory[]
+  onCategories: (next: LibraryCategory[]) => void
+  counts: Record<string, number>
+  submissions: LibrarySubmission[]
+  onSubmission: (next: LibrarySubmission[]) => void
+  onPublish: (item: LibraryCatalogItem) => void
+  collectionId: string
+  notify: (message: string) => void
+}
+
+const degreeOptions = [{ v: '', t: 'General (todos los grados)' }, { v: '1', t: '1° grado' }, { v: '2', t: '2° grado' }, { v: '3', t: '3° grado' }]
+const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'categoria'
+const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
+
+export default function LibraryManagement({ categories, onCategories, counts, submissions, onSubmission, onPublish, collectionId, notify }: Props) {
+  const active = categories.filter(c => c.active && !c.future)
+  const [type, setType] = useState(active[0]?.value ?? 'work_paper')
+  const [fileName, setFileName] = useState('')
+  const [reject, setReject] = useState<{ id: string; reason: string } | null>(null)
+  const [newCategory, setNewCategory] = useState('')
+
+  function buildItem(form: FormData, id: string): LibraryCatalogItem {
+    const g = (k: string) => String(form.get(k) ?? '').trim() || null
+    const degree = g('degree')
+    return {
+      id, collectionId, title: g('title') ?? 'Sin título', documentType: type, collectionName: 'Biblioteca Virtual', versionNumber: 1,
+      contentType: 'application/pdf', sizeBytes: 1_200_000, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: degree ? Number(degree) : null,
+      authorName: g('author'), authorLodgeName: g('lodge'), documentDate: g('date') ?? today(), topic: g('topic'), edition: g('edition'),
+      shortDescription: g('description'), abstractText: g('description'), officialDocumentType: g('officialType'),
+    }
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
+    const item = buildItem(form, `demo-new-${Date.now()}`)
+    if (submitter?.value === 'draft') {
+      onSubmission([...submissions, { id: item.id, kind: 'borrador', title: item.title, documentType: type, author: item.authorName ?? 'Bibliotecario', degree: item.minimumDegreeRequired ?? null, description: item.shortDescription ?? '', sentAt: today(), item }])
+      notify('Borrador guardado. Aún no es visible para los hermanos: publíquelo desde «Por revisar y borradores».')
+    } else {
+      onPublish(item)
+      notify(`«${item.title}» publicado en ${categories.find(c => c.value === type)?.label ?? 'la Biblioteca'}. Queda visible según el grado indicado y registrado en auditoría.`)
+    }
+    setFileName('')
+    event.currentTarget.reset()
+  }
+
+  const pending = submissions.filter(s => s.kind === 'taller')
+  const drafts = submissions.filter(s => s.kind === 'borrador')
+  const drop = (id: string) => onSubmission(submissions.filter(s => s.id !== id))
+
+  function setCat(value: string, patch: Partial<LibraryCategory>) { onCategories(categories.map(c => c.value === value ? { ...c, ...patch } : c)) }
+  function move(value: string, dir: -1 | 1) {
+    const i = categories.findIndex(c => c.value === value); const j = i + dir
+    if (j < 0 || j >= categories.length) return
+    const next = [...categories];[next[i], next[j]] = [next[j], next[i]]; onCategories(next)
+  }
+  function addCategory(event: FormEvent) {
+    event.preventDefault()
+    const label = newCategory.trim(); if (!label) return
+    let value = slug(label); while (categories.some(c => c.value === value)) value += '_2'
+    onCategories([...categories, { value, label, base: false, active: true }]); setNewCategory(''); notify(`Categoría «${label}» creada. Ya puede recibir documentos.`)
+  }
+
+  const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
+  return <>
+    <ActionBar>
+      <ActionDrawer label="Subir a la biblioteca" wide title="Subir a la biblioteca" description="Planchas, libros, revistas, documentos oficiales o la categoría que usted cree. Puede guardarlo como borrador o publicarlo.">
+        <form className="library-admin-form" onSubmit={submit}>
+          <label><span>Categoría</span><select value={type} onChange={e => setType(e.target.value)}>{active.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
+          <label><span>Archivo (PDF, Word u otro permitido)</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e => setFileName(e.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>
+          <label><span>Título</span><input name="title" required maxLength={200} placeholder={type === 'magazine' ? 'Horizonte Masónico · N° 4' : ''} /></label>
+          <label><span>{type === 'work_paper' ? 'Hermano autor' : type === 'official_document' ? 'Emisor' : 'Autor o fuente'}</span><input name="author" maxLength={160} /></label>
+          {type === 'work_paper' && <label><span>Taller</span><input name="lodge" maxLength={160} /></label>}
+          {type === 'magazine' && <label><span>N° de edición</span><input name="edition" maxLength={60} placeholder="N° 4" /></label>}
+          {type === 'book' && <label><span>Edición / editorial / año</span><input name="edition" maxLength={120} /></label>}
+          {type === 'official_document' && <label><span>Tipo de documento (reglamento, manual, ritual…)</span><input name="officialType" maxLength={80} /></label>}
+          {(type === 'work_paper' || type === 'book' || type === 'magazine') && <label><span>{type === 'magazine' ? 'Tema principal' : 'Tema'}</span><input name="topic" maxLength={120} /></label>}
+          <label><span>Fecha</span><input name="date" type="date" defaultValue={today()} /></label>
+          <label><span>Grado mínimo de acceso</span><select name="degree" defaultValue="">{degreeOptions.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}</select></label>
+          <label className="wide"><span>{type === 'magazine' ? 'En este número' : 'Descripción breve'}</span><textarea name="description" rows={3} maxLength={800} /></label>
+          <div className="library-admin-actions"><button type="submit" value="publish" className="action-trigger primary">Publicar</button><button type="submit" value="draft" className="action-trigger secondary">Guardar borrador</button></div>
+        </form>
+      </ActionDrawer>
+      <ActionDrawer label={`Por revisar y borradores${pending.length + drafts.length ? ` (${pending.length + drafts.length})` : ''}`} wide title="Por revisar y borradores" description="Planchas enviadas por los Talleres y borradores propios. Nada es visible para los hermanos hasta publicarlo.">
+        <div className="library-admin-list">
+          <h3>Planchas enviadas por Talleres</h3>
+          {pending.length === 0 && <p className="library-admin-empty">No hay planchas esperando revisión.</p>}
+          {pending.map(s => <article key={s.id} className="library-admin-card">
+            <div><strong>{s.title}</strong><span>{s.author}{s.lodge ? ` · ${s.lodge}` : ''} · enviada el {s.sentAt}</span><p>{s.description}</p></div>
+            {reject?.id === s.id ? <div className="library-admin-reject"><label><span>Motivo de la devolución</span><textarea rows={2} required value={reject.reason} onChange={e => setReject({ id: s.id, reason: e.target.value })} /></label>
+              <div><button type="button" className="action-trigger secondary" onClick={() => setReject(null)}>Volver</button><button type="button" className="action-trigger secondary" disabled={!reject.reason.trim()} onClick={() => { drop(s.id); setReject(null); notify(`Plancha devuelta al Taller con el motivo indicado.`) }}>Devolver</button></div></div>
+              : <div className="library-admin-row-actions"><ConfirmAction label="Aprobar y publicar" message="La plancha quedará visible según su grado y se registrará quién la aprobó." onConfirm={() => { onPublish({ ...s.item, id: `demo-approved-${s.id}` }); drop(s.id); notify(`«${s.title}» aprobada y publicada.`) }} />
+                <button type="button" className="action-trigger secondary" onClick={() => setReject({ id: s.id, reason: '' })}>Devolver con motivo</button></div>}
+          </article>)}
+          <h3>Mis borradores</h3>
+          {drafts.length === 0 && <p className="library-admin-empty">No tiene borradores.</p>}
+          {drafts.map(s => <article key={s.id} className="library-admin-card">
+            <div><strong>{s.title}</strong><span>{label(s.documentType)} · guardado el {s.sentAt}</span></div>
+            <div className="library-admin-row-actions"><ConfirmAction label="Publicar" message="Quedará visible para los hermanos autorizados." onConfirm={() => { onPublish(s.item); drop(s.id); notify(`«${s.title}» publicado.`) }} /><ConfirmAction label="Descartar" message="Se eliminará el borrador (no es un documento publicado)." onConfirm={() => drop(s.id)} /></div>
+          </article>)}
+        </div>
+      </ActionDrawer>
+      <ActionDrawer label="Administrar categorías" title="Administrar categorías" description="Cree, renombre, ordene o desactive las categorías de la Biblioteca Virtual.">
+        <div className="library-admin-list">
+          {categories.filter(c => !c.future).map((c, i) => <article key={c.value} className="library-admin-card">
+            <div className="library-admin-cat">
+              <label><span>Nombre{c.base ? ' · categoría base' : ''}</span><input value={c.label} maxLength={60} onChange={e => setCat(c.value, { label: e.target.value })} /></label>
+              <small>{counts[c.value] ?? 0} publicaciones · {c.active ? 'activa' : 'desactivada'}</small>
+            </div>
+            <div className="library-admin-row-actions">
+              <button type="button" className="action-trigger secondary" disabled={i === 0} aria-label={`Subir ${c.label}`} onClick={() => move(c.value, -1)}>↑</button>
+              <button type="button" className="action-trigger secondary" aria-label={`Bajar ${c.label}`} onClick={() => move(c.value, 1)}>↓</button>
+              {c.active
+                ? <button type="button" className="action-trigger secondary" disabled={(counts[c.value] ?? 0) > 0} title={(counts[c.value] ?? 0) > 0 ? 'Mueva o retire sus publicaciones antes de desactivarla' : undefined} onClick={() => setCat(c.value, { active: false })}>Desactivar</button>
+                : <button type="button" className="action-trigger secondary" onClick={() => setCat(c.value, { active: true })}>Activar</button>}
+            </div>
+          </article>)}
+          <form className="library-admin-new" onSubmit={addCategory}>
+            <label><span>Nueva categoría</span><input value={newCategory} maxLength={60} onChange={e => setNewCategory(e.target.value)} placeholder="Ej.: Manuales de oficio" required /></label>
+            <button type="submit" className="action-trigger primary">Crear categoría</button>
+          </form>
+          <HelpNote>Una categoría con publicaciones no se puede desactivar: primero se retiran o se mueven. Las categorías base no se eliminan.</HelpNote>
+        </div>
+      </ActionDrawer>
+    </ActionBar>
+  </>
+}

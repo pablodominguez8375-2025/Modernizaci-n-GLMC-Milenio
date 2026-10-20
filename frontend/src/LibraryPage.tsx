@@ -1,18 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
 import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 import './library-ppt-enhancement.css'
+import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
 const pageSize = 12
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [], degrees: [], topics: [], officialDocumentTypes: [] }
-const catalogCategories = [
-  { value: 'work_paper', label: 'Planchas de Trabajo', future: false },
-  { value: 'book', label: 'Libros', future: false },
-  { value: 'magazine', label: 'Revistas', future: false },
-  { value: 'official_document', label: 'Documentos Oficiales', future: false },
-  { value: 'video', label: 'Videos', future: true },
-] as const
+const initialCategories: LibraryCategory[] = [
+  { value: 'work_paper', label: 'Planchas de Trabajo', base: true, active: true },
+  { value: 'book', label: 'Libros', base: true, active: true },
+  { value: 'magazine', label: 'Revistas', base: true, active: true },
+  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
+  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+]
 
 export default function LibraryPage({ documentApi }: { documentApi: DocumentApiClient }) {
   const [items, setItems] = useState<LibraryCatalogItem[]>([])
@@ -27,6 +28,11 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+  const [categories, setCategories] = useState<LibraryCategory[]>(initialCategories)
+  const [addedItems, setAddedItems] = useState<LibraryCatalogItem[]>([])
+  const [submissions, setSubmissions] = useState<LibrarySubmission[]>([])
+  const [notice, setNotice] = useState<string | null>(null)
+  const submissionsTouched = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -63,7 +69,10 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
   }, [degree, documentApi, documentType, officialDocumentType, page, query, topic])
 
   const demoCollectionId = facets.collections[0]?.value ?? items[0]?.collectionId ?? 'demo-library'
-  const demoCatalog = useMemo(() => documentApi.useMocks ? createDemoShowcaseCatalog(demoCollectionId) : [], [demoCollectionId, documentApi.useMocks])
+  const baseDemoCatalog = useMemo(() => documentApi.useMocks ? createDemoShowcaseCatalog(demoCollectionId) : [], [demoCollectionId, documentApi.useMocks])
+  const demoCatalog = useMemo(() => [...addedItems, ...baseDemoCatalog], [addedItems, baseDemoCatalog])
+  const submissionsSeed = useMemo(() => documentApi.useMocks ? createDemoSubmissions(demoCollectionId) : [], [demoCollectionId, documentApi.useMocks])
+  const allSubmissions = submissions.length || submissionsTouched.current ? submissions : submissionsSeed
   const visibleItems = documentApi.useMocks
     ? filterDemoCatalog(demoCatalog, { query, documentType, degree, topic, officialDocumentType })
     : items
@@ -73,7 +82,7 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
   const topicFacets = documentApi.useMocks ? buildTopicFacets(demoCatalog) : facets.topics
   const officialTypeFacets = documentApi.useMocks ? buildOfficialTypeFacets(demoCatalog) : facets.officialDocumentTypes
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize))
-  const showingFutureVideos = documentType === 'video' && categoryCounts.video === 0
+  const showingFutureVideos = documentType === 'video' && (categoryCounts.video ?? 0) === 0
 
   async function download(item: LibraryCatalogItem) {
     setDownloadingId(item.id)
@@ -114,11 +123,18 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
+    {documentApi.useMocks && <>
+      {notice && <p className="library-admin-notice" role="status">{notice}</p>}
+      <LibraryManagement categories={categories} onCategories={setCategories} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
+        onSubmission={next => { submissionsTouched.current = true; setSubmissions(next) }}
+        onPublish={item => setAddedItems(current => [item, ...current])} />
+    </>}
+
     <section className="panel library-panel">
       <nav className="library-category-rail" aria-label="Categorías de Biblioteca Virtual">
         <button type="button" className={documentType === '' ? 'active' : ''} aria-pressed={documentType === ''} onClick={() => selectCategory('')}>Todos <span>{categoryTotal}</span></button>
-        {catalogCategories.map(category => <button key={category.value} type="button" className={`${documentType === category.value ? 'active' : ''} ${category.future ? 'future' : ''}`} aria-pressed={documentType === category.value} onClick={() => selectCategory(category.value)}>
-          {category.label}{category.future ? ' · futuro' : ''} <span>{categoryCounts[category.value]}</span>
+        {categories.filter(category => category.active).map(category => <button key={category.value} type="button" className={`${documentType === category.value ? 'active' : ''} ${category.future ? 'future' : ''}`} aria-pressed={documentType === category.value} onClick={() => selectCategory(category.value)}>
+          {category.label}{category.future ? ' · futuro' : ''} <span>{categoryCounts[category.value] ?? 0}</span>
         </button>)}
       </nav>
 
@@ -261,6 +277,15 @@ function createDemoShowcaseCatalog(collectionId: string): LibraryCatalogItem[] {
   ]
 }
 
+function createDemoSubmissions(collectionId: string): LibrarySubmission[] {
+  const mk = (id: string, title: string, author: string, lodge: string, degree: number, description: string): LibrarySubmission => ({ id, kind: 'taller', title, documentType: 'work_paper', author, lodge, degree, description, sentAt: '2026-10-18',
+    item: { id, collectionId, title, documentType: 'work_paper', collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: 380000, publishedAtUtc: '2026-10-18T15:00:00Z', minimumDegreeRequired: degree, authorName: author, authorLodgeName: lodge, documentDate: '2026-10-18', topic: 'Trabajo masónico', shortDescription: description, abstractText: description } })
+  return [
+    mk('demo-sub-1', 'La palabra perdida y el trabajo del Aprendiz', 'Hermano Ejemplo Uno', 'Taller Fraternidad N° 3', 1, 'Reflexión sobre el silencio y el estudio en el primer grado.'),
+    mk('demo-sub-2', 'El simbolismo de la columna Boaz', 'Hermana Ejemplo Dos', 'Taller Luz del Sur N° 7', 2, 'Estudio comparado de las columnas del Templo.'),
+  ]
+}
+
 function filterDemoCatalog(items: LibraryCatalogItem[], filters: { query: string; documentType: string; degree: string; topic: string; officialDocumentType: string }) {
   const normalizedQuery = normalizeSearch(filters.query)
   return items.filter(item => {
@@ -275,19 +300,19 @@ function filterDemoCatalog(items: LibraryCatalogItem[], filters: { query: string
 }
 
 function buildCategoryCounts(items: LibraryCatalogItem[]) {
-  const result = { work_paper: 0, book: 0, magazine: 0, official_document: 0, video: 0 }
+  const result: Record<string, number> = { work_paper: 0, book: 0, magazine: 0, official_document: 0, video: 0 }
   for (const item of items) {
     const kind = canonicalCatalogType(item.documentType)
-    if (kind in result) result[kind as keyof typeof result] += 1
+    result[kind] = (result[kind] ?? 0) + 1
   }
   return result
 }
 
 function buildCategoryCountsFromFacets(items: LibraryFacetItem[]) {
-  const result = { work_paper: 0, book: 0, magazine: 0, official_document: 0, video: 0 }
+  const result: Record<string, number> = { work_paper: 0, book: 0, magazine: 0, official_document: 0, video: 0 }
   for (const item of items) {
     const kind = canonicalCatalogType(item.value)
-    if (kind in result) result[kind as keyof typeof result] += item.count
+    result[kind] = (result[kind] ?? 0) + item.count
   }
   return result
 }
