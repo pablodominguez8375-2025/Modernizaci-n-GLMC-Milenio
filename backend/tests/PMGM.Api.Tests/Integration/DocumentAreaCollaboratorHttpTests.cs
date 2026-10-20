@@ -692,6 +692,50 @@ public sealed class DocumentAreaCollaboratorHttpTests
                 x => x.Action == "library.editorial.magazine_published" &&
                      x.EntityId == magazine.Id.ToString("D"), ct));
         }
+        using var excludedUnpublish = await client.PostAsync(
+            $"/api/biblioteca/editorial/revistas/{book.Id}/retirar-publicacion", null, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, excludedUnpublish.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", "collaborator");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", user);
+        using var deniedUnpublish = await client.PostAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/retirar-publicacion", null, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedUnpublish.StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Collab-Subject");
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.GrandArchivist);
+        using var archivistDenied = await client.PostAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/retirar-publicacion", null, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, archivistDenied.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        using var withdrawn = await client.PostAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/retirar-publicacion", null, ct);
+        Assert.Equal(HttpStatusCode.OK, withdrawn.StatusCode);
+        Assert.True(withdrawn.Headers.CacheControl?.NoStore);
+        var withdrawal = await withdrawn.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal(DocumentManagementCodes.DocumentStatus.Draft,
+            withdrawal.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null,
+            withdrawal.GetProperty("publishedVersionId").ValueKind);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var docs = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            var stored = await docs.InstitutionalDocuments.AsNoTracking()
+                .SingleAsync(x => x.Id == magazine.Id, ct);
+            Assert.Null(stored.PublishedVersionId);
+            Assert.Null(stored.PublishedAtUtc);
+            Assert.Equal(DocumentManagementCodes.DocumentStatus.Draft, stored.Status);
+            Assert.True(await docs.DocumentVersions.AnyAsync(x => x.Id == newVersionId, ct));
+            Assert.True(await docs.AuditEvents.AnyAsync(
+                x => x.Action == "library.editorial.magazine_unpublished" &&
+                     x.EntityId == magazine.Id.ToString("D"), ct));
+        }
+        using var repeated = await client.PostAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/retirar-publicacion", null, ct);
+        Assert.Equal(HttpStatusCode.Conflict, repeated.StatusCode);
     }
 
     private static InstitutionalDocument Document(
