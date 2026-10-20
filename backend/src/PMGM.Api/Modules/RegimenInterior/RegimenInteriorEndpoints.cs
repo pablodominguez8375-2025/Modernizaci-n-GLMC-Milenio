@@ -17,6 +17,8 @@ public static class RegimenInteriorEndpoints
         group.MapGet("/summary", GetSummaryAsync);
         group.MapGet("/asambleas/{assemblyId:guid}/revision",
             AssemblyPreliminaryReviewEndpoints.GetAsync);
+        group.MapPost("/asambleas/{assemblyId:guid}/revision/{personId:guid}/decision",
+            AssemblyReviewDecisionHttpEndpoints.PostAsync);
 
         return endpoints;
     }
