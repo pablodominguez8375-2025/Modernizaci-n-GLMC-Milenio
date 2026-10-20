@@ -12,3 +12,9 @@ Fecha: 2026-10-20; base `dev@032e314f5586a1944e893a42a37d52e8b6b21da1`. Reclamo 
 `backend/src/PMGM.Api/Modules/DocumentManagement/LibraryCatalogMetadataEndpoints.cs`, `backend/src/PMGM.Api/Modules/DocumentManagement/LibraryMagazineMetadataAuthorization.cs`, `backend/src/PMGM.Api/Modules/Authorization/DynamicViewAccess.cs`, `backend/tests/PMGM.Api.Tests/Authorization/LibraryMagazineMetadataAuthorizationTests.cs`, `backend/tests/PMGM.Api.Tests/Integration/DocumentAreaCollaboratorHttpTests.cs` y este handoff.
 
 Sin migraciones, frontend, archivos calientes, despliegue QA ni promoción main. Cerrar sólo con CI/Showcase/Instalable 3/3 SUCCESS exact-head. QA/UAT físico posterior.
+
+## Implementación (PR #601)
+- Alta acotada de Revista: cuerpo `collectionId` + `title`; valores `DocumentType=magazine`, `Status=draft`, `Classification=internal`, `AccessPolicy=library_authenticated` fijos por servidor; colección Orden activa recuperada por ID de BD.
+- Permiso de creación `library/create/magazine` independiente de `edit`; excepción exacta de filtro dinámico sólo para POST editorial, y verificación duplicada dentro del endpoint. No atribuir versiones, grado, archivos ni capacidad de publicación.
+- Registro de auditoría del alta en la misma transacción EF; pruebas unitarias y HTTP/PostgreSQL para borrador sin versiones, revocación, ámbito Taller, colección retirada y rutas versionar/publicar negadas.
+- CI exact-head pendiente; main y QA físico intocados.

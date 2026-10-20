@@ -191,6 +191,17 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
                 LibraryMagazineMetadataAuthorization.CanEditMetadata(http.User, access, catalog, document);
         }
 
+        // Alta editorial específica. Sólo la categoría Revista puede sustituir
+        // el permiso genérico library/create, y el endpoint revalida con DB.
+        if (!allowed &&
+            route.Equals("/api/biblioteca/editorial/revistas", StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" && action == "create")
+        {
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+                http.User, access, catalog);
+        }
+
         if (!allowed) return Results.Forbid();
         http.Response.Headers.CacheControl = "private, no-store";
         return await next(invocation);
