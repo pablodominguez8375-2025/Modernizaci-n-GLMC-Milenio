@@ -23,6 +23,7 @@ public static class InstitutionalRoles
     public const string InmediatoExGranMaestro = "immediate_past_grand_master";
     public const string JefaturaDepartamentoDocencia = "instruction_department_head";
     public const string GrandArchivist = "grand_archivist";
+    public const string Librarian = "librarian";
     public const string PrivacyOfficer = "privacy_officer";
     public const string DocumentManager = "document_manager";
     public const string TallerAdmin = "lodge_admin";
@@ -79,6 +80,7 @@ public interface IInstitutionalAccessService
     bool CanAuthorizeCeremonies(ClaimsPrincipal user);
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
     bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId);
+    bool CanManageLibrary(ClaimsPrincipal user, Guid? organizationId);
     bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId);
     bool CanManagePrivacy(ClaimsPrincipal user);
     bool CanConfigureSystem(ClaimsPrincipal user);
@@ -334,6 +336,16 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
                HasOrganizationClaim(user, organizationId.Value) &&
                HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
     }
+
+    /// <summary>
+    /// Responsable institucional de la Biblioteca Virtual.
+    /// No hereda permisos del Gestor Documental ni del Gran Archivo.
+    /// La autorización de rutas y colaboradores debe invocar esta regla
+    /// junto a los controles dinámicos de categoría, acción y vigencia.
+    /// </summary>
+    public bool CanManageLibrary(ClaimsPrincipal user, Guid? organizationId)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.Librarian);
 
     public bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId)
     {
