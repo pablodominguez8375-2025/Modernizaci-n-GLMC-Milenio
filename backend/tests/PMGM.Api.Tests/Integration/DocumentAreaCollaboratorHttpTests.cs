@@ -310,6 +310,143 @@ public sealed class DocumentAreaCollaboratorHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, deniedListAfterRevoke.StatusCode);
     }
 
+    [Fact]
+    public async Task Magazine_draft_creation_requires_create_grant_and_real_order_collection()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(cs);
+        var active = new DocumentCollection
+        {
+            Code = "BIB-NEW-" + Guid.NewGuid().ToString("N"),
+            Name = "Revistas Orden", Scope = DocumentManagementCodes.Scope.Order,
+            Status = DocumentManagementCodes.CollectionStatus.Active,
+            CreatedBySubject = "ci"
+        };
+        var inactive = new DocumentCollection
+        {
+            Code = "BIB-OLD-" + Guid.NewGuid().ToString("N"),
+            Name = "Retiradas Orden", Scope = DocumentManagementCodes.Scope.Order,
+            Status = DocumentManagementCodes.CollectionStatus.Retired,
+            CreatedBySubject = "ci"
+        };
+        var lodgeId = Guid.NewGuid();
+        var lodge = new DocumentCollection
+        {
+            Code = "BIB-LDG-" + Guid.NewGuid().ToString("N"),
+            Name = "Revistas Taller", Scope = DocumentManagementCodes.Scope.Organization,
+            OrganizationId = lodgeId,
+            Status = DocumentManagementCodes.CollectionStatus.Active,
+            CreatedBySubject = "ci"
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var primary = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await primary.Database.MigrateAsync(ct);
+            primary.Organizations.Add(new Organization
+            {
+                Id = lodgeId, Name = "Taller sintético editorial " + lodgeId.ToString("N"),
+                Type = "workshop"
+            });
+            await primary.SaveChangesAsync(ct);
+            var docs = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            await docs.Database.MigrateAsync(ct);
+            docs.DocumentCollections.AddRange(active, inactive, lodge);
+            await docs.SaveChangesAsync(ct);
+        }
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        var catalog = await client.GetFromJsonAsync<JsonElement>(
+            "/api/biblioteca/colaboradores", ct);
+        var who = "creator-" + Guid.NewGuid().ToString("N");
+        using var granted = await client.PostAsJsonAsync("/api/biblioteca/colaboradores",
+            new
+            {
+                subject = who,
+                category = "magazine",
+                actions = new[] { "view", "create" },
+                effectiveFrom = DynamicAccessEndpoints.Today().ToString("yyyy-MM-dd"),
+                effectiveTo = DynamicAccessEndpoints.Today().AddDays(30).ToString("yyyy-MM-dd"),
+                expectedVersion = catalog.GetProperty("version").GetInt32()
+            }, ct);
+        Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
+        var grantData = await granted.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var grantId = grantData.GetProperty("assignmentId").GetGuid();
+        var nextVersion = grantData.GetProperty("version").GetInt32();
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", "collaborator");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", who);
+
+        var createPayload = new { collectionId = active.Id, title = "Revista CI " + Guid.NewGuid().ToString("N") };
+        using var created = await client.PostAsJsonAsync(
+            "/api/biblioteca/editorial/revistas", createPayload, ct);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var body = await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var id = body.GetProperty("documentId").GetGuid();
+        Assert.Equal(DocumentManagementCodes.DocumentStatus.Draft, body.GetProperty("status").GetString());
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var docs = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            var saved = await docs.InstitutionalDocuments.AsNoTracking()
+                .SingleAsync(x => x.Id == id, ct);
+            Assert.Equal(active.Id, saved.CollectionId);
+            Assert.Null(saved.OrganizationId);
+            Assert.Equal("magazine", saved.DocumentType);
+            Assert.Equal(DocumentManagementCodes.Classification.Internal, saved.Classification);
+            Assert.Equal(DocumentManagementCodes.AccessPolicy.LibraryAuthenticated, saved.AccessPolicy);
+            Assert.Equal(DocumentManagementCodes.DocumentStatus.Draft, saved.Status);
+            Assert.Null(saved.PublishedVersionId);
+            Assert.False(await docs.DocumentVersions.AnyAsync(x => x.DocumentId == id, ct));
+            Assert.True(await docs.AuditEvents.AnyAsync(
+                x => x.Action == "library.editorial.magazine_draft.created" &&
+                     x.EntityId == id.ToString("D"), ct));
+        }
+
+        foreach (var collection in new[] { inactive.Id, lodge.Id })
+        {
+            using var denied = await client.PostAsJsonAsync(
+                "/api/biblioteca/editorial/revistas",
+                new { collectionId = collection, title = "No autorizado" }, ct);
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        }
+        using var badTitle = await client.PostAsJsonAsync(
+            "/api/biblioteca/editorial/revistas", new { collectionId = active.Id, title = "  " }, ct);
+        Assert.Equal(HttpStatusCode.BadRequest, badTitle.StatusCode);
+        using var noEdit = await client.PutAsJsonAsync(
+            $"/api/documentos/{id}/metadatos-biblioteca",
+            new { minimumDegreeRequired = (int?)null, authorName = "Sin editar" }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noEdit.StatusCode);
+        using var noVersion = await client.PostAsJsonAsync(
+            $"/api/documentos/{id}/versiones",
+            new { originalFileName = "sin-subida.pdf", contentType = "application/pdf", sizeBytes = 123 }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noVersion.StatusCode);
+        using var noPublish = await client.PostAsJsonAsync(
+            $"/api/documentos/{id}/publicar", new { versionId = Guid.NewGuid() }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noPublish.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Subject");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", "other-subject");
+        using var other = await client.PostAsJsonAsync(
+            "/api/biblioteca/editorial/revistas", createPayload, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, other.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Subject");
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        using var revoked = await client.DeleteAsync(
+            $"/api/biblioteca/colaboradores/{grantId}?expectedVersion={nextVersion}", ct);
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", "collaborator");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", who);
+        using var afterRevoked = await client.PostAsJsonAsync(
+            "/api/biblioteca/editorial/revistas", createPayload, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, afterRevoked.StatusCode);
+    }
+
     private static InstitutionalDocument Document(
         DocumentCollection collection,
         string type,

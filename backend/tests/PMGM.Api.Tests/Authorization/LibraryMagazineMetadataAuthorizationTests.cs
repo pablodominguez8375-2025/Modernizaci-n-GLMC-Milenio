@@ -137,6 +137,38 @@ public sealed class LibraryMagazineMetadataAuthorizationTests
             Identity(InstitutionalRoles.Librarian), access, grants, doc));
     }
     [Fact]
+    public void Create_draft_is_separate_from_edit_and_requires_live_category_grant()
+    {
+        var access = new InstitutionalAccessService();
+        var person = Identity("collaborator");
+        var createGrant = MagazineGrant();
+        createGrant.Profiles[^1] = createGrant.Profiles[^1] with
+        {
+            Grants = [new DynamicGrant("library", ["view", "create"], ["magazine"])]
+        };
+        Assert.True(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            person, access, createGrant));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanEditMetadata(
+            person, access, createGrant, Document()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            person, access, MagazineGrant())); // solo view+edit
+        Assert.False(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            Identity("collaborator", "otro"), access, createGrant));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            Identity("collaborator", order: false), access, createGrant));
+
+        createGrant.Assignments[0] = createGrant.Assignments[0] with { IsActive = false };
+        Assert.False(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            person, access, createGrant));
+        Assert.True(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+            Identity(InstitutionalRoles.GrandArchivist), access,
+            DynamicAccessEndpoints.CreateCatalog()));
+    }
+
+    [Fact]
     public void Editorial_list_requires_live_magazine_edit_grant_not_just_general_read()
     {
         var access = new InstitutionalAccessService();

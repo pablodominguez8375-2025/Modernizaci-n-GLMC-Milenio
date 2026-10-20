@@ -19,8 +19,67 @@ public static class LibraryCatalogMetadataEndpoints
         endpoints.MapGet("/api/biblioteca/editorial/revistas", ListEditableMagazinesAsync)
             .WithTags("Biblioteca Virtual")
             .RequireAuthorization();
+        endpoints.MapPost("/api/biblioteca/editorial/revistas", CreateEditorialMagazineAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
 
         return endpoints;
+    }
+
+    private static async Task<IResult> CreateEditorialMagazineAsync(
+        CreateEditorialMagazineRequest request,
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        // Sin type, classification, accessPolicy, status o grado elegidos
+        // por el cliente. El servidor fija esos valores y sólo crea borrador.
+        var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+        if (!LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+                httpContext.User, access, catalog))
+            return Results.Forbid();
+
+        var title = request.Title?.Trim();
+        if (request.CollectionId == Guid.Empty || string.IsNullOrWhiteSpace(title) ||
+            title.Length > 240 || title.Any(char.IsControl))
+            return Results.BadRequest(new { message = "Colección y título válido (máximo 240 caracteres) son obligatorios." });
+
+        var collection = await db.DocumentCollections
+            .SingleOrDefaultAsync(x => x.Id == request.CollectionId, cancellationToken);
+        if (collection is null) return Results.NotFound();
+        if (collection.Scope != DocumentManagementCodes.Scope.Order ||
+            collection.OrganizationId is not null ||
+            collection.Status != DocumentManagementCodes.CollectionStatus.Active)
+            return Results.Forbid();
+
+        var document = new InstitutionalDocument
+        {
+            CollectionId = collection.Id,
+            Collection = collection,
+            OrganizationId = null,
+            Title = title,
+            DocumentType = "magazine",
+            Classification = DocumentManagementCodes.Classification.Internal,
+            AccessPolicy = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
+            Status = DocumentManagementCodes.DocumentStatus.Draft,
+            CreatedBySubject = DynamicTreasuryAccess.Subject(httpContext.User) ?? string.Empty
+        };
+        db.InstitutionalDocuments.Add(document);
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext,
+            "library.editorial.magazine_draft.created",
+            nameof(InstitutionalDocument),
+            document.Id.ToString(),
+            null,
+            AuditResults.Success,
+            new { document.CollectionId, document.DocumentType, document.Status }));
+        await db.SaveChangesAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Created("/api/biblioteca/editorial/revistas",
+            new EditorialMagazineCreatedDto(document.Id, document.Status));
     }
 
     private static async Task<IResult> ListEditableMagazinesAsync(
@@ -351,3 +410,6 @@ public sealed record EditorialMagazineListDto(
     int Page,
     int PageSize,
     IReadOnlyList<EditorialMagazineDto> Items);
+
+public sealed record CreateEditorialMagazineRequest(Guid CollectionId, string? Title);
+public sealed record EditorialMagazineCreatedDto(Guid DocumentId, string Status);

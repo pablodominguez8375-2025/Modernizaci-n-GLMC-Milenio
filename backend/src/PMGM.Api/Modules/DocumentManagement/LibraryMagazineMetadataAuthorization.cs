@@ -28,6 +28,24 @@ public static class LibraryMagazineMetadataAuthorization
     /// El listado editorial exige editar la categoría, no basta con
     /// acceso genérico a Biblioteca ni con leer una categoría distinta.
     /// </summary>
+    /// <summary>
+    /// Crear un borrador requiere una concesión de categoría "create" separada
+    /// de "edit": nunca implica poder versionar, subir o publicar archivos.
+    /// </summary>
+    public static bool CanCreateEditorialMagazine(
+        ClaimsPrincipal user,
+        IInstitutionalAccessService access,
+        DynamicAccessCatalog catalog)
+    {
+        if (!access.HasOrderScope(user)) return false;
+        var subject = DynamicTreasuryAccess.Subject(user);
+        var today = DynamicAccessEndpoints.Today();
+        return DynamicAccessEndpoints.IsCategoryGranted(
+                   catalog, subject, "library", "create", "magazine", null, today) ||
+               (access.CanManageLibrary(user, null) &&
+                DynamicViewAccess.Allows(catalog, subject, "library", "create", null, today));
+    }
+
     public static bool CanListEditableMagazines(
         ClaimsPrincipal user,
         IInstitutionalAccessService access,
