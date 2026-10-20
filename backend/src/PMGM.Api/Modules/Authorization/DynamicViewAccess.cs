@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Admissions;
 using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.DocumentManagement;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -168,8 +169,40 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
         if (catalog.Assignments.Any(a => a.Subject == DynamicTreasuryAccess.Subject(http.User) && a.OrganizationId is null))
             scopes = scopes.Append(null).Distinct().ToArray();
         var action = DynamicViewAccess.ActionFor(http.Request.Method, route, handler);
-        if (!scopes.All(org => DynamicViewAccess.Allows(catalog, DynamicTreasuryAccess.Subject(http.User), view, action, org, DynamicAccessEndpoints.Today())))
-            return Results.Forbid();
+        var allowed = scopes.All(org => DynamicViewAccess.Allows(
+            catalog, DynamicTreasuryAccess.Subject(http.User), view, action,
+            org, DynamicAccessEndpoints.Today()));
+
+        // La edición de metadatos de revistas es una excepción verificable
+        // por recurso: un grant "library/edit/magazine" no concede "documentmanager/edit".
+        // Se comprueba la entidad real antes de omitir sólo este filtro genérico;
+        // el endpoint vuelve a validar la autorización de forma independiente.
+        if (!allowed &&
+            route.Equals("/api/documentos/{documentId:guid}/metadatos-biblioteca", StringComparison.OrdinalIgnoreCase) &&
+            action == "edit" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var metadataDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == metadataDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanEditMetadata(http.User, access, catalog, document);
+        }
+
+        // Alta editorial específica. Sólo la categoría Revista puede sustituir
+        // el permiso genérico library/create, y el endpoint revalida con DB.
+        if (!allowed &&
+            route.Equals("/api/biblioteca/editorial/revistas", StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" && action == "create")
+        {
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+                http.User, access, catalog);
+        }
+
+        if (!allowed) return Results.Forbid();
         http.Response.Headers.CacheControl = "private, no-store";
         return await next(invocation);
     }

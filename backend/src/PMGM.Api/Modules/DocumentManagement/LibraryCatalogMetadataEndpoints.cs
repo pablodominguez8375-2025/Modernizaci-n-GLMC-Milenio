@@ -16,7 +16,130 @@ public static class LibraryCatalogMetadataEndpoints
             .WithTags("Biblioteca Virtual")
             .RequireAuthorization();
 
+        endpoints.MapGet("/api/biblioteca/editorial/revistas", ListEditableMagazinesAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
+        endpoints.MapPost("/api/biblioteca/editorial/revistas", CreateEditorialMagazineAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
+
         return endpoints;
+    }
+
+    private static async Task<IResult> CreateEditorialMagazineAsync(
+        CreateEditorialMagazineRequest request,
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        // Sin type, classification, accessPolicy, status o grado elegidos
+        // por el cliente. El servidor fija esos valores y sólo crea borrador.
+        var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+        if (!LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+                httpContext.User, access, catalog))
+            return Results.Forbid();
+
+        var title = request.Title?.Trim();
+        if (request.CollectionId == Guid.Empty || string.IsNullOrWhiteSpace(title) ||
+            title.Length > 240 || title.Any(char.IsControl))
+            return Results.BadRequest(new { message = "Colección y título válido (máximo 240 caracteres) son obligatorios." });
+
+        var collection = await db.DocumentCollections
+            .SingleOrDefaultAsync(x => x.Id == request.CollectionId, cancellationToken);
+        if (collection is null) return Results.NotFound();
+        if (collection.Scope != DocumentManagementCodes.Scope.Order ||
+            collection.OrganizationId is not null ||
+            collection.Status != DocumentManagementCodes.CollectionStatus.Active)
+            return Results.Forbid();
+
+        var document = new InstitutionalDocument
+        {
+            CollectionId = collection.Id,
+            Collection = collection,
+            OrganizationId = null,
+            Title = title,
+            DocumentType = "magazine",
+            Classification = DocumentManagementCodes.Classification.Internal,
+            AccessPolicy = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
+            Status = DocumentManagementCodes.DocumentStatus.Draft,
+            CreatedBySubject = DynamicTreasuryAccess.Subject(httpContext.User) ?? string.Empty
+        };
+        db.InstitutionalDocuments.Add(document);
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext,
+            "library.editorial.magazine_draft.created",
+            nameof(InstitutionalDocument),
+            document.Id.ToString(),
+            null,
+            AuditResults.Success,
+            new { document.CollectionId, document.DocumentType, document.Status }));
+        await db.SaveChangesAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Created("/api/biblioteca/editorial/revistas",
+            new EditorialMagazineCreatedDto(document.Id, document.Status));
+    }
+
+    private static async Task<IResult> ListEditableMagazinesAsync(
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken,
+        int page = 1,
+        int pageSize = 25)
+    {
+        if (page is < 1 or > 10000 || pageSize is < 1 or > 100)
+            return Results.BadRequest(new { message = "Paginación fuera del rango autorizado." });
+
+        var catalog = await DynamicAccessEndpoints.LoadAsync(
+            institutionalDb, cancellationToken);
+        if (!LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+                httpContext.User, access, catalog))
+            return Results.Forbid();
+
+        // Una colección/organización indicada por el solicitante jamás amplía
+        // el conjunto: filtros sobre las relaciones persistidas en PostgreSQL.
+        var query = db.InstitutionalDocuments.AsNoTracking()
+            .Where(document =>
+                document.OrganizationId == null &&
+                document.Collection.OrganizationId == null &&
+                document.Collection.Scope == DocumentManagementCodes.Scope.Order &&
+                document.Collection.Status == DocumentManagementCodes.CollectionStatus.Active &&
+                document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
+                document.Classification == DocumentManagementCodes.Classification.Internal &&
+                document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated &&
+                (document.DocumentType.ToLower() == "magazine" ||
+                 document.DocumentType.ToLower() == "magazines" ||
+                 document.DocumentType.ToLower() == "revista" ||
+                 document.DocumentType.ToLower() == "revistas"));
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(document => document.CreatedAtUtc)
+            .ThenBy(document => document.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(document => new EditorialMagazineDto(
+                document.Id,
+                document.Title,
+                document.DocumentType,
+                document.Collection.Name,
+                document.Status,
+                document.MinimumDegreeRequired,
+                document.AuthorName,
+                document.DocumentDate,
+                document.Topic,
+                document.Edition,
+                document.ShortDescription,
+                document.CreatedAtUtc,
+                document.PublishedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new EditorialMagazineListDto(total, page, pageSize, items));
     }
 
     private static async Task<IResult> SetMetadataAsync(
@@ -24,6 +147,7 @@ public static class LibraryCatalogMetadataEndpoints
         SetLibraryCatalogMetadataRequest request,
         HttpContext httpContext,
         DocumentManagementDbContext db,
+        PmgmDbContext institutionalDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -42,9 +166,22 @@ public static class LibraryCatalogMetadataEndpoints
         }
 
         var document = await db.InstitutionalDocuments
+            .Include(x => x.Collection)
             .SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
         if (document is null) return Results.NotFound();
-        if (!access.CanManageDocuments(httpContext.User, document.OrganizationId)) return Results.Forbid();
+        if (!access.CanManageDocuments(httpContext.User, document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanEditMetadata(
+                    httpContext.User, access, catalog, document))
+                return Results.Forbid();
+            // El colaborador edita datos editoriales, no el nivel de visibilidad.
+            // Cambiar el grado mínimo requiere Bibliotecario o Gestor Documental
+            // institucional; incluso elevar restricciones debe ser auditado.
+            if (!access.CanManageLibrary(httpContext.User, null) &&
+                request.MinimumDegreeRequired != document.MinimumDegreeRequired)
+                return Results.Forbid();
+        }
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden modificar los metadatos de un documento retirado." });
 
@@ -252,3 +389,27 @@ public sealed record LibraryCatalogMetadataDto(
     string? ShortDescription,
     string? AbstractText,
     string? OfficialDocumentType);
+
+public sealed record EditorialMagazineDto(
+    Guid DocumentId,
+    string Title,
+    string DocumentType,
+    string CollectionName,
+    string Status,
+    int? MinimumDegreeRequired,
+    string? AuthorName,
+    DateOnly? DocumentDate,
+    string? Topic,
+    string? Edition,
+    string? ShortDescription,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? PublishedAtUtc);
+
+public sealed record EditorialMagazineListDto(
+    int Total,
+    int Page,
+    int PageSize,
+    IReadOnlyList<EditorialMagazineDto> Items);
+
+public sealed record CreateEditorialMagazineRequest(Guid CollectionId, string? Title);
+public sealed record EditorialMagazineCreatedDto(Guid DocumentId, string Status);
