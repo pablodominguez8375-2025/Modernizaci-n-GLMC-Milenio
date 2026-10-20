@@ -23,3 +23,5 @@
 - Excepción puntual del filtro dinámico sólo sobre `PUT /api/documentos/{documentId}/metadatos-biblioteca`, con comprobación previa de recurso; el endpoint valida otra vez de forma independiente. Toda otra operación conserva filtros/roles existentes.
 - Pruebas unitarias incluyen categoría, Taller, clasificación confidencial, política privada, colección inactiva, revocación, vencimiento y actor diferente.
 - CI exact-head y compatibilidad con funciones previas: pendiente de verificación. No desplegado en QA, no integrado en dev.
+
+- Protección reforzada: las delegaciones de edición nunca alteran el grado mínimo de lectura; el control institucional existente sigue siendo necesario para modificar la visibilidad. Prueba HTTP negativa añadida.

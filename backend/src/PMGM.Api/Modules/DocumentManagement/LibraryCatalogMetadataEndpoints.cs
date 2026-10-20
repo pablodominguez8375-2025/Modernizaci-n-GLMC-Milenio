@@ -52,6 +52,12 @@ public static class LibraryCatalogMetadataEndpoints
             if (!LibraryMagazineMetadataAuthorization.CanEditMetadata(
                     httpContext.User, access, catalog, document))
                 return Results.Forbid();
+            // El colaborador edita datos editoriales, no el nivel de visibilidad.
+            // Cambiar el grado mínimo requiere Bibliotecario o Gestor Documental
+            // institucional; incluso elevar restricciones debe ser auditado.
+            if (!access.CanManageLibrary(httpContext.User, null) &&
+                request.MinimumDegreeRequired != document.MinimumDegreeRequired)
+                return Results.Forbid();
         }
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden modificar los metadatos de un documento retirado." });

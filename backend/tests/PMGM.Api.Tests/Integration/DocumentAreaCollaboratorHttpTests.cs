@@ -223,6 +223,15 @@ public sealed class DocumentAreaCollaboratorHttpTests
         using var edited = await client.PutAsJsonAsync(
             $"/api/documentos/{magazine.Id}/metadatos-biblioteca", payload, ct);
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
+        using var gradeChange = await client.PutAsJsonAsync(
+            $"/api/documentos/{magazine.Id}/metadatos-biblioteca",
+            new
+            {
+                minimumDegreeRequired = 3,
+                authorName = "Equipo revista",
+                edition = "N° 4"
+            }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, gradeChange.StatusCode);
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var saved = await scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>()
