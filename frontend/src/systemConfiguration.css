@@ -18,3 +18,5 @@
 .system-category-row .system-history{grid-column:1/-1}
 @media (max-width:700px){.system-category-row{grid-template-columns:1fr}}
 .system-category-meta button.secondary{background:#eef2f8;color:#29436f;border:1px solid #c8d2e1;border-radius:8px;padding:6px 12px;font:inherit;font-weight:600;cursor:pointer}
+.panel.system-operations.system-operations-bare{padding:0!important;background:none!important;border:0!important;box-shadow:none!important;margin:0 0 12px!important}
+.system-operations-bare .action-bar{margin:0}

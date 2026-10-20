@@ -17,7 +17,7 @@ export default function SystemConfigurationPage({ api, bootstrapSlot }: { api: P
   const [error,setError]=useState<string|null>(null)
   const [tab,setTab]=useState<Section>('backup')
   const [categoryOpen,setCategoryOpen]=useState(false)
-  const OPS:Area[]=['backup','users','mail','brand','audit']
+  const OPS:Area[]=['backup','users','profiles','mail','brand','audit']
   const isOps=OPS.includes(tab as Area)
   const lastOps=useRef<Area>('backup')
   if(isOps) lastOps.current=tab as Area
