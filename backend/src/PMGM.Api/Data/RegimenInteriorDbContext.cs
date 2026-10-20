@@ -14,6 +14,7 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
     public DbSet<InstitutionalRestrictionRecord> InstitutionalRestrictions => Set<InstitutionalRestrictionRecord>();
     public DbSet<AssemblyTreasuryCertificationEventRecord> AssemblyTreasuryCertificationEvents => Set<AssemblyTreasuryCertificationEventRecord>();
     public DbSet<AssemblyTreasurySignedReviewRecord> AssemblyTreasurySignedReviews => Set<AssemblyTreasurySignedReviewRecord>();
+    public DbSet<AssemblyReviewDecisionEventRecord> AssemblyReviewDecisionEvents => Set<AssemblyReviewDecisionEventRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -153,6 +154,21 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
                 .OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.ReviewEventId).IsUnique();
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.RecordedAtUtc });
+        });
+
+        modelBuilder.Entity<AssemblyReviewDecisionEventRecord>(entity =>
+        {
+            entity.ToTable("assembly_review_decision_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Action).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.DecidedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne<AssemblyMemberStatusRecord>().WithMany()
+                .HasForeignKey(x => new { x.AssemblyId, x.MemberStatusId })
+                .HasPrincipalKey(x => new { x.AssemblyId, x.Id })
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AssemblyId, x.MemberStatusId, x.OccurredAtUtc });
         });
 
         modelBuilder.Entity<InstitutionalRestrictionRecord>(entity =>
