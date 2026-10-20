@@ -4,10 +4,11 @@ import { organizationNumberOf } from './displayFormat'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
+import MaskedRut from './MaskedRut'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './MemberPayments'
 import { institutionalStatusLabel } from './institutionalStatus'
-import { ActionDrawer, WorkspacePanel } from './actionKit'
+import { ActionDrawer, ConfirmAction, WorkspacePanel } from './actionKit'
 import './memberPortalInstruction.css'
 
 export type MemberPortalSection = 'datos' | 'pagos' | 'asistencias'
@@ -193,6 +194,9 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
     : selfProfile
       ? `${selfProfile.member.firstNames} ${selfProfile.member.lastNames}`.trim()
       : (profile?.displayName ?? 'Hermano')
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoDraft, setPhotoDraft] = useState<string | null>(null)
+  const [photoVisible, setPhotoVisible] = useState(false)
   const memberId = useMocks ? memberPortalDemoData.memberId : (selfProfile?.member.institutionalNumber ?? 'Sin número institucional')
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
   const lodgeSeal = organizationNumberOf(lodge) ?? (lodge.trim().charAt(0).toUpperCase() || '∴')
@@ -237,19 +241,35 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
     <WorkspacePanel id="datos" active={section === 'datos'}>
     <section className="member-profile-grid">
       <article className="member-card member-identity-card">
-        <div className="member-avatar-wrap"><img className="member-avatar-photo" src={`${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={useMocks ? 'Avatar demostrativo' : 'Avatar institucional'} /></div>
+        <div className="member-avatar-column">
+          <div className="member-avatar-wrap"><img className="member-avatar-photo" src={photoUrl ?? `${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={photoUrl ? 'Mi foto de perfil' : (useMocks ? 'Avatar demostrativo' : 'Avatar institucional')} /></div>
+        </div>
         <div className="member-identity-content">
           <p className="member-card-kicker">Ficha personal</p>
           <h2>{fullName}</h2>
           <p className="member-display-name">{useMocks ? memberPortalDemoData.displayName : 'Ficha personal autenticada'}</p>
           <div className="member-data-grid">
             <MemberDatum label="Identificador" value={memberId} />
+            {useMocks && <MemberDatum label="RUT (solo tú lo ves completo)" value="12.345.678-5" />}
             <MemberDatum label="Nacimiento" value={useMocks ? memberPortalDemoData.birthDate : 'No expuesto en autoservicio'} />
             <MemberDatum label="Correo" value={personal.email || 'Sin registrar'} />
             <MemberDatum label="Teléfono" value={personal.phone || 'Sin registrar'} />
             <MemberDatum label="Profesión" value={useMocks ? memberPortalDemoData.profession : 'No expuesto en autoservicio'} />
             <MemberDatum label={useMocks ? 'Ciudad' : 'Domicilio'} value={useMocks ? personal.city : (personal.address || 'Sin registrar')} />
           </div>
+          {useMocks && <p className="member-rut-hint">En otros módulos tu RUT aparece protegido: <MaskedRut rut="12.345.678-5" /></p>}
+          {useMocks && <div className="member-photo-actions">
+            <ActionDrawer label={photoUrl ? 'Cambiar foto' : 'Subir foto'} tone="secondary" title="Mi foto de perfil" description="JPG o PNG, hasta 2 MB. Se recorta en formato cuadrado.">
+              <form className="library-admin-form" onSubmit={event => { event.preventDefault(); if (photoDraft) setPhotoUrl(photoDraft) }}>
+                <label><span>Archivo</span><input type="file" accept="image/jpeg,image/png" onChange={event => { const file = event.target.files?.[0]; setPhotoDraft(file && file.size <= 2 * 1024 * 1024 ? URL.createObjectURL(file) : null) }} /></label>
+                {photoDraft ? <div className="member-photo-preview"><img src={photoDraft} alt="Vista previa de tu foto" /><small>Vista previa (recorte cuadrado)</small></div> : <small>Elige una imagen para ver la vista previa.</small>}
+                <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={!photoDraft}>Guardar foto</button></div>
+              </form>
+            </ActionDrawer>
+            {photoUrl && <ConfirmAction tone="secondary" label="Quitar foto" message="Se mostrará el avatar con tus iniciales." onConfirm={() => { setPhotoUrl(null); setPhotoDraft(null); setPhotoVisible(false) }} />}
+            <label className="member-photo-visible"><input type="checkbox" checked={photoVisible} disabled={!photoUrl} onChange={event => setPhotoVisible(event.target.checked)} /><span>Mi foto es visible para los demás hermanos</span></label>
+            <small>{photoUrl && photoVisible ? 'Los demás hermanos ven tu foto.' : 'Los demás hermanos ven un avatar con tus iniciales.'}</small>
+          </div>}
         </div>
       </article>
 
