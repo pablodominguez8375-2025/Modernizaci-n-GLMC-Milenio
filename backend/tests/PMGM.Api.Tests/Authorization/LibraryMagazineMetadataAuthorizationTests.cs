@@ -123,5 +123,17 @@ public sealed class LibraryMagazineMetadataAuthorizationTests
             Identity(InstitutionalRoles.DocumentManager), access, grants, doc));
         Assert.False(LibraryMagazineMetadataAuthorization.CanEditMetadata(
             Identity(InstitutionalRoles.Librarian), access, grants, Document("book")));
+
+        // Un bibliotecario sometido a un perfil limitado sólo a lectura
+        // no obtiene permiso de editar a través de la excepción de metadatos.
+        grants.Profiles.Add(new DynamicProfile(
+            Guid.NewGuid(), "bibliotecario-lectura", "Biblioteca lectura",
+            "order", false, true, ["documents"],
+            [new DynamicGrant("library", ["view"], ["magazine"])]));
+        grants.Assignments.Add(new DynamicAssignment(
+            Guid.NewGuid(), "colaborador", "bibliotecario-lectura", null,
+            DynamicAccessEndpoints.Today().AddDays(-1), null, true));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanEditMetadata(
+            Identity(InstitutionalRoles.Librarian), access, grants, doc));
     }
 }

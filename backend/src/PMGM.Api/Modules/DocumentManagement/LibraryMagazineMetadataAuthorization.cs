@@ -31,11 +31,16 @@ public static class LibraryMagazineMetadataAuthorization
         InstitutionalDocument document)
     {
         if (!IsEligible(document) || !access.HasOrderScope(user)) return false;
-        if (access.CanManageLibrary(user, null)) return true;
 
         var subject = DynamicTreasuryAccess.Subject(user);
-        return DynamicAccessEndpoints.IsCategoryGranted(
-            catalog, subject, "library", "edit", "magazine",
-            null, DynamicAccessEndpoints.Today());
+        var today = DynamicAccessEndpoints.Today();
+        var categoryGrant = DynamicAccessEndpoints.IsCategoryGranted(
+            catalog, subject, "library", "edit", "magazine", null, today);
+
+        // El cargo Bibliotecario tampoco evita las restricciones técnicas
+        // explícitas del catálogo, cuando existen asignaciones para el sujeto.
+        return categoryGrant ||
+            (access.CanManageLibrary(user, null) &&
+             DynamicViewAccess.Allows(catalog, subject, "library", "edit", null, today));
     }
 }
