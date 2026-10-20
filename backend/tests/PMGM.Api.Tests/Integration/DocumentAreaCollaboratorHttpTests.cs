@@ -613,6 +613,10 @@ public sealed class DocumentAreaCollaboratorHttpTests
             $"/api/documentos/{magazine.Id}/publicar",
             new { versionId = newVersionId }, ct);
         Assert.Equal(HttpStatusCode.Forbidden, noPublish.StatusCode);
+        using var noEditorialPublish = await client.PostAsJsonAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/publicar",
+            new { versionId = newVersionId }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noEditorialPublish.StatusCode);
         using var noManagedDownload = await client.GetAsync(
             $"/api/documentos/versiones/{newVersionId}/contenido", ct);
         Assert.Equal(HttpStatusCode.Forbidden, noManagedDownload.StatusCode);
@@ -649,6 +653,45 @@ public sealed class DocumentAreaCollaboratorHttpTests
         using var deniedScan = await client.PostAsync(
             $"/api/documentos/versiones/{newVersionId}/analizar", null, ct);
         Assert.Equal(HttpStatusCode.Forbidden, deniedScan.StatusCode);
+
+        // Sólo el Bibliotecario puede aprobar la publicación, y únicamente
+        // después del escaneo y de comparar la huella con el objeto real.
+        client.DefaultRequestHeaders.Remove("X-Collab-Subject");
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        using var pendingPublish = await client.PostAsJsonAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/publicar",
+            new { versionId = pendingId }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, pendingPublish.StatusCode);
+        foreach (var excluded in new[] { book.Id, confidential.Id })
+        {
+            using var forbiddenPublish = await client.PostAsJsonAsync(
+                $"/api/biblioteca/editorial/revistas/{excluded}/publicar",
+                new { versionId = newVersionId }, ct);
+            Assert.Equal(HttpStatusCode.Forbidden, forbiddenPublish.StatusCode);
+        }
+
+        using var published = await client.PostAsJsonAsync(
+            $"/api/biblioteca/editorial/revistas/{magazine.Id}/publicar",
+            new { versionId = newVersionId }, ct);
+        Assert.Equal(HttpStatusCode.OK, published.StatusCode);
+        Assert.True(published.Headers.CacheControl?.NoStore);
+        var publication = await published.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal(DocumentManagementCodes.DocumentStatus.Published,
+            publication.GetProperty("status").GetString());
+        Assert.Equal(newVersionId,
+            publication.GetProperty("publishedVersionId").GetGuid());
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var docs = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            var publishedDoc = await docs.InstitutionalDocuments.AsNoTracking()
+                .SingleAsync(x => x.Id == magazine.Id, ct);
+            Assert.Equal(DocumentManagementCodes.DocumentStatus.Published, publishedDoc.Status);
+            Assert.Equal(newVersionId, publishedDoc.PublishedVersionId);
+            Assert.True(await docs.AuditEvents.AnyAsync(
+                x => x.Action == "library.editorial.magazine_published" &&
+                     x.EntityId == magazine.Id.ToString("D"), ct));
+        }
     }
 
     private static InstitutionalDocument Document(

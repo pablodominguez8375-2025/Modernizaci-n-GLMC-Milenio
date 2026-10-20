@@ -32,6 +32,17 @@ public static class LibraryMagazineMetadataAuthorization
     /// Crear un borrador requiere una concesión de categoría "create" separada
     /// de "edit": nunca implica poder versionar, subir o publicar archivos.
     /// </summary>
+    // Publicar requiere competencia institucional; grants de colaborador
+    // edit/write/create no otorgan esta capacidad.
+    public static bool CanPublishEditorialMagazine(
+        ClaimsPrincipal user, IInstitutionalAccessService access,
+        DynamicAccessCatalog catalog, InstitutionalDocument document)
+        => IsEligible(document) &&
+           document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
+           access.HasOrderScope(user) && access.CanManageLibrary(user, null) &&
+           DynamicViewAccess.Allows(catalog, DynamicTreasuryAccess.Subject(user),
+               "library", "edit", null, DynamicAccessEndpoints.Today());
+
     public static bool CanCreateEditorialMagazine(
         ClaimsPrincipal user,
         IInstitutionalAccessService access,

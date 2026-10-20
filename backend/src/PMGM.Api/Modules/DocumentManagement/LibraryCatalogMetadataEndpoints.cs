@@ -22,6 +22,10 @@ public static class LibraryCatalogMetadataEndpoints
         endpoints.MapPost("/api/biblioteca/editorial/revistas", CreateEditorialMagazineAsync)
             .WithTags("Biblioteca Virtual")
             .RequireAuthorization();
+        endpoints.MapPost("/api/biblioteca/editorial/revistas/{documentId:guid}/publicar",
+                PublishEditorialMagazineAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
 
         endpoints.MapGet("/api/biblioteca/editorial/revistas/{documentId:guid}/versiones",
                 ListEditorialMagazineVersionsAsync)
@@ -71,6 +75,75 @@ public static class LibraryCatalogMetadataEndpoints
         ctx.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new EditorialMagazineVersionsResponse(
             documentId, total, page, pageSize, items));
+    }
+
+    private static async Task<IResult> PublishEditorialMagazineAsync(
+        Guid documentId,
+        PublishEditorialMagazineRequest request,
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        IDocumentObjectStore objectStore,
+        CancellationToken cancellationToken)
+    {
+        var document = await db.InstitutionalDocuments
+            .Include(x => x.Collection)
+            .SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
+        if (document is null) return Results.NotFound();
+
+        var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+        if (!LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+                httpContext.User, access, catalog, document))
+            return Results.Forbid();
+
+        if (request.VersionId == Guid.Empty)
+            return Results.BadRequest(new { message = "VersionId obligatorio." });
+
+        var version = await db.DocumentVersions.SingleOrDefaultAsync(
+            x => x.DocumentId == document.Id && x.Id == request.VersionId,
+            cancellationToken);
+        if (version is null) return Results.NotFound();
+
+        // No hay publicación hasta que el servidor escaneó limpiamente el archivo.
+        if (version.ProcessingStatus != DocumentManagementCodes.ProcessingStatus.Available ||
+            !DocumentIntegrity.IsValidSha256(version.Sha256) ||
+            string.IsNullOrWhiteSpace(version.ScanReference) ||
+            (!version.ScanReference.StartsWith("clamav:clean:", StringComparison.Ordinal) &&
+             !version.ScanReference.StartsWith("clamav:test-clean:", StringComparison.Ordinal)) ||
+            version.ObjectKey != DocumentObjectKeyFactory.Create(document.Id, version.Id))
+            return Results.Conflict(new { message = "La versión no dispone de integridad y escaneo limpio verificables." });
+
+        if (!await objectStore.ExistsAsync(version.ObjectKey, cancellationToken))
+            return Results.Conflict(new { message = "El archivo de la versión no está almacenado." });
+
+        // Verificación final contra los bytes realmente persistidos: nunca
+        // confiar sólo en metadatos ni en la declaración del cliente.
+        await using (var objectContent = await objectStore.OpenReadAsync(version.ObjectKey, cancellationToken))
+        {
+            var actual = await DocumentContentIntegrity.ComputeAsync(objectContent, cancellationToken);
+            if (actual.SizeBytes != version.SizeBytes ||
+                !string.Equals(actual.Sha256, version.Sha256, StringComparison.OrdinalIgnoreCase))
+                return Results.Conflict(new { message = "El contenido almacenado no coincide con su huella de integridad." });
+        }
+
+        document.PublishedVersionId = version.Id;
+        document.PublishedAtUtc = DateTimeOffset.UtcNow;
+        document.Status = DocumentManagementCodes.DocumentStatus.Published;
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            httpContext,
+            "library.editorial.magazine_published",
+            nameof(InstitutionalDocument),
+            document.Id.ToString(), null, AuditResults.Success,
+            new { document.CollectionId, VersionId = version.Id, version.VersionNumber, document.Status }));
+        await db.SaveChangesAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new
+        {
+            document.Id, document.Status,
+            document.PublishedVersionId, document.PublishedAtUtc
+        });
     }
 
     private static async Task<IResult> CreateEditorialMagazineAsync(
@@ -468,3 +541,5 @@ public sealed record EditorialMagazineVersionDto(
 public sealed record EditorialMagazineVersionsResponse(
     Guid DocumentId, int Total, int Page, int PageSize,
     IReadOnlyList<EditorialMagazineVersionDto> Items);
+
+public sealed record PublishEditorialMagazineRequest(Guid VersionId);
