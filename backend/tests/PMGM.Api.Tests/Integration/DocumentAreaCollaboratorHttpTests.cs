@@ -233,7 +233,8 @@ public sealed class DocumentAreaCollaboratorHttpTests
         using var editableList = await client.GetAsync(
             "/api/biblioteca/editorial/revistas?page=1&pageSize=50", ct);
         Assert.Equal(HttpStatusCode.OK, editableList.StatusCode);
-        Assert.Equal("private, no-store", editableList.Headers.CacheControl?.ToString());
+        Assert.True(editableList.Headers.CacheControl?.NoStore);
+        Assert.True(editableList.Headers.CacheControl?.Private);
         var editorial = await editableList.Content.ReadFromJsonAsync<JsonElement>(
             cancellationToken: ct);
         Assert.Equal(1, editorial.GetProperty("page").GetInt32());
