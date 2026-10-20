@@ -44,6 +44,7 @@
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
       "LodgeReceiptAllocationConcurrencyPostgreSqlTests",
       "DynamicAccessHttpTests",
+      "DocumentAreaCollaboratorHttpTests",
       "DocumentContentRecoveryHttpTests",
       "LodgeUnrecoveredDuesPostgreSqlTests",
       "MemberHospitalariaV2HttpTests",
