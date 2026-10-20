@@ -15,6 +15,8 @@ public static class RegimenInteriorEndpoints
             .RequireAuthorization();
 
         group.MapGet("/summary", GetSummaryAsync);
+        group.MapGet("/asambleas/{assemblyId:guid}/revision",
+            AssemblyPreliminaryReviewEndpoints.GetAsync);
 
         return endpoints;
     }
