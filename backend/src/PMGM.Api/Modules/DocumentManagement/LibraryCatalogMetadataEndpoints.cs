@@ -24,6 +24,7 @@ public static class LibraryCatalogMetadataEndpoints
         SetLibraryCatalogMetadataRequest request,
         HttpContext httpContext,
         DocumentManagementDbContext db,
+        PmgmDbContext institutionalDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
@@ -42,9 +43,16 @@ public static class LibraryCatalogMetadataEndpoints
         }
 
         var document = await db.InstitutionalDocuments
+            .Include(x => x.Collection)
             .SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
         if (document is null) return Results.NotFound();
-        if (!access.CanManageDocuments(httpContext.User, document.OrganizationId)) return Results.Forbid();
+        if (!access.CanManageDocuments(httpContext.User, document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanEditMetadata(
+                    httpContext.User, access, catalog, document))
+                return Results.Forbid();
+        }
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden modificar los metadatos de un documento retirado." });
 

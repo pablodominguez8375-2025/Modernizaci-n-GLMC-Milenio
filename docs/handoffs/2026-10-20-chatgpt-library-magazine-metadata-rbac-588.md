@@ -16,3 +16,10 @@
 ## Límite
 
 **No habilitar subida, versiones, publicación, retirada ni descargas administrativas a colaboradores en este incremento.** La fase 5B extenderá controles reales a cada operación, con tests de ciclo y anti-malware. No presentar CRUD documental completo en la UI de Claude. Sin cambios a main ni QA físico. Gates exact-head obligatorios antes de squash.
+
+## Implementación propuesta PR #599
+
+- Evaluador centralizado `LibraryMagazineMetadataAuthorization` valida una revista real (`magazine`, `magazines`, `revista`, `revistas`), Orden, colección activa, categoría interna, acceso de Biblioteca autenticada y `sub` con permiso `library/edit/magazine` vigente o Bibliotecario.
+- Excepción puntual del filtro dinámico sólo sobre `PUT /api/documentos/{documentId}/metadatos-biblioteca`, con comprobación previa de recurso; el endpoint valida otra vez de forma independiente. Toda otra operación conserva filtros/roles existentes.
+- Pruebas unitarias incluyen categoría, Taller, clasificación confidencial, política privada, colección inactiva, revocación, vencimiento y actor diferente.
+- CI exact-head y compatibilidad con funciones previas: pendiente de verificación. No desplegado en QA, no integrado en dev.
