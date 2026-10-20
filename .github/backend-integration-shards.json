@@ -38,7 +38,8 @@
       "AdvancementDispensationHttpTests",
       "FormSchemaVersionPostgreSqlTests",
       "FormSchemaAdministrationHttpTests",
-      "CandidateFormCaptureHttpTests"
+      "CandidateFormCaptureHttpTests",
+      "MagazineEditorialVersionStatusHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
