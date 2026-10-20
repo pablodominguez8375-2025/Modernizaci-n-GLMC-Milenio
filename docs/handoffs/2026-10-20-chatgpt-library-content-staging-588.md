@@ -18,3 +18,6 @@ Fecha 2026-10-20. Fuente `dev@27af98f835edbc0320b535dd6855ab0e71117cad`, `main` 
 - Excepción puntual de filtro dinámico para reservar versión, cargar contenido propio y solicitar scanner propio, con búsqueda de documento real/colección. La capa de endpoint repite evaluación. `/estado`, publicar y descarga administrativa permanecen sin privilegios del colaborador.
 - Todo archivo se somete a controles existentes de Content-Length, MIME, firma, integridad SHA-256, escaneo antimalware y auditoría. La concesión puede revocarse antes de cargar/analizar. Sin migraciones.
 - Evidencia CI y test HTTP pendiente en este momento.
+
+## Test HTTP integrado
+`DocumentAreaCollaboratorHttpTests.Magazine_write_grant_can_upload_and_scan_own_version_but_never_publish_or_fake_scan`: usa PostgreSQL efímero CI, almacén en memoria y scanner sintético; positivos de reserva + PUT objeto + escaneo limpio y persistencia SHA/scanReference; negativos no crear/editar, libro/confidencial, otra versión/usuario, transición manual, publicación, descarga administrativa, revocación previa a upload o scan. Control real de S3 y antivirus siguen en pruebas independientes existentes.
