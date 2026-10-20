@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.DocumentManagement;
 using PMGM.Api.Modules.DocumentManagement.Entities;
 using Xunit;
@@ -180,8 +181,17 @@ public sealed class DocumentAreaCollaboratorHttpTests
         var workshopMagazine = Document(workshopCollection, "magazine", organizationId: workshopId);
         await using (var scope = factory.Services.CreateAsyncScope())
         {
-            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>()
-                .Database.MigrateAsync(ct);
+            var institutionalDb = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await institutionalDb.Database.MigrateAsync(ct);
+            // La FK documental exige que el Taller sintético exista en el
+            // padrón institucional antes de crear su colección de prueba.
+            institutionalDb.Organizations.Add(new Organization
+            {
+                Id = workshopId,
+                Name = "Taller RBAC sintético " + workshopId.ToString("N"),
+                Type = "workshop"
+            });
+            await institutionalDb.SaveChangesAsync(ct);
             var db = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
             await db.Database.MigrateAsync(ct);
             db.DocumentCollections.AddRange(orderCollection, workshopCollection);
