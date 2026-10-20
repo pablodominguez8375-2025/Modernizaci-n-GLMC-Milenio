@@ -227,6 +227,25 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
                     http.User, access, catalog, version);
         }
 
+        // Consulta del estado: revalidar la Revista real antes de la excepción
+        // a la vista genérica; el endpoint filtra las versiones por sub OIDC.
+        if (!allowed &&
+            route.Equals(
+                "/api/biblioteca/editorial/revistas/{documentId:guid}/versiones",
+                StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "GET" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var listedDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == listedDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+                    http.User, access, catalog, document);
+        }
+
         // Alta editorial específica. Sólo la categoría Revista puede sustituir
         // el permiso genérico library/create, y el endpoint revalida con DB.
         if (!allowed &&
