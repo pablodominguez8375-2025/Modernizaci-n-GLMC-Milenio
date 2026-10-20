@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.Http.Headers;
+using System.Text;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -7,6 +9,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
@@ -445,6 +448,207 @@ public sealed class DocumentAreaCollaboratorHttpTests
         using var afterRevoked = await client.PostAsJsonAsync(
             "/api/biblioteca/editorial/revistas", createPayload, ct);
         Assert.Equal(HttpStatusCode.Forbidden, afterRevoked.StatusCode);
+    }
+
+    [Fact]
+    public async Task Magazine_write_grant_can_upload_and_scan_own_version_but_never_publish_or_fake_scan()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        var store = new InMemoryDocumentObjectStore();
+        var scanner = new CleanDocumentMalwareScanner();
+        using var root = Factory(cs);
+        using var factory = root.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IDocumentObjectStore>();
+                services.RemoveAll<IDocumentMalwareScanner>();
+                services.AddSingleton<IDocumentObjectStore>(store);
+                services.AddSingleton<IDocumentMalwareScanner>(scanner);
+            }));
+
+        var collection = new DocumentCollection
+        {
+            Code = "WRITE-MAG-" + Guid.NewGuid().ToString("N"),
+            Name = "Revistas de prueba", Scope = DocumentManagementCodes.Scope.Order,
+            Status = DocumentManagementCodes.CollectionStatus.Active,
+            CreatedBySubject = "ci"
+        };
+        var magazine = Document(collection, "magazine");
+        var book = Document(collection, "book");
+        var confidential = Document(collection, "magazine",
+            DocumentManagementCodes.Classification.Confidential);
+        var priorVersion = new DocumentVersion
+        {
+            Document = magazine,
+            DocumentId = magazine.Id,
+            VersionNumber = 1,
+            OriginalFileName = "otro-autor.txt",
+            ContentType = "text/plain",
+            SizeBytes = 4,
+            ObjectKey = DocumentObjectKeyFactory.Create(magazine.Id, Guid.NewGuid()),
+            ProcessingStatus = DocumentManagementCodes.ProcessingStatus.PendingUpload,
+            CreatedBySubject = "otro-actor"
+        };
+        priorVersion.ObjectKey = DocumentObjectKeyFactory.Create(magazine.Id, priorVersion.Id);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var institutionalDb = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await institutionalDb.Database.MigrateAsync(ct);
+            var docs = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            await docs.Database.MigrateAsync(ct);
+            docs.DocumentCollections.Add(collection);
+            docs.InstitutionalDocuments.AddRange(magazine, book, confidential);
+            docs.DocumentVersions.Add(priorVersion);
+            await docs.SaveChangesAsync(ct);
+        }
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        var listing = await client.GetFromJsonAsync<JsonElement>(
+            "/api/biblioteca/colaboradores", ct);
+        var version = listing.GetProperty("version").GetInt32();
+        using var invalidCategory = await client.PostAsJsonAsync(
+            "/api/biblioteca/colaboradores",
+            new
+            {
+                subject = "prohibido-" + Guid.NewGuid().ToString("N"),
+                category = "book",
+                actions = new[] { "view", "write" },
+                effectiveFrom = DynamicAccessEndpoints.Today().ToString("yyyy-MM-dd"),
+                expectedVersion = version
+            }, ct);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidCategory.StatusCode);
+
+        var user = "revista-writer-" + Guid.NewGuid().ToString("N");
+        using var granted = await client.PostAsJsonAsync(
+            "/api/biblioteca/colaboradores",
+            new
+            {
+                subject = user,
+                category = "magazine",
+                actions = new[] { "view", "write" },
+                effectiveFrom = DynamicAccessEndpoints.Today().ToString("yyyy-MM-dd"),
+                effectiveTo = DynamicAccessEndpoints.Today().AddDays(15).ToString("yyyy-MM-dd"),
+                expectedVersion = version
+            }, ct);
+        Assert.Equal(HttpStatusCode.OK, granted.StatusCode);
+        var grant = await granted.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var assignmentId = grant.GetProperty("assignmentId").GetGuid();
+        var grantedVersion = grant.GetProperty("version").GetInt32();
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", "collaborator");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", user);
+
+        using var noCreate = await client.PostAsJsonAsync(
+            "/api/biblioteca/editorial/revistas",
+            new { collectionId = collection.Id, title = "No crear" }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noCreate.StatusCode);
+        using var noEdit = await client.PutAsJsonAsync(
+            $"/api/documentos/{magazine.Id}/metadatos-biblioteca",
+            new { minimumDegreeRequired = (int?)null, authorName = "No editar" }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noEdit.StatusCode);
+        foreach (var deniedId in new[] { book.Id, confidential.Id })
+        {
+            using var denied = await client.PostAsJsonAsync(
+                $"/api/documentos/{deniedId}/versiones",
+                new { originalFileName = "no-permitido.txt", contentType = "text/plain", sizeBytes = 5 },
+                ct);
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        }
+
+        var bytes = Encoding.UTF8.GetBytes("Contenido revisable y seguro de revista");
+        using var reservation = await client.PostAsJsonAsync(
+            $"/api/documentos/{magazine.Id}/versiones",
+            new
+            {
+                originalFileName = "revista-qa.txt",
+                contentType = "text/plain",
+                sizeBytes = bytes.LongLength
+            }, ct);
+        Assert.Equal(HttpStatusCode.Created, reservation.StatusCode);
+        var reserved = await reservation.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var newVersionId = reserved.GetProperty("id").GetGuid();
+        Assert.Equal(DocumentManagementCodes.ProcessingStatus.PendingUpload,
+            reserved.GetProperty("processingStatus").GetString());
+
+        using var stolen = new ByteArrayContent(bytes);
+        stolen.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        using var notOwnerUpload = await client.PutAsync(
+            $"/api/documentos/versiones/{priorVersion.Id}/contenido", stolen, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, notOwnerUpload.StatusCode);
+
+        using var content = new ByteArrayContent(bytes);
+        content.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        using var uploaded = await client.PutAsync(
+            $"/api/documentos/versiones/{newVersionId}/contenido", content, ct);
+        Assert.Equal(HttpStatusCode.OK, uploaded.StatusCode);
+        Assert.True(store.ContainsDocumentVersion(newVersionId));
+        using var fakeTransition = await client.PostAsJsonAsync(
+            $"/api/documentos/versiones/{newVersionId}/estado",
+            new { targetStatus = DocumentManagementCodes.ProcessingStatus.Available,
+                sha256 = new string('a', 64), scanReference = "user-faked" }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, fakeTransition.StatusCode);
+        using var scanned = await client.PostAsync(
+            $"/api/documentos/versiones/{newVersionId}/analizar", null, ct);
+        Assert.Equal(HttpStatusCode.OK, scanned.StatusCode);
+        Assert.Equal(1, scanner.ScanCount);
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var docs = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            var checkedVersion = await docs.DocumentVersions.AsNoTracking()
+                .SingleAsync(x => x.Id == newVersionId, ct);
+            Assert.Equal(user, checkedVersion.CreatedBySubject);
+            Assert.Equal(DocumentManagementCodes.ProcessingStatus.Available,
+                checkedVersion.ProcessingStatus);
+            Assert.StartsWith("clamav:test-clean:", checkedVersion.ScanReference,
+                StringComparison.Ordinal);
+            var checkedDocument = await docs.InstitutionalDocuments.AsNoTracking()
+                .SingleAsync(x => x.Id == magazine.Id, ct);
+            Assert.Equal(DocumentManagementCodes.DocumentStatus.Draft, checkedDocument.Status);
+            Assert.Null(checkedDocument.PublishedVersionId);
+        }
+        using var noPublish = await client.PostAsJsonAsync(
+            $"/api/documentos/{magazine.Id}/publicar",
+            new { versionId = newVersionId }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noPublish.StatusCode);
+        using var noManagedDownload = await client.GetAsync(
+            $"/api/documentos/versiones/{newVersionId}/contenido", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, noManagedDownload.StatusCode);
+
+        using var otherReserved = await client.PostAsJsonAsync(
+            $"/api/documentos/{magazine.Id}/versiones",
+            new { originalFileName = "pendiente.txt", contentType = "text/plain", sizeBytes = 4 }, ct);
+        Assert.Equal(HttpStatusCode.Created, otherReserved.StatusCode);
+        var pending = await otherReserved.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var pendingId = pending.GetProperty("id").GetGuid();
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Subject");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", "otro-actor");
+        using var wrongActor = new ByteArrayContent(Encoding.UTF8.GetBytes("hola"));
+        wrongActor.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        using var wrongActorUpload = await client.PutAsync(
+            $"/api/documentos/versiones/{pendingId}/contenido", wrongActor, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, wrongActorUpload.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Subject");
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        using var revoked = await client.DeleteAsync(
+            $"/api/biblioteca/colaboradores/{assignmentId}?expectedVersion={grantedVersion}", ct);
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", "collaborator");
+        client.DefaultRequestHeaders.Add("X-Collab-Subject", user);
+        using var deniedAfter = new ByteArrayContent(Encoding.UTF8.GetBytes("hola"));
+        deniedAfter.Headers.ContentType = new MediaTypeHeaderValue("text/plain");
+        using var deniedUpload = await client.PutAsync(
+            $"/api/documentos/versiones/{pendingId}/contenido", deniedAfter, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedUpload.StatusCode);
+        using var deniedScan = await client.PostAsync(
+            $"/api/documentos/versiones/{newVersionId}/analizar", null, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedScan.StatusCode);
     }
 
     private static InstitutionalDocument Document(

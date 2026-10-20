@@ -38,13 +38,23 @@ public static class DocumentContentEndpoints
         CancellationToken cancellationToken)
     {
         var version = await db.DocumentVersions
-            .Include(x => x.Document)
+            .Include(x => x.Document).ThenInclude(x => x.Collection)
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
 
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
-        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType)
-                ? !await MemberWorkPaperEndpoints.CanManageAsync(version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken)
-                : !access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType))
+        {
+            if (!await MemberWorkPaperEndpoints.CanManageAsync(
+                    version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken))
+                return Results.Forbid();
+        }
+        else if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+                    httpContext.User, access, catalog, version))
+                return Results.Forbid();
+        }
         if (version.ProcessingStatus != DocumentManagementCodes.ProcessingStatus.PendingUpload)
             return Results.Conflict(new { message = "Esta versión ya inició su ciclo de carga y no puede sobrescribirse." });
 
@@ -183,13 +193,23 @@ public static class DocumentContentEndpoints
         CancellationToken cancellationToken)
     {
         var version = await db.DocumentVersions
-            .Include(x => x.Document)
+            .Include(x => x.Document).ThenInclude(x => x.Collection)
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
 
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
-        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType)
-                ? !await MemberWorkPaperEndpoints.CanManageAsync(version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken)
-                : !access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType))
+        {
+            if (!await MemberWorkPaperEndpoints.CanManageAsync(
+                    version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken))
+                return Results.Forbid();
+        }
+        else if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+                    httpContext.User, access, catalog, version))
+                return Results.Forbid();
+        }
 
         if (version.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Uploaded)
         {

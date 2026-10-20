@@ -191,6 +191,42 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
                 LibraryMagazineMetadataAuthorization.CanEditMetadata(http.User, access, catalog, document);
         }
 
+        // Reserva de versión sólo para una Revista real, activa y en borrador;
+        // nunca concede acceso genérico a Gestión Documental.
+        if (!allowed &&
+            route.Equals("/api/documentos/{documentId:guid}/versiones", StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" && action == "create" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var stagedDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == stagedDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+                    http.User, access, catalog, document);
+        }
+
+        // Carga/escaneo de contenido exclusivamente a la versión reservada por
+        // este sujeto. Nunca se delega transición /estado ni publicación.
+        if (!allowed &&
+            (route.Equals("/api/documentos/versiones/{versionId:guid}/contenido", StringComparison.OrdinalIgnoreCase) &&
+             http.Request.Method == "PUT" && action == "write" ||
+             route.Equals("/api/documentos/versiones/{versionId:guid}/analizar", StringComparison.OrdinalIgnoreCase) &&
+             http.Request.Method == "POST" && action == "write") &&
+            Guid.TryParse(http.Request.RouteValues["versionId"]?.ToString(), out var stagedVersionId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var version = await documents.DocumentVersions.AsNoTracking()
+                .Include(x => x.Document).ThenInclude(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == stagedVersionId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = version is not null &&
+                LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+                    http.User, access, catalog, version);
+        }
+
         // Alta editorial específica. Sólo la categoría Revista puede sustituir
         // el permiso genérico library/create, y el endpoint revalida con DB.
         if (!allowed &&

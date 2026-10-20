@@ -61,6 +61,37 @@ public static class LibraryMagazineMetadataAuthorization
                 DynamicViewAccess.Allows(catalog, subject, "library", "edit", null, today));
     }
 
+    /// <summary>
+    /// Reserva/carga/análisis de una versión de revista en borrador.
+    /// El grant "write" es independiente de crear/editar metadatos o publicar.
+    /// </summary>
+    public static bool CanStageMagazineContent(
+        ClaimsPrincipal user,
+        IInstitutionalAccessService access,
+        DynamicAccessCatalog catalog,
+        InstitutionalDocument document)
+    {
+        if (!IsEligible(document) ||
+            document.Status != DocumentManagementCodes.DocumentStatus.Draft ||
+            !access.HasOrderScope(user)) return false;
+
+        var subject = DynamicTreasuryAccess.Subject(user);
+        var today = DynamicAccessEndpoints.Today();
+        return DynamicAccessEndpoints.IsCategoryGranted(
+                   catalog, subject, "library", "write", "magazine", null, today) ||
+               (access.CanManageLibrary(user, null) &&
+                DynamicViewAccess.Allows(catalog, subject, "library", "write", null, today));
+    }
+
+    public static bool CanStageOwnMagazineVersion(
+        ClaimsPrincipal user,
+        IInstitutionalAccessService access,
+        DynamicAccessCatalog catalog,
+        DocumentVersion version)
+        => string.Equals(version.CreatedBySubject,
+               DynamicTreasuryAccess.Subject(user), StringComparison.Ordinal) &&
+           CanStageMagazineContent(user, access, catalog, version.Document);
+
     public static bool CanEditMetadata(
         ClaimsPrincipal user,
         IInstitutionalAccessService access,

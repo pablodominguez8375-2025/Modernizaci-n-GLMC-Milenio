@@ -15,7 +15,7 @@ public static class DocumentAreaCollaboratorEndpoints
 {
     private const long CatalogLock = 26620261004;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly string[] DelegableActions = ["view", "create", "edit", "delete"];
+    private static readonly string[] DelegableActions = ["view", "create", "write", "edit", "delete"];
 
     public static IEndpointRouteBuilder MapDocumentAreaCollaboratorEndpoints(
         this IEndpointRouteBuilder endpoints)
@@ -112,6 +112,9 @@ public static class DocumentAreaCollaboratorEndpoints
             string.IsNullOrWhiteSpace(category) ||
             !DynamicAccessEndpoints.CatalogCategories.Contains(category) ||
             actions.Length == 0 || actions.Any(a => !DelegableActions.Contains(a)) ||
+            // El permiso de contenido se delega sólo en revistas de Biblioteca;
+            // otras categorías y Gestión Documental no reciben una vía de carga.
+            (actions.Contains("write") && (view != "library" || category != "magazine")) ||
             !actions.Contains("view") ||
             request.EffectiveTo < request.EffectiveFrom)
             return Results.BadRequest(new { code = "INVALID_COLLABORATOR_SCOPE" });
