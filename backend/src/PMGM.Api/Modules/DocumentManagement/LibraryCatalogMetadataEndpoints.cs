@@ -26,6 +26,10 @@ public static class LibraryCatalogMetadataEndpoints
                 PublishEditorialMagazineAsync)
             .WithTags("Biblioteca Virtual")
             .RequireAuthorization();
+        endpoints.MapPost("/api/biblioteca/editorial/revistas/{documentId:guid}/retirar-publicacion",
+                UnpublishEditorialMagazineAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
 
         endpoints.MapGet("/api/biblioteca/editorial/revistas/{documentId:guid}/versiones",
                 ListEditorialMagazineVersionsAsync)
@@ -75,6 +79,44 @@ public static class LibraryCatalogMetadataEndpoints
         ctx.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new EditorialMagazineVersionsResponse(
             documentId, total, page, pageSize, items));
+    }
+
+    private static async Task<IResult> UnpublishEditorialMagazineAsync(
+        Guid documentId,
+        HttpContext ctx,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken ct)
+    {
+        var document = await db.InstitutionalDocuments.Include(x => x.Collection)
+            .SingleOrDefaultAsync(x => x.Id == documentId, ct);
+        if (document is null) return Results.NotFound();
+
+        var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, ct);
+        if (!LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+                ctx.User, access, catalog, document))
+            return Results.Forbid();
+
+        if (document.Status != DocumentManagementCodes.DocumentStatus.Published ||
+            document.PublishedVersionId is null)
+            return Results.Conflict(new { message = "La revista no tiene una versión publicada." });
+
+        var previousVersionId = document.PublishedVersionId.Value;
+        document.PublishedVersionId = null;
+        document.PublishedAtUtc = null;
+        // Borrador permite nuevas correcciones y carga de versiones por
+        // colaboradores vigentes; la anterior versión se conserva y audita.
+        document.Status = DocumentManagementCodes.DocumentStatus.Draft;
+        db.AuditEvents.Add(AuditEventFactory.Create(
+            ctx, "library.editorial.magazine_unpublished",
+            nameof(InstitutionalDocument), document.Id.ToString(),
+            null, AuditResults.Success,
+            new { PreviousVersionId = previousVersionId, document.Status }));
+        await db.SaveChangesAsync(ct);
+
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { document.Id, document.Status, document.PublishedVersionId });
     }
 
     private static async Task<IResult> PublishEditorialMagazineAsync(
