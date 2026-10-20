@@ -75,8 +75,18 @@ def main():
             "postgres": {"image": old, "volumes": ["synthetic_pg:/synthetic"]},
             "keycloak": {"image": old},
             "minio": {"image": old, "volumes": ["synthetic_objects:/synthetic"]},
+            **{name: {"image": old, "entrypoint": ["/bin/sh"],
+                      "command": ["-c", "exit 0"], "restart": "no"}
+               for name in mod.COMPLETED_JOBS},
         }, "volumes": {"synthetic_pg": {}, "synthetic_objects": {}}}))
-        mod.docker([*base, "up", "--detach", "--wait", "--wait-timeout", "60"])
+        mod.docker([*base, "up", "--detach", "--wait", "--wait-timeout", "60",
+                    "web", "postgres", "keycloak", "minio"])
+        mod.docker([*base, "up", "--detach", *sorted(mod.COMPLETED_JOBS)])
+        for name in sorted(mod.COMPLETED_JOBS):
+            cid = mod.docker([*base, "ps", "--all", "--quiet", name])
+            assert mod.docker(["wait", cid]) == "0"
+            record = mod.metadata()[name]
+            assert record[2] == "exited" and record[11] == 0
         binding = mod.Binding(str(work), (str(compose),), str(env),
                               tuple((str(p), hashlib.sha256(p.read_bytes()).hexdigest())
                                     for p in (compose, env)), str(work))
