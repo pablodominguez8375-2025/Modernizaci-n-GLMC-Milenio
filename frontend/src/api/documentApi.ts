@@ -15,6 +15,9 @@ export interface DocumentListResponse { total: number; items: DocumentListItem[]
 export interface DocumentVersion {
   id: string; documentId: string; versionNumber: number; originalFileName: string; contentType: string; sizeBytes: number; processingStatus: DocumentProcessingStatus; hasIntegrityHash: boolean; scanEvidenceRecorded: boolean; createdAtUtc: string
 }
+export interface EditorialMagazine { documentId: string; title: string; documentType: string; collectionName: string; status: string; minimumDegreeRequired: number | null; authorName: string | null; documentDate: string | null; topic: string | null; edition: string | null; shortDescription: string | null; createdAtUtc: string; publishedAtUtc: string | null }
+export interface EditorialMagazineList { total: number; page: number; pageSize: number; items: EditorialMagazine[] }
+export interface EditorialMagazineVersion { id: string; versionNumber: number; processingStatus: string; originalFileName: string; contentType: string; sizeBytes: number; createdAtUtc: string }
 export interface InstitutionalDocument extends DocumentListItem { collectionCode: string; versions: DocumentVersion[] }
 
 export interface LibraryDocument {
@@ -84,7 +87,7 @@ export type DocumentAccessTokenProvider = () => Promise<string | null>
 
 interface DocumentApiClientOptions { baseUrl?: string; getAccessToken?: DocumentAccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
-class DocumentApiHttpError extends Error {
+export class DocumentApiHttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); this.name = 'DocumentApiHttpError' }
 }
 
@@ -451,6 +454,33 @@ export class DocumentApiClient {
       return { id: documentId, status: document.status }
     }
     return this.request<{ id: string; status: string }>(`/api/documentos/${encodeURIComponent(documentId)}/retirar-publicacion`, { method: 'POST' })
+  }
+
+  /** Revistas editables por el usuario (403 si no tiene permiso editorial). En demo no hay API real: lista vacía. */
+  async listEditableMagazines(page = 1, pageSize = 50): Promise<EditorialMagazineList> {
+    if (this.useMocks) return { total: 0, page, pageSize, items: [] }
+    return this.request<EditorialMagazineList>(`/api/biblioteca/editorial/revistas?page=${page}&pageSize=${pageSize}`)
+  }
+
+  async createEditorialMagazine(collectionId: string, title: string): Promise<{ documentId: string; status: string }> {
+    if (this.useMocks) throw new Error('La demostración no crea revistas reales.')
+    return this.postJson<{ documentId: string; status: string }>('/api/biblioteca/editorial/revistas', { collectionId, title })
+  }
+
+  async listMagazineVersions(documentId: string): Promise<EditorialMagazineVersion[]> {
+    if (this.useMocks) return []
+    const response = await this.request<{ items: EditorialMagazineVersion[] }>(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/versiones?pageSize=50`)
+    return response.items
+  }
+
+  async publishEditorialMagazine(documentId: string, versionId: string): Promise<void> {
+    if (this.useMocks) throw new Error('La demostración no publica revistas reales.')
+    await this.authorizedFetch(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/publicar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versionId }) })
+  }
+
+  async unpublishEditorialMagazine(documentId: string): Promise<void> {
+    if (this.useMocks) throw new Error('La demostración no retira revistas reales.')
+    await this.authorizedFetch(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/retirar-publicacion`, { method: 'POST' })
   }
 
   private toCatalogItem(item: LibraryDocument): LibraryCatalogItem {
