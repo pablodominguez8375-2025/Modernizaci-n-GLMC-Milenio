@@ -1,0 +1,16 @@
+# #533 — C12 preflight de cierre de Padrón de la Gran Asamblea
+Fecha: 2026-10-19. Base dev@e8b4e6eb2f4dfa49fe0683677115111db8351a1b, main@6dfb9546a4873baff15955cf86abfd7d47e3d111. QA físico en otro hilo.
+
+## Objetivo
+Política backend de solo cálculo (sin DB, sin endpoint) que rechaza un cierre salvo acreditación **externa y oficial** de cobertura completa: afiliación/cargos V.M. por fuente, restricciones Tribunal de Honor/Régimen Interior por persona/corte y saldo Gran Tesorería por Taller/moneda/corte. Los hechos de cobertura vienen solo de adaptadores autorizados posteriores, no de la UI. Debe existir fecha de corte coherente, estado draft, evaluación única actual por asambleísta, categoría institucional acreditada, IDs únicos, trazabilidad de cargos, saldo GT acreditado, fuentes de derechos y ausencia de casos pendientes u observados. No inventar permisos ni resolver sanciones manualmente.
+
+Preflight produce digest determinista SHA-256 para una futura instantánea congelada; hash no equivale a firma institucional ni sustituye autorización RBAC/auditoría. Proyecta electores habilitados únicamente, no asistencia ni sentido de voto, y jamás permite cerrar directamente la Asamblea: `MayPerformClosure=false` hasta que exista endpoint transaccional con RBAC y auditoría. No guarda datos ni expone RUT o expedientes de Tribunal.
+
+Pendientes #533: fuentes oficiales reales y pruebas de integración, endpoint creación/evaluación/decisión/cierre con permisos; acto jurídico/auditoría/snapshot inmutable, PDF/CSV autorizado y UI Claude, QA/UAT. CI/Showcase/Instalable exact HEAD antes de merge, no usar QA físico/srv01 ni promover main. C11 PR #581 se desarrolla en paralelo: sin colisión de rutas.
+
+## Estado de código C12
+- `AssemblyClosurePreflightPolicy` exige: Asamblea draft/corte no futuro, cobertura oficial de todas las candidaturas y cadenas de elegibilidad resueltas, calidad de asambleísta acreditada con referencia y cargo V.M., vínculo persona/Taller/Asamblea, última evaluación coherente sin pendientes, derechos RI/Tribunal y saldo GT hasta corte con referencia/moneda. Persona duplicada, calidad desconocida, deuda positiva sin excepción certificada o falta de evidencia producen razones genéricas de bloqueo.
+- Instantánea candidata SHA-256 determinista por identidad pseudonimizada (GUID), categoría, referencias/decisión y saldo; no incluye nombres ni RUT. `MayPerformClosure=false` por diseño: la capacidad de ejecutar cierre con transacción, RBAC y auditoría NO está implementada.
+- Pruebas unitarias sintéticas: orden del hash, inhabilidad frente a asistencia, duplicados, fuente faltante, deuda previa, discordancia financiera, no cierre futuro/ya cerrado, digest variable ante cambio de decisión.
+- PR [#582](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/582), base dev@e8b4e6e, HEAD `4f16271869f48c0e895a6c5967674a5777799842` en primer CI. CI detectó fallo histórico `AssemblyTreasuryStatementInspectionTests` de fixture `RecordedAtUtc` no estabilizado en la base: el arreglo está en PR #581 (C11); no modificar el mismo fixture desde C12 mientras #581 siga abierto. Rebase de C12 **después** de C11 integrado y volver a ejecutar 3/3 exact-head.
+- Estado Pages, paquetes y QA físico: C12 solo código PR, ninguna implementación de UI, despliegue ni UAT. main/srv01 intactos.
