@@ -90,6 +90,8 @@ builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScan
 builder.Services.AddScoped<IAuditService, AuditService>();
 // Solo configuración confiable del proceso; ningún controlador aporta claves GT.
 builder.Services.AddSingleton<AssemblyGrandTreasuryServerTrustRegistry>();
+// C11: lectura interna read-only que revalida constancias de GT al consumirlas.
+builder.Services.AddScoped<AssemblyTreasurySignedReviewRevalidation>();
 builder.Services.AddScoped<FormSchemaVersionStore>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
