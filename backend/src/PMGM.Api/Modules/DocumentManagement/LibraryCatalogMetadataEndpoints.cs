@@ -87,6 +87,11 @@ public static class LibraryCatalogMetadataEndpoints
                     return Results.BadRequest(new { message = "Un Documento Oficial requiere tipo documental, por ejemplo Reglamento, Constitución o Ritual." });
                 break;
 
+            case LibraryCatalogKind.Magazine:
+                // Revistas: edición/número, fecha, tema, descripción y resumen opcionales.
+                // No se exige el abstract propio de los libros ni se expone contenido privado.
+                break;
+
             case LibraryCatalogKind.Video:
                 // Categoría preparada para una habilitación posterior. Los metadatos
                 // de tema/autor/fecha/descripción ya pueden almacenarse sin activar
@@ -120,6 +125,15 @@ public static class LibraryCatalogMetadataEndpoints
             document.Edition = edition;
             document.AbstractText = abstractText;
             document.ShortDescription = null;
+            document.OfficialDocumentType = null;
+        }
+        else if (kind == LibraryCatalogKind.Magazine)
+        {
+            document.AuthorLodgeName = null;
+            document.Topic = topic;
+            document.Edition = edition;
+            document.ShortDescription = shortDescription;
+            document.AbstractText = abstractText;
             document.OfficialDocumentType = null;
         }
         else if (kind == LibraryCatalogKind.OfficialDocument)
@@ -190,6 +204,7 @@ public static class LibraryCatalogMetadataEndpoints
             "official_document" or "documento_oficial" or "regulation" or "reglamento" or
             "constitution" or "constitucion" or "ritual" => LibraryCatalogKind.OfficialDocument,
             "video" or "videos" => LibraryCatalogKind.Video,
+            "magazine" or "magazines" or "revista" or "revistas" => LibraryCatalogKind.Magazine,
             _ => LibraryCatalogKind.Other
         };
     }
@@ -210,7 +225,8 @@ public enum LibraryCatalogKind
     WorkPaper,
     Book,
     OfficialDocument,
-    Video
+    Video,
+    Magazine
 }
 
 public sealed record SetLibraryCatalogMetadataRequest(
