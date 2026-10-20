@@ -26,7 +26,7 @@ def check(ok, code):
 @dataclass(frozen=True)
 class WebReleasePlan:
     project: str
-    previous_sha: str
+    previous_sha: str | None  # None only for installer-controlled first bootstrap
     candidate_sha: str
     previous_image_id: str
     candidate_image_id: str
