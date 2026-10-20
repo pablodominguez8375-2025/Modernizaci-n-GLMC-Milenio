@@ -23,7 +23,54 @@ public static class LibraryCatalogMetadataEndpoints
             .WithTags("Biblioteca Virtual")
             .RequireAuthorization();
 
+        endpoints.MapGet("/api/biblioteca/editorial/revistas/{documentId:guid}/versiones",
+                ListEditorialMagazineVersionsAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
         return endpoints;
+    }
+
+    private static async Task<IResult> ListEditorialMagazineVersionsAsync(
+        Guid documentId,
+        HttpContext ctx,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken ct,
+        int page = 1,
+        int pageSize = 25)
+    {
+        if (page is < 1 or > 10000 || pageSize is < 1 or > 50)
+            return Results.BadRequest(new { message = "Paginación de versiones inválida." });
+
+        var doc = await db.InstitutionalDocuments.AsNoTracking().Include(d => d.Collection)
+            .SingleOrDefaultAsync(d => d.Id == documentId, ct);
+        if (doc is null) return Results.NotFound();
+
+        var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, ct);
+        if (!LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+                ctx.User, access, catalog, doc))
+            return Results.Forbid();
+
+        var subject = DynamicTreasuryAccess.Subject(ctx.User);
+        var isLibrarian = access.CanManageLibrary(ctx.User, null) &&
+            DynamicViewAccess.Allows(catalog, subject, "library", "write",
+                null, DynamicAccessEndpoints.Today());
+        if (!isLibrarian && string.IsNullOrWhiteSpace(subject)) return Results.Forbid();
+
+        var query = db.DocumentVersions.AsNoTracking().Where(v => v.DocumentId == documentId);
+        if (!isLibrarian) query = query.Where(v => v.CreatedBySubject == subject);
+        var total = await query.CountAsync(ct);
+        var items = await query.OrderByDescending(v => v.VersionNumber)
+            .ThenBy(v => v.Id).Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(v => new EditorialMagazineVersionDto(
+                v.Id, v.VersionNumber, v.ProcessingStatus,
+                v.OriginalFileName, v.ContentType, v.SizeBytes, v.CreatedAtUtc))
+            .ToListAsync(ct);
+
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new EditorialMagazineVersionsResponse(
+            documentId, total, page, pageSize, items));
     }
 
     private static async Task<IResult> CreateEditorialMagazineAsync(
@@ -413,3 +460,11 @@ public sealed record EditorialMagazineListDto(
 
 public sealed record CreateEditorialMagazineRequest(Guid CollectionId, string? Title);
 public sealed record EditorialMagazineCreatedDto(Guid DocumentId, string Status);
+
+public sealed record EditorialMagazineVersionDto(
+    Guid Id, int VersionNumber, string ProcessingStatus,
+    string OriginalFileName, string ContentType, long SizeBytes,
+    DateTimeOffset CreatedAtUtc);
+public sealed record EditorialMagazineVersionsResponse(
+    Guid DocumentId, int Total, int Page, int PageSize,
+    IReadOnlyList<EditorialMagazineVersionDto> Items);
