@@ -16,7 +16,71 @@ public static class LibraryCatalogMetadataEndpoints
             .WithTags("Biblioteca Virtual")
             .RequireAuthorization();
 
+        endpoints.MapGet("/api/biblioteca/editorial/revistas", ListEditableMagazinesAsync)
+            .WithTags("Biblioteca Virtual")
+            .RequireAuthorization();
+
         return endpoints;
+    }
+
+    private static async Task<IResult> ListEditableMagazinesAsync(
+        HttpContext httpContext,
+        PmgmDbContext institutionalDb,
+        DocumentManagementDbContext db,
+        IInstitutionalAccessService access,
+        CancellationToken cancellationToken,
+        int page = 1,
+        int pageSize = 25)
+    {
+        if (page is < 1 or > 10000 || pageSize is < 1 or > 100)
+            return Results.BadRequest(new { message = "Paginación fuera del rango autorizado." });
+
+        var catalog = await DynamicAccessEndpoints.LoadAsync(
+            institutionalDb, cancellationToken);
+        if (!LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+                httpContext.User, access, catalog))
+            return Results.Forbid();
+
+        // Una colección/organización indicada por el solicitante jamás amplía
+        // el conjunto: filtros sobre las relaciones persistidas en PostgreSQL.
+        var query = db.InstitutionalDocuments.AsNoTracking()
+            .Where(document =>
+                document.OrganizationId == null &&
+                document.Collection.OrganizationId == null &&
+                document.Collection.Scope == DocumentManagementCodes.Scope.Order &&
+                document.Collection.Status == DocumentManagementCodes.CollectionStatus.Active &&
+                document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
+                document.Classification == DocumentManagementCodes.Classification.Internal &&
+                document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated &&
+                (document.DocumentType.ToLower() == "magazine" ||
+                 document.DocumentType.ToLower() == "magazines" ||
+                 document.DocumentType.ToLower() == "revista" ||
+                 document.DocumentType.ToLower() == "revistas"));
+
+        var total = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderByDescending(document => document.CreatedAtUtc)
+            .ThenBy(document => document.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(document => new EditorialMagazineDto(
+                document.Id,
+                document.Title,
+                document.DocumentType,
+                document.Collection.Name,
+                document.Status,
+                document.MinimumDegreeRequired,
+                document.AuthorName,
+                document.DocumentDate,
+                document.Topic,
+                document.Edition,
+                document.ShortDescription,
+                document.CreatedAtUtc,
+                document.PublishedAtUtc))
+            .ToListAsync(cancellationToken);
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new EditorialMagazineListDto(total, page, pageSize, items));
     }
 
     private static async Task<IResult> SetMetadataAsync(
@@ -266,3 +330,24 @@ public sealed record LibraryCatalogMetadataDto(
     string? ShortDescription,
     string? AbstractText,
     string? OfficialDocumentType);
+
+public sealed record EditorialMagazineDto(
+    Guid DocumentId,
+    string Title,
+    string DocumentType,
+    string CollectionName,
+    string Status,
+    int? MinimumDegreeRequired,
+    string? AuthorName,
+    DateOnly? DocumentDate,
+    string? Topic,
+    string? Edition,
+    string? ShortDescription,
+    DateTimeOffset CreatedAtUtc,
+    DateTimeOffset? PublishedAtUtc);
+
+public sealed record EditorialMagazineListDto(
+    int Total,
+    int Page,
+    int PageSize,
+    IReadOnlyList<EditorialMagazineDto> Items);

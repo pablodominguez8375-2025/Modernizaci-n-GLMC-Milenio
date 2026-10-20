@@ -24,6 +24,25 @@ public static class LibraryMagazineMetadataAuthorization
            document.DocumentType.Trim().ToLowerInvariant() is
                "magazine" or "magazines" or "revista" or "revistas";
 
+    /// <summary>
+    /// El listado editorial exige editar la categoría, no basta con
+    /// acceso genérico a Biblioteca ni con leer una categoría distinta.
+    /// </summary>
+    public static bool CanListEditableMagazines(
+        ClaimsPrincipal user,
+        IInstitutionalAccessService access,
+        DynamicAccessCatalog catalog)
+    {
+        if (!access.HasOrderScope(user)) return false;
+
+        var subject = DynamicTreasuryAccess.Subject(user);
+        var today = DynamicAccessEndpoints.Today();
+        return DynamicAccessEndpoints.IsCategoryGranted(
+                   catalog, subject, "library", "edit", "magazine", null, today) ||
+               (access.CanManageLibrary(user, null) &&
+                DynamicViewAccess.Allows(catalog, subject, "library", "edit", null, today));
+    }
+
     public static bool CanEditMetadata(
         ClaimsPrincipal user,
         IInstitutionalAccessService access,

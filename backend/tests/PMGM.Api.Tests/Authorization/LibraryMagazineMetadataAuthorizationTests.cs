@@ -136,4 +136,48 @@ public sealed class LibraryMagazineMetadataAuthorizationTests
         Assert.False(LibraryMagazineMetadataAuthorization.CanEditMetadata(
             Identity(InstitutionalRoles.Librarian), access, grants, doc));
     }
+    [Fact]
+    public void Editorial_list_requires_live_magazine_edit_grant_not_just_general_read()
+    {
+        var access = new InstitutionalAccessService();
+        var principal = Identity("collaborator");
+        Assert.True(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            principal, access, MagazineGrant()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            principal, access, MagazineGrant(active: false)));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            principal, access, MagazineGrant(daysOffset: -10)));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            Identity("collaborator", "distinto"), access, MagazineGrant()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            principal, access, MagazineGrant(category: "book")));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            principal, access, MagazineGrant(area: "documentmanager")));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            Identity("collaborator", order: false), access, MagazineGrant()));
+
+        var viewOnly = MagazineGrant();
+        viewOnly.Profiles[viewOnly.Profiles.Count - 1] = viewOnly.Profiles[^1] with
+        {
+            Grants = [new DynamicGrant("library", ["view"], ["magazine"])]
+        };
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            principal, access, viewOnly));
+
+        Assert.True(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            Identity(InstitutionalRoles.GrandArchivist), access,
+            DynamicAccessEndpoints.CreateCatalog()));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            Identity(InstitutionalRoles.DocumentManager), access,
+            DynamicAccessEndpoints.CreateCatalog()));
+
+        // Incluso con cargo de Bibliotecario, un perfil técnico de solo lectura
+        // o de una categoría ajena no puede abrir el listado editable.
+        Assert.False(LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
+            Identity(InstitutionalRoles.Librarian), access, MagazineGrant(category: "book")));
+    }
+
 }
