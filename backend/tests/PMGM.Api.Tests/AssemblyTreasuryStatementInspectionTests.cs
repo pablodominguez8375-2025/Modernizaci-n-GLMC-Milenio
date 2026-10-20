@@ -138,6 +138,27 @@ public sealed class AssemblyTreasuryStatementInspectionTests
     }
 
     [Fact]
+    public void Payment_recorded_after_fixed_cutoff_is_rejected()
+    {
+        var late = Statement(9);
+        var original = late.Payments.Single();
+        late.Payments.Clear();
+        late.Payments.Add(new TreasuryPayment
+        {
+            StatementId = late.Id,
+            PaymentMethod = original.PaymentMethod,
+            PaymentDate = original.PaymentDate,
+            RecordedAtUtc = new DateTimeOffset(2026, 10, 20, 0, 0, 0, TimeSpan.Zero),
+            PayerDisplayName = original.PayerDisplayName,
+            Amount = original.Amount
+        });
+        var result = Inspect(Statement(8), late, Statement(10));
+        Assert.Contains("INVALID_OR_LATE_PAYMENT", result.BlockingReasons);
+        Assert.False(result.ObservedRowsConsistent);
+        Assert.False(result.MayAuthorizeSuffrage);
+    }
+
+    [Fact]
     public void Invalid_scope_and_missing_statements_are_fail_closed()
     {
         var missing = Inspect();

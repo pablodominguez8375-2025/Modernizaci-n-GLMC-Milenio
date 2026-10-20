@@ -1,0 +1,88 @@
+name: QA-AUTO-LIGERO local Compose adapter
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-lite-compose-adapter.py'
+      - 'scripts/qa/qa-lite-web-build.py'
+      - 'scripts/qa/qa-lite-install.py'
+      - 'scripts/qa/qa-lite-bootstrap.py'
+      - 'scripts/qa/qa-public-release-download.py'
+      - 'scripts/qa/qa-signed-publish.py'
+      - 'scripts/qa/qa-signed-staging.py'
+      - 'scripts/qa/qa-agent-readiness.py'
+      - 'scripts/qa/qa-lite-web-transaction.py'
+      - 'tests/test_qa_lite_compose_adapter.py'
+      - 'tests/test_qa_lite_web_build.py'
+      - 'tests/test_qa_lite_install.py'
+      - 'tests/test_qa_lite_bootstrap.py'
+      - 'tests/test_qa_lite_validated_selection.py'
+      - 'tests/test_qa_public_release_download.py'
+      - 'tests/qa_lite_signature_no_token_integration.py'
+      - 'tests/qa_lite_compose_docker_integration.py'
+      - '.github/workflows/qa-lite-compose-adapter.yml'
+      - '.github/workflows/qa-signed-publish.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-lite-compose-adapter.py'
+      - 'scripts/qa/qa-lite-web-build.py'
+      - 'scripts/qa/qa-lite-install.py'
+      - 'scripts/qa/qa-lite-bootstrap.py'
+      - 'scripts/qa/qa-public-release-download.py'
+      - 'scripts/qa/qa-signed-publish.py'
+      - 'scripts/qa/qa-signed-staging.py'
+      - 'scripts/qa/qa-agent-readiness.py'
+      - 'scripts/qa/qa-lite-web-transaction.py'
+      - 'tests/test_qa_lite_compose_adapter.py'
+      - 'tests/test_qa_lite_web_build.py'
+      - 'tests/test_qa_lite_install.py'
+      - 'tests/test_qa_lite_bootstrap.py'
+      - 'tests/test_qa_lite_validated_selection.py'
+      - 'tests/test_qa_public_release_download.py'
+      - 'tests/qa_lite_signature_no_token_integration.py'
+      - 'tests/qa_lite_compose_docker_integration.py'
+      - '.github/workflows/qa-lite-compose-adapter.yml'
+      - '.github/workflows/qa-signed-publish.yml'
+permissions:
+  contents: read
+jobs:
+  adapter-offline:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Restricted commands, drift and rollback
+        run: |
+          sudo python3 -m unittest discover -s tests -p 'test_qa_lite*py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_public_release_download.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_agent_readiness.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_signed_staging.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_acquire_candidate.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_artifact_download.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_auto_lite_policy.py' -v
+  adapter-docker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Real Docker, isolated synthetic project, no host credentials
+        run: sudo env GITHUB_ACTIONS=true python3 tests/qa_lite_compose_docker_integration.py
+  tokenless-signature:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Real signed fixture, verifier with empty gh config and no token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tests/qa_lite_signature_no_token_integration.py

@@ -92,6 +92,47 @@ def evaluate(fetch):
     }
 
 
+def evaluate_latest_validated(fetch):
+    """Most recent fully green PUSH that is still an ancestor of live dev.
+
+    Does not relax evaluate(): each historical candidate is checked against all
+    latest attempts and its exact signed artifact. Bounded to 100 recent runs.
+    This avoids starving QA while newer dev commits are still being tested.
+    """
+    tip = fetch("/branches/dev").get("commit", {}).get("sha")
+    if not isinstance(tip, str) or not SHA.fullmatch(tip):
+        raise GateFailure("DEV_SHA_MISSING")
+    try:
+        return evaluate(fetch)
+    except GateFailure:
+        pass
+    runs = fetch("/actions/runs?branch=dev&event=push&status=success&per_page=100")
+    candidates = {}
+    for run in runs.get("workflow_runs", []):
+        sha = run.get("head_sha")
+        if (run.get("event") == "push" and run.get("head_branch") == "dev"
+                and run.get("name") in REQUIRED and isinstance(sha, str) and SHA.fullmatch(sha)
+                and type(run.get("id")) is int):
+            candidates[sha] = max(candidates.get(sha, 0), run["id"])
+    for sha in sorted(candidates, key=candidates.get, reverse=True):
+        if sha == tip:
+            continue
+        comparison = fetch("/compare/" + sha + "..." + tip)
+        if (comparison.get("status") != "ahead"
+                or comparison.get("merge_base_commit", {}).get("sha") != sha):
+            continue
+        def pinned(path):
+            return {"commit": {"sha": sha}} if path == "/branches/dev" else fetch(path)
+        try:
+            candidate = evaluate(pinned)
+        except GateFailure:
+            continue
+        if fetch("/branches/dev").get("commit", {}).get("sha") != tip:
+            raise GateFailure("DEV_CHANGED_DURING_VALIDATED_SELECTION")
+        return candidate
+    raise GateFailure("NO_RECENT_VALIDATED_DEV_ANCESTOR")
+
+
 def main():
     try:
         print(json.dumps(evaluate(fetch_public), sort_keys=True))
