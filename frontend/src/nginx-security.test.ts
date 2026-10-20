@@ -11,4 +11,24 @@ describe('Seguridad · nginx de la aplicación (04-10-2026)', () => {
   it('restringe funciones del navegador no usadas', () => {
     expect(conf).toContain('Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"')
   })
+  it('solo cachea assets con hash y conserva seguridad y revalidación del HTML', () => {
+    const block = (location: string) => {
+      const start = conf.indexOf(location)
+      expect(start).toBeGreaterThan(-1)
+      return conf.slice(start, conf.indexOf('\n    }', start))
+    }
+    const assets = block('location /assets/ {')
+    expect(assets).toContain('try_files $uri =404;')
+    expect(assets).toContain('Cache-Control "public, max-age=31536000, immutable";')
+    const html = block('location = /index.html {')
+    expect(html).toContain('Cache-Control "no-cache" always;')
+    for (const location of [assets, html]) {
+      for (const header of ['X-Content-Type-Options', 'X-Frame-Options', 'Referrer-Policy', 'Permissions-Policy']) {
+        expect(location).toContain(`add_header ${header}`)
+      }
+    }
+    for (const path of ['/auth/callback', '/auth/logout']) {
+      expect(block(`location = ${path} {`)).toContain('Cache-Control "no-store" always;')
+    }
+  })
 })

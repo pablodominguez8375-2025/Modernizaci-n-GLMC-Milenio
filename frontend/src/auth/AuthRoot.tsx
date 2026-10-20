@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react'
-import App from '../App'
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
+import '../app-styles'
 import { LodgeCouncilApiProvider } from '../LodgeCouncilApiContext'
 import { createDefaultBootstrapApiClient } from '../api/bootstrapApi'
 import { createDefaultCalendarApiClient } from '../api/calendarApi'
@@ -18,6 +18,13 @@ import { createDefaultReportingApiClient } from '../api/reportingApi'
 import AccessScreen from './AccessScreen'
 import { readAuthConfig } from './config'
 import { createUserManager, OidcSession } from './session'
+
+// Keep the internal views out of the public access screen's initial download.
+const App = lazy(() => import('../App').catch(() => ({ default: ApplicationLoadError })))
+
+function ApplicationLoadError() {
+  return <AccessScreen tone="error" message="No se pudo cargar la plataforma. Recargue para intentar nuevamente." loginLabel="Recargar plataforma" onLogin={() => window.location.reload()} />
+}
 
 function createRuntime() {
   try {
@@ -50,7 +57,9 @@ function runtimeReady() {
 
 function RuntimeApp({ onLogout }: { onLogout?: () => void }) {
   return <LodgeCouncilApiProvider api={runtime.lodgeCouncilApi!}>
-    <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} candidateIntakeApi={runtime.candidateIntakeApi!} onLogout={onLogout} />
+    <Suspense fallback={<AccessScreen message="Preparando acceso…" />}>
+      <App api={runtime.api!} bootstrapApi={runtime.bootstrapApi!} lodgeApi={runtime.lodgeApi!} membershipApi={runtime.membershipApi!} organizationProfileApi={runtime.organizationProfileApi!} reportingApi={runtime.reportingApi!} internalAffairsApi={runtime.internalAffairsApi!} dataQualityCaseApi={runtime.dataQualityCaseApi!} documentApi={runtime.documentApi!} grandArchiveApi={runtime.grandArchiveApi!} calendarApi={runtime.calendarApi!} notificationApi={runtime.notificationApi!} candidateIntakeApi={runtime.candidateIntakeApi!} onLogout={onLogout} />
+    </Suspense>
   </LodgeCouncilApiProvider>
 }
 
