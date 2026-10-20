@@ -258,6 +258,7 @@ api.MapSystemConfigurationEndpoints();
 api.MapFormSchemaAdministrationEndpoints();
 api.MapUserAccountEndpoints();
 api.MapDynamicAccessEndpoints();
+api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
 
 api.MapViewAccessEndpoints();
