@@ -1,7 +1,6 @@
 import { OwnOffices, OwnAttendanceHistory } from './MemberOwnHistory'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { organizationNumberOf } from './displayFormat'
-import InstitutionalIcon from './InstitutionalIcon'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
@@ -10,7 +9,6 @@ import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './Memb
 import { institutionalStatusLabel } from './institutionalStatus'
 import { ActionDrawer, WorkspacePanel } from './actionKit'
 import './memberPortalInstruction.css'
-import './memberLibraryShortcut.css'
 
 export type MemberPortalSection = 'datos' | 'pagos' | 'asistencias'
 
@@ -30,7 +28,6 @@ interface MemberPortalPageProps {
   documentApi: DocumentApiClient
   onOpenCalendar?: () => void
   onOpenNotifications?: () => void
-  onOpenLibrary?: () => void
   onOpenLodge?: () => void
 }
 
@@ -134,7 +131,7 @@ export const memberPortalDemoData = {
   ],
 } as const
 
-export default function MemberPortalPage({ section = 'datos', profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
+export default function MemberPortalPage({ section = 'datos', profile, useMocks, membershipApi, documentApi }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
@@ -200,9 +197,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
   const lodgeSeal = organizationNumberOf(lodge) ?? (lodge.trim().charAt(0).toUpperCase() || '∴')
   const orient = useMocks ? memberPortalDemoData.institutional.orient : 'Según expediente institucional'
-  const effectiveDegree = useMocks ? 3 : (selfProfile?.current.effectiveDegree ?? Number.parseInt(selfProfile?.current.degree?.degree ?? '', 10))
   const degree = useMocks ? memberPortalDemoData.institutional.degree : formatDegree(selfProfile?.current.effectiveDegree, selfProfile?.current.degree?.degree)
-  const libraryAccess = libraryAccessForDegree(effectiveDegree)
   const status = useMocks ? memberPortalDemoData.institutional.status : institutionalStatusLabel(selfProfile?.current.institutionalStatus?.eventType)
   const statusSince = useMocks ? memberPortalDemoData.institutional.statusSince : formatDateOnly(selfProfile?.current.institutionalStatus?.effectiveDate)
   const initiation = useMocks ? memberPortalDemoData.institutional.initiation : formatDateOnly(selfProfile?.milestones.initiation)
@@ -269,11 +264,6 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
           <MemberDatum label="Aumento de salario" value={wageIncrease} />
           <MemberDatum label="Exaltación" value={exaltation} />
         </div>
-        {onOpenLibrary && <button className="member-degree-library-link" type="button" onClick={onOpenLibrary} aria-label={`Abrir Biblioteca Virtual. ${libraryAccess.title}. ${libraryAccess.detail}`}>
-          <span className="member-degree-library-icon" aria-hidden="true"><InstitutionalIcon name="library" size={24} /></span>
-          <span className="member-degree-library-copy"><small>Biblioteca Virtual · acceso por grado</small><strong>{libraryAccess.title}</strong><span>{libraryAccess.detail}</span></span>
-          <span className="member-degree-library-action">Abrir</span>
-        </button>}
       </article>
 
     </section>
@@ -332,12 +322,6 @@ function PortalPendingData({ text }: { text: string }) {
   return <div className="empty-state"><strong>Información institucional</strong><span>{text}</span></div>
 }
 
-function libraryAccessForDegree(degree?: number) {
-  if (degree === 1) return { title: 'Acceso de 1° grado', detail: 'General · 1°' }
-  if (degree === 2) return { title: 'Acceso hasta 2° grado', detail: 'General · 1° · 2°' }
-  if (degree !== undefined && degree >= 3) return { title: 'Acceso hasta 3° grado', detail: 'General · 1° · 2° · 3°' }
-  return { title: 'Acceso según grado vigente', detail: 'La Biblioteca mostrará sólo contenidos autorizados para tu grado e inferiores.' }
-}
 
 function formatDateOnly(value?: string | null) {
   if (!value) return 'Sin registro'
