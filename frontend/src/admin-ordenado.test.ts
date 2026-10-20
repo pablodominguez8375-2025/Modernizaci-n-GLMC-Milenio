@@ -13,7 +13,8 @@ describe('PMGM-UX administración ordenada (04-10-2026)', () => {
   it('los parámetros se eligen por categoría en tarjetas (no pestañas) y se cambian desde un panel, sin formularios abiertos', () => {
     expect(page).toContain('<WorkspaceTabs label="Categorías de parámetros"')
     expect(page).toMatch(/Categorías de parámetros"[^>]*hub=\{\{ title: 'Parámetros'/)
-    expect(page).toContain('<ActionDrawer label="Cambiar valor"')
+    expect(page).toContain('<SystemSettingsCategoryPanel')
+    expect(readFileSync(new URL('./SystemSettingsCategoryPanel.tsx', import.meta.url), 'utf8')).toContain('<ActionDrawer label="Editar parámetros"')
     expect(page).not.toContain("useState('Todos')")
   })
 
