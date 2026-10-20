@@ -179,6 +179,55 @@ public sealed class LibraryMagazineMetadataAuthorizationTests
     }
 
     [Fact]
+    public void Magazine_publication_cannot_be_delegated_to_contributors()
+    {
+        var access = new InstitutionalAccessService();
+        var document = Document();
+        var catalog = MagazineGrant();
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity("collaborator"), access, catalog, document));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.GrandArchivist), access,
+            DynamicAccessEndpoints.CreateCatalog(), document));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.DocumentManager), access,
+            DynamicAccessEndpoints.CreateCatalog(), document));
+        Assert.True(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog(), document));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian, order: false), access,
+            DynamicAccessEndpoints.CreateCatalog(), document));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog(), Document("book")));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog(), Document(activeCollection: false)));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog(), Document(workshop: true)));
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog(),
+            Document(classification: DocumentManagementCodes.Classification.Confidential)));
+        document.Status = DocumentManagementCodes.DocumentStatus.Retired;
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access,
+            DynamicAccessEndpoints.CreateCatalog(), document));
+
+        // El Bibliotecario con limitación técnica explícita de lectura
+        // no obtiene permiso institucional de publicar por excepción.
+        var viewOnly = MagazineGrant();
+        viewOnly.Profiles[^1] = viewOnly.Profiles[^1] with
+        {
+            Grants = [new DynamicGrant("library", ["view"], ["magazine"])]
+        };
+        Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+            Identity(InstitutionalRoles.Librarian), access, viewOnly, Document()));
+    }
+
+    [Fact]
     public void Create_draft_is_separate_from_edit_and_requires_live_category_grant()
     {
         var access = new InstitutionalAccessService();
