@@ -246,6 +246,25 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
                     http.User, access, catalog, document);
         }
 
+        // Publicación de Revista: excepción exacta sólo para Bibliotecario
+        // institucional. Jamás deducir publicar de un grant de colaborador.
+        if (!allowed &&
+            route.Equals(
+                "/api/biblioteca/editorial/revistas/{documentId:guid}/publicar",
+                StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var publishingDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == publishingDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+                    http.User, access, catalog, document);
+        }
+
         // Alta editorial específica. Sólo la categoría Revista puede sustituir
         // el permiso genérico library/create, y el endpoint revalida con DB.
         if (!allowed &&
