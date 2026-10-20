@@ -78,6 +78,7 @@
       "AssemblyFoundationPostgreSqlTests",
       "AssemblyGrandTreasuryReviewEventsPostgreSqlTests",
       "AssemblyTreasurySignedReviewPostgreSqlTests",
+      "AssemblyTreasurySignedReviewRevalidationPostgreSqlTests",
       "AssemblyTreasuryStatementInspectionPostgreSqlTests",
       "RegimenInteriorMemberControlPostgreSqlTests",
       "CandidateInterviewAssignmentHttpTests",

@@ -37,6 +37,9 @@ public sealed class AssemblyTreasuryStatementInspectionTests
             StatementId = statement.Id,
             PaymentMethod = TreasuryCodes.PaymentMethod.Transfer,
             PaymentDate = new DateOnly(2026, month, 17),
+            // Fecha fija dentro del corte: el test debe ser estable después
+            // de la medianoche UTC, sin flexibilizar la regla productiva.
+            RecordedAtUtc = new DateTimeOffset(2026, 10, 18, 10, 0, 0, TimeSpan.Zero),
             PayerDisplayName = "Taller ficticio",
             Amount = 1000m
         });
