@@ -230,6 +230,25 @@ public sealed class DocumentAreaCollaboratorHttpTests
             edition = "N° 3",
             shortDescription = "Actualización autorizada"
         };
+        using var editableList = await client.GetAsync(
+            "/api/biblioteca/editorial/revistas?page=1&pageSize=50", ct);
+        Assert.Equal(HttpStatusCode.OK, editableList.StatusCode);
+        Assert.Equal("private, no-store", editableList.Headers.CacheControl?.ToString());
+        var editorial = await editableList.Content.ReadFromJsonAsync<JsonElement>(
+            cancellationToken: ct);
+        Assert.Equal(1, editorial.GetProperty("page").GetInt32());
+        var visibleIds = editorial.GetProperty("items").EnumerateArray()
+            .Select(item => item.GetProperty("documentId").GetGuid()).ToArray();
+        Assert.Contains(magazine.Id, visibleIds);
+        Assert.DoesNotContain(book.Id, visibleIds);
+        Assert.DoesNotContain(confidential.Id, visibleIds);
+        Assert.DoesNotContain(workshopMagazine.Id, visibleIds);
+        Assert.DoesNotContain("createdBySubject", editorial.ToString(),
+            StringComparison.OrdinalIgnoreCase);
+        using var invalidPage = await client.GetAsync(
+            "/api/biblioteca/editorial/revistas?pageSize=1000", ct);
+        Assert.Equal(HttpStatusCode.BadRequest, invalidPage.StatusCode);
+
         using var edited = await client.PutAsJsonAsync(
             $"/api/documentos/{magazine.Id}/metadatos-biblioteca", payload, ct);
         Assert.Equal(HttpStatusCode.OK, edited.StatusCode);
@@ -269,6 +288,9 @@ public sealed class DocumentAreaCollaboratorHttpTests
         using var wrongSubject = await client.PutAsJsonAsync(
             $"/api/documentos/{magazine.Id}/metadatos-biblioteca", payload, ct);
         Assert.Equal(HttpStatusCode.Forbidden, wrongSubject.StatusCode);
+        using var wrongList = await client.GetAsync(
+            "/api/biblioteca/editorial/revistas", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, wrongList.StatusCode);
 
         client.DefaultRequestHeaders.Remove("X-Collab-Subject");
         client.DefaultRequestHeaders.Remove("X-Collab-Role");
@@ -282,6 +304,9 @@ public sealed class DocumentAreaCollaboratorHttpTests
         using var deniedAfterRevoke = await client.PutAsJsonAsync(
             $"/api/documentos/{magazine.Id}/metadatos-biblioteca", payload, ct);
         Assert.Equal(HttpStatusCode.Forbidden, deniedAfterRevoke.StatusCode);
+        using var deniedListAfterRevoke = await client.GetAsync(
+            "/api/biblioteca/editorial/revistas", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedListAfterRevoke.StatusCode);
     }
 
     private static InstitutionalDocument Document(

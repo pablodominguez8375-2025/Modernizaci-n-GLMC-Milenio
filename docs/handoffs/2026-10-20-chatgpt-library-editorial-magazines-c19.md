@@ -13,3 +13,12 @@ GET `/api/biblioteca/editorial/revistas` con autorización personal por categor�
 ## Fuera de alcance
 
 Aún no permite crear publicaciones, versionar, cargar archivos, publicar o retirar. Frontend UI de Claude separado. CI exact-head 3/3 previo a integrar dev. QA físico y main intocados.
+
+## Implementación en PR #600
+
+- Endpoint `GET /api/biblioteca/editorial/revistas?page=1&pageSize=25`: máximo 100/página, respuesta 400 con paginación inválida, `Cache-Control: private, no-store` y respuesta mínima sin contenidos binarios ni sujetos creadores.
+- Control estricto `CanListEditableMagazines`: `library/edit/magazine` activo; el simple permiso de lectura, `book` o `documentmanager` no bastan. Bibliotecario sin restricciones conserva su cargo; las asignaciones técnicas restrictivas se respetan.
+- Filtros SQL exclusivamente sobre entidad/colección de Orden, interna, biblioteca autenticada, no retirada, revistas con alias históricos; respuesta ordenada/paginada.
+- Test unitario de roles y revocación; test HTTP/PostgreSQL de listado autorizado, no filtración, paginación, usuario ajeno y revocación. Ninguna migración.
+
+CI exact-head, integración dev y QA físico pendientes.
