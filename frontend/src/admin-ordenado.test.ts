@@ -13,8 +13,16 @@ describe('PMGM-UX administración ordenada (04-10-2026)', () => {
   it('los parámetros se eligen por categoría en tarjetas (no pestañas) y se cambian desde un panel, sin formularios abiertos', () => {
     expect(page).toContain('<WorkspaceTabs label="Categorías de parámetros"')
     expect(page).toMatch(/Categorías de parámetros"[^>]*hub=\{\{ title: 'Parámetros'/)
-    expect(page).toContain('<ActionDrawer label="Cambiar valor"')
+    expect(page).toContain('<SystemSettingsCategoryPanel')
+    expect(readFileSync(new URL('./SystemSettingsCategoryPanel.tsx', import.meta.url), 'utf8')).toContain('<ActionDrawer label="Editar parámetros"')
     expect(page).not.toContain("useState('Todos')")
+  })
+
+  it('el diseñador de perfiles vive en «Perfiles y accesos», no en «Usuarios»', () => {
+    const users = ops.split("{area==='users'&&")[1].split("{area==='profiles'&&")[0]
+    expect(users).not.toContain('Diseñar perfiles de acceso')
+    expect(ops.split("{area==='profiles'&&")[1]).toContain('<ActionDrawer label="Diseñar perfiles de acceso"')
+    expect(page).toContain("['backup','users','profiles'")
   })
 
   it('restauración, correo e identidad se abren en panel', () => {

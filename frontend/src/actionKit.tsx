@@ -6,7 +6,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } fr
 
 type ButtonTone = 'primary' | 'secondary'
 
-export function ActionDrawer({ label, title, description, confirmMessage, tone = 'primary', disabled = false, keepOpen = false, open: controlledOpen, onOpenChange, children }: {
+export function ActionDrawer({ label, title, description, confirmMessage, tone = 'primary', disabled = false, keepOpen = false, open: controlledOpen, onOpenChange, wide: startWide = false, children }: {
   label: string
   title?: string
   description?: string
@@ -19,8 +19,11 @@ export function ActionDrawer({ label, title, description, confirmMessage, tone =
   /** Apertura controlada opcional (p. ej. abrir el panel desde la acción de una fila). */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** El panel se abre ampliado (formularios con muchos campos). El operador siempre puede ampliar o reducir. */
+  wide?: boolean
   children: ReactNode
 }) {
+  const [wide, setWide] = useState(startWide)
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = (value: boolean) => { setInternalOpen(value); onOpenChange?.(value) }
@@ -64,9 +67,10 @@ export function ActionDrawer({ label, title, description, confirmMessage, tone =
     <button type="button" className={`action-trigger ${tone}`} disabled={disabled} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>{label}</button>
     <div className="action-drawer-layer" hidden={!open}>
       <button type="button" className="action-drawer-backdrop" aria-label="Cerrar panel" tabIndex={-1} onClick={close} />
-      <section className="action-drawer" role="dialog" aria-modal="true" aria-labelledby={headingId}>
+      <section className={`action-drawer${wide ? ' is-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={headingId}>
         <header className="action-drawer-header">
           <div><h2 id={headingId} ref={headingRef} tabIndex={-1}>{title ?? label}</h2>{description && <p>{description}</p>}</div>
+          <button type="button" className="action-drawer-size" aria-pressed={wide} title={wide ? 'Volver al ancho normal' : 'Ocupar más ancho de pantalla'} onClick={() => setWide(value => !value)}>{wide ? '⤡ Reducir' : '⤢ Ampliar'}</button>
           <button type="button" className="action-drawer-close" aria-label="Cerrar" onClick={close}>×</button>
         </header>
         <div className="action-drawer-body" onSubmitCapture={onSubmitCapture}>{children}</div>
