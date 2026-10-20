@@ -75,14 +75,14 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged }: { d
       if (!ready) throw new Error('Aún no hay un archivo verificado y disponible. Cargue el archivo primero.')
       await documentApi.publishEditorialMagazine(item.documentId, ready.id)
       setNotice({ tone: 'ok', text: `«${item.title}» publicada. Ya la ven los hermanos según su grado.` }); onChanged()
-    } catch (reason) { setNotice({ tone: 'error', text: reason instanceof DocumentApiHttpError && reason.status === 403 ? 'Solo el Bibliotecario puede publicar. Su perfil puede preparar el borrador y cargar el archivo.' : message(reason) }) }
+    } catch (reason) { setNotice({ tone: 'error', text: reason instanceof DocumentApiHttpError && reason.status === 403 ? 'Su perfil no tiene permiso para publicar este número. Puede preparar el borrador y cargar el archivo; la publicación la realiza quien tenga ese permiso.' : message(reason) }) }
     finally { setBusy(null); await load() }
   }
 
   async function unpublish(item: EditorialMagazine) {
     setBusy(item.documentId); setNotice(null)
     try { await documentApi.unpublishEditorialMagazine(item.documentId); setNotice({ tone: 'ok', text: `«${item.title}» ya no está publicada. El historial se conserva.` }); onChanged() }
-    catch (reason) { setNotice({ tone: 'error', text: reason instanceof DocumentApiHttpError && reason.status === 403 ? 'Solo el Bibliotecario puede retirar una publicación.' : message(reason) }) }
+    catch (reason) { setNotice({ tone: 'error', text: reason instanceof DocumentApiHttpError && reason.status === 403 ? 'Su perfil no tiene permiso para retirar esta publicación.' : message(reason) }) }
     finally { setBusy(null); await load() }
   }
 
@@ -90,7 +90,7 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged }: { d
   return <>
     {notice && <p className={notice.tone === 'ok' ? 'library-admin-notice' : 'error-banner'} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>}
     <ActionBar>
-      <ActionDrawer label="Subir número de revista" wide title="Subir número de revista" description="Horizonte Masónico. Se guarda como borrador; el Bibliotecario lo publica.">
+      <ActionDrawer label="Subir número de revista" wide title="Subir número de revista" description="Horizonte Masónico. Se guarda como borrador; se publica desde «Mis revistas» según su permiso.">
         <form className="library-admin-form" onSubmit={event => void create(event)}>
           <label><span>Archivo PDF</span><input name="file" type="file" accept="application/pdf,.pdf" onChange={event => setFileName(event.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>
           <label><span>Título</span><input name="title" required maxLength={200} placeholder="Horizonte Masónico · N° 4" /></label>
@@ -104,7 +104,7 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged }: { d
           <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy === 'create'}>{busy === 'create' ? 'Guardando…' : 'Guardar borrador'}</button></div>
         </form>
       </ActionDrawer>
-      <ActionDrawer label={`Mis revistas${items.length ? ` (${items.length})` : ''}`} wide title="Revistas en preparación y publicadas" description="Estado de cada número. Publicar y retirar son acciones del Bibliotecario.">
+      <ActionDrawer label={`Mis revistas${items.length ? ` (${items.length})` : ''}`} wide title="Revistas en preparación y publicadas" description="Estado de cada número. Publicar y retirar dependen de su permiso (el Bibliotecario puede con todas; Comunicaciones con las propias).">
         <div className="library-admin-list">
           {items.length === 0 && <p className="library-admin-empty">Aún no hay números cargados.</p>}
           {items.map(item => <article key={item.documentId} className="library-admin-card">
