@@ -1,0 +1,5 @@
+# #588 fase 5B6 — Retirar publicación de Revista (Bibliotecario)
+
+20-10-2026. Base dev@b1a52d8ec9033d32484ecd730f89321285f25155. PR draft reclamada antes de escribir código, GOV-003.
+
+Objetivo: POST /api/biblioteca/editorial/revistas/{documentId}/retirar-publicacion; sólo cargo Bibliotecario institucional de Orden, sujeto a restricciones dinámicas library/edit. Comprobar entidad real: Revista Orden en colección activa, clasificación internal y policy library_authenticated; documento publicado con PublishedVersionId persistido. Despublicar reversiblemente, volver a status draft, limpiar PublishedVersionId/PublishedAtUtc y auditar antiguo id de versión junto al guardado. Mantener documentos/versiones/escaneo físico sin eliminar objetos. Prohibir al colaborador con grant view/create/write/edit, al Gran Archivero, libros, Talleres, colecciones retiradas y no publicados. No modificar endpoint documentmanager general. Pruebas negativas HTTP/PostgreSQL y unitarias, CI exact-head 3/3 y preflight dev. main/QA físico fuera de alcance.
