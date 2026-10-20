@@ -10,6 +10,7 @@ namespace PMGM.Api.Modules.Authorization;
 public static class DynamicAccessEndpoints
 {
     public static readonly string[] AllowedActions = ["view", "create", "write", "edit", "delete", "print"];
+    public static readonly string[] CatalogCategories = ["magazine", "book", "work_paper", "official_document", "video"];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const long CatalogLock = 26620261004;
 
@@ -77,7 +78,14 @@ public static class DynamicAccessEndpoints
                         return Results.BadRequest(new { message = "Vista duplicada, fuera del menú seleccionado o acción inválida." });
                     if (actions.Any(a => a != "view") && !actions.Contains("view")) return Results.BadRequest(new { message = "Las acciones requieren permiso de ver la misma vista." });
                     if (profile.Scope == "lodge" && menu.Code == "system") return Results.BadRequest(new { message = "Un perfil de Taller no puede configurar el sistema." });
-                    grants.Add(new DynamicGrant(grant.ViewCode.Trim().ToLowerInvariant(), actions));
+                    var categories = Normalize(grant.Categories);
+                    if (categories.Length > 0 && (
+                        grant.ViewCode.Trim().ToLowerInvariant() is not ("library" or "documentmanager") ||
+                        categories.Any(category => !CatalogCategories.Contains(category))))
+                        return Results.BadRequest(new { message = "Categorías documentales fuera del área o desconocidas." });
+                    grants.Add(new DynamicGrant(
+                        grant.ViewCode.Trim().ToLowerInvariant(), actions,
+                        categories.Length == 0 ? null : categories));
                 }
                 catalog.Profiles[index] = profile with { Grants = grants };
                 return Results.Ok(catalog.Profiles[index]);
@@ -129,8 +137,48 @@ public static class DynamicAccessEndpoints
         if (menu is null) return false;
         return catalog.Assignments.Where(a => a.IsActive && a.Subject == subject && a.OrganizationId == organizationId && a.EffectiveFrom <= today && (a.EffectiveTo is null || a.EffectiveTo >= today))
             .Join(catalog.Profiles.Where(p => p.IsActive && !p.IsSystem && p.MenuCodes.Contains(menu.Code) && (p.Scope == "lodge" ? organizationId is not null : organizationId is null)), a => a.ProfileCode, p => p.Code, (_, p) => p)
-            .SelectMany(p => p.Grants).Any(g => g.ViewCode == view && g.Actions.Contains("view") && g.Actions.Contains(action));
+            .SelectMany(p => p.Grants).Any(g =>
+                g.ViewCode == view && g.Actions.Contains("view") && g.Actions.Contains(action) &&
+                // Un grant restringido por categoría no da permisos genéricos de escritura.
+                (g.Categories is null || g.Categories.Length == 0 || action == "view"));
     }
+
+    /// <summary>
+    /// Comprueba permisos de un documento concreto sin promocionar grants
+    /// restringidos por categoría a permisos genéricos por vista.
+    /// Si no hay categoría explícita en el grant, no se considera colaborador
+    /// de categoría: ese privilegio pertenece a roles institucionales separados.
+    /// </summary>
+    public static bool IsCategoryGranted(
+        DynamicAccessCatalog catalog, string? subject, string view,
+        string action, string? category, Guid? organizationId, DateOnly today)
+    {
+        if (string.IsNullOrWhiteSpace(subject) ||
+            view is not ("library" or "documentmanager") ||
+            !AllowedActions.Contains(action) ||
+            string.IsNullOrWhiteSpace(category) ||
+            !CatalogCategories.Contains(category))
+            return false;
+        var menu = catalog.Menus.FirstOrDefault(m =>
+            m.IsActive && m.Views.Any(v => v.IsActive && v.Code == view));
+        if (menu is null) return false;
+        return catalog.Assignments
+            .Where(a => a.IsActive && a.Subject == subject &&
+                a.OrganizationId == organizationId &&
+                a.EffectiveFrom <= today &&
+                (a.EffectiveTo is null || a.EffectiveTo >= today))
+            .Join(catalog.Profiles.Where(p =>
+                p.IsActive && !p.IsSystem &&
+                p.MenuCodes.Contains(menu.Code) &&
+                (p.Scope == "lodge" ? organizationId is not null : organizationId is null)),
+                a => a.ProfileCode, p => p.Code, (_, p) => p)
+            .SelectMany(p => p.Grants)
+            .Any(g => g.ViewCode == view &&
+                g.Categories is { Length: > 0 } &&
+                g.Categories.Contains(category) &&
+                g.Actions.Contains("view") && g.Actions.Contains(action));
+    }
+
     private static async Task<IResult> MutateAsync(int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, string action, Func<DynamicAccessCatalog, IResult> mutate, CancellationToken ct)
     {
         if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
@@ -180,7 +228,7 @@ public sealed record DynamicAccessCatalog(int Version, string[] Actions, List<Dy
 public sealed record DynamicMenu(string Code, string Name, bool IsActive, List<DynamicView> Views);
 public sealed record DynamicView(string Code, string Name, bool IsActive);
 public sealed record DynamicProfile(Guid Id, string Code, string Name, string Scope, bool IsSystem, bool IsActive, string[] MenuCodes, List<DynamicGrant> Grants);
-public sealed record DynamicGrant(string ViewCode, string[] Actions);
+public sealed record DynamicGrant(string ViewCode, string[] Actions, string[]? Categories = null);
 public sealed record DynamicAssignment(Guid Id, string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, bool IsActive);
 public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion);
 public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion);
