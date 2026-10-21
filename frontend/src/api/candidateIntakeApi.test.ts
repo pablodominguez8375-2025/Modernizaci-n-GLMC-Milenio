@@ -348,4 +348,22 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.unstubAllGlobals() }
   })
 
+  it('busca recomendantes de cualquier Taller mediante endpoint privado sin listar el directorio masivo', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ items: [{ id: 'member-remote', name: 'Hermana del Taller externo' }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const api = new CandidateIntakeApiClient({ getAccessToken: async () => 'access-example' })
+      expect((await api.getEligibleRecommenders('receiving-workshop', 'ab')).items).toEqual([])
+      expect(fetchMock).not.toHaveBeenCalled()
+      const result = await api.getEligibleRecommenders('receiving-workshop', '  Hermana ')
+      expect(result.items).toEqual([{ id: 'member-remote', name: 'Hermana del Taller externo' }])
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        '/api/insinuados/taller/organizaciones/receiving-workshop/recomendantes?q=Hermana')
+      expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer access-example')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally { vi.unstubAllGlobals() }
+  })
+
 })
