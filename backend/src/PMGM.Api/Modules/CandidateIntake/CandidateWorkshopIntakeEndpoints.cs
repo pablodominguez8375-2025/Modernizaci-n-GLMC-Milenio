@@ -252,7 +252,7 @@ public static class CandidateWorkshopIntakeEndpoints
         return Results.Created($"/api/ceremonias/solicitudes/{entity.Id}", new CandidateWorkshopQueueItemDto(
             entity.Id, person.FirstNames, person.LastNames, person.Rut, $"{person.FirstNames} {person.LastNames}".Trim(),
             organization.Name, organization.Number, null, entity.Status, false, false,
-            CandidateIntakeCodes.ReviewStatus.Pending, entity.CreatedAtUtc, null));
+            CandidateIntakeCodes.ReviewStatus.Pending, entity.CreatedAtUtc, null, organization.Id));
     }
 
     // Un expediente puede nacer desde Internet o la recomendación de otro
@@ -477,7 +477,8 @@ public static class CandidateWorkshopIntakeEndpoints
                 profile?.PhotoVersionId is not null,
                 reviewStatus,
                 candidate.CreatedAtUtc,
-                blocked is null ? null : new CandidateOrderBlockAlertDto(blocked.CeremonyRequestId, blocked.WorkshopName, blocked.AsOfDate, CandidateRejectionPolicy.GetReason(blocked.ValidationType)));
+                blocked is null ? null : new CandidateOrderBlockAlertDto(blocked.CeremonyRequestId, blocked.WorkshopName, blocked.AsOfDate, CandidateRejectionPolicy.GetReason(blocked.ValidationType)),
+                candidate.OrganizationId);
         }).ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -519,7 +520,8 @@ public sealed record CandidateWorkshopQueueItemDto(
     bool PhotoAvailable,
     string ReviewStatus,
     DateTimeOffset CreatedAtUtc,
-    CandidateOrderBlockAlertDto? OrderLevelAlert);
+    CandidateOrderBlockAlertDto? OrderLevelAlert,
+    Guid? OrganizationId = null);
 
 public sealed record CandidateOrderBlockAlertDto(
     Guid PreviousCeremonyRequestId,
