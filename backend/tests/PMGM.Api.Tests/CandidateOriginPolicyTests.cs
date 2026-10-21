@@ -52,6 +52,23 @@ public sealed class CandidateOriginPolicyTests
     }
 
     [Fact]
+    public void Social_media_is_distinct_from_web_and_cannot_claim_recommender()
+    {
+        var valid = CandidateOriginPolicy.ValidateNew(
+            CandidateOriginPolicy.SocialMedia, null, null, null, Day);
+        Assert.True(valid.IsValid);
+        Assert.Equal("social_media", valid.Kind);
+        Assert.Null(valid.RecommenderMemberId);
+        Assert.Null(valid.OtherDescription);
+        Assert.Equal("CANDIDATE_ORIGIN_FIELDS_CONFLICT",
+            CandidateOriginPolicy.ValidateNew("social_media", Recommender, null, Active(), Day).ErrorCode);
+        Assert.Equal("CANDIDATE_ORIGIN_FIELDS_CONFLICT",
+            CandidateOriginPolicy.ValidateNew("social_media", null, "Instagram", null, Day).ErrorCode);
+        Assert.NotEqual("internet", valid.Kind);
+        Assert.True(CandidateOriginPolicy.ValidateNew("other", null, "Reunión cultural", null, Day).IsValid);
+    }
+
+    [Fact]
     public void Other_normalizes_bounded_description_and_blocks_control_characters()
     {
         var valid = CandidateOriginPolicy.ValidateNew("other", null, "  Feria pública  ", null, Day);
