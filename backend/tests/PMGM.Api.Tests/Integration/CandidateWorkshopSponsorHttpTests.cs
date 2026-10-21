@@ -194,9 +194,11 @@ public sealed class CandidateWorkshopSponsorHttpTests
         var localPerson = new Person { FirstNames = "Alicia", LastNames = "Patrocinadora" };
         var inactivePerson = new Person { FirstNames = "Berta", LastNames = "Inactiva" };
         var externalPerson = new Person { FirstNames = "Claudio", LastNames = "Externo" };
+        var apprenticePerson = new Person { FirstNames = "Diana", LastNames = "Aprendiza" };
         var local = new Member { Person = localPerson, PersonId = localPerson.Id, CurrentDegree = "master" };
         var inactive = new Member { Person = inactivePerson, PersonId = inactivePerson.Id, CurrentDegree = "master" };
         var external = new Member { Person = externalPerson, PersonId = externalPerson.Id, CurrentDegree = "master" };
+        var apprentice = new Member { Person = apprenticePerson, PersonId = apprenticePerson.Id, CurrentDegree = "apprentice" };
         var localMembership = new Membership {
             Member = local, MemberId = local.Id, Organization = host,
             OrganizationId = host.Id, MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
@@ -209,6 +211,10 @@ public sealed class CandidateWorkshopSponsorHttpTests
             Member = external, MemberId = external.Id, Organization = other,
             OrganizationId = other.Id, MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
         };
+        var apprenticeMembership = new Membership {
+            Member = apprentice, MemberId = apprentice.Id, Organization = host,
+            OrganizationId = host.Id, MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
+        };
         var inactiveStatus = new InstitutionalStatusEvent {
             Member = inactive, MemberId = inactive.Id,
             Organization = host, OrganizationId = host.Id,
@@ -219,8 +225,8 @@ public sealed class CandidateWorkshopSponsorHttpTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
-            db.AddRange(host, other, local, inactive, external,
-                localMembership, inactiveMembership, externalMembership, inactiveStatus);
+            db.AddRange(host, other, local, inactive, external, apprentice,
+                localMembership, inactiveMembership, externalMembership, apprenticeMembership, inactiveStatus);
             await db.SaveChangesAsync(ct);
         }
 
@@ -239,6 +245,7 @@ public sealed class CandidateWorkshopSponsorHttpTests
         Assert.Contains(items, x => x.GetProperty("id").GetGuid() == local.Id);
         Assert.DoesNotContain(items, x => x.GetProperty("id").GetGuid() == inactive.Id);
         Assert.DoesNotContain(items, x => x.GetProperty("id").GetGuid() == external.Id);
+        Assert.DoesNotContain(items, x => x.GetProperty("id").GetGuid() == apprentice.Id);
         Assert.All(items, x => Assert.Equal(2, x.EnumerateObject().Count()));
 
         using var searched = await client.GetAsync(uri + "?q=Alicia", ct);
@@ -249,6 +256,20 @@ public sealed class CandidateWorkshopSponsorHttpTests
         using var wrongWorkshop = await client.GetAsync(
             "/api/insinuados/taller/organizaciones/" + other.Id + "/patrocinadores", ct);
         Assert.Equal(HttpStatusCode.Forbidden, wrongWorkshop.StatusCode);
+        // La normativa exige patrocinante Maestro, no cualquier miembro local.
+        using var rejectedApprentice = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes",
+            new {
+                organizationId = host.Id, firstNames = "Postulante",
+                lastNames = "Sintético de prueba",
+                rutOrInstitutionalId = Guid.NewGuid().ToString("N")[..12],
+                originKind = "internet", sponsorMemberId = apprentice.Id
+            }, ct);
+        Assert.Equal(HttpStatusCode.BadRequest, rejectedApprentice.StatusCode);
+        var error = await rejectedApprentice.Content.ReadFromJsonAsync<JsonElement>(
+            cancellationToken: ct);
+        Assert.Equal("CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
+            error.GetProperty("code").GetString());
     }
 
 }
