@@ -72,7 +72,7 @@ public static class CandidateIntakeEndpoints
             if (accreditedSponsor is null || !accreditedSponsor.IsActive)
                 return Results.Conflict(new {
                     code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
-                    message = "El presentador debe mantener su membresía activa en este Taller."
+                    message = "El patrocinador formal debe ser Maestro/a activo/a del Taller receptor."
                 });
         }
 

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.CandidateIntake;
@@ -18,11 +19,22 @@ public static class CandidateOriginAccreditation
     /// La presentación/patrocinio institucional pertenece exclusivamente al
     /// Taller que tramita el expediente, no a cualquier Taller de la Orden.
     /// </summary>
-    public static Task<CandidateOriginVerifiedMember?> VerifyWorkshopSponsorAsync(
+    public static async Task<CandidateOriginVerifiedMember?> VerifyWorkshopSponsorAsync(
         PmgmDbContext db, Guid memberId, Guid workshopId,
         DateOnly operationDay, CancellationToken ct)
-        => workshopId == Guid.Empty ? Task.FromResult<CandidateOriginVerifiedMember?>(null)
-           : VerifyScopedAsync(db, memberId, workshopId, operationDay, ct);
+    {
+        if (memberId == Guid.Empty || workshopId == Guid.Empty) return null;
+        // Protocolo de Insinuaciones 2026: solo el/la Maestro/a del Taller
+        // receptor puede patrocinar formalmente. Esto NO restringe al
+        // hermano que figura únicamente como origen/recomendante.
+        var degree = await db.Members.AsNoTracking()
+            .Where(m => m.Id == memberId)
+            .Select(m => m.CurrentDegree)
+            .SingleOrDefaultAsync(ct);
+        if (!InstitutionalDegree.TryParse(degree, out var normalized) || normalized < 3)
+            return null;
+        return await VerifyScopedAsync(db, memberId, workshopId, operationDay, ct);
+    }
 
     private static async Task<CandidateOriginVerifiedMember?> VerifyScopedAsync(
         PmgmDbContext db, Guid memberId, Guid? requiredWorkshopId,

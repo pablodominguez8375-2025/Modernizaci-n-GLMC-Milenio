@@ -16,6 +16,9 @@ public static class CandidateWorkshopIntakeEndpoints
         endpoints.MapGet("/api/insinuados/taller/organizaciones", GetWorkshopOrganizationsAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
+        endpoints.MapGet("/api/insinuados/taller/organizaciones/{organizationId:guid}/patrocinadores", GetEligibleSponsorsAsync)
+            .WithTags("Ficha privada de insinuados")
+            .RequireAuthorization();
         endpoints.MapPost("/api/insinuados/taller/solicitudes", CreateWorkshopRequestAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
@@ -62,6 +65,72 @@ public static class CandidateWorkshopIntakeEndpoints
             .ToListAsync(cancellationToken);
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { total = items.Count, items });
+    }
+
+    /// <summary>
+    /// Catálogo privado de presentadores/patrocinadores: solo miembros activos
+    /// del Taller receptor. No expone RUT, email ni hermanos de otros Talleres.
+    /// La selección NO sustituye la validación al guardar el patrocinio.
+    /// </summary>
+    private static async Task<IResult> GetEligibleSponsorsAsync(
+        Guid organizationId, string? q, HttpContext httpContext,
+        PmgmDbContext coreDb, IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId))
+            return Results.Forbid();
+
+        var search = q?.Trim();
+        if (search is { Length: > 80 } || search?.Any(char.IsControl) == true)
+            return Results.BadRequest(new {
+                code = "CANDIDATE_SPONSOR_SEARCH_INVALID",
+                message = "La búsqueda admite un máximo de 80 caracteres."
+            });
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+            DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        var memberships = await coreDb.Memberships.AsNoTracking()
+            .Where(m => m.OrganizationId == organizationId &&
+                m.Status == MembershipCodes.MembershipStatus.Active &&
+                (m.StartDate == null || m.StartDate <= today) &&
+                (m.EndDate == null || m.EndDate >= today))
+            .Select(m => new {
+                m.MemberId, m.Member.CurrentDegree, m.Member.Person.FirstNames, m.Member.Person.LastNames
+            }).Distinct().ToListAsync(cancellationToken);
+        var ids = memberships.Select(m => m.MemberId).Distinct().ToArray();
+        var recognized = new[] {
+            MembershipCodes.InstitutionalStatus.Active,
+            MembershipCodes.InstitutionalStatus.Reinstated,
+            MembershipCodes.InstitutionalStatus.Inactive,
+            MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
+            MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
+            MembershipCodes.InstitutionalStatus.Deceased
+        };
+        var statusEvents = await coreDb.InstitutionalStatusEvents.AsNoTracking()
+            .Where(e => ids.Contains(e.MemberId) && e.EffectiveDate <= today &&
+                recognized.Contains(e.EventType))
+            .OrderByDescending(e => e.EffectiveDate)
+            .ThenByDescending(e => e.RecordedAtUtc)
+            .Select(e => new { e.MemberId, e.EventType })
+            .ToListAsync(cancellationToken);
+        var latest = statusEvents.GroupBy(e => e.MemberId)
+            .ToDictionary(g => g.Key, g => g.First().EventType);
+        var choices = memberships
+            .Where(m => InstitutionalDegree.TryParse(m.CurrentDegree, out var degree) && degree >= 3)
+            .Where(m => !latest.TryGetValue(m.MemberId, out var status) ||
+                status is MembershipCodes.InstitutionalStatus.Active or
+                    MembershipCodes.InstitutionalStatus.Reinstated)
+            .Select(m => new {
+                id = m.MemberId,
+                name = (m.FirstNames + " " + m.LastNames).Trim()
+            })
+            .Where(m => string.IsNullOrWhiteSpace(search) ||
+                m.name.Contains(search!, StringComparison.OrdinalIgnoreCase))
+            .GroupBy(m => m.id).Select(g => g.First())
+            .OrderBy(m => m.name, StringComparer.CurrentCultureIgnoreCase)
+            .Take(40).ToArray();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { items = choices });
     }
 
     private static async Task<IResult> CreateWorkshopRequestAsync(
@@ -122,7 +191,7 @@ public static class CandidateWorkshopIntakeEndpoints
             if (sponsor is null || !sponsor.IsActive)
                 return Results.BadRequest(new {
                     code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
-                    message = "El presentador o patrocinador debe ser un hermano activo del Taller receptor."
+                    message = "El patrocinador formal debe ser Maestro/a activo/a del Taller receptor."
                 });
         }
         var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut != null &&
@@ -233,7 +302,7 @@ public static class CandidateWorkshopIntakeEndpoints
         if (verified is null || !verified.IsActive)
             return Results.BadRequest(new {
                 code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
-                message = "El presentador o patrocinador debe ser miembro activo del Taller receptor."
+                message = "El patrocinador formal debe ser Maestro/a activo/a del Taller receptor."
             });
 
         ceremony.CandidateSponsorMemberId = request.SponsorMemberId;
