@@ -118,16 +118,26 @@ public sealed class AssemblyPreliminaryReviewHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
         client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
 
+        // Assembly state is append-only in PostgreSQL. Never mutate it in
+        // test fixtures to simulate closure: that would trigger the real
+        // institutional immutability guard. Instead assert fail-closed when
+        // there are no verified assembly-member rows.
+        var emptyAssembly = new AssemblyRecord
+        {
+            Name = "Asamblea sin fuentes acreditadas",
+            MeetingDate = new DateOnly(2026, 11, 20),
+            CutoffDate = new DateOnly(2026, 10, 20),
+            CreatedBySubject = "qa-interno"
+        };
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
-            var stored = await db.Assemblies.SingleAsync(x => x.Id == assembly.Id, ct);
-            stored.Status = "closed";
+            db.Assemblies.Add(emptyAssembly);
             await db.SaveChangesAsync(ct);
         }
-        using var noExportFromClosed = await client.GetAsync(
-            $"/api/regimen-interior/asambleas/{assembly.Id}/asambleistas-preliminar.csv", ct);
-        Assert.Equal(HttpStatusCode.Conflict, noExportFromClosed.StatusCode);
+        using var noExportWithoutSources = await client.GetAsync(
+            $"/api/regimen-interior/asambleas/{emptyAssembly.Id}/asambleistas-preliminar.csv", ct);
+        Assert.Equal(HttpStatusCode.Conflict, noExportWithoutSources.StatusCode);
     }
 
     private sealed class InternalAffairsTestAuth(
