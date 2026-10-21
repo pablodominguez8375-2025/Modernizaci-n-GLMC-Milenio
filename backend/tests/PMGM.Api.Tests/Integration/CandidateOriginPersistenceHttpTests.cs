@@ -126,7 +126,7 @@ public sealed class CandidateOriginPersistenceHttpTests
     }
 
     [Fact]
-    public async Task Invalid_cross_workshop_recommender_fails_without_creating_case()
+    public async Task Unaccredited_recommender_fails_without_creating_case()
     {
         var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
         if (string.IsNullOrWhiteSpace(connection)) return;
