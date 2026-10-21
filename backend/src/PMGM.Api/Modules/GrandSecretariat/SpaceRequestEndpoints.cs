@@ -210,6 +210,7 @@ public static class SpaceRequestEndpoints
                 nameof(InstitutionalSpaceRequest), item.Id.ToString(), item.OrganizationId,
                 AuditResults.Success, new { item.Status, item.DecidedAtUtc }));
             await db.SaveChangesAsync(ct);
+            await SpaceRequestDecisionNotices.QueueInsideDecisionAsync(db, item, http, ct);
             await transaction.CommitAsync(ct);
             http.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(Dto(item));
@@ -297,6 +298,7 @@ public static class SpaceRequestEndpoints
                 item.Id.ToString(), item.OrganizationId, AuditResults.Success,
                 new { item.SpaceReservationId, item.DecidedAtUtc }));
             await db.SaveChangesAsync(ct);
+            await SpaceRequestDecisionNotices.QueueInsideDecisionAsync(db, item, http, ct);
             await transaction.CommitAsync(ct);
             http.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(Dto(item));
