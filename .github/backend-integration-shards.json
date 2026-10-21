@@ -43,7 +43,8 @@
       "CandidateOriginChannelsHttpTests",
       "CandidateWorkshopSponsorHttpTests",
       "CandidateOriginCorrectionHttpTests",
-      "MagazineEditorialVersionStatusHttpTests"
+      "MagazineEditorialVersionStatusHttpTests",
+      "CandidateFormalSponsorGatesHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
