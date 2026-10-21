@@ -31,6 +31,7 @@ export interface CandidateReviewQueueResponse {
 export interface CandidateWorkshopQueueItem {
   ceremonyRequestId: string
   organizationId?: string | null
+  sponsorMemberId?: string | null
   firstNames: string
   lastNames: string
   rutOrInstitutionalId?: string | null
@@ -350,6 +351,7 @@ const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
   {
     ceremonyRequestId: demoRequestId,
     organizationId: 'demo-workshop-23',
+    sponsorMemberId: '10000000-0000-4000-8000-000000000001',
     firstNames: 'Tomás Ignacio',
     lastNames: 'Valdés Riquelme',
     displayName: 'Tomás Ignacio Valdés Riquelme',
@@ -667,6 +669,7 @@ export class CandidateIntakeApiClient {
       if (old && old !== sponsorMemberId)
         throw new CandidateIntakeApiHttpError(409, 'Un patrocinio confirmado requiere corrección institucional auditada.')
       this.mockSponsorAssignments.set(requestId, sponsorMemberId)
+      row.sponsorMemberId = sponsorMemberId
       const profile = this.mockProfiles.get(requestId)
       if (profile) this.mockProfiles.set(requestId, { ...profile, sponsorMemberId })
       return { sponsorMemberId, unchanged: old === sponsorMemberId }
@@ -698,6 +701,7 @@ export class CandidateIntakeApiClient {
       const item: CandidateWorkshopQueueItem = {
         ceremonyRequestId: crypto.randomUUID(),
         organizationId: payload.organizationId,
+        sponsorMemberId: null,
         firstNames: payload.firstNames.trim(),
         lastNames: payload.lastNames.trim(),
         rutOrInstitutionalId: payload.rutOrInstitutionalId.trim().toUpperCase(),
