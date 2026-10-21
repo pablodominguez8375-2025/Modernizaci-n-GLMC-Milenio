@@ -111,6 +111,14 @@ El workflow se ejecuta:
 
 La ejecución post-merge por `pull_request.closed` es el mecanismo de respaldo obligatorio cuando el método de integración no genera un workflow de `push`; evita que la publicación dependa de cómo se realizó el merge.
 
+## Garantía de publicación y evidencia por SHA (21-10-2026)
+
+El workflow real también procesa `pull_request.closed` **únicamente cuando fue fusionada a `dev`**: usa exactamente `pull_request.merge_commit_sha` para checkout, cabecera y paquete QA. Conserva validación rápida sin publicación en PR abiertas. `push` a `dev` sigue siendo disparador principal; para eventos de merge ambos disparadores comparten grupo de concurrencia a fin de que una ejecución obsoleta no publique encima de otra.
+
+El job `deploy` verifica después del despliegue el archivo público `downloads/qa-current.json` con `sourceSha` idéntico al commit integrado. Si la CDN no confirma SHA, el workflow **no declara publicación verificada**. No se usan ramas `gh-pages`: Pages se despliega desde `actions/deploy-pages`. El ZIP accesible desde Pages es un artefacto de **demo/QA sintético**, no una instalación ejecutada en `glmdch`.
+
+Las mejoras de presentación del candidato en esta entrega muestran origen `social_media` diferenciado de la página web, e indican que el recomendante no es patrocinador. Se eliminó el botón demostrativo que añadía al recomendante como presentante. El formulario heredado `PresentersJson` sigue siendo informativo: falta conectar selector real `CandidateSponsorMemberId`, documentos privados y flujos de QA/UAT. Los tests de build de Pages no equivalen a respaldo de autorización backend.
+
 ## Secuencia de publicación
 
 ```text
