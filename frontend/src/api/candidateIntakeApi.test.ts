@@ -304,4 +304,19 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.useRealTimers() }
   })
 
+  it('envía el origen del candidato al backend real (Issue #613)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ceremonyRequestId: 'r1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const api = new CandidateIntakeApiClient({ baseUrl: '', getAccessToken: async () => 'token' })
+      await api.createWorkshopRequest({
+        organizationId: 'org', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '1-9',
+        originKind: 'brother', recommenderMemberId: 'm1', originOtherDescription: null,
+      })
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(String(url)).toContain('/api/insinuados/taller/solicitudes')
+      expect(JSON.parse(init.body as string)).toMatchObject({ originKind: 'brother', recommenderMemberId: 'm1' })
+    } finally { vi.unstubAllGlobals() }
+  })
+
 })

@@ -5,9 +5,12 @@ import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 import './CandidateWorkshopIntakePage.css'
 import { organizationDisplayName } from './displayFormat'
+import { type MembershipApiClient } from './api/membershipApi'
 
 interface CandidateWorkshopIntakePageProps {
   api: CandidateIntakeApiClient
+  /** Directorio de hermanos para elegir al recomendante (modo real). */
+  membershipApi?: MembershipApiClient
   onBack?: () => void
 }
 
@@ -45,16 +48,16 @@ const demoRecommenders = [
 ]
 type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'other'; recommenderId: string; other: string }
 const emptyOrigin: CandidateOrigin = { kind: '', recommenderId: '', other: '' }
-/** Solo demostración: el backend aún no entrega el origen (Issue #613). */
+/** Solo demostración: en modo real el origen viene del expediente (Issue #613). */
 const demoOrigins = new Map<string, CandidateOrigin>()
-function originLabel(origin?: CandidateOrigin) {
+function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string }[] = demoRecommenders) {
   if (!origin || !origin.kind) return 'Sin registrar'
   if (origin.kind === 'internet') return 'Internet / sitio web'
-  if (origin.kind === 'brother') return `Recomendado por ${demoRecommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
+  if (origin.kind === 'brother') return `Recomendado por ${recommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
   return `Otro: ${origin.other}`
 }
 
-export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWorkshopIntakePageProps) {
+export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack }: CandidateWorkshopIntakePageProps) {
   const [queue, setQueue] = useState<CandidateWorkshopQueueItem[]>([])
   const [organizations, setOrganizations] = useState<CandidateWorkshopOrganization[]>([])
   const [createOpen, setCreateOpen] = useState(false)
@@ -64,6 +67,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
+  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>(api.useMocks ? demoRecommenders : [])
+  const [recommenderError, setRecommenderError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
@@ -77,8 +82,10 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [error, setError] = useState<string | null>(null)
 
   const selected = useMemo(() => queue.find(item => item.ceremonyRequestId === selectedId) ?? null, [queue, selectedId])
-  const selectedOrigin = selected ? demoOrigins.get(selected.ceremonyRequestId) : undefined
-  const recommenderName = selectedOrigin?.kind === 'brother' ? demoRecommenders.find(item => item.id === selectedOrigin.recommenderId)?.name ?? '' : ''
+  const selectedOrigin: CandidateOrigin | undefined = !selected ? undefined
+    : api.useMocks ? demoOrigins.get(selected.ceremonyRequestId)
+    : profile?.candidateOriginKind ? { kind: profile.candidateOriginKind as CandidateOrigin['kind'], recommenderId: profile.recommenderMemberId ?? '', other: profile.candidateOriginOtherDescription ?? '' } : undefined
+  const recommenderName = selectedOrigin?.kind === 'brother' ? recommenders.find(item => item.id === selectedOrigin.recommenderId)?.name ?? '' : ''
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
 
   useEffect(() => {
@@ -107,11 +114,30 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     return () => { active = false }
   }, [api])
 
+  const directoryOrgId = newCandidate.organizationId || organizations[0]?.id || ''
+  const needsRecommenders = origin.kind === 'brother' || selectedOrigin?.kind === 'brother'
+  useEffect(() => {
+    if (api.useMocks || !membershipApi || !directoryOrgId || !needsRecommenders) return
+    let active = true
+    membershipApi.getMembers(directoryOrgId, { status: 'active', limit: 250 })
+      .then(result => {
+        if (!active) return
+        setRecommenderError(null)
+        setRecommenders(result.items.map(item => ({ id: item.memberId, name: item.displayName })))
+      })
+      .catch(() => { if (active) setRecommenderError('No fue posible cargar los hermanos activos. Intente nuevamente.') })
+    return () => { active = false }
+  }, [api, membershipApi, directoryOrgId, needsRecommenders])
+
   async function createNewRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (creating) return
     if (!newCandidate.organizationId || !newCandidate.firstNames.trim() || !newCandidate.lastNames.trim() || !newCandidate.rutOrInstitutionalId.trim()) {
       setError('Seleccione el Taller e ingrese nombres, apellidos e identificación.')
+      return
+    }
+    if (!origin.kind || (origin.kind === 'brother' && !origin.recommenderId) || (origin.kind === 'other' && !origin.other.trim())) {
+      setError('Indique el origen del candidato (y el hermano que lo recomienda o la descripción, según corresponda).')
       return
     }
     setCreating(true); setError(null); setMessage(null)
@@ -123,6 +149,9 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
         rutOrInstitutionalId: newCandidate.rutOrInstitutionalId.trim(),
         rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
         rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
+        originKind: origin.kind,
+        recommenderMemberId: origin.kind === 'brother' ? origin.recommenderId : null,
+        originOtherDescription: origin.kind === 'other' ? origin.other.trim() : null,
       })
       if (api.useMocks && origin.kind) demoOrigins.set(created.ceremonyRequestId, origin)
       setOrigin(emptyOrigin)
@@ -305,7 +334,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
           <Field label="Nombres *"><input required maxLength={160} value={newCandidate.firstNames} onChange={event => setNewCandidate({ ...newCandidate, firstNames: event.target.value })} /></Field>
           <Field label="Apellidos *"><input required maxLength={160} value={newCandidate.lastNames} onChange={event => setNewCandidate({ ...newCandidate, lastNames: event.target.value })} /></Field>
           <Field label="RUT / pasaporte / identificación *"><input required maxLength={16} value={newCandidate.rutOrInstitutionalId} onChange={event => setNewCandidate({ ...newCandidate, rutOrInstitutionalId: event.target.value })} /></Field>
-          {api.useMocks && <>
+          <>
             <Field label="Origen del candidato *">
               <select required value={origin.kind} onChange={event => setOrigin({ ...emptyOrigin, kind: event.target.value as CandidateOrigin['kind'] })}>
                 <option value="" disabled>Seleccione cómo llegó</option>
@@ -317,12 +346,13 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             {origin.kind === 'brother' && <Field label="Hermano que lo recomienda *">
               <select required value={origin.recommenderId} onChange={event => setOrigin({ ...origin, recommenderId: event.target.value })}>
                 <option value="" disabled>Buscar y elegir hermano activo</option>
-                {demoRecommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                {recommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
+              {recommenderError && <small role="alert">{recommenderError}</small>}
             </Field>}
             {origin.kind === 'other' && <Field label="Describa el origen *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar" /></Field>}
             {origin.kind === 'brother' && <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El hermano que recomienda no podrá ser designado entrevistador de este candidato. El origen se registra una sola vez; corregirlo exige motivo y queda en auditoría.</div>}
-          </>}
+          </>
           <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>
             Si la persona registra un rechazo en otro Taller, el sistema revisará el antecedente a nivel de Orden y exigirá un año completo antes de una nueva presentación.
             En la demo pueden probarse las identidades ficticias RECHAZO2025 y RECHAZO2026.
@@ -401,13 +431,13 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             <div className="candidate-section-title"><span>⌂</span><h2>Presentación logial y antecedentes</h2><em>Formulario auditable</em></div>
             <div className="workshop-form-grid">
               <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
-              {api.useMocks && <Field label="Origen del candidato"><input value={originLabel(demoOrigins.get(selected.ceremonyRequestId))} disabled /></Field>}
+              <Field label="Origen del candidato"><input value={originLabel(selectedOrigin, recommenders)} disabled /></Field>
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
               <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
               <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" />
-                {api.useMocks && recommenderName && !locked && !presentersText.split('\n').some(line => line.trim() === recommenderName) && (
+                {recommenderName && !locked && !presentersText.split('\n').some(line => line.trim() === recommenderName) && (
                   <button type="button" className="candidate-secondary-button" onClick={() => setPresentersText([recommenderName, ...presentersText.split('\n').filter(line => line.trim())].join('\n'))}>Agregar a {recommenderName} (quien lo recomendó)</button>
                 )}
               </Field>
