@@ -22,6 +22,7 @@ public static class CandidateIntakeEndpoints
 
         group.MapPut("/solicitudes/{requestId:guid}/ficha", UpsertProfileAsync);
         group.MapGet("/solicitudes/{requestId:guid}/ficha", GetProfileAsync);
+        CandidateOriginCorrectionEndpoints.Map(group);
         group.MapGet("/revision-gran-secretaria", GetGrandSecretariatQueueAsync);
         group.MapPost("/solicitudes/{requestId:guid}/foto", AttachPhotoAsync);
         group.MapPut("/solicitudes/{requestId:guid}/foto/contenido", UploadPhotoAsync);
