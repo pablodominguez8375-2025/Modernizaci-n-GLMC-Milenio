@@ -59,6 +59,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<DeathReplenishmentPayment> DeathReplenishmentPayments => Set<DeathReplenishmentPayment>();
     public DbSet<DeathReplenishmentTransfer> DeathReplenishmentTransfers => Set<DeathReplenishmentTransfer>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
+    public DbSet<CandidateOriginCorrection> CandidateOriginCorrections => Set<CandidateOriginCorrection>();
     public DbSet<CandidateInterviewAssignment> CandidateInterviewAssignments => Set<CandidateInterviewAssignment>();
     public DbSet<AdvancementPaperAttestation> AdvancementPaperAttestations => Set<AdvancementPaperAttestation>();
     public DbSet<AdvancementDispensationCase> AdvancementDispensationCases => Set<AdvancementDispensationCase>();
@@ -820,6 +821,22 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(x => x.CeremonyRequestId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => x.CeremonyRequestId).IsUnique();
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
+        });
+
+        modelBuilder.Entity<CandidateOriginCorrection>(entity =>
+        {
+            entity.ToTable("candidate_origin_corrections");
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.PreviousKind).HasMaxLength(24);
+            entity.Property(c => c.PreviousOtherDescription).HasMaxLength(200);
+            entity.Property(c => c.NewKind).HasMaxLength(24).IsRequired();
+            entity.Property(c => c.NewOtherDescription).HasMaxLength(200);
+            entity.Property(c => c.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(c => c.ChangedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(c => c.ChangedAtUtc).IsRequired();
+            entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(c => c.CeremonyRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(c => new { c.CeremonyRequestId, c.ChangedAtUtc });
         });
 
         modelBuilder.Entity<CeremonyRequest>(entity =>
