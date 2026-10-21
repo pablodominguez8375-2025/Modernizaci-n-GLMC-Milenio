@@ -262,6 +262,18 @@ public static class CandidateInterviewAssignmentEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock(hashtextextended({requestId.ToString()}, 0))", ct);
+        // La corrección de origen usa el mismo candado. Releer desde DB
+        // después de bloquear evita la carrera entre cambio y designación.
+        var persistedRecommender = await db.CeremonyRequests.AsNoTracking()
+            .Where(x => x.Id == requestId)
+            .Select(x => x.CandidateRecommenderMemberId)
+            .SingleAsync(ct);
+        if (input.InterviewerMemberIds.Any(id =>
+            !CandidateOriginPolicy.CanBeInterviewer(id, persistedRecommender)))
+            return Results.Conflict(new {
+                code = "CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW",
+                message = "El hermano recomendante del candidato no puede ser designado entrevistador."
+            });
         var prior = await db.CandidateInterviewAssignments
             .Where(x => x.CeremonyRequestId == requestId &&
                 (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||
