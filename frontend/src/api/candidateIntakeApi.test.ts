@@ -323,6 +323,8 @@ describe('CandidateIntakeApiClient demo workflow', () => {
       .toMatchObject({ sponsorMemberId: selected.id, unchanged: false })
     expect(await api.assignWorkshopSponsor(draft.ceremonyRequestId, selected.id))
       .toMatchObject({ unchanged: true })
+    expect((await api.getWorkshopQueue()).items.find(x => x.ceremonyRequestId === draft.ceremonyRequestId)?.sponsorMemberId)
+      .toBe(selected.id)
     await expect(api.assignWorkshopSponsor(draft.ceremonyRequestId, choices[0].id))
       .rejects.toThrow('corrección institucional auditada')
     const saved = await api.saveProfile(draft.ceremonyRequestId, {
