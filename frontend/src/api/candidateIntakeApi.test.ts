@@ -310,7 +310,7 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     const workshop = 'demo-workshop-23'
     const choices = (await api.getEligibleSponsors(workshop)).items
     expect(choices).toHaveLength(3)
-    expect(choices.every(x => /^10000000-/.test(x.id))).toBe(true)
+    expect(choices.every(x => x.id.startsWith('10000000-'))).toBe(true)
     expect((await api.getEligibleSponsors('other-workshop')).items).toEqual([])
     expect((await api.getEligibleSponsors(workshop, 'Dos')).items.map(x => x.name))
       .toEqual(['Maestra de Prueba Dos'])
