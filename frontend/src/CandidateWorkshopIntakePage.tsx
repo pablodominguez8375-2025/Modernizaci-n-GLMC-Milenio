@@ -475,7 +475,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
                     </select>
                     {sponsorLoading && <small>Consultando el catálogo privado de este Taller…</small>}
                     {sponsorConfirmedId
-                      ? <small role="status">Patrocinio institucional registrado. Los cambios posteriores requieren corrección formal auditada.</small>
+                      ? <small role="status">Patrocinio institucional registrado. Su vigencia y grado se volverán a verificar antes de publicar; cualquier cambio de identidad requiere corrección formal auditada.</small>
                       : <button type="button" className="candidate-secondary-button" disabled={!sponsorChoiceId || locked || sponsorBusy || sponsorLoading}
                           onClick={() => void assignSponsor()}>{sponsorBusy ? 'Acreditando…' : 'Acreditar patrocinio formal'}</button>}
                   </> : <small>La ficha no identifica el Taller receptor. No se puede acreditar patrocinio sin ámbito institucional.</small>}
