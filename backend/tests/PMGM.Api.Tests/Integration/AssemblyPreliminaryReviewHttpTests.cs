@@ -91,6 +91,53 @@ public sealed class AssemblyPreliminaryReviewHttpTests
         Assert.Equal(HttpStatusCode.NotFound,
             (await client.GetAsync(
                 $"/api/regimen-interior/asambleas/{Guid.NewGuid()}/revision", ct)).StatusCode);
+        // C19: the only downloadable data is an INTERNAL preliminary list
+        // of assembly members; every mark must remain Pending regardless of
+        // an earlier eligibility event. No official voters roster is emitted.
+        using var preview = await client.GetAsync(
+            $"/api/regimen-interior/asambleas/{assembly.Id}/asambleistas-preliminar.csv", ct);
+        Assert.Equal(HttpStatusCode.OK, preview.StatusCode);
+        Assert.True(preview.Headers.CacheControl?.Private);
+        Assert.True(preview.Headers.CacheControl?.NoStore);
+        Assert.Equal("false", preview.Headers.GetValues("X-PMGM-Official-Roster").Single());
+        Assert.Equal("false", preview.Headers.GetValues("X-PMGM-May-Authorize-Suffrage").Single());
+        Assert.Contains("asambleistas-preliminar-", preview.Content.Headers.ContentDisposition?.FileName ?? "");
+        var data = await preview.Content.ReadAsByteArrayAsync(ct);
+        Assert.Equal(new byte[] { 0xEF, 0xBB, 0xBF }, data.Take(3).ToArray());
+        var csv = System.Text.Encoding.UTF8.GetString(data, 3, data.Length - 3);
+        Assert.Contains("Apellido, Nombre", csv);
+        Assert.Contains("00000000-0", csv);
+        Assert.Contains("Taller sintético", csv);
+        Assert.Contains("Pendiente", csv);
+        Assert.DoesNotContain("Habilitado", csv);
+        Assert.DoesNotContain("EVIDENCIA_PENDIENTE", csv);
+
+        client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.TallerSecretaria);
+        using var forbidden = await client.GetAsync(
+            $"/api/regimen-interior/asambleas/{assembly.Id}/asambleistas-preliminar.csv", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
+
+        // Assembly state is append-only in PostgreSQL. Never mutate it in
+        // test fixtures to simulate closure: that would trigger the real
+        // institutional immutability guard. Instead assert fail-closed when
+        // there are no verified assembly-member rows.
+        var emptyAssembly = new AssemblyRecord
+        {
+            Name = "Asamblea sin fuentes acreditadas",
+            MeetingDate = new DateOnly(2026, 11, 20),
+            CutoffDate = new DateOnly(2026, 10, 20),
+            CreatedBySubject = "qa-interno"
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
+            db.Assemblies.Add(emptyAssembly);
+            await db.SaveChangesAsync(ct);
+        }
+        using var noExportWithoutSources = await client.GetAsync(
+            $"/api/regimen-interior/asambleas/{emptyAssembly.Id}/asambleistas-preliminar.csv", ct);
+        Assert.Equal(HttpStatusCode.Conflict, noExportWithoutSources.StatusCode);
     }
 
     private sealed class InternalAffairsTestAuth(
@@ -105,7 +152,7 @@ public sealed class AssemblyPreliminaryReviewHttpTests
             [
                 new Claim("sub", "ri-test"),
                 new Claim(InstitutionalClaims.Scope, "order"),
-                new Claim(InstitutionalClaims.Role, InstitutionalRoles.RegimenInterior)
+                new Claim(InstitutionalClaims.Role, Request.Headers["X-Assembly-Test-Role"].FirstOrDefault() ?? InstitutionalRoles.RegimenInterior)
             ], SchemeName);
             return Task.FromResult(AuthenticateResult.Success(
                 new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
