@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.CandidateIntake;
