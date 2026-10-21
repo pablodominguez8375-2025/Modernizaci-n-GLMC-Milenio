@@ -9,3 +9,7 @@
 - Implementación en rama: condición `GrandTreasuryPendingAmount != 0m` hace fallar cerradamente la proyección `habilitado` sin cero acreditado y sin prueba específica de excepción RI. Pruebas unitarias agregadas a `AssemblyPreliminaryReviewProjectionTests`: monto null, negativo, positivo y cero.
 - Registro GOV-004: `docs/modelo-datos/registros/2026-10-21-chatgpt-assembly-historical-balance-533-c20.md`.
 - Estado: PR #619 DRAFT; CI exact-head, Pages e instalable por verificar. Compilación local .NET no disponible en este entorno. No QA físico, no UAT, no cierre de #533. La revisión de Drive del 21-10 identificó adendas UI y continuidad #533 sin nueva decisión que permita saldar deuda mediante un dato digitado.
+
+## Segundo control de integridad en el mismo incremento
+- Se añadió reconstrucción exhaustiva de la cadena `SupersedesEligibilityId` para que una sola punta no esconda decisiones huérfanas, ciclos desconectados o reordenamiento temporal. Regresiones unitarias cubren referencia inexistente y ciclo con punta aparte.
+- Cada nuevo commit del PR invalida las verificaciones de un SHA anterior: CI, Showcase e instalable deben aprobar el HEAD final exacto antes de cualquier integración.
