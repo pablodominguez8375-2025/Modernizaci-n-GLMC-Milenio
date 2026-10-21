@@ -109,6 +109,10 @@ public static class AssemblyPreliminaryReviewProjection
             (evaluation.MayVote != true || evaluation.MayAttend != true ||
              string.IsNullOrWhiteSpace(evaluation.GrandTreasurySourceReference) ||
              string.IsNullOrWhiteSpace(evaluation.GrandTreasuryCurrency) ||
+             // Una referencia contable no acredita un monto: sin saldo cero
+             // y sin acto de excepción RI verificado en esta proyección,
+             // nunca afirmar habilitación provisional de sufragio.
+             evaluation.GrandTreasuryPendingAmount != 0m ||
              evaluation.GrandTreasuryAsOfDate != cutoff ||
              string.IsNullOrWhiteSpace(evaluation.InstitutionalRightsSourceReference) ||
              string.IsNullOrWhiteSpace(evaluation.HonorRightsSourceReference)))
