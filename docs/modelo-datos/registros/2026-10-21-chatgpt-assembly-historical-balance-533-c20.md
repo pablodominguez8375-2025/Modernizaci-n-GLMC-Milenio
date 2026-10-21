@@ -10,3 +10,9 @@
 - Privacidad: no se añade RUT, monto, justificación ni causal reservada al contrato ni a la bitácora. No se cambian retención, auditoría, consentimientos o permisos.
 - Alcance pruebas: unitarias de proyección para monto nulo, negativo, positivo y cero; historial vinculado y autorización ya existentes no se modifican. CI exact-head y validación física QA independientes; no equivalen a habilitar sufragio.
 - Restan en Issue #533: certificaciones históricas desde Gran Tesorería por Taller/moneda/corte; event sourcing de excepción RI contra esas certificaciones; calidad de miembro/VM, tribunal, cierre inmutable, exportaciones oficiales, UI y UAT.
+
+## Extensión de integridad del historial (mismo PR #619)
+- La vista preliminar sólo puede considerar una punta de evaluación si las filas append-only de esa persona forman una única cadena completa, enlazada exclusivamente dentro de la misma Asamblea y `MemberStatusId`.
+- Un `SupersedesEligibilityId` que no exista en la colección vinculada produce `INCOMPLETE_EVALUATION_HISTORY`, estado pendiente y voto preliminar/confirmado falsos.
+- Un componente desconectado/ciclo (aunque haya una punta única aparente) también produce estado pendiente y falla segura. Se rechaza inversión de orden temporal (`EvaluatedAtUtc` del predecesor posterior al sucesor) con `CONFLICTING_EVALUATION_HISTORY`.
+- No hay campo nuevo, cambio de modelo, ni persistencia nueva. Pruebas unitarias de referencia huérfana y ciclo desconectado. Conserva la inmutabilidad física actual; evita interpretar historiales incompletos como autorización.
