@@ -176,4 +176,79 @@ public sealed class CandidateWorkshopSponsorHttpTests
         Assert.Equal("internet", row.CandidateOriginKind);
         Assert.Null(row.CandidateRecommenderMemberId);
     }
+    [Fact]
+    public async Task Sponsor_lookup_is_limited_to_active_workshop_members_and_secretariat()
+    {
+        var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new CandidatePublicationTestFactory(connection);
+        using var client = factory.CreateClient();
+
+        var host = new Organization {
+            Name = "Taller patrocinio selector " + Guid.NewGuid().ToString("N"), Type = "workshop"
+        };
+        var other = new Organization {
+            Name = "Taller hermano externo " + Guid.NewGuid().ToString("N"), Type = "workshop"
+        };
+        var localPerson = new Person { FirstNames = "Alicia", LastNames = "Patrocinadora" };
+        var inactivePerson = new Person { FirstNames = "Berta", LastNames = "Inactiva" };
+        var externalPerson = new Person { FirstNames = "Claudio", LastNames = "Externo" };
+        var local = new Member { Person = localPerson, PersonId = localPerson.Id, CurrentDegree = "master" };
+        var inactive = new Member { Person = inactivePerson, PersonId = inactivePerson.Id, CurrentDegree = "master" };
+        var external = new Member { Person = externalPerson, PersonId = externalPerson.Id, CurrentDegree = "master" };
+        var localMembership = new Membership {
+            Member = local, MemberId = local.Id, Organization = host,
+            OrganizationId = host.Id, MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
+        };
+        var inactiveMembership = new Membership {
+            Member = inactive, MemberId = inactive.Id, Organization = host,
+            OrganizationId = host.Id, MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
+        };
+        var externalMembership = new Membership {
+            Member = external, MemberId = external.Id, Organization = other,
+            OrganizationId = other.Id, MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
+        };
+        var inactiveStatus = new InstitutionalStatusEvent {
+            Member = inactive, MemberId = inactive.Id,
+            Organization = host, OrganizationId = host.Id,
+            EventType = MembershipCodes.InstitutionalStatus.Inactive,
+            EffectiveDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-2))
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.AddRange(host, other, local, inactive, external,
+                localMembership, inactiveMembership, externalMembership, inactiveStatus);
+            await db.SaveChangesAsync(ct);
+        }
+
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Organization", host.Id.ToString("D"));
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Role", "member");
+        var uri = "/api/insinuados/taller/organizaciones/" + host.Id + "/patrocinadores";
+        using var forbidden = await client.GetAsync(uri, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerSecretaria);
+        using var response = await client.GetAsync(uri, ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var items = json.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Contains(items, x => x.GetProperty("id").GetGuid() == local.Id);
+        Assert.DoesNotContain(items, x => x.GetProperty("id").GetGuid() == inactive.Id);
+        Assert.DoesNotContain(items, x => x.GetProperty("id").GetGuid() == external.Id);
+        Assert.All(items, x => Assert.Equal(2, x.EnumerateObject().Count()));
+
+        using var searched = await client.GetAsync(uri + "?q=Alicia", ct);
+        Assert.Equal(HttpStatusCode.OK, searched.StatusCode);
+        var filtered = await searched.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Single(filtered.GetProperty("items").EnumerateArray());
+
+        using var wrongWorkshop = await client.GetAsync(
+            "/api/insinuados/taller/organizaciones/" + other.Id + "/patrocinadores", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, wrongWorkshop.StatusCode);
+    }
+
 }
