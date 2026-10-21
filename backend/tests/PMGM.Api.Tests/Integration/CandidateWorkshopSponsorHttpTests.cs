@@ -143,6 +143,22 @@ public sealed class CandidateWorkshopSponsorHttpTests
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var json = await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var requestId = json.GetProperty("ceremonyRequestId").GetGuid();
+        // Origen registrado NO equivale a presentación institucional.
+        // Conservar el borrador hasta asignar un patrocinador del Taller receptor.
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+            DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        using var blockedProfile = await client.PutAsJsonAsync(
+            "/api/insinuados/solicitudes/" + requestId + "/ficha",
+            new {
+                firstNames = "Candidato", paternalSurname = "Origen web",
+                presenters = new[] { "Texto heredado, NO evidencia de membresía" },
+                insinuationDate = today
+            }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, blockedProfile.StatusCode);
+        var missingSponsor = await blockedProfile.Content.ReadFromJsonAsync<JsonElement>(
+            cancellationToken: ct);
+        Assert.Equal("CANDIDATE_WORKSHOP_SPONSOR_REQUIRED",
+            missingSponsor.GetProperty("code").GetString());
         var sponsorUrl = "/api/insinuados/taller/solicitudes/" + requestId + "/patrocinador";
         using var invalid = await client.PutAsJsonAsync(sponsorUrl, new {
             sponsorMemberId = external.Id
