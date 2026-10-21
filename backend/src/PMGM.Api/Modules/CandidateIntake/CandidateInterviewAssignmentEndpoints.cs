@@ -86,8 +86,23 @@ public static class CandidateInterviewAssignmentEndpoints
         if (ceremony is null) return Results.NotFound();
         if (!CanDesignate(http, access, ceremony.OrganizationId)) return Results.Forbid();
         var eligible = await EligibleMasters(db, ceremony.OrganizationId, ct);
+        // El recomendante persistido es una incompatibilidad; no se acepta
+        // un id de recomendante declarado por el navegador.
+        var selectable = eligible.Values.Where(x =>
+            CandidateOriginPolicy.CanBeInterviewer(
+                x.MemberId, ceremony.CandidateRecommenderMemberId));
+        var excluded = eligible.Values.Where(x =>
+            !CandidateOriginPolicy.CanBeInterviewer(
+                x.MemberId, ceremony.CandidateRecommenderMemberId));
         http.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new { items = eligible.Values.OrderBy(x => x.Name).Select(x => new { id = x.MemberId, name = x.Name }) });
+        return Results.Ok(new {
+            items = selectable.OrderBy(x => x.Name)
+                .Select(x => new { id = x.MemberId, name = x.Name }),
+            excluded = excluded.Select(x => new {
+                id = x.MemberId, name = x.Name,
+                code = "CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW"
+            })
+        });
     }
 
     private sealed record EligibleMaster(Guid MemberId, string Name);
@@ -215,6 +230,13 @@ public static class CandidateInterviewAssignmentEndpoints
             TimeZoneInfo.ConvertTimeBySystemTimeZoneId(publishedAt.Value, "America/Santiago").DateTime);
         if (input.CouncilDecisionDate < publicationDate)
             return Results.BadRequest(new { message = "El acuerdo de programación no puede ser anterior a la publicación institucional." });
+
+        if (input.InterviewerMemberIds.Any(id =>
+            !CandidateOriginPolicy.CanBeInterviewer(id, ceremony.CandidateRecommenderMemberId)))
+            return Results.Conflict(new {
+                code = "CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW",
+                message = "El hermano recomendante del candidato no puede ser designado entrevistador."
+            });
 
         var eligible = await EligibleMasters(db, ceremony.OrganizationId, ct);
         if (input.InterviewerMemberIds.Any(id => !eligible.ContainsKey(id)))
