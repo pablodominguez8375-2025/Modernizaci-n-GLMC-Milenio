@@ -8,6 +8,8 @@ using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.CandidateIntake.Entities;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -101,11 +103,16 @@ public sealed class CandidateOriginCorrectionHttpTests
         };
         var person = new Person { FirstNames = "Hermano", LastNames = "Designado" };
         var member = new Member { Person = person, PersonId = person.Id, CurrentDegree = "master" };
+        var membership = new Membership {
+            Member = member, MemberId = member.Id,
+            Organization = workshop, OrganizationId = workshop.Id,
+            MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
+        };
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
-            db.AddRange(workshop, member);
+            db.AddRange(workshop, member, membership);
             await db.SaveChangesAsync(ct);
         }
         client.DefaultRequestHeaders.Add("X-Publication-Test-Organization", workshop.Id.ToString("D"));
@@ -140,9 +147,10 @@ public sealed class CandidateOriginCorrectionHttpTests
                 originKind = "brother", recommenderMemberId = member.Id,
                 reason = "Corrección solicitada después de designar a un entrevistador."
             }, ct);
-        // Puede rechazar por identidad no acreditada (400) o conflicto histórico (409),
-        // pero nunca crear la corrección ni cambiar el expediente.
-        Assert.Contains(denied.StatusCode, new[] { HttpStatusCode.BadRequest, HttpStatusCode.Conflict });
+        Assert.Equal(HttpStatusCode.Conflict, denied.StatusCode);
+        var deniedJson = await denied.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        Assert.Equal("CANDIDATE_RECOMMENDER_INTERVIEW_CONFLICT",
+            deniedJson.GetProperty("code").GetString());
         await using var verify = factory.Services.CreateAsyncScope();
         var dbVerify = verify.ServiceProvider.GetRequiredService<PmgmDbContext>();
         var ceremony = await dbVerify.CeremonyRequests.AsNoTracking().SingleAsync(x => x.Id == requestId, ct);
