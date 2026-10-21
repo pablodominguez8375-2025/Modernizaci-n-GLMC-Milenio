@@ -102,7 +102,7 @@ public static class CandidateWorkshopIntakeEndpoints
             {
                 var membership = await coreDb.Memberships.AsNoTracking()
                     .Where(m => m.MemberId == memberId &&
-                        m.OrganizationId == request.OrganizationId &&
+                        // Un hermano activo de cualquier Taller de la Orden puede recomendar.
                         m.Status == MembershipCodes.MembershipStatus.Active &&
                         (m.StartDate == null || m.StartDate <= presentationDate) &&
                         (m.EndDate == null || m.EndDate >= presentationDate))
