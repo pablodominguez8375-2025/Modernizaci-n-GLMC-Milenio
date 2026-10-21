@@ -71,6 +71,11 @@ public static class DynamicViewAccess
     public static string ActionFor(string method, string route, string handler)
     {
         // Download/export is a read. Print is independently authorized and audited below.
+        // Buscar es una acción técnica distinta de leer. El endpoint conserva
+        // además la autorización de dominio por rol y Taller.
+        if (method is "GET" or "HEAD" &&
+            route.Equals("/api/admisiones/personas-busqueda", StringComparison.OrdinalIgnoreCase))
+            return "search";
         if (method is "GET" or "HEAD" || handler.StartsWith("Plan")) return "view";
         if (method == "DELETE" || handler.StartsWith("Cancel") || handler.StartsWith("Withdraw") || handler.StartsWith("Unpublish")) return "delete";
         if (route.StartsWith("/api/biblioteca/mis-planchas/") && route.EndsWith("/versiones")) return "edit";
