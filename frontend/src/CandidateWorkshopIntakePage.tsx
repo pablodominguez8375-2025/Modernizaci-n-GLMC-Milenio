@@ -133,7 +133,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
         .finally(() => { if (active) setSponsorLoading(false) })
     }, sponsorSearch ? 200 : 0)
     return () => { active = false; window.clearTimeout(timeout) }
-  }, [api, selected?.organizationId, sponsorSearch])
+  }, [api, selected?.ceremonyRequestId, selected?.organizationId, sponsorSearch])
 
   useEffect(() => {
     const sponsorId = profile?.sponsorMemberId
