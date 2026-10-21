@@ -98,6 +98,28 @@ public static class AssemblyPreliminaryReviewProjection
                 "NO_VALID_CURRENT_EVALUATION" : "CONFLICTING_EVALUATION_HISTORY");
 
         var evaluation = leaves[0];
+
+        // Una punta única no demuestra integridad: puede existir una cadena
+        // huérfana o un ciclo desconectado. Resolver hasta la raíz y exigir
+        // que TODO el historial de esta persona participe de la misma cadena.
+        var byId = linked.ToDictionary(x => x.Id);
+        var visited = new HashSet<Guid>();
+        var cursor = evaluation;
+        while (true)
+        {
+            if (!visited.Add(cursor.Id))
+                return Pending(member, "CONFLICTING_EVALUATION_HISTORY");
+            if (cursor.SupersedesEligibilityId is not Guid parentId)
+                break;
+            if (parentId == Guid.Empty || !byId.TryGetValue(parentId, out var parent))
+                return Pending(member, "INCOMPLETE_EVALUATION_HISTORY");
+            if (parent.EvaluatedAtUtc > cursor.EvaluatedAtUtc)
+                return Pending(member, "CONFLICTING_EVALUATION_HISTORY");
+            cursor = parent;
+        }
+        if (visited.Count != linked.Length)
+            return Pending(member, "INCOMPLETE_EVALUATION_HISTORY");
+
         if (evaluation.Status is not (
                 AssemblyVoterEligibilityPolicy.Eligible or
                 AssemblyVoterEligibilityPolicy.Ineligible or
