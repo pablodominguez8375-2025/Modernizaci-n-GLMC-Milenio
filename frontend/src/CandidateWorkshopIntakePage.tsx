@@ -46,14 +46,18 @@ const demoRecommenders = [
   { id: 'rec-3', name: 'Hermano Ejemplo Tres · Maestro' },
   { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra (otro Taller)' },
 ]
-type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'other'; recommenderId: string; other: string }
+type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'social' | 'other'; recommenderId: string; other: string }
 const emptyOrigin: CandidateOrigin = { kind: '', recommenderId: '', other: '' }
 /** Solo demostración: en modo real el origen viene del expediente (Issue #613). */
 const demoOrigins = new Map<string, CandidateOrigin>()
+/** El backend (#613) solo conoce brother/internet/other: «Redes sociales» viaja como «other» con este texto. */
+const SOCIAL_PREFIX = 'Redes sociales'
 function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string;  }[] = demoRecommenders) {
   if (!origin || !origin.kind) return 'Sin registrar'
-  if (origin.kind === 'internet') return 'Internet / sitio web'
+  if (origin.kind === 'internet') return 'Internet / página web'
   if (origin.kind === 'brother') return `Recomendado por ${recommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
+  if (origin.kind === 'social') return origin.other.trim() ? `${SOCIAL_PREFIX}: ${origin.other.trim()}` : SOCIAL_PREFIX
+  if (origin.other.startsWith(SOCIAL_PREFIX)) return origin.other
   return `Otro: ${origin.other}`
 }
 
@@ -148,9 +152,9 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
         rutOrInstitutionalId: newCandidate.rutOrInstitutionalId.trim(),
         rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
         rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
-        originKind: origin.kind,
+        originKind: origin.kind === 'social' ? 'other' : origin.kind,
         recommenderMemberId: origin.kind === 'brother' ? origin.recommenderId : null,
-        originOtherDescription: origin.kind === 'other' ? origin.other.trim() : null,
+        originOtherDescription: origin.kind === 'other' ? origin.other.trim() : origin.kind === 'social' ? (origin.other.trim() ? `${SOCIAL_PREFIX}: ${origin.other.trim()}` : SOCIAL_PREFIX) : null,
       })
       if (api.useMocks && origin.kind) demoOrigins.set(created.ceremonyRequestId, origin)
       setOrigin(emptyOrigin)
@@ -338,8 +342,9 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
               <select required value={origin.kind} onChange={event => setOrigin({ ...emptyOrigin, kind: event.target.value as CandidateOrigin['kind'] })}>
                 <option value="" disabled>Seleccione cómo llegó</option>
                 <option value="brother">Recomendado por un hermano</option>
-                <option value="internet">Internet / sitio web</option>
-                <option value="other">Otro</option>
+                <option value="internet">Internet / página web</option>
+                <option value="social">Redes sociales</option>
+                <option value="other">Otro caso</option>
               </select>
             </Field>
             {origin.kind === 'brother' && <Field label="Hermano que lo recomienda (puede ser de otro Taller) *">
@@ -349,7 +354,8 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
               </select>
               {recommenderError && <small role="alert">{recommenderError}</small>}
             </Field>}
-            {origin.kind === 'other' && <Field label="Describa el origen *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar" /></Field>}
+            {origin.kind === 'social' && <Field label="¿Cuál red social? (opcional)"><input maxLength={150} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: Instagram, Facebook" /></Field>}
+            {origin.kind === 'other' && <Field label="Describa el caso *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar, hermano que no puede patrocinar" /></Field>}
             {origin.kind === 'brother' && <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El hermano que recomienda no podrá ser designado entrevistador de este candidato. El origen se registra una sola vez; corregirlo exige motivo y queda en auditoría.</div>}
           </>
           <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>
