@@ -90,6 +90,7 @@ export interface CandidateIntakeProfile {
   candidateOriginKind?: string | null
   recommenderMemberId?: string | null
   candidateOriginOtherDescription?: string | null
+  sponsorMemberId?: string | null
 }
 
 export interface CandidateIntakeUpsertPayload {
@@ -266,9 +267,19 @@ export interface CreateCandidateWorkshopRequest {
   organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string;
   rejectionCausesRemedied?: boolean; rePresentationSourceReference?: string | null
   /** Origen del candidato (Issue #613): 'brother' | 'internet' | 'other'. */
-  originKind?: 'brother' | 'internet' | 'other' | null
+  originKind?: 'brother' | 'internet' | 'social_media' | 'other' | null
   recommenderMemberId?: string | null
   originOtherDescription?: string | null
+  /** Maestro del MISMO Taller que presenta formalmente (distinto del recomendante). */
+  sponsorMemberId?: string | null
+}
+
+export interface CandidateSponsorChoice { id: string; name: string }
+export interface CorrectCandidateOriginPayload {
+  originKind: 'brother' | 'internet' | 'social_media' | 'other'
+  recommenderMemberId?: string | null
+  originOtherDescription?: string | null
+  reason: string
 }
 
 export interface CandidateIntakeApiClientOptions {
@@ -634,6 +645,36 @@ export class CandidateIntakeApiClient {
   async getWorkshopOrganizations(): Promise<{ total: number; items: CandidateWorkshopOrganization[] }> {
     if (this.useMocks) return { total: 1, items: [{ id: 'demo-workshop-23', name: 'Taller Demostrativo Nº 23', number: '23' }] }
     return this.request('/api/insinuados/taller/organizaciones')
+  }
+
+  /** Maestros activos del Taller receptor (Issue #613): único universo posible de patrocinantes. */
+  async getEligibleSponsors(organizationId: string, query = ''): Promise<{ items: CandidateSponsorChoice[] }> {
+    if (this.useMocks) {
+      const all = [
+        { id: 'spn-1', name: 'Maestro Patrocinante Uno' },
+        { id: 'spn-2', name: 'Maestra Patrocinante Dos' },
+        { id: 'spn-3', name: 'Maestro Patrocinante Tres' },
+      ]
+      const q = query.trim().toLowerCase()
+      return { items: q ? all.filter(item => item.name.toLowerCase().includes(q)) : all }
+    }
+    const params = query.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''
+    return this.request(`/api/insinuados/taller/organizaciones/${encodeURIComponent(organizationId)}/patrocinadores${params}`)
+  }
+
+  async assignWorkshopSponsor(requestId: string, sponsorMemberId: string): Promise<void> {
+    if (this.useMocks) return
+    await this.request(`/api/insinuados/taller/solicitudes/${encodeURIComponent(requestId)}/patrocinador`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sponsorMemberId }),
+    })
+  }
+
+  /** Corrección auditada del origen: motivo de 10 a 500 caracteres; queda historial append-only. */
+  async correctCandidateOrigin(requestId: string, payload: CorrectCandidateOriginPayload): Promise<void> {
+    if (this.useMocks) return
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/origen/corregir`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
   }
 
   async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {

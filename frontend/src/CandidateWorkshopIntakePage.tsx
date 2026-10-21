@@ -1,4 +1,5 @@
 import { SectionIndex } from './listing'
+import { ActionDrawer } from './actionKit'
 import { useEffect, useMemo, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
@@ -46,18 +47,17 @@ const demoRecommenders = [
   { id: 'rec-3', name: 'Hermano Ejemplo Tres · Maestro' },
   { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra (otro Taller)' },
 ]
-type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'social' | 'other'; recommenderId: string; other: string }
+type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'social_media' | 'other'; recommenderId: string; other: string }
 const emptyOrigin: CandidateOrigin = { kind: '', recommenderId: '', other: '' }
 /** Solo demostración: en modo real el origen viene del expediente (Issue #613). */
 const demoOrigins = new Map<string, CandidateOrigin>()
-/** El backend (#613) solo conoce brother/internet/other: «Redes sociales» viaja como «other» con este texto. */
-const SOCIAL_PREFIX = 'Redes sociales'
+/** Solo demostración: patrocinante formal (Maestro del Taller) por expediente. */
+const demoSponsors = new Map<string, string>()
 function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string;  }[] = demoRecommenders) {
   if (!origin || !origin.kind) return 'Sin registrar'
   if (origin.kind === 'internet') return 'Internet / página web'
   if (origin.kind === 'brother') return `Recomendado por ${recommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
-  if (origin.kind === 'social') return origin.other.trim() ? `${SOCIAL_PREFIX}: ${origin.other.trim()}` : SOCIAL_PREFIX
-  if (origin.other.startsWith(SOCIAL_PREFIX)) return origin.other
+  if (origin.kind === 'social_media') return 'Redes sociales'
   return `Otro: ${origin.other}`
 }
 
@@ -73,6 +73,11 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
   const [recommenders, setRecommenders] = useState<{ id: string; name: string;  }[]>(api.useMocks ? demoRecommenders : [])
   const [recommenderError, setRecommenderError] = useState<string | null>(null)
+  const [sponsors, setSponsors] = useState<{ id: string; name: string }[]>([])
+  const [sponsorId, setSponsorId] = useState('')
+  const [sponsorError, setSponsorError] = useState<string | null>(null)
+  const [correction, setCorrection] = useState<CandidateOrigin & { reason: string }>({ ...emptyOrigin, reason: '' })
+  const [pendingSponsorId, setPendingSponsorId] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
@@ -89,6 +94,8 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   const selectedOrigin: CandidateOrigin | undefined = !selected ? undefined
     : api.useMocks ? demoOrigins.get(selected.ceremonyRequestId)
     : profile?.candidateOriginKind ? { kind: profile.candidateOriginKind as CandidateOrigin['kind'], recommenderId: profile.recommenderMemberId ?? '', other: profile.candidateOriginOtherDescription ?? '' } : undefined
+  const selectedSponsorId = !selected ? '' : api.useMocks ? demoSponsors.get(selected.ceremonyRequestId) ?? '' : profile?.sponsorMemberId ?? ''
+  const selectedSponsorName = sponsors.find(item => item.id === selectedSponsorId)?.name ?? (selectedSponsorId ? 'Maestro del Taller' : '')
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
 
   useEffect(() => {
@@ -118,7 +125,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   }, [api])
 
   const directoryOrgId = newCandidate.organizationId || organizations[0]?.id || ''
-  const needsRecommenders = origin.kind === 'brother' || selectedOrigin?.kind === 'brother'
+  const needsRecommenders = origin.kind === 'brother' || correction.kind === 'brother' || selectedOrigin?.kind === 'brother'
   useEffect(() => {
     if (api.useMocks || !membershipApi || !directoryOrgId || !needsRecommenders) return
     let active = true
@@ -132,6 +139,56 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
     return () => { active = false }
   }, [api, membershipApi, directoryOrgId, needsRecommenders])
 
+  useEffect(() => {
+    if (!directoryOrgId) return
+    let active = true
+    api.getEligibleSponsors(directoryOrgId)
+      .then(result => { if (active) { setSponsors(result.items); setSponsorError(null) } })
+      .catch(() => { if (active) setSponsorError('No fue posible cargar los Maestros del Taller. Intente nuevamente.') })
+    return () => { active = false }
+  }, [api, directoryOrgId])
+
+  async function assignSponsor(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selected || !pendingSponsorId) return
+    setBusy(true); setError(null); setMessage(null)
+    try {
+      await api.assignWorkshopSponsor(selected.ceremonyRequestId, pendingSponsorId)
+      if (api.useMocks) demoSponsors.set(selected.ceremonyRequestId, pendingSponsorId)
+      else setProfile(current => current ? { ...current, sponsorMemberId: pendingSponsorId } : current)
+      setPendingSponsorId('')
+      setMessage('Patrocinante registrado. Es un Maestro activo de su Taller.')
+    } catch (reason) {
+      setError(errorMessage(reason, 'No fue posible registrar al patrocinante.'))
+    } finally { setBusy(false) }
+  }
+
+  async function correctOrigin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selected) return
+    const reason = correction.reason.trim()
+    if (reason.length < 10 || reason.length > 500) { setError('El motivo debe tener entre 10 y 500 caracteres.'); return }
+    if (!correction.kind || (correction.kind === 'brother' && !correction.recommenderId) || (correction.kind === 'other' && !correction.other.trim())) {
+      setError('Complete el nuevo origen del candidato.'); return
+    }
+    setBusy(true); setError(null); setMessage(null)
+    try {
+      await api.correctCandidateOrigin(selected.ceremonyRequestId, {
+        originKind: correction.kind,
+        recommenderMemberId: correction.kind === 'brother' ? correction.recommenderId : null,
+        originOtherDescription: correction.kind === 'other' ? correction.other.trim() : null,
+        reason,
+      })
+      const next: CandidateOrigin = { kind: correction.kind, recommenderId: correction.recommenderId, other: correction.other }
+      if (api.useMocks) demoOrigins.set(selected.ceremonyRequestId, next)
+      else setProfile(current => current ? { ...current, candidateOriginKind: next.kind, recommenderMemberId: next.kind === 'brother' ? next.recommenderId : null, candidateOriginOtherDescription: next.kind === 'other' ? next.other.trim() : null } : current)
+      setCorrection({ ...emptyOrigin, reason: '' })
+      setMessage('Origen corregido. Quedó registrado el motivo y el cambio en la auditoría.')
+    } catch (reason) {
+      setError(errorMessage(reason, 'No fue posible corregir el origen.'))
+    } finally { setBusy(false) }
+  }
+
   async function createNewRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (creating) return
@@ -143,6 +200,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
       setError('Indique el origen del candidato (y el hermano que lo recomienda o la descripción, según corresponda).')
       return
     }
+    if (!sponsorId) { setError('Seleccione al Maestro de su Taller que presenta al candidato (patrocinante).'); return }
     setCreating(true); setError(null); setMessage(null)
     try {
       const created = await api.createWorkshopRequest({
@@ -152,11 +210,14 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
         rutOrInstitutionalId: newCandidate.rutOrInstitutionalId.trim(),
         rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
         rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
-        originKind: origin.kind === 'social' ? 'other' : origin.kind,
+        originKind: origin.kind,
+        sponsorMemberId: sponsorId,
         recommenderMemberId: origin.kind === 'brother' ? origin.recommenderId : null,
-        originOtherDescription: origin.kind === 'other' ? origin.other.trim() : origin.kind === 'social' ? (origin.other.trim() ? `${SOCIAL_PREFIX}: ${origin.other.trim()}` : SOCIAL_PREFIX) : null,
+        originOtherDescription: origin.kind === 'other' ? origin.other.trim() : null,
       })
       if (api.useMocks && origin.kind) demoOrigins.set(created.ceremonyRequestId, origin)
+      if (api.useMocks) demoSponsors.set(created.ceremonyRequestId, sponsorId)
+      setSponsorId('')
       setOrigin(emptyOrigin)
       const result = await api.getWorkshopQueue()
       setQueue(result.items)
@@ -343,7 +404,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
                 <option value="" disabled>Seleccione cómo llegó</option>
                 <option value="brother">Recomendado por un hermano</option>
                 <option value="internet">Internet / página web</option>
-                <option value="social">Redes sociales</option>
+                <option value="social_media">Redes sociales</option>
                 <option value="other">Otro caso</option>
               </select>
             </Field>
@@ -354,8 +415,14 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
               </select>
               {recommenderError && <small role="alert">{recommenderError}</small>}
             </Field>}
-            {origin.kind === 'social' && <Field label="¿Cuál red social? (opcional)"><input maxLength={150} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: Instagram, Facebook" /></Field>}
             {origin.kind === 'other' && <Field label="Describa el caso *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar, hermano que no puede patrocinar" /></Field>}
+            <Field label="Patrocinante: Maestro de su Taller *">
+              <select required value={sponsorId} onChange={event => setSponsorId(event.target.value)}>
+                <option value="" disabled>Elegir Maestro del Taller</option>
+                {sponsors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+              {sponsorError && <small role="alert">{sponsorError}</small>}
+            </Field>
             {origin.kind === 'brother' && <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El hermano que recomienda no podrá ser designado entrevistador de este candidato. El origen se registra una sola vez; corregirlo exige motivo y queda en auditoría.</div>}
           </>
           <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>
@@ -437,16 +504,52 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
             <div className="workshop-form-grid">
               <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
               <Field label="Origen del candidato"><input value={originLabel(selectedOrigin, recommenders)} disabled /></Field>
+              <Field label="Patrocinante (Maestro del Taller)"><input value={selectedSponsorName || 'Sin asignar'} disabled /></Field>
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
               <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
               <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" />
-                <small>Patrocinantes y presentantes: exclusivamente Maestros del mismo Taller.</small>
+                <small>Lista descriptiva: no acredita el patrocinio. El patrocinio formal lo acredita el Maestro del Taller indicado arriba.</small>
               </Field>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
               <Field label="Observaciones internas" wide><textarea rows={4} value={form.internalObservations ?? ''} disabled={locked} onChange={event => setForm({ ...form, internalObservations: event.target.value || null })} /></Field>
             </div>
+            {!locked && <div className="workshop-form-actions">
+              {!selectedSponsorId && <ActionDrawer label="Asignar patrocinante" tone="secondary" title="Asignar patrocinante" description="Solo un Maestro activo de su Taller puede presentar formalmente al candidato.">
+                <form className="library-admin-form" onSubmit={assignSponsor}>
+                  <label><span>Maestro del Taller *</span>
+                    <select required value={pendingSponsorId} onChange={event => setPendingSponsorId(event.target.value)}>
+                      <option value="" disabled>Elegir Maestro del Taller</option>
+                      {sponsors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                  </label>
+                  <button className="candidate-primary-button" type="submit" disabled={busy}>Registrar patrocinante</button>
+                </form>
+              </ActionDrawer>}
+              {selectedOrigin?.kind && <ActionDrawer label="Corregir origen" tone="secondary" title="Corregir origen del candidato" description="El origen se registra una sola vez. Corregirlo exige un motivo y queda en la auditoría.">
+                <form className="library-admin-form" onSubmit={correctOrigin}>
+                  <label><span>Nuevo origen *</span>
+                    <select required value={correction.kind} onChange={event => setCorrection({ ...correction, kind: event.target.value as CandidateOrigin['kind'], recommenderId: '', other: '' })}>
+                      <option value="" disabled>Seleccione cómo llegó</option>
+                      <option value="brother">Recomendado por un hermano</option>
+                      <option value="internet">Internet / página web</option>
+                      <option value="social_media">Redes sociales</option>
+                      <option value="other">Otro caso</option>
+                    </select>
+                  </label>
+                  {correction.kind === 'brother' && <label><span>Hermano que lo recomienda *</span>
+                    <select required value={correction.recommenderId} onChange={event => setCorrection({ ...correction, recommenderId: event.target.value })}>
+                      <option value="" disabled>Elegir hermano activo</option>
+                      {recommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                  </label>}
+                  {correction.kind === 'other' && <label><span>Describa el caso *</span><input required maxLength={200} value={correction.other} onChange={event => setCorrection({ ...correction, other: event.target.value })} /></label>}
+                  <label><span>Motivo de la corrección * (10 a 500 caracteres)</span><textarea required minLength={10} maxLength={500} rows={3} value={correction.reason} onChange={event => setCorrection({ ...correction, reason: event.target.value })} /></label>
+                  <button className="candidate-primary-button" type="submit" disabled={busy}>Corregir origen</button>
+                </form>
+              </ActionDrawer>}
+            </div>}
             <div className="workshop-form-actions">
               <small>Al guardar, la ficha queda pendiente de Gran Secretaría. Guardar no publica ni inicia el cómputo de días.</small>
               <button className="candidate-primary-button" type="button" disabled={busy || locked} onClick={() => void save()}>{busy ? 'Guardando…' : profile ? 'Guardar cambios y reenviar' : 'Guardar y enviar a revisión'}</button>

@@ -319,4 +319,20 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.unstubAllGlobals() }
   })
 
+  it('usa los contratos reales de patrocinante y corrección de origen (Issue #613)', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const api = new CandidateIntakeApiClient({ baseUrl: '', getAccessToken: async () => 'token' })
+      await api.getEligibleSponsors('org-1', ' ana ')
+      await api.assignWorkshopSponsor('req-1', 'm-1')
+      await api.correctCandidateOrigin('req-1', { originKind: 'social_media', reason: 'Motivo de prueba válido' })
+      expect(String(fetchMock.mock.calls[0][0])).toBe('/api/insinuados/taller/organizaciones/org-1/patrocinadores?q=ana')
+      expect(String(fetchMock.mock.calls[1][0])).toBe('/api/insinuados/taller/solicitudes/req-1/patrocinador')
+      expect(fetchMock.mock.calls[1][1].method).toBe('PUT')
+      expect(String(fetchMock.mock.calls[2][0])).toBe('/api/insinuados/solicitudes/req-1/origen/corregir')
+      expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toMatchObject({ originKind: 'social_media' })
+    } finally { vi.unstubAllGlobals() }
+  })
+
 })
