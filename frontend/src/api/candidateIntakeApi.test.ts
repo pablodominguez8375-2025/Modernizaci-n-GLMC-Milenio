@@ -304,4 +304,35 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.useRealTimers() }
   })
 
+
+  it('offers only fictional local Masters and records sponsor separately from presenter names', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const workshop = 'demo-workshop-23'
+    const choices = (await api.getEligibleSponsors(workshop)).items
+    expect(choices).toHaveLength(3)
+    expect(choices.every(x => x.id.startsWith('10000000-'))).toBe(true)
+    expect((await api.getEligibleSponsors('other-workshop')).items).toEqual([])
+    expect((await api.getEligibleSponsors(workshop, 'Dos')).items.map(x => x.name))
+      .toEqual(['Maestra de Prueba Dos'])
+    const draft = (await api.getWorkshopQueue()).items.find(x => !x.profileAvailable)!
+    expect(draft.organizationId).toBe(workshop)
+    await expect(api.assignWorkshopSponsor(draft.ceremonyRequestId, 'different-member'))
+      .rejects.toThrow('Maestro activo del Taller receptor')
+    const selected = choices[1]
+    expect(await api.assignWorkshopSponsor(draft.ceremonyRequestId, selected.id))
+      .toMatchObject({ sponsorMemberId: selected.id, unchanged: false })
+    expect(await api.assignWorkshopSponsor(draft.ceremonyRequestId, selected.id))
+      .toMatchObject({ unchanged: true })
+    expect((await api.getWorkshopQueue()).items.find(x => x.ceremonyRequestId === draft.ceremonyRequestId)?.sponsorMemberId)
+      .toBe(selected.id)
+    await expect(api.assignWorkshopSponsor(draft.ceremonyRequestId, choices[0].id))
+      .rejects.toThrow('corrección institucional auditada')
+    const saved = await api.saveProfile(draft.ceremonyRequestId, {
+      firstNames: 'Persona Demo', paternalSurname: 'Ensayo',
+      insinuationDate: '2026-10-21', presenters: ['Presentante histórico en texto'],
+    })
+    expect(saved.sponsorMemberId).toBe(selected.id)
+    expect(saved.presenters).toEqual(['Presentante histórico en texto'])
+  })
+
 })

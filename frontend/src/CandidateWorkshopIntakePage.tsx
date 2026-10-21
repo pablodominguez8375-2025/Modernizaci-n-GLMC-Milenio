@@ -1,6 +1,6 @@
 import { SectionIndex } from './listing'
 import { useEffect, useMemo, useState } from 'react'
-import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
+import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization, type CandidateEligibleSponsor } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 import './CandidateWorkshopIntakePage.css'
@@ -69,6 +69,12 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
   const [presentersText, setPresentersText] = useState('')
+  const [eligibleSponsors, setEligibleSponsors] = useState<CandidateEligibleSponsor[]>([])
+  const [sponsorSearch, setSponsorSearch] = useState('')
+  const [sponsorChoiceId, setSponsorChoiceId] = useState('')
+  const [sponsorConfirmedId, setSponsorConfirmedId] = useState<string | null>(null)
+  const [sponsorLoading, setSponsorLoading] = useState(false)
+  const [sponsorBusy, setSponsorBusy] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [photoSrc, setPhotoSrc] = useState<string | null>(null)
@@ -105,6 +111,53 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
       .catch(reason => { if (active) setError(errorMessage(reason, 'No fue posible identificar el Taller autorizado.')) })
     return () => { active = false }
   }, [api])
+
+  // El catálogo tiene límite privado de 40 por búsqueda. Consultar al
+  // servidor cada filtro (en vez de filtrar únicamente la primera página).
+  useEffect(() => {
+    setEligibleSponsors([])
+    setSponsorChoiceId(selected?.sponsorMemberId ?? '')
+    setSponsorConfirmedId(selected?.sponsorMemberId ?? null)
+    setSponsorSearch('')
+  }, [selected?.ceremonyRequestId, selected?.organizationId, selected?.sponsorMemberId])
+
+  useEffect(() => {
+    let active = true
+    setEligibleSponsors([])
+    if (!selected?.organizationId) return () => { active = false }
+    setSponsorLoading(true)
+    const timeout = window.setTimeout(() => {
+      api.getEligibleSponsors(selected.organizationId!, sponsorSearch)
+        .then(result => { if (active) setEligibleSponsors(result.items) })
+        .catch(reason => { if (active) setError(errorMessage(reason, 'No fue posible consultar los Maestros patrocinantes elegibles.')) })
+        .finally(() => { if (active) setSponsorLoading(false) })
+    }, sponsorSearch ? 200 : 0)
+    return () => { active = false; window.clearTimeout(timeout) }
+  }, [api, selected?.ceremonyRequestId, selected?.organizationId, sponsorSearch])
+
+  useEffect(() => {
+    const sponsorId = profile?.sponsorMemberId
+    if (profile?.ceremonyRequestId === selected?.ceremonyRequestId && sponsorId) {
+      setSponsorConfirmedId(sponsorId)
+      setSponsorChoiceId(sponsorId)
+    }
+  }, [profile, selected?.ceremonyRequestId])
+
+  async function assignSponsor() {
+    if (!selected || !sponsorChoiceId || sponsorBusy || locked) return
+    setSponsorBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await api.assignWorkshopSponsor(selected.ceremonyRequestId, sponsorChoiceId)
+      setSponsorConfirmedId(result.sponsorMemberId)
+      setMessage('Maestro/a patrocinante acreditado formalmente para el Taller receptor.')
+    } catch (reason) {
+      setError(errorMessage(reason, 'No fue posible acreditar al Maestro/a patrocinante.'))
+    } finally {
+      setSponsorBusy(false)
+    }
+  }
 
   async function createNewRequest(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -406,6 +459,31 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
               <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div className="candidate-protected-notice">
+                  <strong>Maestro/a patrocinante formal del Taller receptor</strong>
+                  <p>Seleccione un Maestro/a activo del propio Taller. Este registro acredita el patrocinio institucional: es distinto del hermano que recomendó al candidato o de los nombres del formulario antiguo.</p>
+                  {selected.organizationId ? <>
+                    <label htmlFor="candidate-sponsor-filter">Buscar Maestro/a elegible</label>
+                    <input id="candidate-sponsor-filter" type="search" maxLength={80} value={sponsorSearch} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
+                      onChange={event => { setSponsorSearch(event.target.value); setSponsorChoiceId('') }} placeholder="Filtrar por nombre" />
+                    <label htmlFor="candidate-sponsor-id">Maestro/a del Taller *</label>
+                    <select id="candidate-sponsor-id" value={sponsorChoiceId} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
+                      onChange={event => setSponsorChoiceId(event.target.value)}>
+                      <option value="">Seleccione un Maestro/a patrocinante</option>
+                      {sponsorConfirmedId && !eligibleSponsors.some(item => item.id === sponsorConfirmedId) &&
+                        <option value={sponsorConfirmedId}>Patrocinio registrado (fuera de esta búsqueda)</option>}
+                      {eligibleSponsors.map(item =>
+                        <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                    {sponsorLoading && <small>Consultando el catálogo privado de este Taller…</small>}
+                    {sponsorConfirmedId
+                      ? <small role="status">Patrocinio institucional registrado. Su vigencia y grado se volverán a verificar antes de publicar; cualquier cambio de identidad requiere corrección formal auditada.</small>
+                      : <button type="button" className="candidate-secondary-button" disabled={!sponsorChoiceId || locked || sponsorBusy || sponsorLoading}
+                          onClick={() => void assignSponsor()}>{sponsorBusy ? 'Acreditando…' : 'Acreditar patrocinio formal'}</button>}
+                  </> : <small>La ficha no identifica el Taller receptor. No se puede acreditar patrocinio sin ámbito institucional.</small>}
+                </div>
+              </div>
               <Field label="Presentantes — nombres del formulario legado *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea (referencia histórica)" /></Field>
               <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El origen del candidato no constituye patrocinio. El Maestro/a patrocinante formal debe ser miembro activo del Taller receptor. La lista de nombres heredada es informativa: no acredita membresía ni autoriza la publicación; la validación institucional real se realiza en el backend. La selección de patrocinio por identidad institucional aún está pendiente en esta vista.</div>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
