@@ -19,6 +19,9 @@ public static class CandidateWorkshopIntakeEndpoints
         endpoints.MapPost("/api/insinuados/taller/solicitudes", CreateWorkshopRequestAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
+        endpoints.MapPut("/api/insinuados/taller/solicitudes/{requestId:guid}/patrocinador", AssignWorkshopSponsorAsync)
+            .WithTags("Ficha privada de insinuados")
+            .RequireAuthorization();
         endpoints.MapGet("/api/insinuados/taller/solicitudes", GetWorkshopQueueAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
@@ -109,6 +112,19 @@ public static class CandidateWorkshopIntakeEndpoints
                 return Results.BadRequest(new { code = origin.ErrorCode,
                     message = "El origen del candidato no está acreditado o contiene datos incompatibles." });
         }
+        // El recomendante identifica procedencia y puede venir de otro Taller.
+        // El patrocinador FORMAL sí debe pertenecer al Taller que recibe el expediente.
+        CandidateOriginVerifiedMember? sponsor = null;
+        if (request.SponsorMemberId is Guid sponsorId)
+        {
+            sponsor = await CandidateOriginAccreditation.VerifyWorkshopSponsorAsync(
+                coreDb, sponsorId, organization.Id, presentationDate, cancellationToken);
+            if (sponsor is null || !sponsor.IsActive)
+                return Results.BadRequest(new {
+                    code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
+                    message = "El presentador o patrocinador debe ser un hermano activo del Taller receptor."
+                });
+        }
         var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut != null &&
             x.Rut.Replace(".", "").Replace("-", "").Replace(" ", "").ToUpper() == normalizedId, cancellationToken);
         if (person is not null)
@@ -142,6 +158,7 @@ public static class CandidateWorkshopIntakeEndpoints
             CandidatePersonId = person.Id,
             CandidateOriginKind = origin?.Kind,
             CandidateRecommenderMemberId = origin?.RecommenderMemberId,
+            CandidateSponsorMemberId = sponsor?.MemberId,
             CandidateOriginOtherDescription = origin?.OtherDescription,
             Status = CeremonyCodes.RequestStatus.Draft,
             Notes = "Expediente de insinuación iniciado por Secretaría Logial."
@@ -158,7 +175,8 @@ public static class CandidateWorkshopIntakeEndpoints
                     newCeremonyRequestId = entity.Id, referenceRecorded = true });
         audit.Add(httpContext, "candidate.intake.created", nameof(CeremonyRequest), entity.Id.ToString(),
             organization.Id, AuditResults.Success, new { entity.CandidatePersonId, entity.CeremonyType, entity.Status,
-                originKind = entity.CandidateOriginKind, recommenderRegistered = entity.CandidateRecommenderMemberId.HasValue });
+                originKind = entity.CandidateOriginKind, recommenderRegistered = entity.CandidateRecommenderMemberId.HasValue,
+                workshopSponsorAccredited = entity.CandidateSponsorMemberId.HasValue });
         await coreDb.SaveChangesAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -351,7 +369,7 @@ public sealed record CreateCandidateWorkshopRequest(
     Guid OrganizationId, string FirstNames, string LastNames, string RutOrInstitutionalId,
     bool RejectionCausesRemedied = false, string? RePresentationSourceReference = null,
     string? OriginKind = null, Guid? RecommenderMemberId = null,
-    string? OriginOtherDescription = null);
+    string? OriginOtherDescription = null, Guid? SponsorMemberId = null);
 
 public sealed record CandidateWorkshopQueueItemDto(
     Guid CeremonyRequestId,
