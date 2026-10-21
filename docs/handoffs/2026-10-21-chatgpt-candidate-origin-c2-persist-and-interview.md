@@ -6,7 +6,7 @@ No se toca main, QA físico, ni se autoriza voto. C3 posterior: edición de orig
 
 ## Código entregado a esta rama
 - `CeremonyEntities.cs`, `PmgmDbContext.cs`, nueva migración aditiva de `core.ceremony_requests` con FK e invariantes SQL.
-- `CandidateWorkshopIntakeEndpoints.cs`: alta atómica con evidencia de membresía activa del mismo Taller, campos de origen opcionales para clientes actuales. Sin retorno de nombres del recomendante en la bandeja.
+- `CandidateWorkshopIntakeEndpoints.cs`: alta atómica con evidencia de membresía activa en algún Taller de la Orden, campos de origen opcionales para clientes actuales. Sin retorno de nombres del recomendante en la bandeja.
 - `CandidateIntakeEndpoints.cs`: lectura de origen solo en la ficha privada del expediente.
 - `CandidateInterviewAssignmentEndpoints.cs`: filtro de maestros elegibles y rechazo POST por incompatibilidad del hermano recomendante.
 - `backend/tests/PMGM.Api.Tests/Integration/CandidateOriginPersistenceHttpTests.cs`: pruebas de PostgreSQL/HTTP de alta válida/inválida y 409 al asignar recomendante.
