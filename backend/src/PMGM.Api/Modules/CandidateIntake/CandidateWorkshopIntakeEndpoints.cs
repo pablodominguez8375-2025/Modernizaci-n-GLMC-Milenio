@@ -191,7 +191,7 @@ public static class CandidateWorkshopIntakeEndpoints
             if (sponsor is null || !sponsor.IsActive)
                 return Results.BadRequest(new {
                     code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
-                    message = "El presentador o patrocinador debe ser un hermano activo del Taller receptor."
+                    message = "El patrocinador formal debe ser Maestro/a activo/a del Taller receptor."
                 });
         }
         var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut != null &&
@@ -302,7 +302,7 @@ public static class CandidateWorkshopIntakeEndpoints
         if (verified is null || !verified.IsActive)
             return Results.BadRequest(new {
                 code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
-                message = "El presentador o patrocinador debe ser miembro activo del Taller receptor."
+                message = "El patrocinador formal debe ser Maestro/a activo/a del Taller receptor."
             });
 
         ceremony.CandidateSponsorMemberId = request.SponsorMemberId;
