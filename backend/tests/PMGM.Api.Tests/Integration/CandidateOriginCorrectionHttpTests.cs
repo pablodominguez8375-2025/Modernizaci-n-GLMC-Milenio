@@ -49,6 +49,17 @@ public sealed class CandidateOriginCorrectionHttpTests
         var requestId = createdJson.GetProperty("ceremonyRequestId").GetGuid();
         var uri = "/api/insinuados/solicitudes/" + requestId + "/origen/corregir";
 
+        client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Role", "member");
+        using var deniedByRole = await client.PutAsJsonAsync(uri,
+            new {
+                originKind = "other", originOtherDescription = "Evento público",
+                reason = "Corrección de origen que debe rechazar el perfil miembro."
+            }, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedByRole.StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Publication-Test-Role");
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerSecretaria);
+
         using var missingReason = await client.PutAsJsonAsync(uri,
             new { originKind = "other", originOtherDescription = "Evento público", reason = "corta" }, ct);
         Assert.Equal(HttpStatusCode.BadRequest, missingReason.StatusCode);
@@ -79,6 +90,16 @@ public sealed class CandidateOriginCorrectionHttpTests
                 .SingleAsync(x => x.EntityId == requestId.ToString("D") &&
                     x.Action == "candidate.origin.corrected", ct);
             Assert.DoesNotContain(reason, audit.MetadataJson ?? "");
+        }
+
+        // La DB también protege el historial frente a UPDATE, incluso fuera de la API.
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var historyDb = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var immutable = await historyDb.CandidateOriginCorrections
+                .SingleAsync(x => x.Id == correctionId, ct);
+            immutable.Reason = "Intento sintético de alterar el motivo registrado.";
+            await Assert.ThrowsAsync<DbUpdateException>(() => historyDb.SaveChangesAsync(ct));
         }
 
         using var replay = await client.PutAsJsonAsync(uri,
