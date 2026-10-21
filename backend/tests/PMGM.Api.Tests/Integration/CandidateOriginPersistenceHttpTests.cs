@@ -78,7 +78,7 @@ public sealed class CandidateOriginPersistenceHttpTests
 
             db.CandidatePublications.Add(new CandidatePublication {
                 CeremonyRequestId = request.Id, CeremonyRequest = request,
-                OrganizationId = workshop.Id, Organization = workshop,
+                OrganizationId = workshop.Id,
                 PersonId = request.CandidatePersonId!.Value,
                 Person = request.CandidatePerson!,
                 PublishedFromUtc = DateTimeOffset.UtcNow.AddDays(-1),
