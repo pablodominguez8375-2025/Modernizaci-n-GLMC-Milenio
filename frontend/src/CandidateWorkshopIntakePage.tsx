@@ -116,10 +116,10 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   // servidor cada filtro (en vez de filtrar únicamente la primera página).
   useEffect(() => {
     setEligibleSponsors([])
-    setSponsorChoiceId('')
-    setSponsorConfirmedId(null)
+    setSponsorChoiceId(selected?.sponsorMemberId ?? '')
+    setSponsorConfirmedId(selected?.sponsorMemberId ?? null)
     setSponsorSearch('')
-  }, [selected?.ceremonyRequestId, selected?.organizationId])
+  }, [selected?.ceremonyRequestId, selected?.organizationId, selected?.sponsorMemberId])
 
   useEffect(() => {
     let active = true
@@ -471,6 +471,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
                     <select id="candidate-sponsor-id" value={sponsorChoiceId} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
                       onChange={event => setSponsorChoiceId(event.target.value)}>
                       <option value="">Seleccione un Maestro/a patrocinante</option>
+                      {sponsorConfirmedId && !eligibleSponsors.some(item => item.id === sponsorConfirmedId) &&
+                        <option value={sponsorConfirmedId}>Patrocinio registrado (fuera de esta búsqueda)</option>}
                       {eligibleSponsors.map(item =>
                         <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
