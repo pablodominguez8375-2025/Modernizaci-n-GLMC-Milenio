@@ -136,9 +136,10 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   }, [api, selected?.organizationId, sponsorSearch])
 
   useEffect(() => {
-    if (profile?.ceremonyRequestId === selected?.ceremonyRequestId && profile.sponsorMemberId) {
-      setSponsorConfirmedId(profile.sponsorMemberId)
-      setSponsorChoiceId(profile.sponsorMemberId)
+    const sponsorId = profile?.sponsorMemberId
+    if (profile?.ceremonyRequestId === selected?.ceremonyRequestId && sponsorId) {
+      setSponsorConfirmedId(sponsorId)
+      setSponsorChoiceId(sponsorId)
     }
   }, [profile, selected?.ceremonyRequestId])
 
