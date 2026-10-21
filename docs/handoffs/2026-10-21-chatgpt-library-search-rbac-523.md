@@ -1,0 +1,7 @@
+# #523 S2 — permiso Buscar separado en Biblioteca Virtual
+
+21-10-2026, base `dev@28779aa4853897467c14e6e8fb0097ff03d68b35` (contiene #616 y UI Claude #617); main sin autorización de promoción. Reclamo etiqueta agente:chatgpt del issue #523, abrir PR draft antes de editar.
+
+Alcance estricto: `GET /api/biblioteca/buscar` y `documentApi.searchLibrary` requieren acción `library/search` en **perfiles dinámicos con asignación vigente** además de `library/view`; `GET /api/biblioteca`, `GET /api/biblioteca/facetas` y descargas se quedan en `view`. Se mantienen autorización institucional, filtrado de colecciones clasificadas, por grado, Taller y publicación, paginación y archivos ocultos. Personas sin asignaciones técnicas mantienen compatibilidad anterior: seguridad de dominio existente nunca se relaja. No dar acceso a taller ajeno, documento reservado, drafts o archivos de gestión por asignar search.
+
+Archivos autorizados: `backend/src/PMGM.Api/Modules/Authorization/DynamicViewAccess.cs`, `frontend/src/api/dynamicMethodPolicies.ts`, `backend/tests/PMGM.Api.Tests/Authorization/DynamicViewAccessTests.cs`, `backend/tests/PMGM.Api.Tests/Integration/DynamicViewAccessHttpTests.cs`, `frontend/src/api/dynamicAccess.test.ts`, nuevo registro GOV-004. Sin migración ni cambios de App.tsx, demo UI, main o QA glmdch. Pruebas HTTP PostgreSQL de view-only 403, view+search 200, revocación 403; tests unit backend y frontend. Gates 3/3 exact HEAD antes de integrar en dev vivo.
