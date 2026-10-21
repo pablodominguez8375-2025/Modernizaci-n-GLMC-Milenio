@@ -54,6 +54,23 @@ public sealed class DynamicViewAccessTests
             "GET", "/api/admisiones/expedientes", "SearchAsync"));
     }
 
+    [Fact]
+    public void Library_search_only_requires_search_for_the_exact_search_route()
+    {
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/buscar", "SearchAsync"));
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "HEAD", "/api/biblioteca/buscar", "SearchAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca", "GetLibraryAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/facetas", "GetFacetsAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/{documentId:guid}", "GetLibraryDocumentAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/buscar-otros", "GetLibraryAsync"));
+    }
+
     [Theory]
     [InlineData("GET","ExportIcsAsync","view")]
     [InlineData("POST","CreateMeetingAsync","create")]
