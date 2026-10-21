@@ -677,7 +677,17 @@ export class CandidateIntakeApiClient {
     const term = query.trim()
     if (term.length < 3) return { items: [] }
     if (term.length > 80) throw new Error('Máximo 80 caracteres para buscar un recomendante.')
-    if (this.useMocks) return { items: [] }
+    if (this.useMocks) {
+      if (organizationId !== 'demo-workshop-23') return { items: [] }
+      const choices = [
+        { id: 'rec-1', name: 'Hermano Ejemplo Uno · otro Taller' },
+        { id: 'rec-2', name: 'Hermana Ejemplo Dos · Compañera' },
+        { id: 'rec-3', name: 'Hermano Ejemplo Tres · Aprendiz' },
+        { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra' },
+      ]
+      return { items: choices.filter(item => item.name.toLocaleLowerCase('es-CL')
+        .includes(term.toLocaleLowerCase('es-CL'))) }
+    }
     return this.request('/api/insinuados/taller/organizaciones/' +
       encodeURIComponent(organizationId) + '/recomendantes?q=' + encodeURIComponent(term))
   }
