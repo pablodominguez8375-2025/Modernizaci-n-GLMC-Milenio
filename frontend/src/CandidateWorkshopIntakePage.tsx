@@ -37,6 +37,23 @@ const emptyForm = (item?: CandidateWorkshopQueueItem): CandidateIntakeUpsertPayl
   internalObservations: null,
 })
 
+const demoRecommenders = [
+  { id: 'rec-1', name: 'Hermano Ejemplo Uno · Maestro' },
+  { id: 'rec-2', name: 'Hermana Ejemplo Dos · Compañera' },
+  { id: 'rec-3', name: 'Hermano Ejemplo Tres · Maestro' },
+  { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra' },
+]
+type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'other'; recommenderId: string; other: string }
+const emptyOrigin: CandidateOrigin = { kind: '', recommenderId: '', other: '' }
+/** Solo demostración: el backend aún no entrega el origen (Issue #613). */
+const demoOrigins = new Map<string, CandidateOrigin>()
+function originLabel(origin?: CandidateOrigin) {
+  if (!origin || !origin.kind) return 'Sin registrar'
+  if (origin.kind === 'internet') return 'Internet / sitio web'
+  if (origin.kind === 'brother') return `Recomendado por ${demoRecommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
+  return `Otro: ${origin.other}`
+}
+
 export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWorkshopIntakePageProps) {
   const [queue, setQueue] = useState<CandidateWorkshopQueueItem[]>([])
   const [organizations, setOrganizations] = useState<CandidateWorkshopOrganization[]>([])
@@ -46,6 +63,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     organizationId: '', firstNames: '', lastNames: '', rutOrInstitutionalId: '',
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
+  const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
@@ -104,6 +122,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
         rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
         rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
       })
+      if (api.useMocks && origin.kind) demoOrigins.set(created.ceremonyRequestId, origin)
+      setOrigin(emptyOrigin)
       const result = await api.getWorkshopQueue()
       setQueue(result.items)
       setSelectedId(created.ceremonyRequestId)
@@ -283,6 +303,24 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
           <Field label="Nombres *"><input required maxLength={160} value={newCandidate.firstNames} onChange={event => setNewCandidate({ ...newCandidate, firstNames: event.target.value })} /></Field>
           <Field label="Apellidos *"><input required maxLength={160} value={newCandidate.lastNames} onChange={event => setNewCandidate({ ...newCandidate, lastNames: event.target.value })} /></Field>
           <Field label="RUT / pasaporte / identificación *"><input required maxLength={16} value={newCandidate.rutOrInstitutionalId} onChange={event => setNewCandidate({ ...newCandidate, rutOrInstitutionalId: event.target.value })} /></Field>
+          {api.useMocks && <>
+            <Field label="Origen del candidato *">
+              <select required value={origin.kind} onChange={event => setOrigin({ ...emptyOrigin, kind: event.target.value as CandidateOrigin['kind'] })}>
+                <option value="" disabled>Seleccione cómo llegó</option>
+                <option value="brother">Recomendado por un hermano</option>
+                <option value="internet">Internet / sitio web</option>
+                <option value="other">Otro</option>
+              </select>
+            </Field>
+            {origin.kind === 'brother' && <Field label="Hermano que lo recomienda *">
+              <select required value={origin.recommenderId} onChange={event => setOrigin({ ...origin, recommenderId: event.target.value })}>
+                <option value="" disabled>Buscar y elegir hermano activo</option>
+                {demoRecommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </select>
+            </Field>}
+            {origin.kind === 'other' && <Field label="Describa el origen *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar" /></Field>}
+            {origin.kind === 'brother' && <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El hermano que recomienda no podrá ser designado entrevistador de este candidato. El origen se registra una sola vez; corregirlo exige motivo y queda en auditoría.</div>}
+          </>}
           <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>
             Si la persona registra un rechazo en otro Taller, el sistema revisará el antecedente a nivel de Orden y exigirá un año completo antes de una nueva presentación.
             En la demo pueden probarse las identidades ficticias RECHAZO2025 y RECHAZO2026.
@@ -361,6 +399,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             <div className="candidate-section-title"><span>⌂</span><h2>Presentación logial y antecedentes</h2><em>Formulario auditable</em></div>
             <div className="workshop-form-grid">
               <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
+              {api.useMocks && <Field label="Origen del candidato"><input value={originLabel(demoOrigins.get(selected.ceremonyRequestId))} disabled /></Field>}
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
