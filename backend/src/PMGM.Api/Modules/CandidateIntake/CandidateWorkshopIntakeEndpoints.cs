@@ -96,43 +96,11 @@ public static class CandidateWorkshopIntakeEndpoints
             request.RecommenderMemberId is not null ||
             request.OriginOtherDescription is not null)
         {
-            CandidateOriginVerifiedMember? accredited = null;
-            if (request.OriginKind == CandidateOriginPolicy.Brother &&
-                request.RecommenderMemberId is Guid memberId && memberId != Guid.Empty)
-            {
-                var membership = await coreDb.Memberships.AsNoTracking()
-                    .Where(m => m.MemberId == memberId &&
-                        // Un hermano activo de cualquier Taller de la Orden puede recomendar.
-                        m.Status == MembershipCodes.MembershipStatus.Active &&
-                        (m.StartDate == null || m.StartDate <= presentationDate) &&
-                        (m.EndDate == null || m.EndDate >= presentationDate))
-                    .Select(m => new { m.Id }).FirstOrDefaultAsync(cancellationToken);
-                if (membership is not null)
-                {
-                    var recognized = new[] {
-                        MembershipCodes.InstitutionalStatus.Active,
-                        MembershipCodes.InstitutionalStatus.Reinstated,
-                        MembershipCodes.InstitutionalStatus.Inactive,
-                        MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
-                        MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
-                        MembershipCodes.InstitutionalStatus.Deceased
-                    };
-                    var latestStatus = await coreDb.InstitutionalStatusEvents.AsNoTracking()
-                        .Where(x => x.MemberId == memberId &&
-                            x.EffectiveDate <= presentationDate &&
-                            recognized.Contains(x.EventType))
-                        .OrderByDescending(x => x.EffectiveDate)
-                        .ThenByDescending(x => x.RecordedAtUtc)
-                        .Select(x => x.EventType)
-                        .FirstOrDefaultAsync(cancellationToken);
-                    var active = latestStatus is null or
-                        MembershipCodes.InstitutionalStatus.Active or
-                        MembershipCodes.InstitutionalStatus.Reinstated;
-                    accredited = new CandidateOriginVerifiedMember(
-                        memberId, presentationDate, active,
-                        "core.memberships:" + membership.Id.ToString("D"));
-                }
-            }
+            var accredited = request.OriginKind == CandidateOriginPolicy.Brother &&
+                request.RecommenderMemberId is Guid recommenderId
+                ? await CandidateOriginAccreditation.VerifyAsync(
+                    coreDb, recommenderId, presentationDate, cancellationToken)
+                : null;
 
             origin = CandidateOriginPolicy.ValidateNew(
                 request.OriginKind, request.RecommenderMemberId,
