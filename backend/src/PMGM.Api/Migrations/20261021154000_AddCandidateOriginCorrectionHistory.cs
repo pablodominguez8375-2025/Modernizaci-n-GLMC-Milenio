@@ -35,8 +35,12 @@ public sealed class AddCandidateOriginCorrectionHistory : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_candidate_origin_corrections", x => x.Id);
-                table.ForeignKey("FK_candidate_origin_corrections_ceremony_requests_CeremonyRequestId",
-                    x => x.CeremonyRequestId, "core", "ceremony_requests", "Id",
+                table.ForeignKey(
+                    name: "FK_candidate_origin_corrections_ceremony_requests_CeremonyRequestId",
+                    column: x => x.CeremonyRequestId,
+                    principalSchema: "core",
+                    principalTable: "ceremony_requests",
+                    principalColumn: "Id",
                     onDelete: ReferentialAction.Restrict);
             });
         m.CreateIndex(name: "IX_candidate_origin_corrections_CeremonyRequestId_ChangedAtUtc",
