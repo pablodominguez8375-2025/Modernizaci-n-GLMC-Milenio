@@ -17,6 +17,6 @@ No se crean automáticamente grants de Search ni se reasignan sujetos. El contra
 
 Sin migraciones ni modificación de `core.dynamic_access_snapshots`, PK/FK, índices, cascadas ni esquema físico. La fuente de permisos es el catálogo ya persistido; única nueva asociación código-ruta de aplicación.
 
-Pruebas: `DynamicViewAccessTests` confirma ruta exacta (y preserva portada/facetas en view), `DynamicAccessPolicyTests` comprueba view-only, view+search y revocación; `dynamicAccess.test.ts` comprueba contrato de métodos frontend. Prueba HTTP PostgreSQL complementaria quedó bloqueada por herramienta durante esta sesión, sin incorporarse; no afirmar cobertura HTTP añadida por #618. Tests de catálogo/búsqueda existentes siguen cubiertos por CI.
+Pruebas: `DynamicViewAccessTests` confirma ruta exacta (y preserva portada/facetas en view), `DynamicAccessPolicyTests` comprueba view-only, view+search y revocación; `dynamicAccess.test.ts` comprueba contrato de métodos frontend. Se añadió prueba HTTP/PostgreSQL en `DynamicViewAccessHttpTests`: perfil asignado con `library/view` conserva acceso a facetas pero recibe 403 en `/api/biblioteca/buscar`; habilitar `library/search` concede 200 sin ampliar visibilidad de dominio y revocar la asignación restablece 403. Exige aprobación exact-head en CI antes de integrar.
 
 Gates exact-HEAD, merge SHA y QA físico: pendientes de evaluación. `main` no se modifica.
