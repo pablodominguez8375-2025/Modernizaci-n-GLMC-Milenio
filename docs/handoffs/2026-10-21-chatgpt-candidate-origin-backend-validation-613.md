@@ -7,3 +7,5 @@ Alcance C1: clase nueva CandidateOriginPolicy con validación de opción recomen
 Archivos previstos: backend/src/PMGM.Api/Modules/CandidateIntake/CandidateOriginPolicy.cs; backend/tests/PMGM.Api.Tests/CandidateOriginPolicyTests.cs; registro GOV-004 y este handoff.
 
 Gates y prueba de compilación por verificar en GitHub, no inferir QA/UAT. UI de Claude fuera de alcance.
+
+Entregado en rama: `CandidateOriginPolicy.cs` (opciones `brother/internet/other`, `unregistered` solo legado; verificaciones de hermano activo desde fuente backend/fecha/evidencia; normalización de descripción; exclusión de recomendante en entrevistas) y `CandidateOriginPolicyTests.cs` con casos positivos/negativos. Registro de datos: `docs/modelo-datos/registros/2026-10-21-chatgpt-candidate-origin-policy-613-c1.md`. Sin migraciones, endpoints ni cambios UI. CI exact-head pendiente y no merge.
