@@ -112,22 +112,28 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     return () => { active = false }
   }, [api])
 
-  // La identidad elegible procede exclusivamente del servicio autorizado del Taller.
-  // La lista no se reutiliza al cambiar de expediente ni entre Talleres.
+  // El catálogo tiene límite privado de 40 por búsqueda. Consultar al
+  // servidor cada filtro (en vez de filtrar únicamente la primera página).
   useEffect(() => {
-    let active = true
     setEligibleSponsors([])
     setSponsorChoiceId('')
     setSponsorConfirmedId(null)
     setSponsorSearch('')
+  }, [selected?.ceremonyRequestId, selected?.organizationId])
+
+  useEffect(() => {
+    let active = true
+    setEligibleSponsors([])
     if (!selected?.organizationId) return () => { active = false }
     setSponsorLoading(true)
-    api.getEligibleSponsors(selected.organizationId)
-      .then(result => { if (active) setEligibleSponsors(result.items) })
-      .catch(reason => { if (active) setError(errorMessage(reason, 'No fue posible consultar los Maestros patrocinantes elegibles.')) })
-      .finally(() => { if (active) setSponsorLoading(false) })
-    return () => { active = false }
-  }, [api, selected?.ceremonyRequestId, selected?.organizationId])
+    const timeout = window.setTimeout(() => {
+      api.getEligibleSponsors(selected.organizationId!, sponsorSearch)
+        .then(result => { if (active) setEligibleSponsors(result.items) })
+        .catch(reason => { if (active) setError(errorMessage(reason, 'No fue posible consultar los Maestros patrocinantes elegibles.')) })
+        .finally(() => { if (active) setSponsorLoading(false) })
+    }, sponsorSearch ? 200 : 0)
+    return () => { active = false; window.clearTimeout(timeout) }
+  }, [api, selected?.organizationId, sponsorSearch])
 
   useEffect(() => {
     if (profile?.ceremonyRequestId === selected?.ceremonyRequestId && profile.sponsorMemberId) {
@@ -459,12 +465,12 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
                   {selected.organizationId ? <>
                     <label htmlFor="candidate-sponsor-filter">Buscar Maestro/a elegible</label>
                     <input id="candidate-sponsor-filter" type="search" maxLength={80} value={sponsorSearch} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
-                      onChange={event => setSponsorSearch(event.target.value)} placeholder="Filtrar por nombre" />
+                      onChange={event => { setSponsorSearch(event.target.value); setSponsorChoiceId('') }} placeholder="Filtrar por nombre" />
                     <label htmlFor="candidate-sponsor-id">Maestro/a del Taller *</label>
                     <select id="candidate-sponsor-id" value={sponsorChoiceId} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
                       onChange={event => setSponsorChoiceId(event.target.value)}>
                       <option value="">Seleccione un Maestro/a patrocinante</option>
-                      {eligibleSponsors.filter(item => item.name.toLocaleLowerCase('es-CL').includes(sponsorSearch.trim().toLocaleLowerCase('es-CL'))).map(item =>
+                      {eligibleSponsors.map(item =>
                         <option key={item.id} value={item.id}>{item.name}</option>)}
                     </select>
                     {sponsorLoading && <small>Consultando el catálogo privado de este Taller…</small>}
