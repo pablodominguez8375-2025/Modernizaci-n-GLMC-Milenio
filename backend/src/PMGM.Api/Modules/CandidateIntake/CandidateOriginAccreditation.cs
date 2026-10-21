@@ -10,12 +10,28 @@ namespace PMGM.Api.Modules.CandidateIntake;
 /// </summary>
 public static class CandidateOriginAccreditation
 {
-    public static async Task<CandidateOriginVerifiedMember?> VerifyAsync(
+    public static Task<CandidateOriginVerifiedMember?> VerifyAsync(
         PmgmDbContext db, Guid memberId, DateOnly operationDay, CancellationToken ct)
+        => VerifyScopedAsync(db, memberId, null, operationDay, ct);
+
+    /// <summary>
+    /// La presentación/patrocinio institucional pertenece exclusivamente al
+    /// Taller que tramita el expediente, no a cualquier Taller de la Orden.
+    /// </summary>
+    public static Task<CandidateOriginVerifiedMember?> VerifyWorkshopSponsorAsync(
+        PmgmDbContext db, Guid memberId, Guid workshopId,
+        DateOnly operationDay, CancellationToken ct)
+        => workshopId == Guid.Empty ? Task.FromResult<CandidateOriginVerifiedMember?>(null)
+           : VerifyScopedAsync(db, memberId, workshopId, operationDay, ct);
+
+    private static async Task<CandidateOriginVerifiedMember?> VerifyScopedAsync(
+        PmgmDbContext db, Guid memberId, Guid? requiredWorkshopId,
+        DateOnly operationDay, CancellationToken ct)
     {
         if (memberId == Guid.Empty) return null;
         var membership = await db.Memberships.AsNoTracking()
             .Where(m => m.MemberId == memberId &&
+                (requiredWorkshopId == null || m.OrganizationId == requiredWorkshopId) &&
                 m.Status == MembershipCodes.MembershipStatus.Active &&
                 (m.StartDate == null || m.StartDate <= operationDay) &&
                 (m.EndDate == null || m.EndDate >= operationDay))
