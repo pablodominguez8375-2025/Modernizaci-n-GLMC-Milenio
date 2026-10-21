@@ -43,7 +43,7 @@ public static class CandidateOriginPolicy
         if (kind is Internet or SocialMedia)
             return !string.IsNullOrWhiteSpace(description)
                 ? Invalid("CANDIDATE_ORIGIN_FIELDS_CONFLICT")
-                : new(true, Internet, null, null, null);
+                : new(true, kind, null, null, null);
 
         if (string.IsNullOrWhiteSpace(description))
             return Invalid("CANDIDATE_ORIGIN_DESCRIPTION_REQUIRED");
