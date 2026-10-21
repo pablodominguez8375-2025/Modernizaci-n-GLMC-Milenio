@@ -9,7 +9,7 @@ La integración concurrente de frontend en `dev@4852b0c` ya captura `originKind`
 - Añadido `CandidateIntakeApiClient.getEligibleRecommenders(organizationId, query)`, con búsqueda de 3 a 80 caracteres, contra `GET /api/insinuados/taller/organizaciones/{organizationId}/recomendantes?q=...` de PR #631, autorización same-origin ya existente, respuesta mínima `{id,name}`.
 - Selector de búsqueda por nombre, con debounce y consultas únicamente cuando se ingresan >=3 caracteres. Se usa tanto para apertura de expediente como para corregir origen con motivo, sin consultar un Cuadro completo ni leer el directorio de membresía local. No toca el selector distinto del Maestro/a patrocinante.
 - La UI conserva `membershipApi?` en su firma de props por compatibilidad de consumidores, pero ya no lo utiliza para listar recomendantes.
-- Demo con datos exclusivamente ficticios y lista mock existente; no presenta la consulta institucional real en GitHub Pages.
+- Demo con datos exclusivamente ficticios y búsqueda por nombre de mínimo 3 caracteres sobre cuatro recomendantes simulados, incluyendo otro Taller y Compañera; no consulta identidades institucionales reales en GitHub Pages. La demo reproduce el contrato de búsqueda sin RUT ni correo.
 - Prueba de contrato de API del cliente: longitud mínima sin llamada HTTP, URI `?q=`, autorización bearer en Headers y respuesta con miembro externo.
 
 ## Criterios
