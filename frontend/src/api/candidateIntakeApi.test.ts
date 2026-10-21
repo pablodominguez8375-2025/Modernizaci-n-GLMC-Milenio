@@ -304,34 +304,47 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.useRealTimers() }
   })
 
-  it('envía el origen del candidato al backend real (Issue #613)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ceremonyRequestId: 'r1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-    vi.stubGlobal('fetch', fetchMock)
-    try {
-      const api = new CandidateIntakeApiClient({ baseUrl: '', getAccessToken: async () => 'token' })
-      await api.createWorkshopRequest({
-        organizationId: 'org', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '1-9',
-        originKind: 'brother', recommenderMemberId: 'm1', originOtherDescription: null,
-      })
-      const [url, init] = fetchMock.mock.calls[0]
-      expect(String(url)).toContain('/api/insinuados/taller/solicitudes')
-      expect(JSON.parse(init.body as string)).toMatchObject({ originKind: 'brother', recommenderMemberId: 'm1' })
-    } finally { vi.unstubAllGlobals() }
+
+  it('offers only fictional local Masters and records sponsor separately from presenter names', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    const workshop = 'demo-workshop-23'
+    const choices = (await api.getEligibleSponsors(workshop)).items
+    expect(choices).toHaveLength(3)
+    expect(choices.every(x => x.id.startsWith('10000000-'))).toBe(true)
+    expect((await api.getEligibleSponsors('other-workshop')).items).toEqual([])
+    expect((await api.getEligibleSponsors(workshop, 'Dos')).items.map(x => x.name))
+      .toEqual(['Maestra de Prueba Dos'])
+    const draft = (await api.getWorkshopQueue()).items.find(x => !x.profileAvailable)!
+    expect(draft.organizationId).toBe(workshop)
+    await expect(api.assignWorkshopSponsor(draft.ceremonyRequestId, 'different-member'))
+      .rejects.toThrow('Maestro activo del Taller receptor')
+    const selected = choices[1]
+    expect(await api.assignWorkshopSponsor(draft.ceremonyRequestId, selected.id))
+      .toMatchObject({ sponsorMemberId: selected.id, unchanged: false })
+    expect(await api.assignWorkshopSponsor(draft.ceremonyRequestId, selected.id))
+      .toMatchObject({ unchanged: true })
+    expect((await api.getWorkshopQueue()).items.find(x => x.ceremonyRequestId === draft.ceremonyRequestId)?.sponsorMemberId)
+      .toBe(selected.id)
+    await expect(api.assignWorkshopSponsor(draft.ceremonyRequestId, choices[0].id))
+      .rejects.toThrow('corrección institucional auditada')
+    const saved = await api.saveProfile(draft.ceremonyRequestId, {
+      firstNames: 'Persona Demo', paternalSurname: 'Ensayo',
+      insinuationDate: '2026-10-21', presenters: ['Presentante histórico en texto'],
+    })
+    expect(saved.sponsorMemberId).toBe(selected.id)
+    expect(saved.presenters).toEqual(['Presentante histórico en texto'])
   })
 
-  it('usa los contratos reales de patrocinante y corrección de origen (Issue #613)', async () => {
-    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ items: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+  it('envía el origen y corrige con motivo usando los contratos reales (Issue #613)', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ceremonyRequestId: 'r1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     try {
       const api = new CandidateIntakeApiClient({ baseUrl: '', getAccessToken: async () => 'token' })
-      await api.getEligibleSponsors('org-1', ' ana ')
-      await api.assignWorkshopSponsor('req-1', 'm-1')
-      await api.correctCandidateOrigin('req-1', { originKind: 'social_media', reason: 'Motivo de prueba válido' })
-      expect(String(fetchMock.mock.calls[0][0])).toBe('/api/insinuados/taller/organizaciones/org-1/patrocinadores?q=ana')
-      expect(String(fetchMock.mock.calls[1][0])).toBe('/api/insinuados/taller/solicitudes/req-1/patrocinador')
+      await api.createWorkshopRequest({ organizationId: 'org', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '1-9', originKind: 'social_media' })
+      await api.correctCandidateOrigin('r1', { originKind: 'internet', reason: 'Motivo de prueba válido' })
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({ originKind: 'social_media' })
+      expect(String(fetchMock.mock.calls[1][0])).toBe('/api/insinuados/solicitudes/r1/origen/corregir')
       expect(fetchMock.mock.calls[1][1].method).toBe('PUT')
-      expect(String(fetchMock.mock.calls[2][0])).toBe('/api/insinuados/solicitudes/req-1/origen/corregir')
-      expect(JSON.parse(fetchMock.mock.calls[2][1].body as string)).toMatchObject({ originKind: 'social_media' })
     } finally { vi.unstubAllGlobals() }
   })
 

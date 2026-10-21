@@ -1,12 +1,12 @@
 import { SectionIndex } from './listing'
 import { ActionDrawer } from './actionKit'
+import { type MembershipApiClient } from './api/membershipApi'
 import { useEffect, useMemo, useState } from 'react'
-import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization } from './api/candidateIntakeApi'
+import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization, type CandidateEligibleSponsor } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 import './CandidateWorkshopIntakePage.css'
 import { organizationDisplayName } from './displayFormat'
-import { type MembershipApiClient } from './api/membershipApi'
 
 interface CandidateWorkshopIntakePageProps {
   api: CandidateIntakeApiClient
@@ -45,19 +45,17 @@ const demoRecommenders = [
   { id: 'rec-1', name: 'Hermano Ejemplo Uno · Maestro' },
   { id: 'rec-2', name: 'Hermana Ejemplo Dos · Compañera' },
   { id: 'rec-3', name: 'Hermano Ejemplo Tres · Maestro' },
-  { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra (otro Taller)' },
+  { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra' },
 ]
 type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'social_media' | 'other'; recommenderId: string; other: string }
 const emptyOrigin: CandidateOrigin = { kind: '', recommenderId: '', other: '' }
-/** Solo demostración: en modo real el origen viene del expediente (Issue #613). */
+/** Procedencia ilustrativa de la demo (el backend la guarda de forma separada). */
 const demoOrigins = new Map<string, CandidateOrigin>()
-/** Solo demostración: patrocinante formal (Maestro del Taller) por expediente. */
-const demoSponsors = new Map<string, string>()
-function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string;  }[] = demoRecommenders) {
+function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string }[] = demoRecommenders) {
   if (!origin || !origin.kind) return 'Sin registrar'
-  if (origin.kind === 'internet') return 'Internet / página web'
-  if (origin.kind === 'brother') return `Recomendado por ${recommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
+  if (origin.kind === 'internet') return 'Página web / Internet'
   if (origin.kind === 'social_media') return 'Redes sociales'
+  if (origin.kind === 'brother') return `Recomendado por ${recommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
   return `Otro: ${origin.other}`
 }
 
@@ -71,17 +69,19 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
-  const [recommenders, setRecommenders] = useState<{ id: string; name: string;  }[]>(api.useMocks ? demoRecommenders : [])
+  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>(api.useMocks ? demoRecommenders : [])
   const [recommenderError, setRecommenderError] = useState<string | null>(null)
-  const [sponsors, setSponsors] = useState<{ id: string; name: string }[]>([])
-  const [sponsorId, setSponsorId] = useState('')
-  const [sponsorError, setSponsorError] = useState<string | null>(null)
   const [correction, setCorrection] = useState<CandidateOrigin & { reason: string }>({ ...emptyOrigin, reason: '' })
-  const [pendingSponsorId, setPendingSponsorId] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
   const [form, setForm] = useState<CandidateIntakeUpsertPayload>(() => emptyForm())
   const [presentersText, setPresentersText] = useState('')
+  const [eligibleSponsors, setEligibleSponsors] = useState<CandidateEligibleSponsor[]>([])
+  const [sponsorSearch, setSponsorSearch] = useState('')
+  const [sponsorChoiceId, setSponsorChoiceId] = useState('')
+  const [sponsorConfirmedId, setSponsorConfirmedId] = useState<string | null>(null)
+  const [sponsorLoading, setSponsorLoading] = useState(false)
+  const [sponsorBusy, setSponsorBusy] = useState(false)
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [photoSrc, setPhotoSrc] = useState<string | null>(null)
@@ -93,9 +93,9 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   const selected = useMemo(() => queue.find(item => item.ceremonyRequestId === selectedId) ?? null, [queue, selectedId])
   const selectedOrigin: CandidateOrigin | undefined = !selected ? undefined
     : api.useMocks ? demoOrigins.get(selected.ceremonyRequestId)
-    : profile?.candidateOriginKind ? { kind: profile.candidateOriginKind as CandidateOrigin['kind'], recommenderId: profile.recommenderMemberId ?? '', other: profile.candidateOriginOtherDescription ?? '' } : undefined
-  const selectedSponsorId = !selected ? '' : api.useMocks ? demoSponsors.get(selected.ceremonyRequestId) ?? '' : profile?.sponsorMemberId ?? ''
-  const selectedSponsorName = sponsors.find(item => item.id === selectedSponsorId)?.name ?? (selectedSponsorId ? 'Maestro del Taller' : '')
+    : profile?.candidateOriginKind ? { kind: profile.candidateOriginKind, recommenderId: profile.recommenderMemberId ?? '', other: profile.candidateOriginOtherDescription ?? '' } : undefined
+  const directoryOrgId = newCandidate.organizationId || organizations[0]?.id || ''
+  const needsRecommenders = origin.kind === 'brother' || correction.kind === 'brother' || selectedOrigin?.kind === 'brother'
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
 
   useEffect(() => {
@@ -124,44 +124,45 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
     return () => { active = false }
   }, [api])
 
-  const directoryOrgId = newCandidate.organizationId || organizations[0]?.id || ''
-  const needsRecommenders = origin.kind === 'brother' || correction.kind === 'brother' || selectedOrigin?.kind === 'brother'
+  // El catálogo tiene límite privado de 40 por búsqueda. Consultar al
+  // servidor cada filtro (en vez de filtrar únicamente la primera página).
+  useEffect(() => {
+    setEligibleSponsors([])
+    setSponsorChoiceId(selected?.sponsorMemberId ?? '')
+    setSponsorConfirmedId(selected?.sponsorMemberId ?? null)
+    setSponsorSearch('')
+  }, [selected?.ceremonyRequestId, selected?.organizationId, selected?.sponsorMemberId])
+
+  useEffect(() => {
+    let active = true
+    setEligibleSponsors([])
+    if (!selected?.organizationId) return () => { active = false }
+    setSponsorLoading(true)
+    const timeout = window.setTimeout(() => {
+      api.getEligibleSponsors(selected.organizationId!, sponsorSearch)
+        .then(result => { if (active) setEligibleSponsors(result.items) })
+        .catch(reason => { if (active) setError(errorMessage(reason, 'No fue posible consultar los Maestros patrocinantes elegibles.')) })
+        .finally(() => { if (active) setSponsorLoading(false) })
+    }, sponsorSearch ? 200 : 0)
+    return () => { active = false; window.clearTimeout(timeout) }
+  }, [api, selected?.ceremonyRequestId, selected?.organizationId, sponsorSearch])
+
+  useEffect(() => {
+    const sponsorId = profile?.sponsorMemberId
+    if (profile?.ceremonyRequestId === selected?.ceremonyRequestId && sponsorId) {
+      setSponsorConfirmedId(sponsorId)
+      setSponsorChoiceId(sponsorId)
+    }
+  }, [profile, selected?.ceremonyRequestId])
+
   useEffect(() => {
     if (api.useMocks || !membershipApi || !directoryOrgId || !needsRecommenders) return
     let active = true
     membershipApi.getMembers(directoryOrgId, { status: 'active', limit: 250 })
-      .then(result => {
-        if (!active) return
-        setRecommenderError(null)
-        setRecommenders(result.items.map(item => ({ id: item.memberId, name: item.displayName })))
-      })
+      .then(result => { if (active) { setRecommenderError(null); setRecommenders(result.items.map(item => ({ id: item.memberId, name: item.displayName }))) } })
       .catch(() => { if (active) setRecommenderError('No fue posible cargar los hermanos activos. Intente nuevamente.') })
     return () => { active = false }
   }, [api, membershipApi, directoryOrgId, needsRecommenders])
-
-  useEffect(() => {
-    if (!directoryOrgId) return
-    let active = true
-    api.getEligibleSponsors(directoryOrgId)
-      .then(result => { if (active) { setSponsors(result.items); setSponsorError(null) } })
-      .catch(() => { if (active) setSponsorError('No fue posible cargar los Maestros del Taller. Intente nuevamente.') })
-    return () => { active = false }
-  }, [api, directoryOrgId])
-
-  async function assignSponsor(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selected || !pendingSponsorId) return
-    setBusy(true); setError(null); setMessage(null)
-    try {
-      await api.assignWorkshopSponsor(selected.ceremonyRequestId, pendingSponsorId)
-      if (api.useMocks) demoSponsors.set(selected.ceremonyRequestId, pendingSponsorId)
-      else setProfile(current => current ? { ...current, sponsorMemberId: pendingSponsorId } : current)
-      setPendingSponsorId('')
-      setMessage('Patrocinante registrado. Es un Maestro activo de su Taller.')
-    } catch (reason) {
-      setError(errorMessage(reason, 'No fue posible registrar al patrocinante.'))
-    } finally { setBusy(false) }
-  }
 
   async function correctOrigin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -181,12 +182,28 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
       })
       const next: CandidateOrigin = { kind: correction.kind, recommenderId: correction.recommenderId, other: correction.other }
       if (api.useMocks) demoOrigins.set(selected.ceremonyRequestId, next)
-      else setProfile(current => current ? { ...current, candidateOriginKind: next.kind, recommenderMemberId: next.kind === 'brother' ? next.recommenderId : null, candidateOriginOtherDescription: next.kind === 'other' ? next.other.trim() : null } : current)
+      else setProfile(current => current ? { ...current, candidateOriginKind: next.kind || null, recommenderMemberId: next.kind === 'brother' ? next.recommenderId : null, candidateOriginOtherDescription: next.kind === 'other' ? next.other.trim() : null } : current)
       setCorrection({ ...emptyOrigin, reason: '' })
       setMessage('Origen corregido. Quedó registrado el motivo y el cambio en la auditoría.')
     } catch (reason) {
       setError(errorMessage(reason, 'No fue posible corregir el origen.'))
     } finally { setBusy(false) }
+  }
+
+  async function assignSponsor() {
+    if (!selected || !sponsorChoiceId || sponsorBusy || locked) return
+    setSponsorBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const result = await api.assignWorkshopSponsor(selected.ceremonyRequestId, sponsorChoiceId)
+      setSponsorConfirmedId(result.sponsorMemberId)
+      setMessage('Maestro/a patrocinante acreditado formalmente para el Taller receptor.')
+    } catch (reason) {
+      setError(errorMessage(reason, 'No fue posible acreditar al Maestro/a patrocinante.'))
+    } finally {
+      setSponsorBusy(false)
+    }
   }
 
   async function createNewRequest(event: React.FormEvent<HTMLFormElement>) {
@@ -200,7 +217,6 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
       setError('Indique el origen del candidato (y el hermano que lo recomienda o la descripción, según corresponda).')
       return
     }
-    if (!sponsorId) { setError('Seleccione al Maestro de su Taller que presenta al candidato (patrocinante).'); return }
     setCreating(true); setError(null); setMessage(null)
     try {
       const created = await api.createWorkshopRequest({
@@ -211,13 +227,10 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
         rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
         rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
         originKind: origin.kind,
-        sponsorMemberId: sponsorId,
         recommenderMemberId: origin.kind === 'brother' ? origin.recommenderId : null,
         originOtherDescription: origin.kind === 'other' ? origin.other.trim() : null,
       })
       if (api.useMocks && origin.kind) demoOrigins.set(created.ceremonyRequestId, origin)
-      if (api.useMocks) demoSponsors.set(created.ceremonyRequestId, sponsorId)
-      setSponsorId('')
       setOrigin(emptyOrigin)
       const result = await api.getWorkshopQueue()
       setQueue(result.items)
@@ -403,27 +416,20 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
               <select required value={origin.kind} onChange={event => setOrigin({ ...emptyOrigin, kind: event.target.value as CandidateOrigin['kind'] })}>
                 <option value="" disabled>Seleccione cómo llegó</option>
                 <option value="brother">Recomendado por un hermano</option>
-                <option value="internet">Internet / página web</option>
+                <option value="internet">Página web / Internet</option>
                 <option value="social_media">Redes sociales</option>
-                <option value="other">Otro caso</option>
+                <option value="other">Otro</option>
               </select>
             </Field>
-            {origin.kind === 'brother' && <Field label="Hermano que lo recomienda (puede ser de otro Taller) *">
+            {origin.kind === 'brother' && <Field label="Hermano que lo recomienda *">
               <select required value={origin.recommenderId} onChange={event => setOrigin({ ...origin, recommenderId: event.target.value })}>
                 <option value="" disabled>Buscar y elegir hermano activo</option>
                 {recommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
               </select>
               {recommenderError && <small role="alert">{recommenderError}</small>}
             </Field>}
-            {origin.kind === 'other' && <Field label="Describa el caso *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar, hermano que no puede patrocinar" /></Field>}
-            <Field label="Patrocinante: Maestro de su Taller *">
-              <select required value={sponsorId} onChange={event => setSponsorId(event.target.value)}>
-                <option value="" disabled>Elegir Maestro del Taller</option>
-                {sponsors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-              </select>
-              {sponsorError && <small role="alert">{sponsorError}</small>}
-            </Field>
-            {origin.kind === 'brother' && <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El hermano que recomienda no podrá ser designado entrevistador de este candidato. El origen se registra una sola vez; corregirlo exige motivo y queda en auditoría.</div>}
+            {origin.kind === 'other' && <Field label="Describa el origen *"><input required maxLength={200} value={origin.other} onChange={event => setOrigin({ ...origin, other: event.target.value })} placeholder="Ej.: evento público, familiar" /></Field>}
+            {origin.kind === 'brother' && <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El hermano que recomienda puede pertenecer a otro Taller y no necesita ser Maestro patrocinante. No podrá entrevistar a este candidato. El patrocinio formal lo asume exclusivamente un Maestro/a activo del Taller receptor.</div>}
           </>
           <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>
             Si la persona registra un rechazo en otro Taller, el sistema revisará el antecedente a nivel de Orden y exigirá un año completo antes de una nueva presentación.
@@ -504,38 +510,50 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
             <div className="workshop-form-grid">
               <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
               <Field label="Origen del candidato"><input value={originLabel(selectedOrigin, recommenders)} disabled /></Field>
-              <Field label="Patrocinante (Maestro del Taller)"><input value={selectedSponsorName || 'Sin asignar'} disabled /></Field>
               <Field label="Oriente"><input value={form.orient ?? ''} disabled={locked} onChange={event => setForm({ ...form, orient: event.target.value || null })} /></Field>
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
               <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
-              <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" />
-                <small>Lista descriptiva: no acredita el patrocinio. El patrocinio formal lo acredita el Maestro del Taller indicado arriba.</small>
-              </Field>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <div className="candidate-protected-notice">
+                  <strong>Maestro/a patrocinante formal del Taller receptor</strong>
+                  <p>Seleccione un Maestro/a activo del propio Taller. Este registro acredita el patrocinio institucional: es distinto del hermano que recomendó al candidato o de los nombres del formulario antiguo.</p>
+                  {selected.organizationId ? <>
+                    <label htmlFor="candidate-sponsor-filter">Buscar Maestro/a elegible</label>
+                    <input id="candidate-sponsor-filter" type="search" maxLength={80} value={sponsorSearch} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
+                      onChange={event => { setSponsorSearch(event.target.value); setSponsorChoiceId('') }} placeholder="Filtrar por nombre" />
+                    <label htmlFor="candidate-sponsor-id">Maestro/a del Taller *</label>
+                    <select id="candidate-sponsor-id" value={sponsorChoiceId} disabled={locked || !!sponsorConfirmedId || sponsorLoading || sponsorBusy}
+                      onChange={event => setSponsorChoiceId(event.target.value)}>
+                      <option value="">Seleccione un Maestro/a patrocinante</option>
+                      {sponsorConfirmedId && !eligibleSponsors.some(item => item.id === sponsorConfirmedId) &&
+                        <option value={sponsorConfirmedId}>Patrocinio registrado (fuera de esta búsqueda)</option>}
+                      {eligibleSponsors.map(item =>
+                        <option key={item.id} value={item.id}>{item.name}</option>)}
+                    </select>
+                    {sponsorLoading && <small>Consultando el catálogo privado de este Taller…</small>}
+                    {sponsorConfirmedId
+                      ? <small role="status">Patrocinio institucional registrado. Su vigencia y grado se volverán a verificar antes de publicar; cualquier cambio de identidad requiere corrección formal auditada.</small>
+                      : <button type="button" className="candidate-secondary-button" disabled={!sponsorChoiceId || locked || sponsorBusy || sponsorLoading}
+                          onClick={() => void assignSponsor()}>{sponsorBusy ? 'Acreditando…' : 'Acreditar patrocinio formal'}</button>}
+                  </> : <small>La ficha no identifica el Taller receptor. No se puede acreditar patrocinio sin ámbito institucional.</small>}
+                </div>
+              </div>
+              <Field label="Presentantes — nombres del formulario legado *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea (referencia histórica)" /></Field>
+              <div className="candidate-protected-notice" style={{ gridColumn: '1 / -1' }}>El origen del candidato no constituye patrocinio. El Maestro/a patrocinante formal debe ser miembro activo del Taller receptor. La lista de nombres heredada es informativa: no acredita membresía ni autoriza la publicación; la validación institucional real se realiza en el backend.</div>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
               <Field label="Observaciones internas" wide><textarea rows={4} value={form.internalObservations ?? ''} disabled={locked} onChange={event => setForm({ ...form, internalObservations: event.target.value || null })} /></Field>
             </div>
-            {!locked && <div className="workshop-form-actions">
-              {!selectedSponsorId && <ActionDrawer label="Asignar patrocinante" tone="secondary" title="Asignar patrocinante" description="Solo un Maestro activo de su Taller puede presentar formalmente al candidato.">
-                <form className="library-admin-form" onSubmit={assignSponsor}>
-                  <label><span>Maestro del Taller *</span>
-                    <select required value={pendingSponsorId} onChange={event => setPendingSponsorId(event.target.value)}>
-                      <option value="" disabled>Elegir Maestro del Taller</option>
-                      {sponsors.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                    </select>
-                  </label>
-                  <button className="candidate-primary-button" type="submit" disabled={busy}>Registrar patrocinante</button>
-                </form>
-              </ActionDrawer>}
-              {selectedOrigin?.kind && <ActionDrawer label="Corregir origen" tone="secondary" title="Corregir origen del candidato" description="El origen se registra una sola vez. Corregirlo exige un motivo y queda en la auditoría.">
+            {!locked && selectedOrigin?.kind && <div className="workshop-form-actions">
+              <ActionDrawer label="Corregir origen" tone="secondary" title="Corregir origen del candidato" description="El origen se registra una sola vez. Corregirlo exige un motivo y queda en la auditoría.">
                 <form className="library-admin-form" onSubmit={correctOrigin}>
                   <label><span>Nuevo origen *</span>
                     <select required value={correction.kind} onChange={event => setCorrection({ ...correction, kind: event.target.value as CandidateOrigin['kind'], recommenderId: '', other: '' })}>
                       <option value="" disabled>Seleccione cómo llegó</option>
                       <option value="brother">Recomendado por un hermano</option>
-                      <option value="internet">Internet / página web</option>
+                      <option value="internet">Página web / Internet</option>
                       <option value="social_media">Redes sociales</option>
-                      <option value="other">Otro caso</option>
+                      <option value="other">Otro</option>
                     </select>
                   </label>
                   {correction.kind === 'brother' && <label><span>Hermano que lo recomienda *</span>
@@ -548,7 +566,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
                   <label><span>Motivo de la corrección * (10 a 500 caracteres)</span><textarea required minLength={10} maxLength={500} rows={3} value={correction.reason} onChange={event => setCorrection({ ...correction, reason: event.target.value })} /></label>
                   <button className="candidate-primary-button" type="submit" disabled={busy}>Corregir origen</button>
                 </form>
-              </ActionDrawer>}
+              </ActionDrawer>
             </div>}
             <div className="workshop-form-actions">
               <small>Al guardar, la ficha queda pendiente de Gran Secretaría. Guardar no publica ni inicia el cómputo de días.</small>
