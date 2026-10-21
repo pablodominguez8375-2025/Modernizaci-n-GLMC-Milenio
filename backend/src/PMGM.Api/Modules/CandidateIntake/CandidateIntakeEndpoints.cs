@@ -57,6 +57,25 @@ public static class CandidateIntakeEndpoints
         if (ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected)
             return Results.Conflict(new { message = "La solicitud se encuentra cerrada y no admite cambios en la ficha." });
 
+        // El origen no acredita patrocinio: para los expedientes del circuito
+        // nuevo, no permitir presentación formal sin miembro del Taller receptor.
+        // Las fichas históricas con origen NULL conservan lectura/edición legacy.
+        if (ceremony.CandidateSponsorMemberId is null && ceremony.CandidateOriginKind is not null)
+            return Results.Conflict(new {
+                code = "CANDIDATE_WORKSHOP_SPONSOR_REQUIRED",
+                message = "La presentación requiere un hermano activo del Taller receptor, distinto del dato de origen."
+            });
+        if (ceremony.CandidateSponsorMemberId is Guid sponsorMemberId)
+        {
+            var accreditedSponsor = await CandidateOriginAccreditation.VerifyWorkshopSponsorAsync(
+                coreDb, sponsorMemberId, ceremony.OrganizationId, ChileToday(), cancellationToken);
+            if (accreditedSponsor is null || !accreditedSponsor.IsActive)
+                return Results.Conflict(new {
+                    code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
+                    message = "El presentador debe mantener su membresía activa en este Taller."
+                });
+        }
+
         var validationError = ValidateRequest(request);
         if (validationError is not null) return Results.BadRequest(new { message = validationError });
 
@@ -477,7 +496,8 @@ public static class CandidateIntakeEndpoints
             .Select(x => new {
                 x.CandidateOriginKind,
                 x.CandidateRecommenderMemberId,
-                x.CandidateOriginOtherDescription
+                x.CandidateOriginOtherDescription,
+                x.CandidateSponsorMemberId
             }).SingleOrDefaultAsync(cancellationToken);
 
         return new CandidateIntakeProfileDto(
@@ -515,7 +535,8 @@ public static class CandidateIntakeEndpoints
             profile.UpdatedAtUtc,
             origin?.CandidateOriginKind,
             origin?.CandidateRecommenderMemberId,
-            origin?.CandidateOriginOtherDescription);
+            origin?.CandidateOriginOtherDescription,
+            origin?.CandidateSponsorMemberId);
     }
 
     private static string MapReviewStatus(string? status)
@@ -620,7 +641,8 @@ public sealed record CandidateIntakeProfileDto(
     DateTimeOffset UpdatedAtUtc,
     string? CandidateOriginKind = null,
     Guid? RecommenderMemberId = null,
-    string? CandidateOriginOtherDescription = null);
+    string? CandidateOriginOtherDescription = null,
+    Guid? SponsorMemberId = null);
 
 public sealed record CandidateReviewQueueItemDto(
     Guid CeremonyRequestId,
