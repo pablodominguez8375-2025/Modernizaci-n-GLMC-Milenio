@@ -26,3 +26,4 @@
 .member-rut-hint{margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:#51627f}
 .masked-rut{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center}
 .masked-rut strong{color:#06148E;font-variant-numeric:tabular-nums}
+.library-file-button{cursor:pointer;display:inline-flex;align-items:center}

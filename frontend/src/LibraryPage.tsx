@@ -3,6 +3,7 @@ import InstitutionalIcon from './InstitutionalIcon'
 import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 import './library-ppt-enhancement.css'
+import LibraryMagazineEditorial from './LibraryMagazineEditorial'
 import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
 const pageSize = 12
@@ -32,6 +33,7 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
   const [addedItems, setAddedItems] = useState<LibraryCatalogItem[]>([])
   const [submissions, setSubmissions] = useState<LibrarySubmission[]>([])
   const [notice, setNotice] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
   const submissionsTouched = useRef(false)
 
   useEffect(() => {
@@ -40,7 +42,7 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
       .then(response => { if (active) setFacets(response) })
       .catch(reason => { if (active) setError(toMessage(reason)) })
     return () => { active = false }
-  }, [documentApi])
+  }, [documentApi, reloadKey])
 
   useEffect(() => {
     let active = true
@@ -66,7 +68,7 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
     }, query ? 250 : 0)
 
     return () => { active = false; window.clearTimeout(timer) }
-  }, [degree, documentApi, documentType, officialDocumentType, page, query, topic])
+  }, [degree, documentApi, documentType, officialDocumentType, page, query, reloadKey, topic])
 
   const demoCollectionId = facets.collections[0]?.value ?? items[0]?.collectionId ?? 'demo-library'
   const baseDemoCatalog = useMemo(() => documentApi.useMocks ? createDemoShowcaseCatalog(demoCollectionId) : [], [demoCollectionId, documentApi.useMocks])
@@ -123,6 +125,7 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
+    {!documentApi.useMocks && <LibraryMagazineEditorial documentApi={documentApi} onChanged={() => setReloadKey(value => value + 1)} />}
     {documentApi.useMocks && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
       <LibraryManagement categories={categories} onCategories={setCategories} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
