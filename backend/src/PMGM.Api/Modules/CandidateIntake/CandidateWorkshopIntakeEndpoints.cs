@@ -5,6 +5,7 @@ using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Ceremonies;
+using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.CandidateIntake;
 
@@ -87,6 +88,59 @@ public static class CandidateWorkshopIntakeEndpoints
 
         var presentationDate = DateOnly.FromDateTime(
             TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+
+        // La interfaz antigua todavía no envía origen: NULL conserva compatibilidad
+        // sin inventar fuentes. Si llega un origen, la validación es estricta.
+        CandidateOriginValidationResult? origin = null;
+        if (request.OriginKind is not null ||
+            request.RecommenderMemberId is not null ||
+            request.OriginOtherDescription is not null)
+        {
+            CandidateOriginVerifiedMember? accredited = null;
+            if (request.OriginKind == CandidateOriginPolicy.Brother &&
+                request.RecommenderMemberId is Guid memberId && memberId != Guid.Empty)
+            {
+                var membership = await coreDb.Memberships.AsNoTracking()
+                    .Where(m => m.MemberId == memberId &&
+                        m.OrganizationId == request.OrganizationId &&
+                        m.Status == MembershipCodes.MembershipStatus.Active &&
+                        (m.StartDate == null || m.StartDate <= presentationDate) &&
+                        (m.EndDate == null || m.EndDate >= presentationDate))
+                    .Select(m => new { m.Id }).FirstOrDefaultAsync(cancellationToken);
+                if (membership is not null)
+                {
+                    var recognized = new[] {
+                        MembershipCodes.InstitutionalStatus.Active,
+                        MembershipCodes.InstitutionalStatus.Reinstated,
+                        MembershipCodes.InstitutionalStatus.Inactive,
+                        MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
+                        MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
+                        MembershipCodes.InstitutionalStatus.Deceased
+                    };
+                    var latestStatus = await coreDb.InstitutionalStatusEvents.AsNoTracking()
+                        .Where(x => x.MemberId == memberId &&
+                            x.EffectiveDate <= presentationDate &&
+                            recognized.Contains(x.EventType))
+                        .OrderByDescending(x => x.EffectiveDate)
+                        .ThenByDescending(x => x.RecordedAtUtc)
+                        .Select(x => x.EventType)
+                        .FirstOrDefaultAsync(cancellationToken);
+                    var active = latestStatus is null or
+                        MembershipCodes.InstitutionalStatus.Active or
+                        MembershipCodes.InstitutionalStatus.Reinstated;
+                    accredited = new CandidateOriginVerifiedMember(
+                        memberId, presentationDate, active,
+                        "core.memberships:" + membership.Id.ToString("D"));
+                }
+            }
+
+            origin = CandidateOriginPolicy.ValidateNew(
+                request.OriginKind, request.RecommenderMemberId,
+                request.OriginOtherDescription, accredited, presentationDate);
+            if (!origin.IsValid)
+                return Results.BadRequest(new { code = origin.ErrorCode,
+                    message = "El origen del candidato no está acreditado o contiene datos incompatibles." });
+        }
         var person = await coreDb.People.SingleOrDefaultAsync(x => x.Rut != null &&
             x.Rut.Replace(".", "").Replace("-", "").Replace(" ", "").ToUpper() == normalizedId, cancellationToken);
         if (person is not null)
@@ -118,6 +172,9 @@ public static class CandidateWorkshopIntakeEndpoints
             CeremonyType = CeremonyCodes.Type.Initiation,
             RequiresFormalInterviewAssignments = true,
             CandidatePersonId = person.Id,
+            CandidateOriginKind = origin?.Kind,
+            CandidateRecommenderMemberId = origin?.RecommenderMemberId,
+            CandidateOriginOtherDescription = origin?.OtherDescription,
             Status = CeremonyCodes.RequestStatus.Draft,
             Notes = "Expediente de insinuación iniciado por Secretaría Logial."
         };
@@ -132,7 +189,8 @@ public static class CandidateWorkshopIntakeEndpoints
                     rePresentation.PriorRejection.RejectionDate,
                     newCeremonyRequestId = entity.Id, referenceRecorded = true });
         audit.Add(httpContext, "candidate.intake.created", nameof(CeremonyRequest), entity.Id.ToString(),
-            organization.Id, AuditResults.Success, new { entity.CandidatePersonId, entity.CeremonyType, entity.Status });
+            organization.Id, AuditResults.Success, new { entity.CandidatePersonId, entity.CeremonyType, entity.Status,
+                originKind = entity.CandidateOriginKind, recommenderRegistered = entity.CandidateRecommenderMemberId.HasValue });
         await coreDb.SaveChangesAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -323,7 +381,9 @@ public sealed record CandidateWorkshopOrganizationDto(Guid Id, string Name, stri
 
 public sealed record CreateCandidateWorkshopRequest(
     Guid OrganizationId, string FirstNames, string LastNames, string RutOrInstitutionalId,
-    bool RejectionCausesRemedied = false, string? RePresentationSourceReference = null);
+    bool RejectionCausesRemedied = false, string? RePresentationSourceReference = null,
+    string? OriginKind = null, Guid? RecommenderMemberId = null,
+    string? OriginOtherDescription = null);
 
 public sealed record CandidateWorkshopQueueItemDto(
     Guid CeremonyRequestId,
