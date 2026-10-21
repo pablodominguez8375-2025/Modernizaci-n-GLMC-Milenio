@@ -69,7 +69,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
-  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>(api.useMocks ? demoRecommenders : [])
+  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>([])
   const [recommenderError, setRecommenderError] = useState<string | null>(null)
   const [recommenderSearch, setRecommenderSearch] = useState('')
   const [correction, setCorrection] = useState<CandidateOrigin & { reason: string }>({ ...emptyOrigin, reason: '' })
@@ -160,7 +160,6 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   // El recomendante puede ser de OTRO Taller. El catálogo local de Miembros
   // no satisface esta regla y expone más campos personales que los necesarios.
   useEffect(() => {
-    if (api.useMocks) return
     setRecommenders([])
     setRecommenderError(null)
     const term = recommenderSearch.trim()
@@ -432,7 +431,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               </select>
             </Field>
             {origin.kind === 'brother' && <Field label="Hermano que lo recomienda *">
-              {!api.useMocks && <input type="search" maxLength={80} autoComplete="off" value={recommenderSearch}
+              {<input type="search" maxLength={80} autoComplete="off" value={recommenderSearch}
                 onChange={event => { setRecommenderSearch(event.target.value); setOrigin({ ...origin, recommenderId: '' }) }}
                 placeholder="Busque por nombre (mínimo 3 caracteres, cualquier Taller)" />}
               <select required value={origin.recommenderId} onChange={event => setOrigin({ ...origin, recommenderId: event.target.value })}>
@@ -570,7 +569,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
                     </select>
                   </label>
                   {correction.kind === 'brother' && <label><span>Hermano que lo recomienda *</span>
-                    {!api.useMocks && <input type="search" maxLength={80} autoComplete="off" value={recommenderSearch}
+                    {<input type="search" maxLength={80} autoComplete="off" value={recommenderSearch}
                       onChange={event => { setRecommenderSearch(event.target.value); setCorrection({ ...correction, recommenderId: '' }) }}
                       placeholder="Busque por nombre (mínimo 3 caracteres, cualquier Taller)" />}
                     <select required value={correction.recommenderId} onChange={event => setCorrection({ ...correction, recommenderId: event.target.value })}>
