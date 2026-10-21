@@ -121,7 +121,7 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     getWorkPaperByVersion: { view: 'library', action: 'view' },
     submitWorkPaper: { view: 'library', action: 'create' },
     replaceWorkPaper: { view: 'library', action: 'edit' },
-    searchLibrary: { view: 'library', action: 'view' },
+    searchLibrary: { view: 'library', action: 'search' },
     getLibraryFacets: { view: 'library', action: 'view' },
     setLibraryCatalogMetadata: { view: 'documentmanager', action: 'edit' },
     downloadLibraryDocument: { view: 'library', action: 'view' },
