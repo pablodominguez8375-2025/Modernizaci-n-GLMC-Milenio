@@ -66,6 +66,7 @@ public sealed class AssemblyPreliminaryReviewProjectionTests
         ReasonCode = "HABILITACION_VERIFICADA",
         GrandTreasurySourceReference = "GT-CORTE",
         GrandTreasuryCurrency = "CLP",
+        GrandTreasuryPendingAmount = 0m,
         GrandTreasuryAsOfDate = Cutoff,
         InstitutionalRightsSourceReference = "RI-RESOLUCION",
         HonorRightsSourceReference = "TH-COBERTURA",
@@ -116,6 +117,33 @@ public sealed class AssemblyPreliminaryReviewProjectionTests
         d.GrandTreasurySourceReference = "GT-CORTE";
         d.GrandTreasuryAsOfDate = Cutoff.AddDays(-1);
         Assert.False(AssemblyPreliminaryReviewProjection.Project(m, [d], Cutoff).MayVotePreliminary);
+    }
+
+    [Fact]
+    public void Unverified_or_positive_treasury_amount_never_claims_provisional_suffrage()
+    {
+        var member = Member();
+        foreach (decimal? amount in new decimal?[] { null, -0.01m, 0.01m, 1200m })
+        {
+            var evidence = Decision(member);
+            evidence.GrandTreasuryPendingAmount = amount;
+            var result = AssemblyPreliminaryReviewProjection.Project(member, [evidence], Cutoff);
+            Assert.Equal(AssemblyVoterEligibilityPolicy.Pending, result.Status);
+            Assert.Equal("ELIGIBILITY_SOURCES_UNVERIFIED", result.ReasonCode);
+            Assert.False(result.MayVotePreliminary);
+            Assert.False(result.MayVoteConfirmed);
+        }
+    }
+
+    [Fact]
+    public void Accredited_zero_balance_can_be_preliminarily_eligible_but_never_confirms_vote()
+    {
+        var member = Member();
+        var result = AssemblyPreliminaryReviewProjection.Project(member,
+            [Decision(member)], Cutoff);
+        Assert.Equal(AssemblyVoterEligibilityPolicy.Eligible, result.Status);
+        Assert.True(result.MayVotePreliminary);
+        Assert.False(result.MayVoteConfirmed);
     }
 
     [Fact]
