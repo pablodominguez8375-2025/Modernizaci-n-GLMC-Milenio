@@ -6,4 +6,6 @@
 - Archivos previstos: `AssemblyPreliminaryReviewEndpoints.cs`, pruebas nuevas del módulo, registro GOV-004 y este handoff.
 - Guardarraíles: solo vista preliminar; `MayVoteConfirmed=false`; no cierre, padrón oficial, PDF, migración, decisión electoral ni nuevas atribuciones institucionales. No alterar UI, `main`, QA físico ni datos reales.
 - No es un conector oficial Gran Tesorería: la autenticación de saldo y fuente sigue pendiente en #533; las pruebas de este incremento no equivalen a UAT.
-- Estado al abrir PR: implementación, CI exact-head, Pages e instalable pendientes.
+- Implementación en rama: condición `GrandTreasuryPendingAmount != 0m` hace fallar cerradamente la proyección `habilitado` sin cero acreditado y sin prueba específica de excepción RI. Pruebas unitarias agregadas a `AssemblyPreliminaryReviewProjectionTests`: monto null, negativo, positivo y cero.
+- Registro GOV-004: `docs/modelo-datos/registros/2026-10-21-chatgpt-assembly-historical-balance-533-c20.md`.
+- Estado: PR #619 DRAFT; CI exact-head, Pages e instalable por verificar. Compilación local .NET no disponible en este entorno. No QA físico, no UAT, no cierre de #533. La revisión de Drive del 21-10 identificó adendas UI y continuidad #533 sin nueva decisión que permita saldar deuda mediante un dato digitado.
