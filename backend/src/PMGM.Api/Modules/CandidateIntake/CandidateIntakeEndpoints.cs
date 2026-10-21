@@ -22,6 +22,7 @@ public static class CandidateIntakeEndpoints
 
         group.MapPut("/solicitudes/{requestId:guid}/ficha", UpsertProfileAsync);
         group.MapGet("/solicitudes/{requestId:guid}/ficha", GetProfileAsync);
+        CandidateOriginCorrectionEndpoints.Map(group);
         group.MapGet("/revision-gran-secretaria", GetGrandSecretariatQueueAsync);
         group.MapPost("/solicitudes/{requestId:guid}/foto", AttachPhotoAsync);
         group.MapPut("/solicitudes/{requestId:guid}/foto/contenido", UploadPhotoAsync);
@@ -55,6 +56,25 @@ public static class CandidateIntakeEndpoints
         if (!access.CanManageOrganization(httpContext.User, ceremony.OrganizationId)) return Results.Forbid();
         if (ceremony.Status is CeremonyCodes.RequestStatus.Authorized or CeremonyCodes.RequestStatus.Rejected)
             return Results.Conflict(new { message = "La solicitud se encuentra cerrada y no admite cambios en la ficha." });
+
+        // El origen no acredita patrocinio: para los expedientes del circuito
+        // nuevo, no permitir presentación formal sin miembro del Taller receptor.
+        // Las fichas históricas con origen NULL conservan lectura/edición legacy.
+        if (ceremony.CandidateSponsorMemberId is null && ceremony.CandidateOriginKind is not null)
+            return Results.Conflict(new {
+                code = "CANDIDATE_WORKSHOP_SPONSOR_REQUIRED",
+                message = "La presentación requiere un hermano activo del Taller receptor, distinto del dato de origen."
+            });
+        if (ceremony.CandidateSponsorMemberId is Guid sponsorMemberId)
+        {
+            var accreditedSponsor = await CandidateOriginAccreditation.VerifyWorkshopSponsorAsync(
+                coreDb, sponsorMemberId, ceremony.OrganizationId, ChileToday(), cancellationToken);
+            if (accreditedSponsor is null || !accreditedSponsor.IsActive)
+                return Results.Conflict(new {
+                    code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
+                    message = "El patrocinador formal debe ser Maestro/a activo/a del Taller receptor."
+                });
+        }
 
         var validationError = ValidateRequest(request);
         if (validationError is not null) return Results.BadRequest(new { message = validationError });
@@ -469,6 +489,16 @@ public static class CandidateIntakeEndpoints
         var published = await coreDb.CandidatePublications.AsNoTracking()
             .AnyAsync(x => x.CeremonyRequestId == profile.CeremonyRequestId && x.Status == CeremonyCodes.PublicationStatus.Published, cancellationToken);
         var completeness = CandidateIntakeCompletenessPolicy.Evaluate(profile, person.FirstNames, person.Phone, person.Email, person.Address);
+        // Exclusivamente en el detalle privado autorizado del expediente.
+        // Nunca incluir el recomendante en la bandeja transversal ni publicación.
+        var origin = await coreDb.CeremonyRequests.AsNoTracking()
+            .Where(x => x.Id == profile.CeremonyRequestId)
+            .Select(x => new {
+                x.CandidateOriginKind,
+                x.CandidateRecommenderMemberId,
+                x.CandidateOriginOtherDescription,
+                x.CandidateSponsorMemberId
+            }).SingleOrDefaultAsync(cancellationToken);
 
         return new CandidateIntakeProfileDto(
             profile.CeremonyRequestId,
@@ -502,7 +532,11 @@ public static class CandidateIntakeEndpoints
             profile.InterviewSummary,
             profile.InternalObservations,
             profile.SubmittedAtUtc,
-            profile.UpdatedAtUtc);
+            profile.UpdatedAtUtc,
+            origin?.CandidateOriginKind,
+            origin?.CandidateRecommenderMemberId,
+            origin?.CandidateOriginOtherDescription,
+            origin?.CandidateSponsorMemberId);
     }
 
     private static string MapReviewStatus(string? status)
@@ -604,7 +638,11 @@ public sealed record CandidateIntakeProfileDto(
     string? InterviewSummary,
     string? InternalObservations,
     DateTimeOffset SubmittedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string? CandidateOriginKind = null,
+    Guid? RecommenderMemberId = null,
+    string? CandidateOriginOtherDescription = null,
+    Guid? SponsorMemberId = null);
 
 public sealed record CandidateReviewQueueItemDto(
     Guid CeremonyRequestId,

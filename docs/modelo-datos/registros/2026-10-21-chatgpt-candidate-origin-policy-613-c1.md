@@ -1,0 +1,12 @@
+# GOV-004 — Issue #613 C1: validación de origen y recomendante
+
+- 21-10-2026; PR #621, rama `feature/candidate-origin-admission-policy-613-20261021-gpt`, base `dev@dbd8e53f6c4b9c884e76517fa720458141fdfb52`.
+- **Alcance real:** nuevo contrato de política pura, no persistido. No añade tablas, columnas, relaciones ni migraciones; no agrega datos personales a logs ni endpoints.
+- Diccionario de entrada futuro de creación: `kind` (`brother`, `internet`, `other`; `unregistered` solo lectura histórica), `recommenderMemberId` (UUID, solo `brother`), `otherDescription` (hasta 200 caracteres, solo `other`). El backend debe adaptar la UI actual de Claude y no entregar al cliente indicadores de prueba interna.
+- Dato verificado exclusivamente desde el servidor: `CandidateOriginVerifiedMember(MemberId, AsOf, IsActive, SourceReference)`. No confiar en `IsActive`, fechas o referencia enviados por el navegador; la futura capa de integración consulta membresía efectiva del hermano a fecha de creación.
+- Datos de salida normalizados: `CandidateOriginValidationResult(IsValid, Kind, RecommenderMemberId, OtherDescription, ErrorCode)`. No exponer evidencia sensible, secretos ni nombres de terceros.
+- Independencia de entrevistador: `CandidateOriginPolicy.CanBeInterviewer(interviewerMemberId, persistedRecommenderMemberId)` debe recibir el recomendante **persistido y autorizado del expediente**, no un dato nuevo enviado desde el cliente. La aplicación en las rutas de asignación/elegibles se implementará en la siguiente etapa.
+- Casos inválidos: origen ausente/desconocido, `unregistered` en alta, recomendante ausente/inactivo sin evidencia, referencias de otro miembro/fecha, datos cruzados entre opciones, descripción vacía/de más de 200 caracteres o con saltos de línea.
+- Próxima etapa C2: migración aditiva en `CandidateIntakeProfile`, DTO y endpoint de creación/lectura, mecanismo de corrección con motivo y auditoría; nuevas solicitudes con origen obligatorio, expedientes anteriores `unregistered`; C3 bloquear recomendante en la asignación de maestros y sincronizar frontend/PDF con Claude.
+- Clasificación: el ID del recomendante permite inferir relación con persona natural; requiere acceso restringido al expediente y trazabilidad, Ley 21.719. No cargar datos reales en QA.
+- Pruebas unitarias del contrato incluidas. CI/Showcase/Installable exact-head pendientes; no afirmar integración en dev ni estado QA.

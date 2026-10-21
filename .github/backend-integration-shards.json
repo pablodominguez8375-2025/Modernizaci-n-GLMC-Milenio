@@ -39,7 +39,12 @@
       "FormSchemaVersionPostgreSqlTests",
       "FormSchemaAdministrationHttpTests",
       "CandidateFormCaptureHttpTests",
-      "MagazineEditorialVersionStatusHttpTests"
+      "CandidateOriginPersistenceHttpTests",
+      "CandidateOriginChannelsHttpTests",
+      "CandidateWorkshopSponsorHttpTests",
+      "CandidateOriginCorrectionHttpTests",
+      "MagazineEditorialVersionStatusHttpTests",
+      "CandidateFormalSponsorGatesHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",

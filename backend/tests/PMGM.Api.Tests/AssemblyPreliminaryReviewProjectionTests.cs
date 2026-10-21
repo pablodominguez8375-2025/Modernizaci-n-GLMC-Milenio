@@ -66,6 +66,7 @@ public sealed class AssemblyPreliminaryReviewProjectionTests
         ReasonCode = "HABILITACION_VERIFICADA",
         GrandTreasurySourceReference = "GT-CORTE",
         GrandTreasuryCurrency = "CLP",
+        GrandTreasuryPendingAmount = 0m,
         GrandTreasuryAsOfDate = Cutoff,
         InstitutionalRightsSourceReference = "RI-RESOLUCION",
         HonorRightsSourceReference = "TH-COBERTURA",
@@ -116,6 +117,61 @@ public sealed class AssemblyPreliminaryReviewProjectionTests
         d.GrandTreasurySourceReference = "GT-CORTE";
         d.GrandTreasuryAsOfDate = Cutoff.AddDays(-1);
         Assert.False(AssemblyPreliminaryReviewProjection.Project(m, [d], Cutoff).MayVotePreliminary);
+    }
+
+    [Fact]
+    public void Unverified_or_positive_treasury_amount_never_claims_provisional_suffrage()
+    {
+        var member = Member();
+        foreach (decimal? amount in new decimal?[] { null, -0.01m, 0.01m, 1200m })
+        {
+            var evidence = Decision(member);
+            evidence.GrandTreasuryPendingAmount = amount;
+            var result = AssemblyPreliminaryReviewProjection.Project(member, [evidence], Cutoff);
+            Assert.Equal(AssemblyVoterEligibilityPolicy.Pending, result.Status);
+            Assert.Equal("ELIGIBILITY_SOURCES_UNVERIFIED", result.ReasonCode);
+            Assert.False(result.MayVotePreliminary);
+            Assert.False(result.MayVoteConfirmed);
+        }
+    }
+
+    [Fact]
+    public void Accredited_zero_balance_can_be_preliminarily_eligible_but_never_confirms_vote()
+    {
+        var member = Member();
+        var result = AssemblyPreliminaryReviewProjection.Project(member,
+            [Decision(member)], Cutoff);
+        Assert.Equal(AssemblyVoterEligibilityPolicy.Eligible, result.Status);
+        Assert.True(result.MayVotePreliminary);
+        Assert.False(result.MayVoteConfirmed);
+    }
+
+    [Fact]
+    public void Orphaned_history_reference_cannot_authorize_preliminary_suffrage()
+    {
+        var member = Member();
+        var orphan = Decision(member, supersedes: Guid.NewGuid());
+        var projected = AssemblyPreliminaryReviewProjection.Project(member, [orphan], Cutoff);
+        Assert.Equal(AssemblyVoterEligibilityPolicy.Pending, projected.Status);
+        Assert.Equal("INCOMPLETE_EVALUATION_HISTORY", projected.ReasonCode);
+        Assert.False(projected.MayVotePreliminary);
+        Assert.False(projected.MayVoteConfirmed);
+    }
+
+    [Fact]
+    public void Disconnected_cycle_cannot_hide_behind_an_apparently_unique_tip()
+    {
+        var member = Member();
+        var apparentlyCurrent = Decision(member);
+        var first = Decision(member);
+        var second = Decision(member, supersedes: first.Id);
+        first.SupersedesEligibilityId = second.Id;
+        var projected = AssemblyPreliminaryReviewProjection.Project(
+            member, [apparentlyCurrent, first, second], Cutoff);
+        Assert.Equal(AssemblyVoterEligibilityPolicy.Pending, projected.Status);
+        Assert.Equal("INCOMPLETE_EVALUATION_HISTORY", projected.ReasonCode);
+        Assert.False(projected.MayVotePreliminary);
+        Assert.False(projected.MayVoteConfirmed);
     }
 
     [Fact]
