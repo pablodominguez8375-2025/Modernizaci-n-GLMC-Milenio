@@ -5,13 +5,13 @@
 ## Cambios estructurales aditivos
 - Tabla existente: `core.ceremony_requests`, contexto `PmgmDbContext`.
 - `CandidateOriginKind`: `varchar(24) NULL`. Códigos válidos `brother`, `internet`, `other`, y `NULL` como histórico «Sin registrar».
-- `CandidateRecommenderMemberId`: `uuid NULL`, relación FK restrictiva con `core.members.Id`, índice de consulta. No asociar recomendante de otro Taller ni de membresía no activa.
+- `CandidateRecommenderMemberId`: `uuid NULL`, relación FK restrictiva con `core.members.Id`, índice de consulta. El recomendante puede pertenecer a cualquier Taller de la Orden; debe tener membresía activa acreditada.
 - `CandidateOriginOtherDescription`: `varchar(200) NULL`; descripción breve exclusiva de tipo `other`. Sin nombres de recomendante en listados públicos.
 - Restricción SQL `CK_ceremony_candidate_origin_consistency` impide combinaciones cruzadas o falta de información obligatoria por origen. Los datos históricos quedan con NULL en los tres campos.
 - Migración reversible `20261021150000_AddCandidateOriginToCeremonyRequests` sin actualización masiva ni borrados de historial.
 
 ## Escritura y lectura
-- POST `/api/insinuados/taller/solicitudes`: DTO opcional por compatibilidad antigua `originKind`, `recommenderMemberId`, `originOtherDescription`. Cuando algún campo se informa, `CandidateOriginPolicy.ValidateNew` exige uno de los tres orígenes válidos. Para `brother` consulta en servidor membresía activa del mismo Taller y estado institucional vigente a fecha Chile; fuente `core.memberships.Id`, nunca acepta `IsActive` externo.
+- POST `/api/insinuados/taller/solicitudes`: DTO opcional por compatibilidad antigua `originKind`, `recommenderMemberId`, `originOtherDescription`. Cuando algún campo se informa, `CandidateOriginPolicy.ValidateNew` exige uno de los tres orígenes válidos. Para `brother` consulta en servidor membresía activa en algún Taller de la Orden y estado institucional vigente a fecha Chile; fuente `core.memberships.Id`, nunca acepta `IsActive` externo.
 - El evento de creación y auditoría se almacenan con los datos del expediente en `PmgmDbContext`; la auditoría registra tipo y booleano, no RUT, descripción reservada ni nombre del recomendante.
 - GET/PUT autorizado de `/api/insinuados/solicitudes/{id}/ficha` incluye origen únicamente en respuesta privada. El endpoint de bandeja general no expone recomendante ni descripción.
 - GET `/api/insinuados/solicitudes/{id}/maestros-entrevistadores` excluye del campo `items` al recomendante persistido e informa su incompatibilidad en `excluded` (únicamente Venerable autenticado). POST de asignación verifica el mismo vínculo del expediente y rechaza con 409 y código `CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW`. No se aceptan ids declarados por el navegador para imponer la exclusión.
