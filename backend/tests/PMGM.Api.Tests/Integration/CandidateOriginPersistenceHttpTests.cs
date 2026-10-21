@@ -126,6 +126,55 @@ public sealed class CandidateOriginPersistenceHttpTests
     }
 
     [Fact]
+    public async Task Active_member_from_another_workshop_can_recommend()
+    {
+        var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new CandidatePublicationTestFactory(connection);
+        using var client = factory.CreateClient();
+        var candidateWorkshop = new Organization {
+            Name = "Taller candidato " + Guid.NewGuid().ToString("N"), Type = "workshop"
+        };
+        var otherWorkshop = new Organization {
+            Name = "Taller recomendante " + Guid.NewGuid().ToString("N"), Type = "workshop"
+        };
+        var p = new Person { FirstNames = "Maestro", LastNames = "Recomendante externo" };
+        var recommender = new Member { Person = p, PersonId = p.Id, CurrentDegree = "master" };
+        var active = new Membership {
+            Member = recommender, MemberId = recommender.Id,
+            Organization = otherWorkshop, OrganizationId = otherWorkshop.Id,
+            MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.AddRange(candidateWorkshop, otherWorkshop, recommender, active);
+            await db.SaveChangesAsync(ct);
+        }
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Organization",
+            candidateWorkshop.Id.ToString("D"));
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Role",
+            InstitutionalRoles.TallerSecretaria);
+        using var result = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes",
+            new {
+                organizationId = candidateWorkshop.Id, firstNames = "Persona",
+                lastNames = "Recomendada por otro Taller",
+                rutOrInstitutionalId = Guid.NewGuid().ToString("N")[..12],
+                originKind = "brother", recommenderMemberId = recommender.Id
+            }, ct);
+        Assert.Equal(HttpStatusCode.Created, result.StatusCode);
+        var json = await result.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var id = json.GetProperty("ceremonyRequestId").GetGuid();
+        await using var verifyScope = factory.Services.CreateAsyncScope();
+        var verified = await verifyScope.ServiceProvider.GetRequiredService<PmgmDbContext>()
+            .CeremonyRequests.AsNoTracking().SingleAsync(x => x.Id == id, ct);
+        Assert.Equal(recommender.Id, verified.CandidateRecommenderMemberId);
+    }
+
+    [Fact]
     public async Task Unaccredited_recommender_fails_without_creating_case()
     {
         var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
