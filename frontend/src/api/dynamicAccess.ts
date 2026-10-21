@@ -1,4 +1,4 @@
-export type AccessAction = 'view' | 'create' | 'write' | 'edit' | 'delete' | 'print'
+export type AccessAction = 'view' | 'create' | 'write' | 'edit' | 'delete' | 'search' | 'print'
 export interface DynamicView { code:string; name:string; isActive:boolean }
 export interface DynamicMenu { code:string; name:string; isActive:boolean; views:DynamicView[] }
 export interface DynamicGrant { viewCode:string; actions:AccessAction[] }
@@ -6,8 +6,8 @@ export interface DynamicProfile { id:string; code:string; name:string; scope:'or
 export interface DynamicAssignment { id:string; subject:string; profileCode:string; organizationId:string|null; effectiveFrom:string; effectiveTo:string|null; isActive:boolean }
 export interface DynamicCatalog { version:number; actions:AccessAction[]; menus:DynamicMenu[]; profiles:DynamicProfile[]; assignments:DynamicAssignment[] }
 export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'>
-export const actionLabels:Record<AccessAction,string>={view:'Ver',create:'Crear / hacer',write:'Escribir / registrar',edit:'Editar',delete:'Borrar lógico',print:'Imprimir'}
-const actions:AccessAction[]=['view','create','write','edit','delete','print']
+export const actionLabels:Record<AccessAction,string>={view:'Ver',create:'Crear / hacer',write:'Escribir / registrar',edit:'Editar',delete:'Borrar lógico',search:'Buscar',print:'Imprimir'}
+const actions:AccessAction[]=['view','create','write','edit','delete','search','print']
 export function initialDynamicCatalog():DynamicCatalog {
  const menu=(code:string,name:string,views:[string,string][]):DynamicMenu=>({code,name,isActive:true,views:views.map(([code,name])=>({code:code.toLowerCase(),name,isActive:true}))})
  const names=['Venerable Maestro','Secretaría del Taller','Tesorería del Taller','Hospitalaria del Taller','Orador del Taller','Primer Vigilante','Segundo Vigilante','Inmediato Ex-Venerable Maestro','Administrador del Sistema']

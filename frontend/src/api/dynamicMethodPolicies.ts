@@ -34,7 +34,7 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     issueSecretariatDocument: { view: 'secretariat', action: 'write' },
     issueSecretariatCeremonyAuthorization: { view: 'secretariat', action: 'write' },
     createAdmissionCase: { view: 'admissions', action: 'create' },
-    searchAdmissionPeople: { view: 'admissions', action: 'view' },
+    searchAdmissionPeople: { view: 'admissions', action: 'search' },
     createExternalIncorporation: { view: 'admissions', action: 'create' },
     getAdmissionCase: { view: 'admissions', action: 'view' },
     listAdmissionCases: { view: 'admissions', action: 'view', organizationArg: 0 },

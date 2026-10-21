@@ -1,6 +1,7 @@
 import {describe,expect,it,vi} from 'vitest'
 import {PmgmApiClient} from './pmgmApi'
 import {technicalGrant} from './dynamicAccess'
+import { dynamicMethodPolicies } from './dynamicMethodPolicies'
 describe('dynamic access contract',()=>{
  it('persists, isolates subject/organization/date and revokes',async()=>{
   const api=new PmgmApiClient({useMocks:true});const org=(await api.getOrganizationOptions()).items[0].id;const a=api.dynamicAccess;let c=await a.create({code:'apoyo',name:'Apoyo',scope:'lodge',menuCodes:['personal']},0)
@@ -27,4 +28,22 @@ describe('dynamic access contract',()=>{
   const fetch=vi.fn().mockResolvedValue(new Response(JSON.stringify({version:1,menus:[],profiles:[],assignments:[],actions:[]})));vi.stubGlobal('fetch',fetch)
   try{const a=new PmgmApiClient({getAccessToken:async()=>'test-token'}).dynamicAccess;await a.create({code:'one',name:'Uno',scope:'order',menuCodes:[]},0);const [path,init]=fetch.mock.calls[0];expect(path).toBe('/api/system/access/profiles');expect(new Headers(init.headers).get('Authorization')).toBe('Bearer test-token');expect(JSON.parse(init.body).expectedVersion).toBe(0)}finally{vi.unstubAllGlobals()}
  })
+ it('requires explicit search even when view is granted and keeps domain method scoped',async()=>{
+  expect(dynamicMethodPolicies.pmgmApi.searchAdmissionPeople.action).toBe('search')
+  expect(dynamicMethodPolicies.pmgmApi.getAdmissionCase.action).toBe('view')
+  const api=new PmgmApiClient({useMocks:true})
+  const org=(await api.getOrganizationOptions()).items[0].id
+  const a=api.dynamicAccess
+  let c=await a.create({code:'lookups',name:'Consulta antecedentes',scope:'lodge',menuCodes:['admissions']},0)
+  c=await a.grants('lookups',[{viewCode:'admissions',actions:['view']}],c.version)
+  c=await a.assign({subject:'subject-lookups',profileCode:'lookups',organizationId:org,
+    effectiveFrom:'2026-10-19',effectiveTo:'2026-10-21'},c.version)
+  expect(technicalGrant(c,'subject-lookups','admissions','view',org,'2026-10-20')).toBe(true)
+  expect(technicalGrant(c,'subject-lookups','admissions','search',org,'2026-10-20')).toBe(false)
+  c=await a.grants('lookups',[{viewCode:'admissions',actions:['view','search']}],c.version)
+  expect(technicalGrant(c,'subject-lookups','admissions','search',org,'2026-10-20')).toBe(true)
+  expect(technicalGrant(c,'subject-lookups','admissions','search','other-lodge','2026-10-20')).toBe(false)
+  expect(technicalGrant(c,'subject-lookups','admissions','search',org,'2026-10-22')).toBe(false)
+ })
+
 })

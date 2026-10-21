@@ -41,6 +41,19 @@ public sealed class DynamicViewAccessTests
     [InlineData("/api/system/settings","system")]
     [InlineData("/api/system/audit-events","access-review")]
     public void Catalog_domains_have_explicit_view_contracts(string route,string view) => Assert.Equal(view,DynamicViewAccess.ViewFor(route));
+    [Fact]
+    public void Admission_person_search_uses_search_action_not_view()
+    {
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "GET", "/api/admisiones/personas-busqueda", "SearchAsync"));
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "HEAD", "/api/admisiones/personas-busqueda", "SearchAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/admisiones/expedientes", "ListCasesAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/admisiones/expedientes", "SearchAsync"));
+    }
+
     [Theory]
     [InlineData("GET","ExportIcsAsync","view")]
     [InlineData("POST","CreateMeetingAsync","create")]

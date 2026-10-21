@@ -72,4 +72,41 @@ public sealed class DynamicAccessPolicyTests
         c.Profiles[^1] = valid with { IsActive = false }; Assert.False(Grant()); c.Profiles[^1] = valid;
         c.Assignments[0] = c.Assignments[0] with { IsActive = false }; Assert.False(Grant());
     }
+    [Fact]
+    public void Search_requires_an_explicit_grant_and_never_inherits_read_permission()
+    {
+        var catalog = DynamicAccessEndpoints.CreateCatalog();
+        var lodge = Guid.NewGuid();
+        var today = new DateOnly(2026, 10, 20);
+        var profile = new DynamicProfile(Guid.NewGuid(), "admissions-search", "Buscar inscritos",
+            "lodge", false, true, ["admissions"],
+            [new DynamicGrant("admissions", ["view"])]);
+        catalog.Profiles.Add(profile);
+        catalog.Assignments.Add(new DynamicAssignment(Guid.NewGuid(), "subject-search",
+            profile.Code, lodge, today, today, true));
+
+        bool Allowed(string subject, string action, Guid org, DateOnly when) =>
+            DynamicViewAccess.Allows(catalog, subject, "admissions", action, org, when);
+        Assert.Contains("search", DynamicAccessEndpoints.AllowedActions);
+        Assert.True(Allowed("subject-search", "view", lodge, today));
+        Assert.False(Allowed("subject-search", "search", lodge, today));
+        catalog.Profiles[^1] = profile with
+        {
+            Grants = [new DynamicGrant("admissions", ["view", "search"])]
+        };
+        Assert.True(Allowed("subject-search", "search", lodge, today));
+        Assert.True(Allowed("other", "search", lodge, today)); // Unassigned compatibility; domain RBAC still applies.
+        Assert.False(DynamicAccessEndpoints.IsGranted(catalog,
+            "subject-search", "admissions", "search", Guid.NewGuid(), today));
+        Assert.False(DynamicAccessEndpoints.IsGranted(catalog,
+            "subject-search", "admissions", "search", lodge, today.AddDays(1)));
+        // Search by itself never passes IsGranted without a companion View.
+        catalog.Profiles[^1] = profile with
+        {
+            Grants = [new DynamicGrant("admissions", ["search"])]
+        };
+        Assert.False(DynamicAccessEndpoints.IsGranted(
+            catalog, "subject-search", "admissions", "search", lodge, today));
+    }
+
 }
