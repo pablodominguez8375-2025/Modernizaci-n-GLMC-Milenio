@@ -147,6 +147,34 @@ public sealed class AssemblyPreliminaryReviewProjectionTests
     }
 
     [Fact]
+    public void Orphaned_history_reference_cannot_authorize_preliminary_suffrage()
+    {
+        var member = Member();
+        var orphan = Decision(member, supersedes: Guid.NewGuid());
+        var projected = AssemblyPreliminaryReviewProjection.Project(member, [orphan], Cutoff);
+        Assert.Equal(AssemblyVoterEligibilityPolicy.Pending, projected.Status);
+        Assert.Equal("INCOMPLETE_EVALUATION_HISTORY", projected.ReasonCode);
+        Assert.False(projected.MayVotePreliminary);
+        Assert.False(projected.MayVoteConfirmed);
+    }
+
+    [Fact]
+    public void Disconnected_cycle_cannot_hide_behind_an_apparently_unique_tip()
+    {
+        var member = Member();
+        var apparentlyCurrent = Decision(member);
+        var first = Decision(member);
+        var second = Decision(member, supersedes: first.Id);
+        first.SupersedesEligibilityId = second.Id;
+        var projected = AssemblyPreliminaryReviewProjection.Project(
+            member, [apparentlyCurrent, first, second], Cutoff);
+        Assert.Equal(AssemblyVoterEligibilityPolicy.Pending, projected.Status);
+        Assert.Equal("INCOMPLETE_EVALUATION_HISTORY", projected.ReasonCode);
+        Assert.False(projected.MayVotePreliminary);
+        Assert.False(projected.MayVoteConfirmed);
+    }
+
+    [Fact]
     public void Foreign_history_does_not_join_another_assembly_member()
     {
         var m = Member();
