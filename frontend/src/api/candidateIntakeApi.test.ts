@@ -335,4 +335,17 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     expect(saved.presenters).toEqual(['Presentante histórico en texto'])
   })
 
+  it('envía el origen y corrige con motivo usando los contratos reales (Issue #613)', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ceremonyRequestId: 'r1' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const api = new CandidateIntakeApiClient({ baseUrl: '', getAccessToken: async () => 'token' })
+      await api.createWorkshopRequest({ organizationId: 'org', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '1-9', originKind: 'social_media' })
+      await api.correctCandidateOrigin('r1', { originKind: 'internet', reason: 'Motivo de prueba válido' })
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({ originKind: 'social_media' })
+      expect(String(fetchMock.mock.calls[1][0])).toBe('/api/insinuados/solicitudes/r1/origen/corregir')
+      expect(fetchMock.mock.calls[1][1].method).toBe('PUT')
+    } finally { vi.unstubAllGlobals() }
+  })
+
 })

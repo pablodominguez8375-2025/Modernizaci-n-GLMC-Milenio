@@ -268,6 +268,18 @@ const chileToday = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/S
 export interface CreateCandidateWorkshopRequest {
   organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string;
   rejectionCausesRemedied?: boolean; rePresentationSourceReference?: string | null
+  /** Origen del candidato (Issue #613): independiente del patrocinio formal. */
+  originKind?: 'brother' | 'internet' | 'social_media' | 'other' | null
+  recommenderMemberId?: string | null
+  originOtherDescription?: string | null
+}
+
+export interface CorrectCandidateOriginPayload {
+  originKind: 'brother' | 'internet' | 'social_media' | 'other'
+  recommenderMemberId?: string | null
+  originOtherDescription?: string | null
+  /** Motivo obligatorio de 10 a 500 caracteres; queda en el historial append-only. */
+  reason: string
 }
 
 export interface CandidateIntakeApiClientOptions {
@@ -477,7 +489,7 @@ export class CandidateIntakeApiClient {
     return this.request('/api/insinuados/taller/expedientes-para-entrevista')
   }
 
-  async getEligibleInterviewers(requestId: string): Promise<{ items: CandidateEligibleInterviewer[] }> {
+  async getEligibleInterviewers(requestId: string): Promise<{ items: CandidateEligibleInterviewer[]; excluded?: CandidateEligibleInterviewer[] }> {
     if (this.useMocks) return { items: [
       { id: '10000000-0000-4000-8000-000000000001', name: 'Maestro de Prueba Uno' },
       { id: '10000000-0000-4000-8000-000000000002', name: 'Maestra de Prueba Dos' },
@@ -679,6 +691,14 @@ export class CandidateIntakeApiClient {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sponsorMemberId }),
       })
+  }
+
+  /** Corrección auditada del origen (Issue #613). */
+  async correctCandidateOrigin(requestId: string, payload: CorrectCandidateOriginPayload): Promise<void> {
+    if (this.useMocks) return
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/origen/corregir`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
   }
 
   async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {

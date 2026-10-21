@@ -20,6 +20,7 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
   const [cases, setCases] = useState<CandidateInterviewCase[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [masters, setMasters] = useState<CandidateEligibleInterviewer[]>([])
+  const [excludedRecommenders, setExcludedRecommenders] = useState<CandidateEligibleInterviewer[]>([])
   const [designations, setDesignations] = useState<CandidateInterviewAssignment[]>([])
   const [mine, setMine] = useState<CandidateInterviewAssignment[]>([])
   const [memberIds, setMemberIds] = useState(['', '', ''])
@@ -54,13 +55,14 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
 
   const selectCase = async (id: string) => {
     setSelectedId(id); setError(''); setMessage('')
-    if (!id) { setMasters([]); setDesignations([]); return }
+    if (!id) { setMasters([]); setExcludedRecommenders([]); setDesignations([]); return }
     setLoading(true)
     try {
       const [eligible, current] = await Promise.all([
         api.getEligibleInterviewers(id), api.getAssignedInterviewers(id)
       ])
       setMasters(eligible.items)
+      setExcludedRecommenders(eligible.excluded ?? [])
       setDesignations(current.items)
       const active = current.items.filter(x => x.status === 'assigned' || x.status === 'completed')
         .sort((first, second) => first.position - second.position)
@@ -202,6 +204,7 @@ export default function CandidateInterviewAssignmentsPage({ api, canDesignate }:
         </select>
       </label>
       {selectedId && <>
+        {excludedRecommenders.length > 0 && <div className="candidate-protected-notice">No aparece como entrevistador: {excludedRecommenders.map(item => item.name).join(', ')} (recomendó a este candidato).</div>}
         <div className="candidate-workflow-grid">
           <label>Órgano que acordó las entrevistas
             <select value={councilBody} onChange={event => setCouncilBody(event.target.value as CandidateAssignInterviewers['councilBody'])}>
