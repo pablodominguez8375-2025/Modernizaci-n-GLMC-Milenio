@@ -1,0 +1,9 @@
+# #531 — fase notificación al Taller de decisión de espacio
+
+20-10-2026; base `dev@591dfe19a4ad583d471f4920ba832565ec09b5ab`. Reclamo ChatGPT/GOV-003, PR draft antes de código.
+
+Estado descubierto: creación/listas/aprobación/rechazo/cancelación/salas y tests HTTP A/B ya están en dev, así como frontend de Taller/Gran Secretaría. NO rehacer ni reatribuir trabajo completado. Aprobación de templos intencionalmente bloqueada por protocolo y firma V:.M:.; no modificar esa decisión.
+
+En esta fase, enviar aviso interno al sujeto que creó una solicitud de Taller cuando **Gran Secretaría aprueba o rechaza**; un solo destinatario confirmado por `CreatedBySubject` persistido, jamás por parámetros HTTP. No notificar por email sin vínculo verificado. Usar plantilla institucional nueva `grand_secretariat.space_request.resolved`, sin motivos sensibles ni identidad de terceros, acción relativa. Idempotencia evento/solicitud. Guardar el aviso en la MISMA transacción PostgreSQL que la decisión/reserva/auditoría mediante contexto notification asociado a la transacción del contexto de Gran Secretaría; rollback conjunto. Probar con PostgreSQL los avisos y negativos Taller B, ausencia de duplicados, conflicto sin aviso, cancelación sin aviso.
+
+NO incluir todavía distribución a todos los miembros con rol Gran Secretaría al crear (no hay resolución canónica segura de sujetos con ese rol); pendiente #531 con evidencia de vínculos activos y segregación de perfil. Sin migrations destructivas ni cambios de información personal/sujetos existentes, solamente plantilla de notificación. `main` no se toca; QA físico en otro hilo. Cambios previstos: nueva migración NotificationsDbContext plantilla, helper transaccional GS, SpaceRequestEndpoints.cs, pruebas HTTP GS, registro GOV-004. Fusionar sólo con 3/3 exact-HEAD SUCCESS y preflight dev.

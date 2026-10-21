@@ -20,6 +20,7 @@ using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.Notifications;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -364,6 +365,12 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
+            // Notification migration is applied separately because it belongs
+            // to NotificationDbContext, not PmgmDbContext.
+            await using (var notificationDb = new NotificationDbContext(
+                new DbContextOptionsBuilder<NotificationDbContext>()
+                    .UseNpgsql(connectionString).Options))
+                await notificationDb.Database.MigrateAsync(ct);
             db.Organizations.AddRange(
                 new Organization { Id = lodgeA, Name = "Taller QA A", Number = "QA-A", Type = "workshop" },
                 new Organization { Id = lodgeB, Name = "Taller QA B", Number = "QA-B", Type = "workshop" });
@@ -444,6 +451,30 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var approvedJson = await approved.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         Assert.Equal("approved", approvedJson.GetProperty("status").GetString());
         Assert.NotEqual(Guid.Empty, approvedJson.GetProperty("spaceReservationId").GetGuid());
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var notices = new NotificationDbContext(
+                new DbContextOptionsBuilder<NotificationDbContext>()
+                    .UseNpgsql(connectionString).Options);
+            await using (notices)
+            {
+                var recorded = await notices.NotificationMessages.AsNoTracking()
+                    .Include(x => x.Deliveries)
+                    .Where(x => x.RelatedResourceType == "space_request" &&
+                                x.RelatedResourceId == requestId.ToString("D"))
+                    .ToListAsync(ct);
+                var message = Assert.Single(recorded);
+                Assert.Equal("grand_secretariat.space_request.approved", message.TypeCode);
+                Assert.Equal("synthetic-qa-" + InstitutionalRoles.TallerSecretaria + "-" + lodgeA.ToString("D"),
+                    message.RecipientSubject);
+                Assert.Equal("internal", message.Classification);
+                Assert.DoesNotContain("Actividad ficticia", message.Body);
+                Assert.DoesNotContain("Taller QA B", message.Body);
+                var delivery = Assert.Single(message.Deliveries);
+                Assert.Equal(NotificationCodes.Channel.Internal, delivery.Channel);
+                Assert.Equal(NotificationCodes.DeliveryStatus.Delivered, delivery.Status);
+            }
+        }
 
         var duplicate = await grand.PostAsJsonAsync("/api/gran-secretaria/solicitudes-espacio/" + requestId + "/aprobar",
             new { spaceId }, ct);
@@ -477,6 +508,23 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(HttpStatusCode.OK, rejected.StatusCode);
         var rejectedJson = await rejected.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         Assert.Equal("rejected", rejectedJson.GetProperty("status").GetString());
+        await using (var notices = new NotificationDbContext(
+            new DbContextOptionsBuilder<NotificationDbContext>()
+                .UseNpgsql(connectionString).Options))
+        {
+            var aApproved = await notices.NotificationMessages.AsNoTracking().CountAsync(x =>
+                x.RelatedResourceType == "space_request" &&
+                x.RelatedResourceId == requestId.ToString("D"), ct);
+            Assert.Equal(1, aApproved); // Duplicate approval did not send a second notice.
+            var rejectedNotice = await notices.NotificationMessages.AsNoTracking()
+                .SingleAsync(x => x.RelatedResourceType == "space_request" &&
+                                  x.RelatedResourceId == conflictingId.ToString("D"), ct);
+            Assert.Equal("grand_secretariat.space_request.rejected", rejectedNotice.TypeCode);
+            Assert.Equal("synthetic-qa-" + InstitutionalRoles.TallerSecretaria + "-" + lodgeB.ToString("D"),
+                rejectedNotice.RecipientSubject);
+            Assert.DoesNotContain("Horario ocupado", rejectedNotice.Body);
+            Assert.DoesNotContain("Taller QA A", rejectedNotice.Body);
+        }
 
         var ceremonyBody = new
         {
@@ -503,6 +551,14 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal("cancelled",
             (await cancellation.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
                 .GetProperty("status").GetString());
+        await using (var notices = new NotificationDbContext(
+            new DbContextOptionsBuilder<NotificationDbContext>()
+                .UseNpgsql(connectionString).Options))
+        {
+            Assert.False(await notices.NotificationMessages.AnyAsync(x =>
+                x.RelatedResourceType == "space_request" &&
+                x.RelatedResourceId == ceremonySpaceId.ToString("D"), ct));
+        }
 
         var templeBody = new {
             spaceType = "temple", preferredSpaceId = templeId,
@@ -642,9 +698,9 @@ public sealed class SyntheticHeaderAuthenticationHandler(
     {
         var role = Request.Headers["X-Synthetic-Role"].FirstOrDefault();
         if (string.IsNullOrWhiteSpace(role)) return Task.FromResult(AuthenticateResult.NoResult());
-        var claims = new List<Claim> { new(InstitutionalClaims.Role, role),
-            new("sub", "synthetic-qa-" + role) };
         var org = Request.Headers["X-Synthetic-Lodge"].FirstOrDefault();
+        var claims = new List<Claim> { new(InstitutionalClaims.Role, role),
+            new("sub", "synthetic-qa-" + role + "-" + (org ?? "order")) };
         if (!string.IsNullOrWhiteSpace(org))
             claims.Add(new Claim(InstitutionalClaims.Organization, org));
         if (role == InstitutionalRoles.GranSecretaria)
