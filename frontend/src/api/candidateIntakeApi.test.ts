@@ -366,4 +366,15 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.unstubAllGlobals() }
   })
 
+  it('la demo permite buscar recomendantes externos con datos ficticios sin usar un directorio real', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    expect((await api.getEligibleRecommenders('demo-workshop-23', 'he')).items).toEqual([])
+    const matches = (await api.getEligibleRecommenders('demo-workshop-23', 'Ejemplo')).items
+    expect(matches).toHaveLength(4)
+    expect(matches.some(item => item.name.includes('otro Taller'))).toBe(true)
+    expect(matches.some(item => item.name.includes('Compañera'))).toBe(true)
+    expect((await api.getEligibleRecommenders('otro-taller', 'Ejemplo')).items).toEqual([])
+    expect(Object.keys(matches[0]).sort()).toEqual(['id', 'name'])
+  })
+
 })
