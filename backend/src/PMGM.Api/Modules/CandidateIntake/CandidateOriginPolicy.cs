@@ -10,6 +10,7 @@ public static class CandidateOriginPolicy
 {
     public const string Brother = "brother";
     public const string Internet = "internet";
+    public const string SocialMedia = "social_media";
     public const string Other = "other";
     public const string Unregistered = "unregistered"; // Solo lectura legacy.
 
@@ -18,7 +19,7 @@ public static class CandidateOriginPolicy
         CandidateOriginVerifiedMember? verifiedRecommender, DateOnly operationDay)
     {
         var description = otherDescription?.Trim();
-        if (kind is not (Brother or Internet or Other))
+        if (kind is not (Brother or Internet or SocialMedia or Other))
             return Invalid("CANDIDATE_ORIGIN_REQUIRED");
 
         if (kind == Brother)
@@ -39,10 +40,10 @@ public static class CandidateOriginPolicy
         if (recommenderMemberId is not null)
             return Invalid("CANDIDATE_ORIGIN_FIELDS_CONFLICT");
 
-        if (kind == Internet)
+        if (kind is Internet or SocialMedia)
             return !string.IsNullOrWhiteSpace(description)
                 ? Invalid("CANDIDATE_ORIGIN_FIELDS_CONFLICT")
-                : new(true, Internet, null, null, null);
+                : new(true, kind, null, null, null);
 
         if (string.IsNullOrWhiteSpace(description))
             return Invalid("CANDIDATE_ORIGIN_DESCRIPTION_REQUIRED");
