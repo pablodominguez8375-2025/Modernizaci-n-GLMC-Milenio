@@ -186,6 +186,74 @@ public static class CandidateWorkshopIntakeEndpoints
             CandidateIntakeCodes.ReviewStatus.Pending, entity.CreatedAtUtc, null));
     }
 
+    // Un expediente puede nacer desde Internet o la recomendación de otro
+    // Taller, pero no se presenta institucionalmente sin patrocinador local.
+    private static async Task<IResult> AssignWorkshopSponsorAsync(
+        Guid requestId, AssignCandidateWorkshopSponsor request,
+        HttpContext httpContext, PmgmDbContext coreDb,
+        IInstitutionalAccessService access, IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        if (request.SponsorMemberId == Guid.Empty)
+            return Results.BadRequest(new {
+                code = "CANDIDATE_SPONSOR_REQUIRED",
+                message = "Seleccione un miembro activo del Taller receptor."
+            });
+        var ceremony = await coreDb.CeremonyRequests
+            .SingleOrDefaultAsync(x => x.Id == requestId &&
+                x.CeremonyType == CeremonyCodes.Type.Initiation, cancellationToken);
+        if (ceremony is null) return Results.NotFound();
+        if (!access.CanManageLodgeSecretariat(httpContext.User, ceremony.OrganizationId))
+            return Results.Forbid();
+        if (ceremony.Status is CeremonyCodes.RequestStatus.Authorized or
+            CeremonyCodes.RequestStatus.Completed or CeremonyCodes.RequestStatus.Rejected)
+            return Results.Conflict(new { code = "CANDIDATE_SPONSOR_CASE_CLOSED" });
+        if (await coreDb.CandidatePublications.AsNoTracking()
+            .AnyAsync(x => x.CeremonyRequestId == requestId &&
+                (x.Status == CeremonyCodes.PublicationStatus.Published ||
+                 x.Status == CeremonyCodes.PublicationStatus.Completed), cancellationToken))
+            return Results.Conflict(new { code = "CANDIDATE_SPONSOR_ALREADY_PUBLISHED",
+                message = "La presentación publicada no puede modificarse desde el borrador." });
+
+        if (ceremony.CandidateSponsorMemberId == request.SponsorMemberId)
+        {
+            httpContext.Response.Headers.CacheControl = "private, no-store";
+            return Results.Ok(new { ceremonyRequestId = requestId,
+                sponsorMemberId = request.SponsorMemberId, unchanged = true });
+        }
+        if (ceremony.CandidateSponsorMemberId.HasValue &&
+            (string.IsNullOrWhiteSpace(request.Reason) ||
+             request.Reason.Trim().Length is < 10 or > 500 ||
+             request.Reason.Any(char.IsControl)))
+            return Results.BadRequest(new {
+                code = "CANDIDATE_SPONSOR_CHANGE_REASON_REQUIRED",
+                message = "Cambiar patrocinador requiere motivo de 10 a 500 caracteres."
+            });
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+            DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        var verified = await CandidateOriginAccreditation.VerifyWorkshopSponsorAsync(
+            coreDb, request.SponsorMemberId, ceremony.OrganizationId, today, cancellationToken);
+        if (verified is null || !verified.IsActive)
+            return Results.BadRequest(new {
+                code = "CANDIDATE_SPONSOR_NOT_ACTIVE_IN_WORKSHOP",
+                message = "El presentador o patrocinador debe ser miembro activo del Taller receptor."
+            });
+
+        var changed = ceremony.CandidateSponsorMemberId.HasValue;
+        ceremony.CandidateSponsorMemberId = request.SponsorMemberId;
+        // La auditoría institucional conserva autor, fecha, id de expediente y
+        // motivo registrado, pero no replica nombres ni IDs personales.
+        audit.Add(httpContext, changed ? "candidate.sponsor.changed" : "candidate.sponsor.assigned",
+            nameof(CeremonyRequest), requestId.ToString("D"), ceremony.OrganizationId,
+            AuditResults.Success, new { workshopSponsorAccredited = true,
+                previousSponsorRegistered = changed,
+                changeReasonRecorded = changed, reasonLength = changed ? request.Reason!.Trim().Length : 0 });
+        await coreDb.SaveChangesAsync(cancellationToken);
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { ceremonyRequestId = requestId,
+            sponsorMemberId = request.SponsorMemberId, unchanged = false });
+    }
+
     private static async Task<IResult> GetOrderRejectionAlertsAsync(
         HttpContext httpContext,
         PmgmDbContext coreDb,
@@ -370,6 +438,9 @@ public sealed record CreateCandidateWorkshopRequest(
     bool RejectionCausesRemedied = false, string? RePresentationSourceReference = null,
     string? OriginKind = null, Guid? RecommenderMemberId = null,
     string? OriginOtherDescription = null, Guid? SponsorMemberId = null);
+
+public sealed record AssignCandidateWorkshopSponsor(
+    Guid SponsorMemberId, string? Reason = null);
 
 public sealed record CandidateWorkshopQueueItemDto(
     Guid CeremonyRequestId,
