@@ -221,13 +221,10 @@ public static class CandidateWorkshopIntakeEndpoints
             return Results.Ok(new { ceremonyRequestId = requestId,
                 sponsorMemberId = request.SponsorMemberId, unchanged = true });
         }
-        if (ceremony.CandidateSponsorMemberId.HasValue &&
-            (string.IsNullOrWhiteSpace(request.Reason) ||
-             request.Reason.Trim().Length is < 10 or > 500 ||
-             request.Reason.Any(char.IsControl)))
-            return Results.BadRequest(new {
-                code = "CANDIDATE_SPONSOR_CHANGE_REASON_REQUIRED",
-                message = "Cambiar patrocinador requiere motivo de 10 a 500 caracteres."
+        if (ceremony.CandidateSponsorMemberId.HasValue)
+            return Results.Conflict(new {
+                code = "CANDIDATE_SPONSOR_CHANGE_REQUIRES_FORMAL_CORRECTION",
+                message = "Un patrocinador ya registrado sólo puede cambiar mediante corrección formal auditada."
             });
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
             DateTimeOffset.UtcNow, "America/Santiago").DateTime);
@@ -239,15 +236,12 @@ public static class CandidateWorkshopIntakeEndpoints
                 message = "El presentador o patrocinador debe ser miembro activo del Taller receptor."
             });
 
-        var changed = ceremony.CandidateSponsorMemberId.HasValue;
         ceremony.CandidateSponsorMemberId = request.SponsorMemberId;
         // La auditoría institucional conserva autor, fecha, id de expediente y
         // motivo registrado, pero no replica nombres ni IDs personales.
-        audit.Add(httpContext, changed ? "candidate.sponsor.changed" : "candidate.sponsor.assigned",
+        audit.Add(httpContext, "candidate.sponsor.assigned",
             nameof(CeremonyRequest), requestId.ToString("D"), ceremony.OrganizationId,
-            AuditResults.Success, new { workshopSponsorAccredited = true,
-                previousSponsorRegistered = changed,
-                changeReasonRecorded = changed, reasonLength = changed ? request.Reason!.Trim().Length : 0 });
+            AuditResults.Success, new { workshopSponsorAccredited = true, source = "core.memberships" });
         await coreDb.SaveChangesAsync(cancellationToken);
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { ceremonyRequestId = requestId,
