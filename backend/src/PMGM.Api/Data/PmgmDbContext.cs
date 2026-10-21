@@ -829,6 +829,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.CeremonyType).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CandidateOriginKind).HasMaxLength(24);
+            entity.Property(x => x.CandidateOriginOtherDescription).HasMaxLength(200);
+            entity.HasOne<Member>().WithMany().HasForeignKey(x => x.CandidateRecommenderMemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.CandidateRecommenderMemberId);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);

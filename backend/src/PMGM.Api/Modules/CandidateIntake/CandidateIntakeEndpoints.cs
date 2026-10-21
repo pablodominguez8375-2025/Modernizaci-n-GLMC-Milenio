@@ -469,6 +469,15 @@ public static class CandidateIntakeEndpoints
         var published = await coreDb.CandidatePublications.AsNoTracking()
             .AnyAsync(x => x.CeremonyRequestId == profile.CeremonyRequestId && x.Status == CeremonyCodes.PublicationStatus.Published, cancellationToken);
         var completeness = CandidateIntakeCompletenessPolicy.Evaluate(profile, person.FirstNames, person.Phone, person.Email, person.Address);
+        // Exclusivamente en el detalle privado autorizado del expediente.
+        // Nunca incluir el recomendante en la bandeja transversal ni publicación.
+        var origin = await coreDb.CeremonyRequests.AsNoTracking()
+            .Where(x => x.Id == profile.CeremonyRequestId)
+            .Select(x => new {
+                x.CandidateOriginKind,
+                x.CandidateRecommenderMemberId,
+                x.CandidateOriginOtherDescription
+            }).SingleOrDefaultAsync(cancellationToken);
 
         return new CandidateIntakeProfileDto(
             profile.CeremonyRequestId,
@@ -502,7 +511,10 @@ public static class CandidateIntakeEndpoints
             profile.InterviewSummary,
             profile.InternalObservations,
             profile.SubmittedAtUtc,
-            profile.UpdatedAtUtc);
+            profile.UpdatedAtUtc,
+            origin?.CandidateOriginKind,
+            origin?.CandidateRecommenderMemberId,
+            origin?.CandidateOriginOtherDescription);
     }
 
     private static string MapReviewStatus(string? status)
@@ -604,7 +616,10 @@ public sealed record CandidateIntakeProfileDto(
     string? InterviewSummary,
     string? InternalObservations,
     DateTimeOffset SubmittedAtUtc,
-    DateTimeOffset UpdatedAtUtc);
+    DateTimeOffset UpdatedAtUtc,
+    string? CandidateOriginKind = null,
+    Guid? RecommenderMemberId = null,
+    string? CandidateOriginOtherDescription = null);
 
 public sealed record CandidateReviewQueueItemDto(
     Guid CeremonyRequestId,
