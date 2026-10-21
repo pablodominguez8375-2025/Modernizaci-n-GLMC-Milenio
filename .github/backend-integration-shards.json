@@ -39,6 +39,7 @@
       "FormSchemaVersionPostgreSqlTests",
       "FormSchemaAdministrationHttpTests",
       "CandidateFormCaptureHttpTests",
+      "CandidateOriginPersistenceHttpTests",
       "MagazineEditorialVersionStatusHttpTests"
     ],
     "b": [
