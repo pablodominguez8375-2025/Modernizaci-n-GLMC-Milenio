@@ -44,13 +44,13 @@ const demoRecommenders = [
   { id: 'rec-1', name: 'Hermano Ejemplo Uno · Maestro' },
   { id: 'rec-2', name: 'Hermana Ejemplo Dos · Compañera' },
   { id: 'rec-3', name: 'Hermano Ejemplo Tres · Maestro' },
-  { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra' },
+  { id: 'rec-4', name: 'Hermana Ejemplo Cuatro · Maestra (otro Taller)' },
 ]
 type CandidateOrigin = { kind: '' | 'brother' | 'internet' | 'other'; recommenderId: string; other: string }
 const emptyOrigin: CandidateOrigin = { kind: '', recommenderId: '', other: '' }
 /** Solo demostración: en modo real el origen viene del expediente (Issue #613). */
 const demoOrigins = new Map<string, CandidateOrigin>()
-function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string }[] = demoRecommenders) {
+function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name: string;  }[] = demoRecommenders) {
   if (!origin || !origin.kind) return 'Sin registrar'
   if (origin.kind === 'internet') return 'Internet / sitio web'
   if (origin.kind === 'brother') return `Recomendado por ${recommenders.find(item => item.id === origin.recommenderId)?.name ?? 'un hermano'}`
@@ -67,7 +67,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
-  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>(api.useMocks ? demoRecommenders : [])
+  const [recommenders, setRecommenders] = useState<{ id: string; name: string;  }[]>(api.useMocks ? demoRecommenders : [])
   const [recommenderError, setRecommenderError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
@@ -85,7 +85,6 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   const selectedOrigin: CandidateOrigin | undefined = !selected ? undefined
     : api.useMocks ? demoOrigins.get(selected.ceremonyRequestId)
     : profile?.candidateOriginKind ? { kind: profile.candidateOriginKind as CandidateOrigin['kind'], recommenderId: profile.recommenderMemberId ?? '', other: profile.candidateOriginOtherDescription ?? '' } : undefined
-  const recommenderName = selectedOrigin?.kind === 'brother' ? recommenders.find(item => item.id === selectedOrigin.recommenderId)?.name ?? '' : ''
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
 
   useEffect(() => {
@@ -343,7 +342,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
                 <option value="other">Otro</option>
               </select>
             </Field>
-            {origin.kind === 'brother' && <Field label="Hermano que lo recomienda *">
+            {origin.kind === 'brother' && <Field label="Hermano que lo recomienda (puede ser de otro Taller) *">
               <select required value={origin.recommenderId} onChange={event => setOrigin({ ...origin, recommenderId: event.target.value })}>
                 <option value="" disabled>Buscar y elegir hermano activo</option>
                 {recommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -437,9 +436,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
               <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
               <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" />
-                {recommenderName && !locked && !presentersText.split('\n').some(line => line.trim() === recommenderName) && (
-                  <button type="button" className="candidate-secondary-button" onClick={() => setPresentersText([recommenderName, ...presentersText.split('\n').filter(line => line.trim())].join('\n'))}>Agregar a {recommenderName} (quien lo recomendó)</button>
-                )}
+                <small>Patrocinantes y presentantes: exclusivamente Maestros del mismo Taller.</small>
               </Field>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
               <Field label="Observaciones internas" wide><textarea rows={4} value={form.internalObservations ?? ''} disabled={locked} onChange={event => setForm({ ...form, internalObservations: event.target.value || null })} /></Field>
