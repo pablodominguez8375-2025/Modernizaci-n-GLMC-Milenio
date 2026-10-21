@@ -77,6 +77,8 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [error, setError] = useState<string | null>(null)
 
   const selected = useMemo(() => queue.find(item => item.ceremonyRequestId === selectedId) ?? null, [queue, selectedId])
+  const selectedOrigin = selected ? demoOrigins.get(selected.ceremonyRequestId) : undefined
+  const recommenderName = selectedOrigin?.kind === 'brother' ? demoRecommenders.find(item => item.id === selectedOrigin.recommenderId)?.name ?? '' : ''
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
 
   useEffect(() => {
@@ -404,7 +406,11 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Fecha de insinuación *"><input type="date" value={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, insinuationDate: event.target.value })} /></Field>
               <Field label="Presentación en 1.er grado"><input type="date" value={form.firstDegreePresentationDate ?? ''} min={form.insinuationDate} disabled={locked} onChange={event => setForm({ ...form, firstDegreePresentationDate: event.target.value || null })} /></Field>
               <Field label="Secretario responsable"><input value={form.responsibleSecretaryName ?? ''} disabled={locked} onChange={event => setForm({ ...form, responsibleSecretaryName: event.target.value || null })} /></Field>
-              <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" /></Field>
+              <Field label="Patrocinantes / Presentantes *" wide><textarea rows={3} value={presentersText} disabled={locked} onChange={event => setPresentersText(event.target.value)} placeholder="Un nombre por línea" />
+                {api.useMocks && recommenderName && !locked && !presentersText.split('\n').some(line => line.trim() === recommenderName) && (
+                  <button type="button" className="candidate-secondary-button" onClick={() => setPresentersText([recommenderName, ...presentersText.split('\n').filter(line => line.trim())].join('\n'))}>Agregar a {recommenderName} (quien lo recomendó)</button>
+                )}
+              </Field>
               <Field label="Resumen de entrevista" wide><textarea rows={5} value={form.interviewSummary ?? ''} disabled={locked} onChange={event => setForm({ ...form, interviewSummary: event.target.value || null })} /></Field>
               <Field label="Observaciones internas" wide><textarea rows={4} value={form.internalObservations ?? ''} disabled={locked} onChange={event => setForm({ ...form, internalObservations: event.target.value || null })} /></Field>
             </div>
