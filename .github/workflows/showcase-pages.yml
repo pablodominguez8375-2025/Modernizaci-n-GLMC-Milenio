@@ -5,7 +5,7 @@ on:
     branches: [dev]
   pull_request:
     branches: [dev]
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
   workflow_dispatch:
 
 permissions:
@@ -17,18 +17,21 @@ permissions:
 # Keep only the newest validation for each PR/ref. Exact-head evidence remains attached
 # to the latest commit, while stale visual/package work is cancelled automatically.
 concurrency:
-  group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
+    if: github.event_name != 'pull_request' || github.event.action != 'closed' || github.event.pull_request.merged == true
     name: Build showcase for GitHub Pages
     runs-on: ubuntu-latest
+    env:
+      DELIVERY_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merge_commit_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact delivery SHA
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ env.DELIVERY_SHA }}
           fetch-depth: 0
 
       - name: Setup Node 24
@@ -52,14 +55,14 @@ jobs:
           VITE_API_BASE_URL: ''
           VITE_OIDC_AUTHORITY: ''
           VITE_OIDC_CLIENT_ID: ''
-          VITE_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          VITE_SHOWCASE_SHA: ${{ env.DELIVERY_SHA }}
           VITE_SHOWCASE_CHANNEL: 'post-rc-public-showcase'
         run: npm run build --prefix frontend
 
       - name: Validate generated showcase
         shell: bash
         env:
-          EXPECTED_SHOWCASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          EXPECTED_SHOWCASE_SHA: ${{ env.DELIVERY_SHA }}
         run: |
           set -euo pipefail
           test -s frontend/dist/index.html
@@ -74,7 +77,7 @@ jobs:
       - name: Capture responsive visual evidence
         shell: bash
         env:
-          PMGM_VISUAL_MODE: ${{ github.event_name == 'pull_request' && 'pr' || 'full' }}
+          PMGM_VISUAL_MODE: ${{ github.event_name == 'pull_request' && github.event.action != 'closed' && 'pr' || 'full' }}
         run: |
           set -euo pipefail
           BROWSER="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium || command -v chromium-browser || true)"
@@ -157,11 +160,11 @@ jobs:
           retention-days: 14
 
       - name: Publish QA installable beside the demo
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
         shell: bash
         env:
-          SOURCE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          SOURCE_REF: ${{ github.head_ref || github.ref_name }}
+          SOURCE_SHA: ${{ env.DELIVERY_SHA }}
+          SOURCE_REF: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && 'dev' || github.head_ref || github.ref_name }}
           BUILD_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -197,7 +200,7 @@ jobs:
           printf 'QA PUBLIC DOWNLOAD OK — %s — %s\n' "$filename" "$digest"
 
       - name: Inspect Pages and deployment environment
-        if: github.event_name == 'push'
+        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -285,13 +288,13 @@ jobs:
           PY
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
         uses: actions/upload-pages-artifact@v3
         with:
           path: frontend/dist
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' || (github.event.action == 'closed' && github.event.pull_request.merged == true)
     name: Deploy testing showcase
     needs: build
     environment:
@@ -305,3 +308,28 @@ jobs:
       - name: Deploy showcase
         id: deployment
         uses: actions/deploy-pages@v5
+
+      - name: Verify published QA manifest matches merged dev SHA
+        shell: bash
+        env:
+          EXPECTED_SHA: ${{ github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merge_commit_sha || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          PAGES_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          set -euo pipefail
+          # Pages is an Actions deployment, not a gh-pages branch. Verify what
+          # the public CDN actually serves before declaring publication done.
+          url="${PAGES_URL%/}/downloads/qa-current.json"
+          for attempt in {1..24}; do
+            if curl --fail --location --silent --show-error --max-time 15 \
+                -H 'Cache-Control: no-cache' \
+                "${url}?sha=${EXPECTED_SHA}&attempt=${attempt}" -o /tmp/pmgm-live-qa-current.json; then
+              if python3 -c 'import json,os,sys; d=json.load(open("/tmp/pmgm-live-qa-current.json")); sys.exit(0 if d.get("sourceSha")==os.environ["EXPECTED_SHA"] else 1)'; then
+                echo "PAGES_PUBLICATION_VERIFIED — ${EXPECTED_SHA}"
+                exit 0
+              fi
+            fi
+            echo "Pages aún no sirve SHA ${EXPECTED_SHA:0:12} (intento ${attempt}/24)"
+            sleep 10
+          done
+          echo "La publicación no se confirmó: qa-current.json no coincide con el SHA integrado." >&2
+          exit 1
