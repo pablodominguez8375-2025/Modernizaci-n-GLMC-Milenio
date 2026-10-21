@@ -94,7 +94,7 @@ public static class CandidateWorkshopIntakeEndpoints
                 (m.StartDate == null || m.StartDate <= today) &&
                 (m.EndDate == null || m.EndDate >= today))
             .Select(m => new {
-                m.MemberId, m.Member.Person.FirstNames, m.Member.Person.LastNames
+                m.MemberId, m.Member.CurrentDegree, m.Member.Person.FirstNames, m.Member.Person.LastNames
             }).Distinct().ToListAsync(cancellationToken);
         var ids = memberships.Select(m => m.MemberId).Distinct().ToArray();
         var recognized = new[] {
@@ -115,6 +115,7 @@ public static class CandidateWorkshopIntakeEndpoints
         var latest = statusEvents.GroupBy(e => e.MemberId)
             .ToDictionary(g => g.Key, g => g.First().EventType);
         var choices = memberships
+            .Where(m => InstitutionalDegree.TryParse(m.CurrentDegree, out var degree) && degree >= 3)
             .Where(m => !latest.TryGetValue(m.MemberId, out var status) ||
                 status is MembershipCodes.InstitutionalStatus.Active or
                     MembershipCodes.InstitutionalStatus.Reinstated)
