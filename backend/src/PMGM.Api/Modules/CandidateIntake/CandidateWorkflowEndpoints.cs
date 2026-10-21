@@ -523,6 +523,14 @@ public static class CandidateWorkflowEndpoints
         if (existing is not null)
             return Results.Ok(new { existing.Id, validationStatus = existing.Status, ceremony.ProposedDate, ceremonyStatus = ceremony.Status, alreadySubmitted = true });
 
+        // La aprobación del balotaje y un patrocinio registrado meses antes
+        // no sustituyen la acreditación de Maestro/a vigente al presentar
+        // la solicitud formal de iniciación.
+        var sponsorDecision = await CandidateFormalSponsorGate.EvaluateAsync(
+            coreDb, ceremony, ChileToday(), cancellationToken);
+        if (!sponsorDecision.CanProceed)
+            return CandidateFormalSponsorGate.Conflict(sponsorDecision);
+
         ceremony.ProposedDate = request.ProposedCeremonyDate;
         ceremony.Status = CeremonyCodes.RequestStatus.UnderReview;
         var validation = AddValidation(coreDb, requestId, CeremonyCodes.ValidationType.CandidateCeremonySubmission,
