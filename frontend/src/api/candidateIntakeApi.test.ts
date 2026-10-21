@@ -361,7 +361,7 @@ describe('CandidateIntakeApiClient demo workflow', () => {
       expect(result.items).toEqual([{ id: 'member-remote', name: 'Hermana del Taller externo' }])
       expect(String(fetchMock.mock.calls[0][0])).toBe(
         '/api/insinuados/taller/organizaciones/receiving-workshop/recomendantes?q=Hermana')
-      expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer access-example')
+      expect(fetchMock.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer access-example')
       expect(fetchMock).toHaveBeenCalledTimes(1)
     } finally { vi.unstubAllGlobals() }
   })
