@@ -50,6 +50,10 @@ export interface SessionCapabilities {
   canReadOrderFellowcraftInstructions?: boolean
   canReadOrderMasterInstructions?: boolean
   canReadAllOrderInstructions?: boolean
+  /** Perfil institucional Bibliotecario (Biblioteca Virtual completa). */
+  canManageLibrary?: boolean
+  /** Perfil institucional Comunicaciones (revista y Boletín mensual). */
+  canManageCommunications?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'

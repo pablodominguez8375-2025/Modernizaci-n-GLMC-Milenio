@@ -10,7 +10,7 @@ import { type PmgmApiClient } from './api/pmgmApi'
 export type Area='backup'|'users'|'profiles'|'mail'|'brand'|'audit'
 type Backup={id:string;createdAt:string;status:'verified';scope:string}
 
-const baseProfiles=['Administrador del Sistema','Administrador Gran Logia','Venerable Maestro','Secretaría del Taller','Tesorería del Taller','Hospitalaria del Taller','Orador del Taller','Primer Vigilante','Segundo Vigilante','Ex Venerable Maestro','Régimen Interior','Gran Tesorería','Gran Hospitalaria','Gran Secretaría','Gran Archivero','Gran Maestría']
+const baseProfiles=['Administrador del Sistema','Administrador Gran Logia','Venerable Maestro','Secretaría del Taller','Tesorería del Taller','Hospitalaria del Taller','Orador del Taller','Primer Vigilante','Segundo Vigilante','Ex Venerable Maestro','Régimen Interior','Gran Tesorería','Gran Hospitalaria','Gran Secretaría','Gran Archivero','Bibliotecario','Comunicaciones','Gran Maestría']
 
 export default function SystemOperationsPanel({api,area:controlledArea}:{api:PmgmApiClient;area?:Area}){
  const [internalArea,setArea]=useState<Area>('backup');const area=controlledArea??internalArea;const [notice,setNotice]=useState<string|null>(null)
