@@ -112,7 +112,9 @@ public sealed record SessionCapabilitiesDto(
     bool CanReadOrderApprenticeInstructions,
     bool CanReadOrderFellowcraftInstructions,
     bool CanReadOrderMasterInstructions,
-    bool CanReadAllOrderInstructions);
+    bool CanReadAllOrderInstructions,
+    bool CanManageLibrary = false,
+    bool CanManageCommunications = false);
 
 public static class SessionProfileBuilder
 {
@@ -177,6 +179,8 @@ public static class SessionProfileBuilder
                 CanReadOrderApprenticeInstructions: access.CanReadOrderLodgeInstructions(user, 1),
                 CanReadOrderFellowcraftInstructions: access.CanReadOrderLodgeInstructions(user, 2),
                 CanReadOrderMasterInstructions: access.CanReadOrderLodgeInstructions(user, 3),
-                CanReadAllOrderInstructions: access.CanReadOrderLodgeInstructions(user, null)));
+                CanReadAllOrderInstructions: access.CanReadOrderLodgeInstructions(user, null),
+                CanManageLibrary: access.CanManageLibrary(user, null),
+                CanManageCommunications: access.CanManageCommunications(user)));
     }
 }

@@ -16,7 +16,7 @@ PREFLIGHT = ROOT / "scripts/preflight-srv01-qa.sh"
 class QaG8Contracts(unittest.TestCase):
     def test_exact_subject_and_names_for_all_fake_profiles(self):
         users = json.loads(BASE.read_text())["users"]
-        self.assertEqual(19, len(users))
+        self.assertEqual(21, len(users))
         self.assertEqual(len(users), len({u["username"] for u in users}))
         self.assertEqual(len(users), len({u["id"] for u in users}))
         for index, u in enumerate(users, 1):
@@ -42,6 +42,8 @@ class QaG8Contracts(unittest.TestCase):
             ("qa.granarchivero", "grand_archivist"),
             ("qa.bibliotecaeditor", "document_manager"),
             ("qa.bibliotecarevisor", "document_manager"),
+            ("qa.bibliotecario", "librarian"),
+            ("qa.comunicaciones", "communications"),
         ):
             self.assertEqual([role], profile[name]["realmRoles"])
 
@@ -52,7 +54,7 @@ class QaG8Contracts(unittest.TestCase):
             r'new\((\d+), "([^"]+)", "(apprentice|fellowcraft|master)"'
             r'(?:, "([^"]+)")?(?:, (true))?\)', source
         )
-        self.assertEqual(18, len(fixtures))
+        self.assertEqual(20, len(fixtures))
         for offset, (index, name, degree, office, expired) in enumerate(fixtures, 2):
             self.assertEqual(offset, int(index))
             self.assertEqual(users[offset-1]["username"], name)
@@ -85,7 +87,7 @@ class QaG8Contracts(unittest.TestCase):
         checker = (ROOT / "scripts/qa/check-g8-identities.sh").read_text()
         self.assertIn("core.member_identity_links", checker)
         self.assertIn("public.user_entity", checker)
-        self.assertIn('[ "$members" = 18 ] && [ "$kc_users" = 19 ]', checker)
+        self.assertIn('[ "$members" = 20 ] && [ "$kc_users" = 21 ]', checker)
 
 
 if __name__ == "__main__":

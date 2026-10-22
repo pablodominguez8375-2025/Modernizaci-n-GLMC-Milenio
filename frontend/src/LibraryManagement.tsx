@@ -6,6 +6,8 @@ export type LibraryCategory = { value: string; label: string; base: boolean; fut
 export type LibrarySubmission = { id: string; kind: 'taller' | 'borrador'; title: string; documentType: string; author: string; lodge?: string; degree: number | null; description: string; sentAt: string; item: LibraryCatalogItem }
 
 type Props = {
+  /** Bibliotecario: toda la Biblioteca. Comunicaciones: sólo revista y Boletín mensual. */
+  mode?: 'librarian' | 'communications'
   categories: LibraryCategory[]
   onCategories: (next: LibraryCategory[]) => void
   counts: Record<string, number>
@@ -16,12 +18,15 @@ type Props = {
   notify: (message: string) => void
 }
 
+const editorialCategories = ['magazine', 'bulletin']
+const currentMonth = () => today().slice(0, 7)
 const degreeOptions = [{ v: '', t: 'General (todos los grados)' }, { v: '1', t: '1° grado' }, { v: '2', t: '2° grado' }, { v: '3', t: '3° grado' }]
 const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'categoria'
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 
-export default function LibraryManagement({ categories, onCategories, counts, submissions, onSubmission, onPublish, collectionId, notify }: Props) {
-  const active = categories.filter(c => c.active && !c.future)
+export default function LibraryManagement({ mode = 'librarian', categories, onCategories, counts, submissions, onSubmission, onPublish, collectionId, notify }: Props) {
+  const isCommunications = mode === 'communications'
+  const active = categories.filter(c => c.active && !c.future && (!isCommunications || editorialCategories.includes(c.value)))
   const [type, setType] = useState(active[0]?.value ?? 'work_paper')
   const [fileName, setFileName] = useState('')
   const [reject, setReject] = useState<{ id: string; reason: string } | null>(null)
@@ -29,11 +34,13 @@ export default function LibraryManagement({ categories, onCategories, counts, su
 
   function buildItem(form: FormData, id: string): LibraryCatalogItem {
     const g = (k: string) => String(form.get(k) ?? '').trim() || null
-    const degree = g('degree')
+    // Revista y Boletín: siempre General (todos los grados).
+    const degree = editorialCategories.includes(type) ? null : g('degree')
+    const month = g('month')
     return {
       id, collectionId, title: g('title') ?? 'Sin título', documentType: type, collectionName: 'Biblioteca Virtual', versionNumber: 1,
       contentType: 'application/pdf', sizeBytes: 1_200_000, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: degree ? Number(degree) : null,
-      authorName: g('author'), authorLodgeName: g('lodge'), documentDate: g('date') ?? today(), topic: g('topic'), edition: g('edition'),
+      authorName: g('author'), authorLodgeName: g('lodge'), documentDate: type === 'bulletin' ? `${month ?? currentMonth()}-01` : g('date') ?? today(), topic: g('topic'), edition: g('edition'),
       shortDescription: g('description'), abstractText: g('description'), officialDocumentType: g('officialType'),
     }
   }
@@ -44,8 +51,8 @@ export default function LibraryManagement({ categories, onCategories, counts, su
     const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null
     const item = buildItem(form, `demo-new-${Date.now()}`)
     if (submitter?.value === 'draft') {
-      onSubmission([...submissions, { id: item.id, kind: 'borrador', title: item.title, documentType: type, author: item.authorName ?? 'Bibliotecario', degree: item.minimumDegreeRequired ?? null, description: item.shortDescription ?? '', sentAt: today(), item }])
-      notify('Borrador guardado. Aún no es visible para los hermanos: publíquelo desde «Por revisar y borradores».')
+      onSubmission([...submissions, { id: item.id, kind: 'borrador', title: item.title, documentType: type, author: item.authorName ?? (isCommunications ? 'Comunicaciones' : 'Bibliotecario'), degree: item.minimumDegreeRequired ?? null, description: item.shortDescription ?? '', sentAt: today(), item }])
+      notify(`Borrador guardado. Aún no es visible para los hermanos: publíquelo desde «${isCommunications ? 'Mis borradores' : 'Por revisar y borradores'}».`)
     } else {
       onPublish(item)
       notify(`«${item.title}» publicado en ${categories.find(c => c.value === type)?.label ?? 'la Biblioteca'}. Queda visible según el grado indicado y registrado en auditoría.`)
@@ -74,25 +81,32 @@ export default function LibraryManagement({ categories, onCategories, counts, su
   const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
   return <>
     <ActionBar>
-      <ActionDrawer label="Subir a la biblioteca" wide title="Subir a la biblioteca" description="Planchas, libros, revistas, documentos oficiales o la categoría que usted cree. Puede guardarlo como borrador o publicarlo.">
+      <ActionDrawer label={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} wide title={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} description={isCommunications ? 'Comunicaciones publica la revista Horizonte Masónico y el Boletín mensual de actividades de la Orden (PDF). Puede guardarlo como borrador o publicarlo.' : 'Planchas, libros, revistas, boletines, documentos oficiales o la categoría que usted cree. Puede guardarlo como borrador o publicarlo.'}>
         <form className="library-admin-form" onSubmit={submit}>
           <label><span>Categoría</span><select value={type} onChange={e => setType(e.target.value)}>{active.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
-          <label><span>Archivo (PDF, Word u otro permitido)</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e => setFileName(e.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>
-          <label><span>Título</span><input name="title" required maxLength={200} placeholder={type === 'magazine' ? 'Horizonte Masónico · N° 4' : ''} /></label>
-          <label><span>{type === 'work_paper' ? 'Hermano autor' : type === 'official_document' ? 'Emisor' : 'Autor o fuente'}</span><input name="author" maxLength={160} /></label>
+          {type === 'bulletin'
+            ? <label><span>Archivo PDF del boletín</span><input name="file" type="file" required accept="application/pdf,.pdf" onChange={e => setFileName(e.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>
+            : <label><span>Archivo (PDF, Word u otro permitido)</span><input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" onChange={e => setFileName(e.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>}
+          <label><span>Título</span><input name="title" required maxLength={200} placeholder={type === 'magazine' ? 'Horizonte Masónico · N° 4' : type === 'bulletin' ? 'Boletín de la Orden · Octubre 2026' : ''} /></label>
+          <label><span>{type === 'work_paper' ? 'Hermano autor' : type === 'official_document' ? 'Emisor' : type === 'bulletin' ? 'Responsable' : 'Autor o fuente'}</span><input name="author" maxLength={160} defaultValue={type === 'bulletin' ? 'Comunicaciones' : undefined} key={type} /></label>
           {type === 'work_paper' && <label><span>Taller</span><input name="lodge" maxLength={160} /></label>}
           {type === 'magazine' && <label><span>N° de edición</span><input name="edition" maxLength={60} placeholder="N° 4" /></label>}
           {type === 'book' && <label><span>Edición / editorial / año</span><input name="edition" maxLength={120} /></label>}
           {type === 'official_document' && <label><span>Tipo de documento (reglamento, manual, ritual…)</span><input name="officialType" maxLength={80} /></label>}
           {(type === 'work_paper' || type === 'book' || type === 'magazine') && <label><span>{type === 'magazine' ? 'Tema principal' : 'Tema'}</span><input name="topic" maxLength={120} /></label>}
-          <label><span>Fecha</span><input name="date" type="date" defaultValue={today()} /></label>
-          <label><span>Grado mínimo de acceso</span><select name="degree" defaultValue="">{degreeOptions.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}</select></label>
-          <label className="wide"><span>{type === 'magazine' ? 'En este número' : 'Descripción breve'}</span><textarea name="description" rows={3} maxLength={800} /></label>
+          {type === 'bulletin'
+            ? <label key="month"><span>Mes y año que informa</span><input name="month" type="month" required defaultValue={currentMonth()} /></label>
+            : <label key="date"><span>Fecha</span><input name="date" type="date" defaultValue={today()} /></label>}
+          {editorialCategories.includes(type)
+            ? <p className="library-admin-empty">La revista y el boletín son visibles para todos los grados (General).</p>
+            : <label><span>Grado mínimo de acceso</span><select name="degree" defaultValue="">{degreeOptions.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}</select></label>}
+          <label className="wide"><span>{type === 'magazine' ? 'En este número' : type === 'bulletin' ? 'Resumen de actividades del mes' : 'Descripción breve'}</span><textarea name="description" rows={3} maxLength={800} required={type === 'bulletin'} /></label>
           <div className="library-admin-actions"><button type="submit" value="publish" className="action-trigger primary">Publicar</button><button type="submit" value="draft" className="action-trigger secondary">Guardar borrador</button></div>
         </form>
       </ActionDrawer>
-      <ActionDrawer label={`Por revisar y borradores${pending.length + drafts.length ? ` (${pending.length + drafts.length})` : ''}`} wide title="Por revisar y borradores" description="Planchas enviadas por los Talleres y borradores propios. Nada es visible para los hermanos hasta publicarlo.">
+      <ActionDrawer label={isCommunications ? `Mis borradores${drafts.length ? ` (${drafts.length})` : ''}` : `Por revisar y borradores${pending.length + drafts.length ? ` (${pending.length + drafts.length})` : ''}`} wide title={isCommunications ? 'Mis borradores' : 'Por revisar y borradores'} description={isCommunications ? 'Revistas y boletines guardados como borrador. Nada es visible para los hermanos hasta publicarlo.' : 'Planchas enviadas por los Talleres y borradores propios. Nada es visible para los hermanos hasta publicarlo.'}>
         <div className="library-admin-list">
+          {!isCommunications && <>
           <h3>Planchas enviadas por Talleres</h3>
           {pending.length === 0 && <p className="library-admin-empty">No hay planchas esperando revisión.</p>}
           {pending.map(s => <article key={s.id} className="library-admin-card">
@@ -102,6 +116,7 @@ export default function LibraryManagement({ categories, onCategories, counts, su
               : <div className="library-admin-row-actions"><ConfirmAction label="Aprobar y publicar" message="La plancha quedará visible según su grado y se registrará quién la aprobó." onConfirm={() => { onPublish({ ...s.item, id: `demo-approved-${s.id}` }); drop(s.id); notify(`«${s.title}» aprobada y publicada.`) }} />
                 <button type="button" className="action-trigger secondary" onClick={() => setReject({ id: s.id, reason: '' })}>Devolver con motivo</button></div>}
           </article>)}
+          </>}
           <h3>Mis borradores</h3>
           {drafts.length === 0 && <p className="library-admin-empty">No tiene borradores.</p>}
           {drafts.map(s => <article key={s.id} className="library-admin-card">
@@ -110,7 +125,7 @@ export default function LibraryManagement({ categories, onCategories, counts, su
           </article>)}
         </div>
       </ActionDrawer>
-      <ActionDrawer label="Administrar categorías" title="Administrar categorías" description="Cree, renombre, ordene o desactive las categorías de la Biblioteca Virtual.">
+      {!isCommunications && <ActionDrawer label="Administrar categorías" title="Administrar categorías" description="Cree, renombre, ordene o desactive las categorías de la Biblioteca Virtual.">
         <div className="library-admin-list">
           {categories.filter(c => !c.future).map((c, i) => <article key={c.value} className="library-admin-card">
             <div className="library-admin-cat">
@@ -131,7 +146,7 @@ export default function LibraryManagement({ categories, onCategories, counts, su
           </form>
           <HelpNote>Una categoría con publicaciones no se puede desactivar: primero se retiran o se mueven. Las categorías base no se eliminan.</HelpNote>
         </div>
-      </ActionDrawer>
+      </ActionDrawer>}
     </ActionBar>
   </>
 }
