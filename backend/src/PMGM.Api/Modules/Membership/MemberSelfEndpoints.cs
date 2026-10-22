@@ -42,6 +42,7 @@ public static class MemberSelfEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.Person.Email,
@@ -300,7 +301,8 @@ public static class MemberSelfEndpoints
                 member.Id,
                 member.InstitutionalNumber,
                 member.FirstNames,
-                member.LastNames
+                member.LastNames,
+                member.Rut
             },
             contact = new
             {
