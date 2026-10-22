@@ -34,7 +34,8 @@ export default function LibraryManagement({ mode = 'librarian', categories, onCa
 
   function buildItem(form: FormData, id: string): LibraryCatalogItem {
     const g = (k: string) => String(form.get(k) ?? '').trim() || null
-    const degree = isCommunications ? null : g('degree')
+    // Revista y Boletín: siempre General (todos los grados).
+    const degree = editorialCategories.includes(type) ? null : g('degree')
     const month = g('month')
     return {
       id, collectionId, title: g('title') ?? 'Sin título', documentType: type, collectionName: 'Biblioteca Virtual', versionNumber: 1,
@@ -96,8 +97,8 @@ export default function LibraryManagement({ mode = 'librarian', categories, onCa
           {type === 'bulletin'
             ? <label key="month"><span>Mes y año que informa</span><input name="month" type="month" required defaultValue={currentMonth()} /></label>
             : <label key="date"><span>Fecha</span><input name="date" type="date" defaultValue={today()} /></label>}
-          {isCommunications
-            ? <p className="library-admin-empty">Visible para todos los grados (General). El grado mínimo lo ajusta el Bibliotecario si corresponde.</p>
+          {editorialCategories.includes(type)
+            ? <p className="library-admin-empty">La revista y el boletín son visibles para todos los grados (General).</p>
             : <label><span>Grado mínimo de acceso</span><select name="degree" defaultValue="">{degreeOptions.map(o => <option key={o.v} value={o.v}>{o.t}</option>)}</select></label>}
           <label className="wide"><span>{type === 'magazine' ? 'En este número' : type === 'bulletin' ? 'Resumen de actividades del mes' : 'Descripción breve'}</span><textarea name="description" rows={3} maxLength={800} required={type === 'bulletin'} /></label>
           <div className="library-admin-actions"><button type="submit" value="publish" className="action-trigger primary">Publicar</button><button type="submit" value="draft" className="action-trigger secondary">Guardar borrador</button></div>

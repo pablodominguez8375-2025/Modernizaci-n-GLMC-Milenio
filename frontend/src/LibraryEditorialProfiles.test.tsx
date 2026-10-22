@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import LibraryManagement, { type LibraryCategory } from './LibraryManagement'
@@ -57,5 +58,13 @@ describe('perfiles institucionales Bibliotecario y Comunicaciones (#635)', () =>
     expect(reader).not.toContain('Subir revista o boletín')
     expect(renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="communications" />)).toContain('Subir revista o boletín')
     expect(renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="librarian" />)).toContain('Subir a la biblioteca')
+  })
+
+  it('revista y boletín no ofrecen grado mínimo: son para todos los grados', () => {
+    const editorial = readFileSync(new URL('./LibraryMagazineEditorial.tsx', import.meta.url), 'utf-8')
+    expect(editorial).not.toContain('Grado mínimo')
+    expect(editorial).toContain('minimumDegreeRequired: null')
+    const management = readFileSync(new URL('./LibraryManagement.tsx', import.meta.url), 'utf-8')
+    expect(management).toContain("editorialCategories.includes(type) ? null : g('degree')")
   })
 })

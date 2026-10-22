@@ -368,6 +368,12 @@ public static class LibraryCatalogMetadataEndpoints
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden modificar los metadatos de un documento retirado." });
 
+        // Decisión del PO (22-10-2026, #635): la revista institucional y el
+        // Boletín mensual son de lectura para todos los grados (General).
+        if (LibraryEditorialTypes.Canonical(document.DocumentType) is not null &&
+            request.MinimumDegreeRequired is not null)
+            return Results.BadRequest(new { message = "La revista y el boletín son visibles para todos los grados; no admiten grado mínimo." });
+
         var authorName = Normalize(request.AuthorName);
         var authorLodgeName = Normalize(request.AuthorLodgeName);
         var topic = Normalize(request.Topic);

@@ -4,7 +4,6 @@ import { DocumentApiHttpError, type DocumentApiClient, type EditorialMagazine, t
 
 const statusLabel: Record<string, string> = { draft: 'Borrador', active: 'Listo para publicar', published: 'Publicada', retired: 'Retirada' }
 const typeLabel: Record<EditorialType, string> = { magazine: 'Revista', bulletin: 'Boletín' }
-const degreeOptions = [{ v: '', t: 'General (todos los grados)' }, { v: '1', t: '1° grado' }, { v: '2', t: '2° grado' }, { v: '3', t: '3° grado' }]
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 const currentMonth = () => today().slice(0, 7)
 const isBulletin = (value: string) => ['bulletin', 'bulletins', 'boletin', 'boletines', 'boletín'].includes(value.trim().toLowerCase())
@@ -22,7 +21,7 @@ const message = (reason: unknown) => reason instanceof DocumentApiHttpError && r
 type Props = {
   documentApi: DocumentApiClient
   onChanged: () => void
-  /** Bibliotecario fija el grado; Comunicaciones publica como General. */
+  /** Revista y Boletín son siempre General (todos los grados), para cualquier perfil. */
   editorRole?: 'librarian' | 'communications' | null
 }
 
@@ -34,7 +33,6 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
   const [fileName, setFileName] = useState('')
   const [kind, setKind] = useState<EditorialType>(editorRole === 'communications' ? 'bulletin' : 'magazine')
-  const canSetDegree = editorRole === 'librarian'
 
   const load = useCallback(async () => {
     try {
@@ -71,10 +69,9 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
       if (!collection) throw new Error('No hay una colección activa de la Orden para publicaciones. Avise al administrador.')
       const created = await documentApi.createEditorialMagazine(collection.id, text('title') ?? typeLabel[kind], kind)
       documentId = created.documentId
-      const degree = canSetDegree ? text('degree') : null
       await documentApi.setLibraryCatalogMetadata(documentId, kind === 'bulletin'
-        ? { minimumDegreeRequired: degree ? Number(degree) : null, authorName: text('author'), documentDate: `${text('month') ?? currentMonth()}-01`, shortDescription: text('description'), abstractText: text('summary') }
-        : { minimumDegreeRequired: degree ? Number(degree) : null, authorName: text('author'), documentDate: text('date') ?? today(), topic: text('topic'), edition: text('edition'), shortDescription: text('description'), abstractText: text('summary') })
+        ? { minimumDegreeRequired: null, authorName: text('author'), documentDate: `${text('month') ?? currentMonth()}-01`, shortDescription: text('description'), abstractText: text('summary') }
+        : { minimumDegreeRequired: null, authorName: text('author'), documentDate: text('date') ?? today(), topic: text('topic'), edition: text('edition'), shortDescription: text('description'), abstractText: text('summary') })
       if (file) await stageFile(documentId, file, kind)
       setNotice({ tone: 'ok', text: file ? `${typeLabel[kind]} guardado como borrador con su archivo. Publíquelo desde la lista cuando esté listo.` : 'Borrador guardado. Falta cargar el archivo (botón «Cargar archivo» en la lista).' })
       form.reset(); setFileName('')
@@ -127,10 +124,9 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
             <label><span>Autor o responsable</span><input name="author" maxLength={160} /></label>
             <label><span>Fecha</span><input name="date" type="date" defaultValue={today()} /></label>
           </Fragment>}
-          {canSetDegree && <label><span>Grado mínimo de acceso</span><select name="degree" defaultValue="">{degreeOptions.map(option => <option key={option.v} value={option.v}>{option.t}</option>)}</select></label>}
           <label className="wide"><span>{kind === 'bulletin' ? 'Resumen de actividades del mes' : 'Descripción breve'}</span><textarea name="description" rows={2} maxLength={800} required={kind === 'bulletin'} /></label>
           {kind === 'magazine' && <label className="wide"><span>En este número</span><textarea name="summary" rows={3} maxLength={1200} /></label>}
-          {!canSetDegree && <p className="library-admin-empty">Se publica para todos los grados (General). El grado mínimo lo ajusta el Bibliotecario si corresponde.</p>}
+          <p className="library-admin-empty">La revista y el boletín son visibles para todos los grados (General).</p>
           <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy === 'create'}>{busy === 'create' ? 'Guardando…' : 'Guardar borrador'}</button></div>
         </form>
       </ActionDrawer>
