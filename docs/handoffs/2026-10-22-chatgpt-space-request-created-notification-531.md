@@ -44,3 +44,10 @@ La PR borrador #638 está abierta: https://github.com/pablodominguez8375-2025/Mo
 **Punto operativo importante:** el perfil dedicado `grand-secretariat` no existe entre los perfiles predeterminados. El administrador debe crearlo y asignarlo válidamente en el catálogo de perfiles dinámicos antes de operar el envío; no se envía a un administrador genérico por defecto. Verificar la semántica con el Sponsor y QA/UAT antes de producción. Sin implementar asignaciones implícitas ni inventar enlaces de identidad.
 
 **El código NO está integrado a dev** mientras la PR y los gates permanezcan pendientes. Clau no debe construir una UI que asuma que la notificación funciona hasta ver el SHA mergeado.
+
+
+## Conciliación multi-IA 22-10-2026 (corte 15:00 Chile)
+
+El dev vivo avanzó a `b670395043ad90248c4bc7473a42249b8ca0784b`. Se cotejaron **los siete archivos** del feature contra la antigua base `fa9102935e2954e50a77209e91c52aea7c50af0c`: los cinco nuevos no existen en dev, y los dos preexistentes siguen idénticos. Se reconstruyó el árbol desde dev aplicando solo estos siete blobs, y se registró un merge commit con ambos padres: `1ccab7ad01d4d1d3fcd7dcd2faa3bed6a49af9ce`. La referencia del branch apuntó a ese SHA y la comparación de esos dos SHAs dio `behind=0`, sin eliminar trabajo de Clau u otras IA.
+
+La ejecución del trío CI/Showcase/QA Instalador del **nuevo SHA** debe validarse explícitamente. El `3/3 SUCCESS` del commit anterior `9bc6a32c` no autoriza fusionar el nuevo commit. **No se modificaron secretos, cuentas, permisos institucionales, main, QA físico ni producción.**
