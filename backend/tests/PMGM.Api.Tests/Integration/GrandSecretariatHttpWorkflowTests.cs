@@ -683,6 +683,86 @@ public sealed class GrandSecretariatHttpWorkflowTests
             x.EntityId == requestId.ToString(), ct));
     }
 
+    [Fact]
+    public async Task New_request_without_verified_grand_secretariat_recipient_rolls_back_request_and_audit()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new SpaceRequestTestFactory(connectionString);
+        var lodgeId = Guid.NewGuid();
+        DynamicAccessCatalog previous;
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await core.Database.MigrateAsync(ct);
+            var notifications = new NotificationDbContext(
+                new DbContextOptionsBuilder<NotificationDbContext>()
+                    .UseNpgsql(connectionString).Options);
+            await using (notifications)
+                await notifications.Database.MigrateAsync(ct);
+
+            core.Organizations.Add(new Organization {
+                Id = lodgeId, Name = "Taller de prueba sin receptor " + Guid.NewGuid().ToString("N")[..8],
+                Type = "workshop"
+            });
+            previous = await DynamicAccessEndpoints.LoadAsync(core, ct);
+            var disabled = previous with {
+                Version = previous.Version + 1,
+                Profiles = previous.Profiles
+                    .Where(x => x.Code != SpaceRequestCreatedNotices.RecipientProfileCode).ToList(),
+                Assignments = previous.Assignments
+                    .Where(x => x.ProfileCode != SpaceRequestCreatedNotices.RecipientProfileCode).ToList()
+            };
+            core.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Version = disabled.Version, Payload = JsonSerializer.Serialize(disabled)
+            });
+            await core.SaveChangesAsync(ct);
+        }
+
+        try
+        {
+            using var client = Client(factory, InstitutionalRoles.TallerSecretaria, lodgeId);
+            var starts = DateTimeOffset.UtcNow.AddDays(20);
+            var body = new {
+                spaceType = "temple", preferredSpaceId = (Guid?)null,
+                startsAtUtc = starts, endsAtUtc = starts.AddHours(2),
+                purpose = "tenida", ceremonyRequestId = (Guid?)null,
+                notes = "Dato reservado que NO debe quedar guardado",
+                expectedAttendees = 20, equipmentRequest = (string?)null,
+                equipmentResponsible = (string?)null, vmApprovalReference = (string?)null
+            };
+            using var response = await client.PostAsJsonAsync(
+                "/api/secretaria/solicitudes-espacio", body, ct);
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal("GRAND_SECRETARIAT_RECIPIENT_UNAVAILABLE",
+                payload.GetProperty("code").GetString());
+
+            await using var checkScope = factory.Services.CreateAsyncScope();
+            var grand = checkScope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
+            Assert.False(await grand.SpaceRequests.AsNoTracking()
+                .AnyAsync(x => x.OrganizationId == lodgeId, ct));
+            Assert.False(await grand.AuditEvents.AsNoTracking()
+                .AnyAsync(x => x.Action == "grand_secretariat.space_request.created" &&
+                    x.OrganizationId == lodgeId, ct));
+        }
+        finally
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            // Restaurar la política original sin dejar configuración sintética
+            // del test afectando las demás pruebas PostgreSQL del shard.
+            var current = await DynamicAccessEndpoints.LoadAsync(core, ct);
+            var restored = previous with { Version = current.Version + 1 };
+            core.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Version = restored.Version, Payload = JsonSerializer.Serialize(restored)
+            });
+            await core.SaveChangesAsync(ct);
+        }
+    }
+
     private static HttpClient Client(SpaceRequestTestFactory factory, string role, Guid? organizationId)
     {
         var client = factory.CreateClient();
