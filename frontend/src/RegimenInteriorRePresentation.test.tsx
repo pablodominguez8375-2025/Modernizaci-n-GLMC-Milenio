@@ -5,7 +5,7 @@ import { PmgmApiClient } from './api/pmgmApi'
 
 describe('Revisión de reinsinuaciones por Régimen Interior', () => {
   it('includes a restricted reviewer entrypoint in the institutional page', () => {
-    const html = renderToStaticMarkup(<RegimenInteriorPage api={new PmgmApiClient({ useMocks: true })} />)
+    const html = renderToStaticMarkup(<RegimenInteriorPage api={new PmgmApiClient({ useMocks: true })} initialSection="informe" />)
     expect(html).toContain('Revisión de reinsinuaciones')
     expect(html).toContain('Sólo una resolución formal aprobada habilita el requisito')
   })
