@@ -17,3 +17,5 @@ Fecha: 2026-10-22, base `dev@3506fd7a6723d95d51db56016b5d24cebd00a9d2`. Dueño d
 
 ## Pendiente #609
 Enmascaramiento de otras rutas de reportes/exportación en cada ámbito pertinente; revelación excepcional auditada, fotos de perfil, base jurídica y UAT real. Solicitar a Clau revisión visual y capturas 360/768/1440 antes de declarar el ticket cerrado.
+
+Las respuestas de ficha e historial de tercero establecen expresamente `Cache-Control: private, no-store`; el test PostgreSQL comprueba el encabezado para impedir almacenamiento compartido de datos aun enmascarados.
