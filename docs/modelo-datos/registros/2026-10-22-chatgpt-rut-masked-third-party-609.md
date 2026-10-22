@@ -10,3 +10,5 @@
 | Pruebas | xUnit + HTTP PostgreSQL contra datos exclusivamente sintéticos | Bloquea regresión por divulgación |
 
 La máscara elimina los tres últimos dígitos del cuerpo y retiene DV para identificar visualmente un expediente, sin afirmar unicidad, existencia o titularidad. Invalidar la revelación de campos ajenos requiere revisar cada contrato de listados, reportes, exportaciones y todos los consumidores UI. **La máscara no sustituye autorización ni trazabilidad.** Sin cambio de esquema, claves, restricciones o datos históricos.
+
+Las respuestas de ficha e historial de tercero establecen expresamente `Cache-Control: private, no-store`; el test PostgreSQL comprueba el encabezado para impedir almacenamiento compartido de datos aun enmascarados.
