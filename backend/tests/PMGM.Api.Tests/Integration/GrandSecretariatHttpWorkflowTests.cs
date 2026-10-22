@@ -20,6 +20,8 @@ using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Notifications;
 using Xunit;
 
@@ -360,6 +362,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var spaceId = Guid.NewGuid();
         var templeId = Guid.NewGuid();
         var ceremonyId = Guid.NewGuid();
+        var grandRecipient = "qa-grand-space-" + Guid.NewGuid().ToString("N");
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -382,6 +385,41 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 Status = CeremonyCodes.RequestStatus.Authorized
             });
             await db.SaveChangesAsync(ct);
+
+            // Configuración institucional explícita: un subject vinculado a
+            // hermano activo con perfil Gran Secretaría de alcance Orden.
+            var orderLodge = new Organization {
+                Name = "Taller del receptor institucional " + Guid.NewGuid().ToString("N")[..8],
+                Type = "workshop"
+            };
+            var personRecipient = new Person { FirstNames = "Gran", LastNames = "Secretaria Sintética" };
+            var memberRecipient = new Member { Person = personRecipient };
+            db.Organizations.Add(orderLodge);
+            db.Members.Add(memberRecipient);
+            db.Memberships.Add(new Membership {
+                Member = memberRecipient, Organization = orderLodge,
+                MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active,
+                StartDate = new DateOnly(2020, 1, 1)
+            });
+            var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+            catalog.Profiles.Add(new DynamicProfile(Guid.NewGuid(),
+                SpaceRequestCreatedNotices.RecipientProfileCode, "Gran Secretaría",
+                "order", false, true, ["order"],
+                [new DynamicGrant("secretariat", ["view"])]));
+            catalog.Assignments.Add(new DynamicAssignment(Guid.NewGuid(), grandRecipient,
+                SpaceRequestCreatedNotices.RecipientProfileCode, null,
+                new DateOnly(2020, 1, 1), null, true));
+            db.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Version = catalog.Version + 1,
+                Payload = JsonSerializer.Serialize(catalog)
+            });
+            await db.SaveChangesAsync(ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO core.member_identity_links
+                    ("Id", "MemberId", "Issuer", "Subject", "CreatedAtUtc", "CreatedBySubject")
+                VALUES ({Guid.NewGuid()}, {memberRecipient.Id}, {"urn:qa-space-request"},
+                        {grandRecipient}, {DateTimeOffset.UtcNow}, {"qa-space"})
+                """, ct);
             var gs = scope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
             gs.InstitutionalSpaces.Add(new InstitutionalSpace
             {
@@ -419,6 +457,22 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var createdJson = await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var requestId = createdJson.GetProperty("id").GetGuid();
+        await using (var notices = new NotificationDbContext(
+            new DbContextOptionsBuilder<NotificationDbContext>().UseNpgsql(connectionString).Options))
+        {
+            var createdNotice = await notices.NotificationMessages.AsNoTracking()
+                .Include(x => x.Deliveries)
+                .SingleAsync(x => x.RelatedResourceType == "space_request" &&
+                                  x.RelatedResourceId == requestId.ToString("D") &&
+                                  x.TypeCode == SpaceRequestCreatedNotices.TemplateCode, ct);
+            Assert.Equal(grandRecipient, createdNotice.RecipientSubject);
+            Assert.Null(createdNotice.RecipientEmail);
+            Assert.Equal("internal", createdNotice.Classification);
+            Assert.DoesNotContain("Actividad ficticia", createdNotice.Body);
+            Assert.DoesNotContain("Taller QA A", createdNotice.Body);
+            Assert.Equal(NotificationCodes.Channel.Internal,
+                Assert.Single(createdNotice.Deliveries).Channel);
+        }
         Assert.Equal(lodgeA, createdJson.GetProperty("organizationId").GetGuid());
         Assert.Equal("pending", createdJson.GetProperty("status").GetString());
 
@@ -461,7 +515,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 var recorded = await notices.NotificationMessages.AsNoTracking()
                     .Include(x => x.Deliveries)
                     .Where(x => x.RelatedResourceType == "space_request" &&
-                                x.RelatedResourceId == requestId.ToString("D"))
+                                x.RelatedResourceId == requestId.ToString("D") &&
+                                x.TypeCode == "grand_secretariat.space_request.approved")
                     .ToListAsync(ct);
                 var message = Assert.Single(recorded);
                 Assert.Equal("grand_secretariat.space_request.approved", message.TypeCode);
@@ -514,11 +569,13 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             var aApproved = await notices.NotificationMessages.AsNoTracking().CountAsync(x =>
                 x.RelatedResourceType == "space_request" &&
-                x.RelatedResourceId == requestId.ToString("D"), ct);
+                x.RelatedResourceId == requestId.ToString("D") &&
+                x.TypeCode == "grand_secretariat.space_request.approved", ct);
             Assert.Equal(1, aApproved); // Duplicate approval did not send a second notice.
             var rejectedNotice = await notices.NotificationMessages.AsNoTracking()
                 .SingleAsync(x => x.RelatedResourceType == "space_request" &&
-                                  x.RelatedResourceId == conflictingId.ToString("D"), ct);
+                                  x.RelatedResourceId == conflictingId.ToString("D") &&
+                                  x.TypeCode == "grand_secretariat.space_request.rejected", ct);
             Assert.Equal("grand_secretariat.space_request.rejected", rejectedNotice.TypeCode);
             Assert.Equal("synthetic-qa-" + InstitutionalRoles.TallerSecretaria + "-" + lodgeB.ToString("D"),
                 rejectedNotice.RecipientSubject);
