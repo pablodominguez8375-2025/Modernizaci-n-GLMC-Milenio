@@ -15,9 +15,9 @@ public static class ChileanRut
         if (string.IsNullOrWhiteSpace(input)) return false;
 
         var value = input.Trim().ToUpperInvariant();
-        var raw = Regex.Match(value, @"^(\d{1,8})-?([0-9K])$", RegexOptions.CultureInvariant);
+        var raw = Regex.Match(value, @"^([0-9]{1,8})-?([0-9K])$", RegexOptions.CultureInvariant);
         var grouped = raw.Success ? null : Regex.Match(
-            value, @"^(\d{1,3}(?:\.\d{3}){1,2})-?([0-9K])$", RegexOptions.CultureInvariant);
+            value, @"^([0-9]{1,3}(?:\.[0-9]{3}){1,2})-?([0-9K])$", RegexOptions.CultureInvariant);
         var bodyInput = raw.Success ? raw.Groups[1].Value
             : grouped?.Success == true ? grouped.Groups[1].Value.Replace(".", string.Empty) : null;
         var digit = raw.Success ? raw.Groups[2].Value
@@ -35,7 +35,7 @@ public static class ChileanRut
         if (digit != expected) return false;
 
         normalized = body + "-" + digit;
-        formatted = Regex.Replace(body, @"\B(?=(\d{3})+(?!\d))", ".") + "-" + digit;
+        formatted = Regex.Replace(body, @"\B(?=([0-9]{3})+(?![0-9]))", ".") + "-" + digit;
         return true;
     }
 
