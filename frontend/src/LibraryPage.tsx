@@ -128,7 +128,7 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
-    {!documentApi.useMocks && <LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
+    {<LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
     {documentApi.useMocks && editorRole && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
       <LibraryManagement mode={editorRole} categories={categories} onCategories={setCategories} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}

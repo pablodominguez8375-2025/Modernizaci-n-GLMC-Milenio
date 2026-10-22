@@ -144,6 +144,18 @@ public static class LibraryCatalogMetadataEndpoints
         if (request.VersionId == Guid.Empty)
             return Results.BadRequest(new { message = "VersionId obligatorio." });
 
+        // Reemplazo de una publicación vigente sin despublicar: motivo obligatorio.
+        var previousVersionId = document.Status == DocumentManagementCodes.DocumentStatus.Published
+            ? document.PublishedVersionId : null;
+        var reason = request.Reason?.Trim();
+        if (previousVersionId is not null)
+        {
+            if (previousVersionId == request.VersionId)
+                return Results.Conflict(new { message = "Esa versión ya es la publicada." });
+            if (string.IsNullOrWhiteSpace(reason) || reason.Length is < 10 or > 2000 || reason.Any(char.IsControl))
+                return Results.BadRequest(new { message = "Indique el motivo del reemplazo (10 a 2000 caracteres)." });
+        }
+
         var version = await db.DocumentVersions.SingleOrDefaultAsync(
             x => x.DocumentId == document.Id && x.Id == request.VersionId,
             cancellationToken);
@@ -179,7 +191,11 @@ public static class LibraryCatalogMetadataEndpoints
             $"library.editorial.{LibraryEditorialTypes.Canonical(document.DocumentType)}_published",
             nameof(InstitutionalDocument),
             document.Id.ToString(), null, AuditResults.Success,
-            new { document.CollectionId, VersionId = version.Id, version.VersionNumber, document.Status }));
+            new
+            {
+                document.CollectionId, VersionId = version.Id, version.VersionNumber, document.Status,
+                PreviousVersionId = previousVersionId, Reason = previousVersionId is null ? null : reason
+            }));
         await db.SaveChangesAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -236,6 +252,7 @@ public static class LibraryCatalogMetadataEndpoints
             Classification = DocumentManagementCodes.Classification.Internal,
             AccessPolicy = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
             Status = DocumentManagementCodes.DocumentStatus.Draft,
+            PublisherProfile = LibraryMagazineMetadataAuthorization.ActorProfile(httpContext.User, access),
             CreatedBySubject = DynamicTreasuryAccess.Subject(httpContext.User) ?? string.Empty
         };
         db.InstitutionalDocuments.Add(document);
@@ -318,8 +335,23 @@ public static class LibraryCatalogMetadataEndpoints
                 document.Edition,
                 document.ShortDescription,
                 document.CreatedAtUtc,
-                document.PublishedAtUtc))
+                document.PublishedAtUtc,
+                document.PublisherProfile,
+                false))
             .ToListAsync(cancellationToken);
+        // Titularidad por perfil: la interfaz sólo ofrece corregir lo propio.
+        var librarian = access.CanManageLibrary(httpContext.User, null);
+        var communications = access.CanManageCommunications(httpContext.User);
+        items = items.Select(item => item with
+        {
+            CanCorrect = item.PublisherProfile switch
+            {
+                null => true,
+                LibraryPublisherProfiles.Librarian => librarian,
+                LibraryPublisherProfiles.Communications => communications,
+                _ => false
+            }
+        }).ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new EditorialMagazineListDto(total, page, pageSize, items));
@@ -603,7 +635,9 @@ public sealed record EditorialMagazineDto(
     string? Edition,
     string? ShortDescription,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? PublishedAtUtc);
+    DateTimeOffset? PublishedAtUtc,
+    string? PublisherProfile = null,
+    bool CanCorrect = false);
 
 public sealed record EditorialMagazineListDto(
     int Total,
@@ -622,4 +656,4 @@ public sealed record EditorialMagazineVersionsResponse(
     Guid DocumentId, int Total, int Page, int PageSize,
     IReadOnlyList<EditorialMagazineVersionDto> Items);
 
-public sealed record PublishEditorialMagazineRequest(Guid VersionId);
+public sealed record PublishEditorialMagazineRequest(Guid VersionId, string? Reason = null);
