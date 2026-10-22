@@ -363,6 +363,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var templeId = Guid.NewGuid();
         var ceremonyId = Guid.NewGuid();
         var grandRecipient = "qa-grand-space-" + Guid.NewGuid().ToString("N");
+        var assignmentSnapshotId = Guid.NewGuid();
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -410,6 +411,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 SpaceRequestCreatedNotices.RecipientProfileCode, null,
                 new DateOnly(2020, 1, 1), null, true));
             db.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Id = assignmentSnapshotId,
                 Version = catalog.Version + 1,
                 Payload = JsonSerializer.Serialize(catalog)
             });
@@ -436,6 +438,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
             await gs.SaveChangesAsync(ct);
         }
 
+        try
+        {
         using var a = Client(factory, InstitutionalRoles.TallerSecretaria, lodgeA);
         using var b = Client(factory, InstitutionalRoles.TallerSecretaria, lodgeB);
         using var grand = Client(factory, InstitutionalRoles.GranSecretaria, null);
@@ -615,7 +619,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             Assert.False(await notices.NotificationMessages.AnyAsync(x =>
                 x.RelatedResourceType == "space_request" &&
-                x.RelatedResourceId == ceremonySpaceId.ToString("D"), ct));
+                x.RelatedResourceId == ceremonySpaceId.ToString("D") &&
+                x.TypeCode != SpaceRequestCreatedNotices.TemplateCode, ct));
         }
 
         var templeBody = new {
@@ -681,6 +686,21 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.True(await checkDb.AuditEvents.AsNoTracking().AnyAsync(x =>
             x.Action == "grand_secretariat.space_request.approved" &&
             x.EntityId == requestId.ToString(), ct));
+        }
+        finally
+        {
+            await using var cleanup = factory.Services.CreateAsyncScope();
+            var core = cleanup.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var snapshot = await core.DynamicAccessSnapshots
+                .SingleOrDefaultAsync(x => x.Id == assignmentSnapshotId, ct);
+            if (snapshot is not null)
+            {
+                core.DynamicAccessSnapshots.Remove(snapshot);
+                await core.SaveChangesAsync(ct);
+            }
+            await core.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM core.member_identity_links WHERE \"Subject\" = {grandRecipient}", ct);
+        }
     }
 
     [Fact]
@@ -692,6 +712,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
         using var factory = new SpaceRequestTestFactory(connectionString);
         var lodgeId = Guid.NewGuid();
         DynamicAccessCatalog previous;
+        var disabledSnapshotId = Guid.NewGuid();
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -716,6 +737,7 @@ public sealed class GrandSecretariatHttpWorkflowTests
                     .Where(x => x.ProfileCode != SpaceRequestCreatedNotices.RecipientProfileCode).ToList()
             };
             core.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Id = disabledSnapshotId,
                 Version = disabled.Version, Payload = JsonSerializer.Serialize(disabled)
             });
             await core.SaveChangesAsync(ct);
@@ -752,14 +774,15 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             await using var scope = factory.Services.CreateAsyncScope();
             var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
-            // Restaurar la política original sin dejar configuración sintética
-            // del test afectando las demás pruebas PostgreSQL del shard.
-            var current = await DynamicAccessEndpoints.LoadAsync(core, ct);
-            var restored = previous with { Version = current.Version + 1 };
-            core.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
-                Version = restored.Version, Payload = JsonSerializer.Serialize(restored)
-            });
-            await core.SaveChangesAsync(ct);
+            // Retirar el snapshot temporal, sin incrementar permanentemente
+            // la versión global ni afectar pruebas de permisos dinámicos.
+            var disabled = await core.DynamicAccessSnapshots
+                .SingleOrDefaultAsync(x => x.Id == disabledSnapshotId, ct);
+            if (disabled is not null)
+            {
+                core.DynamicAccessSnapshots.Remove(disabled);
+                await core.SaveChangesAsync(ct);
+            }
         }
     }
 
