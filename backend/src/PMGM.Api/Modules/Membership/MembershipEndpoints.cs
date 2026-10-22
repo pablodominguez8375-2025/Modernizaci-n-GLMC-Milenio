@@ -322,6 +322,9 @@ public static class MembershipEndpoints
             regularity = new { financial, hospitalaria };
         }
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
             member = new
@@ -510,6 +513,9 @@ public static class MembershipEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
             member = new
