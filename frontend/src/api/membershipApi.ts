@@ -71,7 +71,7 @@ export interface MemberTransfer { id: string; sourceOrganizationId: string; sour
 export interface Regularity { status: string; asOfDate: string; scope?: string; sourceReference: string | null }
 
 export interface MemberSelfProfile {
-  member: { id: string; institutionalNumber: string | null; firstNames: string; lastNames: string }
+  member: { id: string; institutionalNumber: string | null; firstNames: string; lastNames: string; rut: string | null }
   contact: { email: string | null; phone: string | null; address: string | null }
   current: {
     membership: { organizationId: string; organization: string; organizationNumber: string | null; organizationType: string; membershipType: string; startDate: string; status: string } | null
@@ -121,7 +121,7 @@ export function demoAccountCandidates(){return demoMembers.filter(m=>m.membershi
  const number=Number(m.memberId.slice(-12));return{memberId:m.memberId,organizationId:number===23?'23232323-2323-2323-2323-232323232323':'11111111-1111-1111-1111-111111111111',name:m.displayName,email:accountEmails[m.memberId],workshop:`Taller Demostrativo Nº ${number}`}
 })}
 const demoSelfProfile: MemberSelfProfile = {
-  member: { id: 'demo-self-member', institutionalNumber: 'DEMO-0001', firstNames: 'Hermano', lastNames: 'Demostrativo' },
+  member: { id: 'demo-self-member', institutionalNumber: 'DEMO-0001', firstNames: 'Hermano', lastNames: 'Demostrativo', rut: '12.345.678-5' },
   contact: { email: 'hermano.demo@ejemplo.cl', phone: '+56 9 0000 0000', address: 'Dirección ficticia para demostración' },
   current: {
     membership: { organizationId: org23, organization: 'Taller Demostrativo Nº 23', organizationNumber: '23', organizationType: 'workshop', membershipType: 'regular', startDate: '2013-10-12', status: 'active' },
