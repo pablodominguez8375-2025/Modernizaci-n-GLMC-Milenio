@@ -133,7 +133,7 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
   return <>
     {notice && <p className={notice.tone === 'ok' ? 'library-admin-notice' : 'error-banner'} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>}
     <ActionBar>
-      <ActionDrawer label="Subir revista o boletín" wide title="Subir revista o boletín" description="Horizonte Masónico o el Boletín mensual de actividades de la Orden (PDF). Se guarda como borrador; se publica desde «Revistas y boletines».">
+      {!documentApi.useMocks && <ActionDrawer label="Subir revista o boletín" wide title="Subir revista o boletín" description="Horizonte Masónico o el Boletín mensual de actividades de la Orden (PDF). Se guarda como borrador; se publica desde «Revistas y boletines».">
         <form className="library-admin-form" onSubmit={event => void create(event)}>
           <label><span>Tipo de publicación</span><select value={kind} onChange={event => { setKind(event.target.value as EditorialType); setFileName('') }}><option value="bulletin">Boletín mensual</option><option value="magazine">Revista Horizonte Masónico</option></select></label>
           <label><span>Archivo PDF</span><input name="file" type="file" accept="application/pdf,.pdf" required={kind === 'bulletin'} onChange={event => setFileName(event.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>
@@ -152,7 +152,7 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
           <p className="library-admin-empty">La revista y el boletín son visibles para todos los grados (General).</p>
           <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy === 'create'}>{busy === 'create' ? 'Guardando…' : 'Guardar borrador'}</button></div>
         </form>
-      </ActionDrawer>
+      </ActionDrawer>}
       <ActionDrawer label={`Revistas y boletines${items.length ? ` (${items.length})` : ''}`} wide title="Revistas y boletines en preparación y publicados" description="Estado de cada número. Cada perfil corrige solo lo que publicó: el Bibliotecario sus publicaciones y Comunicaciones las suyas.">
         <div className="library-admin-list">
           {items.length === 0 && <p className="library-admin-empty">Aún no hay publicaciones cargadas.</p>}
