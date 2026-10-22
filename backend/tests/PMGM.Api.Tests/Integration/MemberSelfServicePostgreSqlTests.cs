@@ -276,6 +276,23 @@ public sealed class MemberSelfServicePostgreSqlTests
         Assert.Equal(institutionalNumber, profileJson.GetProperty("member").GetProperty("institutionalNumber").GetString());
         Assert.Equal(syntheticRut, profileJson.GetProperty("member").GetProperty("rut").GetString());
         Assert.False(profileJson.GetProperty("contact").TryGetProperty("rut", out _));
+
+        // La misma persona en fichas consultadas por terceros NUNCA entrega
+        // el dato original de identificación, incluso a un usuario administrativo.
+        foreach (var route in new[] {
+            $"/api/members/{memberId}/profile",
+            $"/api/members/{memberId}/history"
+        })
+        {
+            using var thirdPartyResponse = await client.GetAsync(route, cancellationToken);
+            Assert.Equal(HttpStatusCode.OK, thirdPartyResponse.StatusCode);
+            var body = await thirdPartyResponse.Content.ReadFromJsonAsync<JsonElement>(
+                cancellationToken: cancellationToken);
+            var thirdPartyMember = body.GetProperty("member");
+            Assert.False(thirdPartyMember.TryGetProperty("rut", out _));
+            Assert.Equal(JsonValueKind.Null, thirdPartyMember.GetProperty("rutMasked").ValueKind);
+            Assert.DoesNotContain(syntheticRut, body.GetRawText(), StringComparison.Ordinal);
+        }
         Assert.Equal("antes@example.test", profileJson.GetProperty("contact").GetProperty("email").GetString());
         Assert.Equal(organizationId, profileJson.GetProperty("current").GetProperty("membership").GetProperty("organizationId").GetGuid());
         Assert.Equal(3, profileJson.GetProperty("current").GetProperty("effectiveDegree").GetInt32());
