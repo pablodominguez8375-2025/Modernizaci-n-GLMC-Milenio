@@ -30,3 +30,17 @@ Archivos backend previstos: `SpaceRequestEndpoints.cs`; nuevo `SpaceRequestCreat
 **Bloqueos reales:** la creación de PR borrador desde la rama sin diferencias fue rechazada por los controles de la herramienta durante el corte anterior. Este documento prepara una PR correcta con commit documental previo, sin escribir código antes del reclamo visible. Falta verificar autorización formal para mapear cargo Gran Secretaría ↔ sujeto OIDC real; no inventar el mapeo.
 
 **Continuidad:** issue https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/531 ; registro en la adenda Drive. No declarar implementación o despliegue hasta evidencia.
+
+## Implementación añadida a la rama (22-10-2026)
+
+La PR borrador #638 está abierta: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/638. Después de su creación se introdujeron los siguientes archivos y cambios:
+- `SpaceRequestCreatedNotices.cs`: resuelve asignaciones vigentes a perfil explícito `grand-secretariat` (`order`, grant `secretariat/view`), exige enlace de identidad OIDC único y no revocado y membresía/estado activo. Envía únicamente avisos internos a subjects individuales. Igual transacción Npgsql para contexto de solicitud, institucional y notificaciones. Sin remitentes o destinatarios configurables desde el formulario.
+- `SpaceRequestEndpoints.cs`: operación de alta serializable + auditoría + avisos; 409 `GRAND_SECRETARIAT_RECIPIENT_UNAVAILABLE` sin destinatarios y `SPACE_REQUEST_RETRY` en colisión transitoria, ambos sin commit parcial.
+- `Migrations/20261022094500_AddSpaceRequestCreatedNotification.cs`: plantilla interna sin variables/PII, idempotente `ON CONFLICT`.
+- `SpaceRequestCreatedNoticesPolicyTests`: pruebas unitarias de perfil/ámbito/grant/vigencia.
+- `GrandSecretariatHttpWorkflowTests`: fixture sintético de asignación dinámica y vínculo de identidad, aviso inicial separado del aviso de resolución y validación de contenido mínimo.
+- GOV004 `docs/modelo-datos/registros/2026-10-22-chatgpt-space-request-created-notice-531.md`.
+
+**Punto operativo importante:** el perfil dedicado `grand-secretariat` no existe entre los perfiles predeterminados. El administrador debe crearlo y asignarlo válidamente en el catálogo de perfiles dinámicos antes de operar el envío; no se envía a un administrador genérico por defecto. Verificar la semántica con el Sponsor y QA/UAT antes de producción. Sin implementar asignaciones implícitas ni inventar enlaces de identidad.
+
+**El código NO está integrado a dev** mientras la PR y los gates permanezcan pendientes. Clau no debe construir una UI que asuma que la notificación funciona hasta ver el SHA mergeado.
