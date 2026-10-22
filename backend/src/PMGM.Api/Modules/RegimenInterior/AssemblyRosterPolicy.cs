@@ -28,7 +28,7 @@ public static class AssemblyRosterPolicy
                 index + 1, FormatName(candidate), candidate.Rut, candidate.Workshop, "", null))
             .ToArray();
 
-    private static IEnumerable<AssemblyRosterCandidate> Order(IEnumerable<AssemblyRosterCandidate> source) =>
+    internal static IEnumerable<AssemblyRosterCandidate> Order(IEnumerable<AssemblyRosterCandidate> source) =>
         source.OrderBy(x => NormalizeForSpanishCollation(x.LastNames),
                 Comparer<string>.Create((a, b) => SpanishChile.Compare(a, b, CompareOptions.IgnoreCase)))
             .ThenBy(x => NormalizeForSpanishCollation(x.FirstNames),

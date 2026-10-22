@@ -16,6 +16,8 @@ export interface DocumentVersion {
   id: string; documentId: string; versionNumber: number; originalFileName: string; contentType: string; sizeBytes: number; processingStatus: DocumentProcessingStatus; hasIntegrityHash: boolean; scanEvidenceRecorded: boolean; createdAtUtc: string
 }
 export interface EditorialMagazine { documentId: string; title: string; documentType: string; collectionName: string; status: string; minimumDegreeRequired: number | null; authorName: string | null; documentDate: string | null; topic: string | null; edition: string | null; shortDescription: string | null; createdAtUtc: string; publishedAtUtc: string | null }
+/** Publicaciones editoriales de Biblioteca: revista institucional y Boletín mensual. */
+export type EditorialType = 'magazine' | 'bulletin'
 export interface EditorialMagazineList { total: number; page: number; pageSize: number; items: EditorialMagazine[] }
 export interface EditorialMagazineVersion { id: string; versionNumber: number; processingStatus: string; originalFileName: string; contentType: string; sizeBytes: number; createdAtUtc: string }
 export interface InstitutionalDocument extends DocumentListItem { collectionCode: string; versions: DocumentVersion[] }
@@ -462,9 +464,10 @@ export class DocumentApiClient {
     return this.request<EditorialMagazineList>(`/api/biblioteca/editorial/revistas?page=${page}&pageSize=${pageSize}`)
   }
 
-  async createEditorialMagazine(collectionId: string, title: string): Promise<{ documentId: string; status: string }> {
-    if (this.useMocks) throw new Error('La demostración no crea revistas reales.')
-    return this.postJson<{ documentId: string; status: string }>('/api/biblioteca/editorial/revistas', { collectionId, title })
+  /** Alta de borrador editorial: Revista (por omisión) o Boletín mensual. */
+  async createEditorialMagazine(collectionId: string, title: string, documentType: EditorialType = 'magazine'): Promise<{ documentId: string; status: string }> {
+    if (this.useMocks) throw new Error('La demostración no crea publicaciones reales.')
+    return this.postJson<{ documentId: string; status: string }>('/api/biblioteca/editorial/revistas', { collectionId, title, documentType })
   }
 
   async listMagazineVersions(documentId: string): Promise<EditorialMagazineVersion[]> {
@@ -528,6 +531,7 @@ function canonicalCatalogType(value: string) {
   if (['book', 'books', 'libro', 'libros'].includes(normalized)) return 'book'
   if (['official_document', 'documento_oficial', 'regulation', 'reglamento', 'constitution', 'constitucion', 'ritual'].includes(normalized)) return 'official_document'
   if (['magazine', 'magazines', 'revista', 'revistas'].includes(normalized)) return 'magazine'
+  if (['bulletin', 'bulletins', 'boletin', 'boletines'].includes(normalized)) return 'bulletin'
   if (['video', 'videos'].includes(normalized)) return 'video'
   return normalized
 }

@@ -205,6 +205,8 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const initiationViews: View[] = ['candidates', 'candidateProfile', 'initiationCircuit']
   const isInitiationView = initiationViews.includes(view)
   const canLibrary = (effectiveProfile !== null && (capabilities?.canReadLibrary ?? false)) && canView('library')
+  // Perfil institucional que administra la Biblioteca: el Bibliotecario (todo) o Comunicaciones (revista y Boletín).
+  const libraryEditorRole: 'librarian' | 'communications' | null = capabilities?.canManageLibrary ? 'librarian' : capabilities?.canManageCommunications ? 'communications' : null
   const canDocuments = (capabilities?.canManageDocuments ?? false) && canView('documentmanager')
   const canGrandArchive = (capabilities?.canManageGrandArchive ?? false) && canView('grandarchive')
   const isLodgeSecretaryWorkspace = canManageLodgeSecretariat && !canSecretariat
@@ -340,7 +342,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/documents' && canDocuments) return setView('documents')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.129' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.130' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -456,7 +458,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {(view === 'lodge' || (view === 'lodgeProfile' && canLodgeProfile)) && canLodge && <LodgeManagementPage key={view} api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat && !isGrandSupervision} instructionGrades={isGrandSupervision ? [] : instructionGrades} pageTitle={isLodgeSecretaryWorkspace ? 'Secretaría del Taller' : lodgeMenuLabel === 'Secretaría' ? 'Gestión Logial' : lodgeMenuLabel} initialTab={view === 'lodgeProfile' ? 'ficha' : undefined} profileSlot={canLodgeProfile ? <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} /> : undefined} />}
         {view === 'lodgeInstruction' && canManageAnyInstruction && <LodgeInstructionPage api={api} lodgeApi={lodgeApi} allowedGrades={instructionGrades} />}
         {view === 'orderInstructionReport' && canReadOrderInstructions && <OrderInstructionReportPage lodgeApi={lodgeApi} allowedGrades={orderInstructionGrades} canReadAll={canReadAllOrderInstructions} />}
-        {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} />}
+        {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} editorRole={libraryEditorRole} />}
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
         </>}
       </main>
