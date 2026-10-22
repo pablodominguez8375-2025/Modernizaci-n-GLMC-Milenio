@@ -34,6 +34,8 @@ public sealed class MemberSelfServicePostgreSqlTests
         Guid memberId;
         Guid organizationId;
         string institutionalNumber;
+        // Identificador ficticio único para no chocar con el índice único de personas.
+        var syntheticRut = "QA-" + Guid.NewGuid().ToString("N")[..12];
         // Match the institutional accounting period, including UTC/local month boundaries.
         var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(
             DateTimeOffset.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("America/Santiago")).DateTime);
@@ -57,7 +59,7 @@ public sealed class MemberSelfServicePostgreSqlTests
             {
                 FirstNames = "Hermano",
                 LastNames = "Autoservicio",
-                Rut = "RUT-QA-609",
+                Rut = syntheticRut,
                 Email = "antes@example.test",
                 Phone = "+56 9 1111 1111",
                 Address = "Domicilio anterior"
@@ -272,7 +274,7 @@ public sealed class MemberSelfServicePostgreSqlTests
         var profileJson = await profileResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(memberId, profileJson.GetProperty("member").GetProperty("id").GetGuid());
         Assert.Equal(institutionalNumber, profileJson.GetProperty("member").GetProperty("institutionalNumber").GetString());
-        Assert.Equal("RUT-QA-609", profileJson.GetProperty("member").GetProperty("rut").GetString());
+        Assert.Equal(syntheticRut, profileJson.GetProperty("member").GetProperty("rut").GetString());
         Assert.False(profileJson.GetProperty("contact").TryGetProperty("rut", out _));
         Assert.Equal("antes@example.test", profileJson.GetProperty("contact").GetProperty("email").GetString());
         Assert.Equal(organizationId, profileJson.GetProperty("current").GetProperty("membership").GetProperty("organizationId").GetGuid());
@@ -354,7 +356,7 @@ public sealed class MemberSelfServicePostgreSqlTests
             .SingleAsync(cancellationToken);
 
         Assert.Equal(institutionalNumber, stored.InstitutionalNumber);
-        Assert.Equal("RUT-QA-609", stored.Rut);
+        Assert.Equal(syntheticRut, stored.Rut);
         Assert.Equal("nuevo@example.test", stored.Email);
         Assert.Equal("+56 9 2222 2222", stored.Phone);
         Assert.Equal("Domicilio actualizado", stored.Address);
