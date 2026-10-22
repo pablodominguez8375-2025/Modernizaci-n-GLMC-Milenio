@@ -142,7 +142,7 @@ function Profile({ profile }: { profile: MemberProfile }) {
   return <>
     <div className="member-profile-hero">
       <span className="member-avatar large">{initials(displayName)}</span>
-      <div><p className="eyebrow">Ficha institucional</p><h2>{displayName}</h2><p>{profile.member.institutionalNumber ?? 'Sin número institucional'} · {degreeLabel(profile.current.degree?.degree ?? null)}</p></div>
+      <div><p className="eyebrow">Ficha institucional</p><h2>{displayName}</h2><p>{profile.member.institutionalNumber ?? 'Sin número institucional'} · {degreeLabel(profile.current.degree?.degree ?? null)}</p>{profile.member.rutMasked && <p className="member-rut-hint">RUT protegido: <strong>{profile.member.rutMasked}</strong></p>}</div>
       <span className="profile-scope">{profile.scope === 'order' ? 'Vista Orden' : 'Vista autorizada'}</span>
     </div>
 
