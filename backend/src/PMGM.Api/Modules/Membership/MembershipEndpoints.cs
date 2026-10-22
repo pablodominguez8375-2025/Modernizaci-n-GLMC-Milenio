@@ -139,6 +139,7 @@ public static class MembershipEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.CreatedAtUtc
@@ -321,9 +322,17 @@ public static class MembershipEndpoints
             regularity = new { financial, hospitalaria };
         }
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
-            member,
+            member = new
+            {
+                member.Id, member.PersonId, member.InstitutionalNumber,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc,
+                RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
+            },
             contactVisible = canReadContact,
             contact,
             scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",
@@ -358,6 +367,7 @@ public static class MembershipEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.CreatedAtUtc
@@ -503,9 +513,17 @@ public static class MembershipEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
-            member,
+            member = new
+            {
+                member.Id, member.PersonId, member.InstitutionalNumber,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc,
+                RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
+            },
             contactVisible = canReadContact,
             contact,
             scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",
