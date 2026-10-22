@@ -861,7 +861,8 @@ public sealed class SyntheticHeaderAuthenticationHandler(
         if (string.IsNullOrWhiteSpace(role)) return Task.FromResult(AuthenticateResult.NoResult());
         var org = Request.Headers["X-Synthetic-Lodge"].FirstOrDefault();
         var claims = new List<Claim> { new(InstitutionalClaims.Role, role),
-            new("sub", "synthetic-qa-" + role + "-" + (org ?? "order")) };
+            new("sub", "synthetic-qa-" + role + "-" + (org ?? "order")),
+            new("iss", "urn:qa-space-request") };
         if (!string.IsNullOrWhiteSpace(org))
             claims.Add(new Claim(InstitutionalClaims.Organization, org));
         if (role == InstitutionalRoles.GranSecretaria)
