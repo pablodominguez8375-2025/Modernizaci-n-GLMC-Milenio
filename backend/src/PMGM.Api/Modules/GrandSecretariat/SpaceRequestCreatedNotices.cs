@@ -1,4 +1,5 @@
 using System.Data;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -53,18 +54,21 @@ public static class SpaceRequestCreatedNotices
         var catalog = await DynamicAccessEndpoints.LoadAsync(institutions, ct);
         var today = DynamicAccessEndpoints.Today();
         var candidates = SelectAssignedSubjects(catalog, today);
-        if (candidates.Length == 0)
+        // El Subject no identifica por sí solo un usuario si dos proveedores
+        // OIDC emiten el mismo texto. Exigir el issuer de la sesión de origen.
+        var issuer = http.User.FindFirstValue("iss");
+        if (candidates.Length == 0 || string.IsNullOrWhiteSpace(issuer))
             throw new SpaceRequestRecipientsUnavailableException();
 
         // No se permite dirigir avisos a un cargo, un correo, un OrganizationId,
         // a múltiples enlaces OIDC para un mismo subject ni a un miembro inactivo.
-        var matches = new List<(string Subject, Guid MemberId)>();
+        var matches = new List<(string Subject, Guid MemberId, string Issuer)>();
         var connection = requestDb.Database.GetDbConnection();
         await using (var cmd = connection.CreateCommand())
         {
             cmd.Transaction = tx.GetDbTransaction();
             cmd.CommandText = """
-                SELECT "Subject", "MemberId"
+                SELECT "Subject", "MemberId", "Issuer"
                 FROM core.member_identity_links
                 WHERE "RevokedAtUtc" IS NULL AND "Subject" = ANY(@subjects);
                 """;
@@ -74,13 +78,14 @@ public static class SpaceRequestCreatedNotices
             cmd.Parameters.Add(parameter);
             await using var reader = await cmd.ExecuteReaderAsync(ct);
             while (await reader.ReadAsync(ct))
-                matches.Add((reader.GetString(0), reader.GetGuid(1)));
+                matches.Add((reader.GetString(0), reader.GetGuid(1), reader.GetString(2)));
         }
 
         var active = new List<string>();
         foreach (var group in matches.GroupBy(x => x.Subject, StringComparer.Ordinal))
         {
-            if (group.Count() != 1 || group.First().MemberId == Guid.Empty)
+            if (group.Count() != 1 || group.First().MemberId == Guid.Empty ||
+                !string.Equals(group.First().Issuer, issuer, StringComparison.Ordinal))
                 continue;
             var memberId = group.First().MemberId;
             var membership = await institutions.Memberships.AsNoTracking().AnyAsync(m =>
