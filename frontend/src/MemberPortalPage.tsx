@@ -5,6 +5,7 @@ import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
 import MaskedRut from './MaskedRut'
+import { formatChileanRut } from './chileanRut'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './MemberPayments'
 import { institutionalStatusLabel } from './institutionalStatus'
@@ -250,7 +251,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
           <p className="member-display-name">{useMocks ? memberPortalDemoData.displayName : 'Ficha personal autenticada'}</p>
           <div className="member-data-grid">
             <MemberDatum label="Identificador" value={memberId} />
-            <MemberDatum label="RUT (solo tú lo ves completo)" value={selfProfile?.member.rut || (useMocks ? "12.345.678-5" : "Sin registrar")} />
+            <MemberDatum label="RUT (solo tú lo ves completo)" value={formatChileanRut(selfProfile?.member.rut) ?? (selfProfile?.member.rut ? "RUT registrado requiere revisión" : "Sin registrar")} />
             <MemberDatum label="Nacimiento" value={useMocks ? memberPortalDemoData.birthDate : 'No expuesto en autoservicio'} />
             <MemberDatum label="Correo" value={personal.email || 'Sin registrar'} />
             <MemberDatum label="Teléfono" value={personal.phone || 'Sin registrar'} />
