@@ -43,7 +43,7 @@ public sealed class SpaceRequestCreatedNoticesPolicyTests
     public void Active_explicit_order_level_assignment_is_candidate_not_delivery_authorization()
     {
         var subjects = SpaceRequestCreatedNotices.SelectAssignedSubjects(Catalog(), Today);
-        Assert.Equal(["subject-order-secretary"], subjects);
+        Assert.Equal(new[] { "subject-order-secretary" }, subjects);
         // El verificador de member_identity_links y membresía efectiva corre
         // por separado dentro de la transacción antes de entregar avisos.
     }
