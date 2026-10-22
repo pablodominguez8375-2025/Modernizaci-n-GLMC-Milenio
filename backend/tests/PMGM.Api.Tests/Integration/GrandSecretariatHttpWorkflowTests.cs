@@ -464,7 +464,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 .Include(x => x.Deliveries)
                 .SingleAsync(x => x.RelatedResourceType == "space_request" &&
                                   x.RelatedResourceId == requestId.ToString("D") &&
-                                  x.TypeCode == SpaceRequestCreatedNotices.TemplateCode, ct);
+                                  x.TypeCode == SpaceRequestCreatedNotices.TemplateCode &&
+                                  x.RecipientSubject == grandRecipient, ct);
             Assert.Equal(grandRecipient, createdNotice.RecipientSubject);
             Assert.Null(createdNotice.RecipientEmail);
             Assert.Equal("internal", createdNotice.Classification);
