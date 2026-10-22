@@ -10,7 +10,7 @@ namespace PMGM.Api.Modules.Authorization;
 public static class DynamicAccessEndpoints
 {
     public static readonly string[] AllowedActions = ["view", "create", "write", "edit", "delete", "search", "print"];
-    public static readonly string[] CatalogCategories = ["magazine", "book", "work_paper", "official_document", "video"];
+    public static readonly string[] CatalogCategories = ["magazine", "bulletin", "book", "work_paper", "official_document", "video"];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const long CatalogLock = 26620261004;
 

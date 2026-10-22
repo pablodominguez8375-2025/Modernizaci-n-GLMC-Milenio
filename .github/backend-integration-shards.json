@@ -30,6 +30,7 @@
       "RequestRateLimitingHttpTests",
       "CalendarSourceSyncPostgreSqlTests",
       "GrandArchivePostgreSqlTests",
+      "CommunicationsBulletinHttpTests",
       "ClamAvDocumentMalwareIntegrationTests",
       "PostgreSqlMigrationTests",
       "TreasuryOrdinaryDuesEligibilityPostgreSqlTests",

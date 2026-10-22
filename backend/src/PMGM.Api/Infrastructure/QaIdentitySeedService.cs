@@ -39,7 +39,9 @@ internal static class QaIdentitySeedService
         new(16, "qa.regimeninterior", "master"),
         new(17, "qa.granarchivero", "master"),
         new(18, "qa.bibliotecaeditor", "master"),
-        new(19, "qa.bibliotecarevisor", "master")
+        new(19, "qa.bibliotecarevisor", "master"),
+        new(20, "qa.bibliotecario", "master"),
+        new(21, "qa.comunicaciones", "master")
     ];
 
     private static Guid Id(string prefix, int index) =>
