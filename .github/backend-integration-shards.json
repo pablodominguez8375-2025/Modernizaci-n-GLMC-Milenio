@@ -91,6 +91,7 @@
       "AssemblyTreasurySignedReviewPostgreSqlTests",
       "AssemblyTreasurySignedReviewRevalidationPostgreSqlTests",
       "AssemblyPreliminaryReviewHttpTests",
+      "AssemblyRosterListingHttpTests",
       "AssemblyTreasuryStatementInspectionPostgreSqlTests",
       "RegimenInteriorMemberControlPostgreSqlTests",
       "CandidateInterviewAssignmentHttpTests",
