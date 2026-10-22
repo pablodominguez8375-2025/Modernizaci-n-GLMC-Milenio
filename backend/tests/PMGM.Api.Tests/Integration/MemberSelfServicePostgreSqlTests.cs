@@ -286,6 +286,7 @@ public sealed class MemberSelfServicePostgreSqlTests
         {
             using var thirdPartyResponse = await client.GetAsync(route, cancellationToken);
             Assert.Equal(HttpStatusCode.OK, thirdPartyResponse.StatusCode);
+            Assert.Contains("no-store", thirdPartyResponse.Headers.CacheControl?.ToString());
             var body = await thirdPartyResponse.Content.ReadFromJsonAsync<JsonElement>(
                 cancellationToken: cancellationToken);
             var thirdPartyMember = body.GetProperty("member");
