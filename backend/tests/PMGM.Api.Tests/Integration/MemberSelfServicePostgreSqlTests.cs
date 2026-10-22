@@ -57,6 +57,7 @@ public sealed class MemberSelfServicePostgreSqlTests
             {
                 FirstNames = "Hermano",
                 LastNames = "Autoservicio",
+                Rut = "RUT-SINTETICO-609",
                 Email = "antes@example.test",
                 Phone = "+56 9 1111 1111",
                 Address = "Domicilio anterior"
@@ -271,6 +272,8 @@ public sealed class MemberSelfServicePostgreSqlTests
         var profileJson = await profileResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         Assert.Equal(memberId, profileJson.GetProperty("member").GetProperty("id").GetGuid());
         Assert.Equal(institutionalNumber, profileJson.GetProperty("member").GetProperty("institutionalNumber").GetString());
+        Assert.Equal("RUT-SINTETICO-609", profileJson.GetProperty("member").GetProperty("rut").GetString());
+        Assert.False(profileJson.GetProperty("contact").TryGetProperty("rut", out _));
         Assert.Equal("antes@example.test", profileJson.GetProperty("contact").GetProperty("email").GetString());
         Assert.Equal(organizationId, profileJson.GetProperty("current").GetProperty("membership").GetProperty("organizationId").GetGuid());
         Assert.Equal(3, profileJson.GetProperty("current").GetProperty("effectiveDegree").GetInt32());
@@ -343,6 +346,7 @@ public sealed class MemberSelfServicePostgreSqlTests
             .Select(x => new
             {
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.Email,
                 x.Person.Phone,
                 x.Person.Address
@@ -350,6 +354,7 @@ public sealed class MemberSelfServicePostgreSqlTests
             .SingleAsync(cancellationToken);
 
         Assert.Equal(institutionalNumber, stored.InstitutionalNumber);
+        Assert.Equal("RUT-SINTETICO-609", stored.Rut);
         Assert.Equal("nuevo@example.test", stored.Email);
         Assert.Equal("+56 9 2222 2222", stored.Phone);
         Assert.Equal("Domicilio actualizado", stored.Address);
