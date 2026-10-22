@@ -45,6 +45,7 @@
       "CandidateWorkshopSponsorHttpTests",
       "CandidateOriginCorrectionHttpTests",
       "MagazineEditorialVersionStatusHttpTests",
+      "LibraryPublicationReplacementHttpTests",
       "CandidateFormalSponsorGatesHttpTests"
     ],
     "b": [
