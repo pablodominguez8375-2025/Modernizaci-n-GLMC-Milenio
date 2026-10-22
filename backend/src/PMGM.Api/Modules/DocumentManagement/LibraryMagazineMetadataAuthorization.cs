@@ -33,8 +33,41 @@ public static class LibraryEditorialTypes
 /// colaboradores con grant por categoría (sólo su categoría exacta).
 /// No autoriza documentos de Taller ni otras categorías o áreas.
 /// </summary>
+public static class LibraryPublisherProfiles
+{
+    public const string Librarian = "librarian";
+    public const string Communications = "communications";
+}
+
 public static class LibraryMagazineMetadataAuthorization
 {
+    /// <summary>
+    /// Perfil con el que el usuario crea publicaciones. Quien reúne ambos
+    /// (Gran Logia admin) o ninguno (colaborador con grant) no fija perfil.
+    /// </summary>
+    public static string? ActorProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
+    {
+        var lib = access.CanManageLibrary(user, null);
+        var com = access.CanManageCommunications(user);
+        if (lib == com) return null;
+        return lib ? LibraryPublisherProfiles.Librarian : LibraryPublisherProfiles.Communications;
+    }
+
+    /// <summary>
+    /// «Propio» es por perfil/cargo, no por persona: quien ocupa el cargo con
+    /// ese perfil hereda las publicaciones. Documentos sin perfil (históricos)
+    /// no se restringen.
+    /// </summary>
+    public static bool OwnsPublication(
+        ClaimsPrincipal user, IInstitutionalAccessService access, InstitutionalDocument document)
+        => document.PublisherProfile switch
+        {
+            null => true,
+            LibraryPublisherProfiles.Librarian => access.CanManageLibrary(user, null),
+            LibraryPublisherProfiles.Communications => access.CanManageCommunications(user),
+            _ => false
+        };
+
     public static bool IsEligible(InstitutionalDocument document)
         => document.OrganizationId is null &&
            document.Collection is
@@ -66,10 +99,12 @@ public static class LibraryMagazineMetadataAuthorization
 
     private static bool CanAct(
         ClaimsPrincipal user, IInstitutionalAccessService access,
-        DynamicAccessCatalog catalog, string action, string category)
+        DynamicAccessCatalog catalog, string action, string category,
+        InstitutionalDocument? document = null)
         => access.HasOrderScope(user) &&
            (CategoryGranted(user, catalog, action, category) ||
-            IsInstitutionalEditor(user, access, catalog, action));
+            (IsInstitutionalEditor(user, access, catalog, action) &&
+             (document is null || OwnsPublication(user, access, document))));
 
     /// <summary>
     /// Publicar y retirar requieren competencia institucional (Bibliotecario
@@ -81,7 +116,8 @@ public static class LibraryMagazineMetadataAuthorization
         => IsEligible(document) &&
            document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
            access.HasOrderScope(user) &&
-           IsInstitutionalEditor(user, access, catalog, "edit");
+           IsInstitutionalEditor(user, access, catalog, "edit") &&
+           OwnsPublication(user, access, document);
 
     /// <summary>Alta de borrador de cualquier categoría editorial (filtro de ruta).</summary>
     public static bool CanCreateEditorialMagazine(
@@ -128,8 +164,24 @@ public static class LibraryMagazineMetadataAuthorization
         DynamicAccessCatalog catalog,
         InstitutionalDocument document)
         => IsEligible(document) &&
-           document.Status == DocumentManagementCodes.DocumentStatus.Draft &&
-           CanAct(user, access, catalog, "write", LibraryEditorialTypes.Canonical(document.DocumentType)!);
+           document.Status is DocumentManagementCodes.DocumentStatus.Draft
+               or DocumentManagementCodes.DocumentStatus.Published &&
+           CanStageInState(user, access, catalog, document);
+
+    // Borrador: grant "write" de colaborador o perfil titular. Publicado: sólo
+    // el perfil titular puede preparar un reemplazo sin despublicar (el
+    // colaborador sigue limitado a borradores).
+    private static bool CanStageInState(
+        ClaimsPrincipal user, IInstitutionalAccessService access,
+        DynamicAccessCatalog catalog, InstitutionalDocument document)
+    {
+        var category = LibraryEditorialTypes.Canonical(document.DocumentType)!;
+        if (document.Status == DocumentManagementCodes.DocumentStatus.Draft)
+            return CanAct(user, access, catalog, "write", category, document);
+        return access.HasOrderScope(user) &&
+               IsInstitutionalEditor(user, access, catalog, "write") &&
+               OwnsPublication(user, access, document);
+    }
 
     public static bool CanStageOwnMagazineVersion(
         ClaimsPrincipal user,
@@ -146,5 +198,5 @@ public static class LibraryMagazineMetadataAuthorization
         DynamicAccessCatalog catalog,
         InstitutionalDocument document)
         => IsEligible(document) &&
-           CanAct(user, access, catalog, "edit", LibraryEditorialTypes.Canonical(document.DocumentType)!);
+           CanAct(user, access, catalog, "edit", LibraryEditorialTypes.Canonical(document.DocumentType)!, document);
 }

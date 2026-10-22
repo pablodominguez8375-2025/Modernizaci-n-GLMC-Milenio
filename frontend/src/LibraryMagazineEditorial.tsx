@@ -4,6 +4,7 @@ import { DocumentApiHttpError, type DocumentApiClient, type EditorialMagazine, t
 
 const statusLabel: Record<string, string> = { draft: 'Borrador', active: 'Listo para publicar', published: 'Publicada', retired: 'Retirada' }
 const typeLabel: Record<EditorialType, string> = { magazine: 'Revista', bulletin: 'Boletín' }
+const profileLabel: Record<string, string> = { librarian: 'el Bibliotecario', communications: 'Comunicaciones' }
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 const currentMonth = () => today().slice(0, 7)
 const isBulletin = (value: string) => ['bulletin', 'bulletins', 'boletin', 'boletines', 'boletín'].includes(value.trim().toLowerCase())
@@ -28,6 +29,8 @@ type Props = {
 /** Revista y Boletín reales (API editorial). Solo se muestra a quien tiene permiso editorial; nunca simula éxito local. */
 export default function LibraryMagazineEditorial({ documentApi, onChanged, editorRole = null }: Props) {
   const [allowed, setAllowed] = useState<boolean | null>(null)
+  // En demostración la titularidad sigue al perfil elegido; con servidor real decide `canCorrect`.
+  const canCorrect = (item: EditorialMagazine) => documentApi.useMocks && editorRole ? item.publisherProfile === editorRole : item.canCorrect !== false
   const [items, setItems] = useState<EditorialMagazine[]>([])
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
@@ -99,6 +102,25 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
     finally { setBusy(null); await load() }
   }
 
+  /** Reemplaza el archivo de una publicación vigente sin despublicarla: sigue visible con la versión actual hasta publicar la nueva. */
+  async function replaceFile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const item = items.find(entry => entry.documentId === String(data.get('document')))
+    const file = (form.elements.namedItem('file') as HTMLInputElement).files?.[0]
+    const reason = String(data.get('reason') ?? '').trim()
+    if (!item || !file) return
+    if (reason.length < 10) { setNotice({ tone: 'error', text: 'Escriba el motivo del reemplazo (al menos 10 caracteres).' }); return }
+    setBusy(item.documentId); setNotice(null)
+    try {
+      const versionId = await stageFile(item.documentId, file, item.documentType)
+      await documentApi.publishEditorialMagazine(item.documentId, versionId, reason)
+      setNotice({ tone: 'ok', text: `«${item.title}» ahora muestra el archivo nuevo. La versión anterior se conserva en el historial.` }); form.reset(); setFileName(''); onChanged()
+    } catch (reason2) { setNotice({ tone: 'error', text: reason2 instanceof DocumentApiHttpError && reason2.status === 403 ? 'Solo el perfil que publicó puede corregir esta publicación.' : message(reason2) }) }
+    finally { setBusy(null); await load() }
+  }
+
   async function unpublish(item: EditorialMagazine) {
     setBusy(item.documentId); setNotice(null)
     try { await documentApi.unpublishEditorialMagazine(item.documentId); setNotice({ tone: 'ok', text: `«${item.title}» ya no está publicado. El historial se conserva.` }); onChanged() }
@@ -107,10 +129,11 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
   }
 
   if (!allowed) return null
+  const replaceable = items.filter(item => item.status === 'published' && canCorrect(item))
   return <>
     {notice && <p className={notice.tone === 'ok' ? 'library-admin-notice' : 'error-banner'} role={notice.tone === 'ok' ? 'status' : 'alert'}>{notice.text}</p>}
     <ActionBar>
-      <ActionDrawer label="Subir revista o boletín" wide title="Subir revista o boletín" description="Horizonte Masónico o el Boletín mensual de actividades de la Orden (PDF). Se guarda como borrador; se publica desde «Revistas y boletines».">
+      {!documentApi.useMocks && <ActionDrawer label="Subir revista o boletín" wide title="Subir revista o boletín" description="Horizonte Masónico o el Boletín mensual de actividades de la Orden (PDF). Se guarda como borrador; se publica desde «Revistas y boletines».">
         <form className="library-admin-form" onSubmit={event => void create(event)}>
           <label><span>Tipo de publicación</span><select value={kind} onChange={event => { setKind(event.target.value as EditorialType); setFileName('') }}><option value="bulletin">Boletín mensual</option><option value="magazine">Revista Horizonte Masónico</option></select></label>
           <label><span>Archivo PDF</span><input name="file" type="file" accept="application/pdf,.pdf" required={kind === 'bulletin'} onChange={event => setFileName(event.target.files?.[0]?.name ?? '')} />{fileName && <small>Seleccionado: {fileName}</small>}</label>
@@ -129,23 +152,35 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
           <p className="library-admin-empty">La revista y el boletín son visibles para todos los grados (General).</p>
           <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy === 'create'}>{busy === 'create' ? 'Guardando…' : 'Guardar borrador'}</button></div>
         </form>
-      </ActionDrawer>
-      <ActionDrawer label={`Revistas y boletines${items.length ? ` (${items.length})` : ''}`} wide title="Revistas y boletines en preparación y publicados" description="Estado de cada número. Publican y retiran el Bibliotecario y Comunicaciones.">
+      </ActionDrawer>}
+      <ActionDrawer label={`Revistas y boletines${items.length ? ` (${items.length})` : ''}`} wide title="Revistas y boletines en preparación y publicados" description="Estado de cada número. Cada perfil corrige solo lo que publicó: el Bibliotecario sus publicaciones y Comunicaciones las suyas.">
         <div className="library-admin-list">
           {items.length === 0 && <p className="library-admin-empty">Aún no hay publicaciones cargadas.</p>}
           {items.map(item => {
             const bulletin = isBulletin(item.documentType)
             return <article key={item.documentId} className="library-admin-card">
               <div><strong>{item.title}</strong><span>{bulletin ? 'Boletín' : 'Revista'} · {statusLabel[item.status] ?? item.status}{!bulletin && item.edition ? ` · ${item.edition}` : ''}{item.documentDate ? ` · ${bulletin ? periodLabel(item.documentDate) : item.documentDate}` : ''}</span>{item.shortDescription && <p>{item.shortDescription}</p>}</div>
-              <div className="library-admin-row-actions">
+              {!canCorrect(item) ? <p className="library-admin-empty">Publicada por {profileLabel[item.publisherProfile ?? ''] ?? 'otro perfil'}. Solo ese perfil puede corregirla.</p> : <div className="library-admin-row-actions">
                 {item.status !== 'published' && <label className="action-trigger secondary library-file-button">Cargar archivo<input type="file" accept="application/pdf,.pdf" hidden disabled={busy === item.documentId} onChange={event => { const file = event.target.files?.[0]; if (file) void attach(item, file); event.target.value = '' }} /></label>}
                 {item.status !== 'published' && <ConfirmAction label="Publicar" message="Quedará visible para los hermanos autorizados según su grado." disabled={busy === item.documentId} onConfirm={() => void publish(item)} />}
                 {item.status === 'published' && <ConfirmAction label="Retirar publicación" message="Dejará de verse en la Biblioteca. El historial se conserva y se puede volver a publicar." disabled={busy === item.documentId} onConfirm={() => void unpublish(item)} />}
-              </div>
+              </div>}
             </article>
           })}
         </div>
       </ActionDrawer>
+      {replaceable.length > 0 && <ActionDrawer label="Reemplazar archivo publicado" tone="secondary" wide title="Reemplazar el archivo de una publicación" description="La publicación sigue visible con el archivo actual hasta que el nuevo esté listo. El archivo anterior queda guardado en el historial.">
+        <form className="library-admin-form" onSubmit={event => void replaceFile(event)}>
+          <label className="wide"><span>Publicación</span><select name="document" required defaultValue="">
+            <option value="" disabled>Elija la publicación…</option>
+            {replaceable.map(item => <option key={item.documentId} value={item.documentId}>{item.title}</option>)}
+          </select></label>
+          <label className="wide"><span>Archivo PDF corregido</span><input name="file" type="file" accept="application/pdf,.pdf" required /></label>
+          <label className="wide"><span>Motivo del reemplazo</span><textarea name="reason" rows={3} required minLength={10} maxLength={2000} placeholder="Ej.: se corrigió una fecha en la página 3." /></label>
+          <p className="library-admin-empty">Solo aparecen las publicaciones que usted publicó. Queda registrado quién, cuándo y por qué.</p>
+          <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy !== null}>{busy ? 'Reemplazando…' : 'Reemplazar archivo'}</button></div>
+        </form>
+      </ActionDrawer>}
     </ActionBar>
   </>
 }

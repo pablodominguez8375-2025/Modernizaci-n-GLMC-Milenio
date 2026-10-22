@@ -121,11 +121,12 @@ public sealed class CommunicationsBulletinHttpTests
         using var degree = await client.PutAsJsonAsync($"/api/documentos/{documentId}/metadatos-biblioteca",
             new { documentDate = "2026-10-01", minimumDegreeRequired = 3 }, ct);
         Assert.Equal(HttpStatusCode.Forbidden, degree.StatusCode);
-        // Ni siquiera el Bibliotecario restringe por grado: revista y boletín son para todos (PO 22-10-2026).
+        // El Bibliotecario ya no corrige lo publicado por Comunicaciones (regla 22-10-2026, titularidad por perfil);
+        // revista y boletín son además para todos los grados (PO 22-10-2026).
         As(InstitutionalRoles.Librarian, "bibliotecario");
         using var librarianDegree = await client.PutAsJsonAsync($"/api/documentos/{documentId}/metadatos-biblioteca",
             new { documentDate = "2026-10-01", minimumDegreeRequired = 1 }, ct);
-        Assert.Equal(HttpStatusCode.BadRequest, librarianDegree.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, librarianDegree.StatusCode);
         As(InstitutionalRoles.Communications, "comunicaciones-" + Guid.NewGuid().ToString("N"));
 
         // Sólo PDF.
