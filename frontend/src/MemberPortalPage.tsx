@@ -250,7 +250,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
           <p className="member-display-name">{useMocks ? memberPortalDemoData.displayName : 'Ficha personal autenticada'}</p>
           <div className="member-data-grid">
             <MemberDatum label="Identificador" value={memberId} />
-            {useMocks && <MemberDatum label="RUT (solo tú lo ves completo)" value="12.345.678-5" />}
+            <MemberDatum label="RUT (solo tú lo ves completo)" value={selfProfile?.member.rut || (useMocks ? "12.345.678-5" : "Sin registrar")} />
             <MemberDatum label="Nacimiento" value={useMocks ? memberPortalDemoData.birthDate : 'No expuesto en autoservicio'} />
             <MemberDatum label="Correo" value={personal.email || 'Sin registrar'} />
             <MemberDatum label="Teléfono" value={personal.phone || 'Sin registrar'} />
