@@ -17,7 +17,7 @@ describe('soporte técnico · exportación segura', () => {
     expect(response.volatileStorage).toBe(true)
     expect(response.items).toHaveLength(2)
     const csv = diagnosticCsv(response.items)
-    expect(csv).toContain('Correlación')
+    expect(csv).toContain('ID de correlación')
     expect(csv).toContain('qa-synthetic-http-500')
     expect(csv).not.toContain('Bearer')
     const json = JSON.parse(diagnosticJson(response))
