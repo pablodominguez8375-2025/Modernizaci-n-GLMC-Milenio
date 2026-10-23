@@ -8,3 +8,6 @@ Archivos: `backend/src/PMGM.Api/Modules/RegimenInterior/AssemblyAccreditedMember
 
 ## Límites vigentes
 Este preparador no autentica actas/identidad por sí solo. **Sólo un futuro conector de infraestructura autenticado puede suministrar las evidencias.** Sin cobertura completa, nada se persiste, lista vacía no equivale a padrón cerrado, todos los derechos electorales continúan en estado pendiente hasta Gran Tesorería/Tribunal/RI. PR/CI exact HEAD antes de integrar en dev, no main ni QA físico.
+
+## Entrega C22
+Implementada política pura de **materialización preparatoria atómica**. La base futura de fuentes certificadas entrega snapshots por miembro y corte más atestación V.M. probada; la política prepara filas `AssemblyMemberStatusRecord` para candidatos elegibles y rechaza lote completo ante cobertura incompleta, identidades duplicadas, fuente V.M. duplicada, fechas incongruentes o evidencia faltante. Excluye inactivos y no asambleístas sólo cuando el conjunto fue validado y garantiza un origen V.M. por persona. Taller actual puede diferir del histórico certificado. **No escribe BD ni autentica certificados**, no hay API HTTP ni flags de sufragio: primer paso para conector/servicio transaccional posterior. Pruebas unitarias positivas y negativas incluidas; sin migración. Mantener Issue #533 abierto.
