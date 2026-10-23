@@ -18,3 +18,13 @@ Sponsor 22-10: solo existe cuenta Master `admin`; puede administrar usuarios y s
 
 ## Estado
 Primer commit documental para reclamar PR borrador según GOV-003. Aún no hay cambios de código ni CI; actualizar este archivo tras pruebas/merge para cualquier otra IA.
+
+
+## Implementación y pruebas (23-10-2026)
+- `InstitutionalAccessService.HasRole` solo reconoce el propio rol explícito `platform_superadmin` cuando el usuario es Máster; nunca equivale a `grand_lodge_admin`, `grand_master` o un cargo de Taller. La función `IsPlatformSuperAdmin` sigue habilitando `CanConfigureSystem` y los controles independientes de alta de usuario/superusuario.
+- `HasExplicitRole` y `HasOrganizationClaim` deniegan atributos de membresía logial a la cuenta Máster, incluso si Keycloak entregó claims accidentales de Taller o Gran Logia; `CanManageLodgeCouncilSummaryAccess` rechaza la delegación del Venerable.
+- Pruebas xUnit reforzadas en `InstitutionalAccessServiceTests`: Máster solo con plataforma + `pmgm_org` erróneo **no** lee fichas de Taller ni firma/aprueba/gestiona pagos, Secretaría, Gran Archivo o otros dominios; caso adversarial Máster con roles logiales adicionales también rechaza; cargos legítimos Venerable/Gran Secretaría conservan funciones con ámbitos válidos.
+- **Regresión de seguridad:** esta modificación reduce permisos de lectura concedidos previamente por atajo del Máster. No se simula lectura universal; un módulo de «Ver como» auténtico necesitará política y auditoría específicas bajo #574. Clau debe mantener las vistas de administración, pero no puede usar el rol técnico como carta blanca para leer fichas personales sin auditoría.
+- Sin migración ni acceso a credenciales, `main` o despliegues. Verificar triple CI exact-head antes de integrar a `dev` y luego preparar UAT de Keycloak, roles y perfil soporte.
+
+Estado del PR: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/660 (borrador al registrar). Dev inicial: `5da54b07d5b913efe97e35e84e4fa8fe5ed8bda1`. El cierre de #604 requiere todavía unicidad real, MFA, recuperación y UAT.
