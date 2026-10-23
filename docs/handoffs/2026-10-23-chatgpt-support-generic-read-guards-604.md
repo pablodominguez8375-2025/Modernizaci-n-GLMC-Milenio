@@ -21,3 +21,14 @@ Test HTTP/PostgreSQL con usuario autenticado de orden, Taller real, support y SU
 - No alterar `main`, glmdch ni producción.
 - Triple CI, Showcase e Instalador QA exact-head SUCCESS y behind=0 antes de proponer merge solo a `dev`.
 - Cuando se fusione, revalidar Pages público por SHA servido; QA físico es otra entrega.
+
+## Implementación versionada y responsabilidades
+
+- PR **#654**: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/654
+- `MembershipEndpoints`: `GET /api/members` rechaza tipo `support` antes de devolver cualquier dato. Ficha e historial por ID rechazan cualquier miembro con una membresía `support`, incluso si simultáneamente existe membresía `workshop` (seguridad ante mezcla incorrecta).
+- `OrganizationEndpoints`: perfil general no sirve datos del soporte en ningún grado de permiso institucional.
+- `DynamicAccessHttpTests`: prueba HTTP PostgreSQL sobre Taller real, dos organizaciones de soporte de mayúsculas diferentes y miembro sintético sin RUT ni correo; deniega directorio, perfiles e historial por UUID directo y preserva el GET real.
+- Diccionario de salida: `docs/modelo-datos/registros/2026-10-23-chatgpt-support-generic-reads-604.md`. No altera modelo ni migraciones.
+- Coordinación: backend ChatGPT reclama #604, Clau conserva sus archivos de UI, múltiple perfil y provisión de identidad (#650 y #651 integradas). No debe sembrarse Taller 00 todavía.
+
+Este control es incremental: **no acredita aislamiento de todas las demás APIs o agregaciones**. Implementar progresivamente las reglas de no escritura/contabilidad/padrón y auditoría antes de habilitar Taller 00. Esperar 3/3 checks exactos, behind=0 y merge solo a dev.
