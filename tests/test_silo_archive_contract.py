@@ -35,7 +35,9 @@ def fixture(directory):
     triage = {'vulnerability': 'CVE-2026-39414', 'source_commit': rebuild.SERVER_SOURCE,
               'fix_commit': rebuild.SERVER_FIX, 'fix_ancestry_verified': True,
               'server_binary_sha256': rebuild.SERVER_BINARY, 'candidate_image_id': image,
-              'server_binary_preserved': True,
+              'server_binary_preserved': False,
+              'vendor_server_binary_sha256': rebuild.VENDOR_SERVER_BINARY,
+              'server_build_toolchain': 'go1.27.3', 'server_source_rebuilt': True,
               'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
               'source_files': {k: {'git_blob': v} for k, v in rebuild.SERVER_BLOBS.items()}}
     objects = {'server-cve-triage.json': triage,
@@ -63,6 +65,13 @@ def fixture(directory):
 
 
 class SiloArchiveContractTests(unittest.TestCase):
+    def setUp(self):
+        rebuilt = archive.module()
+        rebuilt.SERVER_BINARY = 'c' * 64  # synthetic approved pin for fixture policy tests
+        module_patch = patch.object(archive, 'module', return_value=rebuilt)
+        module_patch.start()
+        self.addCleanup(module_patch.stop)
+
     def test_missing_bundle_blocks_before_any_docker_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
