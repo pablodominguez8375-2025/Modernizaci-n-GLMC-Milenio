@@ -11,3 +11,5 @@ ChatGPT implementará (a) backend seguro para guardar credencial cifrada con cla
 Seguridad: no permitir TLS inseguro ni servidor arbitrario para el test; sólo `smtp.gmail.com:587` con STARTTLS, credencial app de Google o OAuth futuro. Clave simétrica de 32 bytes base64 por `SystemMail__EncryptionKey` en servidor de API (fuera GitHub/Drive), persistencia en BD sólo cifrada. El UI nunca revela, exporta ni conserva el secreto después del guardado. El envío efectivo sólo se ejecuta por pulsación explícita del administrador.
 
 No tocar main ni QA físico. PR hacia dev con CI/Showcase/Instalable exact HEAD y registro Drive+GitHub.
+## Implementación en rama PR #670
+Se añadieron API protegida de secreto/estado/prueba real, AES-GCM con clave de servidor, integración de envío de alta de usuarios, pantalla de Parámetros y cliente frontend. Baterías unitarias del cifrado, validación Google STARTTLS y demo que nunca afirma envío real; manual técnico nuevo. Validar gates CI/Showcase/Instalable del HEAD vivo; sin cambios en main ni QA físico y sin credenciales reales.
