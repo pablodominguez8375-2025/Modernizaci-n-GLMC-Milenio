@@ -160,6 +160,11 @@ public sealed class DynamicAccessHttpTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = Factory(Connection);
         using var client = factory.CreateClient();
+        // No reutilizar "dynamic-ci": otros casos del mismo PostgreSQL asignan
+        // grants a ese sujeto; la prueba de privacidad debe evaluar el handler
+        // con un admin sin restricciones técnicas de tests ajenos.
+        client.DefaultRequestHeaders.Add("X-Dynamic-Subject",
+            "support-privacy-" + Guid.NewGuid().ToString("N"));
         // Todos los datos son ficticios. Nunca usar RUT, correos o cuentas reales.
         var marker = Guid.NewGuid().ToString("N");
         var real = new Organization { Name = "Taller real sintético " + marker, Number = "28", Type = "workshop" };
