@@ -46,9 +46,9 @@ public static class AssemblyAccreditedRosterPersistenceService
 
         // Bloqueo físico del registro raíz: serializa importaciones del mismo
         // corte y evita carrera con un cambio de estado de la Asamblea.
-        var matches = await db.Assemblies.AsNoTracking().FromSqlInterpolated(
+        var matches = await db.Assemblies.FromSqlInterpolated(
             $"SELECT * FROM core.assemblies WHERE \"Id\" = {assemblyId} FOR UPDATE")
-            .ToArrayAsync(ct);
+            .AsNoTracking().ToArrayAsync(ct);
         var assembly = matches.SingleOrDefault();
         if (assembly is null)
             return Rejected("ASSEMBLY_NOT_FOUND");
