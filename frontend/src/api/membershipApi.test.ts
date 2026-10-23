@@ -53,3 +53,15 @@ it('demo mode models twenty workshops with the agreed operational composition', 
     expect(roster.items.filter(item => item.membershipType === 'regular').length).toBe(24)
   }
 })
+
+it('revealMemberRut envía el motivo por POST y la demo exige motivo (#609)', async () => {
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ rut: '12.345.678-5', expiresInSeconds: 15 }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    const api = new MembershipApiClient({ getAccessToken: async () => 'token' })
+    await api.revealMemberRut('member-1', 'identity_verification')
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/members/member-1/rut/reveal')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ reason: 'identity_verification' })
+    await expect(new MembershipApiClient({ useMocks: true }).revealMemberRut('m', '')).rejects.toThrow(/motivo/)
+  } finally { vi.unstubAllGlobals() }
+})

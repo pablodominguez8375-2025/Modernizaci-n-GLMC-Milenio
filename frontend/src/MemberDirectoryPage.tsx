@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { officeLabel } from './officeLabels'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
+import MaskedRut from './MaskedRut'
 import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient } from './api/membershipApi'
 import './memberDirectory.css'
 import { organizationDisplayName } from './displayFormat'
@@ -119,7 +120,7 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
       </article>
 
       <article className="panel member-profile">
-        {!selectedId ? <div className="empty-state"><strong>Seleccione un miembro.</strong></div> : !profile ? <Loading /> : <Profile profile={profile} />}
+        {!selectedId ? <div className="empty-state"><strong>Seleccione un miembro.</strong></div> : !profile ? <Loading /> : <Profile profile={profile} membershipApi={membershipApi} />}
       </article>
     </section>
   </>
@@ -136,13 +137,13 @@ function MemberTable({ items, selectedId, onSelect }: { items: MemberDirectoryIt
 
 function degreeRank(value: string | null | undefined) { return value === 'master' ? 3 : value === 'fellowcraft' ? 2 : value === 'apprentice' ? 1 : 0 }
 
-function Profile({ profile }: { profile: MemberProfile }) {
+function Profile({ profile, membershipApi }: { profile: MemberProfile; membershipApi: MembershipApiClient }) {
   const displayName = `${profile.member.firstNames} ${profile.member.lastNames}`.trim()
   const currentMembership = profile.current.membership
   return <>
     <div className="member-profile-hero">
       <span className="member-avatar large">{initials(displayName)}</span>
-      <div><p className="eyebrow">Ficha institucional</p><h2>{displayName}</h2><p>{profile.member.institutionalNumber ?? 'Sin número institucional'} · {degreeLabel(profile.current.degree?.degree ?? null)}</p>{profile.member.rutMasked && <p className="member-rut-hint">RUT protegido: <strong>{profile.member.rutMasked}</strong></p>}</div>
+      <div><p className="eyebrow">Ficha institucional</p><h2>{displayName}</h2><p>{profile.member.institutionalNumber ?? 'Sin número institucional'} · {degreeLabel(profile.current.degree?.degree ?? null)}</p>{profile.member.rutMasked && <p className="member-rut-hint">RUT protegido: <MaskedRut masked={profile.member.rutMasked} onReveal={reason => membershipApi.revealMemberRut(profile.member.id, reason)} /></p>}</div>
       <span className="profile-scope">{profile.scope === 'order' ? 'Vista Orden' : 'Vista autorizada'}</span>
     </div>
 

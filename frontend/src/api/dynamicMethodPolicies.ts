@@ -57,6 +57,7 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
   membershipApi: {
     getMembers: { view: 'members', action: 'view', organizationArg: 0 },
     getProfile: { view: 'members', action: 'view' },
+    revealMemberRut: { view: 'members', action: 'write' },
     getOwnOffices: { view: 'member', action: 'view' },
     getOwnAttendance: { view: 'member', action: 'view' },
     getOwnHospitalaria: { view: 'member', action: 'view' },
