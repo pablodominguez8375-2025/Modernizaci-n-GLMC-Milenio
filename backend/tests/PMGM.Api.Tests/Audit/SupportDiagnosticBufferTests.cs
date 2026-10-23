@@ -1,3 +1,6 @@
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
 using PMGM.Api.Modules.Audit;
 using Xunit;
 
@@ -37,6 +40,33 @@ public sealed class SupportDiagnosticBufferTests
         Assert.Equal("OTHER", item.Method);
         Assert.Equal("(no disponible)", item.CorrelationId);
         Assert.Equal("/api/test/{id:guid}", item.Route);
+    }
+
+    [Fact]
+    public async Task MiddlewareKeepsOnlyRouteTemplateNeverUserPathOrQuery()
+    {
+        var store = new SupportDiagnosticBuffer();
+        var context = new DefaultHttpContext();
+        context.Request.Method = "GET";
+        context.Request.Path = "/api/gestion-logial/talleres/23232323-2323-2323-2323-232323232323/tenidas";
+        context.Request.QueryString = new QueryString("?token=extremely-secret");
+        context.TraceIdentifier = "qa-http-500";
+        var route = RoutePatternFactory.Parse("/api/gestion-logial/talleres/{organizationId:guid}/tenidas");
+        context.SetEndpoint(new RouteEndpointBuilder(
+            _ => Task.CompletedTask, route, 0).Build());
+
+        var middleware = new SupportDiagnosticMiddleware(ctx =>
+        {
+            ctx.Response.StatusCode = 500;
+            return Task.CompletedTask;
+        });
+        await middleware.InvokeAsync(context, store);
+
+        var entry = Assert.Single(store.Snapshot());
+        Assert.Equal("/api/gestion-logial/talleres/{organizationId:guid}/tenidas", entry.Route);
+        Assert.DoesNotContain("23232323", entry.Route);
+        Assert.DoesNotContain("secret", entry.Route);
+        Assert.Equal("qa-http-500", entry.CorrelationId);
     }
 
     [Fact]
