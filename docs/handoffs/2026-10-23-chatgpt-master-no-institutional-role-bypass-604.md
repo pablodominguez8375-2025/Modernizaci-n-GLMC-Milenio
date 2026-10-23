@@ -41,3 +41,7 @@ El primer CI de `e2c2efa...` demostró que el nuevo backend responde correctamen
 4. no simular acceso de funcionarios logiales usando una cuenta técnica.
 
 No se deshabilitó el smoke, no se modificó el servidor ni se cambió Keycloak. Las comprobaciones positivas específicas de Biblioteca, Gran Archivo y publicación de candidatos requieren identidades de prueba autorizadas por cargo, no el Máster; se mantienen las pruebas de unidad/integración institucional existentes y queda el smoke específico de esos perfiles como seguimiento QA. CI debe volver a aprobar sobre el HEAD que incluye este script.
+
+
+### Comprobaciones positivas preservadas
+La revisión del script de smoke mantuvo pruebas de extremo a extremo sobre **dos consultas legítimas de solo lectura**, usando `qa.taller23` para `GET /api/candidate-publications/active` y `GET /api/biblioteca/buscar`, en lugar de elevar al Máster. Se exige 403 a `qa.admin` en lectura del Cuadro del Taller **y** en listado de Gran Archivo; también se conserva 403 de `qa.taller23` en Gran Archivo, y el GET de miembros del propio Taller con grado del miembro trasladado. De esta forma el smoke sigue verificando funcionalidades y segregación real de identidad, sin simular cargos institucionales con el Máster. Un smoke positivo de Gran Archivo requiere una cuenta de QA Gran Archivero y se coordina con Clau/Keycloak separadamente (#604/#97).
