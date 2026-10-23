@@ -153,6 +153,35 @@ public sealed class DynamicAccessHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/session/treasury-access?organizationId={other.Id}", ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Synthetic_support_organization_is_hidden_from_general_directory_even_for_order_administrator()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(Connection);
+        using var client = factory.CreateClient();
+        // Datos sintéticos; no crear personas, RUT, cuotas ni cuentas de soporte.
+        var marker = Guid.NewGuid().ToString("N");
+        var real = new Organization { Name = "Taller real sintético " + marker, Number = "28", Type = "workshop" };
+        var support = new Organization { Name = "Taller 00 Soporte GLMCh QA " + marker, Number = "00", Type = "support" };
+        var uppercase = new Organization { Name = "Taller soporte mayúscula QA " + marker, Number = "00", Type = "SUPPORT" };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.Organizations.AddRange(real, support, uppercase);
+            await db.SaveChangesAsync(ct);
+        }
+        using var response = await client.GetAsync("/api/institutional/organizations/options", ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var items = payload.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Contains(items, item => item.GetProperty("id").GetGuid() == real.Id);
+        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == support.Id);
+        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == uppercase.Id);
+        Assert.DoesNotContain(marker, await response.Content.ReadAsStringAsync(ct));
+    }
+
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
         public const string Name = "DynamicAccess-CI";
