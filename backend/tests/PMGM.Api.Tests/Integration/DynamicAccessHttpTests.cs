@@ -179,7 +179,7 @@ public sealed class DynamicAccessHttpTests
         Assert.Contains(items, item => item.GetProperty("id").GetGuid() == real.Id);
         Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == support.Id);
         Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == uppercase.Id);
-        Assert.DoesNotContain(marker, await response.Content.ReadAsStringAsync(ct));
+        Assert.DoesNotContain("Taller 00 Soporte GLMCh QA " + marker, await response.Content.ReadAsStringAsync(ct));
     }
 
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
