@@ -12,6 +12,21 @@ public sealed class Member
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
 }
 
+/// <summary>Foto de perfil del Hermano (#609): ya normalizada y sin metadatos; solo su titular la cambia o retira.</summary>
+public sealed class MemberPhoto
+{
+    public Guid MemberId { get; init; }
+    public Member Member { get; set; } = null!;
+    public string ContentType { get; set; } = "image/jpeg";
+    public byte[] Content { get; set; } = [];
+    public string Sha256 { get; set; } = string.Empty;
+    public int Width { get; set; }
+    public int Height { get; set; }
+    /// <summary>Decisión del Hermano: si es false, los demás ven un avatar con iniciales.</summary>
+    public bool VisibleToMembers { get; set; }
+    public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+}
+
 public sealed class Membership
 {
     public Guid Id { get; init; } = Guid.NewGuid();

@@ -164,6 +164,7 @@ public static class MembershipEndpoints
                 x.MemberId,
                 DisplayName = x.Member.Person.FirstNames + " " + x.Member.Person.LastNames,
                 x.Member.InstitutionalNumber,
+                HasPhoto = db.MemberPhotos.Any(photo => photo.MemberId == x.MemberId && photo.VisibleToMembers),
                 MembershipStatus = x.Status,
                 x.MembershipType,
                 x.StartDate,
@@ -407,12 +408,13 @@ public static class MembershipEndpoints
         // La proyección contiene información de identificación del miembro,
         // aunque se envíe con máscara: no permitir caché compartida.
         httpContext.Response.Headers.CacheControl = "private, no-store";
+        var hasPhoto = await db.MemberPhotos.AnyAsync(photo => photo.MemberId == id && photo.VisibleToMembers, cancellationToken);
         return Results.Ok(new
         {
             member = new
             {
                 member.Id, member.PersonId, member.InstitutionalNumber,
-                member.FirstNames, member.LastNames, member.CreatedAtUtc,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc, HasPhoto = hasPhoto,
                 RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
             },
             contactVisible = canReadContact,
@@ -601,12 +603,13 @@ public static class MembershipEndpoints
         // La proyección contiene información de identificación del miembro,
         // aunque se envíe con máscara: no permitir caché compartida.
         httpContext.Response.Headers.CacheControl = "private, no-store";
+        var hasPhoto = await db.MemberPhotos.AnyAsync(photo => photo.MemberId == id && photo.VisibleToMembers, cancellationToken);
         return Results.Ok(new
         {
             member = new
             {
                 member.Id, member.PersonId, member.InstitutionalNumber,
-                member.FirstNames, member.LastNames, member.CreatedAtUtc,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc, HasPhoto = hasPhoto,
                 RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
             },
             contactVisible = canReadContact,
