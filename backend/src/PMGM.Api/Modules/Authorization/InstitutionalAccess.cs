@@ -104,9 +104,15 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
     public bool HasRole(ClaimsPrincipal user, params string[] roles)
     {
-        if (IsPlatformSuperAdmin(user)) return true;
-
         var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // The technical Master is not a Grand Lodge or Workshop officer.
+        // Even if identity accidentally carries institutional role claims, it
+        // must never inherit signatures, approval or domain-write authority.
+        // Only callers that explicitly request the platform role can match it.
+        if (IsPlatformSuperAdmin(user))
+            return roleSet.Contains(InstitutionalRoles.PlatformSuperAdmin);
+
         return user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Role && roleSet.Contains(x.Value));
     }
@@ -150,8 +156,10 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            (HasExplicitRole(user, InstitutionalRoles.TallerSecretaria) && user.Claims.Any(x =>
                x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
 
-    private static bool HasExplicitRole(ClaimsPrincipal user, params string[] roles)
+    private bool HasExplicitRole(ClaimsPrincipal user, params string[] roles)
     {
+        if (IsPlatformSuperAdmin(user)) return false;
+
         var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return user.Claims.Any(x => x.Type == InstitutionalClaims.Role && roleSet.Contains(x.Value));
     }
@@ -253,7 +261,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => CanParticipateInLodgeCouncil(user, organizationId);
 
     public bool CanManageLodgeCouncilSummaryAccess(ClaimsPrincipal user, Guid organizationId)
-        => HasOrganizationClaim(user, organizationId) && user.Claims.Any(x =>
+        => !IsPlatformSuperAdmin(user) &&
+           HasOrganizationClaim(user, organizationId) && user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Role &&
             string.Equals(x.Value, InstitutionalRoles.TallerVenerable, StringComparison.OrdinalIgnoreCase));
 
@@ -379,8 +388,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => IsPlatformSuperAdmin(user) ||
            (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin));
 
-    private static bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
-        => user.Claims.Any(x =>
+    private bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
+        => !IsPlatformSuperAdmin(user) && user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Organization &&
             Guid.TryParse(x.Value, out var claimOrganizationId) &&
             claimOrganizationId == organizationId);
