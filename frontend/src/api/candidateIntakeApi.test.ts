@@ -348,4 +348,33 @@ describe('CandidateIntakeApiClient demo workflow', () => {
     } finally { vi.unstubAllGlobals() }
   })
 
+  it('busca recomendantes de cualquier Taller mediante endpoint privado sin listar el directorio masivo', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(
+      JSON.stringify({ items: [{ id: 'member-remote', name: 'Hermana del Taller externo' }] }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const api = new CandidateIntakeApiClient({ getAccessToken: async () => 'access-example' })
+      expect((await api.getEligibleRecommenders('receiving-workshop', 'ab')).items).toEqual([])
+      expect(fetchMock).not.toHaveBeenCalled()
+      const result = await api.getEligibleRecommenders('receiving-workshop', '  Hermana ')
+      expect(result.items).toEqual([{ id: 'member-remote', name: 'Hermana del Taller externo' }])
+      expect(String(fetchMock.mock.calls[0][0])).toBe(
+        '/api/insinuados/taller/organizaciones/receiving-workshop/recomendantes?q=Hermana')
+      expect(fetchMock.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer access-example')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally { vi.unstubAllGlobals() }
+  })
+
+  it('la demo permite buscar recomendantes externos con datos ficticios sin usar un directorio real', async () => {
+    const api = new CandidateIntakeApiClient({ useMocks: true })
+    expect((await api.getEligibleRecommenders('demo-workshop-23', 'he')).items).toEqual([])
+    const matches = (await api.getEligibleRecommenders('demo-workshop-23', 'Ejemplo')).items
+    expect(matches).toHaveLength(4)
+    expect(matches.some(item => item.name.includes('otro Taller'))).toBe(true)
+    expect(matches.some(item => item.name.includes('Compañera'))).toBe(true)
+    expect((await api.getEligibleRecommenders('otro-taller', 'Ejemplo')).items).toEqual([])
+    expect(Object.keys(matches[0]).sort()).toEqual(['id', 'name'])
+  })
+
 })

@@ -59,7 +59,7 @@ function originLabel(origin?: CandidateOrigin, recommenders: { id: string; name:
   return `Otro: ${origin.other}`
 }
 
-export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack }: CandidateWorkshopIntakePageProps) {
+export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWorkshopIntakePageProps) {
   const [queue, setQueue] = useState<CandidateWorkshopQueueItem[]>([])
   const [organizations, setOrganizations] = useState<CandidateWorkshopOrganization[]>([])
   const [createOpen, setCreateOpen] = useState(false)
@@ -69,8 +69,9 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
-  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>(api.useMocks ? demoRecommenders : [])
+  const [recommenders, setRecommenders] = useState<{ id: string; name: string }[]>([])
   const [recommenderError, setRecommenderError] = useState<string | null>(null)
+  const [recommenderSearch, setRecommenderSearch] = useState('')
   const [correction, setCorrection] = useState<CandidateOrigin & { reason: string }>({ ...emptyOrigin, reason: '' })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [profile, setProfile] = useState<CandidateIntakeProfile | null>(null)
@@ -94,7 +95,8 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   const selectedOrigin: CandidateOrigin | undefined = !selected ? undefined
     : api.useMocks ? demoOrigins.get(selected.ceremonyRequestId)
     : profile?.candidateOriginKind ? { kind: profile.candidateOriginKind, recommenderId: profile.recommenderMemberId ?? '', other: profile.candidateOriginOtherDescription ?? '' } : undefined
-  const directoryOrgId = newCandidate.organizationId || organizations[0]?.id || ''
+  const directoryOrgId = createOpen && origin.kind === 'brother' ? newCandidate.organizationId
+    : selected?.organizationId || newCandidate.organizationId || organizations[0]?.id || ''
   const needsRecommenders = origin.kind === 'brother' || correction.kind === 'brother' || selectedOrigin?.kind === 'brother'
   const locked = selected?.reviewStatus === 'approved' || selected?.reviewStatus === 'rejected'
 
@@ -155,14 +157,21 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
     }
   }, [profile, selected?.ceremonyRequestId])
 
+  // El recomendante puede ser de OTRO Taller. El catálogo local de Miembros
+  // no satisface esta regla y expone más campos personales que los necesarios.
   useEffect(() => {
-    if (api.useMocks || !membershipApi || !directoryOrgId || !needsRecommenders) return
+    setRecommenders([])
+    setRecommenderError(null)
+    const term = recommenderSearch.trim()
+    if (!directoryOrgId || !needsRecommenders || term.length < 3) return
     let active = true
-    membershipApi.getMembers(directoryOrgId, { status: 'active', limit: 250 })
-      .then(result => { if (active) { setRecommenderError(null); setRecommenders(result.items.map(item => ({ id: item.memberId, name: item.displayName }))) } })
-      .catch(() => { if (active) setRecommenderError('No fue posible cargar los hermanos activos. Intente nuevamente.') })
-    return () => { active = false }
-  }, [api, membershipApi, directoryOrgId, needsRecommenders])
+    const timeout = window.setTimeout(() => {
+      api.getEligibleRecommenders(directoryOrgId, term)
+        .then(result => { if (active) setRecommenders(result.items) })
+        .catch(() => { if (active) setRecommenderError('No fue posible buscar recomendantes activos. Intente nuevamente.') })
+    }, 250)
+    return () => { active = false; window.clearTimeout(timeout) }
+  }, [api, directoryOrgId, needsRecommenders, recommenderSearch])
 
   async function correctOrigin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -422,6 +431,9 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
               </select>
             </Field>
             {origin.kind === 'brother' && <Field label="Hermano que lo recomienda *">
+              {<input type="search" maxLength={80} autoComplete="off" value={recommenderSearch}
+                onChange={event => { setRecommenderSearch(event.target.value); setOrigin({ ...origin, recommenderId: '' }) }}
+                placeholder="Busque por nombre (mínimo 3 caracteres, cualquier Taller)" />}
               <select required value={origin.recommenderId} onChange={event => setOrigin({ ...origin, recommenderId: event.target.value })}>
                 <option value="" disabled>Buscar y elegir hermano activo</option>
                 {recommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -557,6 +569,9 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
                     </select>
                   </label>
                   {correction.kind === 'brother' && <label><span>Hermano que lo recomienda *</span>
+                    {<input type="search" maxLength={80} autoComplete="off" value={recommenderSearch}
+                      onChange={event => { setRecommenderSearch(event.target.value); setCorrection({ ...correction, recommenderId: '' }) }}
+                      placeholder="Busque por nombre (mínimo 3 caracteres, cualquier Taller)" />}
                     <select required value={correction.recommenderId} onChange={event => setCorrection({ ...correction, recommenderId: event.target.value })}>
                       <option value="" disabled>Elegir hermano activo</option>
                       {recommenders.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
