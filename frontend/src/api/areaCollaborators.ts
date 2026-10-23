@@ -2,6 +2,7 @@ export type CollaboratorArea = 'library' | 'documentmanager'
 export type CollaboratorAction = 'view' | 'create' | 'write' | 'edit' | 'delete'
 export interface AreaCollaborator { assignmentId: string; subject: string; area: CollaboratorArea; category: string; actions: CollaboratorAction[]; effectiveFrom: string; effectiveTo: string | null; isActive: boolean }
 export interface AreaCollaborators { version: number; items: AreaCollaborator[] }
+export interface AreaCollaboratorCandidates { available: boolean; items: Array<{ subject: string; name: string }> }
 export interface AddAreaCollaborator { subject: string; category: string; actions: CollaboratorAction[]; effectiveFrom: string; effectiveTo: string | null; expectedVersion: number }
 
 export const collaboratorCategories: Record<CollaboratorArea, Array<{ value: string; label: string }>> = {
@@ -25,6 +26,12 @@ export class AreaCollaboratorsDemo {
     { assignmentId: 'demo-collab-1', subject: 'demo:communications', area: 'library', category: 'magazine', actions: ['view', 'create', 'write'], effectiveFrom: '2026-09-01', effectiveTo: '2026-12-31', isActive: true },
     { assignmentId: 'demo-collab-2', subject: 'demo:communications', area: 'library', category: 'bulletin', actions: ['view', 'create', 'write'], effectiveFrom: '2026-09-01', effectiveTo: null, isActive: true },
   ]
+  candidates(): AreaCollaboratorCandidates {
+    return { available: true, items: [
+      { subject: 'demo:communications', name: 'Comunicaciones · Demostración' }, { subject: 'demo:brother', name: 'Hermano ficticio · Demostración' },
+      { subject: 'demo:lodgeSecretary', name: 'Secretario de Taller · Demostración' }, { subject: 'demo:treasury', name: 'Tesorero ficticio · Demostración' },
+    ] }
+  }
   list(area: CollaboratorArea): AreaCollaborators { return { version: this.version, items: structuredClone(this.items.filter(i => i.area === area && i.isActive)) } }
   add(area: CollaboratorArea, request: AddAreaCollaborator): AreaCollaborators {
     const subject = request.subject.trim()
