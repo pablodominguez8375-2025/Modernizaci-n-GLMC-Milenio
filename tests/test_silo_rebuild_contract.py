@@ -22,6 +22,21 @@ class SiloRebuildContractTests(unittest.TestCase):
         with patch.object(rebuild, 'SERVER_BINARY', None), self.assertRaisesRegex(ValueError, 'review pending'):
             rebuild.fixed_component_vex({}, 'sha256:' + 'a' * 64)
 
+    def test_scan_requires_known_main_module_and_correct_go_for_both_binaries(self):
+        import copy
+        inventory = {'Results': [
+            {'Target': 'usr/bin/silo', 'Packages': [
+                {'Name': 'stdlib', 'Version': 'v1.27.3'},
+                {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_PURL.rsplit('@', 1)[1]}]},
+            {'Target': 'usr/bin/mcli', 'Packages': [{'Name': 'stdlib', 'Version': 'v1.27.3'}]},
+        ]}
+        rebuild.verify_go_inventory(inventory)
+        for index, package in ((0, 0), (0, 1), (1, 0)):
+            changed = copy.deepcopy(inventory)
+            changed['Results'][index]['Packages'][package]['Version'] = '(devel)'
+            with self.subTest(target=index, package=package), self.assertRaises(ValueError):
+                rebuild.verify_go_inventory(changed)
+
     def test_failure_details_do_not_disclose_urls_or_headers(self):
         import urllib.error
         error = urllib.error.HTTPError('https://private.invalid/token', 403, 'secret', {'Authorization': 'secret'}, None)
@@ -46,6 +61,28 @@ class SiloRebuildContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(rebuild, 'check_source', return_value='a'*64), patch.object(rebuild.subprocess, 'check_output', return_value=b'changed'):
             with self.assertRaisesRegex(ValueError, 'archive changed'):
                 rebuild.export_source(Path('/checkout'), 'a'*40, Path(tmp)/'source')
+
+    def test_ignored_checkout_file_never_enters_build_context(self):
+        import subprocess, tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp)/'repo'
+            source.mkdir()
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(source), *args], stderr=subprocess.DEVNULL)
+            git('init')
+            git('config', 'user.name', 'Synthetic test')
+            git('config', 'user.email', 'test@example.invalid')
+            (source/'.gitignore').write_text('local-only.txt\n')
+            (source/'main.go').write_text('package main\n')
+            git('add', '.')
+            git('commit', '-m', 'synthetic pinned source')
+            commit = git('rev-parse', 'HEAD').decode().strip()
+            (source/'local-only.txt').write_text('synthetic local data')
+            target = Path(tmp)/'export'
+            rebuild.export_source(source, commit, target)
+            self.assertTrue((target/'main.go').is_file())
+            self.assertFalse((target/'local-only.txt').exists())
+            self.assertFalse((target/'.git').exists())
 
     def test_wrong_or_dirty_client_source_is_rejected_before_build(self):
         with patch.object(rebuild.subprocess, 'check_output', return_value='bad-sha'):
