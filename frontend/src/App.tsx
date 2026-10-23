@@ -23,6 +23,7 @@ import DocumentManagementPage from './DocumentManagementPage'
 import GlobalSearch, { type SearchEntry } from './GlobalSearch'
 import ExecutiveReportingPage from './ExecutiveReportingPage'
 import GrandArchivePage from './GrandArchivePage'
+import OfficialDocumentsPage from './OfficialDocumentsPage'
 import GrandSecretariatPage from './GrandSecretariatPage'
 import GrandTreasuryPage from './GrandTreasuryPage'
 import HospitalariaPage from './HospitalariaPage'
@@ -64,8 +65,8 @@ import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'workbench' | 'privacy'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
+type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'officialDocuments' | 'workbench' | 'privacy'
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canReadOfficialDocuments?: boolean; canPublishOfficialDocuments?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -209,6 +210,8 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const libraryEditorRole: 'librarian' | 'communications' | null = capabilities?.canManageLibrary ? 'librarian' : capabilities?.canManageCommunications ? 'communications' : null
   const canDocuments = (capabilities?.canManageDocuments ?? false) && canView('documentmanager')
   const canGrandArchive = (capabilities?.canManageGrandArchive ?? false) && canView('grandarchive')
+  const canOfficialDocuments = effectiveProfile !== null && (capabilities?.canReadOfficialDocuments ?? false)
+  const canPublishOfficial = capabilities?.canPublishOfficialDocuments ?? false
   const isLodgeSecretaryWorkspace = canManageLodgeSecretariat && !canSecretariat
   const isGrandSecretaryWorkspace = canSecretariat
   /* PMGM-UX 06-10-2026 (opción B del PO): las autoridades de la Orden ven Gestión Logial como supervisión de Talleres, en solo lectura. */
@@ -320,9 +323,10 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       ...entry(canManageAnyInstruction, 'lodgeInstruction', 'Docencia del Taller', 'Taller', 'library', 'instruccion'),
       ...entry(canOpenLodgeTreasury, 'lodgeTreasury', 'Tesorería', 'Taller', 'treasury', 'egresos cuotas recibos'),
       ...entry(canLibrary, 'library', 'Biblioteca Virtual', 'Conocimiento', 'library', 'libros planchas'),
+      ...entry(canOfficialDocuments, 'officialDocuments', 'Documentos oficiales', 'Conocimiento', 'archive', 'decretos comunicados reglamentos resoluciones'),
       ...entry(canDocuments, 'documents', 'Gestor Documental', 'Conocimiento', 'documents', 'pdf archivos'),
     ]
-  }, [initiationEntry, viewAccess, canMemberPortal, canCalendar, canNotifications, canConfigureSystem, canBootstrap, canCandidateProfile, canSecretariat, canCeremonies, canMembers, canReporting, canMemberControl, canDataQuality, canCaseQueue, canRegimen, canTreasury, canHospitalariaWorkspace, canHospitalaria, canGrandArchive, canReadOrderInstructions, canLodgeProfile, canLodge, isLodgeSecretaryWorkspace, canManageAnyInstruction, canLodgeTreasury, canManageLodgeSummaryAccess, canApproveLodgeExpenses, canLibrary, canDocuments, canOpenLodgeTreasury, canOpenGrandTreasury, canOpenGrandHospitalaria])
+  }, [initiationEntry, viewAccess, canMemberPortal, canCalendar, canNotifications, canConfigureSystem, canBootstrap, canCandidateProfile, canSecretariat, canCeremonies, canMembers, canReporting, canMemberControl, canDataQuality, canCaseQueue, canRegimen, canTreasury, canHospitalariaWorkspace, canHospitalaria, canGrandArchive, canReadOrderInstructions, canLodgeProfile, canLodge, isLodgeSecretaryWorkspace, canManageAnyInstruction, canLodgeTreasury, canManageLodgeSummaryAccess, canApproveLodgeExpenses, canLibrary, canOfficialDocuments, canDocuments, canOpenLodgeTreasury, canOpenGrandTreasury, canOpenGrandHospitalaria])
 
   const changeDemoProfile = (next: DemoProfileKey) => {
     api.demoAccessSubject=`demo:${next}`
@@ -340,9 +344,10 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/ceremonies' && canCeremonies) return setView('ceremonies')
     if (path === '/lodge' && canLodge) return setView('lodge')
     if (path === '/documents' && canDocuments) return setView('documents')
+    if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.135' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.137' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
@@ -394,9 +399,10 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
           <ModuleAccess icon="treasury" label="Tesorería del Taller" badge={badges.lodgeTreasury} allowed={canOpenLodgeTreasury} active={view === 'lodgeTreasury'} onOpen={canOpenLodgeTreasury ? () => setView('lodgeTreasury') : undefined} />
           {canOpenLodgeHospitalaria && !canOpenGrandHospitalaria && <ModuleAccess icon="hospitalaria" label="Hospitalaria del Taller" allowed active={view === 'hospitalaria'} onOpen={() => setView('hospitalaria')} />}
         </>}
-        {(canLibrary || canDocuments) && <>
+        {(canLibrary || canDocuments || canOfficialDocuments) && <>
           <div className="nav-section">Biblioteca y documentos</div>
           <ModuleAccess icon="library" label="Biblioteca Virtual" allowed={canLibrary} active={view === 'library'} onOpen={canLibrary ? () => setView('library') : undefined} />
+          <ModuleAccess icon="archive" label="Documentos oficiales" allowed={canOfficialDocuments} active={view === 'officialDocuments'} onOpen={canOfficialDocuments ? () => setView('officialDocuments') : undefined} />
           <ModuleAccess icon="documents" label="Gestor Documental" allowed={(canDocuments || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('documentmanager')} active={view === 'documents'} onOpen={canDocuments || isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace ? () => setView('documents') : undefined} />
         </>}
         <TextSizeControl className="in-sidebar" />
@@ -454,7 +460,8 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'lodgeTreasury' && canOpenLodgeTreasury && <LodgeTreasuryPage api={api} canManage={canLodgeTreasury} canApproveExpenses={canApproveLodgeExpenses} />}
         {view === 'hospitalaria' && canHospitalariaWorkspace && <HospitalariaPage api={api} canReadLocal={canOpenLodgeHospitalaria} canManageLocal={canManageLodgeHospitalaria} canApproveExpenses={canApproveLodgeExpenses} canManageGrand={canOpenGrandHospitalaria} regularitySlot={canOpenGrandHospitalaria ? <RegularityPage api={api} kind="hospitalaria" /> : undefined} />}
         {view === 'secretariat' && canSecretariat && <GrandSecretariatPage api={api} />}
-        {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} />}
+        {view === 'grandArchive' && canGrandArchive && <GrandArchivePage archiveApi={grandArchiveApi} canPublish={canPublishOfficial} />}
+        {view === 'officialDocuments' && canOfficialDocuments && <OfficialDocumentsPage archiveApi={grandArchiveApi} />}
         {(view === 'lodge' || (view === 'lodgeProfile' && canLodgeProfile)) && canLodge && <LodgeManagementPage key={view} api={api} lodgeApi={lodgeApi} documentApi={documentApi} canReadSecretariat={canReadLodgeSecretariat} canManageSecretariat={canManageLodgeSecretariat && !isGrandSupervision} instructionGrades={isGrandSupervision ? [] : instructionGrades} pageTitle={isLodgeSecretaryWorkspace ? 'Secretaría del Taller' : lodgeMenuLabel === 'Secretaría' ? 'Gestión Logial' : lodgeMenuLabel} initialTab={view === 'lodgeProfile' ? 'ficha' : undefined} profileSlot={canLodgeProfile ? <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} /> : undefined} />}
         {view === 'lodgeInstruction' && canManageAnyInstruction && <LodgeInstructionPage api={api} lodgeApi={lodgeApi} allowedGrades={instructionGrades} />}
         {view === 'orderInstructionReport' && canReadOrderInstructions && <OrderInstructionReportPage lodgeApi={lodgeApi} allowedGrades={orderInstructionGrades} canReadAll={canReadAllOrderInstructions} />}

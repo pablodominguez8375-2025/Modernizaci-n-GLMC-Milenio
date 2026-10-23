@@ -46,6 +46,7 @@ public static class NotificationCodes
         public const string CandidatePublicationApproved = "candidate.publication.approved";
         public const string CandidateInterviewAssigned = "candidate.interview.assigned";
         public const string CandidateInterviewRescheduled = "candidate.interview.rescheduled";
+        public const string OfficialDocumentPublished = "grandarchive.official.published";
     }
 
     public static class Type
@@ -53,5 +54,6 @@ public static class NotificationCodes
         public const string CandidatePublicationApproved = "candidate.publication.approved";
         public const string CandidateInterviewAssigned = "candidate.interview.assigned";
         public const string CandidateInterviewRescheduled = "candidate.interview.rescheduled";
+        public const string OfficialDocumentPublished = "grandarchive.official.published";
     }
 }

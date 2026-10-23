@@ -22,11 +22,24 @@ public static class GrandArchiveCodes
 
         public static bool IsValid(string value)
             => value is Decree or Communication or Minute or Resolution or Regulation or Correspondence or HistoricalRecord or Other;
+
+        // Publicables a los Hermanos (#653). Correspondencia y registros históricos son internos.
+        public static bool IsPublishable(string value)
+            => value is Decree or Communication or Minute or Resolution or Regulation or Other;
     }
 }
 
 public static class GrandArchivePolicy
 {
+    /// <summary>Solo el perfil Gran Archivero publica y retira publicaciones: el administrador de Gran Logia y el Máster no (perfiles separados).</summary>
+    public static bool IsGrandArchivist(System.Security.Claims.ClaimsPrincipal user)
+        => user.Claims.Any(x => x.Type == PMGM.Api.Modules.Authorization.InstitutionalClaims.Scope &&
+               string.Equals(x.Value, "order", StringComparison.OrdinalIgnoreCase)) &&
+           user.Claims.Any(x => x.Type == PMGM.Api.Modules.Authorization.InstitutionalClaims.Role &&
+               string.Equals(x.Value, PMGM.Api.Modules.Authorization.InstitutionalRoles.GrandArchivist, StringComparison.OrdinalIgnoreCase));
+
+    public static bool IsValidDegree(int degree) => degree is >= 1 and <= 3;
+
     private static readonly HashSet<string> ForbiddenDocumentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "plancha",

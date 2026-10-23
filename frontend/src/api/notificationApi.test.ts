@@ -47,11 +47,11 @@ it('demo mode includes the Gran Secretaría approval notice linked to published 
 
 import { demoNoticeVisible, NotificationApiClient as DemoClient } from './notificationApi'
 describe('Avisos de la demo según el perfil', () => {
-  it('el hermano solo ve avisos de insinuaciones y agenda; no los de gestión ni administración', async () => {
+  it('el hermano ve avisos de insinuaciones, agenda y documentos oficiales; no los de gestión ni administración', async () => {
     const client = new DemoClient({ useMocks: true })
     client.setMockProfile('brother')
     const types = (await client.getMine()).map(item => item.typeCode).sort()
-    expect(types).toEqual(['calendar.space.reserved', 'candidate.publication.approved'])
+    expect(types).toEqual(['calendar.space.reserved', 'candidate.publication.approved', 'grandarchive.official.published'])
     expect((await client.getMine()).some(item => item.actionRequired || item.mandatory)).toBe(false)
   })
   it('los perfiles de gestión ven los avisos de gestión; solo el Administrador ve los de privacidad', () => {

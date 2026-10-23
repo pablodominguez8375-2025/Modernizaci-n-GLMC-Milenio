@@ -27,6 +27,7 @@ export const demoNoticeAudience: Record<string, 'todos' | 'gestion' | 'administr
   'candidate.publication.deadline': 'gestion',
   'lodge.minutes.approved': 'gestion',
   'privacy.retention.review': 'administrador',
+  'grandarchive.official.published': 'todos',
 }
 export function demoNoticeVisible(typeCode: string, profileKey: string): boolean {
   const audience = demoNoticeAudience[typeCode] ?? 'gestion'
@@ -53,6 +54,21 @@ class NotificationApiHttpError extends Error {
 }
 
 const demoInbox: NotificationInboxItem[] = [
+  {
+    id: '9a000007-0000-0000-0000-000000000007',
+    typeCode: 'grandarchive.official.published',
+    subject: 'Nuevo documento oficial',
+    body: 'Decreto publicado en Documentos oficiales: Decreto N.º 14 · Calendario de la Gran Asamblea 2026.',
+    actionUrl: '/official-documents',
+    classification: 'internal',
+    mandatory: false,
+    actionRequired: false,
+    actionStatus: null,
+    relatedResourceType: 'grand_archive_record',
+    relatedResourceId: 'ga-demo-2',
+    createdAtUtc: '2026-10-23T15:00:00Z',
+    readAtUtc: null,
+  },
   {
     id: '9a000006-0000-0000-0000-000000000006',
     typeCode: 'candidate.publication.approved',
