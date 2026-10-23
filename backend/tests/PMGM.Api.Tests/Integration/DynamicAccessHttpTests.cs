@@ -172,13 +172,18 @@ public sealed class DynamicAccessHttpTests
         var supportLink = new Membership {
             Member = synthetic, Organization = support, Status = "active", MembershipType = "regular"
         };
+        // Simula un vínculo equivocado: el miembro de soporte no debe entrar
+        // al listado institucional aunque tenga otra membresía workshop.
+        var mixedLink = new Membership {
+            Member = synthetic, Organization = real, Status = "active", MembershipType = "regular"
+        };
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
             db.Organizations.AddRange(real, support, uppercase);
             db.Members.Add(synthetic);
-            db.Memberships.Add(supportLink);
+            db.Memberships.AddRange(supportLink, mixedLink);
             await db.SaveChangesAsync(ct);
         }
         using var response = await client.GetAsync("/api/institutional/organizations/options", ct);
@@ -211,6 +216,10 @@ public sealed class DynamicAccessHttpTests
         // No producir regresiones para los Talleres reales.
         using var realRoster = await client.GetAsync($"/api/members?organizationId={real.Id}", ct);
         Assert.Equal(HttpStatusCode.OK, realRoster.StatusCode);
+        using var realListJson = JsonDocument.Parse(await realRoster.Content.ReadAsStringAsync(ct));
+        Assert.DoesNotContain(realListJson.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("memberId").GetGuid() == synthetic.Id);
+        Assert.DoesNotContain("FICTICIO " + marker, await realRoster.Content.ReadAsStringAsync(ct));
     }
 
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
