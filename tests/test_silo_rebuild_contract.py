@@ -42,6 +42,29 @@ class SiloRebuildContractTests(unittest.TestCase):
         error = urllib.error.HTTPError('https://private.invalid/token', 403, 'secret', {'Authorization': 'secret'}, None)
         self.assertEqual({'type': 'HTTPError', 'http_status': 403}, rebuild.failure_details(error))
 
+    def test_missing_fix_ancestry_blocks_before_binary_or_network_access(self):
+        import subprocess
+        with patch.object(rebuild, 'check_source'), patch.object(rebuild.subprocess, 'run',
+                return_value=subprocess.CompletedProcess([], 1)), patch.object(rebuild.subprocess, 'check_output') as inspect:
+            with self.assertRaisesRegex(ValueError, 'inherit the fix'):
+                rebuild.server_patch_evidence('sha256:'+'a'*64, Path('/unused'), Path('/pinned'))
+            inspect.assert_not_called()
+
+    def test_offline_triage_binds_git_blob_and_rebuilt_binary(self):
+        import hashlib, subprocess, tempfile
+        content = b'const maxCharsPerRecord = 1 << 20; errOverMaxRecordSize'
+        blob = hashlib.sha1(b'blob '+str(len(content)).encode()+b'\0'+content).hexdigest()
+        with tempfile.TemporaryDirectory() as tmp, patch.object(rebuild, 'check_source'), \
+                patch.object(rebuild, 'SERVER_BLOBS', {'internal/s3select/json/preader.go': blob}), \
+                patch.object(rebuild.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), \
+                patch.object(rebuild.subprocess, 'check_output', side_effect=[content, rebuild.VENDOR_SERVER_BINARY+'  /usr/bin/silo', 'c'*64+'  /usr/bin/silo']):
+            output = Path(tmp)
+            (output/'vendor-attestation.json').write_text(rebuild.SERVER_SOURCE)
+            evidence = rebuild.server_patch_evidence('sha256:'+'a'*64, output, Path('/pinned'))
+            self.assertEqual('c'*64, evidence['server_binary_sha256'])
+            self.assertFalse(evidence['server_binary_preserved'])
+            self.assertTrue(evidence['fix_ancestry_verified'])
+
     def test_export_builds_only_immutable_git_archive(self):
         import io, tarfile, tempfile, hashlib
         data = io.BytesIO()
