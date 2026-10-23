@@ -4,6 +4,7 @@ import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetItem,
 import './documents.css'
 import './library-ppt-enhancement.css'
 import LibraryMagazineEditorial from './LibraryMagazineEditorial'
+import AreaCollaboratorsSection from './AreaCollaborators'
 import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
 const pageSize = 12
@@ -128,6 +129,7 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
+    {editorRole === 'librarian' && <AreaCollaboratorsSection documentApi={documentApi} area="library" />}
     {<LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
     {documentApi.useMocks && editorRole && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
