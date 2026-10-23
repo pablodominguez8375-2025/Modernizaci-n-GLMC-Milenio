@@ -86,6 +86,7 @@
       "RegimenInteriorReinstatementMovementPostgreSqlTests",
       "RegimenInteriorDataQualityPostgreSqlTests",
       "AssemblyFoundationPostgreSqlTests",
+      "AssemblyAccreditedRosterPersistencePostgreSqlTests",
       "AssemblyGrandTreasuryReviewEventsPostgreSqlTests",
       "AssemblyReviewDecisionEventsPostgreSqlTests",
       "AssemblyReviewDecisionHttpTests",
