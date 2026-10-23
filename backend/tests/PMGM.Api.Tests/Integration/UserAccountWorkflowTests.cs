@@ -30,6 +30,7 @@ public sealed class UserAccountWorkflowTests
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
         var identity=new Identity{EnableFails=enableFails};var mail=new Mail{Fails=mailFails};
         using var factory=Factory(connection,identity,mail);using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
         var ids=await Seed(factory,"active");
         var response=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);
         Assert.Equal(mailFails||enableFails?HttpStatusCode.ServiceUnavailable:HttpStatusCode.Created,response.StatusCode);
@@ -60,7 +61,9 @@ public sealed class UserAccountWorkflowTests
     public async Task Inactive_member_cannot_create_account_despite_active_membership(string status)
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
-        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,status);
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var ids=await Seed(factory,status);
         var response=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest,response.StatusCode);Assert.Equal(0,identity.Prepares);
         using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
@@ -71,7 +74,9 @@ public sealed class UserAccountWorkflowTests
     public async Task Requires_binding_and_rejects_email_override_for_member_accounts()
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
-        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,"active");
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var ids=await Seed(factory,"active");
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {},TestContext.Current.CancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=Guid.NewGuid()},TestContext.Current.CancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization,platformEmail="override@example.invalid"},TestContext.Current.CancellationToken)).StatusCode);
@@ -79,6 +84,34 @@ public sealed class UserAccountWorkflowTests
     }
 
     // Regla del PO (22-10 21:31): solo existe UN Máster; ni el Máster crea otro; solo Usuarios y Superusuarios.
+    [Theory]
+    [InlineData(InstitutionalRoles.GranLogiaAdmin)]
+    [InlineData(InstitutionalRoles.TallerTesoreria)]
+    public async Task Only_master_may_create_regular_user_even_with_system_admin_menu(string role)
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        var identity=new Identity();var mail=new Mail();
+        using var factory=Factory(connection,identity,mail);using var client=factory.CreateClient();
+        var ids=await Seed(factory,"active");
+        client.DefaultRequestHeaders.Add("X-Account-Role",role);
+        using var denied=await client.PostAsJsonAsync("/api/system/user-accounts",
+            new { memberId=ids.Member,organizationId=ids.Organization },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden,denied.StatusCode);
+        Assert.Equal(0,identity.Prepares);
+        Assert.Null(identity.Account);
+        Assert.False(identity.Enabled);
+        Assert.Null(mail.LastAccount);
+        Assert.Null(mail.Password);
+        if(role==InstitutionalRoles.GranLogiaAdmin)
+        {
+            using var options=JsonDocument.Parse(await client.GetStringAsync(
+                "/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
+            Assert.False(options.RootElement.GetProperty("canCreateUser").GetBoolean());
+            Assert.False(options.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
+        }
+    }
+
     [Theory]
     [InlineData(InstitutionalRoles.GranLogiaAdmin,false)]
     [InlineData(InstitutionalRoles.PlatformSuperAdmin,false)]
@@ -125,6 +158,7 @@ public sealed class UserAccountWorkflowTests
         Assert.False(json.RootElement.GetProperty("platformAdministrator").GetBoolean());Assert.True(json.RootElement.GetProperty("superuser").GetBoolean());
         using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
         Assert.False(candidates.RootElement.GetProperty("canCreatePlatformAdministrator").GetBoolean());
+        Assert.True(candidates.RootElement.GetProperty("canCreateUser").GetBoolean());
         Assert.True(candidates.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
     }
 
