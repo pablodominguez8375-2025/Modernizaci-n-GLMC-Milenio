@@ -37,6 +37,7 @@ const deniedCoreCapabilities: SessionProfile['capabilities'] = {
   canManagePrivacy: false,
   canReadLodgeSecretariat: false,
   canManageLodgeSecretariat: false,
+  canReadOfficialDocuments: true,
 }
 
 export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
@@ -143,7 +144,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   grandArchivist: {
     displayName: 'Gran Archivero · Demostración',
     accessScope: 'order',
-    capabilities: { ...deniedCoreCapabilities, canManageGrandArchive: true },
+    capabilities: { ...deniedCoreCapabilities, canManageGrandArchive: true, canPublishOfficialDocuments: true },
   },
   librarian: {
     displayName: 'Bibliotecario · Demostración',

@@ -14,6 +14,11 @@ public interface IGrandArchiveService
     Task<GrandArchiveRecordDto> RegisterAsync(RegisterGrandArchiveCommand command, ArchiveActor actor, CancellationToken cancellationToken);
     Task<GrandArchiveRecordDto> WithdrawAsync(Guid recordId, string reason, ArchiveActor actor, CancellationToken cancellationToken);
     Task<GrandArchiveContent?> OpenContentAsync(Guid recordId, CancellationToken cancellationToken);
+    Task<GrandArchiveRecordDto> PublishAsync(Guid recordId, int minimumDegree, ArchiveActor actor, CancellationToken cancellationToken);
+    Task<GrandArchiveRecordDto> UnpublishAsync(Guid recordId, string reason, ArchiveActor actor, CancellationToken cancellationToken);
+    Task<GrandArchiveListResponse> ListPublishedAsync(GrandArchiveQuery query, int viewerDegree, CancellationToken cancellationToken);
+    Task<GrandArchiveRecordDto?> GetPublishedAsync(Guid recordId, int viewerDegree, CancellationToken cancellationToken);
+    Task<GrandArchiveContent?> OpenPublishedContentAsync(Guid recordId, int viewerDegree, CancellationToken cancellationToken);
 }
 
 public sealed class GrandArchiveService(
@@ -198,6 +203,90 @@ public sealed class GrandArchiveService(
         return await GetAsync(recordId, cancellationToken) ?? throw new KeyNotFoundException("El registro archivístico no existe.");
     }
 
+    public async Task<GrandArchiveRecordDto> PublishAsync(Guid recordId, int minimumDegree, ArchiveActor actor, CancellationToken cancellationToken)
+    {
+        if (!GrandArchivePolicy.IsValidDegree(minimumDegree))
+            throw new GrandArchivePolicyException("El grado mínimo debe ser 1 (todos), 2 (desde Compañero) o 3 (solo Maestro).");
+        var record = await archiveDb.GrandArchiveRecords.SingleOrDefaultAsync(x => x.Id == recordId, cancellationToken)
+            ?? throw new KeyNotFoundException("El registro archivístico no existe.");
+        await archiveDb.Entry(record).ReloadAsync(cancellationToken); // el retiro usa ExecuteUpdate: evitar estado en caché
+        if (record.Status != GrandArchiveCodes.Status.Active)
+            throw new GrandArchivePolicyException("Un registro retirado no puede publicarse.");
+        if (!GrandArchiveCodes.RecordType.IsPublishable(record.RecordType))
+            throw new GrandArchivePolicyException("Este tipo de registro es interno del archivo y no puede publicarse a los Hermanos.");
+        var source = await documentDb.DocumentVersions.AsNoTracking()
+            .Where(x => x.Id == record.DocumentVersionId)
+            .Select(x => new { x.Document.DocumentType, x.ProcessingStatus })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new GrandArchiveSourceUnavailableException("La versión documental vinculada ya no está disponible en el Gestor Documental.");
+        if (GrandArchivePolicy.IsForbiddenWorkPaper(source.DocumentType))
+            throw new GrandArchivePolicyException("Las planchas y documentos asociados a un candidato no se publican (Ley 21.719).");
+        if (source.ProcessingStatus != DocumentManagementCodes.ProcessingStatus.Available)
+            throw new GrandArchiveSourceUnavailableException("La versión documental no está disponible para publicarse.");
+
+        var now = DateTimeOffset.UtcNow;
+        record.PublishedMinimumDegree = minimumDegree;
+        record.PublishedAtUtc = now;
+        record.PublishedBySubject = actor.Subject;
+        record.PublishedByDisplayName = actor.DisplayName;
+        record.UnpublishedAtUtc = null;
+        record.UnpublishReason = null;
+        record.UpdatedAtUtc = now;
+        await archiveDb.SaveChangesAsync(cancellationToken);
+        return (await EnrichAsync([record], cancellationToken)).Single();
+    }
+
+    public async Task<GrandArchiveRecordDto> UnpublishAsync(Guid recordId, string reason, ArchiveActor actor, CancellationToken cancellationToken)
+    {
+        var record = await archiveDb.GrandArchiveRecords.SingleOrDefaultAsync(x => x.Id == recordId, cancellationToken)
+            ?? throw new KeyNotFoundException("El registro archivístico no existe.");
+        await archiveDb.Entry(record).ReloadAsync(cancellationToken);
+        if (record.PublishedMinimumDegree is null)
+            throw new GrandArchivePolicyException("El registro no está publicado.");
+        var now = DateTimeOffset.UtcNow;
+        record.PublishedMinimumDegree = null;
+        record.UnpublishedAtUtc = now;
+        record.UnpublishReason = reason.Trim();
+        record.UpdatedAtUtc = now;
+        await archiveDb.SaveChangesAsync(cancellationToken);
+        return (await EnrichAsync([record], cancellationToken)).Single();
+    }
+
+    public async Task<GrandArchiveListResponse> ListPublishedAsync(GrandArchiveQuery query, int viewerDegree, CancellationToken cancellationToken)
+    {
+        IQueryable<GrandArchiveRecord> source = archiveDb.GrandArchiveRecords.AsNoTracking()
+            .Where(x => x.Status == GrandArchiveCodes.Status.Active &&
+                        x.PublishedMinimumDegree != null && x.PublishedMinimumDegree <= viewerDegree);
+        if (!string.IsNullOrWhiteSpace(query.RecordType)) source = source.Where(x => x.RecordType == query.RecordType);
+        if (query.FromDate is not null) source = source.Where(x => x.DocumentDate == null || x.DocumentDate >= query.FromDate);
+        if (query.ToDate is not null) source = source.Where(x => x.DocumentDate == null || x.DocumentDate <= query.ToDate);
+        var rows = await source.OrderByDescending(x => x.DocumentDate).ThenByDescending(x => x.PublishedAtUtc).Take(1000).ToListAsync(cancellationToken);
+        var enriched = await EnrichAsync(rows, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var term = Normalize(query.Search);
+            enriched = enriched.Where(x => Normalize($"{x.ArchiveCode} {x.Title} {x.RecordType} {x.OriginatingBody} {x.Description}").Contains(term, StringComparison.Ordinal)).ToList();
+        }
+        var returned = enriched.Take(query.Limit).ToList();
+        return new GrandArchiveListResponse(enriched.Count, returned.Count, returned);
+    }
+
+    public async Task<GrandArchiveRecordDto?> GetPublishedAsync(Guid recordId, int viewerDegree, CancellationToken cancellationToken)
+    {
+        var record = await archiveDb.GrandArchiveRecords.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.Id == recordId && x.Status == GrandArchiveCodes.Status.Active &&
+                                       x.PublishedMinimumDegree != null && x.PublishedMinimumDegree <= viewerDegree, cancellationToken);
+        return record is null ? null : (await EnrichAsync([record], cancellationToken)).Single();
+    }
+
+    public async Task<GrandArchiveContent?> OpenPublishedContentAsync(Guid recordId, int viewerDegree, CancellationToken cancellationToken)
+    {
+        var visible = await archiveDb.GrandArchiveRecords.AsNoTracking()
+            .AnyAsync(x => x.Id == recordId && x.Status == GrandArchiveCodes.Status.Active &&
+                           x.PublishedMinimumDegree != null && x.PublishedMinimumDegree <= viewerDegree, cancellationToken);
+        return visible ? await OpenContentAsync(recordId, cancellationToken) : null;
+    }
+
     public async Task<GrandArchiveContent?> OpenContentAsync(Guid recordId, CancellationToken cancellationToken)
     {
         var record = await archiveDb.GrandArchiveRecords.AsNoTracking().SingleOrDefaultAsync(x => x.Id == recordId, cancellationToken);
@@ -269,7 +358,12 @@ public sealed class GrandArchiveService(
                 source?.OriginalFileName,
                 source?.ContentType,
                 source?.SizeBytes,
-                source?.ProcessingStatus ?? "unavailable");
+                source?.ProcessingStatus ?? "unavailable",
+                record.PublishedMinimumDegree,
+                record.PublishedAtUtc,
+                record.PublishedByDisplayName,
+                record.UnpublishedAtUtc,
+                record.UnpublishReason);
         }).ToList();
     }
 
@@ -319,7 +413,12 @@ public sealed record GrandArchiveRecordDto(
     string? OriginalFileName,
     string? ContentType,
     long? SizeBytes,
-    string ProcessingStatus);
+    string ProcessingStatus,
+    int? PublishedMinimumDegree = null,
+    DateTimeOffset? PublishedAtUtc = null,
+    string? PublishedByDisplayName = null,
+    DateTimeOffset? UnpublishedAtUtc = null,
+    string? UnpublishReason = null);
 
 public sealed class GrandArchivePolicyException(string message) : Exception(message);
 public sealed class GrandArchiveDuplicateException(string message) : Exception(message);
