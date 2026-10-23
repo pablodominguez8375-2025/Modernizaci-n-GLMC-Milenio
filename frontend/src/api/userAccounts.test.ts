@@ -15,14 +15,15 @@ describe('alta de cuentas',()=>{
   expect(JSON.stringify(r)).not.toMatch(/"(?:password|clave|initialPassword)":/)
   await expect(api.createUserAccount({memberId:c.memberId,organizationId:c.organizationId})).rejects.toThrow('Ya existe')
  })
- it('rechaza sujetos inexistentes y la excepción a administradores institucionales',async()=>{
+ it('rechaza sujetos inexistentes y el Superusuario a administradores institucionales',async()=>{
   const api=admin();await expect(api.createUserAccount({memberId:'inactivo',organizationId:'taller'})).rejects.toThrow()
-  api.demoAccessSubject='demo:grandLodge';expect((await api.getUserAccountCandidates()).canCreatePlatformAdministrator).toBe(false)
-  await expect(api.createUserAccount({platformAdministrator:true,platformName:'Soporte ficticio',platformEmail:'soporte@example.invalid'})).rejects.toThrow('plataforma')
+  api.demoAccessSubject='demo:grandLodge';expect((await api.getUserAccountCandidates()).canCreateSuperuser).toBe(false)
+  await expect(api.createUserAccount({superuser:true,platformName:'Soporte ficticio',platformEmail:'soporte@example.invalid'})).rejects.toThrow('Máster')
   api.demoAccessSubject='demo:brother';await expect(api.getUserAccountCandidates()).rejects.toThrow('permiso')
  })
- it('permite la excepción solamente a plataforma y no le asigna Hermano o Taller',async()=>{
-  const api=admin();const r=await api.createUserAccount({platformAdministrator:true,platformName:'Soporte ficticio',platformEmail:'soporte@example.invalid'})
-  expect(r.memberId).toBeNull();expect(r.organizationId).toBeNull();expect((await api.getUserAccounts()).items[0].kind).toBe('platform')
+ it('permite el Superusuario solo al Máster, sin Hermano ni Taller, y nunca como Máster',async()=>{
+  const api=admin();const r=await api.createUserAccount({superuser:true,platformName:'Soporte ficticio',platformEmail:'soporte@example.invalid'})
+  expect(r.memberId).toBeNull();expect(r.organizationId).toBeNull();expect((await api.getUserAccounts()).items[0].kind).toBe('superuser');expect(r.superuser).toBe(true)
+  expect('platformAdministrator' in r).toBe(false)
  })
 })

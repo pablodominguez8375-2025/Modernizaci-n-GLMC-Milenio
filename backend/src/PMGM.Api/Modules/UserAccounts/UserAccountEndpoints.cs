@@ -34,7 +34,7 @@ public static class UserAccountEndpoints
         var rows=await Eligible(db,DynamicAccessEndpoints.Today()).Select(m=>new AccountCandidate(m.MemberId,m.OrganizationId,
             m.Member.Person.FirstNames+" "+m.Member.Person.LastNames,m.Member.Person.Email??"",m.Organization.Name)).Distinct().ToListAsync(ct);
         return Results.Ok(new { items=rows.Where(x=>AccountPassword.ValidEmail(x.Email)).ToArray(),
-            canCreatePlatformAdministrator=access.IsPlatformSuperAdmin(ctx.User),deliveryConfigured=identity.Configured&&mail.Configured });
+            canCreatePlatformAdministrator=false,canCreateSuperuser=access.IsPlatformSuperAdmin(ctx.User),deliveryConfigured=identity.Configured&&mail.Configured });
     }
     private static async Task<IResult> GetUsers(HttpContext ctx,IInstitutionalAccessService access,IAccountIdentityProvider identity,CancellationToken ct)
     {
@@ -50,11 +50,19 @@ public static class UserAccountEndpoints
     {
         ctx.Response.Headers.CacheControl="private, no-store";
         if(!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
-        if(request.PlatformAdministrator && !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
-        if(request.PlatformAdministrator ? request.MemberId is not null || request.OrganizationId is not null ||
+        // Solo existe UN Máster (cuenta «admin», provista fuera de esta API). Nadie, ni siquiera el Máster,
+        // puede crear, duplicar ni promover otro: se rechaza antes de tocar identidad, correo o base.
+        if(request.PlatformAdministrator)
+        {
+            audit.Add(ctx,"system.users.master_creation_denied","UserAccount","platform",null,AuditResults.Rejected,new { superuser=request.Superuser });
+            await db.SaveChangesAsync(ct);
+            return Results.Json(new { message="No se puede crear otro Máster: la plataforma tiene una sola cuenta Máster. Cree un Usuario o un Superusuario." },statusCode:StatusCodes.Status403Forbidden);
+        }
+        if(request.Superuser && !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+        if(request.Superuser ? request.MemberId is not null || request.OrganizationId is not null ||
             string.IsNullOrWhiteSpace(request.PlatformName) || request.PlatformName.Length>200 || !AccountPassword.ValidEmail(request.PlatformEmail)
             : request.MemberId is null || request.OrganizationId is null || request.PlatformEmail is not null || request.PlatformName is not null)
-            return Results.BadRequest(new { message="Seleccione un Hermano activo y su Taller. Sólo la excepción de plataforma admite nombre y correo propios." });
+            return Results.BadRequest(new { message="Seleccione un Hermano activo y su Taller. Sólo el Superusuario de soporte admite nombre y correo propios." });
         if(!identity.Configured || !mail.Configured) return Failure();
         PreparedIdentity? prepared=null;var committed=false;
         await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);
@@ -64,7 +72,7 @@ public static class UserAccountEndpoints
             await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey},0))",ct);
             AccountIdentity account;
             List<string> links=[];
-            if(request.PlatformAdministrator) account=new(request.PlatformName!.Trim(),request.PlatformEmail!,null,null,true);
+            if(request.Superuser) account=new(request.PlatformName!.Trim(),request.PlatformEmail!,null,null,false,true);
             else
             {
                 var candidate=await Eligible(db,DynamicAccessEndpoints.Today()).Where(m=>m.MemberId==request.MemberId && m.OrganizationId==request.OrganizationId)
@@ -72,7 +80,7 @@ public static class UserAccountEndpoints
                     .FirstOrDefaultAsync(ct);
                 if(candidate is null || !AccountPassword.ValidEmail(candidate.Email))
                     return Results.BadRequest(new { message="El Hermano debe estar activo en ese Taller y tener un correo válido en su ficha." });
-                account=new(candidate.Name,candidate.Email,candidate.MemberId,candidate.OrganizationId,false);
+                account=new(candidate.Name,candidate.Email,candidate.MemberId,candidate.OrganizationId,false,false);
                 links=await db.Database.SqlQuery<string>($"SELECT CASE WHEN \"Issuer\"={identity.Issuer} THEN \"Subject\" ELSE 'other-issuer' END AS \"Value\" FROM core.member_identity_links WHERE \"MemberId\"={candidate.MemberId} AND \"RevokedAtUtc\" IS NULL").ToListAsync(ct);
             }
             // Email from the record is the only delivery destination; lock it across different members too.
@@ -88,18 +96,18 @@ public static class UserAccountEndpoints
             }
             await mail.SendAsync(account,password,ct);
             audit.Add(ctx,"system.users.prepared","UserAccount",prepared.Subject,account.OrganizationId,AuditResults.Success,
-                new { account.MemberId,account.PlatformAdministrator,temporaryCredential=true });
+                new { account.MemberId,account.Superuser,temporaryCredential=true });
             await db.SaveChangesAsync(ct);await tx.CommitAsync(ct);committed=true;await tx.DisposeAsync();
             // Recheck immediately before activation; the SMTP wait must not authorize an inactive member.
             if(account.MemberId is Guid id && !await Eligible(db,DynamicAccessEndpoints.Today()).AnyAsync(m=>m.MemberId==id&&m.OrganizationId==account.OrganizationId,ct))
                 throw new AccountDeliveryException();
             await identity.EnableAsync(prepared.Subject,ct);
             audit.Add(ctx,"system.users.created","UserAccount",prepared.Subject,account.OrganizationId,AuditResults.Success,
-                new { account.MemberId,account.PlatformAdministrator,requiresPasswordChange=true });
+                new { account.MemberId,account.Superuser,requiresPasswordChange=true });
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/system/user-accounts/{prepared.Subject}",new {
                 subject=prepared.Subject,email=account.Email,account.MemberId,account.OrganizationId,
-                platformAdministrator=account.PlatformAdministrator,requiresPasswordChange=true,initialPasswordEmailSent=true });
+                platformAdministrator=false,superuser=account.Superuser,requiresPasswordChange=true,initialPasswordEmailSent=true });
         }
         catch(Exception e) when(e is AccountConflictException or AccountDeliveryException or HttpRequestException or TaskCanceledException or DbUpdateException or System.Data.Common.DbException)
         {
@@ -112,7 +120,7 @@ public static class UserAccountEndpoints
             }
             // Rejection audit contains identifiers only, never contact, credential, provider body or exception text.
             db.ChangeTracker.Clear();audit.Add(ctx,"system.users.creation_failed","UserAccount",request.MemberId?.ToString()??"platform",request.OrganizationId,AuditResults.Rejected,
-                new { request.PlatformAdministrator,reason=e is AccountConflictException?"conflict":"delivery_or_identity" });
+                new { request.Superuser,reason=e is AccountConflictException?"conflict":"delivery_or_identity" });
             await db.SaveChangesAsync(CancellationToken.None);
             return e is AccountConflictException ? Results.Conflict(new { message="Ya existe una cuenta o vínculo de identidad para este Hermano/correo." }) : Failure();
         }

@@ -42,16 +42,20 @@ public sealed class AccountIdentityProviderTests
         await provider.RemoveAsync(prepared.Subject,TestContext.Current.CancellationToken);
         Assert.Equal("DELETE",handler.Methods.Last());
     }
+    // Regla del PO (22-10): el rol global Máster jamás se concede desde esta vía; el superusuario no lo recibe.
     [Fact]
-    public async Task Platform_exception_maps_only_platform_role_and_order_scope()
+    public async Task Master_role_is_never_granted_and_superuser_gets_order_scope_without_global_role()
     {
         var handler=new Handler();var provider=new KeycloakAccountIdentityProvider(new HttpClient(handler),Options.Create(new AccountIdentityOptions{
             ServerUrl="https://identity.example.invalid",Issuer="https://identity.example.invalid/realms/pmgm",ClientSecret="synthetic-test-only"}));
-        await provider.PrepareDisabledAsync(new("Admin Ficticio","admin@example.invalid",null,null,true),AccountPassword.Generate(),TestContext.Current.CancellationToken);
-        using var mapping=JsonDocument.Parse(handler.Bodies.Single(x=>x.Path.EndsWith("/role-mappings/realm")).Body);
-        Assert.Equal("platform_superadmin",mapping.RootElement[0].GetProperty("name").GetString());Assert.Equal(1,mapping.RootElement.GetArrayLength());
+        await Assert.ThrowsAsync<AccountConflictException>(()=>provider.PrepareDisabledAsync(new("Otro Master","master@example.invalid",null,null,true),AccountPassword.Generate(),TestContext.Current.CancellationToken));
+        Assert.Empty(handler.Bodies);
+        await provider.PrepareDisabledAsync(new("Soporte Ficticio","soporte@example.invalid",null,null,false,true),AccountPassword.Generate(),TestContext.Current.CancellationToken);
+        Assert.DoesNotContain(handler.Bodies,x=>x.Path.Contains("role-mappings"));
         using var user=JsonDocument.Parse(handler.Bodies.Single(x=>x.Path.EndsWith("/users")).Body);
-        Assert.Equal("order",user.RootElement.GetProperty("attributes").GetProperty("pmgm_scope")[0].GetString());
+        var attributes=user.RootElement.GetProperty("attributes");
+        Assert.Equal("order",attributes.GetProperty("pmgm_scope")[0].GetString());
+        Assert.Equal("superuser",attributes.GetProperty("pmgm_account_kind")[0].GetString());
     }
     private sealed class Handler:HttpMessageHandler
     {
