@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -39,8 +40,9 @@ public static class MembershipEndpoints
             .Select(x => new { x.Id, x.Name, x.Number, x.Type })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (organization is null)
+        if (organization is null || SupportWorkshopPolicy.IsSupportOrganization(organization.Type))
         {
+            // Soporte sintético nunca se consulta mediante el padrón institucional.
             return Results.NotFound();
         }
 
@@ -124,6 +126,17 @@ public static class MembershipEndpoints
         });
     }
 
+    /// <summary>
+    /// El soporte sintético tendrá un circuito dedicado en fases posteriores.
+    /// Un miembro mixto support/workshop se bloquea por precaución, antes
+    /// de revelar nombres, RUT, ficha o historia institucional.
+    /// </summary>
+    private static Task<bool> HasSupportMembershipAsync(
+        PmgmDbContext db, Guid memberId, CancellationToken ct)
+        => db.Memberships.AsNoTracking().AnyAsync(m =>
+            m.MemberId == memberId &&
+            EF.Functions.ILike(m.Organization.Type, SupportWorkshopPolicy.OrganizationType), ct);
+
     private static async Task<IResult> GetMemberProfileAsync(
         Guid id,
         HttpContext httpContext,
@@ -131,6 +144,9 @@ public static class MembershipEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
+        if (await HasSupportMembershipAsync(db, id, cancellationToken))
+            return Results.NotFound();
+
         var member = await db.Members
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -359,6 +375,9 @@ public static class MembershipEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
+        if (await HasSupportMembershipAsync(db, id, cancellationToken))
+            return Results.NotFound();
+
         var member = await db.Members
             .AsNoTracking()
             .Where(x => x.Id == id)
