@@ -65,20 +65,20 @@ SERVER_BLOBS = {
 }
 
 
-def server_patch_evidence(image, output):
-    # Reuse the checksum-bounded downloader, never fetch an unpinned branch.
-    spec = importlib.util.spec_from_file_location('silo_supply', ROOT / 'scripts/qa/verify-silo-supply.py')
-    supply = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(supply)
-    comparison = json.loads(supply.fetch('https://api.github.com/repos/pgsty/silo/compare/' +
-                                        SERVER_FIX + '...' + SERVER_SOURCE))
-    if comparison.get('status') not in ('ahead', 'identical') or comparison.get('behind_by') != 0:
+def server_patch_evidence(image, output, source):
+    # Evidence comes from the already pinned checkout, not another API call.
+    check_source(source, SERVER_SOURCE)
+    ancestor = subprocess.run(['git', '-C', str(source), 'merge-base', '--is-ancestor',
+                               SERVER_FIX, SERVER_SOURCE], stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL, timeout=30)
+    if ancestor.returncode != 0:
         raise ValueError('server does not inherit the fix')
     if SERVER_SOURCE not in (output / 'vendor-attestation.json').read_text():
         raise ValueError('vendor attestation does not identify expected server source')
     files = {}
     for path, expected in SERVER_BLOBS.items():
-        content = supply.fetch('https://raw.githubusercontent.com/pgsty/silo/' + SERVER_SOURCE + '/' + path)
+        content = subprocess.check_output(['git', '-C', str(source), 'show', SERVER_SOURCE + ':' + path],
+                                          timeout=30)
         blob = hashlib.sha1(b'blob ' + str(len(content)).encode() + b'\0' + content).hexdigest()
         if blob != expected:
             raise ValueError('server source blob mismatch')
@@ -112,8 +112,9 @@ def server_patch_evidence(image, output):
     return evidence
 
 
-# New binary must be reviewed and pinned before VEX/publication can succeed.
-SERVER_BINARY = None
+# Reviewed from authenticated Actions artifact12469593117; independently hashed
+# the sole image layer and matched scan/runtime evidence of source93d85516.
+SERVER_BINARY = '7d1ca6fe1fedfbd6c9b4df3cf2b1aaf53c63499095daeb3d65dd7fcd26e62e04'
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@v0.0.0-20261015052015-7a3ca0f82100'
 
@@ -312,7 +313,7 @@ def main():
                     stdout=stream, stderr=subprocess.STDOUT, timeout=900)
             report['real_iam_recovery_sdk'] = {'status': 'PASS', 'seconds': round(time.monotonic() - started, 3)}
             stage = 'server_cve_triage'
-            report['server_cve_triage'] = server_patch_evidence(image, output)
+            report['server_cve_triage'] = server_patch_evidence(image, output, args.server_source)
             stage = 'candidate_archive_recheck'
             with archive.open('rb') as stream:
                 if hashlib.file_digest(stream, 'sha256').hexdigest() != report['archive_sha256']:
