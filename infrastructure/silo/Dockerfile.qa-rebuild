@@ -14,9 +14,11 @@ FROM go-build AS silo-build
 WORKDIR /source
 COPY --from=silo_source . .
 # Source is exported from the verified Git object, without checkout extras.
+# Retain ELF symbols and stamp the exact source pseudo-version: Trivy can then
+# identify the main module with -trimpath instead of silently scanning (devel).
 RUN test "$(go env GOVERSION)" = go1.27.3 && \
     go build -mod=readonly -trimpath -buildvcs=false -tags=kqueue \
-      -ldflags='-s -w -X github.com/minio/minio/cmd.CommitID=7a3ca0f82100cce06289a465f54139da2639f642 -X github.com/minio/minio/cmd.ShortCommitID=7a3ca0f82100' \
+      -ldflags='-X github.com/minio/minio/cmd.Version=v0.0.0-20261015052015-7a3ca0f82100 -X github.com/minio/minio/cmd.CommitID=7a3ca0f82100cce06289a465f54139da2639f642 -X github.com/minio/minio/cmd.ShortCommitID=7a3ca0f82100' \
       -o /out/silo . && \
     go version -m /out/silo > /out/silo-buildinfo.txt
 
