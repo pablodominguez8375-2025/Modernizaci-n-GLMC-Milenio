@@ -49,7 +49,11 @@ public static class UserAccountEndpoints
         ILoggerFactory logs,CancellationToken ct)
     {
         ctx.Response.Headers.CacheControl="private, no-store";
-        if(!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+        // Decisión Sponsor #604: el Máster único es la única autoridad para
+        // altas de usuarios y superusuarios, aun si otro rol puede administrar
+        // vistas del Sistema. Denegar antes de tocar identidad, SMTP o BD.
+        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User))
+            return Results.Forbid();
         // Solo existe UN Máster (cuenta «admin», provista fuera de esta API). Nadie, ni siquiera el Máster,
         // puede crear, duplicar ni promover otro: se rechaza antes de tocar identidad, correo o base.
         if(request.PlatformAdministrator)
@@ -58,7 +62,6 @@ public static class UserAccountEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Json(new { message="No se puede crear otro Máster: la plataforma tiene una sola cuenta Máster. Cree un Usuario o un Superusuario." },statusCode:StatusCodes.Status403Forbidden);
         }
-        if(request.Superuser && !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
         if(request.Superuser ? request.MemberId is not null || request.OrganizationId is not null ||
             string.IsNullOrWhiteSpace(request.PlatformName) || request.PlatformName.Length>200 || !AccountPassword.ValidEmail(request.PlatformEmail)
             : request.MemberId is null || request.OrganizationId is null || request.PlatformEmail is not null || request.PlatformName is not null)
