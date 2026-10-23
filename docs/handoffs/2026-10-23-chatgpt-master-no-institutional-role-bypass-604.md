@@ -28,3 +28,6 @@ Primer commit documental para reclamar PR borrador según GOV-003. Aún no hay c
 - Sin migración ni acceso a credenciales, `main` o despliegues. Verificar triple CI exact-head antes de integrar a `dev` y luego preparar UAT de Keycloak, roles y perfil soporte.
 
 Estado del PR: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/660 (borrador al registrar). Dev inicial: `5da54b07d5b913efe97e35e84e4fa8fe5ed8bda1`. El cierre de #604 requiere todavía unicidad real, MFA, recuperación y UAT.
+
+### Endurecimiento adicional de identidad incompleta
+Si Keycloak entrega el rol `platform_superadmin` sin `pmgm_scope=order`, la cuenta técnica **tampoco** debe heredar un cargo logial si por error vienen otros `pmgm_role` y `pmgm_org`. El nuevo `HasPlatformMasterClaim` detecta el rol técnico aun con scope incompleto: `HasRole` solo reconoce rol plataforma cuando además el scope es Orden; `HasExplicitRole` y `HasOrganizationClaim` siempre rechazan equivalencias logiales para cualquier token de Máster. Se agregó caso adversarial xUnit `MalformedMasterWithoutOrderScope_CannotFallBackToLodgeOrGrandRoles`. No habilita Master sin scope para cuentas/perfiles ni altera roles legítimos. Nuevo HEAD de PR sujeto a CI exacto y conciliación en vivo.
