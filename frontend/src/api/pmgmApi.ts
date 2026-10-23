@@ -55,6 +55,10 @@ export interface SessionCapabilities {
   canManageLibrary?: boolean
   /** Perfil institucional Comunicaciones (revista y Boletín mensual). */
   canManageCommunications?: boolean
+  /** Cualquier Hermano autenticado consulta los documentos oficiales publicados según su grado. */
+  canReadOfficialDocuments?: boolean
+  /** Solo el perfil Gran Archivero publica y retira publicaciones. */
+  canPublishOfficialDocuments?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'

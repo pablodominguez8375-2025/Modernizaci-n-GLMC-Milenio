@@ -77,6 +77,97 @@ public sealed class GrandArchivePostgreSqlTests
         Assert.Equal(3, await documentDb.DocumentVersions.CountAsync(x => x.Id == decreeVersion.Id || x.Id == workPaperVersion.Id || x.Id == lodgeVersion.Id, cancellationToken));
     }
 
+    [Fact]
+    public async Task Publication_filters_by_degree_and_blocks_internal_types_and_work_papers()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var documentOptions = new DbContextOptionsBuilder<DocumentManagementDbContext>().UseNpgsql(connectionString).Options;
+        var archiveOptions = new DbContextOptionsBuilder<GrandArchiveDbContext>().UseNpgsql(connectionString).Options;
+        var coreOptions = new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(connectionString).Options;
+        await using (var coreDb = new PmgmDbContext(coreOptions)) await coreDb.Database.MigrateAsync(cancellationToken);
+        await using var documentDb = new DocumentManagementDbContext(documentOptions);
+        await using var archiveDb = new GrandArchiveDbContext(archiveOptions);
+        await archiveDb.Database.MigrateAsync(cancellationToken);
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var collection = new DocumentCollection { Code = $"GP-{suffix}", Name = $"Publicaciones {suffix}", Scope = DocumentManagementCodes.Scope.Order, Status = DocumentManagementCodes.CollectionStatus.Active, CreatedBySubject = "qa" };
+        var docs = new[]
+        {
+            Document(collection, "Decreto para todos", "decree"),
+            Document(collection, "Resolución desde Compañero", "resolution"),
+            Document(collection, "Reglamento solo Maestros", "regulation"),
+            Document(collection, "Correspondencia interna", "correspondence"),
+            Document(collection, "Plancha de autorización", "plancha_autorizacion")
+        };
+        documentDb.AddRange(collection); documentDb.AddRange(docs);
+        await documentDb.SaveChangesAsync(cancellationToken);
+        var versions = docs.Select((d, i) => Version(d, $"doc{i}-{suffix}.pdf")).ToArray();
+        documentDb.AddRange(versions);
+        await documentDb.SaveChangesAsync(cancellationToken);
+
+        var service = new GrandArchiveService(archiveDb, documentDb, new FakeObjectStore());
+        var actor = new ArchiveActor("qa-archivist", "Gran Archivero QA");
+        var types = new[] { "decree", "resolution", "regulation", "correspondence", "other" };
+        var records = new List<GrandArchiveRecordDto>();
+        for (var i = 0; i < 4; i++)
+            records.Add(await service.RegisterAsync(new RegisterGrandArchiveCommand(docs[i].Id, versions[i].Id, $"GP-{suffix}-{i}", types[i], new DateOnly(2026, 10, 1), null, null, null), actor, cancellationToken));
+
+        await service.PublishAsync(records[0].Id, 1, null, actor, cancellationToken);
+        await service.PublishAsync(records[1].Id, 2, null, actor, cancellationToken);
+        await service.PublishAsync(records[2].Id, 3, null, actor, cancellationToken);
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[3].Id, 1, null, actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[0].Id, 4, null, actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[0].Id, 0, null, actor, cancellationToken));
+
+        var query = new GrandArchiveQuery(null, null, null, null, suffix, 100);
+        Assert.Equal(["Decreto para todos"], (await service.ListPublishedAsync(query, 1, cancellationToken)).Items.Select(x => x.Title).ToArray());
+        Assert.Equal(2, (await service.ListPublishedAsync(query, 2, cancellationToken)).Total);
+        Assert.Equal(0, (await service.ListPublishedAsync(query with { Search = null, Limit = 1 }, 0, cancellationToken)).Items.Count(x => x.ArchiveCode.Contains(suffix)));
+        Assert.Equal(3, (await service.ListPublishedAsync(query, 3, cancellationToken)).Total);
+
+        // Contenido y detalle directos respetan el mismo grado.
+        Assert.Null(await service.OpenPublishedContentAsync(records[2].Id, 2, cancellationToken));
+        Assert.Null(await service.GetPublishedAsync(records[2].Id, 1, cancellationToken));
+        Assert.NotNull(await service.OpenPublishedContentAsync(records[2].Id, 3, cancellationToken));
+        Assert.Null(await service.GetPublishedAsync(records[3].Id, 3, cancellationToken));
+
+        // Vigencia: fecha propia, inválidas rechazadas; al vencer queda archivado (solo el Gran Archivero) y puede volver a publicarse.
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[2].Id, 3, DateTimeOffset.UtcNow.AddDays(-1), actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[2].Id, 3, DateTimeOffset.UtcNow.AddYears(6), actor, cancellationToken));
+        var defaulted = await service.GetAsync(records[2].Id, cancellationToken);
+        Assert.InRange(defaulted!.PublishedUntilUtc!.Value, DateTimeOffset.UtcNow.AddMonths(12).AddMinutes(-5), DateTimeOffset.UtcNow.AddMonths(12).AddMinutes(5));
+        Assert.Equal("published", defaulted.PublicationStatus);
+        var firstCycle = defaulted.PublishedAtUtc;
+        var renewed = await service.PublishAsync(records[2].Id, 2, DateTimeOffset.UtcNow.AddMonths(6), actor, cancellationToken);
+        Assert.Equal(firstCycle, renewed.PublishedAtUtc); // cambiar audiencia/fecha dentro de la vigencia no abre ciclo nuevo
+        await archiveDb.Database.ExecuteSqlInterpolatedAsync($"UPDATE core.grand_archive_records SET \"PublishedUntilUtc\" = {DateTimeOffset.UtcNow.AddMinutes(-1)} WHERE \"Id\" = {records[2].Id}", cancellationToken);
+        archiveDb.ChangeTracker.Clear();
+        Assert.Null(await service.GetPublishedAsync(records[2].Id, 3, cancellationToken));
+        Assert.Null(await service.OpenPublishedContentAsync(records[2].Id, 3, cancellationToken));
+        Assert.DoesNotContain((await service.ListPublishedAsync(query, 3, cancellationToken)).Items, x => x.Id == records[2].Id);
+        var archived = await service.GetAsync(records[2].Id, cancellationToken);
+        Assert.Equal("expired", archived!.PublicationStatus);
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.UnpublishAsync(records[2].Id, "Intento de retiro sobre algo ya archivado.", actor, cancellationToken));
+        var republished = await service.PublishAsync(records[2].Id, 3, null, actor, cancellationToken);
+        Assert.Equal("published", republished.PublicationStatus);
+        Assert.True(republished.PublishedAtUtc > firstCycle); // ciclo nuevo
+        Assert.NotNull(await service.GetPublishedAsync(records[2].Id, 3, cancellationToken));
+
+        // Retirar la publicación la oculta a todos y deja el motivo.
+        var unpublished = await service.UnpublishAsync(records[0].Id, "Retiro de prueba por corrección del decreto.", actor, cancellationToken);
+        Assert.Null(unpublished.PublishedMinimumDegree);
+        Assert.NotNull(unpublished.UnpublishedAtUtc);
+        Assert.Null(await service.GetPublishedAsync(records[0].Id, 3, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.UnpublishAsync(records[0].Id, "Segundo retiro inválido sin publicar.", actor, cancellationToken));
+
+        // Un registro retirado del archivo deja de ser visible aunque siga marcado.
+        await service.WithdrawAsync(records[1].Id, "Retiro del archivo con publicación vigente.", actor, cancellationToken);
+        Assert.Null(await service.GetPublishedAsync(records[1].Id, 3, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[1].Id, 1, null, actor, cancellationToken));
+    }
+
     private static InstitutionalDocument Document(DocumentCollection collection, string title, string type) => new()
     {
         Collection = collection,

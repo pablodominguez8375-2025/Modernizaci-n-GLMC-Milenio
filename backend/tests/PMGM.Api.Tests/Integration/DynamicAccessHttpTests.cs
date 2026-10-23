@@ -153,6 +153,80 @@ public sealed class DynamicAccessHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/session/treasury-access?organizationId={other.Id}", ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Synthetic_support_organization_is_hidden_from_general_directory_even_for_order_administrator()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(Connection);
+        using var client = factory.CreateClient();
+        // No reutilizar "dynamic-ci": otros casos del mismo PostgreSQL asignan
+        // grants a ese sujeto; la prueba de privacidad debe evaluar el handler
+        // con un admin sin restricciones técnicas de tests ajenos.
+        client.DefaultRequestHeaders.Add("X-Dynamic-Subject",
+            "support-privacy-" + Guid.NewGuid().ToString("N"));
+        // Todos los datos son ficticios. Nunca usar RUT, correos o cuentas reales.
+        var marker = Guid.NewGuid().ToString("N");
+        var real = new Organization { Name = "Taller real sintético " + marker, Number = "28", Type = "workshop" };
+        var support = new Organization { Name = "Taller 00 Soporte GLMCh QA " + marker, Number = "00", Type = "support" };
+        var uppercase = new Organization { Name = "Taller soporte mayúscula QA " + marker, Number = "00", Type = "SUPPORT" };
+        var synthetic = new Member {
+            Person = new Person { FirstNames = "Miembro QA", LastNames = "FICTICIO " + marker },
+            CurrentDegree = "apprentice"
+        };
+        var supportLink = new Membership {
+            Member = synthetic, Organization = support, Status = "active", MembershipType = "regular"
+        };
+        // Simula un vínculo equivocado: el miembro de soporte no debe entrar
+        // al listado institucional aunque tenga otra membresía workshop.
+        var mixedLink = new Membership {
+            Member = synthetic, Organization = real, Status = "active", MembershipType = "regular"
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.Organizations.AddRange(real, support, uppercase);
+            db.Members.Add(synthetic);
+            db.Memberships.AddRange(supportLink, mixedLink);
+            await db.SaveChangesAsync(ct);
+        }
+        using var response = await client.GetAsync("/api/institutional/organizations/options", ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var items = payload.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Contains(items, item => item.GetProperty("id").GetGuid() == real.Id);
+        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == support.Id);
+        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == uppercase.Id);
+        Assert.DoesNotContain("Taller 00 Soporte GLMCh QA " + marker, await response.Content.ReadAsStringAsync(ct));
+
+        // La ocultación de opciones no basta: incluso con claims de Orden,
+        // el UUID directo jamás ofrece un padrón o ficha de soporte.
+        foreach (var hidden in new[] { support, uppercase })
+        {
+            using var organizationProfile = await client.GetAsync(
+                $"/api/institutional/organizations/{hidden.Id}/profile", ct);
+            Assert.Equal(HttpStatusCode.NotFound, organizationProfile.StatusCode);
+            using var roster = await client.GetAsync(
+                $"/api/members?organizationId={hidden.Id}", ct);
+            Assert.Equal(HttpStatusCode.NotFound, roster.StatusCode);
+        }
+
+        using var syntheticProfile = await client.GetAsync($"/api/members/{synthetic.Id}/profile", ct);
+        Assert.Equal(HttpStatusCode.NotFound, syntheticProfile.StatusCode);
+        using var syntheticHistory = await client.GetAsync($"/api/members/{synthetic.Id}/history", ct);
+        Assert.Equal(HttpStatusCode.NotFound, syntheticHistory.StatusCode);
+        Assert.DoesNotContain("FICTICIO " + marker, await syntheticProfile.Content.ReadAsStringAsync(ct));
+
+        // No producir regresiones para los Talleres reales.
+        using var realRoster = await client.GetAsync($"/api/members?organizationId={real.Id}", ct);
+        Assert.Equal(HttpStatusCode.OK, realRoster.StatusCode);
+        using var realListJson = JsonDocument.Parse(await realRoster.Content.ReadAsStringAsync(ct));
+        Assert.DoesNotContain(realListJson.RootElement.GetProperty("items").EnumerateArray(),
+            item => item.GetProperty("memberId").GetGuid() == synthetic.Id);
+        Assert.DoesNotContain("FICTICIO " + marker, await realRoster.Content.ReadAsStringAsync(ct));
+    }
+
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
         public const string Name = "DynamicAccess-CI";

@@ -22,11 +22,38 @@ public static class GrandArchiveCodes
 
         public static bool IsValid(string value)
             => value is Decree or Communication or Minute or Resolution or Regulation or Correspondence or HistoricalRecord or Other;
+
+        // Publicables a los Hermanos (#653). Correspondencia y registros históricos son internos.
+        public static bool IsPublishable(string value)
+            => value is Decree or Communication or Minute or Resolution or Regulation or Other;
     }
 }
 
 public static class GrandArchivePolicy
 {
+    /// <summary>Solo el perfil Gran Archivero publica y retira publicaciones: el administrador de Gran Logia y el Máster no (perfiles separados).</summary>
+    public static bool IsGrandArchivist(System.Security.Claims.ClaimsPrincipal user)
+        => user.Claims.Any(x => x.Type == PMGM.Api.Modules.Authorization.InstitutionalClaims.Scope &&
+               string.Equals(x.Value, "order", StringComparison.OrdinalIgnoreCase)) &&
+           user.Claims.Any(x => x.Type == PMGM.Api.Modules.Authorization.InstitutionalClaims.Role &&
+               string.Equals(x.Value, PMGM.Api.Modules.Authorization.InstitutionalRoles.GrandArchivist, StringComparison.OrdinalIgnoreCase));
+
+    public static bool IsValidDegree(int degree) => degree is >= 1 and <= 3;
+
+    /// <summary>Vigencia por defecto de una publicación: 12 meses.</summary>
+    public static DateTimeOffset DefaultPublicationEnd(DateTimeOffset now) => now.AddMonths(12);
+
+    /// <summary>La fecha de término debe ser futura y no superar 5 años.</summary>
+    public static bool IsValidPublicationEnd(DateTimeOffset end, DateTimeOffset now) => end > now && end <= now.AddYears(5);
+
+    /// <summary>Fin del día civil en Chile (23:59:59) para la fecha elegida por el Gran Archivero.</summary>
+    public static DateTimeOffset EndOfChileanDay(DateOnly date)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
+        var local = date.ToDateTime(new TimeOnly(23, 59, 59), DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, zone.GetUtcOffset(local));
+    }
+
     private static readonly HashSet<string> ForbiddenDocumentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "plancha",

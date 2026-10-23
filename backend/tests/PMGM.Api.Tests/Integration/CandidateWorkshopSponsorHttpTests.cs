@@ -101,8 +101,8 @@ public sealed class CandidateWorkshopSponsorHttpTests
         await using var verify = factory.Services.CreateAsyncScope();
         var read = verify.ServiceProvider.GetRequiredService<PmgmDbContext>();
         Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == body + "-K", ct));
-        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == foreignId, ct));
-        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == legacyId, ct));
+        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == foreignId.ToUpperInvariant(), ct));
+        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == legacyId.ToUpperInvariant(), ct));
         Assert.False(await read.People.AsNoTracking().AnyAsync(x => x.Rut == body + "-0", ct));
     }
 
