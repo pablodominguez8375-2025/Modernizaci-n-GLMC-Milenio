@@ -109,8 +109,20 @@ if [ "$admin_member_status" != '403' ]; then
   exit 1
 fi
 printf '✓ segregación: Master no hereda permisos de Taller\n'
-# Las funciones de Biblioteca, Insinuados y Gran Archivo necesitan usuarios
-# institucionales autorizados específicos; NO se prueban elevando al Master.
+# Las consultas de Insinuados publicados y Biblioteca son lecturas
+# autenticadas de Taller; no se habilitan mediante un cargo inventado al Máster.
+assert_json_get "$workshop_token" '/api/candidate-publications/active' 'Portal de insinuados para Taller autenticado'
+assert_json_get "$workshop_token" '/api/biblioteca/buscar' 'Biblioteca Virtual del Taller'
+
+# El rol Máster tampoco puede sustituir al Gran Archivero.
+admin_archive_status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer $admin_token" -H 'Accept: application/json' \
+  "$BASE_URL/api/grand-archive/?status=active&limit=20")
+if [ "$admin_archive_status" != '403' ]; then
+  echo "Máster técnico: se esperaba 403 en Gran Archivo; se obtuvo $admin_archive_status." >&2
+  exit 1
+fi
+printf '✓ segregación: Master no suplanta Gran Archivero\n'
 
 workshop_archive_status=$(curl -sS --max-time 20 -o /tmp/pmgm-workshop-archive.json -w '%{http_code}' \
   -H "Authorization: Bearer $workshop_token" -H 'Accept: application/json' \
