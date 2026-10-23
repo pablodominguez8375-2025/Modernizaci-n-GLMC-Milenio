@@ -483,6 +483,7 @@ export class PmgmApiClient {
   private readonly mockLodgeTreasuryConfigurations = new Map<string, LodgeTreasuryConfiguration>()
   private readonly mockLodgeTreasuryYearClosures = new Map<string, LodgeTreasuryYearClosure[]>()
   private readonly mockLodgeTreasuryReconciliations = new Map<string, LodgeTreasuryReconciliation[]>()
+  private mockSmtpConfigured = false
   private readonly mockSystemSettings = defaultMockSystemSettings.map(item => ({ ...item }))
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
@@ -587,6 +588,26 @@ export class PmgmApiClient {
       })
   }
 
+  /** La contraseña SMTP nunca se devuelve; no usar el catálogo versionado para secretos. */
+  async getGoogleSmtpCredentialStatus(): Promise<{ configured: boolean; encryptionReady: boolean }> {
+    if (this.useMocks) return { configured: this.mockSmtpConfigured, encryptionReady: true }
+    return this.request('/api/system/mail/credentials')
+  }
+  async saveGoogleSmtpPassword(password: string): Promise<{ configured: boolean }> {
+    if (this.useMocks) {
+      if (password.replace(/ /g, '').trim().length < 12) throw new Error('Ingrese una contraseña de aplicación válida.')
+      this.mockSmtpConfigured = true
+      return { configured: true }
+    }
+    return this.postJson('/api/system/mail/credentials', { password })
+  }
+  async testGoogleSmtp(recipient: string): Promise<{ sent: boolean; message: string }> {
+    if (this.useMocks) {
+      if (!this.mockSmtpConfigured) throw new Error('Primero guarde la contraseña de aplicación.')
+      return { sent: false, message: 'Demostración: no se envió ningún correo. Use el servidor QA real para probar el envío.' }
+    }
+    return this.postJson('/api/system/mail/test', { recipient })
+  }
   async getSystemSettings(): Promise<SystemSettingsResponse> {
     if (this.useMocks) return { total: this.mockSystemSettings.length, items: this.mockSystemSettings.map(item => {
       if (item.code !== publicationFieldsCode) return { ...item }

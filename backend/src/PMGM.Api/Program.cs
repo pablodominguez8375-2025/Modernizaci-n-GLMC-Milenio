@@ -109,7 +109,9 @@ builder.Services.AddScoped<FirstImplementationSeedService>();
 builder.Services.Configure<AccountIdentityOptions>(builder.Configuration.GetSection("UserAccounts:Identity"));
 builder.Services.Configure<InitialAccountMailOptions>(builder.Configuration.GetSection("UserAccounts:Mail"));
 builder.Services.AddHttpClient<IAccountIdentityProvider, KeycloakAccountIdentityProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
-builder.Services.AddSingleton<IInitialAccountMail, InitialAccountMail>();
+builder.Services.AddSingleton<SystemMailCredentialVault>();
+builder.Services.AddSingleton<ISystemMailSender, SystemMailSender>();
+builder.Services.AddScoped<IInitialAccountMail, InitialAccountMail>();
 
 if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<HospitalariaContributionWorker>();
 
@@ -256,6 +258,7 @@ api.MapPrivacyProcessorLifecycleEndpoints();
 api.MapPrivacyLegalRuleEndpoints();
 api.MapPrivacyWorkflowEndpoints();
 api.MapSystemConfigurationEndpoints();
+api.MapSystemMailConfigurationEndpoints();
 api.MapFormSchemaAdministrationEndpoints();
 api.MapUserAccountEndpoints();
 api.MapDynamicAccessEndpoints();
