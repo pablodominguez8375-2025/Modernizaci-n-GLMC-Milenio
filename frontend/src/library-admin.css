@@ -27,3 +27,5 @@
 .masked-rut{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center}
 .masked-rut strong{color:#06148E;font-variant-numeric:tabular-nums}
 .library-file-button{cursor:pointer;display:inline-flex;align-items:center}
+.member-avatar.has-photo{padding:0;overflow:hidden;background:#e9eef7}
+.member-avatar.has-photo img{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%}

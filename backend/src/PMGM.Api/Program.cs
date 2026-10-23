@@ -206,6 +206,7 @@ api.MapLodgeSummaryAccessEndpoints();
 api.MapMembershipEndpoints();
 api.MapInstitutionalStatusEndpoints();
 api.MapMemberSelfEndpoints();
+api.MapMemberPhotoEndpoints();
 api.MapTransferEndpoints();
 api.MapWithdrawalEndpoints();
 api.MapRegimenInteriorEndpoints();
