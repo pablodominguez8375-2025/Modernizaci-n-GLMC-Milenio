@@ -102,8 +102,10 @@ public static class OrganizationEndpoints
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (organization is null)
+        if (organization is null || SupportWorkshopPolicy.IsSupportOrganization(organization.Type))
         {
+            // La ficha completa y los conteos institucionales no incluyen Taller 00.
+            // Una futura API privada del simulador tendrá otro control de acceso.
             return Results.NotFound();
         }
 
