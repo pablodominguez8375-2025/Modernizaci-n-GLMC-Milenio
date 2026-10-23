@@ -48,6 +48,9 @@ public sealed class AssemblyMasterTermEvidenceAdapterTests
         Assert.True(result.OfficialCoverageValidated);
         Assert.Equal(AssemblyMemberCategoryPolicy.Representative, result.Category?.Category);
         Assert.False(result.Category?.CompletedTerms > 0);
+        Assert.Equal(first.Id, result.AccreditedSource?.OfficeAssignmentId);
+        Assert.Equal(Lodge, result.AccreditedSource?.OrganizationId);
+        Assert.Equal("GRAN-SECRETARIA-CERTIFICACION-TEST", result.AccreditedSource?.EvidenceReference);
     }
 
     [Fact]
@@ -62,6 +65,8 @@ public sealed class AssemblyMasterTermEvidenceAdapterTests
         Assert.Equal(AssemblyMemberCategoryPolicy.PermanentAssemblyMember, result.Category?.Category);
         Assert.True(result.Category?.CurrentlyServing);
         Assert.Equal(1, result.Category?.CompletedTerms);
+        Assert.Equal(past.Id, result.AccreditedSource?.OfficeAssignmentId);
+        Assert.Equal(past.EndDate, result.AccreditedSource?.EndDate);
     }
 
     [Fact]
@@ -71,6 +76,7 @@ public sealed class AssemblyMasterTermEvidenceAdapterTests
         var missing = Classify([past], []);
         Assert.False(missing.OfficialCoverageValidated);
         Assert.Null(missing.Category);
+        Assert.Null(missing.AccreditedSource);
         Assert.Contains("MASTER_TERM_NOT_ACCREDITED", missing.BlockingReasons);
 
         var noRegistry = Classify([past], [Cert(past, completed: true)], registryComplete: false);
@@ -84,6 +90,7 @@ public sealed class AssemblyMasterTermEvidenceAdapterTests
         var result = Classify([ended], [Cert(ended, completed: false)]);
         Assert.True(result.OfficialCoverageValidated);
         Assert.False(result.Category!.Qualifies);
+        Assert.Null(result.AccreditedSource);
     }
 
     [Fact]
@@ -115,6 +122,33 @@ public sealed class AssemblyMasterTermEvidenceAdapterTests
         Assert.Contains("FOREIGN_OR_UNRELATED_ATTESTATION",
             Classify([first], [cert with { OfficeAssignmentId = Guid.NewGuid() }])
                 .BlockingReasons);
+    }
+
+
+    [Fact]
+    public void Multiple_completed_terms_select_first_accredited_source_deterministically()
+    {
+        var later = Office(new DateOnly(2022, 1, 1), new DateOnly(2023, 12, 31));
+        var earlier = Office(new DateOnly(2020, 1, 1), new DateOnly(2021, 12, 31));
+        var outcome = Classify([later, earlier],
+            [Cert(later, completed: true), Cert(earlier, completed: true)]);
+        Assert.True(outcome.OfficialCoverageValidated);
+        Assert.Equal(AssemblyMemberCategoryPolicy.PermanentAssemblyMember,
+            outcome.Category?.Category);
+        Assert.Equal(earlier.Id, outcome.AccreditedSource?.OfficeAssignmentId);
+    }
+
+    [Fact]
+    public void Invalid_attestation_never_leaks_accredited_office_source()
+    {
+        var term = Office(new DateOnly(2025, 12, 1));
+        var invalid = Cert(term, serving: true) with
+        {
+            InstitutionallyVerified = false
+        };
+        var result = Classify([term], [invalid]);
+        Assert.False(result.OfficialCoverageValidated);
+        Assert.Null(result.AccreditedSource);
     }
 
     [Fact]
