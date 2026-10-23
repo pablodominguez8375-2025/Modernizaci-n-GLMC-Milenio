@@ -96,8 +96,10 @@ public sealed class AssemblyAccreditedRosterPersistencePostgreSqlTests
             Assert.Null(e.GrandTreasuryPendingAmount);
         });
 
+        // Simula un nuevo lote íntegro desde fuente acreditada, no recicla las
+        // entidades que EF ya vinculó al historial pendiente del primer guardado.
         var again = await AssemblyAccreditedRosterPersistenceService.PersistAsync(
-            assembly.Id, Cutoff, batch, Context(), db, ct);
+            assembly.Id, Cutoff, Prepared(Candidate(assembly.Id)), Context(), db, ct);
         Assert.False(again.Persisted);
         Assert.Equal("ASSEMBLY_ROSTER_ALREADY_MATERIALIZED", again.BlockingReason);
         Assert.Equal(2, await db.AssemblyEligibilities.CountAsync(
