@@ -114,12 +114,12 @@ public sealed class GrandArchivePostgreSqlTests
         for (var i = 0; i < 4; i++)
             records.Add(await service.RegisterAsync(new RegisterGrandArchiveCommand(docs[i].Id, versions[i].Id, $"GP-{suffix}-{i}", types[i], new DateOnly(2026, 10, 1), null, null, null), actor, cancellationToken));
 
-        await service.PublishAsync(records[0].Id, 1, actor, cancellationToken);
-        await service.PublishAsync(records[1].Id, 2, actor, cancellationToken);
-        await service.PublishAsync(records[2].Id, 3, actor, cancellationToken);
-        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[3].Id, 1, actor, cancellationToken));
-        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[0].Id, 4, actor, cancellationToken));
-        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[0].Id, 0, actor, cancellationToken));
+        await service.PublishAsync(records[0].Id, 1, null, actor, cancellationToken);
+        await service.PublishAsync(records[1].Id, 2, null, actor, cancellationToken);
+        await service.PublishAsync(records[2].Id, 3, null, actor, cancellationToken);
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[3].Id, 1, null, actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[0].Id, 4, null, actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[0].Id, 0, null, actor, cancellationToken));
 
         var query = new GrandArchiveQuery(null, null, null, null, suffix, 100);
         Assert.Equal(["Decreto para todos"], (await service.ListPublishedAsync(query, 1, cancellationToken)).Items.Select(x => x.Title).ToArray());
@@ -133,6 +133,28 @@ public sealed class GrandArchivePostgreSqlTests
         Assert.NotNull(await service.OpenPublishedContentAsync(records[2].Id, 3, cancellationToken));
         Assert.Null(await service.GetPublishedAsync(records[3].Id, 3, cancellationToken));
 
+        // Vigencia: fecha propia, inválidas rechazadas; al vencer queda archivado (solo el Gran Archivero) y puede volver a publicarse.
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[2].Id, 3, DateTimeOffset.UtcNow.AddDays(-1), actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[2].Id, 3, DateTimeOffset.UtcNow.AddYears(6), actor, cancellationToken));
+        var defaulted = await service.GetAsync(records[2].Id, cancellationToken);
+        Assert.InRange(defaulted!.PublishedUntilUtc!.Value, DateTimeOffset.UtcNow.AddMonths(12).AddMinutes(-5), DateTimeOffset.UtcNow.AddMonths(12).AddMinutes(5));
+        Assert.Equal("published", defaulted.PublicationStatus);
+        var firstCycle = defaulted.PublishedAtUtc;
+        var renewed = await service.PublishAsync(records[2].Id, 2, DateTimeOffset.UtcNow.AddMonths(6), actor, cancellationToken);
+        Assert.Equal(firstCycle, renewed.PublishedAtUtc); // cambiar audiencia/fecha dentro de la vigencia no abre ciclo nuevo
+        await archiveDb.Database.ExecuteSqlInterpolatedAsync($"UPDATE core.grand_archive_records SET \"PublishedUntilUtc\" = {DateTimeOffset.UtcNow.AddMinutes(-1)} WHERE \"Id\" = {records[2].Id}", cancellationToken);
+        archiveDb.ChangeTracker.Clear();
+        Assert.Null(await service.GetPublishedAsync(records[2].Id, 3, cancellationToken));
+        Assert.Null(await service.OpenPublishedContentAsync(records[2].Id, 3, cancellationToken));
+        Assert.DoesNotContain((await service.ListPublishedAsync(query, 3, cancellationToken)).Items, x => x.Id == records[2].Id);
+        var archived = await service.GetAsync(records[2].Id, cancellationToken);
+        Assert.Equal("expired", archived!.PublicationStatus);
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.UnpublishAsync(records[2].Id, "Intento de retiro sobre algo ya archivado.", actor, cancellationToken));
+        var republished = await service.PublishAsync(records[2].Id, 3, null, actor, cancellationToken);
+        Assert.Equal("published", republished.PublicationStatus);
+        Assert.True(republished.PublishedAtUtc > firstCycle); // ciclo nuevo
+        Assert.NotNull(await service.GetPublishedAsync(records[2].Id, 3, cancellationToken));
+
         // Retirar la publicación la oculta a todos y deja el motivo.
         var unpublished = await service.UnpublishAsync(records[0].Id, "Retiro de prueba por corrección del decreto.", actor, cancellationToken);
         Assert.Null(unpublished.PublishedMinimumDegree);
@@ -143,7 +165,7 @@ public sealed class GrandArchivePostgreSqlTests
         // Un registro retirado del archivo deja de ser visible aunque siga marcado.
         await service.WithdrawAsync(records[1].Id, "Retiro del archivo con publicación vigente.", actor, cancellationToken);
         Assert.Null(await service.GetPublishedAsync(records[1].Id, 3, cancellationToken));
-        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[1].Id, 1, actor, cancellationToken));
+        await Assert.ThrowsAsync<GrandArchivePolicyException>(() => service.PublishAsync(records[1].Id, 1, null, actor, cancellationToken));
     }
 
     private static InstitutionalDocument Document(DocumentCollection collection, string title, string type) => new()

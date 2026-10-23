@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { type FormEvent } from 'react'
-import { OFFICIAL_AUDIENCES, audienceLabel, type GrandArchiveApiClient, type GrandArchiveCandidate, type GrandArchiveRecord, type GrandArchiveRecordType, type OfficialDegree } from './api/grandArchiveApi'
+import { OFFICIAL_AUDIENCES, audienceLabel, defaultPublicationEnd, isExpiringSoon, type GrandArchiveApiClient, type GrandArchiveCandidate, type GrandArchiveRecord, type GrandArchiveRecordType, type OfficialDegree } from './api/grandArchiveApi'
 import { ActionBar, ActionDrawer } from './actionKit'
 import './grandArchive.css'
 
@@ -20,6 +20,7 @@ export default function GrandArchivePage({ archiveApi, canPublish = false }: { a
   const [error, setError] = useState<string | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [showRegister, setShowRegister] = useState(false)
+  const [publication, setPublication] = useState('')
 
   useEffect(() => {
     let active = true
@@ -35,6 +36,8 @@ export default function GrandArchivePage({ archiveApi, canPublish = false }: { a
   }, [archiveApi, status, recordType, search, refreshKey])
 
   const activeCount = useMemo(() => items.filter(x => x.status === 'active').length, [items])
+  const expiringCount = useMemo(() => items.filter(x => isExpiringSoon(x)).length, [items])
+  const visibleItems = useMemo(() => items.filter(x => !publication || (publication === 'expiring' ? isExpiringSoon(x) : publication === 'unpublished' ? (x.publicationStatus ?? 'unpublished') === 'unpublished' : x.publicationStatus === publication)), [items, publication])
   const refresh = () => setRefreshKey(value => value + 1)
 
   return <div className="archive-page">
@@ -45,18 +48,21 @@ export default function GrandArchivePage({ archiveApi, canPublish = false }: { a
 
     <section className="archive-kpis"><article className="metric-card"><span>Registros visibles</span><strong>{loading ? '…' : items.length}</strong></article><article className="metric-card"><span>Activos</span><strong>{loading ? '…' : activeCount}</strong></article><article className="metric-card"><span>Candidatos</span><strong>{loading ? '…' : candidates.length}</strong></article></section>
 
+    {expiringCount > 0 && <div className="archive-expiring" role="status"><span><strong>{expiringCount === 1 ? '1 documento deja' : `${expiringCount} documentos dejan`} de verse para los Hermanos en los próximos 30 días.</strong> Renueve la publicación si sigue vigente; si no, quedará archivado y solo usted podrá verlo.</span><button type="button" className="secondary-action" onClick={() => setPublication('expiring')}>Ver los que vencen</button></div>}
+
     {showRegister && <RegisterPanel archiveApi={archiveApi} candidates={candidates} onCreated={() => { setShowRegister(false); refresh() }} />}
 
     <section className="panel archive-filters">
       <label><span>Estado</span><select value={status} onChange={event => setStatus(event.target.value)}><option value="">Todos</option><option value="active">Activos</option><option value="withdrawn">Retirados</option></select></label>
       <label><span>Tipo</span><select value={recordType} onChange={event => setRecordType(event.target.value)}><option value="">Todos</option>{TYPES.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+      <label><span>Publicación</span><select value={publication} onChange={event => setPublication(event.target.value)}><option value="">Todas</option><option value="published">Publicados a los Hermanos</option><option value="expiring">Vencen en 30 días</option><option value="expired">Archivados por vencimiento</option><option value="unpublished">No publicados</option></select></label>
       <label className="archive-search"><span>Buscar</span><input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Código, título, período…" /></label>
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible consultar Gran Archivero.</strong><span>{error}</span></div>}
     <section className="panel archive-catalog">
-      <div className="panel-heading"><div><p className="eyebrow">Catálogo archivístico</p><h2>Documentos históricos</h2></div><span className="count-badge">{loading ? '…' : items.length}</span></div>
-      {loading ? <div className="loading-rows"><span /><span /><span /></div> : items.length === 0 ? <div className="empty-state"><strong>No hay registros para los filtros seleccionados.</strong></div> : <div className="archive-list">{items.map(item => <ArchiveCard key={item.id} item={item} archiveApi={archiveApi} onChanged={refresh} canPublish={canPublish} />)}</div>}
+      <div className="panel-heading"><div><p className="eyebrow">Catálogo archivístico</p><h2>Documentos históricos</h2></div><span className="count-badge">{loading ? '…' : visibleItems.length}</span></div>
+      {loading ? <div className="loading-rows"><span /><span /><span /></div> : visibleItems.length === 0 ? <div className="empty-state"><strong>No hay registros para los filtros seleccionados.</strong></div> : <div className="archive-list">{visibleItems.map(item => <ArchiveCard key={item.id} item={item} archiveApi={archiveApi} onChanged={refresh} canPublish={canPublish} />)}</div>}
     </section>
   </div>
 }
@@ -109,7 +115,9 @@ function ArchiveCard({ item, archiveApi, onChanged, canPublish }: { item: GrandA
   const withdraw = async () => { const reason = window.prompt('Indique el motivo del retiro archivístico (mínimo 10 caracteres):'); if (!reason) return; setBusy(true); setError(null); try { await archiveApi.withdraw(item.id, reason); onChanged() } catch (cause) { setError(message(cause)) } finally { setBusy(false) } }
   return <article className={`archive-card ${item.status}`}>
     <div className="archive-card-top"><div><code>{item.archiveCode}</code><span className={`status-pill ${item.status === 'active' ? 'complete' : ''}`}>{item.status === 'active' ? 'Activo' : 'Retirado'}</span></div><span>{typeLabel(item.recordType)}</span></div>
-    {item.publishedMinimumDegree != null && <p className="archive-published"><span className={`audience-chip degree-${item.publishedMinimumDegree}`}>Publicado · {audienceLabel(item.publishedMinimumDegree)}</span></p>}
+    {item.publishedMinimumDegree != null && (item.publicationStatus === 'expired'
+      ? <p className="archive-published"><span className="audience-chip expired">Archivado por vencimiento · solo lo ve el Gran Archivero</span><small>Venció el {dateLabel((item.publishedUntilUtc ?? '').slice(0, 10) || null)}</small></p>
+      : <p className="archive-published"><span className={`audience-chip degree-${item.publishedMinimumDegree}`}>Publicado · {audienceLabel(item.publishedMinimumDegree)}</span>{item.publishedUntilUtc && <small className={isExpiringSoon(item) ? 'expiring-soon' : undefined}>{isExpiringSoon(item) ? 'Vence pronto · ' : ''}Visible hasta el {dateLabel(item.publishedUntilUtc.slice(0, 10))}</small>}</p>)}
     <h3>{item.title}</h3><p>{item.description ?? 'Sin descripción archivística adicional.'}</p>
     <dl className="archive-meta"><div><dt>Fecha documento</dt><dd>{dateLabel(item.documentDate)}</dd></div><div><dt>Origen</dt><dd>{item.originatingBody ?? '—'}</dd></div><div><dt>Período</dt><dd>{item.historicalPeriod ?? '—'}</dd></div><div><dt>Versión</dt><dd>{item.versionNumber ? `v${item.versionNumber}` : '—'}</dd></div></dl>
     {item.withdrawalReason && <div className="archive-withdrawal"><strong>Retirado del catálogo activo</strong><span>{item.withdrawalReason}</span></div>}
@@ -123,17 +131,20 @@ const PUBLISHABLE = ['decree', 'communication', 'minute', 'resolution', 'regulat
 function PublishActions({ item, archiveApi, onChanged, onError }: { item: GrandArchiveRecord; archiveApi: GrandArchiveApiClient; onChanged: () => void; onError: (message: string | null) => void }) {
   const [degree, setDegree] = useState<OfficialDegree>((item.publishedMinimumDegree as OfficialDegree | null) ?? 1)
   const [reason, setReason] = useState('')
-  const published = item.publishedMinimumDegree != null
+  const [until, setUntil] = useState(() => (item.publishedUntilUtc && item.publicationStatus === 'published' ? item.publishedUntilUtc.slice(0, 10) : defaultPublicationEnd()))
+  const expired = item.publicationStatus === 'expired'
+  const published = item.publishedMinimumDegree != null && !expired
   const run = (action: () => Promise<unknown>) => { onError(null); void action().then(onChanged).catch(cause => onError(message(cause))) }
-  const publish = (event: FormEvent) => { event.preventDefault(); run(() => archiveApi.publish(item.id, degree)) }
+  const publish = (event: FormEvent) => { event.preventDefault(); run(() => archiveApi.publish(item.id, degree, until)) }
   const unpublish = (event: FormEvent) => { event.preventDefault(); run(() => archiveApi.unpublish(item.id, reason)) }
   return <ActionBar>
-    <ActionDrawer label={published ? 'Cambiar audiencia' : 'Publicar a los Hermanos'} tone="secondary" title={published ? 'Cambiar audiencia' : 'Publicar documento oficial'} description={`${item.archiveCode} · ${item.title}`} confirmMessage="El documento quedará visible para los Hermanos del grado indicado y el cambio se registrará en la auditoría.">
+    <ActionDrawer label={expired ? 'Volver a publicar' : published ? 'Cambiar audiencia o fecha' : 'Publicar a los Hermanos'} tone="secondary" title={expired ? 'Volver a publicar' : published ? 'Cambiar audiencia o fecha' : 'Publicar documento oficial'} description={`${item.archiveCode} · ${item.title}`} confirmMessage="El documento quedará visible para los Hermanos del grado indicado hasta la fecha elegida y el cambio se registrará en la auditoría.">
       <form className="stack-form" onSubmit={publish}>
         <fieldset className="audience-options"><legend>¿Quiénes pueden verlo?</legend>
           {OFFICIAL_AUDIENCES.map(option => <label key={option.degree} className="audience-option"><input type="radio" name={`aud-${item.id}`} checked={degree === option.degree} onChange={() => setDegree(option.degree)} /><span><strong>{option.label}</strong><small>{option.hint}</small></span></label>)}
         </fieldset>
-        <button className="primary-action">{published ? 'Guardar audiencia' : 'Publicar'}</button>
+        <label className="field"><span>Visible hasta</span><input type="date" required value={until} min={new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)} max={new Date(Date.now() + 5 * 366 * 86_400_000).toISOString().slice(0, 10)} onChange={event => setUntil(event.target.value)} /><small>Por defecto 12 meses. Al vencer, el documento se archiva: los Hermanos dejan de verlo y solo usted puede verlo y volver a publicarlo. Le avisamos 30 días antes.</small></label>
+        <button className="primary-action">{expired ? 'Volver a publicar' : published ? 'Guardar cambios' : 'Publicar'}</button>
       </form>
     </ActionDrawer>
     {published && <ActionDrawer label="Retirar publicación" tone="secondary" title="Retirar publicación" description={`${item.archiveCode} · ${item.title}`} confirmMessage="Los Hermanos dejarán de ver este documento. El motivo quedará auditado.">

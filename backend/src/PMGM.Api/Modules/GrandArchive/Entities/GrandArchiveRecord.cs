@@ -22,6 +22,8 @@ public sealed class GrandArchiveRecord
     // Publicación a los Hermanos (#653): grado mínimo 1, 2 o 3; null = no publicado.
     public int? PublishedMinimumDegree { get; set; }
     public DateTimeOffset? PublishedAtUtc { get; set; }
+    /// <summary>Fin de la vigencia de la publicación; al vencer el documento queda archivado (solo lo ve el Gran Archivero). Null = sin vencimiento.</summary>
+    public DateTimeOffset? PublishedUntilUtc { get; set; }
     public string? PublishedBySubject { get; set; }
     public string? PublishedByDisplayName { get; set; }
     public DateTimeOffset? UnpublishedAtUtc { get; set; }
