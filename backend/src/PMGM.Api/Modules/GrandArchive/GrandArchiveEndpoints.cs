@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
@@ -207,6 +208,7 @@ public static class GrandArchiveEndpoints
         PublishGrandArchiveRequest request,
         HttpContext httpContext,
         IGrandArchiveService service,
+        IOfficialDocumentNoticeService notices,
         IAuditService audit,
         PmgmDbContext db,
         CancellationToken cancellationToken)
@@ -223,6 +225,19 @@ public static class GrandArchiveEndpoints
             audit.Add(httpContext, "grandarchive.published", "GrandArchiveRecord", recordId.ToString(), null, AuditResults.Success,
                 new { result.ArchiveCode, minimumDegree = request.MinimumDegree });
             await db.SaveChangesAsync(cancellationToken);
+            // El aviso es complementario: si falla, la publicación ya está hecha y auditada.
+            try
+            {
+                var notice = await notices.NotifyPublishedAsync(recordId, result.ArchiveCode, result.RecordType, result.Title, request.MinimumDegree, cancellationToken);
+                audit.Add(httpContext, "grandarchive.publication_notified", "GrandArchiveRecord", recordId.ToString(), null,
+                    notice.Failed == 0 ? AuditResults.Success : AuditResults.Rejected,
+                    new { result.ArchiveCode, notice.Eligible, notice.Queued, notice.Failed });
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+            }
             NoStore(httpContext);
             return Results.Ok(result);
         }

@@ -46,7 +46,8 @@
       "CandidateOriginCorrectionHttpTests",
       "MagazineEditorialVersionStatusHttpTests",
       "LibraryPublicationReplacementHttpTests",
-      "CandidateFormalSponsorGatesHttpTests"
+      "CandidateFormalSponsorGatesHttpTests",
+      "OfficialDocumentNoticePostgreSqlTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
