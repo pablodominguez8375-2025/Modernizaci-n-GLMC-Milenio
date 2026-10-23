@@ -25,7 +25,7 @@ Test HTTP/PostgreSQL con usuario autenticado de orden, Taller real, support y SU
 ## Implementación versionada y responsabilidades
 
 - PR **#654**: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/654
-- `MembershipEndpoints`: `GET /api/members` rechaza tipo `support` antes de devolver cualquier dato. Ficha e historial por ID rechazan cualquier miembro con una membresía `support`, incluso si simultáneamente existe membresía `workshop` (seguridad ante mezcla incorrecta).
+- `MembershipEndpoints`: `GET /api/members` rechaza tipo `support` antes de devolver cualquier dato; **también excluye de los listados de Talleres reales a un miembro que tenga algún vínculo support**, aunque se le haya asignado accidentalmente membresía mixta. Ficha e historial por ID rechazan cualquier miembro con una membresía `support`, incluso si simultáneamente existe membresía `workshop` (seguridad ante mezcla incorrecta).
 - `OrganizationEndpoints`: perfil general no sirve datos del soporte en ningún grado de permiso institucional.
 - `DynamicAccessHttpTests`: prueba HTTP PostgreSQL sobre Taller real, dos organizaciones de soporte de mayúsculas diferentes y miembro sintético sin RUT ni correo; deniega directorio, perfiles e historial por UUID directo y preserva el GET real.
 - Diccionario de salida: `docs/modelo-datos/registros/2026-10-23-chatgpt-support-generic-reads-604.md`. No altera modelo ni migraciones.
