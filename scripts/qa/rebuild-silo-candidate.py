@@ -5,6 +5,7 @@ import datetime
 import hashlib
 import importlib.util
 import json
+import io
 import os
 from pathlib import Path
 import re
@@ -12,6 +13,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[2]
 VENDOR = 'docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62'
@@ -22,15 +24,36 @@ def run(args, **kwargs):
     return subprocess.run(args, check=True, timeout=kwargs.pop('timeout', 180), **kwargs)
 
 
-def check_source(source):
+def check_source(source, expected=CLIENT_SOURCE):
     actual = subprocess.check_output(['git', '-C', str(source), 'rev-parse', 'HEAD'], text=True).strip()
-    if actual != CLIENT_SOURCE:
+    if actual != expected:
         raise ValueError('client source mismatch')
     dirty = subprocess.check_output(['git', '-C', str(source), 'status', '--porcelain', '--untracked-files=all'])
     if dirty:
         raise ValueError('dirty client source')
-    archive = subprocess.check_output(['git', '-C', str(source), 'archive', CLIENT_SOURCE])
+    archive = subprocess.check_output(['git', '-C', str(source), 'archive', expected])
     return hashlib.sha256(archive).hexdigest()
+
+
+def export_source(source, expected, destination):
+    digest = check_source(source, expected)
+    raw = subprocess.check_output(['git', '-C', str(source), 'archive', expected])
+    if hashlib.sha256(raw).hexdigest() != digest:
+        raise ValueError('source archive changed')
+    destination.mkdir()
+    with tarfile.open(fileobj=io.BytesIO(raw)) as archive:
+        archive.extractall(destination, filter='data')
+    return digest
+
+
+def failure_details(error):
+    # Record useful, bounded diagnostics without URLs, headers or exception text.
+    details = {'type': type(error).__name__}
+    if isinstance(error, subprocess.CalledProcessError):
+        details['exit'] = error.returncode
+    if isinstance(error, urllib.error.HTTPError):
+        details['http_status'] = error.code
+    return details
 
 
 SERVER_SOURCE = '7a3ca0f82100cce06289a465f54139da2639f642'
@@ -73,12 +96,15 @@ def server_patch_evidence(image, output):
         if re.fullmatch(r'[0-9a-f]{64}', result) is None:
             raise ValueError('invalid server binary digest')
         hashes.append(result)
-    if hashes[0] != hashes[1]:
-        raise ValueError('rebuilt server differs from signed vendor binary')
+    if hashes[0] != VENDOR_SERVER_BINARY:
+        raise ValueError('signed vendor server binary changed')
     evidence = {'vulnerability': 'CVE-2026-39414', 'source_commit': SERVER_SOURCE,
                 'fix_commit': SERVER_FIX, 'fix_ancestry_verified': True,
-                'source_files': files, 'server_binary_sha256': hashes[0],
-                'candidate_image_id': image, 'server_binary_preserved': True,
+                'source_files': files, 'server_binary_sha256': hashes[1],
+                'vendor_server_binary_sha256': hashes[0],
+                'server_build_toolchain': 'go1.27.3',
+                'server_source_rebuilt': True,
+                'candidate_image_id': image, 'server_binary_preserved': False,
                 'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED',
                 'status': 'FIX_EVIDENCE_FOR_COMPONENT_REVIEW',
                 'scanner_exception_applied': False}
@@ -86,15 +112,21 @@ def server_patch_evidence(image, output):
     return evidence
 
 
-SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
+# New binary must be reviewed and pinned before VEX/publication can succeed.
+SERVER_BINARY = None
+VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@v0.0.0-20261015052015-7a3ca0f82100'
 
 
 def fixed_component_vex(evidence, image):
+    if not isinstance(SERVER_BINARY, str) or re.fullmatch(r'[0-9a-f]{64}', SERVER_BINARY) is None:
+        raise ValueError('rebuilt server binary review pending')
     expected = {'vulnerability': 'CVE-2026-39414', 'source_commit': SERVER_SOURCE,
                 'fix_commit': SERVER_FIX, 'fix_ancestry_verified': True,
                 'server_binary_sha256': SERVER_BINARY, 'candidate_image_id': image,
-                'server_binary_preserved': True,
+                'server_binary_preserved': False,
+                'vendor_server_binary_sha256': VENDOR_SERVER_BINARY,
+                'server_build_toolchain': 'go1.27.3', 'server_source_rebuilt': True,
                 'binary_regression': 'CSV_AND_JSON_LINES_COUNT_OVERSIZED_RECORDS_REJECTED'}
     if re.fullmatch(r'sha256:[0-9a-f]{64}', image) is None:
         raise ValueError('invalid VEX image binding')
@@ -173,6 +205,7 @@ def blocking_findings(inventory):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
+    parser.add_argument('--server-source', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     output = args.output.resolve()
@@ -190,6 +223,7 @@ def main():
         if subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip() != report['source_sha']:
             raise ValueError('checkout source mismatch')
         report['client_git_archive_sha256'] = check_source(args.source)
+        report['server_git_archive_sha256'] = check_source(args.server_source, SERVER_SOURCE)
         stage = 'vendor_signature'
         with (output / 'vendor-attestation.json').open('w') as stream:
             run(['gh', 'attestation', 'verify', 'oci://' + VENDOR, '--repo', 'pgsty/silo',
@@ -209,11 +243,20 @@ def main():
                                     'sha256': license_sha, 'scope': 'TECHNICAL_IDENTITY_QA_ONLY'}
         stage = 'build'
         tag = 'pmgm-silo-qa-rebuild:' + report['source_sha'][:12]
-        with (output / 'build.log').open('w') as stream:
-            run(['docker', 'buildx', 'build', '--load', '--no-cache', '--platform', 'linux/amd64',
-                 '--build-context', 'mcli_source=' + str(args.source.resolve()),
-                 '-f', str(ROOT / 'infrastructure/silo/Dockerfile.qa-rebuild'),
-                 '-t', tag, str(ROOT)], stdout=stream, stderr=subprocess.STDOUT, timeout=1200)
+        with tempfile.TemporaryDirectory(prefix='qa-pinned-go-sources-') as temporary:
+            exported = Path(temporary)
+            for path, commit, name, field in (
+                (args.source, CLIENT_SOURCE, 'mcli', 'client_git_archive_sha256'),
+                (args.server_source, SERVER_SOURCE, 'silo', 'server_git_archive_sha256'),
+            ):
+                if export_source(path, commit, exported/name) != report[field]:
+                    raise ValueError('source changed before build')
+            with (output / 'build.log').open('w') as stream:
+                run(['docker', 'buildx', 'build', '--load', '--no-cache', '--platform', 'linux/amd64',
+                     '--build-context', 'mcli_source=' + str(exported/'mcli'),
+                     '--build-context', 'silo_source=' + str(exported/'silo'),
+                     '-f', str(ROOT / 'infrastructure/silo/Dockerfile.qa-rebuild'),
+                     '-t', tag, str(ROOT)], stdout=stream, stderr=subprocess.STDOUT, timeout=1800)
         image = subprocess.check_output(['docker', 'image', 'inspect', '--format', '{{.Id}}', tag], text=True).strip()
         if re.fullmatch(r'sha256:[0-9a-f]{64}', image) is None:
             raise ValueError('invalid image identity')
@@ -222,7 +265,7 @@ def main():
         with (output / 'runtime-binaries-and-rpms.txt').open('w') as stream:
             run(['docker', 'run', '--rm', '--entrypoint', '/bin/sh', image, '-c',
                  'set -eu; sha256sum /usr/bin/silo /usr/bin/mcli; '
-                 'cat /licenses/mcli-buildinfo.txt /licenses/qa-runtime-rpms.txt'], stdout=stream)
+                 'cat /licenses/mcli-buildinfo.txt /licenses/silo-buildinfo.txt /licenses/qa-runtime-rpms.txt'], stdout=stream)
         stage = 'save'
         archive = output / 'silo-qa-review-only.tar'
         run(['docker', 'save', '-o', str(archive), image], timeout=180)
@@ -242,10 +285,9 @@ def main():
             run(common + ['--format', 'cyclonedx', '--output', str(output / 'sbom.cdx.json')],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=180)
     except Exception as error:
-        report['failures'][stage] = {'type': type(error).__name__}
-        if isinstance(error, subprocess.CalledProcessError):
-            report['failures'][stage]['exit'] = error.returncode
+        report['failures'][stage] = failure_details(error)
     if image:
+        stage = 'real_iam_recovery_sdk'
         try:
             environment = dict(os.environ, PMGM_SILO_REBUILD_LAB='1',
                                PMGM_SILO_REBUILD_IMAGE_ID=image, PYTHONPATH=str(ROOT / 'tests'))
@@ -255,10 +297,13 @@ def main():
                      'test_silo_dotnet_sdk', 'test_silo_select_record_limit', '-v'], cwd=ROOT, env=environment,
                     stdout=stream, stderr=subprocess.STDOUT, timeout=900)
             report['real_iam_recovery_sdk'] = {'status': 'PASS', 'seconds': round(time.monotonic() - started, 3)}
+            stage = 'server_cve_triage'
             report['server_cve_triage'] = server_patch_evidence(image, output)
+            stage = 'candidate_archive_recheck'
             with archive.open('rb') as stream:
                 if hashlib.file_digest(stream, 'sha256').hexdigest() != report['archive_sha256']:
                     raise ValueError('candidate archive changed after scan')
+            stage = 'fixed_component_scan'
             effective = evaluate_fixed_component(archive, image, report['server_cve_triage'], output)
             # Prevent any unintended filtering beyond this one reviewed component.
             removed = [v for v in report['blocking_findings'] if v not in effective]
@@ -270,7 +315,7 @@ def main():
             report['fixed_component_statement'] = 'PROJECT_VEX_BOUND_TO_VERIFIED_SERVER_BINARY'
 
         except Exception as error:
-            report['failures']['real_iam_recovery_sdk'] = {'type': type(error).__name__}
+            report['failures'][stage] = failure_details(error)
     if report['failures']:
         report['status'] = 'BLOCKED_INCOMPLETE_VALIDATION'
     elif report.get('effective_blocking_findings', report.get('blocking_findings')):
