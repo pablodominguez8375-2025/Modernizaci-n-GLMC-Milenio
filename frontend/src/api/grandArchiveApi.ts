@@ -32,6 +32,10 @@ export interface GrandArchiveRecord {
   publishedByDisplayName?: string | null
   unpublishedAtUtc?: string | null
   unpublishReason?: string | null
+  /** Fin de la vigencia de la publicación (null = sin vencimiento). */
+  publishedUntilUtc?: string | null
+  /** unpublished = interno · published = visible a los Hermanos · expired = archivado por vencimiento (solo lo ve el Gran Archivero). */
+  publicationStatus?: 'unpublished' | 'published' | 'expired' | string
 }
 
 export type OfficialDegree = 1 | 2 | 3
@@ -42,6 +46,16 @@ export const OFFICIAL_AUDIENCES: Array<{ degree: OfficialDegree; label: string; 
 ]
 export function audienceLabel(degree: number | null | undefined): string {
   return OFFICIAL_AUDIENCES.find(x => x.degree === degree)?.label ?? 'Interno del archivo'
+}
+const DAY = 86_400_000
+export const EXPIRING_WINDOW_DAYS = 30
+export function defaultPublicationEnd(from = new Date()): string {
+  const d = new Date(from); d.setMonth(d.getMonth() + 12); return d.toISOString().slice(0, 10)
+}
+export function isExpiringSoon(record: Pick<GrandArchiveRecord, 'publicationStatus' | 'publishedUntilUtc'>, now = new Date()): boolean {
+  if (record.publicationStatus !== 'published' || !record.publishedUntilUtc) return false
+  const left = new Date(record.publishedUntilUtc).getTime() - now.getTime()
+  return left > 0 && left <= EXPIRING_WINDOW_DAYS * DAY
 }
 export interface OfficialDocumentFilters { recordType?: string; year?: number; search?: string; limit?: number }
 
@@ -120,9 +134,9 @@ export class GrandArchiveApiClient {
     return this.request<GrandArchiveRecord>(`/api/grand-archive/${encodeURIComponent(recordId)}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
   }
 
-  async publish(recordId: string, minimumDegree: OfficialDegree): Promise<GrandArchiveRecord> {
-    if (this.useMocks) return mockPublish(recordId, minimumDegree)
-    return this.request<GrandArchiveRecord>(`/api/grand-archive/${encodeURIComponent(recordId)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ minimumDegree }) })
+  async publish(recordId: string, minimumDegree: OfficialDegree, until?: string | null): Promise<GrandArchiveRecord> {
+    if (this.useMocks) return mockPublish(recordId, minimumDegree, until)
+    return this.request<GrandArchiveRecord>(`/api/grand-archive/${encodeURIComponent(recordId)}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ minimumDegree, until: until || null }) })
   }
 
   async unpublish(recordId: string, reason: string): Promise<GrandArchiveRecord> {
@@ -186,14 +200,15 @@ export function createDefaultGrandArchiveApiClient(getAccessToken?: GrandArchive
 let mockRecords: GrandArchiveRecord[] = [{
   id: 'ga-demo-1', archiveCode: 'GA-2026-001', documentId: 'doc-demo-1', documentVersionId: 'ver-demo-1', recordType: 'historical_record', documentDate: '1986-07-12', originatingBody: 'Gran Logia Mixta de Chile', historicalPeriod: '1980–1989', description: 'Documento institucional histórico demostrativo.', status: 'active', archivedAtUtc: '2026-09-09T18:00:00Z', createdByDisplayName: 'Gran Archivero QA', withdrawnAtUtc: null, withdrawnByDisplayName: null, withdrawalReason: null, title: 'Acta histórica demostrativa', documentType: 'historical_record', classification: 'confidential', documentStatus: 'active', versionNumber: 1, originalFileName: 'acta-historica-demo.pdf', contentType: 'application/pdf', sizeBytes: 245000, processingStatus: 'available'
 },
-  mockOfficial('ga-demo-2', 'DEC-2026-014', 'decree', '2026-08-15', 'Decreto N.º 14 · Calendario de la Gran Asamblea 2026', 'Fija fechas y procedimiento de la Gran Asamblea.', 'decreto-14-demo.pdf', 1),
-  mockOfficial('ga-demo-3', 'RES-2026-007', 'resolution', '2026-07-02', 'Resolución · Criterios de instrucción por grado', 'Orienta la docencia de Compañeros y Maestros.', 'resolucion-007-demo.pdf', 2),
-  mockOfficial('ga-demo-4', 'REG-2025-003', 'regulation', '2025-11-20', 'Reglamento de Ceremonias de Maestros', 'Procedimientos reservados a los Maestros.', 'reglamento-003-demo.pdf', 3),
-  mockOfficial('ga-demo-5', 'COM-2026-021', 'communication', '2026-09-30', 'Comunicado a la Orden · Cierre del año masónico', 'Información general para todos los Hermanos.', 'comunicado-021-demo.pdf', 1),
+  mockOfficial('ga-demo-2', 'DEC-2026-014', 'decree', '2026-08-15', 'Decreto N.º 14 · Calendario de la Gran Asamblea 2026', 'Fija fechas y procedimiento de la Gran Asamblea.', 'decreto-14-demo.pdf', 1, 300),
+  mockOfficial('ga-demo-3', 'RES-2026-007', 'resolution', '2026-07-02', 'Resolución · Criterios de instrucción por grado', 'Orienta la docencia de Compañeros y Maestros.', 'resolucion-007-demo.pdf', 2, 18),
+  mockOfficial('ga-demo-4', 'REG-2025-003', 'regulation', '2025-11-20', 'Reglamento de Ceremonias de Maestros', 'Procedimientos reservados a los Maestros.', 'reglamento-003-demo.pdf', 3, 200),
+  mockOfficial('ga-demo-5', 'COM-2026-021', 'communication', '2026-09-30', 'Comunicado a la Orden · Cierre del año masónico', 'Información general para todos los Hermanos.', 'comunicado-021-demo.pdf', 1, 250),
+  mockOfficial('ga-demo-6', 'COM-2025-018', 'communication', '2025-09-30', 'Comunicado · Calendario de actividades 2025', 'Vigencia cumplida: archivado por vencimiento.', 'comunicado-018-demo.pdf', 1, -20),
 ]
 
-function mockOfficial(id: string, archiveCode: string, recordType: string, documentDate: string, title: string, description: string, fileName: string, degree: number): GrandArchiveRecord {
-  return { id, archiveCode, documentId: `doc-${id}`, documentVersionId: `ver-${id}`, recordType, documentDate, originatingBody: 'Gran Logia Mixta de Chile', historicalPeriod: null, description, status: 'active', archivedAtUtc: `${documentDate}T15:00:00Z`, createdByDisplayName: 'Gran Archivero QA', withdrawnAtUtc: null, withdrawnByDisplayName: null, withdrawalReason: null, title, documentType: recordType, classification: 'internal', documentStatus: 'active', versionNumber: 1, originalFileName: fileName, contentType: 'application/pdf', sizeBytes: 180000, processingStatus: 'available', publishedMinimumDegree: degree, publishedAtUtc: `${documentDate}T16:00:00Z`, publishedByDisplayName: 'Gran Archivero QA', unpublishedAtUtc: null, unpublishReason: null }
+function mockOfficial(id: string, archiveCode: string, recordType: string, documentDate: string, title: string, description: string, fileName: string, degree: number, untilInDays = 300): GrandArchiveRecord {
+  return { id, archiveCode, documentId: `doc-${id}`, documentVersionId: `ver-${id}`, recordType, documentDate, originatingBody: 'Gran Logia Mixta de Chile', historicalPeriod: null, description, status: 'active', archivedAtUtc: `${documentDate}T15:00:00Z`, createdByDisplayName: 'Gran Archivero QA', withdrawnAtUtc: null, withdrawnByDisplayName: null, withdrawalReason: null, title, documentType: recordType, classification: 'internal', documentStatus: 'active', versionNumber: 1, originalFileName: fileName, contentType: 'application/pdf', sizeBytes: 180000, processingStatus: 'available', publishedMinimumDegree: degree, publishedAtUtc: `${documentDate}T16:00:00Z`, publishedByDisplayName: 'Gran Archivero QA', unpublishedAtUtc: null, unpublishReason: null, publishedUntilUtc: new Date(Date.now() + untilInDays * DAY).toISOString(), publicationStatus: untilInDays > 0 ? 'published' : 'expired' }
 }
 
 const mockCandidates: GrandArchiveCandidate[] = [
@@ -218,23 +233,29 @@ function mockRegister(input: RegisterGrandArchiveInput): GrandArchiveRecord {
 }
 function mockWithdraw(recordId: string, reason: string): GrandArchiveRecord { const row = mockRecords.find(x => x.id === recordId); if (!row) throw new Error('El registro archivístico no existe.'); if (row.status !== 'active') throw new Error('El registro ya fue retirado del catálogo activo.'); row.status = 'withdrawn'; row.withdrawnAtUtc = new Date().toISOString(); row.withdrawnByDisplayName = 'Gran Archivero QA'; row.withdrawalReason = reason.trim(); return clone(row) }
 const PUBLISHABLE = ['decree', 'communication', 'minute', 'resolution', 'regulation', 'other']
-function mockPublish(recordId: string, degree: number): GrandArchiveRecord {
+function mockPublish(recordId: string, degree: number, until?: string | null): GrandArchiveRecord {
   const row = mockRecords.find(x => x.id === recordId); if (!row) throw new Error('El registro archivístico no existe.')
   if (row.status !== 'active') throw new Error('Un registro retirado no puede publicarse.')
   if (![1, 2, 3].includes(degree)) throw new Error('El grado mínimo debe ser 1 (todos), 2 (desde Compañero) o 3 (solo Maestro).')
   if (!PUBLISHABLE.includes(row.recordType)) throw new Error('Este tipo de registro es interno del archivo y no puede publicarse a los Hermanos.')
-  row.publishedMinimumDegree = degree; row.publishedAtUtc = new Date().toISOString(); row.publishedByDisplayName = 'Gran Archivero QA'; row.unpublishedAtUtc = null; row.unpublishReason = null
+  const end = until ? new Date(`${until}T23:59:59-03:00`) : new Date(`${defaultPublicationEnd()}T23:59:59-03:00`)
+  if (!(end.getTime() > Date.now()) || end.getTime() > Date.now() + 5 * 366 * DAY) throw new Error('La fecha de término debe ser posterior a hoy y no superar 5 años.')
+  const visible = row.publicationStatus === 'published'
+  row.publishedMinimumDegree = degree; if (!visible || !row.publishedAtUtc) row.publishedAtUtc = new Date().toISOString()
+  row.publishedByDisplayName = 'Gran Archivero QA'; row.unpublishedAtUtc = null; row.unpublishReason = null
+  row.publishedUntilUtc = end.toISOString(); row.publicationStatus = 'published'
   return clone(row)
 }
 function mockUnpublish(recordId: string, reason: string): GrandArchiveRecord {
   const row = mockRecords.find(x => x.id === recordId); if (!row) throw new Error('El registro archivístico no existe.')
   if (row.publishedMinimumDegree == null) throw new Error('El registro no está publicado.')
+  if (row.publicationStatus === 'expired') throw new Error('La publicación ya venció: el documento está archivado y solo lo ve el Gran Archivero.')
   if (reason.trim().length < 10) throw new Error('Retirar la publicación requiere un motivo de 10 a 500 caracteres.')
-  row.publishedMinimumDegree = null; row.unpublishedAtUtc = new Date().toISOString(); row.unpublishReason = reason.trim()
+  row.publishedMinimumDegree = null; row.publishedUntilUtc = null; row.publicationStatus = 'unpublished'; row.unpublishedAtUtc = new Date().toISOString(); row.unpublishReason = reason.trim()
   return clone(row)
 }
 function mockListOfficial(filters: OfficialDocumentFilters): GrandArchiveListResponse {
-  let items = mockRecords.filter(x => x.status === 'active' && x.publishedMinimumDegree != null).map(clone)
+  let items = mockRecords.filter(x => x.status === 'active' && x.publishedMinimumDegree != null && x.publicationStatus !== 'expired').map(clone)
   if (filters.recordType) items = items.filter(x => x.recordType === filters.recordType)
   if (filters.year) items = items.filter(x => (x.documentDate ?? '').startsWith(String(filters.year)))
   if (filters.search?.trim()) { const term = normalize(filters.search); items = items.filter(x => normalize(`${x.archiveCode} ${x.title} ${x.description ?? ''}`).includes(term)) }

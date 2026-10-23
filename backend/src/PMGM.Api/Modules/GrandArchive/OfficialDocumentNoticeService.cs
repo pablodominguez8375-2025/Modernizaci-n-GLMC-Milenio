@@ -11,7 +11,7 @@ namespace PMGM.Api.Modules.GrandArchive;
 /// </summary>
 public interface IOfficialDocumentNoticeService
 {
-    Task<OfficialDocumentNoticeResult> NotifyPublishedAsync(Guid recordId, string archiveCode, string recordType, string title, int minimumDegree, CancellationToken cancellationToken);
+    Task<OfficialDocumentNoticeResult> NotifyPublishedAsync(Guid recordId, string archiveCode, string recordType, string title, int minimumDegree, DateTimeOffset cycleStartedAtUtc, CancellationToken cancellationToken);
 }
 
 public sealed record OfficialDocumentNoticeResult(int Eligible, int Queued, int Failed);
@@ -22,7 +22,7 @@ public sealed class OfficialDocumentNoticeService(PmgmDbContext coreDb, IInstitu
     private sealed class DegreeRow { public Guid MemberId { get; set; } public string? Degree { get; set; } public DateOnly EffectiveDate { get; set; } public DateTimeOffset RecordedAtUtc { get; set; } }
 
     public async Task<OfficialDocumentNoticeResult> NotifyPublishedAsync(
-        Guid recordId, string archiveCode, string recordType, string title, int minimumDegree, CancellationToken cancellationToken)
+        Guid recordId, string archiveCode, string recordType, string title, int minimumDegree, DateTimeOffset cycleStartedAtUtc, CancellationToken cancellationToken)
     {
         var links = await coreDb.Database.SqlQuery<LinkRow>($"""
             SELECT "MemberId", "Subject" FROM core.member_identity_links WHERE "RevokedAtUtc" IS NULL
@@ -56,7 +56,7 @@ public sealed class OfficialDocumentNoticeService(PmgmDbContext coreDb, IInstitu
                     recipient.Subject, null,
                     new[] { NotificationCodes.Channel.Internal },
                     new Dictionary<string, string?> { ["type"] = TypeLabel(recordType), ["title"] = title },
-                    $"official-document-published:{recordId:N}:{recipient.MemberId:N}",
+                    $"official-document-published:{recordId:N}:{recipient.MemberId:N}:{cycleStartedAtUtc.UtcTicks}",
                     recordId.ToString("N"), recordId.ToString("N"),
                     "/official-documents", false, null,
                     RelatedResourceType: "grand_archive_record",

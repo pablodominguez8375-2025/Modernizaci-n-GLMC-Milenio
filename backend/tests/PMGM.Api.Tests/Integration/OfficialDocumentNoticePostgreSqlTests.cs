@@ -61,30 +61,35 @@ public sealed class OfficialDocumentNoticePostgreSqlTests
 
         var service = new OfficialDocumentNoticeService(coreDb, new InstitutionalNotificationService(notifDb));
         var recordId = Guid.NewGuid();
+        var cycle = DateTimeOffset.UtcNow;
         async Task<List<string>> Recipients() => await notifDb.NotificationMessages.AsNoTracking()
             .Where(x => x.RelatedResourceId == recordId.ToString("N")).Select(x => x.RecipientSubject).ToListAsync(ct);
         bool Mine(string subject) => subject.StartsWith($"notice-{suffix}-", StringComparison.Ordinal);
 
         // Solo Maestros: avisa únicamente al de grado 3 con cuenta activa.
-        var master = await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 3, ct);
+        var master = await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 3, cycle, ct);
         Assert.Equal(0, master.Failed);
         Assert.Equal([$"notice-{suffix}-3"], (await Recipients()).Where(Mine).ToArray());
 
         // Repetir la publicación no duplica avisos.
-        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 3, ct);
+        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 3, cycle, ct);
         Assert.Single(await Recipients(), Mine);
 
         // Ampliar a Compañeros avisa solo al grado 2 (el Maestro ya fue avisado).
-        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 2, ct);
+        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 2, cycle, ct);
         Assert.Equal(new[] { $"notice-{suffix}-2", $"notice-{suffix}-3" }, (await Recipients()).Where(Mine).OrderBy(x => x).ToArray());
 
         // Ampliar a todos suma al Aprendiz; el aviso es interno y no exige acción.
-        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 1, ct);
+        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 1, cycle, ct);
         Assert.Equal(3, (await Recipients()).Count(Mine));
         var sample = await notifDb.NotificationMessages.AsNoTracking().Include(x => x.Deliveries).FirstAsync(x => x.RelatedResourceId == recordId.ToString("N") && x.RecipientSubject.StartsWith($"notice-{suffix}-"), ct);
         Assert.Equal("/official-documents", sample.ActionUrl);
         Assert.False(sample.ActionRequired);
         Assert.Contains("Decreto QA", sample.Body);
         Assert.All(sample.Deliveries, d => Assert.Equal(NotificationCodes.Channel.Internal, d.Channel));
+
+        // Un ciclo nuevo (publicado de nuevo tras vencer) vuelve a avisar.
+        await service.NotifyPublishedAsync(recordId, "DEC-QA", GrandArchiveCodes.RecordType.Decree, "Decreto QA", 1, cycle.AddDays(400), ct);
+        Assert.Equal(6, (await Recipients()).Count(Mine));
     }
 }

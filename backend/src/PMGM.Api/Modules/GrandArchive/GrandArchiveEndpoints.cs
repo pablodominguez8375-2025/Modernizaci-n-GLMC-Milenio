@@ -221,14 +221,15 @@ public static class GrandArchiveEndpoints
             return Results.BadRequest(new { message = "El grado mínimo debe ser 1 (todos), 2 (desde Compañero) o 3 (solo Maestro)." });
         try
         {
-            var result = await service.PublishAsync(recordId, request.MinimumDegree, actor, cancellationToken);
+            var until = request.Until is null ? (DateTimeOffset?)null : GrandArchivePolicy.EndOfChileanDay(request.Until.Value);
+            var result = await service.PublishAsync(recordId, request.MinimumDegree, until, actor, cancellationToken);
             audit.Add(httpContext, "grandarchive.published", "GrandArchiveRecord", recordId.ToString(), null, AuditResults.Success,
-                new { result.ArchiveCode, minimumDegree = request.MinimumDegree });
+                new { result.ArchiveCode, minimumDegree = request.MinimumDegree, until = result.PublishedUntilUtc });
             await db.SaveChangesAsync(cancellationToken);
             // El aviso es complementario: si falla, la publicación ya está hecha y auditada.
             try
             {
-                var notice = await notices.NotifyPublishedAsync(recordId, result.ArchiveCode, result.RecordType, result.Title, request.MinimumDegree, cancellationToken);
+                var notice = await notices.NotifyPublishedAsync(recordId, result.ArchiveCode, result.RecordType, result.Title, request.MinimumDegree, result.PublishedAtUtc ?? DateTimeOffset.UtcNow, cancellationToken);
                 audit.Add(httpContext, "grandarchive.publication_notified", "GrandArchiveRecord", recordId.ToString(), null,
                     notice.Failed == 0 ? AuditResults.Success : AuditResults.Rejected,
                     new { result.ArchiveCode, notice.Eligible, notice.Queued, notice.Failed });
@@ -368,5 +369,5 @@ public sealed record RegisterGrandArchiveRequest(
 
 public sealed record WithdrawGrandArchiveRequest(string Reason);
 
-public sealed record PublishGrandArchiveRequest(int MinimumDegree);
+public sealed record PublishGrandArchiveRequest(int MinimumDegree, DateOnly? Until = null);
 public sealed record UnpublishGrandArchiveRequest(string Reason);

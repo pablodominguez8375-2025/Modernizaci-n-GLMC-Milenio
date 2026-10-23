@@ -40,6 +40,20 @@ public static class GrandArchivePolicy
 
     public static bool IsValidDegree(int degree) => degree is >= 1 and <= 3;
 
+    /// <summary>Vigencia por defecto de una publicación: 12 meses.</summary>
+    public static DateTimeOffset DefaultPublicationEnd(DateTimeOffset now) => now.AddMonths(12);
+
+    /// <summary>La fecha de término debe ser futura y no superar 5 años.</summary>
+    public static bool IsValidPublicationEnd(DateTimeOffset end, DateTimeOffset now) => end > now && end <= now.AddYears(5);
+
+    /// <summary>Fin del día civil en Chile (23:59:59) para la fecha elegida por el Gran Archivero.</summary>
+    public static DateTimeOffset EndOfChileanDay(DateOnly date)
+    {
+        var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Santiago");
+        var local = date.ToDateTime(new TimeOnly(23, 59, 59), DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, zone.GetUtcOffset(local));
+    }
+
     private static readonly HashSet<string> ForbiddenDocumentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "plancha",
