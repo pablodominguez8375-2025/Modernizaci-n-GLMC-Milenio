@@ -1,0 +1,83 @@
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { ActionDrawer, ConfirmAction, HelpNote } from './actionKit'
+import { DocumentApiHttpError, type DocumentApiClient } from './api/documentApi'
+import { canDelegateUpload, collaboratorActionLabels, collaboratorCategories, type AreaCollaborator, type AreaCollaborators, type CollaboratorAction, type CollaboratorArea } from './api/areaCollaborators'
+
+const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
+const areaTitle: Record<CollaboratorArea, string> = { library: 'Biblioteca Virtual', documentmanager: 'Gestión Documental' }
+const toMessage = (e: unknown) => {
+  if (e instanceof DocumentApiHttpError) {
+    if (e.status === 409) return 'La lista cambió o el usuario ya tiene acceso vigente a esa categoría en ese período. Se recargó; revise y repita.'
+    if (e.status === 400) return 'Revise el usuario, las acciones y las fechas.'
+    if (e.status === 404) return 'Ese acceso ya no existe en esta área.'
+  }
+  return e instanceof Error ? e.message : 'No se pudo completar la acción.'
+}
+const fmt = (d: string) => d.split('-').reverse().join('-')
+
+/** Colaboradores de un área: acceso limitado por categoría, acciones y vigencia. Solo lo ve el responsable del área. */
+export default function AreaCollaboratorsSection({ documentApi, area }: { documentApi: DocumentApiClient; area: CollaboratorArea }) {
+  const [data, setData] = useState<AreaCollaborators | null>(null)
+  const [denied, setDenied] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const categories = collaboratorCategories[area]
+  const [category, setCategory] = useState(categories[0].value)
+  const [actions, setActions] = useState<CollaboratorAction[]>(['view'])
+  const [subject, setSubject] = useState('')
+  const [from, setFrom] = useState(today())
+  const [until, setUntil] = useState('')
+
+  const load = useCallback(async () => {
+    try { setData(await documentApi.getAreaCollaborators(area)); setDenied(false) }
+    catch (e) { if (e instanceof DocumentApiHttpError && e.status === 403) setDenied(true); else setError(toMessage(e)) }
+  }, [documentApi, area])
+  useEffect(() => { void load() }, [load])
+  if (denied) return null
+
+  const upload = canDelegateUpload(area, category)
+  const toggle = (a: CollaboratorAction) => setActions(cur => cur.includes(a) ? cur.filter(x => x !== a) : [...cur, a])
+  const pickCategory = (value: string) => { setCategory(value); if (!canDelegateUpload(area, value)) setActions(cur => cur.filter(a => a !== 'write')) }
+
+  async function add(event: FormEvent) {
+    event.preventDefault(); if (!data) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      setData(await documentApi.addAreaCollaborator(area, { subject: subject.trim(), category, actions: ['view', ...actions.filter(a => a !== 'view')], effectiveFrom: from, effectiveTo: until || null, expectedVersion: data.version }))
+      setNotice('Acceso otorgado y registrado en auditoría. Tiene efecto de inmediato.'); setSubject(''); setActions(['view'])
+    } catch (e) { setError(toMessage(e)); await load() } finally { setBusy(false) }
+  }
+  async function revoke(item: AreaCollaborator) {
+    if (!data) return
+    setBusy(true); setError(''); setNotice('')
+    try { setData(await documentApi.revokeAreaCollaborator(area, item.assignmentId, data.version)); setNotice('Acceso revocado; el historial queda en auditoría.') }
+    catch (e) { setError(toMessage(e)); await load() } finally { setBusy(false) }
+  }
+  const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
+
+  return <section className="panel area-collaborators" aria-label={`Colaboradores de ${areaTitle[area]}`}>
+    <header><div><h2>Colaboradores</h2><p>Personas con acceso limitado a una categoría de {areaTitle[area]}. No pueden dar acceso a otros ni salir de su categoría.</p></div>
+      <ActionDrawer label="Agregar colaborador" title="Agregar colaborador" description="Elija la persona, la categoría, lo que puede hacer y hasta cuándo." keepOpen>
+        <form className="library-admin-form" onSubmit={event => void add(event)}>
+          <label><span>Identificador del usuario</span><input required maxLength={320} value={subject} disabled={busy} onChange={e => setSubject(e.target.value)} /><small>Lo entrega el administrador de la plataforma al crear la cuenta; no sirve el correo.</small></label>
+          <label><span>Categoría</span><select value={category} disabled={busy} onChange={e => pickCategory(e.target.value)}>{categories.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
+          <fieldset className="area-collaborators-actions"><legend>Qué puede hacer</legend>
+            <label><input type="checkbox" checked disabled /> {collaboratorActionLabels.view} <small>(siempre)</small></label>
+            {(['create', 'edit', 'delete'] as CollaboratorAction[]).map(a => <label key={a}><input type="checkbox" checked={actions.includes(a)} disabled={busy} onChange={() => toggle(a)} /> {collaboratorActionLabels[a]}</label>)}
+            {upload ? <label><input type="checkbox" checked={actions.includes('write')} disabled={busy} onChange={() => toggle('write')} /> {collaboratorActionLabels.write}</label> : <small>Subir y publicar contenido solo se delega para la Revista y el Boletín.</small>}
+          </fieldset>
+          <label><span>Desde</span><input type="date" required value={from} disabled={busy} onChange={e => setFrom(e.target.value)} /></label>
+          <label><span>Hasta (opcional)</span><input type="date" min={from} value={until} disabled={busy} onChange={e => setUntil(e.target.value)} /></label>
+          <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy || !data}>{busy ? 'Guardando…' : 'Otorgar acceso'}</button></div>
+        </form>
+      </ActionDrawer></header>
+    {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
+    {data && data.items.length === 0 && <p className="library-admin-empty">No hay colaboradores. Solo usted administra esta área.</p>}
+    <div className="library-admin-list">{data?.items.map(item => <article key={item.assignmentId} className="library-admin-card">
+      <div><strong>{label(item.category)}</strong><span>{item.subject}</span><small>{item.actions.map(a => collaboratorActionLabels[a]).join(' · ')} · desde {fmt(item.effectiveFrom)}{item.effectiveTo ? ` hasta ${fmt(item.effectiveTo)}` : ' sin fecha de término'}{item.effectiveTo && item.effectiveTo < today() ? ' · vencido' : ''}</small></div>
+      <div className="library-admin-row-actions"><ConfirmAction label="Revocar" tone="secondary" message="Pierde el acceso de inmediato. Queda registrado en auditoría." disabled={busy} onConfirm={() => void revoke(item)} /></div>
+    </article>)}</div>
+    <HelpNote>El acceso se verifica siempre en el servidor. Vencida la fecha, el colaborador deja de ver la categoría sin que usted haga nada.</HelpNote>
+  </section>
+}

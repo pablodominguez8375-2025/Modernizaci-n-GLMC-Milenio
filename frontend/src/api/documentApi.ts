@@ -1,3 +1,4 @@
+import { AreaCollaboratorsDemo, type AddAreaCollaborator, type AreaCollaborators, type CollaboratorArea } from './areaCollaborators'
 export type DocumentScope = 'order' | 'organization'
 export type DocumentClassification = 'internal' | 'confidential' | 'sensitive' | 'restricted'
 export type DocumentAccessPolicy = 'library_authenticated' | 'organization_authenticated' | 'management_only'
@@ -181,6 +182,24 @@ export class DocumentApiClient {
     { documentId: 'demo-ed-boletin-nov', title: 'Boletín de la Orden · Noviembre 2026', documentType: 'bulletin', collectionName: 'Publicaciones de la Orden', status: 'draft', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-11-01', topic: null, edition: null, shortDescription: 'Borrador en preparación.', createdAtUtc: '2026-10-20T12:00:00Z', publishedAtUtc: null, publisherProfile: 'communications', canCorrect: true }
   ]
   private mockEditorialVersions: Array<EditorialMagazineVersion & { documentId: string }> = this.mockEditorial.map(item => ({ documentId: item.documentId, id: `${item.documentId}-v1`, versionNumber: 1, processingStatus: 'available', originalFileName: `${item.documentId}.pdf`, contentType: 'application/pdf', sizeBytes: 1_200_000, createdAtUtc: item.createdAtUtc }))
+
+  private readonly collaboratorsDemo = new AreaCollaboratorsDemo()
+  private collaboratorsPath(area: CollaboratorArea) { return area === 'library' ? '/api/biblioteca/colaboradores' : '/api/documentos/colaboradores' }
+  // Sin política de vista en el cliente: el servidor decide (solo Bibliotecario / Gran Archivero responsables) y falla cerrado.
+  async getAreaCollaborators(area: CollaboratorArea): Promise<AreaCollaborators> {
+    if (this.useMocks) return this.collaboratorsDemo.list(area)
+    return this.request<AreaCollaborators>(this.collaboratorsPath(area))
+  }
+  async addAreaCollaborator(area: CollaboratorArea, request: AddAreaCollaborator): Promise<AreaCollaborators> {
+    if (this.useMocks) return this.collaboratorsDemo.add(area, request)
+    await this.postJson(this.collaboratorsPath(area), request)
+    return this.getAreaCollaborators(area)
+  }
+  async revokeAreaCollaborator(area: CollaboratorArea, assignmentId: string, expectedVersion: number): Promise<AreaCollaborators> {
+    if (this.useMocks) return this.collaboratorsDemo.revoke(area, assignmentId, expectedVersion)
+    await this.authorizedFetch(`${this.collaboratorsPath(area)}/${encodeURIComponent(assignmentId)}?expectedVersion=${expectedVersion}`, { method: 'DELETE' })
+    return this.getAreaCollaborators(area)
+  }
 
   constructor(options: DocumentApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
