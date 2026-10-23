@@ -70,6 +70,11 @@ public static class DynamicViewAccess
 
     public static string ActionFor(string method, string route, string handler)
     {
+        // Biblioteca Virtual: consultar portada/facetas es "view"; ejecutar una
+        // búsqueda de catálogo requiere "search" independiente cuando hay perfiles.
+        if (method is "GET" or "HEAD" &&
+            route.Equals("/api/biblioteca/buscar", StringComparison.OrdinalIgnoreCase))
+            return "search";
         // Download/export is a read. Print is independently authorized and audited below.
         // Buscar es una acción técnica distinta de leer. El endpoint conserva
         // además la autorización de dominio por rol y Taller.
