@@ -17,9 +17,15 @@ describe('SMTP Google: administración segura', () => {
 
   it('la demo jamás confirma falsamente el envío real', async () => {
     const api = new PmgmApiClient({ useMocks: true })
-    expect((await api.getGoogleSmtpCredentialStatus()).configured).toBe(false)
+    const before = await api.getGoogleSmtpCredentialStatus()
+    expect(before.configured).toBe(false)
+    expect(before.transportReady).toBe(false)
+    expect(before.reason).toBe('missing_password')
     await api.saveGoogleSmtpPassword('abcdefghijklmnop')
-    expect((await api.getGoogleSmtpCredentialStatus()).configured).toBe(true)
+    const after = await api.getGoogleSmtpCredentialStatus()
+    expect(after.configured).toBe(true)
+    expect(after.transportReady).toBe(true)
+    expect(after.reason).toBe('ready_to_test')
     const test = await api.testGoogleSmtp('test@example.org')
     expect(test.sent).toBe(false)
     expect(test.message).toContain('no se envió')

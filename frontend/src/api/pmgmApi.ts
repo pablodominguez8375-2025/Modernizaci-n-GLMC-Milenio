@@ -590,8 +590,9 @@ export class PmgmApiClient {
   }
 
   /** La contraseña SMTP nunca se devuelve; no usar el catálogo versionado para secretos. */
-  async getGoogleSmtpCredentialStatus(): Promise<{ configured: boolean; encryptionReady: boolean }> {
-    if (this.useMocks) return { configured: this.mockSmtpConfigured, encryptionReady: true }
+  async getGoogleSmtpCredentialStatus(): Promise<{ configured: boolean; encryptionReady: boolean; transportReady: boolean; reason: string }> {
+    if (this.useMocks) return { configured: this.mockSmtpConfigured, encryptionReady: true,
+      transportReady: this.mockSmtpConfigured, reason: this.mockSmtpConfigured ? 'ready_to_test' : 'missing_password' }
     return this.request('/api/system/mail/credentials')
   }
   async saveGoogleSmtpPassword(password: string): Promise<{ configured: boolean }> {
