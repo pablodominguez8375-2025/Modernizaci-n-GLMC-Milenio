@@ -7,6 +7,7 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     getUserAccountCandidates: { view: 'system', action: 'view' },
     getUserAccounts: { view: 'system', action: 'view' },
     createUserAccount: { view: 'system', action: 'create' },
+    resetUserAccountAccess: { view: 'system', action: 'write' },
     getCandidatePortal: { view: 'candidates', action: 'view' },
     getSystemSettings: { view: 'system', action: 'view' },
     createSystemSettingVersion: { view: 'system', action: 'create' },
