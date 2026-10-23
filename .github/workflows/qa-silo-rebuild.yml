@@ -24,6 +24,12 @@ jobs:
           fetch-depth: 0
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
+          repository: pgsty/silo
+          ref: 7a3ca0f82100cce06289a465f54139da2639f642
+          path: artifacts/silo-source
+          persist-credentials: false
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
           repository: pgsty/mc
           ref: 0e24a70a0a428de4ae2b7853db3499ba1cb34f37
           path: artifacts/mcli-source
@@ -66,7 +72,7 @@ jobs:
       - name: Rebuild, scan and exercise real IAM and recovery
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/qa/rebuild-silo-candidate.py --source artifacts/mcli-source --output artifacts/silo-rebuild
+        run: python3 scripts/qa/rebuild-silo-candidate.py --source artifacts/mcli-source --server-source artifacts/silo-source --output artifacts/silo-rebuild
       - name: Attest candidate image archive and fixed-component evidence
         id: provenance
         uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
