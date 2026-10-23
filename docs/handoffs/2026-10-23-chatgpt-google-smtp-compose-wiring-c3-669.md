@@ -20,3 +20,6 @@ El backend exige `SystemMail:EncryptionKey` en configuración (32 bytes base64),
 Solución: variable **opcional** `PMGM_SMTP_ENCRYPTION_KEY` en el archivo de entorno local de infraestructura; expuesta **sólo** al contenedor API como `SystemMail__EncryptionKey`; no se envía a Keycloak ni web. Vacía => UI indica que no está configurada, sin generar ni inventar claves. No se modifica ningún entorno real ni `main`. Se añadirá prueba estática en CI y runbook, 3/3 antes de merge.
 
 Siguiente paso tras integración: operador prepara clave aleatoria de 32 bytes bajo custodia, modifica archivo de entorno existente protegido, aplica despliegue conforme a políticas QA vigentes (NO automático), guarda contraseña de aplicación desde Parámetros y prueba entrega en buzón controlado. 
+
+## Código entregado
+Tres Compose de QA/piloto/srv01 pasan opcional `PMGM_SMTP_ENCRYPTION_KEY` exclusivamente al proceso API como `SystemMail__EncryptionKey`. Se agregaron tres plantillas vacías, prueba estática ejecutada por CI, explicación operativa en runbook y diccionario GOV004. Sin escribir secretos reales, ni acciones en glmdch/main. Validar 3/3 gates antes de merge.
