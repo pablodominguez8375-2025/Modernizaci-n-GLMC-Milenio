@@ -28,6 +28,7 @@ jobs:
           ref: 7a3ca0f82100cce06289a465f54139da2639f642
           path: artifacts/silo-source
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           repository: pgsty/mc
