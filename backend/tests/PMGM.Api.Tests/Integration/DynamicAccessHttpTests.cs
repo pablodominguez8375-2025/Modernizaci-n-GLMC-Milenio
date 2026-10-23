@@ -160,16 +160,25 @@ public sealed class DynamicAccessHttpTests
         var ct = TestContext.Current.CancellationToken;
         using var factory = Factory(Connection);
         using var client = factory.CreateClient();
-        // Datos sintéticos; no crear personas, RUT, cuotas ni cuentas de soporte.
+        // Todos los datos son ficticios. Nunca usar RUT, correos o cuentas reales.
         var marker = Guid.NewGuid().ToString("N");
         var real = new Organization { Name = "Taller real sintético " + marker, Number = "28", Type = "workshop" };
         var support = new Organization { Name = "Taller 00 Soporte GLMCh QA " + marker, Number = "00", Type = "support" };
         var uppercase = new Organization { Name = "Taller soporte mayúscula QA " + marker, Number = "00", Type = "SUPPORT" };
+        var synthetic = new Member {
+            Person = new Person { FirstNames = "Miembro QA", LastNames = "FICTICIO " + marker },
+            CurrentDegree = "apprentice"
+        };
+        var supportLink = new Membership {
+            Member = synthetic, Organization = support, Status = "active", MembershipType = "regular"
+        };
         await using (var scope = factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
             db.Organizations.AddRange(real, support, uppercase);
+            db.Members.Add(synthetic);
+            db.Memberships.Add(supportLink);
             await db.SaveChangesAsync(ct);
         }
         using var response = await client.GetAsync("/api/institutional/organizations/options", ct);
@@ -180,6 +189,28 @@ public sealed class DynamicAccessHttpTests
         Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == support.Id);
         Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == uppercase.Id);
         Assert.DoesNotContain("Taller 00 Soporte GLMCh QA " + marker, await response.Content.ReadAsStringAsync(ct));
+
+        // La ocultación de opciones no basta: incluso con claims de Orden,
+        // el UUID directo jamás ofrece un padrón o ficha de soporte.
+        foreach (var hidden in new[] { support, uppercase })
+        {
+            using var organizationProfile = await client.GetAsync(
+                $"/api/institutional/organizations/{hidden.Id}/profile", ct);
+            Assert.Equal(HttpStatusCode.NotFound, organizationProfile.StatusCode);
+            using var roster = await client.GetAsync(
+                $"/api/members?organizationId={hidden.Id}", ct);
+            Assert.Equal(HttpStatusCode.NotFound, roster.StatusCode);
+        }
+
+        using var syntheticProfile = await client.GetAsync($"/api/members/{synthetic.Id}/profile", ct);
+        Assert.Equal(HttpStatusCode.NotFound, syntheticProfile.StatusCode);
+        using var syntheticHistory = await client.GetAsync($"/api/members/{synthetic.Id}/history", ct);
+        Assert.Equal(HttpStatusCode.NotFound, syntheticHistory.StatusCode);
+        Assert.DoesNotContain("FICTICIO " + marker, await syntheticProfile.Content.ReadAsStringAsync(ct));
+
+        // No producir regresiones para los Talleres reales.
+        using var realRoster = await client.GetAsync($"/api/members?organizationId={real.Id}", ct);
+        Assert.Equal(HttpStatusCode.OK, realRoster.StatusCode);
     }
 
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
