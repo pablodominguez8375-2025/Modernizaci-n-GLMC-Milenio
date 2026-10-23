@@ -14,3 +14,11 @@ En `backend/src/PMGM.Api/Modules/UserAccounts/UserAccountEndpoints.cs`, `POST /a
 
 ## Puertas
 3/3 GitHub Actions SUCCESS exact SHA y behind 0. Solo fusionar a dev, no main, producción ni QA físico; conservar comentario en #604 y espejo Drive.
+
+## Incremento aplicado y reconciliado
+
+- POST `/api/system/user-accounts`: `CanConfigureSystem` **y** `IsPlatformSuperAdmin`, antes de cualquier identidad, SMTP o BD. No se amplía `GET`; el Máster continúa imposibilitado de crear otro Máster.
+- GET `/api/system/user-accounts/eligible-members` añade `canCreateUser:boolean` junto a `canCreateSuperuser`, ambos solo verdaderos para el Máster. Clau puede usar este flag en la UI; el backend sigue verificando POST.
+- `UserAccountWorkflowTests`: permisos negativos de GranLogiaAdmin/Tesorería con cero llamadas a identidad/correo, capacidades de GranLogiaAdmin falsas y de Máster verdaderas, y los casos existentes de creación e invalidación con actor Máster.
+- La rama preserva el árbol de `dev@18fbbfed7cede2823c0f3fec2760f2aa528b5f48` (PR #654) y modifica solo `UserAccountEndpoints.cs`, `UserAccountWorkflowTests.cs`, este handoff y el registro GOV-004 nuevo. Documentación: `docs/modelo-datos/registros/2026-10-23-chatgpt-master-only-create-authorization-604.md`.
+- No se dio de alta cuenta, no hubo secretos, no se creó Taller 00. Falta bootstrap/MFA/QA/UAT para cierre de #604. CI/Showcase/Instalable tienen que ser 3/3 SUCCESS sobre HEAD final y behind dev=0 antes de merge; `main` congelada.
