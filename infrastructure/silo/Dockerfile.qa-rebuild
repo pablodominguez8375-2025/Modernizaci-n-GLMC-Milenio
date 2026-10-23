@@ -1,13 +1,24 @@
 # Experimental QA-only rebuild. No registry push or deployment until all gates pass.
-# Preserve the signed vendor server; rebuild its independently versioned client.
+# Retain the authenticated vendor rootfs, rebuilding both pinned Go programs.
 FROM docker.io/pgsty/silo@sha256:aaac6bce13eb99316b3c88bd20143fc3c38ab607585256a411a095c44ee57f62 AS vendor
-FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS mcli-build
+FROM golang:1.27.3-alpine@sha256:b8c9b82affbbb82a020bbcf998dad2ba9516944ac7e883524642a481a9505e9c AS go-build
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local
+FROM go-build AS mcli-build
 WORKDIR /source
 COPY --from=mcli_source . .
-RUN test "$(go env GOVERSION)" = go1.27.2 && \
+RUN test "$(go env GOVERSION)" = go1.27.3 && \
     go build -mod=readonly -trimpath -buildvcs=false -o /out/mcli . && \
     go version -m /out/mcli > /out/mcli-buildinfo.txt
+
+FROM go-build AS silo-build
+WORKDIR /source
+COPY --from=silo_source . .
+# Source is exported from the verified Git object, without checkout extras.
+RUN test "$(go env GOVERSION)" = go1.27.3 && \
+    go build -mod=readonly -trimpath -buildvcs=false -tags=kqueue \
+      -ldflags='-s -w -X github.com/minio/minio/cmd.CommitID=7a3ca0f82100cce06289a465f54139da2639f642 -X github.com/minio/minio/cmd.ShortCommitID=7a3ca0f82100' \
+      -o /out/silo . && \
+    go version -m /out/silo > /out/silo-buildinfo.txt
 
 FROM registry.access.redhat.com/ubi9/ubi:latest@sha256:206b65b8ee0f04b992818c9a51b29081b14974630d4850bc358097d0c44ea156 AS patched
 COPY --from=vendor / /rootfs/
@@ -22,6 +33,9 @@ RUN dnf -y --installroot=/rootfs --releasever=9 \
     rm -rf /rootfs/var/cache/dnf /rootfs/var/log/dnf* /rootfs/var/log/hawkey*
 COPY --from=mcli-build /out/mcli /rootfs/usr/bin/mcli
 COPY --from=mcli-build /out/mcli-buildinfo.txt /rootfs/licenses/mcli-buildinfo.txt
+COPY --from=silo-build /out/silo /rootfs/usr/bin/silo
+COPY --from=silo-build /out/silo-buildinfo.txt /rootfs/licenses/silo-buildinfo.txt
+COPY --from=silo-build /source/LICENSE /source/NOTICE /source/CREDITS /rootfs/licenses/silo/
 COPY --from=mcli-build /source/LICENSE /source/NOTICE /source/CREDITS /rootfs/licenses/mcli/
 # One final rootfs copy excludes the vulnerable client from historical final layers.
 FROM scratch
