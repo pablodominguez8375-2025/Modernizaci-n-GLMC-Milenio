@@ -202,6 +202,19 @@ def blocking_findings(inventory):
             if finding.get('Severity') in ('HIGH', 'CRITICAL')]
 
 
+def verify_go_inventory(inventory):
+    results = inventory.get('Results', [])
+    server = [r for r in results if r.get('Target') == 'usr/bin/silo']
+    if len(server) != 1 or not any(p.get('Name') == 'github.com/minio/minio' and
+            p.get('Version') == SERVER_PURL.rsplit('@', 1)[1] for p in server[0].get('Packages', [])):
+        raise ValueError('server main module version missing from scan')
+    for target in ('usr/bin/silo', 'usr/bin/mcli'):
+        rows = [r for r in results if r.get('Target') == target]
+        if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
+                for p in rows[0].get('Packages', [])):
+            raise ValueError('Go toolchain missing or incorrect in scan')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', type=Path, required=True)
@@ -276,10 +289,11 @@ def main():
         with tempfile.TemporaryDirectory(prefix='qa-rebuild-scan-') as tmp:
             scanner, scanner_sha = scanner_tools(Path(tmp))
             common = [str(scanner), 'image', '--input', str(archive), '--timeout', '8m',
-                      '--cache-dir', str(Path(tmp) / 'cache'), '--ignorefile', '/dev/null']
+                      '--cache-dir', str(Path(tmp) / 'cache'), '--ignorefile', '/dev/null', '--list-all-pkgs']
             run(common + ['--scanners', 'vuln', '--format', 'json', '--output', str(output / 'trivy-raw.json')],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=540)
             inventory = json.loads((output / 'trivy-raw.json').read_text())
+            verify_go_inventory(inventory)
             report['scanner_binary_sha256'] = scanner_sha
             report['blocking_findings'] = blocking_findings(inventory)
             run(common + ['--format', 'cyclonedx', '--output', str(output / 'sbom.cdx.json')],
