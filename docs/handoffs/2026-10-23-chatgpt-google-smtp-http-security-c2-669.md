@@ -6,3 +6,6 @@ Se reclama una segunda capa: nuevo test integración HTTP/PostgreSQL para POST c
 * .github/backend-integration-shards.json (registro nuevo test en shard B)
 * nuevo este handoff y registro GOV004.
 No se modificará SMTP base ni UI de Clau, tampoco claves reales, servidor físico ni main. PR draft primero; 3/3 exact SHA antes de integrar. Advertencia: no interpretar simulación con sender inyectado como envío real Gmail.
+
+## Entrega de código
+Test integrado PostgreSQL HTTP con sender de red simulado, verificación de secreto AES-GCM fuera de GET/historial/auditoría, denegaciones de password/correo inválidos y 429 tras 5 pruebas. Nuevo límite por actor POST /api/system/mail/test y registro en shard B. Se requiere CI exact-head antes de merge.

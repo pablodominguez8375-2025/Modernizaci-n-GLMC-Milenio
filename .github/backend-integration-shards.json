@@ -71,6 +71,7 @@
       "MemberOwnCeremonyReceiptPostgreSqlTests",
       "PrivacyRequestReadAuditPostgreSqlTests",
       "PrivacyContactEmailHttpTests",
+      "SystemMailGoogleHttpTests",
       "PrivacyContactMemberAccessHttpTests",
       "LibraryDegreeAuthorizationTests",
       "AdmissionPersonLookupHttpTests",
