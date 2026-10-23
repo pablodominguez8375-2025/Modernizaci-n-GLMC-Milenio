@@ -95,6 +95,25 @@ public sealed class InstitutionalAccessServiceTests
     }
 
     [Fact]
+    public void MalformedMasterWithoutOrderScope_CannotFallBackToLodgeOrGrandRoles()
+    {
+        var workshop = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable),
+            new Claim(InstitutionalClaims.Organization, workshop.ToString()));
+
+        Assert.False(_service.IsPlatformSuperAdmin(user));
+        Assert.False(_service.HasRole(user, InstitutionalRoles.PlatformSuperAdmin));
+        Assert.False(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
+        Assert.False(_service.CanConfigureSystem(user));
+        Assert.False(_service.CanManageOrganization(user, workshop));
+        Assert.False(_service.CanSignLodgeDocuments(user, workshop));
+        Assert.False(_service.CanManageLodgeCouncilSummaryAccess(user, workshop));
+    }
+
+    [Fact]
     public void PlatformSuperAdmin_WithoutOrderScope_DoesNotBypassRoles()
     {
         var user = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin));
