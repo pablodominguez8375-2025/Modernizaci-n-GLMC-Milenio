@@ -114,7 +114,9 @@ public sealed record SessionCapabilitiesDto(
     bool CanReadOrderMasterInstructions,
     bool CanReadAllOrderInstructions,
     bool CanManageLibrary = false,
-    bool CanManageCommunications = false);
+    bool CanManageCommunications = false,
+    bool CanReadOfficialDocuments = false,
+    bool CanPublishOfficialDocuments = false);
 
 public static class SessionProfileBuilder
 {
@@ -181,6 +183,8 @@ public static class SessionProfileBuilder
                 CanReadOrderMasterInstructions: access.CanReadOrderLodgeInstructions(user, 3),
                 CanReadAllOrderInstructions: access.CanReadOrderLodgeInstructions(user, null),
                 CanManageLibrary: access.CanManageLibrary(user, null),
-                CanManageCommunications: access.CanManageCommunications(user)));
+                CanManageCommunications: access.CanManageCommunications(user),
+                CanReadOfficialDocuments: user.Identity?.IsAuthenticated == true,
+                CanPublishOfficialDocuments: PMGM.Api.Modules.GrandArchive.GrandArchivePolicy.IsGrandArchivist(user)));
     }
 }

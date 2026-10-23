@@ -195,6 +195,8 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     register: { view: 'grandarchive', action: 'create' },
     withdraw: { view: 'grandarchive', action: 'delete' },
     download: { view: 'grandarchive', action: 'view' },
+    publish: { view: 'grandarchive', action: 'write' },
+    unpublish: { view: 'grandarchive', action: 'write' },
   },
   calendarApi: {
     getCalendar: { view: 'calendar', action: 'view' },

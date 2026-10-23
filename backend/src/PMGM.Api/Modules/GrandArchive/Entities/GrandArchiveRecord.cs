@@ -19,6 +19,13 @@ public sealed class GrandArchiveRecord
     public string? WithdrawnBySubject { get; set; }
     public string? WithdrawnByDisplayName { get; set; }
     public string? WithdrawalReason { get; set; }
+    // Publicación a los Hermanos (#653): grado mínimo 1, 2 o 3; null = no publicado.
+    public int? PublishedMinimumDegree { get; set; }
+    public DateTimeOffset? PublishedAtUtc { get; set; }
+    public string? PublishedBySubject { get; set; }
+    public string? PublishedByDisplayName { get; set; }
+    public DateTimeOffset? UnpublishedAtUtc { get; set; }
+    public string? UnpublishReason { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
