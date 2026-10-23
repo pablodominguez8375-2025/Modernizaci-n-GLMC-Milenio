@@ -63,6 +63,24 @@ public sealed class LibraryPublicationOwnershipTests
     }
 
     [Fact]
+    public void Gran_logia_admin_and_platform_master_own_neither_profile()
+    {
+        var catalog = DynamicAccessEndpoints.CreateCatalog();
+        foreach (var role in new[] { InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.PlatformSuperAdmin })
+        {
+            var user = Identity(role, "admin-" + role);
+            Assert.Null(LibraryMagazineMetadataAuthorization.ActorProfile(user, access));
+            foreach (var profile in new[] { LibraryPublisherProfiles.Librarian, LibraryPublisherProfiles.Communications })
+            {
+                var doc = Document(profile, Published);
+                Assert.False(LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(user, access, catalog, doc));
+                Assert.False(LibraryMagazineMetadataAuthorization.CanEditMetadata(user, access, catalog, doc));
+                Assert.False(LibraryMagazineMetadataAuthorization.CanStageMagazineContent(user, access, catalog, doc));
+            }
+        }
+    }
+
+    [Fact]
     public void Each_profile_cannot_touch_the_other_profiles_publications()
     {
         var catalog = DynamicAccessEndpoints.CreateCatalog();

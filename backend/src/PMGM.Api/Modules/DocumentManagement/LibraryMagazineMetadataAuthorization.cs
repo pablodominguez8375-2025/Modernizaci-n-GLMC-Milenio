@@ -41,30 +41,46 @@ public static class LibraryPublisherProfiles
 
 public static class LibraryMagazineMetadataAuthorization
 {
+    // Perfiles SEPARADOS (decisión del PO 23-10): Bibliotecario y Comunicaciones
+    // son cargos distintos. El administrador de Gran Logia y el Master de
+    // plataforma NO ejercen ninguno de los dos: se comprueba el rol propio,
+    // sin la herencia de GranLogiaAdmin ni de PlatformSuperAdmin.
+    private static bool HasOwnRole(ClaimsPrincipal user, IInstitutionalAccessService access, string role)
+        => access.HasOrderScope(user) && user.Claims.Any(x =>
+            x.Type == InstitutionalClaims.Role &&
+            string.Equals(x.Value, role, StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsLibrarianProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
+        => HasOwnRole(user, access, InstitutionalRoles.Librarian);
+
+    private static bool IsCommunicationsProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
+        => HasOwnRole(user, access, InstitutionalRoles.Communications);
+
     /// <summary>
     /// Perfil con el que el usuario crea publicaciones. Quien reúne ambos
-    /// (Gran Logia admin) o ninguno (colaborador con grant) no fija perfil.
+    /// cargos o ninguno (colaborador con grant) no fija perfil.
     /// </summary>
     public static string? ActorProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
     {
-        var lib = access.CanManageLibrary(user, null);
-        var com = access.CanManageCommunications(user);
+        var lib = IsLibrarianProfile(user, access);
+        var com = IsCommunicationsProfile(user, access);
         if (lib == com) return null;
         return lib ? LibraryPublisherProfiles.Librarian : LibraryPublisherProfiles.Communications;
     }
 
     /// <summary>
     /// «Propio» es por perfil/cargo, no por persona: quien ocupa el cargo con
-    /// ese perfil hereda las publicaciones. Documentos sin perfil (históricos)
-    /// no se restringen.
+    /// ese perfil hereda las publicaciones. Cada perfil no toca lo del otro y
+    /// el administrador de Gran Logia no es titular de ninguno. Documentos sin
+    /// perfil (históricos) no se restringen.
     /// </summary>
     public static bool OwnsPublication(
         ClaimsPrincipal user, IInstitutionalAccessService access, InstitutionalDocument document)
         => document.PublisherProfile switch
         {
             null => true,
-            LibraryPublisherProfiles.Librarian => access.CanManageLibrary(user, null),
-            LibraryPublisherProfiles.Communications => access.CanManageCommunications(user),
+            LibraryPublisherProfiles.Librarian => IsLibrarianProfile(user, access),
+            LibraryPublisherProfiles.Communications => IsCommunicationsProfile(user, access),
             _ => false
         };
 
@@ -87,7 +103,7 @@ public static class LibraryMagazineMetadataAuthorization
     private static bool IsInstitutionalEditor(
         ClaimsPrincipal user, IInstitutionalAccessService access,
         DynamicAccessCatalog catalog, string action)
-        => (access.CanManageLibrary(user, null) || access.CanManageCommunications(user)) &&
+        => (IsLibrarianProfile(user, access) || IsCommunicationsProfile(user, access)) &&
            DynamicViewAccess.Allows(catalog, DynamicTreasuryAccess.Subject(user),
                "library", action, null, DynamicAccessEndpoints.Today());
 
