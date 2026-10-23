@@ -103,6 +103,13 @@ public sealed class UserAccountWorkflowTests
         Assert.False(identity.Enabled);
         Assert.Null(mail.LastAccount);
         Assert.Null(mail.Password);
+        if(role==InstitutionalRoles.GranLogiaAdmin)
+        {
+            using var options=JsonDocument.Parse(await client.GetStringAsync(
+                "/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
+            Assert.False(options.RootElement.GetProperty("canCreateUser").GetBoolean());
+            Assert.False(options.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
+        }
     }
 
     [Theory]
@@ -151,6 +158,7 @@ public sealed class UserAccountWorkflowTests
         Assert.False(json.RootElement.GetProperty("platformAdministrator").GetBoolean());Assert.True(json.RootElement.GetProperty("superuser").GetBoolean());
         using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
         Assert.False(candidates.RootElement.GetProperty("canCreatePlatformAdministrator").GetBoolean());
+        Assert.True(candidates.RootElement.GetProperty("canCreateUser").GetBoolean());
         Assert.True(candidates.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
     }
 
