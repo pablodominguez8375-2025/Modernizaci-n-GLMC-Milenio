@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -39,8 +40,9 @@ public static class MembershipEndpoints
             .Select(x => new { x.Id, x.Name, x.Number, x.Type })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (organization is null)
+        if (organization is null || SupportWorkshopPolicy.IsSupportOrganization(organization.Type))
         {
+            // Soporte sintético nunca se consulta mediante el padrón institucional.
             return Results.NotFound();
         }
 
@@ -65,6 +67,11 @@ public static class MembershipEndpoints
         var latestMemberships = db.Memberships
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId &&
+                        // Aunque alguien vincule por error un miembro ficticio
+                        // al Taller real, no entra al Cuadro ni a los conteos.
+                        !db.Memberships.Any(support =>
+                            support.MemberId == x.MemberId &&
+                            EF.Functions.ILike(support.Organization.Type, SupportWorkshopPolicy.OrganizationType)) &&
                         !db.Memberships.Any(other =>
                             other.OrganizationId == organizationId &&
                             other.MemberId == x.MemberId &&
@@ -124,6 +131,17 @@ public static class MembershipEndpoints
         });
     }
 
+    /// <summary>
+    /// El soporte sintético tendrá un circuito dedicado en fases posteriores.
+    /// Un miembro mixto support/workshop se bloquea por precaución, antes
+    /// de revelar nombres, RUT, ficha o historia institucional.
+    /// </summary>
+    private static Task<bool> HasSupportMembershipAsync(
+        PmgmDbContext db, Guid memberId, CancellationToken ct)
+        => db.Memberships.AsNoTracking().AnyAsync(m =>
+            m.MemberId == memberId &&
+            EF.Functions.ILike(m.Organization.Type, SupportWorkshopPolicy.OrganizationType), ct);
+
     private static async Task<IResult> GetMemberProfileAsync(
         Guid id,
         HttpContext httpContext,
@@ -131,6 +149,9 @@ public static class MembershipEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
+        if (await HasSupportMembershipAsync(db, id, cancellationToken))
+            return Results.NotFound();
+
         var member = await db.Members
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -139,6 +160,7 @@ public static class MembershipEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.CreatedAtUtc
@@ -321,9 +343,17 @@ public static class MembershipEndpoints
             regularity = new { financial, hospitalaria };
         }
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
-            member,
+            member = new
+            {
+                member.Id, member.PersonId, member.InstitutionalNumber,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc,
+                RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
+            },
             contactVisible = canReadContact,
             contact,
             scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",
@@ -350,6 +380,9 @@ public static class MembershipEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
+        if (await HasSupportMembershipAsync(db, id, cancellationToken))
+            return Results.NotFound();
+
         var member = await db.Members
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -358,6 +391,7 @@ public static class MembershipEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.CreatedAtUtc
@@ -503,9 +537,17 @@ public static class MembershipEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new
         {
-            member,
+            member = new
+            {
+                member.Id, member.PersonId, member.InstitutionalNumber,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc,
+                RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
+            },
             contactVisible = canReadContact,
             contact,
             scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",

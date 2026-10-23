@@ -1,4 +1,5 @@
 import { technicalGrant } from './dynamicAccess'
+import { MockAssemblyStore, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
@@ -50,6 +51,14 @@ export interface SessionCapabilities {
   canReadOrderFellowcraftInstructions?: boolean
   canReadOrderMasterInstructions?: boolean
   canReadAllOrderInstructions?: boolean
+  /** Perfil institucional Bibliotecario (Biblioteca Virtual completa). */
+  canManageLibrary?: boolean
+  /** Perfil institucional Comunicaciones (revista y Boletín mensual). */
+  canManageCommunications?: boolean
+  /** Cualquier Hermano autenticado consulta los documentos oficiales publicados según su grado. */
+  canReadOfficialDocuments?: boolean
+  /** Solo el perfil Gran Archivero publica y retira publicaciones. */
+  canPublishOfficialDocuments?: boolean
 }
 export interface SessionProfile { displayName: string; accessScope: 'order' | 'organization' | 'authenticated'; capabilities: SessionCapabilities }
 export type TreasuryTerritory = 'santiago' | 'other_oriente' | 'peru'
@@ -813,6 +822,27 @@ export class PmgmApiClient {
     originalSourceReference:'ACTA-TALLER-DEMO-2026-001'
   }]
 
+  private readonly mockAssemblies = new MockAssemblyStore()
+  async getAssemblies(): Promise<AssemblyListResponse> {
+    if (this.useMocks) return this.mockAssemblies.list()
+    return this.request('/api/regimen-interior/asambleas')
+  }
+  async createAssembly(payload: CreateAssemblyPayload): Promise<AssemblySummary> {
+    if (this.useMocks) return this.mockAssemblies.create(payload)
+    return this.request('/api/regimen-interior/asambleas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  }
+  async getAssemblyListing(assemblyId: string): Promise<AssemblyListing> {
+    if (this.useMocks) return this.mockAssemblies.listing(assemblyId)
+    return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/listados`)
+  }
+  async decideAssemblyDebtBlock(assemblyId: string, organizationId: string, payload: AssemblyDebtBlockPayload): Promise<void> {
+    if (this.useMocks) { this.mockAssemblies.decideDebtBlock(organizationId, payload); return }
+    await this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/talleres/${encodeURIComponent(organizationId)}/bloqueo-saldo`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  }
+  async decideAssemblyMember(assemblyId: string, personId: string, payload: AssemblyReviewPayload): Promise<void> {
+    if (this.useMocks) { if (payload.reason.trim().length < 3 || !payload.evidenceReference.trim()) throw new Error('Indique el motivo y la referencia.'); return }
+    await this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/revision/${encodeURIComponent(personId)}/decision`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  }
   async getRePresentationReviews():Promise<RePresentationReviewResponse> {
     if(this.useMocks)return {total:this.mockRePresentationReviews.length,items:this.mockRePresentationReviews.map(x=>({...x}))}
     return this.request('/api/insinuados/regimen-interior/reinsinuaciones')

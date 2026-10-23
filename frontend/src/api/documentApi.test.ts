@@ -170,7 +170,7 @@ it('uses the editorial magazine endpoints with bearer boundary and the exact con
   const calls = fetch.mock.calls
   expect(calls[0][0]).toBe('/api/biblioteca/editorial/revistas?page=1&pageSize=50')
   expect(calls[1][0]).toBe('/api/biblioteca/editorial/revistas')
-  expect(JSON.parse(calls[1][1].body)).toEqual({ collectionId: 'col-1', title: 'Horizonte Masónico · N° 4' })
+  expect(JSON.parse(calls[1][1].body)).toEqual({ collectionId: 'col-1', title: 'Horizonte Masónico · N° 4', documentType: 'magazine' })
   expect(calls[2][0]).toBe('/api/biblioteca/editorial/revistas/doc-1/versiones?pageSize=50')
   expect(calls[3][0]).toBe('/api/biblioteca/editorial/revistas/doc-1/publicar')
   expect(JSON.parse(calls[3][1].body)).toEqual({ versionId: 'v1' })
@@ -178,8 +178,32 @@ it('uses the editorial magazine endpoints with bearer boundary and the exact con
   for (const [, options] of calls) expect(options.headers.get('Authorization')).toBe('Bearer editorial-token')
 })
 
-it('demo mode never pretends to persist editorial magazines', async () => {
+it('demo mode replaces a published file only for the owner profile and with a reason', async () => {
   const api = new DocumentApiClient({ useMocks: true })
-  expect((await api.listEditableMagazines()).items).toEqual([])
-  await expect(api.publishEditorialMagazine('d', 'v')).rejects.toThrow('demostración')
+  const list = (await api.listEditableMagazines()).items
+  expect(list.find(item => item.documentId === 'demo-ed-especial')?.canCorrect).toBe(false)
+  await expect(api.publishEditorialMagazine('demo-ed-especial', 'v', 'Motivo suficiente')).rejects.toThrow('Solo el perfil')
+  await expect(api.publishEditorialMagazine('demo-ed-boletin-oct', 'v')).rejects.toThrow('motivo')
+  await api.publishEditorialMagazine('demo-ed-boletin-oct', 'v', 'Se corrigió una fecha en la página 3.')
+  await expect(api.publishEditorialMagazine('inexistente', 'v')).rejects.toThrow('demostración')
+})
+
+it('sends the replacement reason only when provided', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  const api = new DocumentApiClient({ getAccessToken: async () => 't' })
+  await api.publishEditorialMagazine('doc-1', 'v2', 'Corrección de fecha en página 3')
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ versionId: 'v2', reason: 'Corrección de fecha en página 3' })
+})
+
+it('creates a monthly Boletín draft through the same editorial endpoint (#635)', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'bol-1', status: 'draft' })))
+  vi.stubGlobal('fetch', fetch)
+  const api = new DocumentApiClient({ getAccessToken: async () => 'communications-token' })
+  const created = await api.createEditorialMagazine('col-1', 'Boletín de la Orden · Octubre 2026', 'bulletin')
+  expect(created.documentId).toBe('bol-1')
+  expect(fetch.mock.calls[0][0]).toBe('/api/biblioteca/editorial/revistas')
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ collectionId: 'col-1', title: 'Boletín de la Orden · Octubre 2026', documentType: 'bulletin' })
+  expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer communications-token')
+  vi.unstubAllGlobals()
 })

@@ -24,6 +24,9 @@ public static class InstitutionalRoles
     public const string JefaturaDepartamentoDocencia = "instruction_department_head";
     public const string GrandArchivist = "grand_archivist";
     public const string Librarian = "librarian";
+    // Comunicaciones: publica la revista institucional y el Boletín mensual.
+    // No administra el resto de la Biblioteca ni Gestión Documental.
+    public const string Communications = "communications";
     public const string PrivacyOfficer = "privacy_officer";
     public const string DocumentManager = "document_manager";
     public const string TallerAdmin = "lodge_admin";
@@ -81,6 +84,7 @@ public interface IInstitutionalAccessService
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
     bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId);
     bool CanManageLibrary(ClaimsPrincipal user, Guid? organizationId);
+    bool CanManageCommunications(ClaimsPrincipal user);
     bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId);
     bool CanManagePrivacy(ClaimsPrincipal user);
     bool CanConfigureSystem(ClaimsPrincipal user);
@@ -346,6 +350,15 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     public bool CanManageLibrary(ClaimsPrincipal user, Guid? organizationId)
         => HasOrderScope(user) &&
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.Librarian);
+
+    /// <summary>
+    /// Perfil institucional Comunicaciones (alcance Orden). Sólo publicaciones
+    /// editoriales de Biblioteca: revista institucional y Boletín mensual.
+    /// No concede Biblioteca general, Gestión Documental ni Gran Archivo.
+    /// </summary>
+    public bool CanManageCommunications(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.Communications);
 
     public bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId)
     {

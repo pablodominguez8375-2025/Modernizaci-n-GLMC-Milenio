@@ -30,6 +30,7 @@
       "RequestRateLimitingHttpTests",
       "CalendarSourceSyncPostgreSqlTests",
       "GrandArchivePostgreSqlTests",
+      "CommunicationsBulletinHttpTests",
       "ClamAvDocumentMalwareIntegrationTests",
       "PostgreSqlMigrationTests",
       "TreasuryOrdinaryDuesEligibilityPostgreSqlTests",
@@ -44,7 +45,9 @@
       "CandidateWorkshopSponsorHttpTests",
       "CandidateOriginCorrectionHttpTests",
       "MagazineEditorialVersionStatusHttpTests",
-      "CandidateFormalSponsorGatesHttpTests"
+      "LibraryPublicationReplacementHttpTests",
+      "CandidateFormalSponsorGatesHttpTests",
+      "OfficialDocumentNoticePostgreSqlTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
@@ -90,6 +93,7 @@
       "AssemblyTreasurySignedReviewPostgreSqlTests",
       "AssemblyTreasurySignedReviewRevalidationPostgreSqlTests",
       "AssemblyPreliminaryReviewHttpTests",
+      "AssemblyRosterListingHttpTests",
       "AssemblyTreasuryStatementInspectionPostgreSqlTests",
       "RegimenInteriorMemberControlPostgreSqlTests",
       "CandidateInterviewAssignmentHttpTests",

@@ -1,0 +1,9 @@
+.assembly-toolbar { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+.assembly-toolbar .field { flex: 1 1 18rem; min-width: 0; }
+.assembly-dates { flex-basis: 100%; margin: 0; }
+.assembly-form { display: grid; gap: 1rem; }
+.assembly-form textarea { width: 100%; box-sizing: border-box; }
+.assembly-note { margin: 0; padding: .85rem 1rem; border-left: 4px solid var(--gold, #c9a227); background: var(--surface, #fff); border-radius: .5rem; font-size: .95rem; line-height: 1.5; }
+.assembly-signature { display: inline-block; min-width: 9rem; height: 1.6rem; border-bottom: 1px solid currentColor; vertical-align: bottom; }
+.assembly-table td small { display: block; color: var(--muted); }
+@media (max-width: 640px) { .assembly-signature { min-width: 5rem; } }

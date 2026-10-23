@@ -238,6 +238,12 @@ public static class DocumentManagementEndpoints
         var contentType = NormalizeRequired(request.ContentType);
         if (fileName is null || contentType is null)
             return Results.BadRequest(new { message = "Nombre de archivo y tipo MIME son obligatorios." });
+        // El Boletín mensual se publica exclusivamente en PDF.
+        if (LibraryEditorialTypes.IsBulletin(document.DocumentType) &&
+            (!string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase) ||
+             !fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)))
+            return Results.Json(new { message = "El Boletín se sube sólo en formato PDF." },
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
         if (request.SizeBytes <= 0)
             return Results.BadRequest(new { message = "El tamaño del archivo debe ser mayor que cero." });
 

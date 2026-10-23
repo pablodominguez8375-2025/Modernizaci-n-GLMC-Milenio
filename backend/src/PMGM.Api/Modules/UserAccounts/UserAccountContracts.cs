@@ -4,9 +4,15 @@ using System.Security.Cryptography;
 namespace PMGM.Api.Modules.UserAccounts;
 
 public sealed record CreateUserAccountRequest(Guid? MemberId, Guid? OrganizationId,
-    bool PlatformAdministrator = false, string? PlatformName = null, string? PlatformEmail = null);
+    bool PlatformAdministrator = false, string? PlatformName = null, string? PlatformEmail = null,
+    bool Superuser = false);
 public sealed record AccountCandidate(Guid MemberId, Guid OrganizationId, string Name, string Email, string Workshop);
-public sealed record AccountIdentity(string Name, string Email, Guid? MemberId, Guid? OrganizationId, bool PlatformAdministrator);
+/// <summary>
+/// <c>PlatformAdministrator</c> (rol global Máster) NUNCA se concede desde el alta
+/// común: existe una sola cuenta Máster, provista fuera de esta API. El superusuario
+/// es otra cosa: cuenta de soporte sin rol global, con perfiles limitados.
+/// </summary>
+public sealed record AccountIdentity(string Name, string Email, Guid? MemberId, Guid? OrganizationId, bool PlatformAdministrator, bool Superuser = false);
 public sealed record PreparedIdentity(string Subject, bool Created);
 public sealed record AccountUser(string Subject, string Name, string Email, bool Enabled, string Kind);
 

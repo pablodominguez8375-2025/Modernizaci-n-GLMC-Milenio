@@ -88,6 +88,12 @@
       },
       {
         "name": "lodge_past_master"
+      },
+      {
+        "name": "librarian"
+      },
+      {
+        "name": "communications"
       }
     ]
   },
@@ -668,6 +674,54 @@
         }
       ],
       "id": "aa820001-0000-4000-8000-000000000019"
+    },
+    {
+      "username": "qa.bibliotecario",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.bibliotecario@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "librarian"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000020"
+    },
+    {
+      "username": "qa.comunicaciones",
+      "enabled": true,
+      "firstName": "Cuenta",
+      "lastName": "Sintética QA",
+      "email": "qa.comunicaciones@pmgm.invalid",
+      "emailVerified": true,
+      "attributes": {
+        "pmgm_scope": [
+          "order"
+        ]
+      },
+      "realmRoles": [
+        "communications"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${PMGM_QA_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "id": "aa820001-0000-4000-8000-000000000021"
     }
   ],
   "smtpServer": {

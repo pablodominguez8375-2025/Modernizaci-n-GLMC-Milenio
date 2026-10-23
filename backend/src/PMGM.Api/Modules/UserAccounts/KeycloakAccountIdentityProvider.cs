@@ -40,6 +40,8 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
     }
     public async Task<PreparedIdentity> PrepareDisabledAsync(AccountIdentity account, string temporaryPassword, CancellationToken ct)
     {
+        // Fail-closed: el rol global de Máster jamás se concede por esta vía (regla del PO 22-10).
+        if(account.PlatformAdministrator) throw new AccountConflictException();
         string? subject=null; var created=false;
         using(var lookup=await Send(HttpMethod.Get,$"users?username={Uri.EscapeDataString(account.Email.ToLowerInvariant())}&exact=true",null,ct))
         {
@@ -49,7 +51,7 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
                 var existing=json.RootElement[0];
                 if(existing.GetProperty("enabled").GetBoolean() || Attribute(existing,"pmgm_managed")!="active-member-accounts" ||
                    Attribute(existing,"pmgm_member_id")!=(account.MemberId?.ToString()??"") ||
-                   Attribute(existing,"pmgm_account_kind")!=(account.PlatformAdministrator?"platform":"member") ||
+                   Attribute(existing,"pmgm_account_kind")!=(account.Superuser?"superuser":"member") ||
                    !string.Equals(existing.GetProperty("email").GetString(),account.Email,StringComparison.OrdinalIgnoreCase)) throw new AccountConflictException();
                 subject=existing.GetProperty("id").GetString();
             }
@@ -59,8 +61,8 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
         var userRepresentation=new { username=account.Email.ToLowerInvariant(),email=account.Email,
                 firstName=names,lastName=parts.Length>1?parts[^1]:"Plataforma",enabled=false,emailVerified=false,
                 requiredActions=new[]{"UPDATE_PASSWORD"}, attributes=new Dictionary<string,string[]> {
-                    ["pmgm_managed"]=["active-member-accounts"],["pmgm_account_kind"]=[account.PlatformAdministrator?"platform":"member"],
-                    ["pmgm_member_id"]=[account.MemberId?.ToString()??""],["pmgm_scope"]=[account.PlatformAdministrator?"order":"organization"],
+                    ["pmgm_managed"]=["active-member-accounts"],["pmgm_account_kind"]=[account.Superuser?"superuser":"member"],
+                    ["pmgm_member_id"]=[account.MemberId?.ToString()??""],["pmgm_scope"]=[account.Superuser?"order":"organization"],
                     ["pmgm_org"]=[account.OrganizationId?.ToString()??""] } };
         if(subject is null)
         {
@@ -76,12 +78,6 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
             if(!created)
             {
                 using var update=await Send(HttpMethod.Put,$"users/{Uri.EscapeDataString(subject)}",userRepresentation,ct);Success(update);
-            }
-            if(account.PlatformAdministrator)
-            {
-                using var role=await Send(HttpMethod.Get,"roles/platform_superadmin",null,ct);Success(role);
-                using var roleJson=JsonDocument.Parse(await role.Content.ReadAsStringAsync(ct));
-                using var mapping=await Send(HttpMethod.Post,$"users/{subject}/role-mappings/realm",new[]{roleJson.RootElement.Clone()},ct);Success(mapping);
             }
             using var password=await Send(HttpMethod.Put,$"users/{subject}/reset-password",new { type="password",value=temporaryPassword,temporary=true },ct);Success(password);
             return new(subject,created);

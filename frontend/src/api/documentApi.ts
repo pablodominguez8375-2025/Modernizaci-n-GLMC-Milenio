@@ -15,7 +15,9 @@ export interface DocumentListResponse { total: number; items: DocumentListItem[]
 export interface DocumentVersion {
   id: string; documentId: string; versionNumber: number; originalFileName: string; contentType: string; sizeBytes: number; processingStatus: DocumentProcessingStatus; hasIntegrityHash: boolean; scanEvidenceRecorded: boolean; createdAtUtc: string
 }
-export interface EditorialMagazine { documentId: string; title: string; documentType: string; collectionName: string; status: string; minimumDegreeRequired: number | null; authorName: string | null; documentDate: string | null; topic: string | null; edition: string | null; shortDescription: string | null; createdAtUtc: string; publishedAtUtc: string | null }
+export interface EditorialMagazine { documentId: string; title: string; documentType: string; collectionName: string; status: string; minimumDegreeRequired: number | null; authorName: string | null; documentDate: string | null; topic: string | null; edition: string | null; shortDescription: string | null; createdAtUtc: string; publishedAtUtc: string | null; publisherProfile?: 'librarian' | 'communications' | null; canCorrect?: boolean }
+/** Publicaciones editoriales de Biblioteca: revista institucional y Boletín mensual. */
+export type EditorialType = 'magazine' | 'bulletin'
 export interface EditorialMagazineList { total: number; page: number; pageSize: number; items: EditorialMagazine[] }
 export interface EditorialMagazineVersion { id: string; versionNumber: number; processingStatus: string; originalFileName: string; contentType: string; sizeBytes: number; createdAtUtc: string }
 export interface InstitutionalDocument extends DocumentListItem { collectionCode: string; versions: DocumentVersion[] }
@@ -171,6 +173,14 @@ export class DocumentApiClient {
     id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1',
     versions: [{ id: 'demo-own-work-paper-version-1', versionNumber: 1, originalFileName: 'trabajo-aprendiz-demo.pdf', processingStatus: 'available', createdAtUtc: '2026-09-10T15:00:00Z', isCurrent: true }],
   }]
+
+  private mockEditorial: EditorialMagazine[] = [
+    { documentId: 'demo-ed-boletin-oct', title: 'Boletín de la Orden · Octubre 2026', documentType: 'bulletin', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-10-01', topic: null, edition: null, shortDescription: 'Actividades de la Orden durante octubre.', createdAtUtc: '2026-10-02T12:00:00Z', publishedAtUtc: '2026-10-03T12:00:00Z', publisherProfile: 'communications', canCorrect: true },
+    { documentId: 'demo-ed-horizonte-4', title: 'Horizonte Masónico · N° 4', documentType: 'magazine', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-09-15', topic: 'El trabajo en logia', edition: 'N° 4', shortDescription: 'Cuarto número de la revista institucional.', createdAtUtc: '2026-09-10T12:00:00Z', publishedAtUtc: '2026-09-15T12:00:00Z', publisherProfile: 'communications', canCorrect: true },
+    { documentId: 'demo-ed-especial', title: 'Horizonte Masónico · Edición especial', documentType: 'magazine', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Bibliotecario', documentDate: '2026-08-20', topic: null, edition: 'Especial', shortDescription: 'Edición especial publicada por el Bibliotecario.', createdAtUtc: '2026-08-18T12:00:00Z', publishedAtUtc: '2026-08-20T12:00:00Z', publisherProfile: 'librarian', canCorrect: false },
+    { documentId: 'demo-ed-boletin-nov', title: 'Boletín de la Orden · Noviembre 2026', documentType: 'bulletin', collectionName: 'Publicaciones de la Orden', status: 'draft', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-11-01', topic: null, edition: null, shortDescription: 'Borrador en preparación.', createdAtUtc: '2026-10-20T12:00:00Z', publishedAtUtc: null, publisherProfile: 'communications', canCorrect: true }
+  ]
+  private mockEditorialVersions: Array<EditorialMagazineVersion & { documentId: string }> = this.mockEditorial.map(item => ({ documentId: item.documentId, id: `${item.documentId}-v1`, versionNumber: 1, processingStatus: 'available', originalFileName: `${item.documentId}.pdf`, contentType: 'application/pdf', sizeBytes: 1_200_000, createdAtUtc: item.createdAtUtc }))
 
   constructor(options: DocumentApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -378,6 +388,14 @@ export class DocumentApiClient {
 
   async createVersion(documentId: string, payload: CreateDocumentVersionRequest): Promise<DocumentVersion> {
     if (this.useMocks) {
+      const editorial = this.mockEditorial.find(item => item.documentId === documentId)
+      if (editorial) {
+        if (editorial.canCorrect === false) throw new DocumentApiHttpError(403, 'Solo el perfil que publicó puede corregir esta publicación.')
+        const number = Math.max(0, ...this.mockEditorialVersions.filter(item => item.documentId === documentId).map(item => item.versionNumber)) + 1
+        const created = { documentId, id: crypto.randomUUID(), versionNumber: number, processingStatus: 'pending_upload', originalFileName: payload.originalFileName.trim(), contentType: payload.contentType.trim(), sizeBytes: payload.sizeBytes, createdAtUtc: new Date().toISOString() }
+        this.mockEditorialVersions.push(created)
+        return { id: created.id, documentId, versionNumber: number, originalFileName: created.originalFileName, contentType: created.contentType, sizeBytes: created.sizeBytes, processingStatus: 'pending_upload', hasIntegrityHash: false, scanEvidenceRecorded: false, createdAtUtc: created.createdAtUtc }
+      }
       const document = this.mockDocuments.get(documentId); if (!document) throw new Error('El documento indicado no existe.')
       const version: DocumentVersion = { id: crypto.randomUUID(), documentId, versionNumber: Math.max(0, ...document.versions.map(item => item.versionNumber)) + 1, originalFileName: payload.originalFileName.trim(), contentType: payload.contentType.trim(), sizeBytes: payload.sizeBytes, processingStatus: 'pending_upload', hasIntegrityHash: false, scanEvidenceRecorded: false, createdAtUtc: new Date().toISOString() }
       document.versions.unshift(version); return { ...version }
@@ -387,6 +405,8 @@ export class DocumentApiClient {
 
   async uploadVersionContent(versionId: string, file: File): Promise<DocumentVersion> {
     if (this.useMocks) {
+      const editorial = this.mockEditorialVersions.find(item => item.id === versionId)
+      if (editorial) { editorial.processingStatus = 'uploaded'; return { id: versionId, documentId: editorial.documentId, versionNumber: editorial.versionNumber, originalFileName: editorial.originalFileName, contentType: editorial.contentType, sizeBytes: editorial.sizeBytes, processingStatus: 'uploaded', hasIntegrityHash: true, scanEvidenceRecorded: false, createdAtUtc: editorial.createdAtUtc } }
       const document = [...this.mockDocuments.values()].find(item => item.versions.some(version => version.id === versionId))
       const version = document?.versions.find(item => item.id === versionId)
       if (!version) throw new Error('La versión indicada no existe.')
@@ -404,6 +424,8 @@ export class DocumentApiClient {
 
   async scanVersionContent(versionId: string): Promise<DocumentVersion> {
     if (this.useMocks) {
+      const editorial = this.mockEditorialVersions.find(item => item.id === versionId)
+      if (editorial) { editorial.processingStatus = 'available'; return { id: versionId, documentId: editorial.documentId, versionNumber: editorial.versionNumber, originalFileName: editorial.originalFileName, contentType: editorial.contentType, sizeBytes: editorial.sizeBytes, processingStatus: 'available', hasIntegrityHash: true, scanEvidenceRecorded: true, createdAtUtc: editorial.createdAtUtc } }
       const document = [...this.mockDocuments.values()].find(item => item.versions.some(version => version.id === versionId))
       const version = document?.versions.find(item => item.id === versionId)
       if (!version) throw new Error('La versión indicada no existe.')
@@ -458,28 +480,41 @@ export class DocumentApiClient {
 
   /** Revistas editables por el usuario (403 si no tiene permiso editorial). En demo no hay API real: lista vacía. */
   async listEditableMagazines(page = 1, pageSize = 50): Promise<EditorialMagazineList> {
-    if (this.useMocks) return { total: 0, page, pageSize, items: [] }
+    if (this.useMocks) return { total: this.mockEditorial.length, page, pageSize, items: this.mockEditorial.map(item => ({ ...item })) }
     return this.request<EditorialMagazineList>(`/api/biblioteca/editorial/revistas?page=${page}&pageSize=${pageSize}`)
   }
 
-  async createEditorialMagazine(collectionId: string, title: string): Promise<{ documentId: string; status: string }> {
-    if (this.useMocks) throw new Error('La demostración no crea revistas reales.')
-    return this.postJson<{ documentId: string; status: string }>('/api/biblioteca/editorial/revistas', { collectionId, title })
+  /** Alta de borrador editorial: Revista (por omisión) o Boletín mensual. */
+  async createEditorialMagazine(collectionId: string, title: string, documentType: EditorialType = 'magazine'): Promise<{ documentId: string; status: string }> {
+    if (this.useMocks) throw new Error('La demostración no crea publicaciones reales.')
+    return this.postJson<{ documentId: string; status: string }>('/api/biblioteca/editorial/revistas', { collectionId, title, documentType })
   }
 
   async listMagazineVersions(documentId: string): Promise<EditorialMagazineVersion[]> {
-    if (this.useMocks) return []
+    if (this.useMocks) return this.mockEditorialVersions.filter(item => item.documentId === documentId).sort((a, b) => b.versionNumber - a.versionNumber).map(({ documentId: _ignored, ...version }) => version)
     const response = await this.request<{ items: EditorialMagazineVersion[] }>(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/versiones?pageSize=50`)
     return response.items
   }
 
-  async publishEditorialMagazine(documentId: string, versionId: string): Promise<void> {
-    if (this.useMocks) throw new Error('La demostración no publica revistas reales.')
-    await this.authorizedFetch(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/publicar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ versionId }) })
+  /** `reason` es obligatorio (10 a 2000 caracteres) al reemplazar el archivo de una publicación vigente sin despublicar. */
+  async publishEditorialMagazine(documentId: string, versionId: string, reason?: string): Promise<void> {
+    if (this.useMocks) {
+      const item = this.mockEditorial.find(entry => entry.documentId === documentId)
+      if (!item) throw new Error('La demostración no publica revistas reales.')
+      if (item.canCorrect === false) throw new DocumentApiHttpError(403, 'Solo el perfil que publicó puede corregir esta publicación.')
+      if (item.status === 'published' && (reason?.trim().length ?? 0) < 10) throw new DocumentApiHttpError(400, 'Indique el motivo del reemplazo (10 a 2000 caracteres).')
+      item.status = 'published'; item.publishedAtUtc = new Date().toISOString(); return
+    }
+    await this.authorizedFetch(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/publicar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(reason ? { versionId, reason } : { versionId }) })
   }
 
   async unpublishEditorialMagazine(documentId: string): Promise<void> {
-    if (this.useMocks) throw new Error('La demostración no retira revistas reales.')
+    if (this.useMocks) {
+      const item = this.mockEditorial.find(entry => entry.documentId === documentId)
+      if (!item) throw new Error('La demostración no retira revistas reales.')
+      if (item.canCorrect === false) throw new DocumentApiHttpError(403, 'Solo el perfil que publicó puede retirar esta publicación.')
+      item.status = 'draft'; item.publishedAtUtc = null; return
+    }
     await this.authorizedFetch(`/api/biblioteca/editorial/revistas/${encodeURIComponent(documentId)}/retirar-publicacion`, { method: 'POST' })
   }
 
@@ -528,6 +563,7 @@ function canonicalCatalogType(value: string) {
   if (['book', 'books', 'libro', 'libros'].includes(normalized)) return 'book'
   if (['official_document', 'documento_oficial', 'regulation', 'reglamento', 'constitution', 'constitucion', 'ritual'].includes(normalized)) return 'official_document'
   if (['magazine', 'magazines', 'revista', 'revistas'].includes(normalized)) return 'magazine'
+  if (['bulletin', 'bulletins', 'boletin', 'boletines'].includes(normalized)) return 'bulletin'
   if (['video', 'videos'].includes(normalized)) return 'video'
   return normalized
 }

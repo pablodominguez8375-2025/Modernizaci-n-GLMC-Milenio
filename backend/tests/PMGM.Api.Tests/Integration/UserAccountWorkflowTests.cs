@@ -30,6 +30,7 @@ public sealed class UserAccountWorkflowTests
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
         var identity=new Identity{EnableFails=enableFails};var mail=new Mail{Fails=mailFails};
         using var factory=Factory(connection,identity,mail);using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
         var ids=await Seed(factory,"active");
         var response=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);
         Assert.Equal(mailFails||enableFails?HttpStatusCode.ServiceUnavailable:HttpStatusCode.Created,response.StatusCode);
@@ -60,7 +61,9 @@ public sealed class UserAccountWorkflowTests
     public async Task Inactive_member_cannot_create_account_despite_active_membership(string status)
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
-        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,status);
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var ids=await Seed(factory,status);
         var response=await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},TestContext.Current.CancellationToken);
         Assert.Equal(HttpStatusCode.BadRequest,response.StatusCode);Assert.Equal(0,identity.Prepares);
         using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
@@ -68,18 +71,95 @@ public sealed class UserAccountWorkflowTests
     }
 
     [Fact]
-    public async Task Requires_binding_rejects_email_override_and_limits_platform_exception_to_superadmin()
+    public async Task Requires_binding_and_rejects_email_override_for_member_accounts()
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
-        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,"active");
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var ids=await Seed(factory,"active");
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {},TestContext.Current.CancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=Guid.NewGuid()},TestContext.Current.CancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization,platformEmail="override@example.invalid"},TestContext.Current.CancellationToken)).StatusCode);
-        var platform=new {platformAdministrator=true,platformName="Admin Ficticio",platformEmail=$"admin-{Guid.NewGuid():N}@example.invalid"};
-        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/system/user-accounts",platform,TestContext.Current.CancellationToken)).StatusCode);Assert.Equal(0,identity.Prepares);
+        Assert.Equal(0,identity.Prepares);
+    }
+
+    // Regla del PO (22-10 21:31): solo existe UN Máster; ni el Máster crea otro; solo Usuarios y Superusuarios.
+    [Theory]
+    [InlineData(InstitutionalRoles.GranLogiaAdmin)]
+    [InlineData(InstitutionalRoles.TallerTesoreria)]
+    public async Task Only_master_may_create_regular_user_even_with_system_admin_menu(string role)
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        var identity=new Identity();var mail=new Mail();
+        using var factory=Factory(connection,identity,mail);using var client=factory.CreateClient();
+        var ids=await Seed(factory,"active");
+        client.DefaultRequestHeaders.Add("X-Account-Role",role);
+        using var denied=await client.PostAsJsonAsync("/api/system/user-accounts",
+            new { memberId=ids.Member,organizationId=ids.Organization },
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden,denied.StatusCode);
+        Assert.Equal(0,identity.Prepares);
+        Assert.Null(identity.Account);
+        Assert.False(identity.Enabled);
+        Assert.Null(mail.LastAccount);
+        Assert.Null(mail.Password);
+        if(role==InstitutionalRoles.GranLogiaAdmin)
+        {
+            using var options=JsonDocument.Parse(await client.GetStringAsync(
+                "/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
+            Assert.False(options.RootElement.GetProperty("canCreateUser").GetBoolean());
+            Assert.False(options.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
+        }
+    }
+
+    [Theory]
+    [InlineData(InstitutionalRoles.GranLogiaAdmin,false)]
+    [InlineData(InstitutionalRoles.PlatformSuperAdmin,false)]
+    [InlineData(InstitutionalRoles.PlatformSuperAdmin,true)]
+    public async Task Nobody_not_even_the_master_can_create_another_master(string role,bool alsoSuperuser)
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",role);
+        var email=$"admin-{Guid.NewGuid():N}@example.invalid";
+        var body=new {platformAdministrator=true,superuser=alsoSuperuser,platformName="Otro Master",platformEmail=email};
+        var response=await client.PostAsJsonAsync("/api/system/user-accounts",body,TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden,response.StatusCode);
+        Assert.Equal(0,identity.Prepares);Assert.Null(identity.Account);Assert.False(identity.Enabled);
+        // Concurrencia: ninguna de varias altas simultáneas llega a la identidad.
+        var results=await Task.WhenAll(Enumerable.Range(0,6).Select(_=>client.PostAsJsonAsync("/api/system/user-accounts",body,TestContext.Current.CancellationToken)));
+        Assert.All(results,r=>Assert.Equal(HttpStatusCode.Forbidden,r.StatusCode));
+        Assert.Equal(0,identity.Prepares);
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        if(role==InstitutionalRoles.PlatformSuperAdmin)
+        {
+            var audits=await db.AuditEvents.Where(a=>a.Action=="system.users.master_creation_denied").ToListAsync(TestContext.Current.CancellationToken);
+            Assert.NotEmpty(audits);Assert.All(audits,a=>Assert.DoesNotContain(email,a.MetadataJson??""));
+        }
+    }
+
+    [Fact]
+    public async Task Only_the_master_creates_superusers_and_they_never_get_the_global_master_role()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,"active");
+        var superuser=new {superuser=true,platformName="Soporte Ficticio",platformEmail=$"soporte-{Guid.NewGuid():N}@example.invalid"};
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/system/user-accounts",superuser,TestContext.Current.CancellationToken)).StatusCode);Assert.Equal(0,identity.Prepares);
         client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
-        Assert.Equal(HttpStatusCode.Created,(await client.PostAsJsonAsync("/api/system/user-accounts",platform,TestContext.Current.CancellationToken)).StatusCode);
-        Assert.Null(identity.Account!.MemberId);Assert.Null(identity.Account.OrganizationId);Assert.True(identity.Account.PlatformAdministrator);
+        // Un superusuario no admite Hermano/Taller ni datos incompletos.
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {superuser=true,memberId=ids.Member,organizationId=ids.Organization,platformName="X",platformEmail="x@example.invalid"},TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync("/api/system/user-accounts",new {superuser=true},TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(0,identity.Prepares);
+        var created=await client.PostAsJsonAsync("/api/system/user-accounts",superuser,TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Created,created.StatusCode);
+        Assert.Null(identity.Account!.MemberId);Assert.Null(identity.Account.OrganizationId);
+        Assert.True(identity.Account.Superuser);Assert.False(identity.Account.PlatformAdministrator);
+        using var json=JsonDocument.Parse(await created.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.False(json.RootElement.GetProperty("platformAdministrator").GetBoolean());Assert.True(json.RootElement.GetProperty("superuser").GetBoolean());
+        using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
+        Assert.False(candidates.RootElement.GetProperty("canCreatePlatformAdministrator").GetBoolean());
+        Assert.True(candidates.RootElement.GetProperty("canCreateUser").GetBoolean());
+        Assert.True(candidates.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
     }
 
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection,Identity identity,Mail mail)

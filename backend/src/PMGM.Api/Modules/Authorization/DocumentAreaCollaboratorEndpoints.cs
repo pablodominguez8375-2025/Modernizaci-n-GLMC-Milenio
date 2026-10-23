@@ -112,9 +112,10 @@ public static class DocumentAreaCollaboratorEndpoints
             string.IsNullOrWhiteSpace(category) ||
             !DynamicAccessEndpoints.CatalogCategories.Contains(category) ||
             actions.Length == 0 || actions.Any(a => !DelegableActions.Contains(a)) ||
-            // El permiso de contenido se delega sólo en revistas de Biblioteca;
-            // otras categorías y Gestión Documental no reciben una vía de carga.
-            (actions.Contains("write") && (view != "library" || category != "magazine")) ||
+            // El permiso de contenido se delega sólo en publicaciones editoriales
+            // de Biblioteca (Revista y Boletín); otras categorías y Gestión
+            // Documental no reciben una vía de carga.
+            (actions.Contains("write") && (view != "library" || category is not ("magazine" or "bulletin"))) ||
             !actions.Contains("view") ||
             request.EffectiveTo < request.EffectiveFrom)
             return Results.BadRequest(new { code = "INVALID_COLLABORATOR_SCOPE" });

@@ -39,6 +39,13 @@ public sealed class InstitutionalDocument
     public string? AbstractText { get; set; }
     public string? OfficialDocumentType { get; set; }
 
+    /// <summary>
+    /// Perfil institucional (librarian | communications) que creó la publicación
+    /// editorial. La titularidad es por perfil/cargo, no por persona. Null en
+    /// documentos históricos: se comportan como antes.
+    /// </summary>
+    public string? PublisherProfile { get; set; }
+
     public string Status { get; set; } = DocumentManagementCodes.DocumentStatus.Draft;
     public Guid? PublishedVersionId { get; set; }
     public DateTimeOffset? PublishedAtUtc { get; set; }

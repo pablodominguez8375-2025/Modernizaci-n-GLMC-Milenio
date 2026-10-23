@@ -50,6 +50,32 @@ public sealed class CalendarNotificationRecipientGuardTests
     [Theory]
     [InlineData(null)]
     [InlineData("all")]
+    public void An_ungraded_instruction_never_reaches_a_regular_member_in_internal_inbox(string? grade)
+    {
+        var lodge = Guid.NewGuid();
+        var instruction = Event(lodge, grade);
+        instruction.EventType = "lodge_instruction_day";
+        foreach (var degree in new[] { 1, 2, 3 })
+        {
+            var reader = new CalendarGradeReader(false, degree,
+                new HashSet<Guid> { lodge }, new HashSet<Guid>());
+            Assert.False(CalendarNotificationRecipientGuard.CanDeliver(
+                reader, instruction, [NotificationCodes.Channel.Internal]));
+        }
+        // Un cargo institucional vigente dentro del mismo Taller conserva
+        // la excepción aprobada, sin extenderla a un Taller distinto.
+        var officer = new CalendarGradeReader(false, 2,
+            new HashSet<Guid> { lodge }, new HashSet<Guid> { lodge });
+        Assert.True(CalendarNotificationRecipientGuard.CanDeliver(
+            officer, instruction, [NotificationCodes.Channel.Internal]));
+        instruction.OrganizationId = Guid.NewGuid();
+        Assert.False(CalendarNotificationRecipientGuard.CanDeliver(
+            officer, instruction, [NotificationCodes.Channel.Internal]));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("all")]
     public void General_lodge_notice_requires_active_membership(string? grade)
     {
         var lodge = Guid.NewGuid();

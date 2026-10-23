@@ -142,6 +142,7 @@ function actionLabel(actionUrl: string | null, actionRequired = false) {
   if (actionUrl === '/ceremonies') return 'Ver ceremonias'
   if (actionUrl === '/lodge') return 'Ir a Gestión Logial'
   if (actionUrl === '/documents') return 'Ver documentos'
+  if (actionUrl === '/official-documents') return 'Ver documento oficial'
   return 'Abrir'
 }
 
@@ -149,6 +150,7 @@ function notificationIcon(typeCode: string): InstitutionalIconName {
   if (typeCode.includes('ceremony')) return 'ceremony'
   if (typeCode.includes('candidate')) return 'candidate'
   if (typeCode.includes('calendar')) return 'calendar'
+  if (typeCode.includes('grandarchive')) return 'archive'
   if (typeCode.includes('privacy')) return 'shield'
   if (typeCode.includes('lodge')) return 'lodge'
   return 'bell'
@@ -158,6 +160,7 @@ function typeLabel(typeCode: string) {
   if (typeCode.includes('candidate')) return 'Insinuados'
   if (typeCode.includes('ceremony')) return 'Ceremonias'
   if (typeCode.includes('calendar')) return 'Calendario'
+  if (typeCode.includes('grandarchive')) return 'Documentos oficiales'
   if (typeCode.includes('privacy')) return 'Privacidad'
   if (typeCode.includes('lodge')) return 'Gestión Logial'
   return 'Institucional'

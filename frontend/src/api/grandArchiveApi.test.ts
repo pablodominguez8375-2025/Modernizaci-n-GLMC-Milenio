@@ -28,3 +28,62 @@ it('demo workflow registers and withdraws an archive record without network call
   expect(withdrawn.status).toBe('withdrawn')
   expect(fetch).not.toHaveBeenCalled()
 })
+
+it('demo publishes with a degree, lists official documents and unpublishes with a reason', async () => {
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+  const client = new GrandArchiveApiClient({ useMocks: true })
+  const before = (await client.listOfficial()).items.length
+  const candidate = (await client.candidates('Decreto')).items[0]
+  const created = await client.register({ documentId: candidate.documentId, documentVersionId: candidate.documentVersionId, archiveCode: 'GA-QA-PUB-1', recordType: 'decree' })
+  expect(created.publishedMinimumDegree ?? null).toBeNull()
+  const published = await client.publish(created.id, 2)
+  expect(published.publishedMinimumDegree).toBe(2)
+  expect((await client.listOfficial()).items).toHaveLength(before + 1)
+  await expect(client.publish(created.id, 4 as never)).rejects.toThrow()
+  await expect(client.unpublish(created.id, 'corto')).rejects.toThrow()
+  expect((await client.unpublish(created.id, 'Retiro por corrección del decreto.')).publishedMinimumDegree).toBeNull()
+  expect((await client.listOfficial()).items).toHaveLength(before)
+  const historical = (await client.list({})).items.find(x => x.recordType === 'historical_record')!
+  await expect(client.publish(historical.id, 1)).rejects.toThrow(/interno/)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('official documents use the read-only route and the publish route sends the degree', async () => {
+  const fetch = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ total: 0, returned: 0, items: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetch)
+  const client = new GrandArchiveApiClient({ getAccessToken: async () => 't' })
+  await client.listOfficial({ recordType: 'decree', year: 2026 })
+  expect(fetch.mock.calls[0][0]).toContain('/api/publicaciones-oficiales/?recordType=decree&year=2026')
+  await client.publish('abc', 3)
+  expect(fetch.mock.calls[1][0]).toContain('/api/grand-archive/abc/publish')
+  expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ minimumDegree: 3, until: null })
+})
+
+it('publication has a 12-month default end, can be set, expires into the archive and can be published again', async () => {
+  const fetch = vi.fn(); vi.stubGlobal('fetch', fetch)
+  const { defaultPublicationEnd, isExpiringSoon } = await import('./grandArchiveApi')
+  const client = new GrandArchiveApiClient({ useMocks: true })
+  const all = (await client.list({})).items
+  // Demo: uno vence pronto, uno ya está archivado por vencimiento y no aparece para los Hermanos.
+  expect(all.some(x => isExpiringSoon(x))).toBe(true)
+  const expired = all.find(x => x.publicationStatus === 'expired')!
+  expect((await client.listOfficial()).items.some(x => x.id === expired.id)).toBe(false)
+  await expect(client.unpublish(expired.id, 'Intento de retiro sobre algo ya archivado.')).rejects.toThrow(/archivado/)
+  // Volver a publicar: nueva vigencia (por defecto 12 meses) y vuelve a verse.
+  const again = await client.publish(expired.id, 2)
+  expect(again.publicationStatus).toBe('published')
+  expect(again.publishedUntilUtc!.slice(0, 7)).toBe(defaultPublicationEnd().slice(0, 7))
+  expect((await client.listOfficial()).items.some(x => x.id === expired.id)).toBe(true)
+  // Fechas inválidas.
+  await expect(client.publish(expired.id, 2, '2020-01-01')).rejects.toThrow(/posterior a hoy/)
+  const far = new Date(); far.setFullYear(far.getFullYear() + 6)
+  await expect(client.publish(expired.id, 2, far.toISOString().slice(0, 10))).rejects.toThrow(/5 años/)
+  expect(fetch).not.toHaveBeenCalled()
+})
+
+it('publish sends the chosen end date to the server', async () => {
+  const fetch = vi.fn().mockImplementation(async () => new Response(JSON.stringify({}), { status: 200 }))
+  vi.stubGlobal('fetch', fetch)
+  await new GrandArchiveApiClient({ getAccessToken: async () => 't' }).publish('abc', 1, '2027-03-31')
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ minimumDegree: 1, until: '2027-03-31' })
+})
