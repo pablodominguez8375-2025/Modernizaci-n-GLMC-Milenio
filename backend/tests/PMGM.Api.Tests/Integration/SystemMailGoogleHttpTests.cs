@@ -135,7 +135,9 @@ public sealed class SystemMailGoogleHttpTests
                 Assert.Equal(HttpStatusCode.BadRequest, invalidAddress.StatusCode);
 
             // Test inyecta un sender falso: NUNCA abre conexión SMTP externa.
-            for (var i = 0; i < 5; i++)
+            // El intento rechazado por destinatario inválido también consume
+            // un cupo antiabuso del mismo actor; restan cuatro envíos válidos.
+            for (var i = 0; i < 4; i++)
             {
                 using var response = await client.PostAsJsonAsync(
                     "/api/system/mail/test", new { recipient }, ct);
@@ -149,7 +151,7 @@ public sealed class SystemMailGoogleHttpTests
             {
                 Assert.Equal(HttpStatusCode.TooManyRequests, sixth.StatusCode);
             }
-            Assert.Equal(5, sender.CallCount);
+            Assert.Equal(4, sender.CallCount);
             Assert.Equal(recipient, sender.LastRecipient);
             Assert.Equal(mailbox, sender.LastAccount);
             Assert.Equal(rawSecret, sender.LastPassword);
