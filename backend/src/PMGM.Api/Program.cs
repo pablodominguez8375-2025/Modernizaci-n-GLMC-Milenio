@@ -104,6 +104,7 @@ builder.Services.AddScoped<ITreasuryOrdinaryDuesEligibilityService, TreasuryOrdi
 builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
 builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
+builder.Services.AddScoped<IOfficialDocumentNoticeService, OfficialDocumentNoticeService>();
 builder.Services.AddScoped<FirstImplementationSeedService>();
 builder.Services.Configure<AccountIdentityOptions>(builder.Configuration.GetSection("UserAccounts:Identity"));
 builder.Services.Configure<InitialAccountMailOptions>(builder.Configuration.GetSection("UserAccounts:Mail"));

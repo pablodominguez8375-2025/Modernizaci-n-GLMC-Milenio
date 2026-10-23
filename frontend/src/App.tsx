@@ -344,9 +344,10 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/ceremonies' && canCeremonies) return setView('ceremonies')
     if (path === '/lodge' && canLodge) return setView('lodge')
     if (path === '/documents' && canDocuments) return setView('documents')
+    if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.136' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.137' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
