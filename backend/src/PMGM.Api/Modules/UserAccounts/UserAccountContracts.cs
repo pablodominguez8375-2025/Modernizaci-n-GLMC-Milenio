@@ -24,7 +24,14 @@ public interface IAccountIdentityProvider
     Task EnableAsync(string subject, CancellationToken ct);
     Task RemoveAsync(string subject, CancellationToken ct);
     Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct);
+    /// <summary>Cuenta gestionada por la plataforma o null si no existe / no es gestionada.</summary>
+    Task<AccountUser?> FindManagedAsync(string subject, CancellationToken ct);
+    /// <summary>Modalidad A: el proveedor envía un enlace de un solo uso (UPDATE_PASSWORD) al correo de la cuenta.</summary>
+    Task SendPasswordRecoveryEmailAsync(string subject, CancellationToken ct);
+    /// <summary>Modalidad B: clave temporal con cambio obligatorio; cierra las sesiones activas.</summary>
+    Task SetTemporaryPasswordAsync(string subject, string temporaryPassword, CancellationToken ct);
 }
+public sealed record PasswordRecoveryRequest(string? Modality, string? Reason);
 public interface IInitialAccountMail
 {
     bool Configured { get; }

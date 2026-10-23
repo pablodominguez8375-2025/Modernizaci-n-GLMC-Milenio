@@ -114,5 +114,33 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
             if(json.RootElement.GetArrayLength()<100) return result;
         }
     }
+    public async Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) return null;
+        using var response=await Send(HttpMethod.Get,$"users/{id}",null,ct);
+        if(response.StatusCode==HttpStatusCode.NotFound) return null;
+        Success(response);
+        using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));var x=json.RootElement;
+        if(Attribute(x,"pmgm_managed")!="active-member-accounts") return null;
+        return new AccountUser(id.ToString(),$"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),Text(x,"email"),x.GetProperty("enabled").GetBoolean(),Attribute(x,"pmgm_account_kind"));
+    }
+    public async Task SendPasswordRecoveryEmailAsync(string subject,CancellationToken ct)
+    {
+        // Enlace de un solo uso con vigencia corta (30 min); el correo lo envía el proveedor, la API nunca ve la clave.
+        using var response=await Send(HttpMethod.Put,$"users/{Uri.EscapeDataString(subject)}/execute-actions-email?lifespan=1800",new[]{"UPDATE_PASSWORD"},ct);
+        Success(response);
+        await LogoutAsync(subject,ct);
+    }
+    public async Task SetTemporaryPasswordAsync(string subject,string temporaryPassword,CancellationToken ct)
+    {
+        using var password=await Send(HttpMethod.Put,$"users/{Uri.EscapeDataString(subject)}/reset-password",new{type="password",value=temporaryPassword,temporary=true},ct);
+        Success(password);
+        await LogoutAsync(subject,ct);
+    }
+    private async Task LogoutAsync(string subject,CancellationToken ct)
+    {
+        using var response=await Send(HttpMethod.Post,$"users/{Uri.EscapeDataString(subject)}/logout",null,ct);
+        if(response.StatusCode!=HttpStatusCode.NotFound) Success(response);
+    }
     private static string Text(JsonElement user,string field)=>user.TryGetProperty(field,out var value)?value.GetString()??"":"";
 }
