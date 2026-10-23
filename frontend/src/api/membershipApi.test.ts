@@ -65,3 +65,21 @@ it('revealMemberRut envía el motivo por POST y la demo exige motivo (#609)', as
     await expect(new MembershipApiClient({ useMocks: true }).revealMemberRut('m', '')).rejects.toThrow(/motivo/)
   } finally { vi.unstubAllGlobals() }
 })
+
+it('foto de perfil: sube bytes con su tipo, cambia visibilidad y la demo respeta la elección (#609)', async () => {
+  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ hasPhoto: true, visibleToMembers: false }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+  vi.stubGlobal('fetch', fetchMock)
+  try {
+    const api = new MembershipApiClient({ getAccessToken: async () => 'token' })
+    const photo = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/jpeg' })
+    await api.uploadOwnPhoto(photo)
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/member-self/photo')
+    expect(fetchMock.mock.calls[0][1].method).toBe('PUT')
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get('Content-Type')).toBe('image/jpeg')
+    await api.setOwnPhotoVisibility(true)
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({ visible: true })
+  } finally { vi.unstubAllGlobals() }
+  const demo = new MembershipApiClient({ useMocks: true })
+  await expect(demo.setOwnPhotoVisibility(true)).rejects.toThrow(/Primero suba/)
+  expect(await demo.getOwnPhotoStatus()).toEqual({ hasPhoto: false, visibleToMembers: false })
+})
