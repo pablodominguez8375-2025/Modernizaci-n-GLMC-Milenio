@@ -194,6 +194,17 @@ export class MembershipApiClient {
     return this.request<MemberProfile>(`/api/members/${encodeURIComponent(memberId)}/profile`)
   }
 
+  /** «Ver completo» del RUT de un tercero (#609): motivo de catálogo; el servidor audita antes de responder. */
+  async revealMemberRut(memberId: string, reason: string): Promise<{ rut: string; expiresInSeconds: number }> {
+    if (this.useMocks) {
+      if (!reason) throw new Error('Seleccione un motivo válido para ver el RUT completo.')
+      return { rut: '12.345.678-5', expiresInSeconds: 10 }
+    }
+    return this.request(`/api/members/${encodeURIComponent(memberId)}/rut/reveal`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    })
+  }
+
   async getOwnOffices(): Promise<{total:number;items:OwnOffice[]}> {
     if(this.useMocks) return {total:1,items:[{id:'own-office-demo',cargo:'secretary',periodo:'2025',tallerId:org23,taller:'Taller Demostrativo Nº 23',desde:'2025-01-01',hasta:'2025-12-31'}]}
     return this.request('/api/membership/me/cargos')

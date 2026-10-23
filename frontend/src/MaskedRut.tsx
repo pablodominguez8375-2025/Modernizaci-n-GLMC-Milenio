@@ -11,30 +11,50 @@ export function maskRut(rut: string): string {
   return `${grouped}.***-${dv}`
 }
 
-const reasons = ['Verificación de identidad', 'Trámite autorizado por el cargo', 'Soporte con autorización del usuario']
+export const rutRevealReasons = [
+  { code: 'identity_verification', label: 'Verificación de identidad' },
+  { code: 'authorized_procedure', label: 'Trámite autorizado por el cargo' },
+  { code: 'support_with_consent', label: 'Soporte con autorización del usuario' },
+] as const
 
-/** RUT enmascarado por defecto; «Ver completo» exige un motivo (queda en auditoría) y se oculta solo. */
-export default function MaskedRut({ rut, revealSeconds = 10, onReveal }: { rut: string; revealSeconds?: number; onReveal?: (reason: string) => void }) {
+export type RutRevealReason = typeof rutRevealReasons[number]['code']
+export interface RutRevealResult { rut: string; expiresInSeconds: number }
+
+/**
+ * RUT enmascarado por defecto. «Ver completo» pide un motivo al servidor, que registra la auditoría ANTES
+ * de responder: el RUT completo solo se muestra tras esa respuesta y se oculta solo.
+ */
+export default function MaskedRut({ masked, onReveal }: { masked: string; onReveal: (reason: RutRevealReason) => Promise<RutRevealResult> }) {
+  const [full, setFull] = useState<string | null>(null)
   const [left, setLeft] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
-    if (left <= 0) return
+    if (left <= 0) { if (full) setFull(null); return }
     const t = window.setTimeout(() => setLeft(value => value - 1), 1000)
     return () => window.clearTimeout(t)
-  }, [left])
-  function reveal(event: FormEvent<HTMLFormElement>) {
+  }, [left, full])
+  async function reveal(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const reason = String(new FormData(event.currentTarget).get('reason') ?? '')
-    onReveal?.(reason)
-    setLeft(revealSeconds)
+    const reason = String(new FormData(event.currentTarget).get('reason') ?? '') as RutRevealReason
+    if (busy || !reason) return
+    setBusy(true); setError(null)
+    try {
+      const result = await onReveal(reason)
+      setFull(result.rut); setLeft(result.expiresInSeconds)
+    } catch (reasonError) {
+      setError(reasonError instanceof Error ? reasonError.message : 'No fue posible mostrar el RUT.')
+    } finally { setBusy(false) }
   }
   return <span className="masked-rut">
-    <strong>{left > 0 ? rut : maskRut(rut)}</strong>
-    {left > 0
+    <strong>{full ?? masked}</strong>
+    {full
       ? <small>Se oculta en {left} s</small>
       : <ActionDrawer label="Ver completo" title="Ver RUT completo" description="Solo para verificar identidad. Queda registrado quién lo vio, cuándo y por qué.">
-        <form className="library-admin-form" onSubmit={reveal}>
-          <label><span>Motivo</span><select name="reason" required defaultValue="">{<option value="" disabled>Seleccione un motivo</option>}{reasons.map(r => <option key={r}>{r}</option>)}</select></label>
-          <div className="library-admin-actions"><button type="submit" className="action-trigger primary">Mostrar RUT</button></div>
+        <form className="library-admin-form" onSubmit={event => void reveal(event)}>
+          <label><span>Motivo</span><select name="reason" required defaultValue=""><option value="" disabled>Seleccione un motivo</option>{rutRevealReasons.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}</select></label>
+          {error && <p role="alert" className="form-error">{error}</p>}
+          <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={busy}>{busy ? 'Registrando…' : 'Mostrar RUT'}</button></div>
         </form>
       </ActionDrawer>}
   </span>

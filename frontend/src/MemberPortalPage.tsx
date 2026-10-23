@@ -4,7 +4,7 @@ import { organizationNumberOf } from './displayFormat'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
-import MaskedRut from './MaskedRut'
+import { maskRut } from './MaskedRut'
 import { formatChileanRut } from './chileanRut'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './MemberPayments'
@@ -258,7 +258,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
             <MemberDatum label="Profesión" value={useMocks ? memberPortalDemoData.profession : 'No expuesto en autoservicio'} />
             <MemberDatum label={useMocks ? 'Ciudad' : 'Domicilio'} value={useMocks ? personal.city : (personal.address || 'Sin registrar')} />
           </div>
-          {useMocks && <p className="member-rut-hint">En otros módulos tu RUT aparece protegido: <MaskedRut rut="12.345.678-5" /></p>}
+          {useMocks && <p className="member-rut-hint">En otros módulos tu RUT aparece protegido: <strong>{maskRut('12.345.678-5')}</strong></p>}
           {useMocks && <div className="member-photo-actions">
             <ActionDrawer label={photoUrl ? 'Cambiar foto' : 'Subir foto'} tone="secondary" title="Mi foto de perfil" description="JPG o PNG, hasta 2 MB. Se recorta en formato cuadrado.">
               <form className="library-admin-form" onSubmit={event => { event.preventDefault(); if (photoDraft) setPhotoUrl(photoDraft) }}>
