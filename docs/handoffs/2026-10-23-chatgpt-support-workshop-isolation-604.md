@@ -21,3 +21,13 @@ Acuerdos PO 23-10: Máster único, soporte sin edición ordinaria; Taller 00 «S
 4. Bootstrap seguro del Máster único `admin`, MFA, break-glass, UAT y GUI de Clau.
 
 No `main`, QA glmdch ni producción. Mantener evidencia CI exact-head y comparación con dev antes de cualquier fusión. Fuente normativa funcional: comentarios del PO en #604 del 23-10 y adenda Drive «Biblioteca separada y Máster único (UI QA v0.135)».
+
+## Implementación parcial real
+
+- `backend/src/PMGM.Api/Modules/Core/SupportWorkshopPolicy.cs`: tipo soporte reservado, clasificación estable por tipo.
+- `backend/src/PMGM.Api/Modules/Core/OrganizationEndpoints.cs`: `GET /api/institutional/organizations/options` excluye `support` antes de `Take(2000)`, también para alcance Orden. La exclusión tolera mayúsculas y no altera `GET /{id}/profile`.
+- `backend/tests/PMGM.Api.Tests/Authorization/OrganizationProjectionTests.cs`: tests unitarios de tipos `support`, `SUPPORT`, `workshop`, `order`.
+- `backend/tests/PMGM.Api.Tests/Integration/DynamicAccessHttpTests.cs`: test HTTP con PostgreSQL para alcance Orden que verifica que un Taller real sí está y dos soportes ficticios no salen.
+- `docs/modelo-datos/registros/2026-10-23-chatgpt-support-workshop-directory-isolation-604.md`: adenda de contrato/datos.
+
+**Importante:** no es la creación del Taller 00 ni un control universal de todas las rutas; no se han dado permisos a Master/superusers ni se han insertado datos ficticios. Debe comprobarse el CI exact-head y la integración a dev antes de declarar activo este corte.
