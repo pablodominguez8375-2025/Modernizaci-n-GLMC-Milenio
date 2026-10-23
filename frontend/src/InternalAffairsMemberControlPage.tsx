@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { maskRut } from './MaskedRut'
 import { type HistoricalIntakeReviewItem, type InternalAffairsApiClient, type MemberControlRow } from './api/internalAffairsApi'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsControl.css'
@@ -106,7 +105,7 @@ export default function InternalAffairsMemberControlPage({ api, internalAffairsA
       <p className="form-note">Secretaría del Taller propone altas o actualizaciones de hermanos ya activos. La información sólo pasa al Cuadro oficial después de esta validación de Régimen Interior.</p>
       <div className="historical-review-list">
         {historicalIntakes.map(item => <article key={item.id} className="historical-review-card">
-          <div><strong>{item.firstNames} {item.lastNames}</strong><span>{degreeLabel(item.currentDegree)} · corte {formatDate(item.cutoffDate)}</span><small>{item.institutionalNumber || 'Sin Nº institucional'}{item.rut ? ` · RUT ${maskRut(item.rut)}` : ''}</small><small>Fuente: {item.evidenceReference}</small><small>Hitos: iniciación {formatDateOptional(item.initiationDate)} · aumento {formatDateOptional(item.wageIncreaseDate)} · exaltación {formatDateOptional(item.exaltationDate)}</small>{item.offices.length>0 && <small>Cargos: {item.offices.map(o=>`${o.officeType} (${o.period})`).join(', ')}</small>}</div>
+          <div><strong>{item.firstNames} {item.lastNames}</strong><span>{degreeLabel(item.currentDegree)} · corte {formatDate(item.cutoffDate)}</span><small>{item.institutionalNumber || 'Sin Nº institucional'}{item.rutMasked ? ` · RUT ${item.rutMasked}` : ''}</small><small>Fuente: {item.evidenceReference}</small><small>Hitos: iniciación {formatDateOptional(item.initiationDate)} · aumento {formatDateOptional(item.wageIncreaseDate)} · exaltación {formatDateOptional(item.exaltationDate)}</small>{item.offices.length>0 && <small>Cargos: {item.offices.map(o=>`${o.officeType} (${o.period})`).join(', ')}</small>}</div>
           <div className="historical-review-actions">
             <ConfirmAction label="Aprobar y actualizar Cuadro" message={`Se incorporará a ${item.firstNames} ${item.lastNames} al Cuadro oficial del Taller.`} confirmLabel="Sí, aprobar" disabled={reviewingId!==null} onConfirm={()=>void resolveHistorical(item,'approve')} />
             <ActionDrawer label="Observar o rechazar" tone="secondary" title={`Observar o rechazar — ${item.firstNames} ${item.lastNames}`} description="La observación es obligatoria y se informa a Secretaría del Taller." keepOpen>

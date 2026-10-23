@@ -10,7 +10,7 @@ it('masks a RUT keeping the first digits and the verifier', () => {
 })
 
 it('third-party views never print the full RUT (#609)', () => {
-  expect(read('InternalAffairsMemberControlPage.tsx')).toContain('maskRut(item.rut)')
-  expect(read('InternalAffairsMemberControlPage.tsx')).not.toMatch(/RUT \$\{item\.rut\}/)
+  expect(read('InternalAffairsMemberControlPage.tsx')).toContain('item.rutMasked')
+  expect(read('InternalAffairsMemberControlPage.tsx')).not.toMatch(/item\.rut\b(?!Masked)/)
   expect(read('MemberDirectoryPage.tsx')).toContain('profile.member.rutMasked')
 })

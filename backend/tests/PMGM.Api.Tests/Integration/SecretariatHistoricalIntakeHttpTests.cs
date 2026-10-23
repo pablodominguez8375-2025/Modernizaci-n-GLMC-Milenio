@@ -75,6 +75,10 @@ public sealed class SecretariatHistoricalIntakeHttpTests
         var created = await create.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var intakeId = created.GetProperty("id").GetGuid();
         Assert.Equal("draft", created.GetProperty("status").GetString());
+        // #609: la respuesta nunca lleva el RUT completo, solo el enmascarado.
+        Assert.False(created.TryGetProperty("rut", out _));
+        Assert.Equal("12.345.***-5", created.GetProperty("rutMasked").GetString());
+        Assert.DoesNotContain("12345678", created.GetRawText());
         Assert.Equal(JsonValueKind.Null, created.GetProperty("membershipStartDate").ValueKind);
         Assert.Equal(JsonValueKind.Null, created.GetProperty("wageIncreaseDate").ValueKind);
 
@@ -83,6 +87,9 @@ public sealed class SecretariatHistoricalIntakeHttpTests
             null,
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, submit.StatusCode);
+        var submitted = await submit.Content.ReadAsStringAsync(cancellationToken);
+        Assert.DoesNotContain("12345678", submitted);
+        Assert.DoesNotContain("12.345.678", submitted);
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -99,6 +106,7 @@ public sealed class SecretariatHistoricalIntakeHttpTests
             new { decision = "approve", notes = (string?)null },
             cancellationToken);
         Assert.Equal(HttpStatusCode.OK, review.StatusCode);
+        Assert.DoesNotContain("12345678", await review.Content.ReadAsStringAsync(cancellationToken));
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {

@@ -1055,7 +1055,9 @@ public static class SecretariatOperationsEndpoints
         x.CutoffDate,
         x.FirstNames,
         x.LastNames,
-        x.Rut,
+        // El RUT completo se conserva solo en el servidor (aprobación, deduplicación,
+        // materialización); las respuestas llevan únicamente la versión enmascarada (#609).
+        rutMasked = MemberProfilePrivacy.MaskRutForThirdParty(x.Rut),
         x.InstitutionalNumber,
         x.Email,
         x.Phone,
