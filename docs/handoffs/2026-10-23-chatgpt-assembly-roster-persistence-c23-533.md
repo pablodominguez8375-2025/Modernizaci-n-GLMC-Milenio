@@ -12,3 +12,6 @@ Archivos planificados:
 
 ## Límites y dependencias
 NO se crea conector de constancias, no se reconoce como verificada una solicitud HTTP, no hay evaluación de voto ni padrón oficial. El servicio no está publicado como endpoint ni registrado para consumo externo: sólo futura orquestación **servidor confiable** con fuentes Gran Secretaría/VM, membresía, GT, RI y Tribunal podrá llamarlo. No autorizar cierre ni exportación. C22 de #664 integrada a dev; #665 de permisos pasó 3/3 pero el conector bloqueó merge, registrado en #523, no tocar su rama. PR nuevo a dev + 3/3 exact head; main y QA físico intactos.
+
+## Implementación entregada
+Nueva unidad interna PostgreSQL con comprobación de rol RI, Asamblea borrador/corte, idempotencia por rechazo a reimportación, inserción transaccional de candidatos con un historial inicial de evaluación pendiente, auditoría transaccional minimizada y pruebas PostgreSQL. No hay ruta HTTP pública ni cambios de fuente institucional. PR #666 requiere 3/3 CI exact-head antes de fusionar.
