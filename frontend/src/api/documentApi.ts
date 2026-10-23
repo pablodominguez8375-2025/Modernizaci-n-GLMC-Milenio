@@ -1,4 +1,4 @@
-import { AreaCollaboratorsDemo, type AddAreaCollaborator, type AreaCollaborators, type CollaboratorArea } from './areaCollaborators'
+import { AreaCollaboratorsDemo, type AddAreaCollaborator, type AreaCollaboratorCandidates, type AreaCollaborators, type CollaboratorArea } from './areaCollaborators'
 export type DocumentScope = 'order' | 'organization'
 export type DocumentClassification = 'internal' | 'confidential' | 'sensitive' | 'restricted'
 export type DocumentAccessPolicy = 'library_authenticated' | 'organization_authenticated' | 'management_only'
@@ -189,6 +189,10 @@ export class DocumentApiClient {
   async getAreaCollaborators(area: CollaboratorArea): Promise<AreaCollaborators> {
     if (this.useMocks) return this.collaboratorsDemo.list(area)
     return this.request<AreaCollaborators>(this.collaboratorsPath(area))
+  }
+  async getAreaCollaboratorCandidates(area: CollaboratorArea): Promise<AreaCollaboratorCandidates> {
+    if (this.useMocks) return this.collaboratorsDemo.candidates()
+    return this.request<AreaCollaboratorCandidates>(`${this.collaboratorsPath(area)}/candidatos`)
   }
   async addAreaCollaborator(area: CollaboratorArea, request: AddAreaCollaborator): Promise<AreaCollaborators> {
     if (this.useMocks) return this.collaboratorsDemo.add(area, request)
