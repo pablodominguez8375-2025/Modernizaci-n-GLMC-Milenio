@@ -9,21 +9,89 @@ public sealed class InstitutionalAccessServiceTests
     private readonly InstitutionalAccessService _service = new();
 
     [Fact]
-    public void PlatformSuperAdmin_WithOrderScope_HasAdministrativeBypass()
+    public void MasterAdmin_CanConfigurePlatform_ButCannotPerformInstitutionalActs()
     {
         var organization = Guid.NewGuid();
         var user = CreateUser(
             new Claim(InstitutionalClaims.Scope, "order"),
-            new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin));
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin),
+            // An incorrectly provisioned Workshop claim must not grant a role.
+            new Claim(InstitutionalClaims.Organization, organization.ToString()));
 
         Assert.True(_service.IsPlatformSuperAdmin(user));
-        Assert.True(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
-        Assert.True(_service.CanManageOrganization(user, organization));
-        Assert.True(_service.CanApproveTransfers(user));
-        Assert.True(_service.CanManageGrandSecretariat(user));
-        Assert.True(_service.CanManageGrandArchive(user));
-        Assert.True(_service.CanProvideGrandMasterApproval(user));
-        Assert.True(_service.CanManagePrivacy(user));
+        Assert.True(_service.HasRole(user, InstitutionalRoles.PlatformSuperAdmin));
+        Assert.True(_service.CanConfigureSystem(user));
+
+        Assert.False(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
+        Assert.False(_service.HasRole(user, InstitutionalRoles.TallerVenerable));
+        Assert.False(_service.CanReadOrganization(user, organization));
+        Assert.False(_service.CanManageOrganization(user, organization));
+        Assert.False(_service.CanManageWorkshopProfile(user, organization));
+        Assert.False(_service.CanEditAnyWorkshopProfile(user));
+        Assert.False(_service.CanManageLodgeOperations(user));
+        Assert.False(_service.CanManageLodgeSecretariat(user, organization));
+        Assert.False(_service.CanReadLodgeSecretariat(user, organization));
+        Assert.False(_service.CanManageLodgeTreasury(user, organization));
+        Assert.False(_service.CanManageLodgeHospitalaria(user, organization));
+        Assert.False(_service.CanApproveLodgeExpenses(user, organization));
+        Assert.False(_service.CanSignLodgeDocuments(user, organization));
+        Assert.False(_service.CanManageLodgeInstruction(user, organization, 1));
+        Assert.False(_service.CanParticipateInLodgeCouncil(user, organization));
+        Assert.False(_service.CanManageLodgeCouncilSummaryAccess(user, organization));
+        Assert.False(_service.CanApproveTransfers(user));
+        Assert.False(_service.CanRunRegimenInteriorReports(user));
+        Assert.False(_service.CanManageGrandSecretariat(user));
+        Assert.False(_service.CanManageTreasuryRegularity(user));
+        Assert.False(_service.CanManageHospitalariaRegularity(user));
+        Assert.False(_service.CanManageGrandArchive(user));
+        Assert.False(_service.CanEvaluateCeremonies(user));
+        Assert.False(_service.CanProvideGrandMasterApproval(user));
+        Assert.False(_service.CanAuthorizeCeremonies(user));
+        Assert.False(_service.CanManageCandidatePublications(user, organization));
+        Assert.False(_service.CanManageDocuments(user, organization));
+        Assert.False(_service.CanManageLibrary(user, organization));
+        Assert.False(_service.CanManageCommunications(user));
+        Assert.False(_service.CanManagePrivacy(user));
+    }
+
+    [Fact]
+    public void MasterAdmin_WithAccidentalInstitutionalRoleClaims_StillCannotApproveOrSign()
+    {
+        var workshop = Guid.NewGuid();
+        var user = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.PlatformSuperAdmin),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranLogiaAdmin),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable),
+            new Claim(InstitutionalClaims.Organization, workshop.ToString()));
+
+        Assert.True(_service.CanConfigureSystem(user));
+        Assert.False(_service.HasRole(user, InstitutionalRoles.GranLogiaAdmin));
+        Assert.False(_service.CanApproveTransfers(user));
+        Assert.False(_service.CanProvideGrandMasterApproval(user));
+        Assert.False(_service.CanManageGrandSecretariat(user));
+        Assert.False(_service.CanManageWorkshopProfile(user, workshop));
+        Assert.False(_service.CanManageLodgeCouncilSummaryAccess(user, workshop));
+        Assert.False(_service.CanSignLodgeDocuments(user, workshop));
+    }
+
+    [Fact]
+    public void RealInstitutionalRoleKeepsItsAuthorizedOperationsAfterMasterIsolation()
+    {
+        var workshop = Guid.NewGuid();
+        var grandSecretariat = CreateUser(
+            new Claim(InstitutionalClaims.Scope, "order"),
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
+        var venerable = CreateUser(
+            new Claim(InstitutionalClaims.Role, InstitutionalRoles.TallerVenerable),
+            new Claim(InstitutionalClaims.Organization, workshop.ToString()));
+
+        Assert.True(_service.CanManageGrandSecretariat(grandSecretariat));
+        Assert.False(_service.CanProvideGrandMasterApproval(grandSecretariat));
+        Assert.True(_service.CanApproveLodgeExpenses(venerable, workshop));
+        Assert.True(_service.CanSignLodgeDocuments(venerable, workshop));
+        Assert.False(_service.CanApproveLodgeExpenses(venerable, Guid.NewGuid()));
     }
 
     [Fact]
