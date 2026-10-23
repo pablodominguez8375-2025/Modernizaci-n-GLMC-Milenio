@@ -7,6 +7,7 @@ import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 import './CandidateWorkshopIntakePage.css'
 import { organizationDisplayName } from './displayFormat'
+import { parseChileanRut } from './chileanRut'
 
 interface CandidateWorkshopIntakePageProps {
   api: CandidateIntakeApiClient
@@ -66,6 +67,7 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
   const [creating, setCreating] = useState(false)
   const [newCandidate, setNewCandidate] = useState({
     organizationId: '', firstNames: '', lastNames: '', rutOrInstitutionalId: '',
+    identityType: 'chilean_rut' as 'chilean_rut' | 'other',
     rejectionCausesRemedied: false, rePresentationSourceReference: '',
   })
   const [origin, setOrigin] = useState<CandidateOrigin>(emptyOrigin)
@@ -213,6 +215,11 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
       setError('Seleccione el Taller e ingrese nombres, apellidos e identificación.')
       return
     }
+    const chileanRut = newCandidate.identityType === 'chilean_rut' ? parseChileanRut(newCandidate.rutOrInstitutionalId) : null
+    if (newCandidate.identityType === 'chilean_rut' && !chileanRut) {
+      setError('El RUT no es válido. Revise el número y el dígito verificador (ej. 12.345.678-5), o elija «Pasaporte u otra identificación».')
+      return
+    }
     if (!origin.kind || (origin.kind === 'brother' && !origin.recommenderId) || (origin.kind === 'other' && !origin.other.trim())) {
       setError('Indique el origen del candidato (y el hermano que lo recomienda o la descripción, según corresponda).')
       return
@@ -223,7 +230,8 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
         organizationId: newCandidate.organizationId,
         firstNames: newCandidate.firstNames.trim(),
         lastNames: newCandidate.lastNames.trim(),
-        rutOrInstitutionalId: newCandidate.rutOrInstitutionalId.trim(),
+        rutOrInstitutionalId: chileanRut ? chileanRut.normalized : newCandidate.rutOrInstitutionalId.trim(),
+        identityType: newCandidate.identityType,
         rejectionCausesRemedied: newCandidate.rejectionCausesRemedied,
         rePresentationSourceReference: newCandidate.rePresentationSourceReference.trim() || null,
         originKind: origin.kind,
@@ -410,7 +418,16 @@ export default function CandidateWorkshopIntakePage({ api, membershipApi, onBack
           </Field>
           <Field label="Nombres *"><input required maxLength={160} value={newCandidate.firstNames} onChange={event => setNewCandidate({ ...newCandidate, firstNames: event.target.value })} /></Field>
           <Field label="Apellidos *"><input required maxLength={160} value={newCandidate.lastNames} onChange={event => setNewCandidate({ ...newCandidate, lastNames: event.target.value })} /></Field>
-          <Field label="RUT / pasaporte / identificación *"><input required maxLength={16} value={newCandidate.rutOrInstitutionalId} onChange={event => setNewCandidate({ ...newCandidate, rutOrInstitutionalId: event.target.value })} /></Field>
+          <Field label="Tipo de identificación *">
+            <select required value={newCandidate.identityType} onChange={event => setNewCandidate({ ...newCandidate, identityType: event.target.value as 'chilean_rut' | 'other' })}>
+              <option value="chilean_rut">RUT chileno</option>
+              <option value="other">Pasaporte u otra identificación</option>
+            </select>
+          </Field>
+          <Field label={newCandidate.identityType === 'chilean_rut' ? 'RUT *' : 'Pasaporte o identificación *'}>
+            <input required maxLength={16} inputMode={newCandidate.identityType === 'chilean_rut' ? 'text' : undefined} placeholder={newCandidate.identityType === 'chilean_rut' ? '12.345.678-5' : 'Número del documento'} value={newCandidate.rutOrInstitutionalId} onChange={event => setNewCandidate({ ...newCandidate, rutOrInstitutionalId: event.target.value })} />
+            <small>{newCandidate.identityType === 'chilean_rut' ? 'Se verifica el dígito verificador y se guarda sin puntos.' : 'Se guarda tal como lo escribe; no se aplica validación de RUT.'}</small>
+          </Field>
           <>
             <Field label="Origen del candidato *">
               <select required value={origin.kind} onChange={event => setOrigin({ ...emptyOrigin, kind: event.target.value as CandidateOrigin['kind'] })}>

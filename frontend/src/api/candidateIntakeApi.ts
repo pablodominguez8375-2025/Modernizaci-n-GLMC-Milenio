@@ -1,3 +1,4 @@
+import { parseChileanRut } from '../chileanRut'
 import type { CandidatePortalResponse } from './pmgmApi'
 import {
   prepareCandidateFormCapture, visibleCandidateFormFields,
@@ -272,6 +273,8 @@ export interface CreateCandidateWorkshopRequest {
   originKind?: 'brother' | 'internet' | 'social_media' | 'other' | null
   recommenderMemberId?: string | null
   originOtherDescription?: string | null
+  /** Tipo de identificación (#609/#643): `chilean_rut` valida módulo 11 en servidor; `other` conserva el valor tal cual. */
+  identityType?: 'chilean_rut' | 'other' | null
 }
 
 export interface CorrectCandidateOriginPayload {
@@ -703,6 +706,13 @@ export class CandidateIntakeApiClient {
 
   async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {
     if (this.useMocks) {
+      if (payload.identityType && payload.identityType !== 'chilean_rut' && payload.identityType !== 'other')
+        throw new CandidateIntakeApiHttpError(400, 'Seleccione RUT chileno u otra identificación.')
+      if (payload.identityType === 'chilean_rut') {
+        const parsed = parseChileanRut(payload.rutOrInstitutionalId)
+        if (!parsed) throw new CandidateIntakeApiHttpError(400, 'El RUT chileno informado no es válido. Revise el número y el dígito verificador.')
+        payload = { ...payload, rutOrInstitutionalId: parsed.normalized }
+      }
       const normalizedId = payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase()
       const duplicate = this.mockIdentifications.has(normalizedId)
       if (duplicate) throw new CandidateIntakeApiHttpError(409, 'Ya existe un expediente demostrativo para este postulante.')
