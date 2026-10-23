@@ -29,6 +29,9 @@ describe('dynamic access contract',()=>{
   try{const a=new PmgmApiClient({getAccessToken:async()=>'test-token'}).dynamicAccess;await a.create({code:'one',name:'Uno',scope:'order',menuCodes:[]},0);const [path,init]=fetch.mock.calls[0];expect(path).toBe('/api/system/access/profiles');expect(new Headers(init.headers).get('Authorization')).toBe('Bearer test-token');expect(JSON.parse(init.body).expectedVersion).toBe(0)}finally{vi.unstubAllGlobals()}
  })
  it('requires explicit search even when view is granted and keeps domain method scoped',async()=>{
+  expect(dynamicMethodPolicies.documentApi.searchLibrary.action).toBe('search')
+  expect(dynamicMethodPolicies.documentApi.getLibrary.action).toBe('view')
+  expect(dynamicMethodPolicies.documentApi.getLibraryFacets.action).toBe('view')
   expect(dynamicMethodPolicies.pmgmApi.searchAdmissionPeople.action).toBe('search')
   expect(dynamicMethodPolicies.pmgmApi.getAdmissionCase.action).toBe('view')
   const api=new PmgmApiClient({useMocks:true})
