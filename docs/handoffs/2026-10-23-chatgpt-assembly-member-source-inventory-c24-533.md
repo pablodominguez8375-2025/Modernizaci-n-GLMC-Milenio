@@ -12,3 +12,6 @@ Archivos a modificar (exclusivos):
 - docs/modelo-datos/registros/2026-10-23-chatgpt-assembly-source-inventory-c24-533.md
 
 No tocar UI/endpoints de Clau #639/#640, PR #665 RBAC, main ni QA físico. Requiere CI, Showcase, QA Instalador 3/3 del HEAD exacto antes de merge.
+
+## Implementación
+Se incorporó nuevo lector interno del registro de membresía y períodos V.M., con controles de inconsistencias de Taller/soporte/fechas/identidad, inventario acotado y explicitación `InstitutionallyCertified=false` en toda salida. Pruebas PostgreSQL sintéticas positivas y negativas, inventariadas en shard B. Ningún endpoint, nueva firma, migración ni persistencia. Certificación/operación real posteriores.
