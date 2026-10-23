@@ -27,3 +27,17 @@ describe('alta de cuentas',()=>{
   expect('platformAdministrator' in r).toBe(false)
  })
 })
+
+describe('restablecer acceso',()=>{
+ const admin=()=>{const a=new PmgmApiClient({useMocks:true});a.demoAccessSubject='demo:systemAdmin';return a}
+ it('solo el Máster; correo sin clave en la respuesta; clave temporal con motivo y única',async()=>{
+  const api=admin();const c=(await api.getUserAccountCandidates()).items[0]
+  const u=await api.createUserAccount({memberId:c.memberId,organizationId:c.organizationId})
+  const a=await api.resetUserAccountAccess(u.subject,{modality:'email'});expect(a.temporaryPassword).toBeUndefined();expect(a.expiresInMinutes).toBe(30)
+  await expect(api.resetUserAccountAccess(u.subject,{modality:'temporary',reason:'corto'})).rejects.toThrow('motivo')
+  const b=await api.resetUserAccountAccess(u.subject,{modality:'temporary',reason:'Hermano sin correo, verificado en persona'})
+  expect(b.temporaryPassword).toHaveLength(24);expect(b.requiresPasswordChange).toBe(true)
+  await expect(api.resetUserAccountAccess('inexistente',{modality:'email'})).rejects.toThrow('no existe')
+  api.demoAccessSubject='demo:grandLodge';await expect(api.resetUserAccountAccess(u.subject,{modality:'email'})).rejects.toThrow('Máster')
+ })
+})
