@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.UserAccounts;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -34,6 +35,11 @@ public static class DocumentAreaCollaboratorEndpoints
             IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             RevokeAsync("library", assignmentId, expectedVersion, ctx, db, access, audit, ct));
 
+        library.MapGet("/candidatos", (HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, IAccountIdentityProvider identity,
+            IAuditService audit, CancellationToken ct) =>
+            CandidatesAsync("library", ctx, db, access, identity, audit, ct));
+
         var documents = endpoints.MapGroup("/api/documentos/colaboradores")
             .WithTags("Gestión Documental - Colaboradores").RequireAuthorization();
         documents.MapGet("", (HttpContext ctx, PmgmDbContext db,
@@ -48,7 +54,43 @@ public static class DocumentAreaCollaboratorEndpoints
             IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             RevokeAsync("documentmanager", assignmentId, expectedVersion,
                 ctx, db, access, audit, ct));
+        documents.MapGet("/candidatos", (HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, IAccountIdentityProvider identity,
+            IAuditService audit, CancellationToken ct) =>
+            CandidatesAsync("documentmanager", ctx, db, access, identity, audit, ct));
         return endpoints;
+    }
+
+    /// <summary>
+    /// Personas elegibles para recibir acceso: solo nombre e identificador (nunca correo ni RUT),
+    /// únicamente cuentas de Hermanos habilitadas; excluye al Máster, al Superusuario y al propio solicitante.
+    /// Solo el responsable del área. Si la identidad no está disponible, devuelve lista vacía y la
+    /// pantalla permite ingresar el identificador a mano.
+    /// </summary>
+    private static async Task<IResult> CandidatesAsync(
+        string view, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+        IAccountIdentityProvider identity, IAuditService audit, CancellationToken ct)
+    {
+        if (!CanAdminister(view, ctx, access)) return Results.Forbid();
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        var self = ctx.User.FindFirst("sub")?.Value;
+        IReadOnlyList<AccountUser> users = [];
+        var available = identity.Configured;
+        if (available)
+        {
+            try { users = await identity.ListAsync(ct); }
+            catch (Exception e) when (e is AccountDeliveryException or HttpRequestException or TaskCanceledException)
+            { available = false; }
+        }
+        var items = users.Where(u => u.Enabled && u.Kind == "member" &&
+                !string.Equals(u.Subject, self, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(u.Name))
+            .OrderBy(u => u.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(u => new { subject = u.Subject, name = u.Name }).ToArray();
+        audit.Add(ctx, "library.collaborator.candidates_viewed", "DynamicAccessCatalog", view, null,
+            available ? AuditResults.Success : AuditResults.Rejected, new { area = view, count = items.Length });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { available, items });
     }
 
     private static bool CanAdminister(
