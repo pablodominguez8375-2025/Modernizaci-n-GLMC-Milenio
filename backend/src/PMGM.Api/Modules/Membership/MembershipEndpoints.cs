@@ -67,6 +67,11 @@ public static class MembershipEndpoints
         var latestMemberships = db.Memberships
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId &&
+                        // Aunque alguien vincule por error un miembro ficticio
+                        // al Taller real, no entra al Cuadro ni a los conteos.
+                        !db.Memberships.Any(support =>
+                            support.MemberId == x.MemberId &&
+                            EF.Functions.ILike(support.Organization.Type, SupportWorkshopPolicy.OrganizationType)) &&
                         !db.Memberships.Any(other =>
                             other.OrganizationId == organizationId &&
                             other.MemberId == x.MemberId &&
