@@ -42,6 +42,9 @@ public static class OrganizationEndpoints
     {
         var rows = await db.Organizations
             .AsNoTracking()
+            // El Taller 00 de soporte no integra el directorio de organizaciones
+            // reales. Su futura API privada tendrá autorización propia.
+            .Where(x => x.Type.ToLower() != SupportWorkshopPolicy.OrganizationType)
             .OrderBy(x => x.Type)
             .ThenBy(x => x.Number)
             .ThenBy(x => x.Name)
