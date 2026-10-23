@@ -138,8 +138,10 @@ public sealed class AssemblyAccreditedRosterPersistencePostgreSqlTests
             assembly.Id, Cutoff, Prepared(first, foreign), Context(), db, ct);
         Assert.Equal("INVALID_ACCREDITED_MEMBER_BATCH", mismatch.BlockingReason);
 
+        var duplicateRow = Candidate(assembly.Id);
+        duplicateRow.PersonId = first.PersonId;
         var duplicate = await AssemblyAccreditedRosterPersistenceService.PersistAsync(
-            assembly.Id, Cutoff, Prepared(first, Candidate(assembly.Id) withSamePerson(first)),
+            assembly.Id, Cutoff, Prepared(first, duplicateRow),
             Context(), db, ct);
         Assert.Equal("INVALID_ACCREDITED_MEMBER_BATCH", duplicate.BlockingReason);
 
@@ -153,10 +155,4 @@ public sealed class AssemblyAccreditedRosterPersistencePostgreSqlTests
             e => e.AssemblyId == assembly.Id, ct));
     }
 
-    private static AssemblyMemberStatusRecord withSamePerson(
-        this AssemblyMemberStatusRecord row, AssemblyMemberStatusRecord source)
-    {
-        row.PersonId = source.PersonId;
-        return row;
-    }
 }
