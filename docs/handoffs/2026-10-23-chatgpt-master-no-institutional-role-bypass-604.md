@@ -31,3 +31,13 @@ Estado del PR: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Mil
 
 ### Endurecimiento adicional de identidad incompleta
 Si Keycloak entrega el rol `platform_superadmin` sin `pmgm_scope=order`, la cuenta técnica **tampoco** debe heredar un cargo logial si por error vienen otros `pmgm_role` y `pmgm_org`. El nuevo `HasPlatformMasterClaim` detecta el rol técnico aun con scope incompleto: `HasRole` solo reconoce rol plataforma cuando además el scope es Orden; `HasExplicitRole` y `HasOrganizationClaim` siempre rechazan equivalencias logiales para cualquier token de Máster. Se agregó caso adversarial xUnit `MalformedMasterWithoutOrderScope_CannotFallBackToLodgeOrGrandRoles`. No habilita Master sin scope para cuentas/perfiles ni altera roles legítimos. Nuevo HEAD de PR sujeto a CI exacto y conciliación en vivo.
+
+
+### Regresión del smoke autenticado y cambio de contrato
+El primer CI de `e2c2efa...` demostró que el nuevo backend responde correctamente `403` a `qa.admin` en `GET /api/members?organizationId=... `, pero `scripts/smoke-first-implementation.sh` todavía **exigía** que el Máster pudiera consultar los miembros de Taller 23 y los endpoints de Insinuados/Biblioteca/Gran Archivo como sustituto de sus autoridades. Ese supuesto contradice la instrucción vigente. Se actualizó el script para:
+1. validar que `qa.admin` conserva sesión autenticada;
+2. exigir `403` cuando Máster intenta leer el Cuadro de Taller;
+3. conservar la prueba positiva de `qa.taller23` accediendo a sus miembros y la negativa de no entrar a Gran Archivo;
+4. no simular acceso de funcionarios logiales usando una cuenta técnica.
+
+No se deshabilitó el smoke, no se modificó el servidor ni se cambió Keycloak. Las comprobaciones positivas específicas de Biblioteca, Gran Archivo y publicación de candidatos requieren identidades de prueba autorizadas por cargo, no el Máster; se mantienen las pruebas de unidad/integración institucional existentes y queda el smoke específico de esos perfiles como seguimiento QA. CI debe volver a aprobar sobre el HEAD que incluye este script.
