@@ -1,5 +1,5 @@
 import { ActionDrawer, HelpNote, WorkspaceTabs, type WorkspaceTab } from './actionKit'
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactElement, type ReactNode, cloneElement, isValidElement, useEffect, useMemo, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type DocumentApiClient } from './api/documentApi'
 import {
@@ -377,7 +377,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
 
     </section>
 
-    {profileSlot && <div className="workspace-panel" hidden={tab !== 'ficha'}>{profileSlot}</div>}
+    {profileSlot && <div className="workspace-panel" hidden={tab !== 'ficha'}>{isValidElement(profileSlot) ? cloneElement(profileSlot as ReactElement<{ sharedOrganizationId?: string }>, { sharedOrganizationId: organizationId }) : profileSlot}</div>}
     <div className="workspace-panel" hidden={tab !== 'consejo'}><LodgeCouncilPanel organizationId={organizationId} members={members} /></div>
 
     {canReadSecretariat && <div className="workspace-panel" hidden={!secretariatSection}><LodgeSecretariatPanel organizationId={organizationId} lodgeApi={lodgeApi} documentApi={documentApi} meetings={meetings} members={members} canManage={canManageSecretariat} onMeetingChanged={meetingId => refreshMeetings(meetingId)} section={secretariatSection ?? 'daily'} /></div>}
