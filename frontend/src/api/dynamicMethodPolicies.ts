@@ -218,5 +218,6 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     catalog: { view: 'system', action: 'view' },
     initialLoadContract: { view: 'system', action: 'view' },
     downloadInitialLoadTemplate: { view: 'system', action: 'view' },
+    initialLoadStatus: { view: 'system', action: 'view' },
   },
 }

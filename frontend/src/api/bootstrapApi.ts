@@ -50,6 +50,8 @@ export interface InitialLoadContract {
   acceptsUploadedData: boolean; createsAccounts: boolean; assignsProfiles: boolean; supportsApply: boolean
 }
 
+export interface InitialLoadStatus { status: 'not_opened' | 'open' | 'closed' | 'unavailable'; version: number | null; canApply: boolean; writesPerformed: number; code: string }
+
 const mockInitialLoadContract: InitialLoadContract = {
   status: 'TEMPLATE_ONLY', revision: 'INITIAL-LOAD-CSV-v1',
   files: [
@@ -99,6 +101,12 @@ export class BootstrapApiClient {
   async initialLoadContract(): Promise<InitialLoadContract> {
     if (this.useMocks) return mockInitialLoadContract
     return this.get<InitialLoadContract>('/api/platform/bootstrap/initial-load/contract')
+  }
+
+  /** #694 — estado de la ventana de carga inicial (solo lectura). 403 si la cuenta no es el Máster registrado en el servidor. */
+  async initialLoadStatus(): Promise<InitialLoadStatus> {
+    if (this.useMocks) return { status: 'not_opened', version: 0, canApply: false, writesPerformed: 0, code: 'initial_load.not_opened' }
+    return this.get<InitialLoadStatus>('/api/platform/bootstrap/initial-load/status')
   }
 
   /** Descarga el ZIP con las 3 plantillas CSV vacías (solo encabezados). */
