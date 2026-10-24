@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PmgmApiClient, SupportDiagnosticsResponse } from './api/pmgmApi'
 import { diagnosticCsv, diagnosticJson } from './supportDiagnosticExport'
+import LodgeDataHealthCard from './LodgeDataHealthCard'
 import './auditableEventLog.css'
 
 function exportFile(content: string, type: string, name: string) {
@@ -54,7 +55,9 @@ export default function SupportDiagnosticsPanel({
 
   useEffect(() => { void load() }, [load])
 
-  return <section className="system-event-log" aria-label="Diagnóstico de soporte">
+  return <>
+  <LodgeDataHealthCard api={api} />
+  <section className="system-event-log" aria-label="Diagnóstico de soporte">
     <header>
       <div>
         <p className="eyebrow">Soporte técnico · solo lectura</p>
@@ -97,4 +100,5 @@ export default function SupportDiagnosticsPanel({
     </div>
     {snapshot?.items.length === 0 && !loading && <p>No hay eventos en el intervalo consultado. Esto no demuestra ausencia de errores anteriores al inicio de la API.</p>}
   </section>
+  </>
 }
