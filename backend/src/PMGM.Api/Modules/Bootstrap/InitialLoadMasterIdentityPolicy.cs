@@ -48,11 +48,23 @@ public static class InitialLoadMasterIdentityPolicy
             !string.Equals(validatedTokenIssuer, registration.Issuer, StringComparison.Ordinal))
             return Deny("MASTER_ISSUER_MISMATCH");
 
-        var subjects = principal.FindAll("sub").Select(x => x.Value).ToArray();
+        // JwtBearer can map JWT "sub" into ClaimTypes.NameIdentifier.
+        // Accept exactly ONE representation, never several ambiguous or
+        // conflicting identity claims. The subject still must match the
+        // server's unique Master registration byte-for-byte.
+        var rawSubjects = principal.FindAll("sub").Select(x => x.Value).ToArray();
+        var mappedSubjects = principal.FindAll(ClaimTypes.NameIdentifier)
+            .Select(x => x.Value).ToArray();
         var names = principal.FindAll("preferred_username").Select(x => x.Value).ToArray();
+        if (rawSubjects.Length > 1 || mappedSubjects.Length > 1 ||
+            (rawSubjects.Length == 1 && mappedSubjects.Length == 1))
+            return Deny("MASTER_ACCOUNT_REQUIRED");
 
-        if (subjects.Length != 1 || names.Length != 1 ||
-            !string.Equals(subjects[0], registration.Subject, StringComparison.Ordinal) ||
+        var subject = rawSubjects.Length == 1
+            ? rawSubjects[0]
+            : mappedSubjects.Length == 1 ? mappedSubjects[0] : null;
+        if (subject is null || names.Length != 1 ||
+            !string.Equals(subject, registration.Subject, StringComparison.Ordinal) ||
             !string.Equals(names[0], "admin", StringComparison.Ordinal))
             return Deny("MASTER_ACCOUNT_REQUIRED");
 

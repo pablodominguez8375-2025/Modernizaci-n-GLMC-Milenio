@@ -149,6 +149,43 @@ public sealed class InitialLoadMasterIdentityPolicyTests
     }
 
     [Fact]
+    public void Jwt_bearer_mapped_name_identifier_is_accepted_only_as_unique_subject()
+    {
+        var principal = Principal();
+        var identity = (ClaimsIdentity)principal.Identity!;
+        identity.RemoveClaim(Assert.Single(identity.FindAll("sub")));
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, MasterSubject));
+
+        var result = Verify(principal);
+        Assert.True(result.Verified);
+        Assert.Equal("MASTER_VERIFIED", result.Code);
+    }
+
+    [Fact]
+    public void Raw_and_mapped_subject_together_or_duplicate_mapped_subject_fail_closed()
+    {
+        var principal = Principal();
+        var identity = (ClaimsIdentity)principal.Identity!;
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, MasterSubject));
+        Assert.Equal("MASTER_ACCOUNT_REQUIRED", Verify(principal).Code);
+
+        identity.RemoveClaim(Assert.Single(identity.FindAll("sub")));
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, MasterSubject));
+        Assert.Equal("MASTER_ACCOUNT_REQUIRED", Verify(principal).Code);
+    }
+
+    [Fact]
+    public void Wrong_mapped_subject_cannot_replace_unique_master()
+    {
+        var principal = Principal();
+        var identity = (ClaimsIdentity)principal.Identity!;
+        identity.RemoveClaim(Assert.Single(identity.FindAll("sub")));
+        identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, "someone-else"));
+        Assert.False(Verify(principal).Verified);
+        Assert.Equal("MASTER_ACCOUNT_REQUIRED", Verify(principal).Code);
+    }
+
+    [Fact]
     public void Unrelated_personal_attributes_do_not_appear_in_the_result()
     {
         var result = Verify(Principal(subject: "private-identifier"));
