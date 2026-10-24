@@ -116,6 +116,21 @@ def _reference(row: dict, key: str, identifiers: set[str]) -> None:
     require(isinstance(row.get(key), str) and row[key] in identifiers, "INVALID_REFERENCE")
 
 
+def _matches_canonical(actual: object, expected: object) -> bool:
+    """Reject JSON type coercions (e.g., 1500.0 == 1500 or True == 1)."""
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return (actual.keys() == expected.keys() and
+                all(_matches_canonical(actual[key], value)
+                    for key, value in expected.items()))
+    if isinstance(expected, list):
+        return (len(actual) == len(expected) and
+                all(_matches_canonical(item, wanted)
+                    for item, wanted in zip(actual, expected)))
+    return actual == expected
+
+
 def preflight(data: dict, digest: str) -> dict:
     require(set(data) == {"manifest", *AREAS}, "UNEXPECTED_SECTIONS")
     manifest = data.get("manifest")
@@ -235,7 +250,7 @@ def preflight(data: dict, digest: str) -> dict:
     canonical = synthetic_generator.make_dataset(
         member_count=len(persons), workshop_count=len(workshops),
         month_count=declared["months"])
-    require(data == canonical, "NON_CANONICAL_SYNTHETIC_DATA")
+    require(_matches_canonical(data, canonical), "NON_CANONICAL_SYNTHETIC_DATA")
 
     # Output has no row identifiers, data or sample values. Mapping is a
     # CONTRACT/PLAN only; unsupported entities remain explicitly unmapped.
