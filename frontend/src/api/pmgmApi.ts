@@ -72,6 +72,9 @@ export interface SystemSettingVersion { id: string; value: string; effectiveFrom
 export interface SystemSettingVersionsResponse { total: number; items: SystemSettingVersion[] }
 export interface AuditLogEvent { id:string; occurredAtUtc:string; user:string; ipAddress:string; menu:string|null; submenu:string|null; summary:string; action:string; result:'success'|'rejected'|'observed'; correlationId:string }
 export interface AuditLogResponse { total:number; page:number; pageSize:number; immutable:boolean; items:AuditLogEvent[] }
+export interface SupportDiagnosticEntry { occurredAtUtc:string; severity:'error'|'warning'; statusCode:number; method:string; route:string; correlationId:string }
+export interface SupportDiagnosticsResponse { total:number; limit:number; capacity:number; volatileStorage:boolean; source:string; note:string; items:SupportDiagnosticEntry[] }
+export interface SupportDiagnosticFilters { severity?:'error'|'warning'; route?:string; from?:string; to?:string; limit?:number }
 export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_active'
 export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; currency?:'CLP'|'USD'; grandTreasuryAmount: number | null; workshopAmount: number | null; rateAvailable?: boolean; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
 export interface LodgeTreasurySummary { organizationId: string; currency?: 'CLP'|'USD'; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
@@ -659,6 +662,28 @@ export class PmgmApiClient {
   }
   async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
   async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'Asignó perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'Probó configuración SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesión',summary:'Intento de autenticación rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
+
+  async getSupportDiagnostics(filters:SupportDiagnosticFilters={}):Promise<SupportDiagnosticsResponse>{
+    if(this.useMocks){
+      const items:SupportDiagnosticEntry[]=[
+        {occurredAtUtc:'2026-10-23T22:41:05Z',severity:'error',statusCode:500,method:'GET',route:'/api/gestion-logial/talleres/{organizationId:guid}/tenidas',correlationId:'qa-synthetic-http-500'},
+        {occurredAtUtc:'2026-10-23T22:40:10Z',severity:'warning',statusCode:403,method:'GET',route:'/api/system/settings/',correlationId:'qa-synthetic-http-403'}
+      ]
+      const matching=items.filter(item=>
+        (!filters.severity||item.severity===filters.severity)&&
+        (!filters.route||item.route.toLowerCase().includes(filters.route.toLowerCase()))&&
+        (!filters.from||item.occurredAtUtc>=filters.from)&&
+        (!filters.to||item.occurredAtUtc<=filters.to))
+      return {total:matching.length,limit:filters.limit??100,capacity:500,volatileStorage:true,source:'qa-demo-memory',note:'Datos exclusivamente ficticios de demostración.',items:matching.slice(0,filters.limit??100)}
+    }
+    const query=new URLSearchParams()
+    if(filters.severity)query.set('severity',filters.severity)
+    if(filters.route)query.set('route',filters.route)
+    if(filters.from)query.set('from',filters.from)
+    if(filters.to)query.set('to',filters.to)
+    query.set('limit',String(filters.limit??100))
+    return this.request<SupportDiagnosticsResponse>('/api/system/support/diagnostics?'+query.toString())
+  }
 
   async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
     this.assertMockTreasuryAccess(organizationId,'create')

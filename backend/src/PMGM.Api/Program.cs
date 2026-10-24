@@ -34,6 +34,8 @@ using PMGM.Api.Modules.UserAccounts;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+// Support HTTP failure metadata only: bounded in-memory buffer, no payloads or PII.
+builder.Services.AddSingleton<SupportDiagnosticBuffer>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
     TrustedProxyForwarding.Configure(options, builder.Configuration));
 builder.Services.AddLocalization();
@@ -160,6 +162,8 @@ if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
 
 // IP normalizada para auditoría y partición de rate limits. Solo proxies de confianza explícita.
 app.UseForwardedHeaders();
+// Capture the final HTTP error status after exception handling, without raw logs.
+app.UseMiddleware<SupportDiagnosticMiddleware>();
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
@@ -265,6 +269,7 @@ api.MapUserAccountEndpoints();
 api.MapDynamicAccessEndpoints();
 api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
+api.MapSupportDiagnosticEndpoints();
 
 api.MapViewAccessEndpoints();
 
