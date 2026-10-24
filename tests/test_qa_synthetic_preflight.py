@@ -99,6 +99,14 @@ class QaSyntheticPreflightTests(unittest.TestCase):
         d["manifest"]["fixture_parameters"]["members"] = True
         self.assert_rejected(d, "PARAMETER_MISMATCH")
 
+    def test_rejects_equivalent_numeric_value_with_wrong_json_type(self):
+        # Python compares 1500 == 1500.0 as True, but the QA contract
+        # requires the exact integer type emitted by the generator.
+        dataset = fixture()
+        allocation = dataset["quota_allocations"][0]
+        allocation["amount"] = float(allocation["amount"])
+        self.assert_rejected(dataset, "NON_CANONICAL_SYNTHETIC_DATA")
+
     def test_rejects_hidden_personal_field_in_every_section(self):
         for section in preflight.AREAS:
             with self.subTest(section=section):
