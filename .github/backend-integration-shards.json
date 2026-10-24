@@ -57,6 +57,7 @@
       "DynamicAccessHttpTests",
       "DocumentAreaCollaboratorHttpTests",
       "DocumentAreaCollaboratorCandidatesTests",
+      "SupportViewAsPostgreSqlTests",
       "DocumentContentRecoveryHttpTests",
       "LodgeUnrecoveredDuesPostgreSqlTests",
       "MemberHospitalariaV2HttpTests",

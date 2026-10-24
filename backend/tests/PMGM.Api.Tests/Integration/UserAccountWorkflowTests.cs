@@ -240,6 +240,7 @@ public sealed class UserAccountWorkflowTests
         public Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct)=>Task.FromResult<IReadOnlyList<AccountUser>>([]);
         public Dictionary<string,AccountUser> Managed{get;}=new();public int Emails,Temporary;public string? TemporaryPassword;public bool RecoveryFails;
         public Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)=>Task.FromResult(Managed.GetValueOrDefault(subject));
+        public Task<AccountClaims?> GetClaimsAsync(string subject,CancellationToken ct)=>Task.FromResult<AccountClaims?>(null);
         public Task SendPasswordRecoveryEmailAsync(string subject,CancellationToken ct){if(RecoveryFails)throw new AccountDeliveryException();Emails++;return Task.CompletedTask;}
         public Task SetTemporaryPasswordAsync(string subject,string password,CancellationToken ct){if(RecoveryFails)throw new AccountDeliveryException();Temporary++;TemporaryPassword=password;return Task.CompletedTask;}
     }
