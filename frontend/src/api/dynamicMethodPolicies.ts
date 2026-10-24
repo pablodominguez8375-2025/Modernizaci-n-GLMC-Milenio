@@ -216,5 +216,7 @@ export const dynamicMethodPolicies: Record<string, Record<string, DynamicMethodP
     plan: { view: 'system', action: 'view' },
     apply: { view: 'system', action: 'write' },
     catalog: { view: 'system', action: 'view' },
+    initialLoadContract: { view: 'system', action: 'view' },
+    downloadInitialLoadTemplate: { view: 'system', action: 'view' },
   },
 }

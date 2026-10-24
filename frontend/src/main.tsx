@@ -26,6 +26,7 @@ import { applyTextSize, readTextSize } from './textSize'
 import { installSupportViewAsFetch } from './api/supportViewAs'
 import './support-view-as.css'
 import './lodge-data-health.css'
+import './initial-load.css'
 
 installSupportViewAsFetch()
 
