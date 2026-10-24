@@ -266,8 +266,7 @@ def main(argv: list[str] | None = None) -> int:
         data, digest = load_fixture(args.input)
         result = preflight(data, digest)
     except PreflightError as exc:
-        result = {"status": "REJECTED", "error_code": exc.code,
-                  "writes_performed": 0}
+        result = {"error_code": exc.code, "writes_performed": 0}
         print(json.dumps(result, sort_keys=True))
         return 2
     print(json.dumps(result, sort_keys=True))
