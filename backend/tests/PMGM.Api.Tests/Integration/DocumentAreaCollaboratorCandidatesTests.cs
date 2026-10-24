@@ -107,6 +107,7 @@ public sealed class DocumentAreaCollaboratorCandidatesTests
             new("actor-test", "Solicitante Ficticio", "yo@example.invalid", true, "member"),
         ]);
         public Task<AccountUser?> FindManagedAsync(string subject, CancellationToken ct) => Task.FromResult<AccountUser?>(null);
+        public Task<AccountClaims?> GetClaimsAsync(string subject, CancellationToken ct) => Task.FromResult<AccountClaims?>(null);
         public Task SendPasswordRecoveryEmailAsync(string subject, CancellationToken ct) => throw new NotSupportedException();
         public Task SetTemporaryPasswordAsync(string subject, string password, CancellationToken ct) => throw new NotSupportedException();
     }

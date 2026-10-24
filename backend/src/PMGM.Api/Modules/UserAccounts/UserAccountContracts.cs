@@ -14,6 +14,8 @@ public sealed record AccountCandidate(Guid MemberId, Guid OrganizationId, string
 /// </summary>
 public sealed record AccountIdentity(string Name, string Email, Guid? MemberId, Guid? OrganizationId, bool PlatformAdministrator, bool Superuser = false);
 public sealed record PreparedIdentity(string Subject, bool Created);
+/// <summary>Identidad efectiva de una cuenta gestionada, tal como la verá el token: roles, alcance y Talleres.</summary>
+public sealed record AccountClaims(string Subject, string Name, string Kind, bool Enabled, string[] Roles, string? Scope, string[] Organizations);
 public sealed record AccountUser(string Subject, string Name, string Email, bool Enabled, string Kind);
 
 public interface IAccountIdentityProvider
@@ -26,6 +28,8 @@ public interface IAccountIdentityProvider
     Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct);
     /// <summary>Cuenta gestionada por la plataforma o null si no existe / no es gestionada.</summary>
     Task<AccountUser?> FindManagedAsync(string subject, CancellationToken ct);
+    /// <summary>Roles efectivos, alcance y Talleres de una cuenta gestionada (para «Ver como»); null si no existe o no es gestionada.</summary>
+    Task<AccountClaims?> GetClaimsAsync(string subject, CancellationToken ct);
     /// <summary>Modalidad A: el proveedor envía un enlace de un solo uso (UPDATE_PASSWORD) al correo de la cuenta.</summary>
     Task SendPasswordRecoveryEmailAsync(string subject, CancellationToken ct);
     /// <summary>Modalidad B: clave temporal con cambio obligatorio; cierra las sesiones activas.</summary>

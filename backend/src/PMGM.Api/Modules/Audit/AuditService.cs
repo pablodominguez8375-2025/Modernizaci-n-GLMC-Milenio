@@ -82,10 +82,13 @@ public static class AuditEventFactory
         string result,
         object? metadata = null)
     {
-        var subject = httpContext.User.FindFirstValue("sub")
+        // «Ver como» (#574): la identidad efectiva es la del objetivo, pero el actor auditado es SIEMPRE el operador real.
+        var supportOperator = httpContext.User.FindFirstValue("pmgm_support_operator");
+        var subject = supportOperator
+            ?? httpContext.User.FindFirstValue("sub")
             ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        var displayName = httpContext.User.Identity?.Name
+        var displayName = supportOperator is not null ? "Soporte (Ver como)" : httpContext.User.Identity?.Name
             ?? httpContext.User.FindFirstValue("name")
             ?? httpContext.User.FindFirstValue(ClaimTypes.Name);
 

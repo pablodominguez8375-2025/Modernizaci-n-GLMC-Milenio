@@ -3,7 +3,8 @@ import { MockAssemblyStore, type AssemblyDebtBlockPayload, type AssemblyListResp
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
-import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult } from './userAccounts'
+import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest } from './userAccounts'
+import type { SupportViewStart } from './supportViewAs'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
 export interface HospitalariaContributionObligation { id:string;organizationId:string;taller:string;rateId:string;periodYear:number;periodMonth:number;currency:'CLP';amountDue:number;status:'pending'|'submitted'|'observed'|'reconciled';paymentDate:string|null;paymentReference:string|null;reviewedAtUtc:string|null;reviewNotes:string|null }
@@ -441,6 +442,11 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
   },
 ]
 
+const demoViewAsAccounts:AccountUser[]=[
+ {subject:'demo:brother',name:'Hermano Demostrativo',email:'hermano.demo@ejemplo.cl',enabled:true,kind:'member'},
+ {subject:'demo:lodgeSecretary',name:'Secretario Demostrativo',email:'secretario.demo@ejemplo.cl',enabled:true,kind:'member'},
+ {subject:'demo:librarian',name:'Bibliotecario Demostrativo',email:'biblioteca.demo@ejemplo.cl',enabled:true,kind:'member'},
+]
 export class PmgmApiClient {
   private readonly mockUnrecoveredDues = new Map<string,UnrecoveredDue[]>()
   private readonly withdrawalReviewDemo = withdrawalReviewFixture()
@@ -491,10 +497,12 @@ export class PmgmApiClient {
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
   demoAccessSubject = 'demo:brother'
-  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin')
+  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin',demoViewAsAccounts)
   async getUserAccountCandidates():Promise<AccountCandidates>{if(this.useMocks)return this.userAccountsDemo.candidatesForCreation();return this.request('/api/system/user-accounts/eligible-members')}
   async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
   async resetUserAccountAccess(subject:string,request:AccessResetRequest):Promise<AccessResetResult>{if(this.useMocks)return this.userAccountsDemo.resetAccess(subject,request);return this.request(`/api/system/user-accounts/${encodeURIComponent(subject)}/password-recovery`,{method:'POST',body:JSON.stringify(request)})}
+  async startSupportView(request:SupportViewStartRequest):Promise<SupportViewStart>{if(this.useMocks)return this.userAccountsDemo.startViewAs(request);return this.request('/api/system/support/view-as',{method:'POST',body:JSON.stringify(request)})}
+  async endSupportView(sessionId:string):Promise<void>{if(this.useMocks)return;await this.request(`/api/system/support/view-as/${encodeURIComponent(sessionId)}/end`,{method:'POST'})}
   async createUserAccount(request:CreateUserAccount):Promise<UserAccountCreated>{if(this.useMocks)return this.userAccountsDemo.create(request);return this.request('/api/system/user-accounts',{method:'POST',body:JSON.stringify(request)})}
   readonly dynamicAccess: DynamicAccessClient
   private canMockManageGrandTreasury(){return getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity}

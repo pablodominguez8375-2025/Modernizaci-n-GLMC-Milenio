@@ -4,14 +4,22 @@ export interface AccountUser { subject:string;name:string;email:string;enabled:b
 export interface CreateUserAccount { memberId?:string|null;organizationId?:string|null;superuser?:boolean;platformName?:string|null;platformEmail?:string|null }
 export interface UserAccountCreated { subject:string;email:string;memberId:string|null;organizationId:string|null;superuser:boolean;requiresPasswordChange:true;initialPasswordEmailSent:boolean }
 
+export interface SupportViewStartRequest { targetSubject:string;reason:string }
 export type AccessResetModality='email'|'temporary'
 export interface AccessResetRequest { modality:AccessResetModality;reason?:string }
 export interface AccessResetResult { subject:string;name:string;modality:AccessResetModality;emailSent?:boolean;email?:string;expiresInMinutes?:number;temporaryPassword?:string;requiresPasswordChange?:boolean;shownOnce?:boolean }
 
 // Synthetic institutional records only. Identity and email delivery are simulated on Pages.
 export class UserAccountsDemo {
- private users:AccountUser[]=[]
- constructor(private readonly candidates:AccountCandidate[],private readonly allowed:()=>boolean,private readonly platformAllowed:()=>boolean){}
+ private users:AccountUser[]
+ constructor(private readonly candidates:AccountCandidate[],private readonly allowed:()=>boolean,private readonly platformAllowed:()=>boolean,seed:AccountUser[]=[]){this.users=structuredClone(seed)}
+ startViewAs(request:SupportViewStartRequest){
+  this.authorize();if(!this.platformAllowed())throw new Error('Sólo el Máster de plataforma puede usar «Ver como».')
+  if((request.reason?.trim().length??0)<10||request.reason.trim().length>500)throw new Error('Indique el motivo (10 a 500 caracteres).')
+  const user=this.users.find(u=>u.subject===request.targetSubject&&u.enabled);if(!user)throw new Error('La cuenta no existe o no está habilitada.')
+  if(user.kind!=='member')throw new Error('No se puede ver como una cuenta con cargos de administración.')
+  const now=Date.now();return{sessionId:crypto.randomUUID(),targetSubject:user.subject,targetName:user.name,startedAtUtc:new Date(now).toISOString(),expiresAtUtc:new Date(now+30*60000).toISOString(),readOnly:true as const}
+ }
  private authorize(){if(!this.allowed())throw new Error('No tiene permiso para administrar usuarios.')}
  candidatesForCreation():AccountCandidates{this.authorize();return{items:structuredClone(this.candidates),canCreateUser:this.platformAllowed(),canCreateSuperuser:this.platformAllowed(),deliveryConfigured:true}}
  list(){this.authorize();return{items:structuredClone(this.users),configured:true}}

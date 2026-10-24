@@ -23,6 +23,10 @@ import './home-consistency.css'
 import './common-views.css'
 import './desktop-density.css'
 import { applyTextSize, readTextSize } from './textSize'
+import { installSupportViewAsFetch } from './api/supportViewAs'
+import './support-view-as.css'
+
+installSupportViewAsFetch()
 
 const root = document.getElementById('root')
 
