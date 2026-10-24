@@ -15,6 +15,7 @@ public static class InitialLoadAdmissionPolicy
     public enum Operation { RequestOpen, Preview, RequestApply, RequestClose }
 
     public sealed record Evidence(
+        bool MasterAccountVerifiedByServer = false,
         bool LegalApprovalVerifiedByServer = false,
         bool AuditSinkVerifiedByServer = false,
         string? AuditReason = null,
@@ -61,6 +62,16 @@ public static class InitialLoadAdmissionPolicy
 
         // Terminal closure is irreversible in the initial-load process.
         // A new enrollment campaign requires a distinct protocol and issue.
+        // A platform-superadmin role alone is too broad for initial load.
+        // Only the uniquely registered Master 'admin' can be admitted.
+        // Identity evidence must be resolved from a server-trusted registry,
+        // NOT supplied as a Boolean from a browser/API request.
+        if (!evidence.MasterAccountVerifiedByServer)
+        {
+            Fail("MASTER_ACCOUNT_REQUIRED");
+            return Denied();
+        }
+
         if (window == Window.Closed)
         {
             Fail("WINDOW_CLOSED");
