@@ -139,11 +139,11 @@ public sealed class QaSyntheticPlanHttpTests
                 services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(connectionString));
                 services.AddAuthentication(options =>
                 {
-                    options.DefaultAuthenticateScheme = QaSyntheticTestAuthHandler.Scheme;
-                    options.DefaultChallengeScheme = QaSyntheticTestAuthHandler.Scheme;
-                    options.DefaultForbidScheme = QaSyntheticTestAuthHandler.Scheme;
+                    options.DefaultAuthenticateScheme = QaSyntheticTestAuthHandler.SchemeName;
+                    options.DefaultChallengeScheme = QaSyntheticTestAuthHandler.SchemeName;
+                    options.DefaultForbidScheme = QaSyntheticTestAuthHandler.SchemeName;
                 }).AddScheme<AuthenticationSchemeOptions, QaSyntheticTestAuthHandler>(
-                    QaSyntheticTestAuthHandler.Scheme, _ => { });
+                    QaSyntheticTestAuthHandler.SchemeName, _ => { });
             });
         }
     }
@@ -154,7 +154,7 @@ public sealed class QaSyntheticPlanHttpTests
         UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
-        public const string Scheme = "PMGM-QaPlan-Testing";
+        public const string SchemeName = "PMGM-QaPlan-Testing";
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
             if (Request.Headers["X-Test-Unauthenticated"].ToString() == "true")
@@ -169,7 +169,7 @@ public sealed class QaSyntheticPlanHttpTests
             };
             return Task.FromResult(AuthenticateResult.Success(
                 new AuthenticationTicket(new ClaimsPrincipal(
-                    new ClaimsIdentity(claims, Scheme)), Scheme)));
+                    new ClaimsIdentity(claims, SchemeName)), SchemeName)));
         }
     }
 }
