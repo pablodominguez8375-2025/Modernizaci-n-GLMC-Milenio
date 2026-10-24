@@ -274,6 +274,7 @@ api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
 api.MapSupportDiagnosticEndpoints();
 api.MapSupportLodgeDataHealthEndpoints();
+api.MapQaSyntheticPlanEndpoints();
 
 api.MapViewAccessEndpoints();
 
