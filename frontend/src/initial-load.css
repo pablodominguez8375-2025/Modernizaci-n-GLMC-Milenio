@@ -3,3 +3,7 @@
 .initial-load-files small{color:#526078;overflow-wrap:anywhere}
 .initial-load-notice{display:grid;gap:4px;margin-top:14px;padding:12px 14px;border:1px solid #e6cf8f;border-radius:12px;background:#fff8e1;color:#5c4a12}
 @media(max-width:620px){.initial-load-prepare .button-row button{width:100%;min-height:48px}}
+.initial-load-status{display:grid;gap:3px;margin:14px 0;padding:12px 14px;border:1px solid #dfe5ee;border-radius:12px;background:#f9fafc}
+.initial-load-status.open{border-color:#b9d6ae;background:#f3faf0}
+.initial-load-status.closed{border-color:#c5cfe0;background:#eef2f9}
+.initial-load-status.warn{border-color:#e6cf8f;background:#fff8e1;color:#5c4a12}

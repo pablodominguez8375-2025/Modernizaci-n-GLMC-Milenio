@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { BootstrapApiClient, InitialLoadContract } from './api/bootstrapApi'
+import type { BootstrapApiClient, InitialLoadContract, InitialLoadStatus } from './api/bootstrapApi'
+import { describeInitialLoadStatus, initialLoadStatusErrorMessage } from './initialLoadStatus'
 import { describeInitialLoadFiles } from './initialLoadFiles'
 
 /** #694 — «Preparar la carga»: plantillas CSV para Talleres, Hermanos y cargos. No recibe datos todavía. */
@@ -7,12 +8,17 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
   const [contract, setContract] = useState<InitialLoadContract | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [downloading, setDownloading] = useState(false)
+  const [status, setStatus] = useState<InitialLoadStatus | null>(null)
+  const [statusError, setStatusError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
     bootstrapApi.initialLoadContract()
       .then(value => { if (active) setContract(value) })
       .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : 'No fue posible cargar el contrato de la carga inicial.') })
+    bootstrapApi.initialLoadStatus()
+      .then(value => { if (active) setStatus(value) })
+      .catch(reason => { if (active) setStatusError(initialLoadStatusErrorMessage(reason instanceof Error ? reason.message : undefined)) })
     return () => { active = false }
   }, [bootstrapApi])
 
@@ -28,12 +34,17 @@ export default function InitialLoadPrepare({ bootstrapApi }: { bootstrapApi: Boo
     finally { setDownloading(false) }
   }
 
+  const statusView = describeInitialLoadStatus(status)
   const files = contract ? describeInitialLoadFiles(contract.files) : []
   return <section className="panel initial-load-prepare" aria-labelledby="initial-load-title">
     <p className="eyebrow">Carga inicial · Paso 1 de 3</p>
     <h2 id="initial-load-title">Preparar la carga de Talleres, Hermanos y cargos</h2>
     <p>Para poner en marcha los Talleres reales se cargan tres archivos: los Talleres, los hermanos de cada Taller y los cargos vigentes. Descargue las plantillas, complételas fuera del sistema y guárdelas como CSV. Las plantillas vienen vacías: solo traen los encabezados.</p>
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{error}</span></div>}
+    <div className={`initial-load-status ${statusError ? 'warn' : statusView.tone}`} role="status">
+      <strong>{statusError ? 'Estado de la carga' : statusView.label}</strong>
+      <span>{statusError ?? statusView.detail}</span>
+    </div>
     <ol className="initial-load-files">
       {files.map(file => <li key={file.name}>
         <strong>{file.name}</strong>
