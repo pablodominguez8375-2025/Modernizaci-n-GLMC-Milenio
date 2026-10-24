@@ -14,7 +14,10 @@ public static class DynamicViewAccess
 {
     public static bool Allows(DynamicAccessCatalog catalog, string? subject, string view, string action, Guid? organization, DateOnly today)
         => DynamicAccessEndpoints.AllowedActions.Contains(action) &&
-           (!catalog.Assignments.Any(a => a.Subject == subject && a.OrganizationId == organization) ||
+           // Una vez enrolado en cualquier ámbito, el sujeto no puede volver al
+           // acceso legado al consultar otro Taller sin asignación expresa.
+           // Se consideran también las asignaciones revocadas y vencidas.
+           (!catalog.Assignments.Any(a => a.Subject == subject) ||
             DynamicAccessEndpoints.IsGranted(catalog, subject, view, action, organization, today));
 
     // A collection with no organization selector must not leak a denied context. All historical
