@@ -273,6 +273,7 @@ api.MapDynamicAccessEndpoints();
 api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
 api.MapSupportDiagnosticEndpoints();
+api.MapSupportLodgeDataHealthEndpoints();
 
 api.MapViewAccessEndpoints();
 

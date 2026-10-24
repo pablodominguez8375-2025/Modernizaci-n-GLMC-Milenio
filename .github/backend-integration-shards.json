@@ -49,7 +49,8 @@
       "CandidateFormalSponsorGatesHttpTests",
       "OfficialDocumentNoticePostgreSqlTests",
       "MemberRutRevealPostgreSqlTests",
-      "MemberPhotoPostgreSqlTests"
+      "MemberPhotoPostgreSqlTests",
+      "SupportLodgeDataHealthHttpTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
