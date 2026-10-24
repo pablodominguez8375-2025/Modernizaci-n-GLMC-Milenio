@@ -129,7 +129,11 @@ public sealed class QaSyntheticPlanHttpTests
                 }));
             builder.ConfigureTestServices(services =>
             {
-                services.RemoveAll<IHostedService>();
+                // Remove only the data worker; retain TestServer's hosting service.
+                foreach (var hosted in services.Where(descriptor =>
+                    descriptor.ServiceType == typeof(IHostedService) &&
+                    descriptor.ImplementationType?.Name == "HospitalariaContributionWorker").ToArray())
+                    services.Remove(hosted);
                 services.RemoveAll<PmgmDbContext>();
                 services.RemoveAll<DbContextOptions<PmgmDbContext>>();
                 services.AddDbContext<PmgmDbContext>(options => options.UseNpgsql(connectionString));
