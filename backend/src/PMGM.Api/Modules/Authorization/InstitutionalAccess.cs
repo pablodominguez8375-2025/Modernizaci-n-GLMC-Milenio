@@ -154,11 +154,11 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     }
 
     public bool CanManageWorkshopProfile(ClaimsPrincipal user, Guid organizationId)
-        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior)) ||
+        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria)) ||
            (HasOrganizationClaim(user, organizationId) && HasExplicitRole(user, InstitutionalRoles.TallerSecretaria));
 
     public bool CanEditAnyWorkshopProfile(ClaimsPrincipal user)
-        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior)) ||
+        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria)) ||
            (HasExplicitRole(user, InstitutionalRoles.TallerSecretaria) && user.Claims.Any(x =>
                x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
 

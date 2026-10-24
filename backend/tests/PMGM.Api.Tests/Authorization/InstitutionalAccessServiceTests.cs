@@ -157,8 +157,7 @@ public sealed class InstitutionalAccessServiceTests
     [Theory]
     [InlineData(InstitutionalRoles.TallerSecretaria, false)]
     [InlineData(InstitutionalRoles.GranSecretaria, true)]
-    [InlineData(InstitutionalRoles.RegimenInterior, true)]
-    public void WorkshopProfileMetadata_IsEditableByTheThreeApprovedProfilesWithinScope(string role, bool orderScoped)
+    public void WorkshopProfileMetadata_IsEditableOnlyByTwoSecretariatsWithinScope(string role, bool orderScoped)
     {
         var ownOrganization = Guid.NewGuid();
         var claims = new List<Claim> { new(InstitutionalClaims.Role, role) };
@@ -168,9 +167,11 @@ public sealed class InstitutionalAccessServiceTests
 
         Assert.True(_service.CanManageWorkshopProfile(user, ownOrganization));
         Assert.Equal(orderScoped, _service.CanManageWorkshopProfile(user, Guid.NewGuid()));
+        Assert.True(_service.CanEditAnyWorkshopProfile(user));
     }
 
     [Theory]
+    [InlineData(InstitutionalRoles.RegimenInterior, true)]
     [InlineData(InstitutionalRoles.GranTesoreria, true)]
     [InlineData(InstitutionalRoles.TallerTesoreria, false)]
     [InlineData(InstitutionalRoles.TallerVenerable, false)]
@@ -185,6 +186,16 @@ public sealed class InstitutionalAccessServiceTests
         var user = CreateUser(claims.ToArray());
 
         Assert.False(_service.CanManageWorkshopProfile(user, organizationId));
+        Assert.False(_service.CanEditAnyWorkshopProfile(user));
+    }
+
+    [Fact]
+    public void GrandSecretariat_without_order_scope_cannot_edit_workshop()
+    {
+        var organizationId = Guid.NewGuid();
+        var user = CreateUser(new Claim(InstitutionalClaims.Role, InstitutionalRoles.GranSecretaria));
+        Assert.False(_service.CanManageWorkshopProfile(user, organizationId));
+        Assert.False(_service.CanEditAnyWorkshopProfile(user));
     }
 
     [Theory]
