@@ -114,6 +114,11 @@ public sealed class InstitutionalBootstrapPostgreSqlTests
         // transaction abort cannot contaminate another integration test.
         await using (var transaction = await bootstrap.Database.BeginTransactionAsync(ct))
         {
+            // These database guards must not hang CI if another shard holds
+            // a conflicting lock. A lock-timeout is a test failure, never
+            // mistaken for an accepted transition.
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '15s'", ct);
             var ex = await Assert.ThrowsAsync<PostgresException>(() =>
                 bootstrap.Database.ExecuteSqlRawAsync(
                     """UPDATE core.initial_load_windows SET "Status" = 'closed' WHERE "Id" = 1""", ct));
@@ -123,6 +128,11 @@ public sealed class InstitutionalBootstrapPostgreSqlTests
 
         await using (var transaction = await bootstrap.Database.BeginTransactionAsync(ct))
         {
+            // These database guards must not hang CI if another shard holds
+            // a conflicting lock. A lock-timeout is a test failure, never
+            // mistaken for an accepted transition.
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '15s'", ct);
             var ex = await Assert.ThrowsAsync<PostgresException>(() =>
                 bootstrap.Database.ExecuteSqlRawAsync(
                     """DELETE FROM core.initial_load_windows WHERE "Id" = 1""", ct));
@@ -132,6 +142,11 @@ public sealed class InstitutionalBootstrapPostgreSqlTests
 
         await using (var transaction = await bootstrap.Database.BeginTransactionAsync(ct))
         {
+            // These database guards must not hang CI if another shard holds
+            // a conflicting lock. A lock-timeout is a test failure, never
+            // mistaken for an accepted transition.
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '15s'", ct);
             var ex = await Assert.ThrowsAsync<PostgresException>(() =>
                 bootstrap.Database.ExecuteSqlRawAsync(
                     """TRUNCATE TABLE core.initial_load_windows""", ct));
