@@ -97,15 +97,32 @@ admin_token=$(get_token 'qa.admin')
 workshop_token=$(get_token 'qa.taller23')
 printf '✓ autenticación QA mediante Keycloak\n'
 
-assert_json_get "$admin_token" '/api/session/me' 'sesión institucional de Gran Logia'
-admin_members=$(json_get "$admin_token" "/api/members?organizationId=$LODGE23&limit=20")
-assert_transferred_degree "$admin_members" 'Gran Logia'
-printf '✓ Membresía / Ficha de Taller\n'
-assert_json_get "$admin_token" '/api/candidate-publications/active' 'Portal de insinuados'
-# La raíz de Biblioteca redirige deliberadamente a /buscar. El smoke llama al
-# endpoint JSON real para validar el catálogo sin depender de seguimiento de 307.
-assert_json_get "$admin_token" '/api/biblioteca/buscar' 'Biblioteca Virtual'
-assert_json_get "$admin_token" '/api/grand-archive/?status=active&limit=20' 'Gran Archivero'
+assert_json_get "$admin_token" '/api/session/me' 'sesión de Master técnico'
+# Contrato institucional aprobado (#604): el Máster administra el sistema,
+# pero no es miembro ni autoridad del Taller 23. La prueba anterior exigía
+# incorrectamente que la cuenta de plataforma accediera al Cuadro del Taller.
+admin_member_status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer $admin_token" -H 'Accept: application/json' \
+  "$BASE_URL/api/members?organizationId=$LODGE23&limit=20")
+if [ "$admin_member_status" != '403' ]; then
+  echo "Máster técnico: se esperaba 403 al consultar Cuadro del Taller; se obtuvo $admin_member_status." >&2
+  exit 1
+fi
+printf '✓ segregación: Master no hereda permisos de Taller\n'
+# Las consultas de Insinuados publicados y Biblioteca son lecturas
+# autenticadas de Taller; no se habilitan mediante un cargo inventado al Máster.
+assert_json_get "$workshop_token" '/api/candidate-publications/active' 'Portal de insinuados para Taller autenticado'
+assert_json_get "$workshop_token" '/api/biblioteca/buscar' 'Biblioteca Virtual del Taller'
+
+# El rol Máster tampoco puede sustituir al Gran Archivero.
+admin_archive_status=$(curl -sS --max-time 20 -o /dev/null -w '%{http_code}' \
+  -H "Authorization: Bearer $admin_token" -H 'Accept: application/json' \
+  "$BASE_URL/api/grand-archive/?status=active&limit=20")
+if [ "$admin_archive_status" != '403' ]; then
+  echo "Máster técnico: se esperaba 403 en Gran Archivo; se obtuvo $admin_archive_status." >&2
+  exit 1
+fi
+printf '✓ segregación: Master no suplanta Gran Archivero\n'
 
 workshop_archive_status=$(curl -sS --max-time 20 -o /tmp/pmgm-workshop-archive.json -w '%{http_code}' \
   -H "Authorization: Bearer $workshop_token" -H 'Accept: application/json' \
