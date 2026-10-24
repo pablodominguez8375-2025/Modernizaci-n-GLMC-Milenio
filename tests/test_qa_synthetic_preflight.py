@@ -145,6 +145,7 @@ class QaSyntheticPreflightTests(unittest.TestCase):
                 result = preflight.main(["--input", str(path)])
             self.assertEqual(2, result)
             report = json.loads(stdout.getvalue())
+            self.assertEqual({"error_code", "writes_performed"}, set(report))
             self.assertEqual("NON_CANONICAL_SYNTHETIC_DATA", report["error_code"])
             self.assertEqual(0, report["writes_performed"])
             self.assertNotIn("notasPrivadas", stdout.getvalue())
