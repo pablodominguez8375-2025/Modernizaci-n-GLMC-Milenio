@@ -43,6 +43,23 @@ const mockCatalog: BootstrapCatalogResponse = {
   ].map((name, index) => ({ code: `office-${index + 1}`, name, category: index < 8 ? 'administrative' : 'ritual', isPrimary: index < 8, isActive: true, aliasesJson: name === 'Guarda Templo Externo' ? '["Retejador"]' : null })),
 }
 
+export interface InitialLoadContract {
+  status: string; revision: string
+  files: { name: string; columns: string[] }[]
+  requiresLegalApprovalBeforeRealData: boolean
+  acceptsUploadedData: boolean; createsAccounts: boolean; assignsProfiles: boolean; supportsApply: boolean
+}
+
+const mockInitialLoadContract: InitialLoadContract = {
+  status: 'TEMPLATE_ONLY', revision: 'INITIAL-LOAD-CSV-v1',
+  files: [
+    { name: 'Talleres.csv', columns: ['workshopCode', 'number', 'name', 'orienteCode', 'city', 'country'] },
+    { name: 'Hermanos.csv', columns: ['personRef', 'identityType', 'identityNumber', 'firstNames', 'lastNames', 'email', 'workshopCode', 'grade', 'institutionalStatus'] },
+    { name: 'CargosVigentes.csv', columns: ['personRef', 'workshopCode', 'officeCode', 'startDate'] },
+  ],
+  requiresLegalApprovalBeforeRealData: true, acceptsUploadedData: false, createsAccounts: false, assignsProfiles: false, supportsApply: false,
+}
+
 export class BootstrapApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: BootstrapTokenProvider
@@ -76,6 +93,29 @@ export class BootstrapApiClient {
   async catalog(): Promise<BootstrapCatalogResponse> {
     if (this.useMocks) return mockCatalog
     return this.get<BootstrapCatalogResponse>('/api/platform/bootstrap/catalog')
+  }
+
+  /** #694 — contrato de las 3 plantillas CSV de la Carga inicial (solo lectura; no recibe datos). */
+  async initialLoadContract(): Promise<InitialLoadContract> {
+    if (this.useMocks) return mockInitialLoadContract
+    return this.get<InitialLoadContract>('/api/platform/bootstrap/initial-load/contract')
+  }
+
+  /** Descarga el ZIP con las 3 plantillas CSV vacías (solo encabezados). */
+  async downloadInitialLoadTemplate(): Promise<{ blob: Blob; fileName: string }> {
+    const fileName = 'PMGM-Carga-Inicial-Plantillas-CSV-v1.zip'
+    if (this.useMocks) {
+      const text = mockInitialLoadContract.files.map(f => `${f.name}\n${f.columns.join(',')}`).join('\n\n')
+      return { blob: new Blob([text], { type: 'text/plain;charset=utf-8' }), fileName: 'plantillas-demo.txt' }
+    }
+    const token = await this.getAccessToken?.()
+    if (!token) throw new Error('Debe ingresar como Superadmin para descargar las plantillas.')
+    const response = await fetch(`${this.baseUrl}/api/platform/bootstrap/initial-load/template-csv`, { headers: { Authorization: `Bearer ${token}` }, credentials: 'omit', cache: 'no-store', redirect: 'error' })
+    if (!response.ok) {
+      if (response.status === 401) await this.onUnauthorized?.()
+      throw new Error(response.status === 403 ? 'Solo el Máster puede descargar las plantillas de la carga inicial.' : `La API respondió ${response.status} ${response.statusText}.`)
+    }
+    return { blob: await response.blob(), fileName }
   }
 
   private async request<T>(path: string, body: InstitutionalBootstrapRequest): Promise<T> {
