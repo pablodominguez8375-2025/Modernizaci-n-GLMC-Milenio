@@ -249,6 +249,7 @@ api.MapLodgeCouncilEndpoints();
 api.MapLodgeInstructionEndpoints();
 api.MapDocumentManagementEndpoints();
 api.MapMemberWorkPaperEndpoints();
+api.MapWorkPaperReviewEndpoints();
 api.MapDocumentManagementQueryEndpoints();
 api.MapDocumentContentEndpoints();
 api.MapDocumentContentRecoveryEndpoints();
