@@ -74,6 +74,8 @@ public sealed class SystemMailGoogleHttpTests
                     cancellationToken: ct);
                 Assert.False(status.GetProperty("configured").GetBoolean());
                 Assert.True(status.GetProperty("encryptionReady").GetBoolean());
+                Assert.False(status.GetProperty("transportReady").GetBoolean());
+                Assert.Equal("missing_password", status.GetProperty("reason").GetString());
             }
 
             void AddSetting(string code, string value) =>
@@ -114,9 +116,39 @@ public sealed class SystemMailGoogleHttpTests
                 var text = await statusResponse.Content.ReadAsStringAsync(ct);
                 Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
                 Assert.Contains("\"configured\":true", text);
+                var status = JsonDocument.Parse(text).RootElement;
+                Assert.True(status.GetProperty("transportReady").GetBoolean());
+                Assert.Equal("ready_to_test", status.GetProperty("reason").GetString());
                 Assert.DoesNotContain(rawSecret, text);
                 Assert.DoesNotContain(encrypted.Value, text);
             }
+            // Un ciphertext guardado NO significa que el transporte esté listo:
+            // mostrar estado seguro cuando falta host, sin abrir conexiones.
+            var hostSetting = await db.InstitutionalRuleSettings.SingleAsync(
+                x => x.Code == GoogleSmtpPolicy.HostCode, ct);
+            var originalHost = hostSetting.Value;
+            hostSetting.Value = "smtp.invalid.local";
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+            using (var incomplete = await client.GetAsync(
+                "/api/system/mail/credentials", ct))
+            {
+                Assert.Equal(HttpStatusCode.OK, incomplete.StatusCode);
+                var status = await incomplete.Content.ReadFromJsonAsync<JsonElement>(
+                    cancellationToken: ct);
+                Assert.True(status.GetProperty("configured").GetBoolean());
+                Assert.False(status.GetProperty("transportReady").GetBoolean());
+                Assert.Equal("incomplete_transport", status.GetProperty("reason").GetString());
+                var serialized = status.GetRawText();
+                Assert.DoesNotContain(rawSecret, serialized);
+                Assert.DoesNotContain(mailbox, serialized);
+            }
+            hostSetting = await db.InstitutionalRuleSettings.SingleAsync(
+                x => x.Code == GoogleSmtpPolicy.HostCode, ct);
+            hostSetting.Value = originalHost;
+            await db.SaveChangesAsync(ct);
+            db.ChangeTracker.Clear();
+
             using (var catalog = await client.GetAsync(
                 "/api/system/settings/", ct))
             {
