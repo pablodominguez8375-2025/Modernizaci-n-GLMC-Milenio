@@ -16,7 +16,8 @@ Persistir el estado singleton de la ventana de carga inicial, **sin admitir ni i
 - `backend/src/PMGM.Api/Modules/Bootstrap/Entities/InitialLoadWindow.cs` nuevo.
 - `backend/src/PMGM.Api/Modules/Bootstrap/BootstrapDbContext.cs` ampliación mínima.
 - `backend/src/PMGM.Api/Migrations/20261024183000_AddInitialLoadWindow.cs` nueva migración del BootstrapDbContext (reservar exclusividad de migraciones y revisar otras ramas antes de merge).
-- `backend/tests/PMGM.Api.Tests/InitialLoadWindowModelTests.cs` nuevo test de modelo EF.
+- `backend/tests/PMGM.Api.Tests/InitialLoadWindowModelTests.cs` nuevo test de modelo EF/DDL.
+- `backend/tests/PMGM.Api.Tests/Integration/InstitutionalBootstrapPostgreSqlTests.cs` ampliación de test PostgreSQL ya registrado en shard: migración y denegación real de UPDATE directo a cerrado, DELETE y TRUNCATE con rollback.
 - Este handoff.
 
 ## Política de ejecución y límites
