@@ -61,6 +61,7 @@ public sealed class InitialLoadWindowModelTests
         Assert.Contains("INSERT INTO core.initial_load_windows", sql);
         Assert.Contains("'not_opened', 0", sql);
         Assert.Contains("ck_initial_load_window_state", sql);
+        Assert.Contains("\"LegalApprovalDigest\" IS NOT NULL", sql);
         Assert.Contains("trg_initial_load_window_no_unsafe_change", sql);
         Assert.Contains("trg_initial_load_window_no_truncate", sql);
         Assert.Contains("initial load legal and opening proof is immutable", sql);
