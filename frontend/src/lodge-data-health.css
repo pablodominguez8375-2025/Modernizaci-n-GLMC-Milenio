@@ -1,0 +1,15 @@
+.lodge-health{margin:0 0 22px;padding:18px;border:1px solid #dfe5ee;border-radius:14px;background:#fff}
+.lodge-health>header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.lodge-health h2{margin:2px 0 6px}
+.lodge-health>header p:last-child{color:#526078;margin:0;max-width:62ch}
+.lodge-health-list{list-style:none;margin:16px 0 8px;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.lodge-health-list>li{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid #dfe5ee;border-radius:12px;background:#f9fafc}
+.lodge-health-list>li div{display:grid;gap:3px;min-width:0}
+.lodge-health-list small{color:#526078;font-size:.9375rem}
+.lodge-health-list li ul{margin:6px 0 0;padding-left:18px;color:#802d33}
+.lodge-health-list li.ok{border-color:#b9d6ae}
+.lodge-health-list li.attention{border-color:#e4b5b8;background:#fff6f6}
+.lodge-health-dot{flex:none;width:16px;height:16px;margin-top:4px;border-radius:50%;background:#3f8f3a}
+.attention .lodge-health-dot{background:#c0392b}
+.lodge-health-note{color:#526078;margin:8px 0 0}
+@media(max-width:620px){.lodge-health>header{flex-direction:column;align-items:stretch}.lodge-health>header button{width:100%;min-height:48px}}

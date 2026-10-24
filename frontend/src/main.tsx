@@ -25,6 +25,7 @@ import './desktop-density.css'
 import { applyTextSize, readTextSize } from './textSize'
 import { installSupportViewAsFetch } from './api/supportViewAs'
 import './support-view-as.css'
+import './lodge-data-health.css'
 
 installSupportViewAsFetch()
 

@@ -75,6 +75,8 @@ export interface AuditLogEvent { id:string; occurredAtUtc:string; user:string; i
 export interface AuditLogResponse { total:number; page:number; pageSize:number; immutable:boolean; items:AuditLogEvent[] }
 export interface SupportDiagnosticEntry { occurredAtUtc:string; severity:'error'|'warning'; statusCode:number; method:string; route:string; correlationId:string }
 export interface SupportDiagnosticsResponse { total:number; limit:number; capacity:number; volatileStorage:boolean; source:string; note:string; items:SupportDiagnosticEntry[] }
+export interface SupportLodgeDataHealthItem { resource:string; relation:string; present:boolean; schemaUsable:boolean; selectGranted:boolean; requiredColumnsPresent:boolean }
+export interface SupportLodgeDataHealthResponse { status:'ready'|'attention'; mode:string; scope:string; note:string; checkedAtUtc:string; items:SupportLodgeDataHealthItem[] }
 export interface SupportDiagnosticFilters { severity?:'error'|'warning'; route?:string; from?:string; to?:string; limit?:number }
 export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_active'
 export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; currency?:'CLP'|'USD'; grandTreasuryAmount: number | null; workshopAmount: number | null; rateAvailable?: boolean; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
@@ -325,7 +327,7 @@ export interface AddTreasuryPaymentRequest { paymentMethod: 'transfer' | 'deposi
 export type AccessTokenProvider = () => Promise<string | null>
 export interface PmgmApiClientOptions { baseUrl?: string; getAccessToken?: AccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
-class PmgmApiHttpError extends Error { constructor(readonly status: number, message: string) { super(message); this.name = 'PmgmApiHttpError' } }
+export class PmgmApiHttpError extends Error { constructor(readonly status: number, message: string) { super(message); this.name = 'PmgmApiHttpError' } }
 
 const mockCandidates: CandidatePublication[] = [
   { displayName: 'Persona Demostrativa Uno', workshopName: 'Taller Demostrativo Nº 1', workshopNumber: '1', publishedFromUtc: '2026-08-25T15:00:00Z', publishedUntilUtc: null, requiredDays: 20, elapsedDays: 13, complianceDateUtc: '2026-09-14T15:00:00Z', ruleCode: 'initiation.publication.minimum_days', status: 'published' },
@@ -670,6 +672,18 @@ export class PmgmApiClient {
   }
   async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
   async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'Asignó perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'Probó configuración SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesión',summary:'Intento de autenticación rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
+
+  /** #688 — estado de tablas/columnas/permisos de Talleres (solo metadatos; GET explícito). */
+  async getSupportLodgeDataHealth():Promise<SupportLodgeDataHealthResponse>{
+    if(this.useMocks){
+      const ok=(resource:string,relation:string)=>({resource,relation,present:true,schemaUsable:true,selectGranted:true,requiredColumnsPresent:true})
+      return {status:'attention',mode:'read_only_catalog',scope:'gestion_logial_taller',note:'Datos ficticios de demostración: solo metadatos del esquema y permisos del rol API; no garantiza que las consultas reales respondan 200.',checkedAtUtc:new Date().toISOString(),items:[
+        ok('tenidas','core.lodge_meetings'),
+        {...ok('instrucciones','core.lodge_instruction_sessions'),requiredColumnsPresent:false},
+        ok('miembros','core.memberships'),ok('miembros','core.members'),ok('miembros','core.people')]}
+    }
+    return this.request<SupportLodgeDataHealthResponse>('/api/system/support/lodge-data-health')
+  }
 
   async getSupportDiagnostics(filters:SupportDiagnosticFilters={}):Promise<SupportDiagnosticsResponse>{
     if(this.useMocks){
