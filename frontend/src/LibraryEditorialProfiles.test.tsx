@@ -11,7 +11,7 @@ const categories: LibraryCategory[] = [
   { value: 'magazine', label: 'Revistas', base: true, active: true },
   { value: 'bulletin', label: 'Boletines', base: true, active: true },
 ]
-const props = { categories, onCategories: () => {}, counts: {}, submissions: [], onSubmission: () => {}, onPublish: () => {}, collectionId: 'c', notify: () => {} }
+const props = { categories, categoryActions: { create: async () => {}, patch: async () => {}, reorder: async () => {} }, counts: {}, submissions: [], onSubmission: () => {}, onPublish: () => {}, collectionId: 'c', notify: () => {} }
 
 describe('perfiles institucionales Bibliotecario y Comunicaciones (#635)', () => {
   it('declara ambos perfiles en la demo con capacidades separadas y sin Gestión Documental', () => {

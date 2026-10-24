@@ -50,7 +50,7 @@ public static class LibraryMagazineMetadataAuthorization
             x.Type == InstitutionalClaims.Role &&
             string.Equals(x.Value, role, StringComparison.OrdinalIgnoreCase));
 
-    private static bool IsLibrarianProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
+    public static bool IsLibrarianProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
         => HasOwnRole(user, access, InstitutionalRoles.Librarian);
 
     private static bool IsCommunicationsProfile(ClaimsPrincipal user, IInstitutionalAccessService access)
