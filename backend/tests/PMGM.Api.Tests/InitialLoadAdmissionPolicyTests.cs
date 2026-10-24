@@ -19,6 +19,7 @@ public sealed class InitialLoadAdmissionPolicyTests
     }
 
     private static InitialLoadAdmissionPolicy.Evidence Complete() => new(
+        MasterAccountVerifiedByServer: true,
         LegalApprovalVerifiedByServer: true,
         AuditSinkVerifiedByServer: true,
         AuditReason: "Autorización registrada en acta de prueba sintética",
@@ -62,6 +63,22 @@ public sealed class InitialLoadAdmissionPolicyTests
             actor: Actor(InstitutionalRoles.PlatformSuperAdmin, false));
         Assert.Contains("MASTER_REQUIRED", result.Codes);
         Assert.Null(result.ProposedNextWindow);
+    }
+
+    [Fact]
+    public void Platform_role_is_insufficient_without_uniquely_verified_master_account()
+    {
+        // A support superadmin may have the role and order scope but is not
+        // automatically the unique institutional initial-load Master admin.
+        var result = Evaluate(InitialLoadAdmissionPolicy.Window.NotOpened,
+            InitialLoadAdmissionPolicy.Operation.RequestOpen,
+            Complete() with { MasterAccountVerifiedByServer = false });
+        Assert.Contains("MASTER_ACCOUNT_REQUIRED", result.Codes);
+        Assert.False(result.PrerequisitesSatisfied);
+        Assert.False(result.MayProposeTransition);
+        Assert.Null(result.ProposedNextWindow);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
     }
 
     [Fact]
