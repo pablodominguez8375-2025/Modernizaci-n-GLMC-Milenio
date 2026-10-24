@@ -38,6 +38,13 @@ public sealed class InstitutionalBootstrapPostgreSqlTests
             new BootstrapInstitution("Gran Logia Mixta de Chile"),
             new[] { new BootstrapWorkshop("Respetable Logia Libertad Nº 23", $"23-{suffix}") });
 
+        // Legacy institutional setup is still allowed BEFORE initial-load
+        // opening. ApplyAsync itself must acquire the singleton FOR UPDATE
+        // lock in its PostgreSQL transaction before any organization write.
+        var initialWindow = await bootstrapDb.InitialLoadWindows.AsNoTracking()
+            .SingleAsync(x => x.Id == InitialLoadWindow.SingletonId, cancellationToken);
+        Assert.True(InitialLoadLegacyBootstrapWriteGuard.AllowsApply(initialWindow));
+
         var service = new InstitutionalBootstrapService(bootstrapDb);
         var plan = await service.PlanAsync(package, cancellationToken);
         Assert.True(plan.Valid);
