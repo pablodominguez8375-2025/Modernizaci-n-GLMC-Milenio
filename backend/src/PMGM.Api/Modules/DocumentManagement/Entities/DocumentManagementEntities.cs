@@ -72,3 +72,21 @@ public sealed class DocumentVersion
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public string CreatedBySubject { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// #588 — categorías de la Biblioteca Virtual administradas por el Bibliotecario. El código
+/// (`DocumentType`) es estable; el rótulo, el orden y la vigencia son editables. Las categorías
+/// base no se eliminan ni se desactivan.
+/// </summary>
+public sealed class LibraryCategory
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public int Position { get; set; }
+    public bool Active { get; set; } = true;
+    public bool IsBase { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAtUtc { get; set; }
+    public string? UpdatedBySubject { get; set; }
+}

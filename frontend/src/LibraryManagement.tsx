@@ -9,7 +9,7 @@ type Props = {
   /** Bibliotecario: toda la Biblioteca. Comunicaciones: sólo revista y Boletín mensual. */
   mode?: 'librarian' | 'communications'
   categories: LibraryCategory[]
-  onCategories: (next: LibraryCategory[]) => void
+  categoryActions: { create: (label: string) => Promise<void>; patch: (code: string, patch: { label?: string; active?: boolean }) => Promise<void>; reorder: (codes: string[]) => Promise<void> }
   counts: Record<string, number>
   submissions: LibrarySubmission[]
   onSubmission: (next: LibrarySubmission[]) => void
@@ -21,10 +21,9 @@ type Props = {
 const editorialCategories = ['magazine', 'bulletin']
 const currentMonth = () => today().slice(0, 7)
 const degreeOptions = [{ v: '', t: 'General (todos los grados)' }, { v: '1', t: '1° grado' }, { v: '2', t: '2° grado' }, { v: '3', t: '3° grado' }]
-const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40) || 'categoria'
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 
-export default function LibraryManagement({ mode = 'librarian', categories, onCategories, counts, submissions, onSubmission, onPublish, collectionId, notify }: Props) {
+export default function LibraryManagement({ mode = 'librarian', categories, categoryActions, counts, submissions, onSubmission, onPublish, collectionId, notify }: Props) {
   const isCommunications = mode === 'communications'
   const active = categories.filter(c => c.active && !c.future && (!isCommunications || editorialCategories.includes(c.value)))
   const [type, setType] = useState(active[0]?.value ?? 'work_paper')
@@ -65,17 +64,16 @@ export default function LibraryManagement({ mode = 'librarian', categories, onCa
   const drafts = submissions.filter(s => s.kind === 'borrador')
   const drop = (id: string) => onSubmission(submissions.filter(s => s.id !== id))
 
-  function setCat(value: string, patch: Partial<LibraryCategory>) { onCategories(categories.map(c => c.value === value ? { ...c, ...patch } : c)) }
+  const managed = categories.filter(c => !c.future && c.value !== 'official_document')
   function move(value: string, dir: -1 | 1) {
-    const i = categories.findIndex(c => c.value === value); const j = i + dir
-    if (j < 0 || j >= categories.length) return
-    const next = [...categories];[next[i], next[j]] = [next[j], next[i]]; onCategories(next)
+    const i = managed.findIndex(c => c.value === value); const j = i + dir
+    if (j < 0 || j >= managed.length) return
+    const next = managed.map(c => c.value);[next[i], next[j]] = [next[j], next[i]]; void categoryActions.reorder(next)
   }
   function addCategory(event: FormEvent) {
     event.preventDefault()
     const label = newCategory.trim(); if (!label) return
-    let value = slug(label); while (categories.some(c => c.value === value)) value += '_2'
-    onCategories([...categories, { value, label, base: false, active: true }]); setNewCategory(''); notify(`Categoría «${label}» creada. Ya puede recibir documentos.`)
+    void categoryActions.create(label); setNewCategory('')
   }
 
   const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
@@ -127,17 +125,17 @@ export default function LibraryManagement({ mode = 'librarian', categories, onCa
       </ActionDrawer>
       {!isCommunications && <ActionDrawer label="Administrar categorías" title="Administrar categorías" description="Cree, renombre, ordene o desactive las categorías de la Biblioteca Virtual.">
         <div className="library-admin-list">
-          {categories.filter(c => !c.future).map((c, i) => <article key={c.value} className="library-admin-card">
+          {managed.map((c, i) => <article key={c.value} className="library-admin-card">
             <div className="library-admin-cat">
-              <label><span>Nombre{c.base ? ' · categoría base' : ''}</span><input value={c.label} maxLength={60} onChange={e => setCat(c.value, { label: e.target.value })} /></label>
+              <label><span>Nombre{c.base ? ' · categoría base' : ''}</span><input key={c.label} defaultValue={c.label} maxLength={60} onBlur={e => { const v = e.target.value.trim(); if (v && v !== c.label) void categoryActions.patch(c.value, { label: v }) }} /></label>
               <small>{counts[c.value] ?? 0} publicaciones · {c.active ? 'activa' : 'desactivada'}</small>
             </div>
             <div className="library-admin-row-actions">
               <button type="button" className="action-trigger secondary" disabled={i === 0} aria-label={`Subir ${c.label}`} onClick={() => move(c.value, -1)}>↑</button>
               <button type="button" className="action-trigger secondary" aria-label={`Bajar ${c.label}`} onClick={() => move(c.value, 1)}>↓</button>
               {c.active
-                ? <button type="button" className="action-trigger secondary" disabled={(counts[c.value] ?? 0) > 0} title={(counts[c.value] ?? 0) > 0 ? 'Mueva o retire sus publicaciones antes de desactivarla' : undefined} onClick={() => setCat(c.value, { active: false })}>Desactivar</button>
-                : <button type="button" className="action-trigger secondary" onClick={() => setCat(c.value, { active: true })}>Activar</button>}
+                ? <button type="button" className="action-trigger secondary" disabled={c.base || (counts[c.value] ?? 0) > 0} title={(counts[c.value] ?? 0) > 0 ? 'Mueva o retire sus publicaciones antes de desactivarla' : undefined} onClick={() => categoryActions.patch(c.value, { active: false })}>Desactivar</button>
+                : <button type="button" className="action-trigger secondary" onClick={() => categoryActions.patch(c.value, { active: true })}>Activar</button>}
             </div>
           </article>)}
           <form className="library-admin-new" onSubmit={addCategory}>

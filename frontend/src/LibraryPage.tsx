@@ -9,13 +9,17 @@ import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from 
 
 const pageSize = 12
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [], degrees: [], topics: [], officialDocumentTypes: [] }
+// Categorías que no se administran desde la tabla del Bibliotecario: documentos oficiales y videos (futuro).
+const fixedCategories: LibraryCategory[] = [
+  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
+  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+]
 const initialCategories: LibraryCategory[] = [
   { value: 'work_paper', label: 'Planchas de Trabajo', base: true, active: true },
   { value: 'book', label: 'Libros', base: true, active: true },
   { value: 'magazine', label: 'Revistas', base: true, active: true },
   { value: 'bulletin', label: 'Boletines', base: true, active: true },
-  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
-  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+  ...fixedCategories,
 ]
 
 export type LibraryEditorRole = 'librarian' | 'communications' | null
@@ -39,6 +43,24 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
   const [notice, setNotice] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
   const submissionsTouched = useRef(false)
+
+  useEffect(() => {
+    let active = true
+    documentApi.listLibraryCategories()
+      .then(response => { if (active) setCategories([...response.items.map(c => ({ value: c.value, label: c.label, base: c.base, active: c.active })), ...fixedCategories]) })
+      .catch(() => { /* se conservan las categorías base si el servidor no responde */ })
+    return () => { active = false }
+  }, [documentApi, reloadKey])
+
+  async function categoryAction(run: () => Promise<unknown>, okMessage?: string) {
+    try { await run(); setReloadKey(key => key + 1); if (okMessage) setNotice(okMessage) }
+    catch (reason) { setNotice(toMessage(reason)) }
+  }
+  const categoryActions = {
+    create: (label: string) => categoryAction(() => documentApi.createLibraryCategory(label), `Categoría «${label}» creada. Ya puede recibir documentos.`),
+    patch: (code: string, patch: { label?: string; active?: boolean }) => categoryAction(() => documentApi.updateLibraryCategory(code, patch), 'Categoría actualizada y registrada en auditoría.'),
+    reorder: (codes: string[]) => categoryAction(() => documentApi.reorderLibraryCategories(codes)),
+  }
 
   useEffect(() => {
     let active = true
@@ -133,7 +155,7 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
     {<LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
     {documentApi.useMocks && editorRole && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
-      <LibraryManagement mode={editorRole} categories={categories} onCategories={setCategories} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
+      <LibraryManagement mode={editorRole} categories={categories} categoryActions={categoryActions} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
         onSubmission={next => { submissionsTouched.current = true; setSubmissions(next) }}
         onPublish={item => setAddedItems(current => [item, ...current])} />
     </>}

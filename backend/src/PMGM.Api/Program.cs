@@ -253,6 +253,7 @@ api.MapDocumentContentRecoveryEndpoints();
 api.MapLibraryCatalogEndpoints();
 api.MapLibraryAccessPolicyEndpoints();
 api.MapLibraryCatalogMetadataEndpoints();
+api.MapLibraryCategoryEndpoints();
 api.MapGrandArchiveEndpoints();
 api.MapNotificationEndpoints();
 api.MapInstitutionalCalendarEndpoints();

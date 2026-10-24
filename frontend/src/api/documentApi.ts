@@ -88,6 +88,7 @@ export interface MemberWorkPaper { id: string; title: string; shortDescription: 
 export interface MemberWorkPaperLink { documentId: string; authorMemberId: string | null; title: string; shortDescription: string }
 export type DocumentAccessTokenProvider = () => Promise<string | null>
 
+export interface LibraryCategoryDto { value: string; label: string; base: boolean; active: boolean; position: number; publications?: number }
 interface DocumentApiClientOptions { baseUrl?: string; getAccessToken?: DocumentAccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
 export class DocumentApiHttpError extends Error {
@@ -354,6 +355,44 @@ export class DocumentApiClient {
       }
     }
     return this.request<LibraryFacetsResponse>('/api/biblioteca/facetas')
+  }
+
+  private mockCategories: LibraryCategoryDto[] = [
+    { value: 'work_paper', label: 'Planchas de Trabajo', base: true, active: true, position: 1 },
+    { value: 'book', label: 'Libros', base: true, active: true, position: 2 },
+    { value: 'magazine', label: 'Revistas', base: true, active: true, position: 3 },
+    { value: 'bulletin', label: 'Boletines', base: true, active: true, position: 4 },
+  ]
+
+  /** #588 — categorías persistentes de la Biblioteca (el Bibliotecario las administra). */
+  async listLibraryCategories(): Promise<{ canManage: boolean; items: LibraryCategoryDto[] }> {
+    if (this.useMocks) return { canManage: true, items: this.mockCategories.map(c => ({ ...c })) }
+    return this.request('/api/biblioteca/categorias')
+  }
+  async createLibraryCategory(label: string): Promise<LibraryCategoryDto> {
+    if (this.useMocks) {
+      const clean = label.trim()
+      if (this.mockCategories.some(c => c.label.toLowerCase() === clean.toLowerCase())) throw new Error('Ya existe una categoría con ese nombre.')
+      let value = clean.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 36) || 'categoria'
+      while (this.mockCategories.some(c => c.value === value)) value += '_2'
+      const created = { value, label: clean, base: false, active: true, position: this.mockCategories.length + 1 }
+      this.mockCategories.push(created); return { ...created }
+    }
+    return this.postJson('/api/biblioteca/categorias', { label })
+  }
+  async updateLibraryCategory(code: string, patch: { label?: string; active?: boolean }): Promise<LibraryCategoryDto> {
+    if (this.useMocks) {
+      const c = this.mockCategories.find(x => x.value === code); if (!c) throw new Error('Categoría no encontrada.')
+      if (patch.active === false && c.base) throw new Error('Las categorías base no se desactivan.')
+      if (patch.label !== undefined) c.label = patch.label.trim()
+      if (patch.active !== undefined) c.active = patch.active
+      return { ...c }
+    }
+    return this.putJson(`/api/biblioteca/categorias/${encodeURIComponent(code)}`, patch)
+  }
+  async reorderLibraryCategories(codes: string[]): Promise<void> {
+    if (this.useMocks) { this.mockCategories = codes.map((v, i) => ({ ...this.mockCategories.find(c => c.value === v)!, position: i + 1 })); return }
+    await this.putJson('/api/biblioteca/categorias/orden', { codes })
   }
 
   async setLibraryCatalogMetadata(documentId: string, payload: LibraryCatalogMetadataRequest): Promise<LibraryCatalogMetadata> {

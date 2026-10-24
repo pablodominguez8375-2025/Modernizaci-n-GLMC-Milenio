@@ -27,6 +27,7 @@
       "GrandTreasuryTariffHttpTests",
       "DocumentManagementQueryHttpTests",
       "LibraryCatalogMetadataHttpTests",
+      "LibraryCategoryHttpTests",
       "RequestRateLimitingHttpTests",
       "CalendarSourceSyncPostgreSqlTests",
       "GrandArchivePostgreSqlTests",
