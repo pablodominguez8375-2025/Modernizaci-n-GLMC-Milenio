@@ -46,6 +46,17 @@ public sealed class InstitutionalDocument
     /// </summary>
     public string? PublisherProfile { get; set; }
 
+    /// <summary>
+    /// #588 — revisión del Bibliotecario sobre planchas: pending_review | returned | approved.
+    /// Null en documentos que no pasan por revisión (y planchas históricas ya publicadas).
+    /// </summary>
+    public string? ReviewStatus { get; set; }
+    public Guid? ReviewVersionId { get; set; }
+    public DateTimeOffset? ReviewSubmittedAtUtc { get; set; }
+    public string? ReviewReason { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+    public string? ReviewedBySubject { get; set; }
+
     public string Status { get; set; } = DocumentManagementCodes.DocumentStatus.Draft;
     public Guid? PublishedVersionId { get; set; }
     public DateTimeOffset? PublishedAtUtc { get; set; }

@@ -60,6 +60,10 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.Property(x => x.AbstractText).HasMaxLength(4000);
             entity.Property(x => x.OfficialDocumentType).HasMaxLength(120);
             entity.Property(x => x.PublisherProfile).HasMaxLength(20);
+            entity.Property(x => x.ReviewStatus).HasMaxLength(20);
+            entity.Property(x => x.ReviewReason).HasMaxLength(500);
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => x.ReviewStatus);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();

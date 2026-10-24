@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { ActionBar, ActionDrawer, ConfirmAction, HelpNote } from './actionKit'
-import type { LibraryCatalogItem } from './api/documentApi'
+import type { LibraryCatalogItem, WorkPaperReview } from './api/documentApi'
 
 export type LibraryCategory = { value: string; label: string; base: boolean; future?: boolean; active: boolean }
 export type LibrarySubmission = { id: string; kind: 'taller' | 'borrador'; title: string; documentType: string; author: string; lodge?: string; degree: number | null; description: string; sentAt: string; item: LibraryCatalogItem }
@@ -14,6 +14,11 @@ type Props = {
   submissions: LibrarySubmission[]
   onSubmission: (next: LibrarySubmission[]) => void
   onPublish: (item: LibraryCatalogItem) => void
+  /** #588: planchas enviadas por los Talleres, esperando al Bibliotecario (datos reales del servidor). */
+  reviews?: WorkPaperReview[]
+  reviewActions?: { approve: (review: WorkPaperReview) => Promise<void>; returnWith: (review: WorkPaperReview, reason: string) => Promise<void>; download: (review: WorkPaperReview) => Promise<void> }
+  /** En producción la carga de documentos nuevos aún no está habilitada: solo revisión y categorías. */
+  uploadEnabled?: boolean
   collectionId: string
   notify: (message: string) => void
 }
@@ -23,7 +28,7 @@ const currentMonth = () => today().slice(0, 7)
 const degreeOptions = [{ v: '', t: 'General (todos los grados)' }, { v: '1', t: '1° grado' }, { v: '2', t: '2° grado' }, { v: '3', t: '3° grado' }]
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 
-export default function LibraryManagement({ mode = 'librarian', categories, categoryActions, counts, submissions, onSubmission, onPublish, collectionId, notify }: Props) {
+export default function LibraryManagement({ mode = 'librarian', categories, categoryActions, counts, submissions, onSubmission, onPublish, reviews = [], reviewActions, uploadEnabled = true, collectionId, notify }: Props) {
   const isCommunications = mode === 'communications'
   const active = categories.filter(c => c.active && !c.future && (!isCommunications || editorialCategories.includes(c.value)))
   const [type, setType] = useState(active[0]?.value ?? 'work_paper')
@@ -60,7 +65,7 @@ export default function LibraryManagement({ mode = 'librarian', categories, cate
     event.currentTarget.reset()
   }
 
-  const pending = submissions.filter(s => s.kind === 'taller')
+  const pending = reviews
   const drafts = submissions.filter(s => s.kind === 'borrador')
   const drop = (id: string) => onSubmission(submissions.filter(s => s.id !== id))
 
@@ -79,7 +84,7 @@ export default function LibraryManagement({ mode = 'librarian', categories, cate
   const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
   return <>
     <ActionBar>
-      <ActionDrawer label={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} wide title={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} description={isCommunications ? 'Comunicaciones publica la revista Horizonte Masónico y el Boletín mensual de actividades de la Orden (PDF). Puede guardarlo como borrador o publicarlo.' : 'Planchas, libros, revistas, boletines, documentos oficiales o la categoría que usted cree. Puede guardarlo como borrador o publicarlo.'}>
+      {uploadEnabled && <ActionDrawer label={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} wide title={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} description={isCommunications ? 'Comunicaciones publica la revista Horizonte Masónico y el Boletín mensual de actividades de la Orden (PDF). Puede guardarlo como borrador o publicarlo.' : 'Planchas, libros, revistas, boletines, documentos oficiales o la categoría que usted cree. Puede guardarlo como borrador o publicarlo.'}>
         <form className="library-admin-form" onSubmit={submit}>
           <label><span>Categoría</span><select value={type} onChange={e => setType(e.target.value)}>{active.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>
           {type === 'bulletin'
@@ -101,26 +106,28 @@ export default function LibraryManagement({ mode = 'librarian', categories, cate
           <label className="wide"><span>{type === 'magazine' ? 'En este número' : type === 'bulletin' ? 'Resumen de actividades del mes' : 'Descripción breve'}</span><textarea name="description" rows={3} maxLength={800} required={type === 'bulletin'} /></label>
           <div className="library-admin-actions"><button type="submit" value="publish" className="action-trigger primary">Publicar</button><button type="submit" value="draft" className="action-trigger secondary">Guardar borrador</button></div>
         </form>
-      </ActionDrawer>
-      <ActionDrawer label={isCommunications ? `Mis borradores${drafts.length ? ` (${drafts.length})` : ''}` : `Por revisar y borradores${pending.length + drafts.length ? ` (${pending.length + drafts.length})` : ''}`} wide title={isCommunications ? 'Mis borradores' : 'Por revisar y borradores'} description={isCommunications ? 'Revistas y boletines guardados como borrador. Nada es visible para los hermanos hasta publicarlo.' : 'Planchas enviadas por los Talleres y borradores propios. Nada es visible para los hermanos hasta publicarlo.'}>
+      </ActionDrawer>}
+      <ActionDrawer label={isCommunications ? `Mis borradores${drafts.length ? ` (${drafts.length})` : ''}` : uploadEnabled ? `Por revisar y borradores${pending.length + drafts.length ? ` (${pending.length + drafts.length})` : ''}` : `Planchas por revisar${pending.length ? ` (${pending.length})` : ''}`} wide title={isCommunications ? 'Mis borradores' : uploadEnabled ? 'Por revisar y borradores' : 'Planchas por revisar'} description={isCommunications ? 'Revistas y boletines guardados como borrador. Nada es visible para los hermanos hasta publicarlo.' : 'Planchas enviadas por los Talleres. Nada es visible para los hermanos hasta que usted la apruebe.'}>
         <div className="library-admin-list">
           {!isCommunications && <>
           <h3>Planchas enviadas por Talleres</h3>
           {pending.length === 0 && <p className="library-admin-empty">No hay planchas esperando revisión.</p>}
-          {pending.map(s => <article key={s.id} className="library-admin-card">
-            <div><strong>{s.title}</strong><span>{s.author}{s.lodge ? ` · ${s.lodge}` : ''} · enviada el {s.sentAt}</span><p>{s.description}</p></div>
-            {reject?.id === s.id ? <div className="library-admin-reject"><label><span>Motivo de la devolución</span><textarea rows={2} required value={reject.reason} onChange={e => setReject({ id: s.id, reason: e.target.value })} /></label>
-              <div><button type="button" className="action-trigger secondary" onClick={() => setReject(null)}>Volver</button><button type="button" className="action-trigger secondary" disabled={!reject.reason.trim()} onClick={() => { drop(s.id); setReject(null); notify(`Plancha devuelta al Taller con el motivo indicado.`) }}>Devolver</button></div></div>
-              : <div className="library-admin-row-actions"><ConfirmAction label="Aprobar y publicar" message="La plancha quedará visible según su grado y se registrará quién la aprobó." onConfirm={() => { onPublish({ ...s.item, id: `demo-approved-${s.id}` }); drop(s.id); notify(`«${s.title}» aprobada y publicada.`) }} />
-                <button type="button" className="action-trigger secondary" onClick={() => setReject({ id: s.id, reason: '' })}>Devolver con motivo</button></div>}
+          {pending.map(r => <article key={r.id} className="library-admin-card">
+            <div><strong>{r.title}</strong><span>{r.authorName ?? 'Autor sin registrar'}{r.lodge ? ` · ${r.lodge}` : ''} · enviada el {r.submittedAtUtc.slice(0, 10)}{r.degree ? ` · ${r.degree}° grado` : ''}{r.replacesPublished ? ' · nueva versión de una plancha ya publicada' : ''}</span><p>{r.description}</p></div>
+            {reject?.id === r.id ? <div className="library-admin-reject"><label><span>Motivo de la devolución (el Taller lo verá)</span><textarea rows={2} required minLength={10} maxLength={500} value={reject.reason} onChange={e => setReject({ id: r.id, reason: e.target.value })} /></label>
+              <div><button type="button" className="action-trigger secondary" onClick={() => setReject(null)}>Volver</button><button type="button" className="action-trigger secondary" disabled={reject.reason.trim().length < 10} onClick={() => { const reason = reject.reason; setReject(null); void reviewActions?.returnWith(r, reason) }}>Devolver</button></div></div>
+              : <div className="library-admin-row-actions"><button type="button" className="action-trigger secondary" onClick={() => void reviewActions?.download(r)}>Leer la plancha</button><ConfirmAction label="Aprobar y publicar" message="La plancha quedará visible según el grado de su autor y se registrará quién la aprobó." onConfirm={() => void reviewActions?.approve(r)} />
+                <button type="button" className="action-trigger secondary" onClick={() => setReject({ id: r.id, reason: '' })}>Devolver con motivo</button></div>}
           </article>)}
           </>}
+          {uploadEnabled && <>
           <h3>Mis borradores</h3>
           {drafts.length === 0 && <p className="library-admin-empty">No tiene borradores.</p>}
           {drafts.map(s => <article key={s.id} className="library-admin-card">
             <div><strong>{s.title}</strong><span>{label(s.documentType)} · guardado el {s.sentAt}</span></div>
             <div className="library-admin-row-actions"><ConfirmAction label="Publicar" message="Quedará visible para los hermanos autorizados." onConfirm={() => { onPublish(s.item); drop(s.id); notify(`«${s.title}» publicado.`) }} /><ConfirmAction label="Descartar" message="Se eliminará el borrador (no es un documento publicado)." onConfirm={() => drop(s.id)} /></div>
           </article>)}
+          </>}
         </div>
       </ActionDrawer>
       {!isCommunications && <ActionDrawer label="Administrar categorías" title="Administrar categorías" description="Cree, renombre, ordene o desactive las categorías de la Biblioteca Virtual.">

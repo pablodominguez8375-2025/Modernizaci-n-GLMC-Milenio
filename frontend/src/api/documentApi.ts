@@ -84,7 +84,10 @@ export interface CreateDocumentCollectionRequest { code: string; name: string; d
 export interface CreateInstitutionalDocumentRequest { title: string; documentType: string; classification: DocumentClassification; accessPolicy: DocumentAccessPolicy }
 export interface CreateDocumentVersionRequest { originalFileName: string; contentType: string; sizeBytes: number }
 export interface MemberWorkPaperVersion { id: string; versionNumber: number; originalFileName: string; processingStatus: DocumentProcessingStatus; createdAtUtc: string; isCurrent: boolean }
-export interface MemberWorkPaper { id: string; title: string; shortDescription: string; minimumDegreeRequired: number; status: DocumentStatus; publishedVersionId: string | null; versions: MemberWorkPaperVersion[] }
+export interface MemberWorkPaper { id: string; title: string; shortDescription: string; minimumDegreeRequired: number; status: DocumentStatus; publishedVersionId: string | null; reviewStatus: WorkPaperReviewStatus; returnReason?: string | null; versions: MemberWorkPaperVersion[] }
+/** draft = aún sin enviar a revisión · pending_review = espera al Bibliotecario · returned = devuelta con motivo · approved = en Biblioteca. */
+export type WorkPaperReviewStatus = 'draft' | 'pending_review' | 'returned' | 'approved'
+export interface WorkPaperReview { id: string; title: string; authorName: string | null; lodge: string | null; description: string | null; submittedAtUtc: string; degree: number | null; replacesPublished: boolean; versionId: string; fileName: string; sizeBytes: number }
 export interface MemberWorkPaperLink { documentId: string; authorMemberId: string | null; title: string; shortDescription: string }
 export type DocumentAccessTokenProvider = () => Promise<string | null>
 
@@ -172,10 +175,14 @@ export class DocumentApiClient {
   private readonly mockDocuments = new Map<string, InstitutionalDocument>()
   private readonly mockLibrary: LibraryDocument[] = demoLibrary.map(item => ({ ...item }))
   private readonly mockWorkPapers: MemberWorkPaper[] = [{
-    id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1',
+    id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1', reviewStatus: 'approved',
     versions: [{ id: 'demo-own-work-paper-version-1', versionNumber: 1, originalFileName: 'trabajo-aprendiz-demo.pdf', processingStatus: 'available', createdAtUtc: '2026-09-10T15:00:00Z', isCurrent: true }],
   }]
 
+  private mockReviews: WorkPaperReview[] = [
+    { id: 'demo-sub-1', title: 'La palabra perdida y el trabajo del Aprendiz', authorName: 'Hermano Ejemplo Uno', lodge: 'Taller Fraternidad N° 3', description: 'Reflexión sobre el silencio y el estudio en el primer grado.', submittedAtUtc: '2026-10-18T15:00:00Z', degree: 1, replacesPublished: false, versionId: 'demo-sub-1-v1', fileName: 'palabra-perdida.pdf', sizeBytes: 380000 },
+    { id: 'demo-sub-2', title: 'El simbolismo de la columna Boaz', authorName: 'Hermana Ejemplo Dos', lodge: 'Taller Luz del Sur N° 7', description: 'Estudio comparado de las columnas del Templo.', submittedAtUtc: '2026-10-18T16:00:00Z', degree: 2, replacesPublished: false, versionId: 'demo-sub-2-v1', fileName: 'columna-boaz.pdf', sizeBytes: 410000 },
+  ]
   private mockEditorial: EditorialMagazine[] = [
     { documentId: 'demo-ed-boletin-oct', title: 'Boletín de la Orden · Octubre 2026', documentType: 'bulletin', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-10-01', topic: null, edition: null, shortDescription: 'Actividades de la Orden durante octubre.', createdAtUtc: '2026-10-02T12:00:00Z', publishedAtUtc: '2026-10-03T12:00:00Z', publisherProfile: 'communications', canCorrect: true },
     { documentId: 'demo-ed-horizonte-4', title: 'Horizonte Masónico · N° 4', documentType: 'magazine', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-09-15', topic: 'El trabajo en logia', edition: 'N° 4', shortDescription: 'Cuarto número de la revista institucional.', createdAtUtc: '2026-09-10T12:00:00Z', publishedAtUtc: '2026-09-15T12:00:00Z', publisherProfile: 'communications', canCorrect: true },
@@ -224,6 +231,29 @@ export class DocumentApiClient {
     return response.items
   }
 
+  // #588 — revisión del Bibliotecario. El servidor decide (solo perfil Bibliotecario) y falla cerrado.
+  async listWorkPaperReviews(): Promise<WorkPaperReview[]> {
+    if (this.useMocks) return this.mockReviews.map(item => ({ ...item }))
+    const response = await this.request<{ items: WorkPaperReview[] }>('/api/biblioteca/revision')
+    return response.items
+  }
+
+  async approveWorkPaper(documentId: string): Promise<void> {
+    if (this.useMocks) { this.mockReviews = this.mockReviews.filter(item => item.id !== documentId); const own = this.mockWorkPapers.find(item => item.id === documentId); if (own) { own.reviewStatus = 'approved'; own.status = 'published'; own.returnReason = null; own.versions = own.versions.map((version, index) => ({ ...version, isCurrent: index === 0 })); own.publishedVersionId = own.versions[0]?.id ?? null } return }
+    await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/aprobar`, { method: 'POST' })
+  }
+
+  async returnWorkPaper(documentId: string, reason: string): Promise<void> {
+    if (this.useMocks) { this.mockReviews = this.mockReviews.filter(item => item.id !== documentId); const own = this.mockWorkPapers.find(item => item.id === documentId); if (own) { own.reviewStatus = 'returned'; own.returnReason = reason.trim() } return }
+    await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/devolver`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) })
+  }
+
+  async downloadWorkPaperForReview(documentId: string): Promise<Blob> {
+    if (this.useMocks) return new Blob(['Plancha demostrativa en revisión'], { type: 'text/plain' })
+    const response = await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/contenido`, {}, 'application/octet-stream')
+    return response.blob()
+  }
+
   async getWorkPaperByVersion(versionId: string): Promise<MemberWorkPaperLink> {
     if (this.useMocks) {
       const paper = this.mockWorkPapers.find(item => item.versions.some(version => version.id === versionId))
@@ -237,8 +267,9 @@ export class DocumentApiClient {
     const { file } = input
     if (this.useMocks) {
       const id = crypto.randomUUID(); const versionId = crypto.randomUUID(); const now = new Date().toISOString()
-      this.mockWorkPapers.unshift({ id, title: input.title.trim(), shortDescription: input.shortDescription.trim(), minimumDegreeRequired: 3, status: 'published', publishedVersionId: versionId, versions: [{ id: versionId, versionNumber: 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: true }] })
-      this.mockLibrary.unshift({ id, title: input.title.trim(), documentType: 'work_paper', collectionName: 'Planchas de Trabajo', versionNumber: 1, contentType: file.type, sizeBytes: file.size, publishedAtUtc: now, minimumDegreeRequired: 3, shortDescription: input.shortDescription.trim(), authorName: 'Hermano Demostrativo', authorLodgeName: 'Taller Demostrativo Nº 23' })
+      // #588: la plancha queda «para revisión»; no entra a la Biblioteca hasta que el Bibliotecario la apruebe.
+      this.mockWorkPapers.unshift({ id, title: input.title.trim(), shortDescription: input.shortDescription.trim(), minimumDegreeRequired: 3, status: 'draft', publishedVersionId: null, reviewStatus: 'pending_review', returnReason: null, versions: [{ id: versionId, versionNumber: 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: false }] })
+      this.mockReviews.unshift({ id, title: input.title.trim(), authorName: 'Hermano Demostrativo', lodge: 'Taller Demostrativo Nº 23', description: input.shortDescription.trim(), submittedAtUtc: now, degree: 3, replacesPublished: false, versionId, fileName: file.name, sizeBytes: file.size })
       return { documentId: id, versionId }
     }
     const created = await this.postJson<{ documentId: string; versionId: string }>('/api/biblioteca/mis-planchas', {
@@ -247,7 +278,7 @@ export class DocumentApiClient {
     })
     await this.uploadVersionContent(created.versionId, file)
     const scanned = await this.scanVersionContent(created.versionId)
-    if (scanned.processingStatus !== 'available') throw new Error('La plancha no quedó publicada: el análisis de seguridad no la declaró disponible.')
+    if (scanned.processingStatus !== 'available') throw new Error('La plancha no quedó enviada: el análisis de seguridad no la declaró disponible.')
     return created
   }
 
@@ -257,10 +288,11 @@ export class DocumentApiClient {
       const document = this.mockWorkPapers.find(item => item.id === documentId)
       if (!document) throw new Error('La plancha indicada no existe en tus trabajos.')
       const versionId = crypto.randomUUID(); const now = new Date().toISOString()
-      document.title = input.title.trim(); document.shortDescription = input.shortDescription.trim(); document.publishedVersionId = versionId; document.status = 'published'
-      document.versions = [{ id: versionId, versionNumber: Math.max(0, ...document.versions.map(version => version.versionNumber)) + 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: true }, ...document.versions.map(version => ({ ...version, isCurrent: false }))]
-      const libraryIndex = this.mockLibrary.findIndex(item => item.id === documentId)
-      if (libraryIndex >= 0) this.mockLibrary[libraryIndex] = { ...this.mockLibrary[libraryIndex], title: document.title, shortDescription: document.shortDescription, versionNumber: document.versions[0].versionNumber, sizeBytes: file.size, publishedAtUtc: now }
+      if (document.reviewStatus === 'pending_review') throw new Error('La plancha está en revisión del Bibliotecario; espera su respuesta antes de enviar otra versión.')
+      document.reviewStatus = 'pending_review'; document.returnReason = null
+      document.versions = [{ id: versionId, versionNumber: Math.max(0, ...document.versions.map(version => version.versionNumber)) + 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: false }, ...document.versions]
+      this.mockReviews = this.mockReviews.filter(item => item.id !== documentId)
+      this.mockReviews.unshift({ id: documentId, title: input.title.trim(), authorName: 'Hermano Demostrativo', lodge: 'Taller Demostrativo Nº 23', description: input.shortDescription.trim(), submittedAtUtc: now, degree: document.minimumDegreeRequired, replacesPublished: document.publishedVersionId !== null, versionId, fileName: file.name, sizeBytes: file.size })
       return { versionId }
     }
     const created = await this.postJson<{ versionId: string }>(`/api/biblioteca/mis-planchas/${encodeURIComponent(documentId)}/versiones`, {
@@ -268,7 +300,7 @@ export class DocumentApiClient {
     })
     await this.uploadVersionContent(created.versionId, file)
     const scanned = await this.scanVersionContent(created.versionId)
-    if (scanned.processingStatus !== 'available') throw new Error('La nueva versión no quedó disponible; se conserva publicada la versión anterior.')
+    if (scanned.processingStatus !== 'available') throw new Error('La nueva versión no quedó disponible; se conserva la versión anterior.')
     return created
   }
 
