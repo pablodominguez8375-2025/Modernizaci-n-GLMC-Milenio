@@ -41,7 +41,9 @@ public sealed class SessionProfileTests
         Assert.True(profile.Capabilities.CanEvaluateCeremonies);
         Assert.True(profile.Capabilities.CanReviewCeremonies);
         Assert.True(profile.Capabilities.CanValidateCeremonyInternalAffairs);
-        Assert.True(profile.Capabilities.CanManageAnyWorkshopProfile);
+        // #694: revisión/validación de Régimen Interior no equivale a
+        // permiso para editar datos de un Taller.
+        Assert.False(profile.Capabilities.CanManageAnyWorkshopProfile);
         Assert.False(profile.Capabilities.CanAuthorizeCeremonies);
     }
 
