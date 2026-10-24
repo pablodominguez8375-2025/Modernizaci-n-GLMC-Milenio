@@ -208,6 +208,7 @@ var api = app.MapGroup("").AddEndpointFilterFactory((context, next) =>
 api.MapSessionEndpoints();
 api.MapBootstrapEndpoints();
 api.MapInitialLoadTemplateEndpoints();
+api.MapInitialLoadWindowStatusEndpoints();
 api.MapOrganizationEndpoints();
 api.MapLodgeSummaryAccessEndpoints();
 api.MapMembershipEndpoints();
