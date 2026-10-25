@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCollapsibleNavGroups } from './navGroups'
 import ReportsHub from './ReportsHub'
 import PrivacyPage from './PrivacyPage'
+import type { MySupportCorrection } from './api/userAccounts'
 import WorkbenchPage, { type WorkbenchItem } from './WorkbenchPage'
 import AdmissionsPage from './AdmissionsPage'
 import BootstrapPage from './BootstrapPage'
@@ -89,6 +90,7 @@ interface AppProps {
 
 export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeApi: rawLodgeApi, membershipApi: rawMembershipApi, organizationProfileApi: rawOrganizationProfileApi, reportingApi: rawReportingApi, internalAffairsApi: rawInternalAffairsApi, dataQualityCaseApi: rawDataQualityCaseApi, documentApi: rawDocumentApi, grandArchiveApi: rawGrandArchiveApi, calendarApi: rawCalendarApi, notificationApi: rawNotificationApi, candidateIntakeApi: rawCandidateIntakeApi, onLogout }: AppProps) {
   const [view, setView] = useState<View>('dashboard')
+  const [supportCorrections, setSupportCorrections] = useState<MySupportCorrection[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [memberQuery, setMemberQuery] = useState('')
   const [memberQueryRevision, setMemberQueryRevision] = useState(0)
@@ -107,6 +109,12 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const accessRef = useRef(viewAccess)
   accessRef.current = viewAccess
   const api = useMemo(() => restrictClient(rawApi, 'pmgmApi', rawApi, () => accessRef.current), [rawApi])
+  useEffect(() => {
+    if (view !== 'privacy') return
+    let live = true
+    void api.getMySupportCorrections().then(items => { if (live) setSupportCorrections(items) }).catch(() => { if (live) setSupportCorrections([]) })
+    return () => { live = false }
+  }, [view, api, api.demoAccessSubject])
   const bootstrapApi = useMemo(() => restrictClient(rawBootstrapApi, 'bootstrapApi', rawApi, () => accessRef.current), [rawBootstrapApi, rawApi])
   const lodgeApi = useMemo(() => restrictClient(rawLodgeApi, 'lodgeApi', rawApi, () => accessRef.current), [rawLodgeApi, rawApi])
   const membershipApi = useMemo(() => restrictClient(rawMembershipApi, 'membershipApi', rawApi, () => accessRef.current), [rawMembershipApi, rawApi])
@@ -360,7 +368,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.158' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.159' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
@@ -430,7 +438,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
              : 'La sesión no tiene autorización confirmada para abrir Sistema. No se han cambiado permisos ni datos; solicita una revisión de acceso QA.'}</p>
            <button type="button" className="secondary" onClick={() => setView('dashboard')}>Volver a Inicio</button>
          </section>}
-        {view === 'privacy' && <PrivacyPage contactEmail={privacyEmail} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
+        {view === 'privacy' && <PrivacyPage contactEmail={privacyEmail} corrections={supportCorrections} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage membershipApi={membershipApi} pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {activeViewAllowed && <>

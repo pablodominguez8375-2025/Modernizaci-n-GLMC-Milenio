@@ -1,3 +1,4 @@
+import type { MySupportCorrection } from './api/userAccounts'
 import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
 
 type Right = { icon: InstitutionalIconName; title: string; text: string }
@@ -19,7 +20,7 @@ const dataGroups: Array<{ title: string; text: string }> = [
 ]
 
 /** Hallazgo 4 de la auditoría 13-10-2026 · Ley 21.719: política de privacidad en lenguaje simple y derechos del titular. */
-export default function PrivacyPage({ contactEmail, onOpenProfile }: { contactEmail: string; onOpenProfile?: () => void }) {
+export default function PrivacyPage({ contactEmail, onOpenProfile, corrections = [] }: { contactEmail: string; onOpenProfile?: () => void; corrections?: MySupportCorrection[] }) {
   return <section className="privacy-page" aria-labelledby="privacidad-titulo">
     <h2 id="privacidad-titulo">Privacidad y mis datos</h2>
     <p>Tus datos son tuyos. Aquí te explicamos, en simple, cómo los cuidamos y qué puedes pedir.</p>
@@ -29,6 +30,17 @@ export default function PrivacyPage({ contactEmail, onOpenProfile }: { contactEm
         <p>{group.text}</p>
       </article>)}
     </div>
+    {corrections.length > 0 && <>
+      <h3 className="privacy-subtitle">Correcciones hechas por soporte</h3>
+      <p>Cuando el soporte de la plataforma corrige un dato tuyo, queda anotado aquí: qué dato, quién, cuándo y por qué.</p>
+      <div className="privacy-grid">
+        {corrections.map(c => <article key={c.id} className="privacy-card">
+          <h4>{c.label}</h4>
+          <p>Corregido por <strong>{c.operatorName}</strong> el {new Date(c.createdAtUtc).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Santiago' })}.</p>
+          <p>Motivo: {c.reason}</p>
+        </article>)}
+      </div>
+    </>}
     <h3 className="privacy-subtitle">Tus derechos</h3>
     <div className="privacy-grid">
       {rights.map(right => <article key={right.title} className="privacy-card privacy-right">
