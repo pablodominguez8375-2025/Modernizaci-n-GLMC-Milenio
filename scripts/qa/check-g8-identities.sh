@@ -71,7 +71,7 @@ for _ in $(seq 1 45); do
   members="$(query pmgm "$member_sql" || true)"
   kc_users="$(query pmgm_keycloak "$kc_sql" || true)"
   offices="$(query pmgm "$office_sql" || true)"
-  if [ "$members" = 20 ] && [ "$kc_users" = 21 ] && [ "$offices" = t ]; then
+  if [ "$members" = 20 ] && [ "$kc_users" = 21 ] && [ "$offices" = true ]; then
     ready=true
     break
   fi
