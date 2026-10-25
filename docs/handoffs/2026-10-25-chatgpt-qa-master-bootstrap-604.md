@@ -23,7 +23,7 @@ Fuente Keycloak del realm esperado: pmgm. Endpoint público de gestión detrás 
 3. Preparar /etc/pmgm/master-qa.env, modo 0600, con:
    InitialLoad__MasterSubject=<valor de archivo protegido subject>
    InitialLoad__MasterIssuer=https://sistema.granlogiamixta.cl/identity/realms/pmgm
-   Authentication__Authority=http://keycloak:8080/realms/pmgm
+   Authentication__Authority=http://keycloak:8080/identity/realms/pmgm
    Los corchetes en esta documentación son marcadores, NO valores reales.
    En /etc/pmgm/srv01.env (raíz privada) fijar PMGM_QA_MASTER_APP_ENV_FILE=/etc/pmgm/master-qa.env. Al levantar API usar infrastructure/docker-compose.qa-master.yml como ULTIMO -f overlay; solo el contenedor API recibe el archivo. Validar docker compose config/entorno efectivo con redacción de secretos, no publicar salida cruda. Conservar Authority interna actual salvo verificación contraria, comprobar que el issuer del JWT validado coincide exactamente con MasterIssuer.
 4. Instalar únicamente paquete QA firmado del MISMO SHA integrado dev, con backups, migraciones, instalación reversible y pruebas de host #97/#525. Reiniciar API de forma controlada tras agregar overlay y comprobar configuración efectiva.
@@ -32,3 +32,5 @@ Fuente Keycloak del realm esperado: pmgm. Endpoint público de gestión detrás 
 7. Registrar estado exacto API/web/DB/Keycloak, SHA, gates, backups/restauración, comprobación por rol y resultados UAT SIN sujetos reales, contraseñas ni valores de configuración privados. Si falla algún paso, cuenta deshabilitada y restauración controlada; no declarar QA operativo hasta 26/26 checklist / gates aplicables.
 
 **Bloqueo de esta sesión:** los conectores disponibles permiten GitHub/Drive, pero no SSH a glmdch ni acceso a Keycloak real, por lo que no pueden generarse secretos, realizar backups físicos, ejecutar los modos contra el realm ni acreditar UAT. La autorización Sponsor ya existe; falta canal técnico y evidencia real, NO nueva aprobación. Main y producción no se modifican.
+
+Nota de conectividad: el overlay liga la administración Keycloak SOLO a 127.0.0.1:18180:8080 en glmdch; no abrir puerto 18180 en firewall/NAT. La utilidad acepta exclusivamente http://127.0.0.1:18180/identity (loopback), con issuer externo HTTPS inmutable. Verificar compose final y listener real antes de transmitir credenciales. 
