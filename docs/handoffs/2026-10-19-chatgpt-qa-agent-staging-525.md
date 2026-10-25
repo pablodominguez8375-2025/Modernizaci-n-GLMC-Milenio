@@ -1,0 +1,15 @@
+# Handoff — Agente QA auto-staging #525 — 19-10-2026
+## Contexto y alcance
+- Revisión de PR #543, previamente reclamada por ChatGPT conforme a GOV-003; no se abre tarea paralela. Rebasada sobre HEAD `dev@712987b97f80a6357896f8b4b7a42ab4a9be28f1`, con `main@6dfb9546a4873baff15955cf86abfd7d47e3d111` inalterada. PR: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/543.
+- Conserva ocho archivos de la PR original sin sobrescribir trabajo de Clau ni los ficheros calientes existentes. Workflows, implementación de sondeo y pruebas de staging **sin instalación**.
+- Contrato: solo después de que un administrador instale un baseline firmado y verificado de primer despliegue QA, el agente sin privilegios puede seleccionar por commit fast-forward, descargar con Actions:read, verificar firma/digest y preparar candidato en staging privado. `LoadCredential` restringe token a copia de systemd con controles de owner/modo/ruta/sistema de archivos; no recibe Docker/sudo.
+- Nuevas unit `pmgm-qa-agent-stage.service/.timer` son plantillas de referencia **deshabilitadas**: el merge de código no las instala. No se despliega ni se inicia nada por GitHub Actions; no abrir SSH ni puertos públicos.
+## Actualización de realidad QA — no usar información antigua del PR como estado vigente
+- A 19-10 existe acceso real al dominio canónico `https://sistema.granlogiamixta.cl/` y el Sponsor pudo iniciar sesión como `qa.admin` en Keycloak QA, según evidencia registrada en #97; no sostener el antiguo estado general «QA no iniciado / HTTPS 502» como realidad actual.
+- Sigue abierto #558: al pulsar Sistema retorna a Inicio; PR #559 DRAFT propone distinguir permisos ausentes de denegación, sin ampliar RBAC. G10 NO aprobado.
+- Incidente logo #553: cuatro recursos /brand/* estaban 0600 en contenedor; mitigación temporal de chmod efectuada según bitácora QA, corrección persistente PR #554/#557 (no fusionar duplicadas sin conciliación). Verificar 200 y permisos tras instalar nueva imagen.
+- G8 fase 1 autenticación/RBAC sintética y restauración de 2BD+Silo en recursos aislados de mismo host se informaron PASS. DR segundo host y G10 pendiente. Primer artefacto instalado y firma/baseline del agente #525 todavía requieren prueba/aceptación y custodia auditada.
+## Evidencia y siguientes pasos
+- PR original HEAD `da26ae8deb1194679acac0dfaf8d1108a47a6c99`: 8 workflows SUCCESS (PMGM CI, Showcase, Installable, Silo, HTTPS, readonly, artifact-read, stage contract), **obsoletos tras rebase**. Nuevo HEAD debe pasar gates exact-head antes de fusionar a dev. No inferir deploy QA a partir de CI.
+- El siguiente incremento autónomo real necesita ejecutor con lista de operaciones permitidas, verificación backup/restore/rollback, aprobación independiente del candidato y prueba en host sintético bajo control del operador. Esta PR no concede autodespliegue.
+- Referencias: GitHub #525, #97, PR #543; Drive bitácora QA https://docs.google.com/document/d/1I9bcJ7lKH4T2iQvxafY63HbOBr0ZsGZ8lDX3tSe2UfM/edit. No tocar main, srv01 ni credenciales.

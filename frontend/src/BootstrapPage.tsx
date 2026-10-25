@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import InitialLoadPrepare from './InitialLoadPrepare'
 import { type BootstrapApiClient, type BootstrapApplyResponse, type BootstrapPlanResponse, type InstitutionalBootstrapRequest } from './api/bootstrapApi'
 
 const initialPackage: InstitutionalBootstrapRequest = {
@@ -50,6 +51,8 @@ export default function BootstrapPage({ bootstrapApi }: { bootstrapApi: Bootstra
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la operación.</strong><span>{error}</span></div>}
+
+    <InitialLoadPrepare bootstrapApi={bootstrapApi} />
 
     <section className="panel">
       <h2>Paquete institucional</h2>

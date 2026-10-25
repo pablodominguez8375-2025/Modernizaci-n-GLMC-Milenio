@@ -1,0 +1,2 @@
+# PMGM GOV004 — #669 C5 (2026-10-23)
+Sin cambios DB. El preflight scripts/qa/check-google-smtp-runtime.py lee únicamente los metadatos de seguridad del archivo env, la clave PMGM_SMTP_ENCRYPTION_KEY en memoria y la sección api de Compose. Códigos discretos SMTP_KEY_VALID_256_BITS, SMTP_KEY_MISSING_OR_DUPLICATED, ENV_PERMISSIONS_UNSAFE, ENV_SYMLINK_FORBIDDEN, SMTP_KEY_MAPPING_NOT_API_ONLY, entre otros. No retorna ni almacena credenciales ni identifica usuario. READY_STATIC_ONLY no es prueba operativa de correo ni de TLS.

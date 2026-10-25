@@ -34,6 +34,8 @@ using PMGM.Api.Modules.UserAccounts;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+// Support HTTP failure metadata only: bounded in-memory buffer, no payloads or PII.
+builder.Services.AddSingleton<SupportDiagnosticBuffer>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
     TrustedProxyForwarding.Configure(options, builder.Configuration));
 builder.Services.AddLocalization();
@@ -88,6 +90,10 @@ builder.Services.AddSingleton<ICeremonyEligibilityService, CeremonyEligibilitySe
 builder.Services.AddSingleton<IDocumentObjectStore, S3DocumentObjectStore>();
 builder.Services.AddSingleton<IDocumentMalwareScanner, ClamAvDocumentMalwareScanner>();
 builder.Services.AddScoped<IAuditService, AuditService>();
+// Solo configuración confiable del proceso; ningún controlador aporta claves GT.
+builder.Services.AddSingleton<AssemblyGrandTreasuryServerTrustRegistry>();
+// C11: lectura interna read-only que revalida constancias de GT al consumirlas.
+builder.Services.AddScoped<AssemblyTreasurySignedReviewRevalidation>();
 builder.Services.AddScoped<FormSchemaVersionStore>();
 builder.Services.AddScoped<IPrivacyLegalRuleResolver, PrivacyLegalRuleResolver>();
 builder.Services.AddScoped<IInstitutionalNotificationService, InstitutionalNotificationService>();
@@ -100,11 +106,15 @@ builder.Services.AddScoped<ITreasuryOrdinaryDuesEligibilityService, TreasuryOrdi
 builder.Services.AddScoped<IRegimenInteriorDataQualityService, RegimenInteriorDataQualityService>();
 builder.Services.AddScoped<IDataQualityCaseService, DataQualityCaseService>();
 builder.Services.AddScoped<IGrandArchiveService, GrandArchiveService>();
+builder.Services.AddScoped<IOfficialDocumentNoticeService, OfficialDocumentNoticeService>();
 builder.Services.AddScoped<FirstImplementationSeedService>();
 builder.Services.Configure<AccountIdentityOptions>(builder.Configuration.GetSection("UserAccounts:Identity"));
 builder.Services.Configure<InitialAccountMailOptions>(builder.Configuration.GetSection("UserAccounts:Mail"));
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IAccountIdentityProvider, KeycloakAccountIdentityProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
-builder.Services.AddSingleton<IInitialAccountMail, InitialAccountMail>();
+builder.Services.AddSingleton<SystemMailCredentialVault>();
+builder.Services.AddSingleton<ISystemMailSender, SystemMailSender>();
+builder.Services.AddScoped<IInitialAccountMail, InitialAccountMail>();
 
 if (!builder.Environment.IsEnvironment("Testing")) builder.Services.AddHostedService<HospitalariaContributionWorker>();
 
@@ -153,10 +163,15 @@ if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
 
 // IP normalizada para auditoría y partición de rate limits. Solo proxies de confianza explícita.
 app.UseForwardedHeaders();
+// Capture the final HTTP error status after exception handling, without raw logs.
+app.UseMiddleware<SupportDiagnosticMiddleware>();
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
+app.UseMiddleware<SupportViewAsMiddleware>();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
+app.UseMiddleware<DynamicScopeExpansionMiddleware>();
+app.UseMiddleware<DynamicRoleConferralMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();
@@ -194,11 +209,14 @@ var api = app.MapGroup("").AddEndpointFilterFactory((context, next) =>
 });
 api.MapSessionEndpoints();
 api.MapBootstrapEndpoints();
+api.MapInitialLoadTemplateEndpoints();
+api.MapInitialLoadWindowStatusEndpoints();
 api.MapOrganizationEndpoints();
 api.MapLodgeSummaryAccessEndpoints();
 api.MapMembershipEndpoints();
 api.MapInstitutionalStatusEndpoints();
 api.MapMemberSelfEndpoints();
+api.MapMemberPhotoEndpoints();
 api.MapTransferEndpoints();
 api.MapWithdrawalEndpoints();
 api.MapRegimenInteriorEndpoints();
@@ -233,12 +251,15 @@ api.MapLodgeCouncilEndpoints();
 api.MapLodgeInstructionEndpoints();
 api.MapDocumentManagementEndpoints();
 api.MapMemberWorkPaperEndpoints();
+api.MapWorkPaperReviewEndpoints();
+api.MapLibraryManagedPublicationEndpoints();
 api.MapDocumentManagementQueryEndpoints();
 api.MapDocumentContentEndpoints();
 api.MapDocumentContentRecoveryEndpoints();
 api.MapLibraryCatalogEndpoints();
 api.MapLibraryAccessPolicyEndpoints();
 api.MapLibraryCatalogMetadataEndpoints();
+api.MapLibraryCategoryEndpoints();
 api.MapGrandArchiveEndpoints();
 api.MapNotificationEndpoints();
 api.MapInstitutionalCalendarEndpoints();
@@ -251,10 +272,17 @@ api.MapPrivacyProcessorLifecycleEndpoints();
 api.MapPrivacyLegalRuleEndpoints();
 api.MapPrivacyWorkflowEndpoints();
 api.MapSystemConfigurationEndpoints();
+api.MapSystemMailConfigurationEndpoints();
 api.MapFormSchemaAdministrationEndpoints();
 api.MapUserAccountEndpoints();
+api.MapSupportViewAsEndpoints();
+api.MapSupportCorrectionEndpoints();
 api.MapDynamicAccessEndpoints();
+api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
+api.MapSupportDiagnosticEndpoints();
+api.MapSupportLodgeDataHealthEndpoints();
+api.MapQaSyntheticPlanEndpoints();
 
 api.MapViewAccessEndpoints();
 

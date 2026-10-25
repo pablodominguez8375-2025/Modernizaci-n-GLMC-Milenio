@@ -23,6 +23,10 @@ public static class InstitutionalRoles
     public const string InmediatoExGranMaestro = "immediate_past_grand_master";
     public const string JefaturaDepartamentoDocencia = "instruction_department_head";
     public const string GrandArchivist = "grand_archivist";
+    public const string Librarian = "librarian";
+    // Comunicaciones: publica la revista institucional y el Boletín mensual.
+    // No administra el resto de la Biblioteca ni Gestión Documental.
+    public const string Communications = "communications";
     public const string PrivacyOfficer = "privacy_officer";
     public const string DocumentManager = "document_manager";
     public const string TallerAdmin = "lodge_admin";
@@ -79,6 +83,8 @@ public interface IInstitutionalAccessService
     bool CanAuthorizeCeremonies(ClaimsPrincipal user);
     bool CanManageCandidatePublications(ClaimsPrincipal user, Guid organizationId);
     bool CanManageDocuments(ClaimsPrincipal user, Guid? organizationId);
+    bool CanManageLibrary(ClaimsPrincipal user, Guid? organizationId);
+    bool CanManageCommunications(ClaimsPrincipal user);
     bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId);
     bool CanManagePrivacy(ClaimsPrincipal user);
     bool CanConfigureSystem(ClaimsPrincipal user);
@@ -91,16 +97,28 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
             x.Type == InstitutionalClaims.Scope &&
             string.Equals(x.Value, "order", StringComparison.OrdinalIgnoreCase));
 
-    public bool IsPlatformSuperAdmin(ClaimsPrincipal user)
-        => HasOrderScope(user) && user.Claims.Any(x =>
+    // A misconfigured Master without pmgm_scope=order is still a technical
+    // account: it must fail closed rather than fall back to its other claims.
+    private static bool HasPlatformMasterClaim(ClaimsPrincipal user)
+        => user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Role &&
             string.Equals(x.Value, InstitutionalRoles.PlatformSuperAdmin, StringComparison.OrdinalIgnoreCase));
 
+    public bool IsPlatformSuperAdmin(ClaimsPrincipal user)
+        => HasOrderScope(user) && HasPlatformMasterClaim(user);
+
     public bool HasRole(ClaimsPrincipal user, params string[] roles)
     {
-        if (IsPlatformSuperAdmin(user)) return true;
-
         var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        // The technical Master is not a Grand Lodge or Workshop officer.
+        // Even if identity accidentally carries institutional role claims, it
+        // must never inherit signatures, approval or domain-write authority.
+        // Only callers that explicitly request the platform role can match it.
+        if (HasPlatformMasterClaim(user))
+            return IsPlatformSuperAdmin(user) &&
+                   roleSet.Contains(InstitutionalRoles.PlatformSuperAdmin);
+
         return user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Role && roleSet.Contains(x.Value));
     }
@@ -136,16 +154,18 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
     }
 
     public bool CanManageWorkshopProfile(ClaimsPrincipal user, Guid organizationId)
-        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior)) ||
+        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria)) ||
            (HasOrganizationClaim(user, organizationId) && HasExplicitRole(user, InstitutionalRoles.TallerSecretaria));
 
     public bool CanEditAnyWorkshopProfile(ClaimsPrincipal user)
-        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior)) ||
+        => (HasOrderScope(user) && HasExplicitRole(user, InstitutionalRoles.GranSecretaria)) ||
            (HasExplicitRole(user, InstitutionalRoles.TallerSecretaria) && user.Claims.Any(x =>
                x.Type == InstitutionalClaims.Organization && Guid.TryParse(x.Value, out _)));
 
-    private static bool HasExplicitRole(ClaimsPrincipal user, params string[] roles)
+    private bool HasExplicitRole(ClaimsPrincipal user, params string[] roles)
     {
+        if (HasPlatformMasterClaim(user)) return false;
+
         var roleSet = roles.ToHashSet(StringComparer.OrdinalIgnoreCase);
         return user.Claims.Any(x => x.Type == InstitutionalClaims.Role && roleSet.Contains(x.Value));
     }
@@ -247,7 +267,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => CanParticipateInLodgeCouncil(user, organizationId);
 
     public bool CanManageLodgeCouncilSummaryAccess(ClaimsPrincipal user, Guid organizationId)
-        => HasOrganizationClaim(user, organizationId) && user.Claims.Any(x =>
+        => !HasPlatformMasterClaim(user) &&
+           HasOrganizationClaim(user, organizationId) && user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Role &&
             string.Equals(x.Value, InstitutionalRoles.TallerVenerable, StringComparison.OrdinalIgnoreCase));
 
@@ -335,6 +356,25 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
                HasRole(user, InstitutionalRoles.TallerAdmin, InstitutionalRoles.TallerSecretaria);
     }
 
+    /// <summary>
+    /// Responsable institucional de la Biblioteca Virtual.
+    /// No hereda permisos del Gestor Documental ni del Gran Archivo.
+    /// La autorización de rutas y colaboradores debe invocar esta regla
+    /// junto a los controles dinámicos de categoría, acción y vigencia.
+    /// </summary>
+    public bool CanManageLibrary(ClaimsPrincipal user, Guid? organizationId)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.Librarian);
+
+    /// <summary>
+    /// Perfil institucional Comunicaciones (alcance Orden). Sólo publicaciones
+    /// editoriales de Biblioteca: revista institucional y Boletín mensual.
+    /// No concede Biblioteca general, Gestión Documental ni Gran Archivo.
+    /// </summary>
+    public bool CanManageCommunications(ClaimsPrincipal user)
+        => HasOrderScope(user) &&
+           HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.Communications);
+
     public bool CanReadOrganizationLibrary(ClaimsPrincipal user, Guid organizationId)
     {
         if (HasOrderScope(user) &&
@@ -354,8 +394,8 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
         => IsPlatformSuperAdmin(user) ||
            (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin));
 
-    private static bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
-        => user.Claims.Any(x =>
+    private bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)
+        => !HasPlatformMasterClaim(user) && user.Claims.Any(x =>
             x.Type == InstitutionalClaims.Organization &&
             Guid.TryParse(x.Value, out var claimOrganizationId) &&
             claimOrganizationId == organizationId);

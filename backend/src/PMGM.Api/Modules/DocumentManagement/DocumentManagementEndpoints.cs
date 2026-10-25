@@ -215,14 +215,22 @@ public static class DocumentManagementEndpoints
         CreateDocumentVersionRequest request,
         HttpContext httpContext,
         DocumentManagementDbContext db,
+        PmgmDbContext institutionalDb,
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        var document = await db.InstitutionalDocuments.SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
+        var document = await db.InstitutionalDocuments.Include(x => x.Collection)
+            .SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);
         if (document is null) return Results.NotFound(new { message = "El documento indicado no existe." });
         if (MemberWorkPaperEndpoints.IsWorkPaper(document.DocumentType))
             return Results.BadRequest(new { message = "Use el flujo de Mis planchas para conservar la autoría, descripción y grado de cada versión." });
-        if (!access.CanManageDocuments(httpContext.User, document.OrganizationId)) return Results.Forbid();
+        if (!access.CanManageDocuments(httpContext.User, document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+                    httpContext.User, access, catalog, document))
+                return Results.Forbid();
+        }
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden agregar versiones a un documento retirado." });
 
@@ -230,6 +238,12 @@ public static class DocumentManagementEndpoints
         var contentType = NormalizeRequired(request.ContentType);
         if (fileName is null || contentType is null)
             return Results.BadRequest(new { message = "Nombre de archivo y tipo MIME son obligatorios." });
+        // El Boletín mensual se publica exclusivamente en PDF.
+        if (LibraryEditorialTypes.IsBulletin(document.DocumentType) &&
+            (!string.Equals(contentType, "application/pdf", StringComparison.OrdinalIgnoreCase) ||
+             !fileName.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase)))
+            return Results.Json(new { message = "El Boletín se sube sólo en formato PDF." },
+                statusCode: StatusCodes.Status415UnsupportedMediaType);
         if (request.SizeBytes <= 0)
             return Results.BadRequest(new { message = "El tamaño del archivo debe ser mayor que cero." });
 

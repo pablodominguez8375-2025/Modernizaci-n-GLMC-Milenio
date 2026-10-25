@@ -1,3 +1,4 @@
+import { type CreateSpaceRequestPayload, type SpaceOption, type SpaceRequest, type SpaceRequestList, mockSpaceOptions, mockSpaceRequests } from './spaceRequests'
 export type LodgeMeetingType = 'regular' | 'solemn' | 'instruction' | 'anniversary' | 'funeral' | 'special'
 export type LodgeGrade = 'apprentice' | 'fellowcraft' | 'master' | 'all'
 export type LodgeMeetingStatus = 'scheduled' | 'open' | 'held' | 'closed' | 'cancelled'
@@ -90,7 +91,7 @@ export type HistoricalIntakeStatus = 'draft' | 'submitted' | 'observed' | 'appro
 export interface HistoricalOfficeInput { officeType: string; period: string; startDate?: string | null; endDate?: string | null; isCurrent: boolean }
 export interface HistoricalMemberIntake {
   id: string; organizationId: string; targetMemberId: string | null; cutoffDate: string; firstNames: string; lastNames: string
-  rut: string | null; institutionalNumber: string | null; email: string | null; phone: string | null; currentDegree: 'apprentice' | 'fellowcraft' | 'master'
+  rutMasked: string | null; institutionalNumber: string | null; email: string | null; phone: string | null; currentDegree: 'apprentice' | 'fellowcraft' | 'master'
   membershipStartDate: string | null; initiationDate: string | null; wageIncreaseDate: string | null; exaltationDate: string | null
   evidenceReference: string; status: HistoricalIntakeStatus; revision: number; createdAtUtc: string; submittedAtUtc: string | null
   reviewedAtUtc: string | null; reviewNotes: string | null; approvedMemberId: string | null
@@ -209,6 +210,7 @@ export const demoLodgeSeed = {
   ] satisfies LodgeInstruction[],
 } as const
 
+
 export class LodgeApiClient {
   private readonly baseUrl: string
   private readonly getAccessToken?: LodgeAccessTokenProvider
@@ -271,8 +273,9 @@ export class LodgeApiClient {
 
   async createHistoricalMemberIntake(organizationId: string, payload: CreateHistoricalMemberIntakeRequest): Promise<HistoricalMemberIntake> {
     if (this.useMocks) {
-      const item:HistoricalMemberIntake={ id:crypto.randomUUID(), organizationId, targetMemberId:null, ...payload,
-        rut:payload.rut??null, institutionalNumber:payload.institutionalNumber??null, email:payload.email??null, phone:payload.phone??null,
+      const { rut: fullRut, ...safePayload } = payload
+      const item:HistoricalMemberIntake={ id:crypto.randomUUID(), organizationId, targetMemberId:null, ...safePayload,
+        rutMasked:fullRut?maskRutForDisplay(fullRut):null, institutionalNumber:payload.institutionalNumber??null, email:payload.email??null, phone:payload.phone??null,
         membershipStartDate:payload.membershipStartDate??null, initiationDate:payload.initiationDate??null, wageIncreaseDate:payload.wageIncreaseDate??null,
         exaltationDate:payload.exaltationDate??null, status:'draft', revision:1, createdAtUtc:new Date().toISOString(), submittedAtUtc:null,
         reviewedAtUtc:null, reviewNotes:null, approvedMemberId:null,
@@ -584,6 +587,24 @@ export class LodgeApiClient {
     return meeting
   }
 
+  async listSpaceRequests(organizationId: string): Promise<SpaceRequestList> {
+    if (this.useMocks) { const items = mockSpaceRequests.list(organizationId); return { total: items.length, items } }
+    return this.request<SpaceRequestList>('/api/secretaria/solicitudes-espacio')
+  }
+  async createSpaceRequest(organizationId: string, payload: CreateSpaceRequestPayload): Promise<SpaceRequest> {
+    if (this.useMocks) return mockSpaceRequests.create(organizationId, payload)
+    return this.postJson<SpaceRequest>('/api/secretaria/solicitudes-espacio', payload)
+  }
+  async cancelSpaceRequest(id: string): Promise<SpaceRequest> {
+    if (this.useMocks) return mockSpaceRequests.decide(id, 'cancelled', null)
+    return this.postJson<SpaceRequest>(`/api/secretaria/solicitudes-espacio/${encodeURIComponent(id)}/cancelar`, {})
+  }
+  async getSpaceOptions(fromUtc: string, toUtc: string): Promise<SpaceOption[]> {
+    if (this.useMocks) return mockSpaceOptions.map(x => ({ ...x }))
+    const query = new URLSearchParams({ fromUtc, toUtc })
+    return (await this.request<{ items: SpaceOption[] }>(`/api/secretaria/espacios/disponibilidad?${query}`)).items
+  }
+
   private postJson<T>(path: string, payload: unknown): Promise<T> {
     return this.request<T>(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   }
@@ -625,3 +646,11 @@ export function createDefaultLodgeApiClient(getAccessToken?: LodgeAccessTokenPro
 }
 
 function procedureLabel(value: 1 | 2 | 3 | null) { return value === 1 ? 'Primer trámite · ' : value === 2 ? 'Segundo trámite · ' : value === 3 ? 'Tercer trámite · ' : '' }
+
+/** Igual que el servidor: 12345678-5 → 12.345.***-5 (el RUT completo no vuelve del servidor, #609). */
+function maskRutForDisplay(rut: string): string {
+  const clean = rut.replace(/[^0-9kK]/g, '').toUpperCase()
+  if (clean.length < 2) return '***'
+  const visible = clean.slice(0, -1).slice(0, Math.max(0, clean.length - 1 - 3))
+  return `${visible.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}.***-${clean.slice(-1)}`
+}

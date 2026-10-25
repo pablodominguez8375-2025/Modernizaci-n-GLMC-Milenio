@@ -3,7 +3,7 @@ import InstitutionalIcon from './InstitutionalIcon'
 import MemberTreasuryCredits from './MemberTreasuryCredits'
 import { downloadOwnReceiptDocument } from './ownReceiptDocument'
 import { ActionDrawer } from './actionKit'
-import type { MemberTreasuryAccount, MemberTreasuryCharge, MembershipApiClient, OwnHospitalaria } from './api/membershipApi'
+import type { MemberTreasuryAccount, MemberTreasuryCharge, MembershipApiClient, OwnCeremonyReceipt, OwnHospitalaria } from './api/membershipApi'
 
 /* Mis pagos para el hermano (pedido del PO 08-10-2026): Tesorería y Hospitalaria en bloques separados,
    cada uno con una frase de estado, «Lo que debo» y «Mis pagos realizados» en lenguaje simple.
@@ -35,7 +35,7 @@ export function treasuryReceipts(items: MemberTreasuryCharge[]): TreasuryReceipt
   return [...byReceipt.values()].sort((a, b) => b.date.localeCompare(a.date))
 }
 
-function useReceiptDownload(api: MembershipApiClient, kind: 'tesoreria' | 'hospitalaria') {
+function useReceiptDownload(api: MembershipApiClient, kind: 'tesoreria' | 'hospitalaria' | 'ceremonia') {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const download = async (id: string) => {
@@ -189,5 +189,40 @@ export function HospitalariaPayments({ api, fallback }: { api: MembershipApiClie
         <p>{x.decreto ? `Decreto ${x.decreto.numero ?? 'sin número en el registro histórico'} del ${day(x.decreto.fecha)}, vigente desde ${day(x.decreto.vigencia)}` : 'Sin decreto registrado'}</p>
       </li>)}</ul>
     </ActionDrawer>}
+  </section>
+}
+
+const CEREMONY_LABELS: Record<string, string> = { initiation: 'Iniciación', affiliation: 'Afiliación', wage_increase: 'Aumento de salario', exaltation: 'Exaltación', incorporation: 'Incorporación' }
+
+/** Derechos de ceremonia: solo aparece si el hermano tiene recibos; va separado de Tesorería y Hospitalaria. */
+export function CeremonyPayments({ api }: { api: MembershipApiClient }) {
+  const [items, setItems] = useState<OwnCeremonyReceipt[] | null>(null)
+  const [all, setAll] = useState(false)
+  const receiptAction = useReceiptDownload(api, 'ceremonia')
+  useEffect(() => {
+    let active = true
+    api.getOwnCeremonyReceipts().then(result => { if (active) setItems(result.items) }).catch(() => { if (active) setItems([]) })
+    return () => { active = false }
+  }, [api])
+  if (!items || items.length === 0) return null
+  return <section className="member-card member-pay-block member-ceremony-payments" aria-labelledby="pay-ceremony-title">
+    <header className="member-pay-header">
+      <span className="member-status-icon" aria-hidden="true"><InstitutionalIcon name="ceremony" size={22} /></span>
+      <div><h2 id="pay-ceremony-title">Derechos de ceremonia</h2><p>Los pagos que hiciste por tus ceremonias. Puedes descargar cada comprobante cuando lo necesites.</p></div>
+    </header>
+    <div className="member-pay-list">
+      <h3>Mis pagos realizados</h3>
+      {receiptAction.error && <p role="alert">{receiptAction.error}</p>}
+      <ul>{(all ? items : items.slice(0, VISIBLE)).map(p => <li key={p.id}>
+        <span><b>{day(p.paymentDate)}</b> · Recibo {p.receiptNumber}<small>{CEREMONY_LABELS[p.ceremonyType] ?? 'Ceremonia'} · {p.organization}</small></span>
+        <strong>{money(p.amount, p.currency)}</strong>
+        <button type="button" className="member-pay-more" disabled={receiptAction.busyId !== null}
+          aria-label={`Descargar comprobante de derechos de ceremonia ${p.receiptNumber}`}
+          onClick={() => void receiptAction.download(p.id)}>
+          {receiptAction.busyId === p.id ? 'Preparando…' : 'Descargar comprobante PDF'}
+        </button>
+      </li>)}</ul>
+      <ShowMore total={items.length} open={all} onToggle={() => setAll(v => !v)} />
+    </div>
   </section>
 }

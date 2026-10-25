@@ -24,6 +24,98 @@ public sealed class CalendarGradeVisibilityTests
     }
 
     [Theory]
+    [InlineData("apprentice", 1, true)]
+    [InlineData("fellow_craft", 1, false)]
+    [InlineData("master", 1, false)]
+    [InlineData("apprentice", 2, false)]
+    [InlineData("fellow_craft", 2, true)]
+    [InlineData("master", 2, false)]
+    [InlineData("apprentice", 3, false)]
+    [InlineData("fellow_craft", 3, false)]
+    [InlineData("master", 3, true)]
+    public void Instruction_is_visible_only_to_own_exact_degree(
+        string grade, int effectiveDegree, bool expected)
+    {
+        var lodge = Guid.NewGuid();
+        var reader = new CalendarGradeReader(false, effectiveDegree,
+            new HashSet<Guid> { lodge }, new HashSet<Guid>());
+        var instruction = BuildEvent(lodge, grade);
+        instruction.EventType = "lodge_instruction_day";
+        Assert.Equal(expected, reader.CanSee(instruction));
+    }
+
+    [Fact]
+    public void Current_officer_and_institutional_administrator_keep_instruction_access()
+    {
+        var lodge = Guid.NewGuid();
+        var otherLodge = Guid.NewGuid();
+        var instruction = BuildEvent(lodge, CalendarCodes.Grade.Master);
+        instruction.EventType = "lodge_instruction_day";
+        var currentOfficer = new CalendarGradeReader(false, 1,
+            new HashSet<Guid> { lodge }, new HashSet<Guid> { lodge });
+        var expiredOfficer = new CalendarGradeReader(false, 1,
+            new HashSet<Guid> { lodge }, new HashSet<Guid>());
+        var administrator = new CalendarGradeReader(true, null,
+            new HashSet<Guid>(), new HashSet<Guid>());
+        Assert.True(currentOfficer.CanSee(instruction));
+        Assert.False(expiredOfficer.CanSee(instruction));
+        Assert.True(administrator.CanSee(instruction));
+        instruction.OrganizationId = otherLodge;
+        Assert.False(currentOfficer.CanSee(instruction));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("all")]
+    [InlineData("invalid_source_grade")]
+    public void Ungraded_or_invalid_instruction_is_never_general_for_regular_members(string? grade)
+    {
+        var lodge = Guid.NewGuid();
+        var instruction = BuildEvent(lodge, grade);
+        instruction.EventType = "lodge_instruction_day";
+        foreach (var degree in new[] { 1, 2, 3 })
+        {
+            var regular = new CalendarGradeReader(false, degree,
+                new HashSet<Guid> { lodge }, new HashSet<Guid>());
+            Assert.False(regular.CanSee(instruction));
+        }
+
+        var officer = new CalendarGradeReader(false, 1,
+            new HashSet<Guid> { lodge }, new HashSet<Guid> { lodge });
+        var expiredOfficer = new CalendarGradeReader(false, 1,
+            new HashSet<Guid> { lodge }, new HashSet<Guid>());
+        var outsider = new CalendarGradeReader(false, 3,
+            new HashSet<Guid>(), new HashSet<Guid> { lodge });
+        var institutionalAdmin = new CalendarGradeReader(true, null,
+            new HashSet<Guid>(), new HashSet<Guid>());
+
+        Assert.True(officer.CanSee(instruction));
+        Assert.False(expiredOfficer.CanSee(instruction));
+        Assert.False(outsider.CanSee(instruction));
+        Assert.True(institutionalAdmin.CanSee(instruction));
+    }
+
+    [Fact]
+    public void Instruction_without_valid_lodge_is_not_revealed_by_other_active_membership()
+    {
+        var currentLodge = Guid.NewGuid();
+        var instruction = BuildEvent(null, CalendarCodes.Grade.Apprentice);
+        instruction.EventType = "lodge_instruction_day";
+        var apprentice = new CalendarGradeReader(false, 1,
+            new HashSet<Guid> { currentLodge }, new HashSet<Guid>());
+        Assert.False(apprentice.CanSee(instruction));
+
+        instruction.OrganizationId = Guid.NewGuid();
+        Assert.False(apprentice.CanSee(instruction));
+
+        // Una tenida general preserva su visibilidad anterior.
+        instruction.EventType = "lodge_meeting_day";
+        instruction.Grade = CalendarCodes.Grade.All;
+        instruction.OrganizationId = currentLodge;
+        Assert.True(apprentice.CanSee(instruction));
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData("all")]
     public void General_events_are_visible_even_without_degree(string? grade)

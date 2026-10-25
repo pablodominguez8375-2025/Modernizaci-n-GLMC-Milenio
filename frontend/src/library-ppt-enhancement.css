@@ -405,3 +405,7 @@
     transition: none;
   }
 }
+
+.library-card-magazine .library-card-cover {
+  background: linear-gradient(120deg, #06148E, #b8860b);
+}

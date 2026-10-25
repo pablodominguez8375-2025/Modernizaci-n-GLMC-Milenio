@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest'
 const css = readFileSync(new URL('./institutional-theme.css', import.meta.url), 'utf8')
 const fidelityCss = readFileSync(new URL('./ppt-fidelity.css', import.meta.url), 'utf8')
 const memberPortalCss = readFileSync(new URL('./member-portal.css', import.meta.url), 'utf8')
-const memberLibraryShortcutCss = readFileSync(new URL('./memberLibraryShortcut.css', import.meta.url), 'utf8')
 const main = readFileSync(new URL('./main.tsx', import.meta.url), 'utf8')
 
 describe('PMGM-UI-001 institutional responsive contract', () => {
@@ -22,12 +21,6 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
 
   it('uses gold glyphs on navy status and callout tiles', () => {
     expect(fidelityCss).toMatch(/\.member-status-icon,\s*\.member-callout-icon\s*\{\s*color:\s*var\(--member-ppt-gold\)/)
-  })
-
-  it('shows the Library Virtual shortcut glyph in gold on its navy tile', () => {
-    const iconRule = memberLibraryShortcutCss.match(/\.member-degree-library-icon\s*\{([^}]+)\}/)?.[1] ?? ''
-    expect(iconRule).toContain('background: #06148E')
-    expect(iconRule).toContain('color: var(--brand-gold)')
   })
 
   it('keeps navigation accents readable against the corporate gold', () => {
@@ -100,7 +93,7 @@ describe('PMGM-UI-001 institutional responsive contract', () => {
     expect(switcher).toContain('showcaseSha.slice(0, 7)')
     expect(switcher).toContain('className="demo-public-sha"')
     const app = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8')
-    expect(app).toContain('UI QA v0.114')
+    expect(app).toContain('UI QA v0.159')
   })
 
   it('supports reduced motion preferences', () => {

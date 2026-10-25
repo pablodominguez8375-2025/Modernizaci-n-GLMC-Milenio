@@ -44,7 +44,7 @@ function wrapText(text: string, size: number, maxWidth: number, bold = false): s
 
 /** Frase única que resume el pago, antes del detalle. */
 export function ownReceiptSummary(item: OwnReceiptDocument): string {
-  const what = item.kind === 'hospitalaria' ? 'a la Gran Hospitalaria' : 'a Tesorería'
+  const what = item.kind === 'hospitalaria' ? 'a la Gran Hospitalaria' : item.kind === 'ceremonia' ? 'por derechos de ceremonia' : 'a Tesorería'
   return `Se recibió ${money(item.receivedAmount, item.currency)} ${what} del ${item.organization}, el ${dateText(item.paymentDate)}.`
 }
 
@@ -65,7 +65,7 @@ export function renderOwnReceiptPdf(item: OwnReceiptDocument): Blob {
     for (const row of wrapText(value, size, PAGE_W - 2 * MARGIN, bold)) { need(size + gap); text(row, MARGIN, size, bold); y -= size + gap }
   }
 
-  const title = item.kind === 'hospitalaria' ? 'Comprobante de Hospitalaria' : 'Comprobante de Tesorería'
+  const title = item.kind === 'hospitalaria' ? 'Comprobante de Hospitalaria' : item.kind === 'ceremonia' ? 'Comprobante de Derechos de ceremonia' : 'Comprobante de Tesorería'
   text('GRAN LOGIA MIXTA DE CHILE', MARGIN, 11, true, GOLD); y -= 28
   text(title, MARGIN, 26, true, BLUE); y -= 12
   rule(GOLD, 2); y -= 30

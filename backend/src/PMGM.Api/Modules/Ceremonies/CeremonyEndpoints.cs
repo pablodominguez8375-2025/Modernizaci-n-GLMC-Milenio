@@ -545,6 +545,14 @@ public static class CeremonyEndpoints
             });
         }
 
+        // Una aprobación nueva debe comprobar nuevamente al Maestro/a
+        // patrocinante. La idempotencia de una publicación ya realizada se
+        // resuelve antes de este gate; no reescribir aprobaciones históricas.
+        var sponsorDecision = await CandidateFormalSponsorGate.EvaluateAsync(
+            db, ceremony, ChileToday(), cancellationToken);
+        if (!sponsorDecision.CanProceed)
+            return CandidateFormalSponsorGate.Conflict(sponsorDecision);
+
         var initialDeliberationApproved = await db.CeremonyValidations.AsNoTracking()
             .Where(x => x.CeremonyRequestId == requestId &&
                         x.ValidationType == CeremonyCodes.ValidationType.CandidateInitialDeliberation)

@@ -6,7 +6,7 @@ import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } fr
 
 type ButtonTone = 'primary' | 'secondary'
 
-export function ActionDrawer({ label, title, description, confirmMessage, tone = 'primary', disabled = false, keepOpen = false, open: controlledOpen, onOpenChange, children }: {
+export function ActionDrawer({ label, title, description, confirmMessage, tone = 'primary', disabled = false, keepOpen = false, open: controlledOpen, onOpenChange, wide: startWide = false, children }: {
   label: string
   title?: string
   description?: string
@@ -19,8 +19,11 @@ export function ActionDrawer({ label, title, description, confirmMessage, tone =
   /** Apertura controlada opcional (p. ej. abrir el panel desde la acción de una fila). */
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  /** El panel se abre ampliado (formularios con muchos campos). El operador siempre puede ampliar o reducir. */
+  wide?: boolean
   children: ReactNode
 }) {
+  const [wide, setWide] = useState(startWide)
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = (value: boolean) => { setInternalOpen(value); onOpenChange?.(value) }
@@ -64,9 +67,10 @@ export function ActionDrawer({ label, title, description, confirmMessage, tone =
     <button type="button" className={`action-trigger ${tone}`} disabled={disabled} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>{label}</button>
     <div className="action-drawer-layer" hidden={!open}>
       <button type="button" className="action-drawer-backdrop" aria-label="Cerrar panel" tabIndex={-1} onClick={close} />
-      <section className="action-drawer" role="dialog" aria-modal="true" aria-labelledby={headingId}>
+      <section className={`action-drawer${wide ? ' is-wide' : ''}`} role="dialog" aria-modal="true" aria-labelledby={headingId}>
         <header className="action-drawer-header">
           <div><h2 id={headingId} ref={headingRef} tabIndex={-1}>{title ?? label}</h2>{description && <p>{description}</p>}</div>
+          <button type="button" className="action-drawer-size" aria-pressed={wide} title={wide ? 'Volver al ancho normal' : 'Ocupar más ancho de pantalla'} onClick={() => setWide(value => !value)}>{wide ? '⤡ Reducir' : '⤢ Ampliar'}</button>
           <button type="button" className="action-drawer-close" aria-label="Cerrar" onClick={close}>×</button>
         </header>
         <div className="action-drawer-body" onSubmitCapture={onSubmitCapture}>{children}</div>
@@ -118,7 +122,9 @@ export type WorkspaceTab<T extends string> = { id: T; label: string; badge?: num
 /** Decisión del PO 09-10-2026 (opción C): un módulo con secciones no muestra pestañas ni menú interno.
  *  Con `hub`, el módulo abre primero tarjetas grandes; al elegir una, se ve solo esa sección con «← Volver a …».
  *  Sin `hub` mantiene las pestañas (usos que son filtros o categorías, no secciones). */
-export type WorkspaceHub<T extends string> = { title: string; hints?: Partial<Record<T, string>>; startOpen?: boolean }
+/** `onOpenChange` avisa cuando el hub abre o cierra una sección; `hideBack` oculta este nivel mientras un hub interno
+ *  (tarjetas dentro de una sección) está abierto, para que quede un solo «← Volver» a la vista. */
+export type WorkspaceHub<T extends string> = { title: string; hints?: Partial<Record<T, string>>; startOpen?: boolean; onOpenChange?: (open: boolean) => void; hideBack?: boolean }
 
 export function WorkspaceTabs<T extends string>({ tabs, active, onChange, label, hub }: { tabs: WorkspaceTab<T>[]; active: T; onChange: (id: T) => void; label: string; hub?: WorkspaceHub<T> }) {
   const [opened, setOpened] = useState(hub?.startOpen ?? false)
@@ -127,7 +133,7 @@ export function WorkspaceTabs<T extends string>({ tabs, active, onChange, label,
       return <nav className="workspace-tabs is-hub" aria-label={label}>
         <p className="section-hub-intro">Elige qué quieres hacer.</p>
         <div className="section-hub-grid">
-          {tabs.map(tab => <button key={tab.id} type="button" className="section-hub-card" onClick={() => { onChange(tab.id); setOpened(true); window.scrollTo({ top: 0 }) }}>
+          {tabs.map(tab => <button key={tab.id} type="button" className="section-hub-card" onClick={() => { onChange(tab.id); setOpened(true); hub.onOpenChange?.(true); window.scrollTo({ top: 0 }) }}>
             {tab.icon && <span className="section-hub-icon" aria-hidden="true"><InstitutionalIcon name={tab.icon} size={26} /></span>}
             <strong>{tab.label}</strong>
             {hub.hints?.[tab.id] && <small>{hub.hints[tab.id]}</small>}
@@ -137,8 +143,9 @@ export function WorkspaceTabs<T extends string>({ tabs, active, onChange, label,
       </nav>
     }
     const current = tabs.find(tab => tab.id === active)
+    if (hub.hideBack) return null
     return <nav className="workspace-tabs is-open-section" aria-label={label}>
-      <button type="button" className="secondary section-hub-back" onClick={() => { setOpened(false); window.scrollTo({ top: 0 }) }}>← Volver a {hub.title}</button>
+      <button type="button" className="secondary section-hub-back" onClick={() => { setOpened(false); hub.onOpenChange?.(false); window.scrollTo({ top: 0 }) }}>← Volver a {hub.title}</button>
       {current && <strong className="section-hub-current">{current.label}</strong>}
     </nav>
   }

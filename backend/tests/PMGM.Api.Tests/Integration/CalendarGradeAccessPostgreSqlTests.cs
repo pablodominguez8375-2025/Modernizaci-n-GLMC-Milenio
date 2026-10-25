@@ -57,6 +57,9 @@ public sealed class CalendarGradeAccessPostgreSqlTests
 
         var reader = await service.ForUserAsync(user, ct);
         Assert.True(reader.CanSee(Event(org.Id, CalendarCodes.Grade.Master)));
+        var instruction = Event(org.Id, CalendarCodes.Grade.Master);
+        instruction.EventType = "lodge_instruction_day";
+        Assert.True(reader.CanSee(instruction)); // Cargo vigente.
 
         // Un cargo vencido no permite ver grados superiores.
         office.EndDate = localToday.AddDays(-1);
@@ -64,6 +67,9 @@ public sealed class CalendarGradeAccessPostgreSqlTests
         reader = await service.ForUserAsync(user, ct);
         Assert.False(reader.CanSee(Event(org.Id, CalendarCodes.Grade.Master)));
         Assert.True(reader.CanSee(Event(org.Id, CalendarCodes.Grade.Apprentice)));
+        Assert.False(reader.CanSee(instruction)); // Ya no ve Docencia de Maestros.
+        instruction.Grade = CalendarCodes.Grade.Apprentice;
+        Assert.True(reader.CanSee(instruction)); // Sí ve su grado exacto.
 
         // La pertenencia cerrada revoca también visibilidad de eventos graduados.
         membership.Status = MembershipCodes.MembershipStatus.Closed;

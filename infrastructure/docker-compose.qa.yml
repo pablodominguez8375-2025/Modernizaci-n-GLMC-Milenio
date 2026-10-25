@@ -80,6 +80,8 @@ services:
       UserAccounts__Mail__Password: ${PMGM_ACCOUNT_SMTP_PASSWORD:-}
       UserAccounts__Mail__From: ${PMGM_ACCOUNT_SMTP_FROM:-}
       UserAccounts__Mail__LoginUrl: ${PMGM_ACCOUNT_LOGIN_URL:-}
+      # Secreto local opcional: jamás en repositorio ni contenedor Keycloak/web.
+      SystemMail__EncryptionKey: ${PMGM_SMTP_ENCRYPTION_KEY:-}
       Authentication__Authority: ${OIDC_AUTHORITY:-}
       Authentication__Audience: ${OIDC_API_AUDIENCE:-pmgm-api}
       ConnectionStrings__MainDatabase: Host=postgres;Port=5432;Database=${POSTGRES_DB:-pmgm};Username=${POSTGRES_USER:-pmgm_app};Password=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD es obligatorio}

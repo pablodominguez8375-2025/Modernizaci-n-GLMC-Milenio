@@ -29,15 +29,34 @@ public sealed record CalendarGradeReader(
             item.OrganizationId is Guid lodgeId && !ActiveLodges.Contains(lodgeId))
             return false;
 
+        // La Docencia es estricta: sin Taller o sin grado concreto la
+        // instrucción nunca se interpreta como un evento general. La excepción
+        // de un cargo exige membresía vigente en ESE Taller; el administrador
+        // institucional ya fue reconocido al inicio del método.
+        if (item.EventType == "lodge_instruction_day")
+        {
+            if (item.OrganizationId is not Guid instructionLodge ||
+                !ActiveLodges.Contains(instructionLodge))
+                return false;
+            if (OfficerLodges.Contains(instructionLodge))
+                return true;
+
+            var instructionDegree = CalendarCodes.Grade.ToNumeric(item.Grade);
+            return instructionDegree is not null &&
+                EffectiveDegree is not null &&
+                EffectiveDegree.Value == instructionDegree.Value;
+        }
+
+        // Tenidas, ceremonias y demás eventos: generales o el propio grado
+        // y los inferiores, conforme decisión institucional anterior.
         if (item.Grade is null or CalendarCodes.Grade.All) return true;
         if (ActiveLodges.Count == 0) return false;
         if (item.OrganizationId is Guid officerLodge && OfficerLodges.Contains(officerLodge))
             return true;
 
         var eventDegree = CalendarCodes.Grade.ToNumeric(item.Grade);
-        return eventDegree is not null &&
-               EffectiveDegree is not null &&
-               EffectiveDegree.Value >= eventDegree.Value;
+        if (eventDegree is null || EffectiveDegree is null) return false;
+        return EffectiveDegree.Value >= eventDegree.Value;
     }
 }
 

@@ -3,8 +3,13 @@ import { type OrganizationOption, type PmgmApiClient, type RegimenInteriorSummar
 import type { OrderRejectionAlert, RePresentationReviewRow, RePresentationReviewDecision } from './api/pmgmApi'
 import './regimen.css'
 import { organizationDisplayName } from './displayFormat'
+import AssemblyPadronPanel from './AssemblyPadronPanel'
+import InstitutionalIcon from './InstitutionalIcon'
 
-export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
+type RegimenSection = 'home' | 'informe' | 'padron'
+
+export default function RegimenInteriorPage({ api, initialSection = 'home' }: { api: PmgmApiClient; initialSection?: RegimenSection }) {
+  const [section, setSection] = useState<RegimenSection>(initialSection)
   const today = chileDate(new Date())
   const [organizationId, setOrganizationId] = useState('')
   const [from, setFrom] = useState(`${today.slice(0, 4)}-01-01`)
@@ -54,6 +59,18 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
   return <>
     <section className="page-heading"><div><p className="eyebrow">Control institucional agregado</p><h1>Régimen Interior</h1><p>Estado de membresía, movimientos, grados y regularidad financiera, por Orden o Taller.</p></div><span className="count-badge">Corte {formatDateOnly(summary?.asOf ?? asOf)}</span></section>
     {error && <div className="error-banner" role="alert"><strong>No fue posible obtener el reporte.</strong><span>{error}</span></div>}
+    {section === 'home' ? <nav className="workspace-tabs is-hub" aria-label="Secciones de Régimen Interior">
+      <p className="section-hub-intro">Elige qué quieres hacer.</p>
+      <div className="section-hub-grid">
+        <button type="button" className="section-hub-card" onClick={() => { setSection('informe'); window.scrollTo({ top: 0 }) }}><span className="section-hub-icon" aria-hidden="true"><InstitutionalIcon name="report" size={26} /></span><strong>Informe y revisiones</strong><small>Membresía, alertas de rechazo y reinsinuaciones</small></button>
+        <button type="button" className="section-hub-card" onClick={() => { setSection('padron'); window.scrollTo({ top: 0 }) }}><span className="section-hub-icon" aria-hidden="true"><InstitutionalIcon name="members" size={26} /></span><strong>Padrón de la Gran Asamblea</strong><small>Asambleístas, sufragantes habilitados y saldos de los Talleres</small></button>
+      </div>
+    </nav> : <nav className="workspace-tabs is-open-section" aria-label="Sección de Régimen Interior">
+      <button type="button" className="secondary section-hub-back" onClick={() => { setSection('home'); window.scrollTo({ top: 0 }) }}>← Volver a Régimen Interior</button>
+      <strong className="section-hub-current">{section === 'padron' ? 'Padrón de la Gran Asamblea' : 'Informe y revisiones'}</strong>
+    </nav>}
+    {section === 'padron' && <AssemblyPadronPanel api={api} />}
+    {section === 'informe' && <>
     <section className="panel report-filter"><form onSubmit={submit} className="report-filter-form">
       <Field label="Ámbito"><select value={organizationId} onChange={e => setOrganizationId(e.target.value)}><option value="">Toda la Orden</option>{organizations.map(o => <option key={o.id} value={o.id}>{organizationLabel(o)}</option>)}</select></Field>
       <Field label="Desde"><input type="date" required value={from} onChange={e => setFrom(e.target.value)} /></Field>
@@ -91,43 +108,9 @@ export default function RegimenInteriorPage({ api }: { api: PmgmApiClient }) {
         </article>}
       </>}
     </section>
-    {api.useMocks && <AssemblyRosterDemo />}
+    </>}
   </>
 }
-
-const assemblyRosterDemo = [
-  { id: 'asm-a', name: 'Persona Demostrativa A', lodge: 'Taller Demostrativo Nº 1', category: 'Asambleísta permanente', history: 'Período 2022 completado', alert: 'Sin observaciones', source: 'Historial institucional de cargos', attend: true, vote: true, status: 'enabled' },
-  { id: 'asm-b', name: 'Persona Demostrativa B', lodge: 'Taller Demostrativo Nº 23', category: 'Representante', history: 'Primer período vigente', alert: 'Taller moroso · Gran Tesorería', source: 'Snapshot financiero de Gran Tesorería', attend: true, vote: false, status: 'observed' },
-  { id: 'asm-c', name: 'Persona Demostrativa C', lodge: 'Taller Demostrativo Nº 8', category: 'Asambleísta permanente', history: 'Reelecto como Venerable Maestro', alert: 'Inhabilidad vigente de asistencia y sufragio', source: 'Efecto institucional reservado', attend: false, vote: false, status: 'disabled' },
-  { id: 'asm-d', name: 'Persona Demostrativa D', lodge: 'Taller Demostrativo Nº 14', category: 'Asambleísta permanente', history: 'Período 2024 completado', alert: 'Designación pendiente de validar', source: 'Gestión de cargos del Taller', attend: false, vote: false, status: 'pending' },
-]
-
-type AssemblyRosterItem = typeof assemblyRosterDemo[number]
-type AssemblyReviewStatus = 'enabled' | 'attendance_only' | 'observed' | 'disabled' | 'pending'
-
-function AssemblyRosterDemo() {
-  const [items, setItems] = useState<AssemblyRosterItem[]>(() => assemblyRosterDemo.map(item => ({ ...item })))
-  const [selectedId, setSelectedId] = useState(items[1].id)
-  const [closed, setClosed] = useState(false)
-  const selected = items.find(item => item.id === selectedId) ?? items[0]
-  const unresolved = items.filter(item => item.status === 'pending' || item.status === 'observed').length
-
-  const decide = (status: AssemblyReviewStatus, alert: string, attend: boolean, vote: boolean) => {
-    if (closed) return
-    setItems(current => current.map(item => item.id === selected.id ? { ...item, status, alert, attend, vote } : item))
-  }
-
-  return <section className="panel report-wide"><div className="panel-heading"><div><p className="eyebrow">Gran Asamblea · datos ficticios</p><h2>Revisión preliminar de habilitaciones</h2><p>Clasificación automática y alertas para revisión por Régimen Interior. Esta vista incluye casos pendientes y observados; no constituye el Padrón de la Gran Asamblea.</p></div><div><span className="count-badge">{unresolved} pendientes</span> <button className="primary-action" type="button" disabled={closed || unresolved > 0} onClick={() => setClosed(true)}>{closed ? 'Revisión cerrada' : 'Cerrar revisión'}</button></div></div>
-    <div className="table-wrap"><table><thead><tr><th>Integrante</th><th>Calidad calculada</th><th>Alerta u observación</th><th>Asiste</th><th>Vota</th><th></th></tr></thead><tbody>{items.map(item => <tr key={item.id}><td><strong>{item.name}</strong><small>{item.lodge}</small></td><td>{item.category}<small>{item.history}</small></td><td>{item.alert}</td><td><span className={item.attend ? 'status-pill complete' : 'status-pill attention'}>{item.attend ? 'Sí' : 'No'}</span></td><td><span className={item.vote ? 'status-pill complete' : 'status-pill attention'}>{item.vote ? 'Sí' : 'No'}</span></td><td><button className="secondary-action" type="button" onClick={() => setSelectedId(item.id)}>Revisar</button></td></tr>)}</tbody></table></div>
-    <article className="panel"><p className="eyebrow">Detalle de revisión</p><h3>{selected.name}</h3><dl className="candidate-meta"><div><dt>Calidad</dt><dd>{selected.category}</dd></div><div><dt>Historial</dt><dd>{selected.history}</dd></div><div><dt>Fuente</dt><dd>{selected.source}</dd></div><div><dt>Resultado actual</dt><dd>{reviewStatusLabel(selected.status)}</dd></div></dl><p><strong>Alerta:</strong> {selected.alert}</p>
-      <div className="notification-actions"><button type="button" disabled={closed} onClick={() => decide('enabled', 'Revisión conforme por Régimen Interior', true, true)}>Confirmar habilitación</button><button type="button" disabled={closed} onClick={() => decide('attendance_only', 'Habilitado únicamente para asistir', true, false)}>Solo asistencia</button><button type="button" disabled={closed} onClick={() => decide('observed', 'Corrección solicitada a la unidad responsable', false, false)}>Solicitar corrección</button><button type="button" disabled={closed} onClick={() => decide('pending', 'Validación derivada; respuesta pendiente', false, false)}>Derivar validación</button><button type="button" disabled={closed} onClick={() => decide('disabled', 'Inhabilidad confirmada por Régimen Interior', false, false)}>Confirmar inhabilidad</button></div>
-    </article>
-    {unresolved > 0 && <p className="report-footnote">El cierre está bloqueado hasta resolver {unresolved} observación(es). Una unidad externa debe corregir su propia fuente; Régimen Interior conserva la trazabilidad.</p>}
-    <p className="report-footnote">El Padrón de la Gran Asamblea comprende exclusivamente a electores vigentes habilitados. Esta revisión nunca registra ni permite reconstruir cómo votó una persona.</p>
-  </section>
-}
-
-function reviewStatusLabel(value: string) { return value === 'enabled' ? 'Habilitado' : value === 'attendance_only' ? 'Solo asistencia' : value === 'disabled' ? 'Inhabilitado' : value === 'observed' ? 'Observado' : 'Pendiente de respuesta' }
 
 function Report({ summary }: { summary: RegimenInteriorSummary }) {
   const degrees = Object.entries(summary.degreeDistribution).sort(([a], [b]) => a.localeCompare(b, 'es'))

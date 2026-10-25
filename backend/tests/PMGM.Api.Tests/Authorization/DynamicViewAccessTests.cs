@@ -21,6 +21,39 @@ public sealed class DynamicViewAccessTests
         var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub","subject")],"test"));
         Assert.Equal(new Guid?[]{org},DynamicViewAccess.AggregateScopes(catalog,user));
     }
+
+    [Fact]
+    public void Managed_subject_denies_unassigned_workshop_and_order_scope_without_legacy_fallback()
+    {
+        var catalog = DynamicAccessEndpoints.CreateCatalog();
+        var workshopA = Guid.NewGuid();
+        var workshopB = Guid.NewGuid();
+        var today = new DateOnly(2026, 10, 23);
+        catalog.Profiles.Add(new(
+            Guid.NewGuid(), "qa-scope", "Taller A", "lodge", false, true,
+            ["lodge"], [new("lodge", ["view", "create"])]));
+        catalog.Assignments.Add(new(
+            Guid.NewGuid(), "managed", "qa-scope", workshopA,
+            new DateOnly(2020, 1, 1), null, true));
+
+        Assert.True(DynamicViewAccess.Allows(catalog, "managed", "lodge", "view", workshopA, today));
+        Assert.False(DynamicViewAccess.Allows(catalog, "managed", "lodge", "view", workshopB, today));
+        Assert.False(DynamicViewAccess.Allows(catalog, "managed", "lodge", "create", workshopB, today));
+        Assert.False(DynamicViewAccess.Allows(catalog, "managed", "lodge", "view", null, today));
+        Assert.True(DynamicViewAccess.Allows(catalog, "unmanaged-legacy", "lodge", "view", workshopB, today));
+
+        // Asignación de Orden tampoco constituye permiso en un Taller.
+        catalog.Assignments.Clear();
+        catalog.Assignments.Add(new(
+            Guid.NewGuid(), "managed", "qa-scope", null,
+            new DateOnly(2020, 1, 1), null, true));
+        Assert.False(DynamicViewAccess.Allows(catalog, "managed", "lodge", "view", workshopA, today));
+
+        // Revoques no rehabilitan implícitamente otro Taller.
+        catalog.Assignments[0] = catalog.Assignments[0] with { IsActive = false };
+        Assert.False(DynamicViewAccess.Allows(catalog, "managed", "lodge", "view", workshopB, today));
+    }
+
     [Theory]
     [InlineData("/api/member-self/profile","member")]
     [InlineData("/api/membership/me/hospitalaria","member")]
@@ -41,6 +74,36 @@ public sealed class DynamicViewAccessTests
     [InlineData("/api/system/settings","system")]
     [InlineData("/api/system/audit-events","access-review")]
     public void Catalog_domains_have_explicit_view_contracts(string route,string view) => Assert.Equal(view,DynamicViewAccess.ViewFor(route));
+    [Fact]
+    public void Admission_person_search_uses_search_action_not_view()
+    {
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "GET", "/api/admisiones/personas-busqueda", "SearchAsync"));
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "HEAD", "/api/admisiones/personas-busqueda", "SearchAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/admisiones/expedientes", "ListCasesAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/admisiones/expedientes", "SearchAsync"));
+    }
+
+    [Fact]
+    public void Library_search_only_requires_search_for_the_exact_search_route()
+    {
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/buscar", "SearchAsync"));
+        Assert.Equal("search", DynamicViewAccess.ActionFor(
+            "HEAD", "/api/biblioteca/buscar", "SearchAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca", "GetLibraryAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/facetas", "GetFacetsAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/{documentId:guid}", "GetLibraryDocumentAsync"));
+        Assert.Equal("view", DynamicViewAccess.ActionFor(
+            "GET", "/api/biblioteca/buscar-otros", "GetLibraryAsync"));
+    }
+
     [Theory]
     [InlineData("GET","ExportIcsAsync","view")]
     [InlineData("POST","CreateMeetingAsync","create")]

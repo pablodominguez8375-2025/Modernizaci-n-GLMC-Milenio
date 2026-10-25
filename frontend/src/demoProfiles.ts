@@ -1,6 +1,6 @@
 import type { SessionProfile } from './api/pmgmApi'
 
-export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'grandFirstWarden' | 'grandSecondWarden' | 'immediatePastGrandMaster' | 'instructionDepartmentHead' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandArchivist' | 'systemAdmin' | 'grandLodge'
+export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'grandFirstWarden' | 'grandSecondWarden' | 'immediatePastGrandMaster' | 'instructionDepartmentHead' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandArchivist' | 'librarian' | 'communications' | 'systemAdmin' | 'supportUser' | 'grandLodge'
 
 type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canBootstrapInstitutional?: boolean
@@ -11,6 +11,7 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canReadLodgeSecretariat?: boolean
   canManageLodgeSecretariat?: boolean
   canConfigureSystem?: boolean
+  canManageAccessProfiles?: boolean
   canManageLodgeTreasury?: boolean
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
@@ -37,6 +38,7 @@ const deniedCoreCapabilities: SessionProfile['capabilities'] = {
   canManagePrivacy: false,
   canReadLodgeSecretariat: false,
   canManageLodgeSecretariat: false,
+  canReadOfficialDocuments: true,
 }
 
 export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
@@ -138,12 +140,26 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   systemAdmin: {
     displayName: 'Administrador del Sistema · Demostración', accessScope: 'order',
-    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canBootstrapInstitutional: true, canManageDocuments: true, canReadLibrary: true },
+    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canManageAccessProfiles: true, canBootstrapInstitutional: true, canManageDocuments: true, canReadLibrary: true, canManageLibrary: true, canManageCommunications: true },
+  },
+  supportUser: {
+    displayName: 'Superusuario de soporte · Demostración', accessScope: 'order',
+    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canManageAccessProfiles: true, canReadLibrary: true },
   },
   grandArchivist: {
     displayName: 'Gran Archivero · Demostración',
     accessScope: 'order',
-    capabilities: { ...deniedCoreCapabilities, canManageGrandArchive: true },
+    capabilities: { ...deniedCoreCapabilities, canManageGrandArchive: true, canPublishOfficialDocuments: true },
+  },
+  librarian: {
+    displayName: 'Bibliotecario · Demostración',
+    accessScope: 'order',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageLibrary: true, canManageCommunications: false, canManageDocuments: false, canManageGrandArchive: false },
+  },
+  communications: {
+    displayName: 'Comunicaciones · Demostración',
+    accessScope: 'order',
+    capabilities: { ...deniedCoreCapabilities, canReadLibrary: true, canManageCommunications: true, canManageLibrary: false, canManageDocuments: false, canManageGrandArchive: false },
   },
   grandLodge: {
     displayName: 'Autoridad de Gran Logia · Demostración',
@@ -167,6 +183,8 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
       canManageGrandArchive: true,
       canBootstrapInstitutional: true,
       canConfigureSystem: true,
+      canManageLibrary: true,
+      canManageCommunications: true,
     },
   },
 }

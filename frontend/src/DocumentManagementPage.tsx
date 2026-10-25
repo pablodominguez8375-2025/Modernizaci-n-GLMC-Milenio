@@ -1,5 +1,6 @@
 import { exportCsv } from './listing'
 import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import AreaCollaboratorsSection from './AreaCollaborators'
 import { type DocumentApiClient, type DocumentCollection, type DocumentListItem, type InstitutionalDocument } from './api/documentApi'
 import { type OrganizationOption, type PmgmApiClient, type SessionProfile } from './api/pmgmApi'
 import './documents.css'
@@ -74,6 +75,7 @@ export default function DocumentManagementPage({ api, documentApi }: { api: Pmgm
 
   return <>
     <section className="page-heading"><div><p className="eyebrow">Repositorio institucional</p><h1>Gestor Documental</h1><p>Administra colecciones, documentos y versiones sin exponer las claves físicas del almacenamiento.</p></div><span className="count-badge">{loading ? 'cargando…' : `${collections.length} colecciones`}</span></section>
+    {(!documentApi.useMocks || ['demo:grandArchivist', 'demo:systemAdmin'].includes(api.demoAccessSubject)) && <AreaCollaboratorsSection documentApi={documentApi} area="documentmanager" />}
     {error && <div className="error-banner" role="alert"><strong>Operación documental no completada.</strong><span>{error}</span></div>}
     {message && <div className="regularity-success" role="status">{message}</div>}
 

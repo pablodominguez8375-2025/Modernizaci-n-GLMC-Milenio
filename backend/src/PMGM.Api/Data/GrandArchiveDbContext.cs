@@ -25,6 +25,11 @@ public sealed class GrandArchiveDbContext(DbContextOptions<GrandArchiveDbContext
             entity.Property(x => x.WithdrawnBySubject).HasMaxLength(320);
             entity.Property(x => x.WithdrawnByDisplayName).HasMaxLength(320);
             entity.Property(x => x.WithdrawalReason).HasMaxLength(500);
+            entity.Property(x => x.PublishedBySubject).HasMaxLength(320);
+            entity.Property(x => x.PublishedByDisplayName).HasMaxLength(320);
+            entity.Property(x => x.UnpublishReason).HasMaxLength(500);
+            entity.ToTable(t => t.HasCheckConstraint("CK_grand_archive_records_published_degree", "\"PublishedMinimumDegree\" IS NULL OR \"PublishedMinimumDegree\" BETWEEN 1 AND 3"));
+            entity.HasIndex(x => new { x.PublishedMinimumDegree, x.Status });
             entity.Property(x => x.ArchivedAtUtc).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.Property(x => x.UpdatedAtUtc).IsRequired();

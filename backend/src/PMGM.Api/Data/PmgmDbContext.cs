@@ -18,6 +18,10 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<Person> People => Set<Person>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Member> Members => Set<Member>();
+    public DbSet<MemberPhoto> MemberPhotos => Set<MemberPhoto>();
+    public DbSet<SupportViewSession> SupportViewSessions => Set<SupportViewSession>();
+    public DbSet<SupportCorrectionGrant> SupportCorrectionGrants => Set<SupportCorrectionGrant>();
+    public DbSet<SupportCorrection> SupportCorrections => Set<SupportCorrection>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<MemberTransfer> MemberTransfers => Set<MemberTransfer>();
     public DbSet<MemberWithdrawalRequest> MemberWithdrawalRequests => Set<MemberWithdrawalRequest>();
@@ -59,6 +63,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<DeathReplenishmentPayment> DeathReplenishmentPayments => Set<DeathReplenishmentPayment>();
     public DbSet<DeathReplenishmentTransfer> DeathReplenishmentTransfers => Set<DeathReplenishmentTransfer>();
     public DbSet<CeremonyRequest> CeremonyRequests => Set<CeremonyRequest>();
+    public DbSet<CandidateOriginCorrection> CandidateOriginCorrections => Set<CandidateOriginCorrection>();
     public DbSet<CandidateInterviewAssignment> CandidateInterviewAssignments => Set<CandidateInterviewAssignment>();
     public DbSet<AdvancementPaperAttestation> AdvancementPaperAttestations => Set<AdvancementPaperAttestation>();
     public DbSet<AdvancementDispensationCase> AdvancementDispensationCases => Set<AdvancementDispensationCase>();
@@ -201,6 +206,48 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
                 .WithMany()
                 .HasForeignKey(x => x.ParentOrganizationId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SupportViewSession>(entity =>
+        {
+            entity.ToTable("support_view_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OperatorSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.TargetSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(x => new { x.OperatorSubject, x.EndedAtUtc });
+        });
+
+        modelBuilder.Entity<SupportCorrectionGrant>(entity =>
+        {
+            entity.ToTable("support_correction_grants");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OperatorSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.OperatorName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.GrantedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(x => new { x.OperatorSubject, x.RevokedAtUtc });
+        });
+
+        modelBuilder.Entity<SupportCorrection>(entity =>
+        {
+            entity.ToTable("support_corrections");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OperatorSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.OperatorName).HasMaxLength(300).IsRequired();
+            entity.Property(x => x.Field).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(x => new { x.MemberId, x.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<MemberPhoto>(entity =>
+        {
+            entity.ToTable("member_photos", table => table.HasCheckConstraint("CK_member_photos_content_type", "\"ContentType\" IN ('image/jpeg','image/png')"));
+            entity.HasKey(x => x.MemberId);
+            entity.Property(x => x.ContentType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Content).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            entity.HasOne(x => x.Member).WithOne().HasForeignKey<MemberPhoto>(x => x.MemberId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Member>(entity =>
@@ -822,6 +869,22 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.HasIndex(x => new { x.OrganizationId, x.Status });
         });
 
+        modelBuilder.Entity<CandidateOriginCorrection>(entity =>
+        {
+            entity.ToTable("candidate_origin_corrections");
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.PreviousKind).HasMaxLength(24);
+            entity.Property(c => c.PreviousOtherDescription).HasMaxLength(200);
+            entity.Property(c => c.NewKind).HasMaxLength(24).IsRequired();
+            entity.Property(c => c.NewOtherDescription).HasMaxLength(200);
+            entity.Property(c => c.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(c => c.ChangedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(c => c.ChangedAtUtc).IsRequired();
+            entity.HasOne<CeremonyRequest>().WithMany().HasForeignKey(c => c.CeremonyRequestId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(c => new { c.CeremonyRequestId, c.ChangedAtUtc });
+        });
+
         modelBuilder.Entity<CeremonyRequest>(entity =>
         {
             entity.ToTable("ceremony_requests");
@@ -829,6 +892,12 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.CeremonyType).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Status).HasMaxLength(80).IsRequired();
             entity.Property(x => x.Notes).HasMaxLength(2000);
+            entity.Property(x => x.CandidateOriginKind).HasMaxLength(24);
+            entity.Property(x => x.CandidateOriginOtherDescription).HasMaxLength(200);
+            entity.HasOne<Member>().WithMany().HasForeignKey(x => x.CandidateRecommenderMemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.CandidateRecommenderMemberId);
+            entity.HasOne<Member>().WithMany().HasForeignKey(x => x.CandidateSponsorMemberId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => x.CandidateSponsorMemberId);
             entity.Property(x => x.CreatedAtUtc).IsRequired();
             entity.HasOne(x => x.Organization).WithMany().HasForeignKey(x => x.OrganizationId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Member).WithMany().HasForeignKey(x => x.MemberId).OnDelete(DeleteBehavior.Restrict);

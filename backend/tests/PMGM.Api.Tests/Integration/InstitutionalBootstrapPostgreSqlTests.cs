@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Bootstrap;
+using PMGM.Api.Modules.Bootstrap.Entities;
+using Npgsql;
 using Xunit;
 
 namespace PMGM.Api.Tests.Integration;
@@ -35,6 +37,13 @@ public sealed class InstitutionalBootstrapPostgreSqlTests
             1,
             new BootstrapInstitution("Gran Logia Mixta de Chile"),
             new[] { new BootstrapWorkshop("Respetable Logia Libertad Nº 23", $"23-{suffix}") });
+
+        // Legacy institutional setup is still allowed BEFORE initial-load
+        // opening. ApplyAsync itself must acquire the singleton FOR UPDATE
+        // lock in its PostgreSQL transaction before any organization write.
+        var initialWindow = await bootstrapDb.InitialLoadWindows.AsNoTracking()
+            .SingleAsync(x => x.Id == InitialLoadWindow.SingletonId, cancellationToken);
+        Assert.True(InitialLoadLegacyBootstrapWriteGuard.AllowsApply(initialWindow));
 
         var service = new InstitutionalBootstrapService(bootstrapDb);
         var plan = await service.PlanAsync(package, cancellationToken);
@@ -82,6 +91,77 @@ public sealed class InstitutionalBootstrapPostgreSqlTests
         var conflict = await service.PlanAsync(changedPackage, cancellationToken);
         Assert.False(conflict.Valid);
         Assert.Contains(conflict.Errors, x => x.Contains("contenido diferente", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Initial_load_window_is_unopened_and_database_blocks_deletion_or_bypass()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var ct = TestContext.Current.CancellationToken;
+        var coreOptions = new DbContextOptionsBuilder<PmgmDbContext>()
+            .UseNpgsql(connectionString).Options;
+        var bootstrapOptions = new DbContextOptionsBuilder<BootstrapDbContext>()
+            .UseNpgsql(connectionString).Options;
+
+        await using (var core = new PmgmDbContext(coreOptions))
+            await core.Database.MigrateAsync(ct);
+        await using var bootstrap = new BootstrapDbContext(bootstrapOptions);
+        await bootstrap.Database.MigrateAsync(ct);
+
+        var window = await bootstrap.InitialLoadWindows.AsNoTracking()
+            .SingleAsync(x => x.Id == InitialLoadWindow.SingletonId, ct);
+        Assert.Equal(InitialLoadWindow.NotOpened, window.Status);
+        Assert.Equal(0, window.Version);
+        Assert.Null(window.OpenedAtUtc);
+        Assert.Null(window.LegalApprovalDigest);
+
+        // Each denied mutation uses its own rollback so a PostgreSQL
+        // transaction abort cannot contaminate another integration test.
+        await using (var transaction = await bootstrap.Database.BeginTransactionAsync(ct))
+        {
+            // These database guards must not hang CI if another shard holds
+            // a conflicting lock. A lock-timeout is a test failure, never
+            // mistaken for an accepted transition.
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '15s'", ct);
+            var ex = await Assert.ThrowsAsync<PostgresException>(() =>
+                bootstrap.Database.ExecuteSqlRawAsync(
+                    """UPDATE core.initial_load_windows SET "Status" = 'closed' WHERE "Id" = 1""", ct));
+            Assert.Equal("55000", ex.SqlState);
+            await transaction.RollbackAsync(ct);
+        }
+
+        await using (var transaction = await bootstrap.Database.BeginTransactionAsync(ct))
+        {
+            // These database guards must not hang CI if another shard holds
+            // a conflicting lock. A lock-timeout is a test failure, never
+            // mistaken for an accepted transition.
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '15s'", ct);
+            var ex = await Assert.ThrowsAsync<PostgresException>(() =>
+                bootstrap.Database.ExecuteSqlRawAsync(
+                    """DELETE FROM core.initial_load_windows WHERE "Id" = 1""", ct));
+            Assert.Equal("55000", ex.SqlState);
+            await transaction.RollbackAsync(ct);
+        }
+
+        await using (var transaction = await bootstrap.Database.BeginTransactionAsync(ct))
+        {
+            // These database guards must not hang CI if another shard holds
+            // a conflicting lock. A lock-timeout is a test failure, never
+            // mistaken for an accepted transition.
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL lock_timeout = '5s'", ct);
+            await bootstrap.Database.ExecuteSqlRawAsync("SET LOCAL statement_timeout = '15s'", ct);
+            var ex = await Assert.ThrowsAsync<PostgresException>(() =>
+                bootstrap.Database.ExecuteSqlRawAsync(
+                    """TRUNCATE TABLE core.initial_load_windows""", ct));
+            Assert.Equal("55000", ex.SqlState);
+            await transaction.RollbackAsync(ct);
+        }
+
+        Assert.Equal(1, await bootstrap.InitialLoadWindows.CountAsync(ct));
     }
 
     private static DefaultHttpContext CreateSuperAdminContext(string subject)

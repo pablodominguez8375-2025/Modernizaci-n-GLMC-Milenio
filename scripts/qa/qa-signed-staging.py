@@ -129,7 +129,7 @@ def verify_manifest(package, source_sha):
         raise Blocked("SIGNED_SILO_EVIDENCE_MISSING")
 
 
-def stage(artifact, expected_sha256, source_sha, output):
+def stage(artifact, expected_sha256, source_sha, output, *, tokenless=False):
     if not SHA.fullmatch(source_sha):
         raise Blocked("INVALID_SOURCE_SHA")
     parsed = DIGEST.fullmatch(expected_sha256)
@@ -163,9 +163,17 @@ def stage(artifact, expected_sha256, source_sha, output):
                    "--signer-workflow", WORKFLOW,
                    "--source-digest", source_sha, "--deny-self-hosted-runners",
                    "--format", "json"]
+        options = {}
+        if tokenless:
+            empty_config = tmp / "gh-noauth"
+            empty_config.mkdir(mode=0o700)
+            clean_env = {k: v for k, v in os.environ.items() if k not in {
+                "GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"}}
+            clean_env["GH_CONFIG_DIR"] = str(empty_config)
+            options["env"] = clean_env
         try:
             subprocess.run(command, check=True, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, timeout=120)
+                           stderr=subprocess.DEVNULL, timeout=120, **options)
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             raise Blocked("INSTALLABLE_ATTESTATION_FAILED") from None
         destination = tmp / "package"

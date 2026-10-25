@@ -1,0 +1,62 @@
+name: QA agent signed staging contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-agent-sync.py'
+      - 'scripts/qa/qa-artifact-download.py'
+      - 'tests/test_qa_agent_sync.py'
+      - 'tests/test_qa_agent_token_credential.py'
+      - 'infrastructure/systemd/pmgm-qa-agent-stage.*'
+      - 'docs/qa/QA-AGENT-STAGE-CONTRACT.md'
+      - '.github/workflows/qa-agent-stage-contract.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa-agent-sync.py'
+      - 'scripts/qa/qa-artifact-download.py'
+      - 'tests/test_qa_agent_sync.py'
+      - 'tests/test_qa_agent_token_credential.py'
+      - 'infrastructure/systemd/pmgm-qa-agent-stage.*'
+      - '.github/workflows/qa-agent-stage-contract.yml'
+permissions:
+  contents: read
+jobs:
+  negative-tests:
+    name: Synthetic QA staging policy and credential guards (no host)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Compile and test QA modules offline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/qa/qa-agent-sync.py scripts/qa/qa-artifact-download.py tests/test_qa_agent_sync.py tests/test_qa_agent_token_credential.py
+          python3 -m unittest discover -s tests -p 'test_qa_agent_sync.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_agent_token_credential.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_artifact_download.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_acquire_candidate.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_agent_plan.py' -v
+          python3 -m unittest discover -s tests -p 'test_qa_antirollback.py' -v
+      - name: Assert no deployment primitives or enabled timer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          script = Path('scripts/qa/qa-agent-sync.py').read_text()
+          for forbidden in ('docker compose up', 'subprocess.run(', 'os.system(', 'INSTALAR.sh', 'systemctl enable'):
+              assert forbidden not in script, forbidden
+          service = Path('infrastructure/systemd/pmgm-qa-agent-stage.service').read_text()
+          assert 'LoadCredential=qa-baseline:' in service
+          assert 'LoadCredential=qa-token:' in service
+          assert 'NoNewPrivileges=yes' in service
+          assert 'ProtectSystem=strict' in service
+          assert 'ReadWritePaths=/var/lib/pmgm-qa-agent/staging' in service
+          timer = Path('infrastructure/systemd/pmgm-qa-agent-stage.timer').read_text()
+          assert 'OnCalendar=hourly' in timer
+          print('QA staging-only CI contract PASS; no remote host actions')
+          PY

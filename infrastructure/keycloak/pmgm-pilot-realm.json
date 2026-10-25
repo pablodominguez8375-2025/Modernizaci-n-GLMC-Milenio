@@ -1,6 +1,6 @@
 {
   "realm": "pmgm",
-  "displayName": "Proyecto Milenio Piloto",
+  "displayName": "Proyecto Centenario Piloto",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -19,6 +19,10 @@
   "adminEventsDetailsEnabled": false,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 28800,
+  "loginTheme": "glmch",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["es"],
+  "defaultLocale": "es",
   "resetPasswordAllowed": true,
   "rememberMe": false,
   "loginWithEmailAllowed": true,
@@ -58,6 +62,12 @@
       },
       {
         "name": "lodge_secretariat"
+      },
+      {
+        "name": "librarian"
+      },
+      {
+        "name": "communications"
       }
     ]
   },

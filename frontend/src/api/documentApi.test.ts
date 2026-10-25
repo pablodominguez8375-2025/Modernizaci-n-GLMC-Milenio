@@ -127,7 +127,7 @@ it('submits a work paper through the server scan pipeline and does not publish a
   expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer member-token')
 })
 
-it('demo work paper replacement retains older versions in the member history', async () => {
+it('demo work paper replacement goes to review and keeps the published version until the Librarian approves', async () => {
   const client = new DocumentApiClient({ useMocks: true })
   const file = new File(['revision'], 'revision.pdf', { type: 'application/pdf' })
   const before = await client.getMyWorkPapers()
@@ -135,11 +135,45 @@ it('demo work paper replacement retains older versions in the member history', a
 
   await client.replaceWorkPaper(id, { title: 'Trabajo revisado', shortDescription: 'Versión mejorada', file })
 
-  const after = await client.getMyWorkPapers()
-  expect(after[0].versions).toHaveLength(2)
-  expect(after[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: true, processingStatus: 'available' })
-  expect(after[0].versions[1]).toMatchObject({ versionNumber: 1, isCurrent: false })
-  expect(after[0].title).toBe('Trabajo revisado')
+  const pending = await client.getMyWorkPapers()
+  expect(pending[0].reviewStatus).toBe('pending_review')
+  expect(pending[0].versions).toHaveLength(2)
+  expect(pending[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: false })
+  expect(pending[0].versions[1]).toMatchObject({ versionNumber: 1, isCurrent: true })
+  await expect(client.replaceWorkPaper(id, { title: 'Otra', shortDescription: 'Otra', file })).rejects.toThrow(/en revisión/)
+  expect((await client.listWorkPaperReviews()).some(item => item.id === id)).toBe(true)
+
+  await client.approveWorkPaper(id)
+  const approved = await client.getMyWorkPapers()
+  expect(approved[0].reviewStatus).toBe('approved')
+  expect(approved[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: true })
+  expect((await client.listWorkPaperReviews()).some(item => item.id === id)).toBe(false)
+})
+
+it('demo returned work paper shows the reason to the Taller and can be corrected and resubmitted', async () => {
+  const client = new DocumentApiClient({ useMocks: true })
+  const file = new File(['x'], 'x.pdf', { type: 'application/pdf' })
+  const { documentId } = await client.submitWorkPaper({ organizationId: 'o', title: 'Para devolver', shortDescription: 'Breve', file })
+  expect((await client.getMyWorkPapers()).find(item => item.id === documentId)?.status).toBe('draft')
+  await client.returnWorkPaper(documentId, 'Falta la portada con el nombre del Taller.')
+  const returned = (await client.getMyWorkPapers()).find(item => item.id === documentId)
+  expect(returned).toMatchObject({ reviewStatus: 'returned', returnReason: 'Falta la portada con el nombre del Taller.' })
+  await client.replaceWorkPaper(documentId, { title: 'Para devolver', shortDescription: 'Breve', file })
+  expect((await client.getMyWorkPapers()).find(item => item.id === documentId)).toMatchObject({ reviewStatus: 'pending_review', returnReason: null })
+})
+
+it('review calls use the dedicated Librarian endpoints', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] })))
+    .mockResolvedValueOnce(new Response('{}'))
+    .mockResolvedValueOnce(new Response('{}'))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'librarian-token' })
+  await client.listWorkPaperReviews()
+  await client.approveWorkPaper('doc-1')
+  await client.returnWorkPaper('doc-2', '  Motivo suficiente para devolver.  ')
+  expect(fetch.mock.calls.map(call => call[0])).toEqual(['/api/biblioteca/revision', '/api/biblioteca/revision/doc-1/aprobar', '/api/biblioteca/revision/doc-2/devolver'])
+  expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({ reason: 'Motivo suficiente para devolver.' })
 })
 
 it('resolves a Tenida plancha link only through the authenticated work-paper endpoint', async () => {
@@ -151,4 +185,95 @@ it('resolves a Tenida plancha link only through the authenticated work-paper end
   expect(result).toEqual(payload)
   expect(fetch.mock.calls[0][0]).toBe('/api/biblioteca/mis-planchas/versiones/version-1')
   expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer secretariat-token')
+})
+
+it('uses the editorial magazine endpoints with bearer boundary and the exact contract', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ total: 0, page: 1, pageSize: 50, items: [] })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'doc-1', status: 'draft' })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ items: [{ id: 'v1', versionNumber: 1, processingStatus: 'available' }] })))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  const api = new DocumentApiClient({ getAccessToken: async () => 'editorial-token' })
+  await api.listEditableMagazines()
+  await api.createEditorialMagazine('col-1', 'Horizonte Masónico · N° 4')
+  expect((await api.listMagazineVersions('doc-1'))[0].id).toBe('v1')
+  await api.publishEditorialMagazine('doc-1', 'v1')
+  await api.unpublishEditorialMagazine('doc-1')
+  const calls = fetch.mock.calls
+  expect(calls[0][0]).toBe('/api/biblioteca/editorial/revistas?page=1&pageSize=50')
+  expect(calls[1][0]).toBe('/api/biblioteca/editorial/revistas')
+  expect(JSON.parse(calls[1][1].body)).toEqual({ collectionId: 'col-1', title: 'Horizonte Masónico · N° 4', documentType: 'magazine' })
+  expect(calls[2][0]).toBe('/api/biblioteca/editorial/revistas/doc-1/versiones?pageSize=50')
+  expect(calls[3][0]).toBe('/api/biblioteca/editorial/revistas/doc-1/publicar')
+  expect(JSON.parse(calls[3][1].body)).toEqual({ versionId: 'v1' })
+  expect(calls[4][0]).toBe('/api/biblioteca/editorial/revistas/doc-1/retirar-publicacion')
+  for (const [, options] of calls) expect(options.headers.get('Authorization')).toBe('Bearer editorial-token')
+})
+
+it('demo mode replaces a published file only for the owner profile and with a reason', async () => {
+  const api = new DocumentApiClient({ useMocks: true })
+  const list = (await api.listEditableMagazines()).items
+  expect(list.find(item => item.documentId === 'demo-ed-especial')?.canCorrect).toBe(false)
+  await expect(api.publishEditorialMagazine('demo-ed-especial', 'v', 'Motivo suficiente')).rejects.toThrow('Solo el perfil')
+  await expect(api.publishEditorialMagazine('demo-ed-boletin-oct', 'v')).rejects.toThrow('motivo')
+  await api.publishEditorialMagazine('demo-ed-boletin-oct', 'v', 'Se corrigió una fecha en la página 3.')
+  await expect(api.publishEditorialMagazine('inexistente', 'v')).rejects.toThrow('demostración')
+})
+
+it('sends the replacement reason only when provided', async () => {
+  const fetch = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+  vi.stubGlobal('fetch', fetch)
+  const api = new DocumentApiClient({ getAccessToken: async () => 't' })
+  await api.publishEditorialMagazine('doc-1', 'v2', 'Corrección de fecha en página 3')
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ versionId: 'v2', reason: 'Corrección de fecha en página 3' })
+})
+
+it('creates a monthly Boletín draft through the same editorial endpoint (#635)', async () => {
+  const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'bol-1', status: 'draft' })))
+  vi.stubGlobal('fetch', fetch)
+  const api = new DocumentApiClient({ getAccessToken: async () => 'communications-token' })
+  const created = await api.createEditorialMagazine('col-1', 'Boletín de la Orden · Octubre 2026', 'bulletin')
+  expect(created.documentId).toBe('bol-1')
+  expect(fetch.mock.calls[0][0]).toBe('/api/biblioteca/editorial/revistas')
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ collectionId: 'col-1', title: 'Boletín de la Orden · Octubre 2026', documentType: 'bulletin' })
+  expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer communications-token')
+  vi.unstubAllGlobals()
+})
+
+it('librarian upload creates the draft, verifies the file through the server pipeline and only then publishes', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'doc-1', status: 'draft' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-1', documentId: 'doc-1', versionNumber: 1, originalFileName: 'libro.pdf', contentType: 'application/pdf', sizeBytes: 8, processingStatus: 'pending_upload', hasIntegrityHash: false, scanEvidenceRecorded: false, createdAtUtc: '2026-10-24T00:00:00Z' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-1', processingStatus: 'uploaded', sizeBytes: 8, hasIntegrityHash: true })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ processingStatus: 'available', clean: true })))
+    .mockResolvedValueOnce(new Response('{}'))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'librarian-token' })
+  const file = new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])], 'libro.pdf', { type: 'application/pdf' })
+
+  const result = await client.uploadManagedPublication({ categoryCode: 'book', title: 'Libro', authorName: 'A', topic: 'T', edition: '1', description: 'D', minimumDegreeRequired: 2 }, file, true)
+
+  expect(result).toEqual({ documentId: 'doc-1', published: true })
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/biblioteca/gestion/publicaciones',
+    '/api/documentos/doc-1/versiones',
+    '/api/documentos/versiones/ver-1/contenido',
+    '/api/documentos/versiones/ver-1/analizar',
+    '/api/biblioteca/editorial/revistas/doc-1/publicar',
+  ])
+})
+
+it('librarian upload leaves the draft unpublished when the security scan does not make the file available', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'doc-2', status: 'draft' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-2', documentId: 'doc-2', versionNumber: 1, originalFileName: 'x.pdf', contentType: 'application/pdf', sizeBytes: 8, processingStatus: 'pending_upload', hasIntegrityHash: false, scanEvidenceRecorded: false, createdAtUtc: '2026-10-24T00:00:00Z' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-2', processingStatus: 'uploaded', sizeBytes: 8, hasIntegrityHash: true })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ processingStatus: 'rejected', clean: false })))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'librarian-token' })
+  const file = new File([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])], 'x.pdf', { type: 'application/pdf' })
+  await expect(client.uploadManagedPublication({ categoryCode: 'book', title: 'X', minimumDegreeRequired: null }, file, true)).rejects.toThrow(/sin publicar/)
+  expect(fetch.mock.calls.some(call => String(call[0]).endsWith('/publicar'))).toBe(false)
 })

@@ -1,0 +1,26 @@
+name: Publish signed synthetic QA envelope
+on:
+  push:
+    branches: [dev]
+permissions:
+  contents: read
+concurrency:
+  group: qa-signed-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify source, gates, signature and publish QA prerelease only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/qa/qa-signed-publish.py

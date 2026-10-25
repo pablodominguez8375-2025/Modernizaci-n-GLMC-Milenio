@@ -180,8 +180,20 @@ public static class LibraryCatalogEndpoints
             .Take(200)
             .ToListAsync(cancellationToken);
 
+        // Agrupar alias históricos de revista en una única faceta pública canónica.
+        // La consulta ya se restringió a documentos visibles para este usuario.
         var documentTypes = documentTypeRows
-            .Select(x => new LibraryFacetItemDto(x.Value, x.Label, x.Count))
+            .Select(x => new
+            {
+                Value = IsMagazineType(x.Value) ? "magazine" : IsBulletinType(x.Value) ? "bulletin" : x.Value,
+                Label = IsMagazineType(x.Value) ? "Revistas" : IsBulletinType(x.Value) ? "Boletines" : x.Label,
+                x.Count
+            })
+            .GroupBy(x => new { x.Value, x.Label })
+            .Select(group => new LibraryFacetItemDto(
+                group.Key.Value, group.Key.Label, group.Sum(x => x.Count)))
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.Label)
             .ToList();
 
         var topicRows = await query
@@ -254,6 +266,17 @@ public static class LibraryCatalogEndpoints
                 x.DocumentType.ToLower() == "ritual"),
             "video" => query.Where(x =>
                 x.DocumentType.ToLower() == "video" || x.DocumentType.ToLower() == "videos"),
+            "magazine" or "magazines" or "revista" or "revistas" => query.Where(x =>
+                x.DocumentType.ToLower() == "magazine" ||
+                x.DocumentType.ToLower() == "magazines" ||
+                x.DocumentType.ToLower() == "revista" ||
+                x.DocumentType.ToLower() == "revistas"),
+            "bulletin" or "bulletins" or "boletin" or "boletines" or "boletín" => query.Where(x =>
+                x.DocumentType.ToLower() == "bulletin" ||
+                x.DocumentType.ToLower() == "bulletins" ||
+                x.DocumentType.ToLower() == "boletin" ||
+                x.DocumentType.ToLower() == "boletines" ||
+                x.DocumentType.ToLower() == "boletín"),
             _ => query.Where(x => x.DocumentType.ToLower() == normalized)
         };
     }
@@ -327,6 +350,13 @@ public static class LibraryCatalogEndpoints
 
     private static bool IsValidYear(int? year)
         => year is null or >= 1600 and <= 2100;
+
+    private static bool IsBulletinType(string documentType)
+        => LibraryEditorialTypes.IsBulletin(documentType);
+
+    private static bool IsMagazineType(string documentType)
+        => documentType.Trim().ToLowerInvariant() is
+            "magazine" or "magazines" or "revista" or "revistas";
 
     private sealed class LibraryCatalogQueryRow
     {

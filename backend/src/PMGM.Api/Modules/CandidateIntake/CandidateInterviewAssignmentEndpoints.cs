@@ -86,8 +86,23 @@ public static class CandidateInterviewAssignmentEndpoints
         if (ceremony is null) return Results.NotFound();
         if (!CanDesignate(http, access, ceremony.OrganizationId)) return Results.Forbid();
         var eligible = await EligibleMasters(db, ceremony.OrganizationId, ct);
+        // El recomendante persistido es una incompatibilidad; no se acepta
+        // un id de recomendante declarado por el navegador.
+        var selectable = eligible.Values.Where(x =>
+            CandidateOriginPolicy.CanBeInterviewer(
+                x.MemberId, ceremony.CandidateRecommenderMemberId));
+        var excluded = eligible.Values.Where(x =>
+            !CandidateOriginPolicy.CanBeInterviewer(
+                x.MemberId, ceremony.CandidateRecommenderMemberId));
         http.Response.Headers.CacheControl = "private, no-store";
-        return Results.Ok(new { items = eligible.Values.OrderBy(x => x.Name).Select(x => new { id = x.MemberId, name = x.Name }) });
+        return Results.Ok(new {
+            items = selectable.OrderBy(x => x.Name)
+                .Select(x => new { id = x.MemberId, name = x.Name }),
+            excluded = excluded.Select(x => new {
+                id = x.MemberId, name = x.Name,
+                code = "CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW"
+            })
+        });
     }
 
     private sealed record EligibleMaster(Guid MemberId, string Name);
@@ -216,6 +231,13 @@ public static class CandidateInterviewAssignmentEndpoints
         if (input.CouncilDecisionDate < publicationDate)
             return Results.BadRequest(new { message = "El acuerdo de programación no puede ser anterior a la publicación institucional." });
 
+        if (input.InterviewerMemberIds.Any(id =>
+            !CandidateOriginPolicy.CanBeInterviewer(id, ceremony.CandidateRecommenderMemberId)))
+            return Results.Conflict(new {
+                code = "CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW",
+                message = "El hermano recomendante del candidato no puede ser designado entrevistador."
+            });
+
         var eligible = await EligibleMasters(db, ceremony.OrganizationId, ct);
         if (input.InterviewerMemberIds.Any(id => !eligible.ContainsKey(id)))
             return Results.Conflict(new { message = "Se seleccionó un Hermano que no es Maestro activo de este Taller." });
@@ -240,6 +262,18 @@ public static class CandidateInterviewAssignmentEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock(hashtextextended({requestId.ToString()}, 0))", ct);
+        // La corrección de origen usa el mismo candado. Releer desde DB
+        // después de bloquear evita la carrera entre cambio y designación.
+        var persistedRecommender = await db.CeremonyRequests.AsNoTracking()
+            .Where(x => x.Id == requestId)
+            .Select(x => x.CandidateRecommenderMemberId)
+            .SingleAsync(ct);
+        if (input.InterviewerMemberIds.Any(id =>
+            !CandidateOriginPolicy.CanBeInterviewer(id, persistedRecommender)))
+            return Results.Conflict(new {
+                code = "CANDIDATE_RECOMMENDER_CANNOT_INTERVIEW",
+                message = "El hermano recomendante del candidato no puede ser designado entrevistador."
+            });
         var prior = await db.CandidateInterviewAssignments
             .Where(x => x.CeremonyRequestId == requestId &&
                 (x.Status == CandidateInterviewAssignmentPolicy.Assigned ||

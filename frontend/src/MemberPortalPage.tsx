@@ -1,16 +1,17 @@
 import { OwnOffices, OwnAttendanceHistory } from './MemberOwnHistory'
 import { useEffect, useState, type CSSProperties } from 'react'
 import { organizationNumberOf } from './displayFormat'
-import InstitutionalIcon from './InstitutionalIcon'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
+import { maskRut } from './MaskedRut'
+import { cropToSquareJpeg } from './photoCrop'
+import { formatChileanRut } from './chileanRut'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
-import { TreasuryPayments, HospitalariaPayments } from './MemberPayments'
+import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './MemberPayments'
 import { institutionalStatusLabel } from './institutionalStatus'
-import { ActionDrawer, WorkspacePanel } from './actionKit'
+import { ActionDrawer, ConfirmAction, WorkspacePanel } from './actionKit'
 import './memberPortalInstruction.css'
-import './memberLibraryShortcut.css'
 
 export type MemberPortalSection = 'datos' | 'pagos' | 'asistencias'
 
@@ -30,7 +31,6 @@ interface MemberPortalPageProps {
   documentApi: DocumentApiClient
   onOpenCalendar?: () => void
   onOpenNotifications?: () => void
-  onOpenLibrary?: () => void
   onOpenLodge?: () => void
 }
 
@@ -134,7 +134,7 @@ export const memberPortalDemoData = {
   ],
 } as const
 
-export default function MemberPortalPage({ section = 'datos', profile, useMocks, membershipApi, documentApi, onOpenLibrary }: MemberPortalPageProps) {
+export default function MemberPortalPage({ section = 'datos', profile, useMocks, membershipApi, documentApi }: MemberPortalPageProps) {
   const [editing, setEditing] = useState(false)
   const [personal, setPersonal] = useState<EditablePersonalData>({ ...memberPortalDemoData.personal })
   const [selfProfile, setSelfProfile] = useState<MemberSelfProfile | null>(null)
@@ -196,13 +196,51 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
     : selfProfile
       ? `${selfProfile.member.firstNames} ${selfProfile.member.lastNames}`.trim()
       : (profile?.displayName ?? 'Hermano')
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [photoDraft, setPhotoDraft] = useState<{ url: string; blob: Blob } | null>(null)
+  const [photoVisible, setPhotoVisible] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    membershipApi.getOwnPhotoStatus().then(async status => {
+      if (!active) return
+      setPhotoVisible(status.visibleToMembers)
+      setPhotoUrl(status.hasPhoto ? await membershipApi.getOwnPhotoUrl() : null)
+    }).catch(() => { /* sin foto o sin vínculo: se muestra el avatar institucional */ })
+    return () => { active = false }
+  }, [membershipApi])
+  async function choosePhoto(file: File | undefined) {
+    setPhotoError(null); setPhotoDraft(null)
+    if (!file) return
+    try {
+      const blob = await cropToSquareJpeg(file)
+      setPhotoDraft({ url: URL.createObjectURL(blob), blob })
+    } catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible preparar la foto.') }
+  }
+  async function savePhoto() {
+    if (!photoDraft || photoBusy) return
+    setPhotoBusy(true); setPhotoError(null)
+    try {
+      const status = await membershipApi.uploadOwnPhoto(photoDraft.blob)
+      setPhotoUrl(await membershipApi.getOwnPhotoUrl()); setPhotoVisible(status.visibleToMembers); setPhotoDraft(null)
+    } catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible guardar la foto.') } finally { setPhotoBusy(false) }
+  }
+  async function removePhoto() {
+    setPhotoBusy(true); setPhotoError(null)
+    try { await membershipApi.removeOwnPhoto(); setPhotoUrl(null); setPhotoDraft(null); setPhotoVisible(false) }
+    catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible quitar la foto.') } finally { setPhotoBusy(false) }
+  }
+  async function changeVisibility(visible: boolean) {
+    setPhotoError(null)
+    try { const status = await membershipApi.setOwnPhotoVisibility(visible); setPhotoVisible(status.visibleToMembers) }
+    catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible cambiar la visibilidad.') }
+  }
   const memberId = useMocks ? memberPortalDemoData.memberId : (selfProfile?.member.institutionalNumber ?? 'Sin número institucional')
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
   const lodgeSeal = organizationNumberOf(lodge) ?? (lodge.trim().charAt(0).toUpperCase() || '∴')
   const orient = useMocks ? memberPortalDemoData.institutional.orient : 'Según expediente institucional'
-  const effectiveDegree = useMocks ? 3 : (selfProfile?.current.effectiveDegree ?? Number.parseInt(selfProfile?.current.degree?.degree ?? '', 10))
   const degree = useMocks ? memberPortalDemoData.institutional.degree : formatDegree(selfProfile?.current.effectiveDegree, selfProfile?.current.degree?.degree)
-  const libraryAccess = libraryAccessForDegree(effectiveDegree)
   const status = useMocks ? memberPortalDemoData.institutional.status : institutionalStatusLabel(selfProfile?.current.institutionalStatus?.eventType)
   const statusSince = useMocks ? memberPortalDemoData.institutional.statusSince : formatDateOnly(selfProfile?.current.institutionalStatus?.effectiveDate)
   const initiation = useMocks ? memberPortalDemoData.institutional.initiation : formatDateOnly(selfProfile?.milestones.initiation)
@@ -242,19 +280,37 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
     <WorkspacePanel id="datos" active={section === 'datos'}>
     <section className="member-profile-grid">
       <article className="member-card member-identity-card">
-        <div className="member-avatar-wrap"><img className="member-avatar-photo" src={`${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={useMocks ? 'Avatar demostrativo' : 'Avatar institucional'} /></div>
+        <div className="member-avatar-column">
+          <div className="member-avatar-wrap"><img className="member-avatar-photo" src={photoUrl ?? `${import.meta.env.BASE_URL}demo-member-avatar.svg`} alt={photoUrl ? 'Mi foto de perfil' : (useMocks ? 'Avatar demostrativo' : 'Avatar institucional')} /></div>
+        </div>
         <div className="member-identity-content">
           <p className="member-card-kicker">Ficha personal</p>
           <h2>{fullName}</h2>
           <p className="member-display-name">{useMocks ? memberPortalDemoData.displayName : 'Ficha personal autenticada'}</p>
           <div className="member-data-grid">
             <MemberDatum label="Identificador" value={memberId} />
+            <MemberDatum label="RUT (solo tú lo ves completo)" value={formatChileanRut(selfProfile?.member.rut) ?? (selfProfile?.member.rut ? "RUT registrado requiere revisión" : "Sin registrar")} />
             <MemberDatum label="Nacimiento" value={useMocks ? memberPortalDemoData.birthDate : 'No expuesto en autoservicio'} />
             <MemberDatum label="Correo" value={personal.email || 'Sin registrar'} />
             <MemberDatum label="Teléfono" value={personal.phone || 'Sin registrar'} />
             <MemberDatum label="Profesión" value={useMocks ? memberPortalDemoData.profession : 'No expuesto en autoservicio'} />
             <MemberDatum label={useMocks ? 'Ciudad' : 'Domicilio'} value={useMocks ? personal.city : (personal.address || 'Sin registrar')} />
           </div>
+          {useMocks && <p className="member-rut-hint">En otros módulos tu RUT aparece protegido: <strong>{maskRut('12.345.678-5')}</strong></p>}
+          {canEdit && <div className="member-photo-actions">
+            <ActionDrawer label={photoUrl ? 'Cambiar foto' : 'Subir foto'} tone="secondary" title="Mi foto de perfil" description="JPG o PNG. Se recorta en formato cuadrado y se guarda sin datos de la cámara ni ubicación.">
+              <form className="library-admin-form" onSubmit={event => { event.preventDefault(); void savePhoto() }}>
+                <label><span>Archivo</span><input type="file" accept="image/jpeg,image/png" onChange={event => void choosePhoto(event.target.files?.[0])} /></label>
+                {photoDraft ? <div className="member-photo-preview"><img src={photoDraft.url} alt="Vista previa de tu foto" /><small>Vista previa (recorte cuadrado centrado)</small></div> : <small>Elige una imagen para ver la vista previa.</small>}
+                {photoError && <p role="alert" className="form-error">{photoError}</p>}
+                <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={!photoDraft || photoBusy}>{photoBusy ? 'Guardando…' : 'Guardar foto'}</button></div>
+              </form>
+            </ActionDrawer>
+            {photoUrl && <ConfirmAction tone="secondary" label="Quitar foto" message="Se mostrará el avatar con tus iniciales." onConfirm={() => void removePhoto()} />}
+            <label className="member-photo-visible"><input type="checkbox" checked={photoVisible} disabled={!photoUrl} onChange={event => void changeVisibility(event.target.checked)} /><span>Mi foto es visible para los demás hermanos</span></label>
+            <small>{photoUrl && photoVisible ? 'Los demás hermanos ven tu foto.' : 'Los demás hermanos ven un avatar con tus iniciales.'}</small>
+            {photoError && !photoDraft && <small role="alert" className="form-error">{photoError}</small>}
+          </div>}
         </div>
       </article>
 
@@ -269,11 +325,6 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
           <MemberDatum label="Aumento de salario" value={wageIncrease} />
           <MemberDatum label="Exaltación" value={exaltation} />
         </div>
-        {onOpenLibrary && <button className="member-degree-library-link" type="button" onClick={onOpenLibrary} aria-label={`Abrir Biblioteca Virtual. ${libraryAccess.title}. ${libraryAccess.detail}`}>
-          <span className="member-degree-library-icon" aria-hidden="true"><InstitutionalIcon name="library" size={24} /></span>
-          <span className="member-degree-library-copy"><small>Biblioteca Virtual · acceso por grado</small><strong>{libraryAccess.title}</strong><span>{libraryAccess.detail}</span></span>
-          <span className="member-degree-library-action">Abrir</span>
-        </button>}
       </article>
 
     </section>
@@ -288,6 +339,7 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
       <div className="member-pay-grid">
         <TreasuryPayments account={treasuryAccount} fallback={treasury} api={membershipApi} />
         <HospitalariaPayments api={membershipApi} fallback={hospitalaria} />
+        <CeremonyPayments api={membershipApi} />
       </div>
     </WorkspacePanel>
 
@@ -331,12 +383,6 @@ function PortalPendingData({ text }: { text: string }) {
   return <div className="empty-state"><strong>Información institucional</strong><span>{text}</span></div>
 }
 
-function libraryAccessForDegree(degree?: number) {
-  if (degree === 1) return { title: 'Acceso de 1° grado', detail: 'General · 1°' }
-  if (degree === 2) return { title: 'Acceso hasta 2° grado', detail: 'General · 1° · 2°' }
-  if (degree !== undefined && degree >= 3) return { title: 'Acceso hasta 3° grado', detail: 'General · 1° · 2° · 3°' }
-  return { title: 'Acceso según grado vigente', detail: 'La Biblioteca mostrará sólo contenidos autorizados para tu grado e inferiores.' }
-}
 
 function formatDateOnly(value?: string | null) {
   if (!value) return 'Sin registro'

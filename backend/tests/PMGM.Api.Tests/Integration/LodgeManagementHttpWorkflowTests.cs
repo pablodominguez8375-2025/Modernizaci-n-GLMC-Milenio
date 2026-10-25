@@ -82,6 +82,21 @@ public sealed class LodgeManagementHttpWorkflowTests
         Assert.DoesNotContain("institutionalNumber", memberOptionsText, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("email", memberOptionsText, StringComparison.OrdinalIgnoreCase);
 
+        // Reproduce exactly the three initial GET requests made by the QA
+        // LodgeManagementPage. One failure in Promise.all surfaces as HTTP 500
+        // in the shared banner, even before clicking "Crear Tenida".
+        var initialLoads = await Task.WhenAll(
+            client.GetAsync($"/api/gestion-logial/talleres/{organizationId}/tenidas", cancellationToken),
+            client.GetAsync($"/api/gestion-logial/talleres/{organizationId}/miembros/opciones", cancellationToken),
+            client.GetAsync($"/api/gestion-logial/talleres/{organizationId}/instrucciones", cancellationToken));
+        foreach (var response in initialLoads)
+        {
+            using (response)
+            {
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            }
+        }
+
         var meetingResponse = await client.PostAsJsonAsync(
             $"/api/gestion-logial/talleres/{organizationId}/tenidas",
             new
@@ -99,6 +114,21 @@ public sealed class LodgeManagementHttpWorkflowTests
         Assert.Equal(HttpStatusCode.Created, meetingResponse.StatusCode);
         var meetingJson = await meetingResponse.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
         var meetingId = meetingJson.GetProperty("id").GetGuid();
+
+        // Read-after-write must include the created meeting exactly once.
+        // This must not be mistaken for proof of glmdch deployment/UAT.
+        var listedResponse = await client.GetAsync(
+            $"/api/gestion-logial/talleres/{organizationId}/tenidas", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, listedResponse.StatusCode);
+        var listedJson = await listedResponse.Content.ReadFromJsonAsync<JsonElement>(
+            cancellationToken: cancellationToken);
+        Assert.Equal(1, listedJson.GetProperty("items").EnumerateArray()
+            .Count(item => item.GetProperty("id").GetGuid() == meetingId));
+
+        var loadedInstructions = await client.GetAsync(
+            $"/api/gestion-logial/talleres/{organizationId}/instrucciones", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, loadedInstructions.StatusCode);
+
 
         var prematureAttendance = await client.PostAsJsonAsync(
             $"/api/gestion-logial/tenidas/{meetingId}/asistencia",

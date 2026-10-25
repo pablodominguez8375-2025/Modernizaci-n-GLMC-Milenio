@@ -38,13 +38,23 @@ public static class DocumentContentEndpoints
         CancellationToken cancellationToken)
     {
         var version = await db.DocumentVersions
-            .Include(x => x.Document)
+            .Include(x => x.Document).ThenInclude(x => x.Collection)
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
 
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
-        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType)
-                ? !await MemberWorkPaperEndpoints.CanManageAsync(version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken)
-                : !access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType))
+        {
+            if (!await MemberWorkPaperEndpoints.CanManageAsync(
+                    version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken))
+                return Results.Forbid();
+        }
+        else if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+                    httpContext.User, access, catalog, version))
+                return Results.Forbid();
+        }
         if (version.ProcessingStatus != DocumentManagementCodes.ProcessingStatus.PendingUpload)
             return Results.Conflict(new { message = "Esta versión ya inició su ciclo de carga y no puede sobrescribirse." });
 
@@ -183,13 +193,23 @@ public static class DocumentContentEndpoints
         CancellationToken cancellationToken)
     {
         var version = await db.DocumentVersions
-            .Include(x => x.Document)
+            .Include(x => x.Document).ThenInclude(x => x.Collection)
             .SingleOrDefaultAsync(x => x.Id == versionId, cancellationToken);
 
         if (version is null) return Results.NotFound(new { message = "La versión indicada no existe." });
-        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType)
-                ? !await MemberWorkPaperEndpoints.CanManageAsync(version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken)
-                : !access.CanManageDocuments(httpContext.User, version.Document.OrganizationId)) return Results.Forbid();
+        if (MemberWorkPaperEndpoints.IsWorkPaper(version.Document.DocumentType))
+        {
+            if (!await MemberWorkPaperEndpoints.CanManageAsync(
+                    version.Document, httpContext, institutionalDb, access, memberResolver, cancellationToken))
+                return Results.Forbid();
+        }
+        else if (!access.CanManageDocuments(httpContext.User, version.Document.OrganizationId))
+        {
+            var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
+            if (!LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+                    httpContext.User, access, catalog, version))
+                return Results.Forbid();
+        }
 
         if (version.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Uploaded)
         {
@@ -261,11 +281,13 @@ public static class DocumentContentEndpoints
         {
             version.Document.Title = version.SubmittedTitle ?? version.Document.Title;
             version.Document.ShortDescription = version.SubmittedShortDescription ?? version.Document.ShortDescription;
-            version.Document.PublishedVersionId = version.Id;
-            version.Document.PublishedAtUtc = DateTimeOffset.UtcNow;
-            version.Document.Status = DocumentManagementCodes.DocumentStatus.Published;
-            if (version.AuthorEffectiveDegreeAtUpload is >= 1)
-                version.Document.MinimumDegreeRequired = version.AuthorEffectiveDegreeAtUpload;
+            // #588: la plancha ya no se publica sola. Supera integridad y antivirus y queda «para revisión»:
+            // el Bibliotecario la aprueba (y fija el grado) o la devuelve con motivo. Una versión anterior
+            // ya publicada sigue visible hasta que se apruebe la nueva.
+            version.Document.ReviewStatus = WorkPaperReviewStatus.Pending;
+            version.Document.ReviewVersionId = version.Id;
+            version.Document.ReviewSubmittedAtUtc = DateTimeOffset.UtcNow;
+            version.Document.ReviewReason = null;
         }
 
         db.AuditEvents.Add(AuditEventFactory.Create(

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Admissions;
 using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.DocumentManagement;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -13,7 +14,10 @@ public static class DynamicViewAccess
 {
     public static bool Allows(DynamicAccessCatalog catalog, string? subject, string view, string action, Guid? organization, DateOnly today)
         => DynamicAccessEndpoints.AllowedActions.Contains(action) &&
-           (!catalog.Assignments.Any(a => a.Subject == subject && a.OrganizationId == organization) ||
+           // Una vez enrolado en cualquier ámbito, el sujeto no puede volver al
+           // acceso legado al consultar otro Taller sin asignación expresa.
+           // Se consideran también las asignaciones revocadas y vencidas.
+           (!catalog.Assignments.Any(a => a.Subject == subject) ||
             DynamicAccessEndpoints.IsGranted(catalog, subject, view, action, organization, today));
 
     // A collection with no organization selector must not leak a denied context. All historical
@@ -60,6 +64,7 @@ public static class DynamicViewAccess
         if (route.StartsWith("/api/biblioteca")) return "library";
         if (route.StartsWith("/api/documentos")) return "documentmanager";
         if (route.StartsWith("/api/grand-archive")) return "grandarchive";
+        if (route.StartsWith("/api/publicaciones-oficiales")) return "officialdocuments";
         if (route.StartsWith("/api/calendar")) return "calendar";
         if (route.StartsWith("/api/notifications")) return "notifications";
         if (route.StartsWith("/api/system/audit")) return "access-review";
@@ -69,7 +74,17 @@ public static class DynamicViewAccess
 
     public static string ActionFor(string method, string route, string handler)
     {
+        // Biblioteca Virtual: consultar portada/facetas es "view"; ejecutar una
+        // búsqueda de catálogo requiere "search" independiente cuando hay perfiles.
+        if (method is "GET" or "HEAD" &&
+            route.Equals("/api/biblioteca/buscar", StringComparison.OrdinalIgnoreCase))
+            return "search";
         // Download/export is a read. Print is independently authorized and audited below.
+        // Buscar es una acción técnica distinta de leer. El endpoint conserva
+        // además la autorización de dominio por rol y Taller.
+        if (method is "GET" or "HEAD" &&
+            route.Equals("/api/admisiones/personas-busqueda", StringComparison.OrdinalIgnoreCase))
+            return "search";
         if (method is "GET" or "HEAD" || handler.StartsWith("Plan")) return "view";
         if (method == "DELETE" || handler.StartsWith("Cancel") || handler.StartsWith("Withdraw") || handler.StartsWith("Unpublish")) return "delete";
         if (route.StartsWith("/api/biblioteca/mis-planchas/") && route.EndsWith("/versiones")) return "edit";
@@ -127,6 +142,7 @@ public static class DynamicViewAccess
             "secretariat" => access.CanManageGrandSecretariat(user),
             "library" => org is null || Local(access.CanReadOrganizationLibrary),
             "documentmanager" => access.CanManageDocuments(user, org),
+            "officialdocuments" => user.Identity?.IsAuthenticated == true,
             "grandarchive" => access.CanManageGrandArchive(user),
             "treasury" => access.CanManageTreasuryRegularity(user),
             "lodgetreasury" => Local(access.CanManageLodgeTreasury) || Local(access.CanApproveLodgeExpenses),
@@ -168,8 +184,133 @@ public sealed class DynamicViewAccessFilter(string handler) : IEndpointFilter
         if (catalog.Assignments.Any(a => a.Subject == DynamicTreasuryAccess.Subject(http.User) && a.OrganizationId is null))
             scopes = scopes.Append(null).Distinct().ToArray();
         var action = DynamicViewAccess.ActionFor(http.Request.Method, route, handler);
-        if (!scopes.All(org => DynamicViewAccess.Allows(catalog, DynamicTreasuryAccess.Subject(http.User), view, action, org, DynamicAccessEndpoints.Today())))
-            return Results.Forbid();
+        var allowed = scopes.All(org => DynamicViewAccess.Allows(
+            catalog, DynamicTreasuryAccess.Subject(http.User), view, action,
+            org, DynamicAccessEndpoints.Today()));
+
+        // La edición de metadatos de revistas es una excepción verificable
+        // por recurso: un grant "library/edit/magazine" no concede "documentmanager/edit".
+        // Se comprueba la entidad real antes de omitir sólo este filtro genérico;
+        // el endpoint vuelve a validar la autorización de forma independiente.
+        if (!allowed &&
+            route.Equals("/api/documentos/{documentId:guid}/metadatos-biblioteca", StringComparison.OrdinalIgnoreCase) &&
+            action == "edit" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var metadataDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == metadataDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanEditMetadata(http.User, access, catalog, document);
+        }
+
+        // Reserva de versión sólo para una Revista real, activa y en borrador;
+        // nunca concede acceso genérico a Gestión Documental.
+        if (!allowed &&
+            route.Equals("/api/documentos/{documentId:guid}/versiones", StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" && action == "create" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var stagedDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == stagedDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+                    http.User, access, catalog, document);
+        }
+
+        // Carga/escaneo de contenido exclusivamente a la versión reservada por
+        // este sujeto. Nunca se delega transición /estado ni publicación.
+        if (!allowed &&
+            (route.Equals("/api/documentos/versiones/{versionId:guid}/contenido", StringComparison.OrdinalIgnoreCase) &&
+             http.Request.Method == "PUT" && action == "write" ||
+             route.Equals("/api/documentos/versiones/{versionId:guid}/analizar", StringComparison.OrdinalIgnoreCase) &&
+             http.Request.Method == "POST" && action == "write") &&
+            Guid.TryParse(http.Request.RouteValues["versionId"]?.ToString(), out var stagedVersionId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var version = await documents.DocumentVersions.AsNoTracking()
+                .Include(x => x.Document).ThenInclude(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == stagedVersionId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = version is not null &&
+                LibraryMagazineMetadataAuthorization.CanStageOwnMagazineVersion(
+                    http.User, access, catalog, version);
+        }
+
+        // Consulta del estado: revalidar la Revista real antes de la excepción
+        // a la vista genérica; el endpoint filtra las versiones por sub OIDC.
+        if (!allowed &&
+            route.Equals(
+                "/api/biblioteca/editorial/revistas/{documentId:guid}/versiones",
+                StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "GET" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var listedDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == listedDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanStageMagazineContent(
+                    http.User, access, catalog, document);
+        }
+
+        // Publicación de Revista: excepción exacta sólo para Bibliotecario
+        // institucional. Jamás deducir publicar de un grant de colaborador.
+        if (!allowed &&
+            route.Equals(
+                "/api/biblioteca/editorial/revistas/{documentId:guid}/publicar",
+                StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var publishingDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == publishingDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+                    http.User, access, catalog, document);
+        }
+
+        // Retiro institucional reversible: misma autorización de publicación,
+        // sobre el documento persistido, sin delegar a colaboradores.
+        if (!allowed &&
+            route.Equals(
+                "/api/biblioteca/editorial/revistas/{documentId:guid}/retirar-publicacion",
+                StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" &&
+            Guid.TryParse(http.Request.RouteValues["documentId"]?.ToString(), out var withdrawingDocumentId))
+        {
+            var documents = http.RequestServices.GetRequiredService<DocumentManagementDbContext>();
+            var document = await documents.InstitutionalDocuments.AsNoTracking()
+                .Include(x => x.Collection)
+                .SingleOrDefaultAsync(x => x.Id == withdrawingDocumentId, http.RequestAborted);
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = document is not null &&
+                LibraryMagazineMetadataAuthorization.CanPublishEditorialMagazine(
+                    http.User, access, catalog, document);
+        }
+
+        // Alta editorial específica. Sólo la categoría Revista puede sustituir
+        // el permiso genérico library/create, y el endpoint revalida con DB.
+        if (!allowed &&
+            route.Equals("/api/biblioteca/editorial/revistas", StringComparison.OrdinalIgnoreCase) &&
+            http.Request.Method == "POST" && action == "create")
+        {
+            var access = http.RequestServices.GetRequiredService<IInstitutionalAccessService>();
+            allowed = LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
+                http.User, access, catalog);
+        }
+
+        if (!allowed) return Results.Forbid();
         http.Response.Headers.CacheControl = "private, no-store";
         return await next(invocation);
     }

@@ -9,6 +9,7 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
     public DbSet<DocumentCollection> DocumentCollections => Set<DocumentCollection>();
     public DbSet<InstitutionalDocument> InstitutionalDocuments => Set<InstitutionalDocument>();
     public DbSet<DocumentVersion> DocumentVersions => Set<DocumentVersion>();
+    public DbSet<LibraryCategory> LibraryCategories => Set<LibraryCategory>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -30,6 +31,16 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.HasIndex(x => new { x.Scope, x.OrganizationId, x.Status });
         });
 
+        modelBuilder.Entity<LibraryCategory>(entity =>
+        {
+            entity.ToTable("library_categories");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Code).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Label).HasMaxLength(60).IsRequired();
+            entity.Property(x => x.UpdatedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => x.Code).IsUnique();
+        });
+
         modelBuilder.Entity<InstitutionalDocument>(entity =>
         {
             entity.ToTable("institutional_documents");
@@ -48,6 +59,11 @@ public sealed class DocumentManagementDbContext(DbContextOptions<DocumentManagem
             entity.Property(x => x.ShortDescription).HasMaxLength(1000);
             entity.Property(x => x.AbstractText).HasMaxLength(4000);
             entity.Property(x => x.OfficialDocumentType).HasMaxLength(120);
+            entity.Property(x => x.PublisherProfile).HasMaxLength(20);
+            entity.Property(x => x.ReviewStatus).HasMaxLength(20);
+            entity.Property(x => x.ReviewReason).HasMaxLength(500);
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.HasIndex(x => x.ReviewStatus);
             entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.CreatedAtUtc).IsRequired();

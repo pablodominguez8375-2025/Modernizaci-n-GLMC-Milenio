@@ -12,6 +12,13 @@ public sealed class CeremonyRequest
     public Guid? MemberId { get; set; }
     public Member? Member { get; set; }
     public Guid? CandidatePersonId { get; set; }
+    // Origen confidencial del candidato; NULL = expediente histórico sin registrar.
+    public string? CandidateOriginKind { get; set; }
+    public Guid? CandidateRecommenderMemberId { get; set; }
+    // Patrocinador/presentador FORMAL: debe ser miembro activo del Taller receptor.
+    // NULL implica presentación sin acreditar (legado o borrador pendiente).
+    public Guid? CandidateSponsorMemberId { get; set; }
+    public string? CandidateOriginOtherDescription { get; set; }
     // Exp. nuevos requieren designación real; históricos anteriores conservan trazabilidad previa.
     public bool RequiresFormalInterviewAssignments { get; set; }
     public Person? CandidatePerson { get; set; }

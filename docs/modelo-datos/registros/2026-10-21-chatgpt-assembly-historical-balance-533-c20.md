@@ -1,0 +1,18 @@
+# GOV-004 — #533 C20: saldo verificable en la proyección preliminar
+
+- Fecha: 21-10-2026; Issue #533; PR #619; agente:chatgpt; base dev@28779aa4853897467c14e6e8fb0097ff03d68b35.
+- Tipo de cambio: regla de proyección derivada, **sin cambios de datos persistidos**, estructura, migraciones EF, claves, índices, API pública ni contratos JSON.
+- Entidad de entrada ya existente: `AssemblyEligibilityRecord` de `core.assembly_eligibilities`. Campo `GrandTreasuryPendingAmount` (`decimal?`, escala 2 en EF; datos de monto institucional), `GrandTreasuryCurrency`, `GrandTreasurySourceReference`, `GrandTreasuryAsOfDate`; el historial de evaluaciones sigue siendo append-only.
+- Entidad de salida existente: `AssemblyPreliminaryReviewRow`; campo `MayVotePreliminary` (bool), `MayVoteConfirmed` (siempre false en esta ruta), `Status` y `ReasonCode`. Una fila no es un padrón de la Gran Asamblea ni voto confirmado.
+- Antes: una evaluación `habilitado` con referencias de Tesorería y fecha correcta, pero importe histórico nulo o incorrecto, podía ser proyectada como `MayVotePreliminary=true`.
+- Después: para una revisión `habilitado`, solo un monto `0m` (además de fuentes institucionales, honoríficas, moneda y corte ya requeridos) permite indicar habilitación **preliminar**. Montos `null`, negativos o positivos retornan `Pendiente`, `MayVotePreliminary=false`, `MayVoteConfirmed=false` y código no sensible `ELIGIBILITY_SOURCES_UNVERIFIED`.
+- Regla de negocio: la morosidad positiva sin certificación de excepción RI no acredita sufragio (decisión Sponsor #533, 16-10-2026). Este incremento **no** acredita la fuente contable por sí mismo y **no** implementa el acto de levantamiento; una excepción con deuda positiva solo podrá representarse con evidencia validada por el futuro conector y contrato RI. Preferimos fallo seguro.
+- Privacidad: no se añade RUT, monto, justificación ni causal reservada al contrato ni a la bitácora. No se cambian retención, auditoría, consentimientos o permisos.
+- Alcance pruebas: unitarias de proyección para monto nulo, negativo, positivo y cero; historial vinculado y autorización ya existentes no se modifican. CI exact-head y validación física QA independientes; no equivalen a habilitar sufragio.
+- Restan en Issue #533: certificaciones históricas desde Gran Tesorería por Taller/moneda/corte; event sourcing de excepción RI contra esas certificaciones; calidad de miembro/VM, tribunal, cierre inmutable, exportaciones oficiales, UI y UAT.
+
+## Extensión de integridad del historial (mismo PR #619)
+- La vista preliminar sólo puede considerar una punta de evaluación si las filas append-only de esa persona forman una única cadena completa, enlazada exclusivamente dentro de la misma Asamblea y `MemberStatusId`.
+- Un `SupersedesEligibilityId` que no exista en la colección vinculada produce `INCOMPLETE_EVALUATION_HISTORY`, estado pendiente y voto preliminar/confirmado falsos.
+- Un componente desconectado/ciclo (aunque haya una punta única aparente) también produce estado pendiente y falla segura. Se rechaza inversión de orden temporal (`EvaluatedAtUtc` del predecesor posterior al sucesor) con `CONFLICTING_EVALUATION_HISTORY`.
+- No hay campo nuevo, cambio de modelo, ni persistencia nueva. Pruebas unitarias de referencia huérfana y ciclo desconectado. Conserva la inmutabilidad física actual; evita interpretar historiales incompletos como autorización.

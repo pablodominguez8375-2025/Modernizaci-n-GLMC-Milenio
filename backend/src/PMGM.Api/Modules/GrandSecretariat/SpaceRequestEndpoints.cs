@@ -118,11 +118,32 @@ public static class SpaceRequestEndpoints
             VmApprovalReference = body.VmApprovalReference?.Trim(),
             Status = "pending", CreatedBySubject = Subject(http.User)
         };
-        db.SpaceRequests.Add(row);
-        db.AuditEvents.Add(AuditEventFactory.Create(http, "grand_secretariat.space_request.created",
-            nameof(InstitutionalSpaceRequest), row.Id.ToString(), lodgeId, AuditResults.Success,
-            new { row.PreferredSpaceType, row.PreferredSpaceId, row.Purpose, row.StartsAtUtc, row.EndsAtUtc }));
-        await db.SaveChangesAsync(ct);
+        // Alta, auditoría y todos los avisos deben confirmarse juntos.
+        // No convertir roles, identificadores de Taller ni correos en RecipientSubject.
+        try
+        {
+            await using var tx = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+            db.SpaceRequests.Add(row);
+            db.AuditEvents.Add(AuditEventFactory.Create(http, "grand_secretariat.space_request.created",
+                nameof(InstitutionalSpaceRequest), row.Id.ToString(), lodgeId, AuditResults.Success,
+                new { row.PreferredSpaceType, row.PreferredSpaceId, row.Purpose, row.StartsAtUtc, row.EndsAtUtc }));
+            await db.SaveChangesAsync(ct);
+            await SpaceRequestCreatedNotices.QueueInsideCreateAsync(db, row, http, ct);
+            await tx.CommitAsync(ct);
+        }
+        catch (SpaceRequestRecipientsUnavailableException)
+        {
+            return Results.Conflict(new {
+                code = "GRAND_SECRETARIAT_RECIPIENT_UNAVAILABLE",
+                message = "Gran Secretaría aún no tiene destinatarios activos con identidad verificada. Solicite al administrador configurar el perfil institucional antes de enviar."
+            });
+        }
+        catch (PostgresException ex) when (ex.SqlState is "40001" or "40P01")
+        {
+            return Results.Conflict(new { code = "SPACE_REQUEST_RETRY",
+                message = "El registro cambió concurrentemente. Reintente la solicitud." });
+        }
+
         http.Response.Headers.CacheControl = "private, no-store";
         return Results.Created("/api/secretaria/solicitudes-espacio/" + row.Id, Dto(row));
     }
@@ -210,6 +231,7 @@ public static class SpaceRequestEndpoints
                 nameof(InstitutionalSpaceRequest), item.Id.ToString(), item.OrganizationId,
                 AuditResults.Success, new { item.Status, item.DecidedAtUtc }));
             await db.SaveChangesAsync(ct);
+            await SpaceRequestDecisionNotices.QueueInsideDecisionAsync(db, item, http, ct);
             await transaction.CommitAsync(ct);
             http.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(Dto(item));
@@ -297,6 +319,7 @@ public static class SpaceRequestEndpoints
                 item.Id.ToString(), item.OrganizationId, AuditResults.Success,
                 new { item.SpaceReservationId, item.DecidedAtUtc }));
             await db.SaveChangesAsync(ct);
+            await SpaceRequestDecisionNotices.QueueInsideDecisionAsync(db, item, http, ct);
             await transaction.CommitAsync(ct);
             http.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(Dto(item));

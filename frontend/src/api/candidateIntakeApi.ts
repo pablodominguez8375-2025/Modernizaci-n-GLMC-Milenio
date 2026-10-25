@@ -1,3 +1,4 @@
+import { parseChileanRut } from '../chileanRut'
 import type { CandidatePortalResponse } from './pmgmApi'
 import {
   prepareCandidateFormCapture, visibleCandidateFormFields,
@@ -30,6 +31,8 @@ export interface CandidateReviewQueueResponse {
 
 export interface CandidateWorkshopQueueItem {
   ceremonyRequestId: string
+  organizationId?: string | null
+  sponsorMemberId?: string | null
   firstNames: string
   lastNames: string
   rutOrInstitutionalId?: string | null
@@ -55,6 +58,10 @@ export interface CandidateWorkshopQueueResponse {
 
 export interface CandidateIntakeProfile {
   ceremonyRequestId: string
+  candidateOriginKind?: 'brother' | 'internet' | 'social_media' | 'other' | null
+  recommenderMemberId?: string | null
+  candidateOriginOtherDescription?: string | null
+  sponsorMemberId?: string | null
   firstNames: string
   paternalSurname: string | null
   maternalSurname: string | null
@@ -256,11 +263,26 @@ export type CandidateReviewDecision = 'observed' | 'rejected'
 export type AccessTokenProvider = () => Promise<string | null>
 
 export interface CandidateWorkshopOrganization { id: string; name: string; number: string | null }
+export interface CandidateEligibleSponsor { id: string; name: string }
 const chileToday = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Santiago' }).format(new Date())
 
 export interface CreateCandidateWorkshopRequest {
   organizationId: string; firstNames: string; lastNames: string; rutOrInstitutionalId: string;
   rejectionCausesRemedied?: boolean; rePresentationSourceReference?: string | null
+  /** Origen del candidato (Issue #613): independiente del patrocinio formal. */
+  originKind?: 'brother' | 'internet' | 'social_media' | 'other' | null
+  recommenderMemberId?: string | null
+  originOtherDescription?: string | null
+  /** Tipo de identificación (#609/#643): `chilean_rut` valida módulo 11 en servidor; `other` conserva el valor tal cual. */
+  identityType?: 'chilean_rut' | 'other' | null
+}
+
+export interface CorrectCandidateOriginPayload {
+  originKind: 'brother' | 'internet' | 'social_media' | 'other'
+  recommenderMemberId?: string | null
+  originOtherDescription?: string | null
+  /** Motivo obligatorio de 10 a 500 caracteres; queda en el historial append-only. */
+  reason: string
 }
 
 export interface CandidateIntakeApiClientOptions {
@@ -282,6 +304,8 @@ const demoSecondRequestId = 'eeeeeeee-3333-3333-3333-333333333333'
 
 const demoProfile: CandidateIntakeProfile = {
   ceremonyRequestId: demoRequestId,
+  sponsorMemberId: '10000000-0000-4000-8000-000000000001',
+  candidateOriginKind: 'internet',
   firstNames: 'Tomás Ignacio',
   paternalSurname: 'Valdés',
   maternalSurname: 'Riquelme',
@@ -341,6 +365,8 @@ const demoQueueSeed: CandidateReviewQueueItem[] = [
 const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
   {
     ceremonyRequestId: demoRequestId,
+    organizationId: 'demo-workshop-23',
+    sponsorMemberId: '10000000-0000-4000-8000-000000000001',
     firstNames: 'Tomás Ignacio',
     lastNames: 'Valdés Riquelme',
     displayName: 'Tomás Ignacio Valdés Riquelme',
@@ -356,6 +382,7 @@ const demoWorkshopQueueSeed: CandidateWorkshopQueueItem[] = [
   },
   {
     ceremonyRequestId: demoSecondRequestId,
+    organizationId: 'demo-workshop-23',
     firstNames: 'Persona Demostrativa',
     lastNames: 'Dos',
     displayName: 'Persona Demostrativa Dos',
@@ -465,7 +492,7 @@ export class CandidateIntakeApiClient {
     return this.request('/api/insinuados/taller/expedientes-para-entrevista')
   }
 
-  async getEligibleInterviewers(requestId: string): Promise<{ items: CandidateEligibleInterviewer[] }> {
+  async getEligibleInterviewers(requestId: string): Promise<{ items: CandidateEligibleInterviewer[]; excluded?: CandidateEligibleInterviewer[] }> {
     if (this.useMocks) return { items: [
       { id: '10000000-0000-4000-8000-000000000001', name: 'Maestro de Prueba Uno' },
       { id: '10000000-0000-4000-8000-000000000002', name: 'Maestra de Prueba Dos' },
@@ -588,6 +615,7 @@ export class CandidateIntakeApiClient {
   private readonly onUnauthorized?: () => Promise<void>
   private readonly mockQueue = demoQueueSeed.map(item => ({ ...item }))
   private readonly mockWorkshopQueue = demoWorkshopQueueSeed.map(item => ({ ...item }))
+  private readonly mockSponsorAssignments = new Map<string, string>([[demoRequestId, '10000000-0000-4000-8000-000000000001']])
   private readonly mockIdentifications = new Set<string>()
   private readonly mockProfiles = new Map<string, CandidateIntakeProfile>([[demoRequestId, { ...demoProfile, presenters: [...demoProfile.presenters] }]])
   private readonly mockWorkflows = new Map<string, CandidateWorkflowResponse>([[demoRequestId, cloneWorkflow(demoWorkflowSeed)]])
@@ -628,8 +656,63 @@ export class CandidateIntakeApiClient {
     return this.request('/api/insinuados/taller/organizaciones')
   }
 
+  /** Private, scoped roster: only active Master-degree members of the receiving workshop. */
+  async getEligibleSponsors(organizationId: string, q = ''): Promise<{ items: CandidateEligibleSponsor[] }> {
+    if (this.useMocks) {
+      if (organizationId !== 'demo-workshop-23') return { items: [] }
+      const rows: CandidateEligibleSponsor[] = [
+        { id: '10000000-0000-4000-8000-000000000001', name: 'Maestro de Prueba Uno' },
+        { id: '10000000-0000-4000-8000-000000000002', name: 'Maestra de Prueba Dos' },
+        { id: '10000000-0000-4000-8000-000000000003', name: 'Maestro de Prueba Tres' },
+      ]
+      return { items: rows.filter(row => row.name.toLocaleLowerCase('es-CL').includes(q.trim().toLocaleLowerCase('es-CL'))) }
+    }
+    const query = q.trim() ? '?q=' + encodeURIComponent(q.trim()) : ''
+    return this.request('/api/insinuados/taller/organizaciones/' +
+      encodeURIComponent(organizationId) + '/patrocinadores' + query)
+  }
+
+  /** Stores the official member ID; free-text presenter names do not accredit sponsorship. */
+  async assignWorkshopSponsor(requestId: string, sponsorMemberId: string): Promise<{ sponsorMemberId: string; unchanged: boolean }> {
+    if (this.useMocks) {
+      const row = this.mockWorkshopQueue.find(item => item.ceremonyRequestId === requestId)
+      if (!row) throw new CandidateIntakeApiHttpError(404, 'Expediente demostrativo inexistente.')
+      const eligible = (await this.getEligibleSponsors(row.organizationId ?? '')).items
+      if (!eligible.some(item => item.id === sponsorMemberId))
+        throw new CandidateIntakeApiHttpError(400, 'Seleccione un Maestro activo del Taller receptor.')
+      const old = this.mockSponsorAssignments.get(requestId)
+      if (old && old !== sponsorMemberId)
+        throw new CandidateIntakeApiHttpError(409, 'Un patrocinio confirmado requiere corrección institucional auditada.')
+      this.mockSponsorAssignments.set(requestId, sponsorMemberId)
+      row.sponsorMemberId = sponsorMemberId
+      const profile = this.mockProfiles.get(requestId)
+      if (profile) this.mockProfiles.set(requestId, { ...profile, sponsorMemberId })
+      return { sponsorMemberId, unchanged: old === sponsorMemberId }
+    }
+    return this.request('/api/insinuados/taller/solicitudes/' +
+      encodeURIComponent(requestId) + '/patrocinador', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sponsorMemberId }),
+      })
+  }
+
+  /** Corrección auditada del origen (Issue #613). */
+  async correctCandidateOrigin(requestId: string, payload: CorrectCandidateOriginPayload): Promise<void> {
+    if (this.useMocks) return
+    await this.request(`/api/insinuados/solicitudes/${encodeURIComponent(requestId)}/origen/corregir`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    })
+  }
+
   async createWorkshopRequest(payload: CreateCandidateWorkshopRequest): Promise<CandidateWorkshopQueueItem> {
     if (this.useMocks) {
+      if (payload.identityType && payload.identityType !== 'chilean_rut' && payload.identityType !== 'other')
+        throw new CandidateIntakeApiHttpError(400, 'Seleccione RUT chileno u otra identificación.')
+      if (payload.identityType === 'chilean_rut') {
+        const parsed = parseChileanRut(payload.rutOrInstitutionalId)
+        if (!parsed) throw new CandidateIntakeApiHttpError(400, 'El RUT chileno informado no es válido. Revise el número y el dígito verificador.')
+        payload = { ...payload, rutOrInstitutionalId: parsed.normalized }
+      }
       const normalizedId = payload.rutOrInstitutionalId.trim().replace(/[.\s-]/g, '').toUpperCase()
       const duplicate = this.mockIdentifications.has(normalizedId)
       if (duplicate) throw new CandidateIntakeApiHttpError(409, 'Ya existe un expediente demostrativo para este postulante.')
@@ -647,6 +730,8 @@ export class CandidateIntakeApiClient {
       }
       const item: CandidateWorkshopQueueItem = {
         ceremonyRequestId: crypto.randomUUID(),
+        organizationId: payload.organizationId,
+        sponsorMemberId: null,
         firstNames: payload.firstNames.trim(),
         lastNames: payload.lastNames.trim(),
         rutOrInstitutionalId: payload.rutOrInstitutionalId.trim().toUpperCase(),
@@ -835,6 +920,7 @@ export class CandidateIntakeApiClient {
       const existing = this.mockProfiles.get(requestId)
       const profile: CandidateIntakeProfile = {
         ceremonyRequestId: requestId,
+        sponsorMemberId: this.mockSponsorAssignments.get(requestId) ?? null,
         firstNames: payload.firstNames.trim(),
         paternalSurname: payload.paternalSurname.trim(),
         maternalSurname: payload.maternalSurname?.trim() || null,

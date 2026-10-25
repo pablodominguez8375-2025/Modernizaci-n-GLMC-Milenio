@@ -36,12 +36,15 @@ export default function DemoProfileSwitcher({ value, onChange }: DemoProfileSwit
       <option value="immediatePastGrandMaster">Inmediato Ex Gran Maestro</option>
       <option value="instructionDepartmentHead">Jefatura de Docencia</option>
       <option value="grandArchivist">Gran Archivero</option>
+      <option value="librarian">Bibliotecario</option>
+      <option value="communications">Comunicaciones</option>
       <option value="regimen">Régimen Interior</option>
       <option value="treasury">Gran Tesorero</option>
       <option value="hospitalaria">Gran Hospitalaria</option>
       <option value="secretariat">Gran Secretaría</option>
       <option value="grandMaster">Gran Maestra</option>
       <option value="systemAdmin">Administrador del Sistema</option>
+      <option value="supportUser">Superusuario de soporte</option>
       <option value="grandLodge">Autoridad de Gran Logia</option>
     </select>
   </label>

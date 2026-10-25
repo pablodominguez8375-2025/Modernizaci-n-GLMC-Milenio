@@ -1,0 +1,13 @@
+.space-request-list{list-style:none;margin:0;padding:0;display:grid;gap:.75rem}
+.space-request-row{display:flex;gap:1rem;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;padding:1rem;border:1px solid var(--line,#d9deea);border-radius:12px;background:#fff}
+.space-request-row>div:first-child{display:grid;gap:.25rem;min-width:0;flex:1 1 18rem}
+.space-request-title{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.space-request-row small{color:#4a5270}
+.space-request-reason{background:#fff7e0;border-left:4px solid #F3C609;padding:.4rem .6rem;border-radius:6px}
+.space-request-ok{color:#14653a}
+.status-pill.space-request-pending{background:#fff3c4;color:#5c4400}
+.status-pill.space-request-approved{background:#d8f3e3;color:#14653a}
+.status-pill.space-request-rejected{background:#fde0e0;color:#8a1c1c}
+.status-pill.space-request-cancelled{background:#e8eaf2;color:#3b4261}
+@media (max-width:640px){.space-request-row{padding:.8rem}.space-request-row .action-bar{width:100%}}
+.space-request-note{background:#eef1fb;border-left:4px solid #06148E;padding:.6rem .8rem;border-radius:6px}

@@ -103,6 +103,7 @@ services:
       KC_HOSTNAME_STRICT: "true"
     volumes:
       - ./keycloak/pmgm-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
+      - ./keycloak/themes/glmch:/opt/keycloak/themes/glmch:ro
     ports:
       - "${PMGM_QA_BIND_ADDRESS:-127.0.0.1}:${PMGM_QA_OIDC_PORT:-8180}:8080"
     networks: [pmgm_srv01_internal]
@@ -136,6 +137,8 @@ services:
       UserAccounts__Mail__Password: ${PMGM_ACCOUNT_SMTP_PASSWORD:-}
       UserAccounts__Mail__From: ${PMGM_ACCOUNT_SMTP_FROM:-}
       UserAccounts__Mail__LoginUrl: ${PMGM_ACCOUNT_LOGIN_URL:-}
+      # Secreto local opcional: jamás en repositorio ni contenedor Keycloak/web.
+      SystemMail__EncryptionKey: ${PMGM_SMTP_ENCRYPTION_KEY:-}
       Authentication__Authority: http://keycloak:8080/realms/pmgm
       Authentication__Audience: pmgm-api
       Authentication__RequireHttpsMetadata: "false"

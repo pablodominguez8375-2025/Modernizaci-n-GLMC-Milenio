@@ -9,7 +9,8 @@ namespace PMGM.Api.Modules.Authorization;
 
 public static class DynamicAccessEndpoints
 {
-    public static readonly string[] AllowedActions = ["view", "create", "write", "edit", "delete", "print"];
+    public static readonly string[] AllowedActions = ["view", "create", "write", "edit", "delete", "search", "print"];
+    public static readonly string[] CatalogCategories = ["magazine", "bulletin", "book", "work_paper", "official_document", "video"];
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const long CatalogLock = 26620261004;
 
@@ -18,9 +19,9 @@ public static class DynamicAccessEndpoints
         var group = endpoints.MapGroup("/api/system/access").WithTags("Sistema — Acceso dinámico").RequireAuthorization();
         group.MapGet("/catalog", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
         {
-            if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+            if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
             ctx.Response.Headers.CacheControl = "private, no-store";
-            return Results.Ok(await LoadAsync(db, ct));
+            return Results.Ok(await LoadRawAsync(db, ct));
         });
         group.MapPost("/profiles", (CreateDynamicProfileRequest request, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_created", catalog =>
@@ -28,8 +29,11 @@ public static class DynamicAccessEndpoints
                 var error = ValidateProfile(request.Code, request.Name, request.Scope);
                 if (error is not null) return Results.BadRequest(new { message = error });
                 if (catalog.Profiles.Any(p => Eq(p.Code, request.Code))) return Conflict("El código del perfil ya existe.");
-                if (!ValidMenus(catalog, request.MenuCodes) || request.Scope == "lodge" && (request.MenuCodes ?? []).Any(m => Eq(m, "system"))) return Results.BadRequest(new { message = "Menú inexistente o inactivo." });
-                var profile = new DynamicProfile(Guid.NewGuid(), request.Code.Trim().ToLowerInvariant(), request.Name.Trim(), request.Scope, false, true, Normalize(request.MenuCodes), []);
+                if (!ValidMenus(catalog, request.MenuCodes) || IsLodgeScoped(request.Scope) && (request.MenuCodes ?? []).Any(m => Eq(m, "system"))) return Results.BadRequest(new { message = "Menú inexistente o inactivo." });
+                var roles = Normalize(request.BaseRoles);
+                var roleError = DynamicRoleConferral.Validate(roles, request.Scope);
+                if (roleError is not null) return Results.BadRequest(new { message = roleError });
+                var profile = new DynamicProfile(Guid.NewGuid(), request.Code.Trim().ToLowerInvariant(), request.Name.Trim(), request.Scope, false, true, Normalize(request.MenuCodes), [], roles);
                 catalog.Profiles.Add(profile);
                 return Results.Ok(profile);
             }, ct));
@@ -42,11 +46,14 @@ public static class DynamicAccessEndpoints
                 if (current.IsSystem || !current.IsActive) return Conflict("El perfil está protegido o inactivo.");
                 var error = ValidateProfile(current.Code, request.Name, request.Scope);
                 if (error is not null) return Results.BadRequest(new { message = error });
-                if (!ValidMenus(catalog, request.MenuCodes) || request.Scope == "lodge" && (request.MenuCodes ?? []).Any(m => Eq(m, "system"))) return Results.BadRequest(new { message = "Menú inexistente o inactivo." });
+                if (!ValidMenus(catalog, request.MenuCodes) || IsLodgeScoped(request.Scope) && (request.MenuCodes ?? []).Any(m => Eq(m, "system"))) return Results.BadRequest(new { message = "Menú inexistente o inactivo." });
                 if (current.Scope != request.Scope && catalog.Assignments.Any(a => a.IsActive && Eq(a.ProfileCode, current.Code))) return Conflict("Revoque las asignaciones antes de cambiar el alcance.");
                 var menus = Normalize(request.MenuCodes);
                 var views = catalog.Menus.Where(m => menus.Contains(m.Code)).SelectMany(m => m.Views).Select(v => v.Code).ToHashSet();
-                var profile = current with { Name = request.Name.Trim(), Scope = request.Scope, MenuCodes = menus, Grants = current.Grants.Where(g => views.Contains(g.ViewCode)).ToList() };
+                var roles = request.BaseRoles is null ? current.BaseRoles ?? [] : Normalize(request.BaseRoles);
+                var roleError = DynamicRoleConferral.Validate(roles, request.Scope);
+                if (roleError is not null) return Results.BadRequest(new { message = roleError });
+                var profile = current with { Name = request.Name.Trim(), Scope = request.Scope, MenuCodes = menus, Grants = current.Grants.Where(g => views.Contains(g.ViewCode)).ToList(), BaseRoles = roles };
                 catalog.Profiles[index] = profile;
                 return Results.Ok(profile);
             }, ct));
@@ -76,8 +83,15 @@ public static class DynamicAccessEndpoints
                     if (menu is null || !profile.MenuCodes.Contains(menu.Code) || actions.Any(a => !AllowedActions.Contains(a)) || grants.Any(g => Eq(g.ViewCode, grant.ViewCode)))
                         return Results.BadRequest(new { message = "Vista duplicada, fuera del menú seleccionado o acción inválida." });
                     if (actions.Any(a => a != "view") && !actions.Contains("view")) return Results.BadRequest(new { message = "Las acciones requieren permiso de ver la misma vista." });
-                    if (profile.Scope == "lodge" && menu.Code == "system") return Results.BadRequest(new { message = "Un perfil de Taller no puede configurar el sistema." });
-                    grants.Add(new DynamicGrant(grant.ViewCode.Trim().ToLowerInvariant(), actions));
+                    if (IsLodgeScoped(profile.Scope) && menu.Code == "system") return Results.BadRequest(new { message = "Un perfil de Taller no puede configurar el sistema." });
+                    var categories = Normalize(grant.Categories);
+                    if (categories.Length > 0 && (
+                        grant.ViewCode.Trim().ToLowerInvariant() is not ("library" or "documentmanager") ||
+                        categories.Any(category => !CatalogCategories.Contains(category))))
+                        return Results.BadRequest(new { message = "Categorías documentales fuera del área o desconocidas." });
+                    grants.Add(new DynamicGrant(
+                        grant.ViewCode.Trim().ToLowerInvariant(), actions,
+                        categories.Length == 0 ? null : categories));
                 }
                 catalog.Profiles[index] = profile with { Grants = grants };
                 return Results.Ok(catalog.Profiles[index]);
@@ -108,13 +122,13 @@ public static class DynamicAccessEndpoints
             if (!AllowedActions.Contains(action)) return Results.BadRequest(new { message = "Acción inválida." });
             ctx.Response.Headers.CacheControl = "private, no-store";
             var subject = ctx.User.FindFirstValue("sub") ?? ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var boundary = organizationId is Guid org ? access.CanReadOrganization(ctx.User, org) : access.HasOrderScope(ctx.User) || access.CanConfigureSystem(ctx.User);
+            var boundary = organizationId is Guid org ? access.CanReadOrganization(ctx.User, org) : access.HasOrderScope(ctx.User) || access.IsPlatformSuperAdmin(ctx.User);
             var catalog = await LoadAsync(db, ct);
             return Results.Ok(new { allowed = boundary && IsGranted(catalog, subject, viewCode.Trim().ToLowerInvariant(), action, organizationId, Today()), catalog.Version });
         });
         group.MapPost("/print", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
         {
-            if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+            if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
             audit.Add(ctx, "system.access.review_print_requested", "DynamicAccessCatalog", "review", null, AuditResults.Success);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { allowed = true });
@@ -128,15 +142,55 @@ public static class DynamicAccessEndpoints
         var menu = catalog.Menus.FirstOrDefault(m => m.IsActive && m.Views.Any(v => v.IsActive && v.Code == view));
         if (menu is null) return false;
         return catalog.Assignments.Where(a => a.IsActive && a.Subject == subject && a.OrganizationId == organizationId && a.EffectiveFrom <= today && (a.EffectiveTo is null || a.EffectiveTo >= today))
-            .Join(catalog.Profiles.Where(p => p.IsActive && !p.IsSystem && p.MenuCodes.Contains(menu.Code) && (p.Scope == "lodge" ? organizationId is not null : organizationId is null)), a => a.ProfileCode, p => p.Code, (_, p) => p)
-            .SelectMany(p => p.Grants).Any(g => g.ViewCode == view && g.Actions.Contains("view") && g.Actions.Contains(action));
+            .Join(catalog.Profiles.Where(p => p.IsActive && !p.IsSystem && p.MenuCodes.Contains(menu.Code) && (IsLodgeScoped(p.Scope) ? organizationId is not null : organizationId is null)), a => a.ProfileCode, p => p.Code, (_, p) => p)
+            .SelectMany(p => p.Grants).Any(g =>
+                g.ViewCode == view && g.Actions.Contains("view") && g.Actions.Contains(action) &&
+                // Un grant restringido por categoría no da permisos genéricos de escritura.
+                (g.Categories is null || g.Categories.Length == 0 || action == "view"));
     }
+
+    /// <summary>
+    /// Comprueba permisos de un documento concreto sin promocionar grants
+    /// restringidos por categoría a permisos genéricos por vista.
+    /// Si no hay categoría explícita en el grant, no se considera colaborador
+    /// de categoría: ese privilegio pertenece a roles institucionales separados.
+    /// </summary>
+    public static bool IsCategoryGranted(
+        DynamicAccessCatalog catalog, string? subject, string view,
+        string action, string? category, Guid? organizationId, DateOnly today)
+    {
+        if (string.IsNullOrWhiteSpace(subject) ||
+            view is not ("library" or "documentmanager") ||
+            !AllowedActions.Contains(action) ||
+            string.IsNullOrWhiteSpace(category) ||
+            !CatalogCategories.Contains(category))
+            return false;
+        var menu = catalog.Menus.FirstOrDefault(m =>
+            m.IsActive && m.Views.Any(v => v.IsActive && v.Code == view));
+        if (menu is null) return false;
+        return catalog.Assignments
+            .Where(a => a.IsActive && a.Subject == subject &&
+                a.OrganizationId == organizationId &&
+                a.EffectiveFrom <= today &&
+                (a.EffectiveTo is null || a.EffectiveTo >= today))
+            .Join(catalog.Profiles.Where(p =>
+                p.IsActive && !p.IsSystem &&
+                p.MenuCodes.Contains(menu.Code) &&
+                (IsLodgeScoped(p.Scope) ? organizationId is not null : organizationId is null)),
+                a => a.ProfileCode, p => p.Code, (_, p) => p)
+            .SelectMany(p => p.Grants)
+            .Any(g => g.ViewCode == view &&
+                g.Categories is { Length: > 0 } &&
+                g.Categories.Contains(category) &&
+                g.Actions.Contains("view") && g.Actions.Contains(action));
+    }
+
     private static async Task<IResult> MutateAsync(int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, string action, Func<DynamicAccessCatalog, IResult> mutate, CancellationToken ct)
     {
-        if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+        if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
-        var catalog = await LoadAsync(db, ct);
+        var catalog = await LoadRawAsync(db, ct);
         if (expectedVersion != catalog.Version) return Conflict("El catálogo cambió. Recargue antes de guardar.");
         var result = mutate(catalog);
         if (result is IStatusCodeHttpResult status && status.StatusCode is >= 400) return result;
@@ -147,13 +201,44 @@ public static class DynamicAccessEndpoints
         await tx.CommitAsync(ct);
         return Results.Ok(next);
     }
+    /// <summary>Perfiles que se evalúan por Taller: específico, el propio (según la ficha) o todos.</summary>
+    public static bool IsLodgeScoped(string? scope) => scope is "lodge" or "own-lodge" or "all-lodges";
+    public static bool IsDerivedScope(string? scope) => scope is "own-lodge" or "all-lodges";
+
+    /// <summary>Catálogo para evaluar accesos del usuario en curso: los alcances «su Taller» y «todos los Talleres» se resuelven al momento.</summary>
     public static async Task<DynamicAccessCatalog> LoadAsync(PmgmDbContext db, CancellationToken ct)
+        => await DynamicScopeExpansion.ApplyAsync(db, await LoadRawAsync(db, ct), ct);
+
+    /// <summary>Catálogo tal como está guardado (para edición y auditoría); nunca contiene asignaciones derivadas.</summary>
+    public static async Task<DynamicAccessCatalog> LoadRawAsync(PmgmDbContext db, CancellationToken ct)
     {
         var snapshot = await db.DynamicAccessSnapshots.AsNoTracking().OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
         if (snapshot is null) return CreateCatalog();
         // A malformed stored snapshot is a fault, never a silent reset of grants.
-        return JsonSerializer.Deserialize<DynamicAccessCatalog>(snapshot.Payload, JsonOptions) ?? throw new InvalidOperationException("Catálogo de accesos inválido.");
+        var stored = JsonSerializer.Deserialize<DynamicAccessCatalog>(snapshot.Payload, JsonOptions) ?? throw new InvalidOperationException("Catálogo de accesos inválido.");
+        return WithMissingDefaults(stored);
     }
+    /// <summary>
+    /// Un catálogo guardado antes de que existiera una vista nueva la recibe sin tocar perfiles ni asignaciones
+    /// (en memoria; se persiste en la próxima mutación del Master). Nunca quita ni modifica lo guardado.
+    /// </summary>
+    public static DynamicAccessCatalog WithMissingDefaults(DynamicAccessCatalog stored)
+    {
+        var defaults = CreateCatalog().Menus;
+        var menus = stored.Menus.Select(m => m).ToList();
+        var changed = false;
+        foreach (var d in defaults)
+        {
+            var i = menus.FindIndex(m => m.Code == d.Code);
+            if (i < 0) { menus.Add(d); changed = true; continue; }
+            var missing = d.Views.Where(v => menus[i].Views.All(x => x.Code != v.Code)).ToList();
+            if (missing.Count == 0) continue;
+            menus[i] = menus[i] with { Views = [.. menus[i].Views, .. missing] };
+            changed = true;
+        }
+        return changed ? stored with { Menus = menus } : stored;
+    }
+
     public static DynamicAccessCatalog CreateCatalog()
     {
         DynamicMenu Menu(string code, string name, params (string code, string name)[] views) => new(code, name, true, views.Select(v => new DynamicView(v.code.ToLowerInvariant(), v.name, true)).ToList());
@@ -163,7 +248,7 @@ public static class DynamicAccessEndpoints
             Menu("lodge", "Taller", ("lodge", "Gestión Logial"), ("lodgeProfile", "Ficha del Taller"), ("members", "Fichas de miembros")),
             Menu("treasury", "Tesorería", ("lodgeTreasury", "Tesorería del Taller"), ("treasury", "Gran Tesorería")),
             Menu("hospitalaria", "Hospitalaria", ("hospitalaria", "Hospitalaria")),
-            Menu("documents", "Documentos", ("library", "Biblioteca"), ("documentManager", "Gestor documental"), ("grandArchive", "Gran Archivo")),
+            Menu("documents", "Documentos", ("library", "Biblioteca"), ("officialDocuments", "Documentos oficiales"), ("documentManager", "Gestor documental"), ("grandArchive", "Gran Archivo")),
             Menu("order", "Gran Logia", ("secretariat", "Gran Secretaría"), ("regimen", "Régimen Interior"), ("ceremonies", "Ceremonias")),
             Menu("system", "Sistema", ("system", "Parámetros"), ("access-review", "Revisión de accesos")) };
         var names = new[] { "Venerable Maestro", "Secretaría del Taller", "Tesorería del Taller", "Hospitalaria del Taller", "Orador del Taller", "Primer Vigilante", "Segundo Vigilante", "Inmediato Ex-Venerable Maestro", "Administrador del Sistema" };
@@ -171,18 +256,18 @@ public static class DynamicAccessEndpoints
     }
     public static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
     private static bool Eq(string? left, string? right) => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
-    private static string[] Normalize(string[]? values) => (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct().ToArray();
+    internal static string[] Normalize(string[]? values) => (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct().ToArray();
     private static bool ValidMenus(DynamicAccessCatalog catalog, string[]? menus) => (menus ?? []).All(m => catalog.Menus.Any(x => x.IsActive && Eq(x.Code, m)));
     private static IResult Conflict(string message) => Results.Conflict(new { message });
-    private static string? ValidateProfile(string? code, string? name, string scope) => code is null || !Regex.IsMatch(code, "^[a-z][a-z0-9-]{0,79}$") ? "Código: letras minúsculas, números y guiones (máximo 80)." : string.IsNullOrWhiteSpace(name) || name.Length > 240 ? "Nombre obligatorio (máximo 240)." : scope is not ("order" or "lodge") ? "Alcance inválido." : null;
+    private static string? ValidateProfile(string? code, string? name, string scope) => code is null || !Regex.IsMatch(code, "^[a-z][a-z0-9-]{0,79}$") ? "Código: letras minúsculas, números y guiones (máximo 80)." : string.IsNullOrWhiteSpace(name) || name.Length > 240 ? "Nombre obligatorio (máximo 240)." : scope is not ("order" or "lodge" or "own-lodge" or "all-lodges") ? "Alcance inválido." : null;
 }
 public sealed record DynamicAccessCatalog(int Version, string[] Actions, List<DynamicMenu> Menus, List<DynamicProfile> Profiles, List<DynamicAssignment> Assignments);
 public sealed record DynamicMenu(string Code, string Name, bool IsActive, List<DynamicView> Views);
 public sealed record DynamicView(string Code, string Name, bool IsActive);
-public sealed record DynamicProfile(Guid Id, string Code, string Name, string Scope, bool IsSystem, bool IsActive, string[] MenuCodes, List<DynamicGrant> Grants);
-public sealed record DynamicGrant(string ViewCode, string[] Actions);
+public sealed record DynamicProfile(Guid Id, string Code, string Name, string Scope, bool IsSystem, bool IsActive, string[] MenuCodes, List<DynamicGrant> Grants, string[]? BaseRoles = null);
+public sealed record DynamicGrant(string ViewCode, string[] Actions, string[]? Categories = null);
 public sealed record DynamicAssignment(Guid Id, string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, bool IsActive);
-public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion);
-public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion);
+public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null);
+public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null);
 public sealed record ReplaceDynamicGrantsRequest(List<DynamicGrant>? Grants, int ExpectedVersion);
 public sealed record AssignDynamicProfileRequest(string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, int ExpectedVersion);

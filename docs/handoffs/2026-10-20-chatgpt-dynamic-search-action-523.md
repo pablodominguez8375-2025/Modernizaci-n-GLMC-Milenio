@@ -1,0 +1,7 @@
+# #523 — Permiso técnico Buscar separado de Leer, fase S1
+
+20-10-2026; base dev@b966ac6249e0eea4d4fd7aa38f13d495b41c7a67, reclamo etiqueta agente:chatgpt, PR draft previo a código (GOV-003). Solo ruta demostrable de consulta de personas de admisiones: `GET /api/admisiones/personas-busqueda` + método UI `searchAdmissionPeople`. No ampliar el poder de búsqueda por accidente.
+
+Contrato: agregar acción técnica `search` a catálogo `DynamicAccessEndpoints.AllowedActions` y `frontend/src/api/dynamicAccess.ts`. Acción `view` sigue siendo necesaria para cualquier `search`, pero **no suficiente** si el sujeto tiene asignaciones dinámicas: GET exacta se mapea a `search` y la UI lo exige para llamar al método. Conserva perfil institucional de dominio: el endpoint aún valida cargo y ámbito; ninguno de los grants técnicos puede elevar un rol sin competencia. Sin asignaciones técnicas se mantiene compatibilidad actual hasta acuerdo explícito del PO. Probar backend que read-only no puede buscar y search+view sí, caducidad, otro Taller, y frontend mock equivalente. Catálogo de vistas granulares restante no se declara completado.
+
+No tocar estilos, App.tsx, main ni QA físico. Sin migración, pero GOV-004 documenta acción en DTO/catálogo. Integrar únicamente con CI/Showcase/Instalable 3/3 exact SHA sobre dev vivo. Coordinar con Clau para vista Perfiles (actionLabels incluye Buscar).

@@ -31,16 +31,40 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
+def is_systemd_token_copy(path, st):
+    """systemd LoadCredential copy ONLY; original remains root-owned 0600.
+
+    Recent systemd versions use root:root 0440 with a service-specific ACL
+    on a read-only /run/credentials mount. Never allow arbitrary 0440 files.
+    """
+    directory = os.environ.get("CREDENTIALS_DIRECTORY", "")
+    if (not directory.startswith("/run/credentials/") or
+            path != Path(directory) / "qa-token" or
+            st.st_uid != 0 or stat.S_IMODE(st.st_mode) != 0o440):
+        return False
+    try:
+        parent = os.stat(directory, follow_symlinks=False)
+        return (stat.S_ISDIR(parent.st_mode) and parent.st_uid == 0 and
+                not stat.S_IMODE(parent.st_mode) & 0o022 and
+                bool(os.statvfs(path).f_flag & os.ST_RDONLY))
+    except OSError:
+        return False
+
+
 def read_token(path):
     path = Path(path)
-    st = path.lstat()
-    if (not stat.S_ISREG(st.st_mode) or
-            st.st_uid != os.geteuid() or
-            stat.S_IMODE(st.st_mode) & 0o077):
-        raise Blocked("TOKEN_FILE_OWNER_OR_PERMISSIONS")
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except OSError:
+        raise Blocked("TOKEN_FILE_OWNER_OR_PERMISSIONS") from None
     with os.fdopen(fd, "rb") as stream:
-        raw = stream.read(512)
+        st = os.fstat(stream.fileno())
+        private = st.st_uid == os.geteuid() and not stat.S_IMODE(st.st_mode) & 0o077
+        if (not stat.S_ISREG(st.st_mode) or st.st_nlink != 1 or
+                st.st_size < 1 or st.st_size > 512 or
+                not (private or is_systemd_token_copy(path, st))):
+            raise Blocked("TOKEN_FILE_OWNER_OR_PERMISSIONS")
+        raw = stream.read(513)
     token = raw.strip()
     if not token or len(token) > 256 or any(byte <= 32 or byte >= 127 for byte in token):
         raise Blocked("TOKEN_FILE_INVALID")
