@@ -87,6 +87,8 @@ export interface MemberWorkPaperVersion { id: string; versionNumber: number; ori
 export interface MemberWorkPaper { id: string; title: string; shortDescription: string; minimumDegreeRequired: number; status: DocumentStatus; publishedVersionId: string | null; reviewStatus: WorkPaperReviewStatus; returnReason?: string | null; versions: MemberWorkPaperVersion[] }
 /** draft = aún sin enviar a revisión · pending_review = espera al Bibliotecario · returned = devuelta con motivo · approved = en Biblioteca. */
 export type WorkPaperReviewStatus = 'draft' | 'pending_review' | 'returned' | 'approved'
+export interface ManagedPublication { id: string; title: string; categoryCode: string; status: DocumentStatus; degree: number | null; author: string | null; topic: string | null; edition: string | null; description: string | null; createdAtUtc: string; publishedAtUtc: string | null }
+export interface ManagedPublicationInput { categoryCode: string; title: string; authorName?: string; topic?: string; edition?: string; description?: string; minimumDegreeRequired: number | null }
 export interface WorkPaperReview { id: string; title: string; authorName: string | null; lodge: string | null; description: string | null; submittedAtUtc: string; degree: number | null; replacesPublished: boolean; versionId: string; fileName: string; sizeBytes: number }
 export interface MemberWorkPaperLink { documentId: string; authorMemberId: string | null; title: string; shortDescription: string }
 export type DocumentAccessTokenProvider = () => Promise<string | null>
@@ -252,6 +254,39 @@ export class DocumentApiClient {
     if (this.useMocks) return new Blob(['Plancha demostrativa en revisión'], { type: 'text/plain' })
     const response = await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/contenido`, {}, 'application/octet-stream')
     return response.blob()
+  }
+
+  // #588 — carga del Bibliotecario (libros y categorías propias). Solo perfil Bibliotecario; el servidor falla cerrado.
+  private mockManaged: ManagedPublication[] = []
+  async listManagedPublications(): Promise<ManagedPublication[]> {
+    if (this.useMocks) return this.mockManaged.map(item => ({ ...item }))
+    const response = await this.request<{ items: ManagedPublication[] }>('/api/biblioteca/gestion/publicaciones')
+    return response.items
+  }
+
+  /** Crea el borrador, carga el archivo, lo hace analizar y, si se pide, lo publica. Devuelve el id del documento. */
+  async uploadManagedPublication(input: ManagedPublicationInput, file: File, publishNow: boolean): Promise<{ documentId: string; published: boolean }> {
+    if (this.useMocks) {
+      const id = crypto.randomUUID(); const now = new Date().toISOString()
+      this.mockManaged.unshift({ id, title: input.title.trim(), categoryCode: input.categoryCode, status: publishNow ? 'published' : 'draft', degree: input.minimumDegreeRequired, author: input.authorName ?? null, topic: input.topic ?? null, edition: input.edition ?? null, description: input.description ?? null, createdAtUtc: now, publishedAtUtc: publishNow ? now : null })
+      return { documentId: id, published: publishNow }
+    }
+    const created = await this.postJson<{ documentId: string }>('/api/biblioteca/gestion/publicaciones', input)
+    const version = await this.createVersion(created.documentId, { originalFileName: file.name, contentType: file.type, sizeBytes: file.size })
+    await this.uploadVersionContent(version.id, file)
+    const scanned = await this.scanVersionContent(version.id)
+    if (scanned.processingStatus !== 'available') throw new Error('El archivo no quedó disponible después del análisis de seguridad; el borrador quedó sin publicar.')
+    if (publishNow) await this.publishEditorialMagazine(created.documentId, version.id)
+    return { documentId: created.documentId, published: publishNow }
+  }
+
+  /** Publica la última versión disponible de un borrador propio del Bibliotecario. */
+  async publishManagedDraft(documentId: string): Promise<void> {
+    if (this.useMocks) { const item = this.mockManaged.find(entry => entry.id === documentId); if (item) { item.status = 'published'; item.publishedAtUtc = new Date().toISOString() } return }
+    const versions = await this.listMagazineVersions(documentId)
+    const latest = versions.filter(version => version.processingStatus === 'available').sort((a, b) => b.versionNumber - a.versionNumber)[0]
+    if (!latest) throw new Error('El borrador no tiene un archivo disponible para publicar.')
+    await this.publishEditorialMagazine(documentId, latest.id)
   }
 
   async getWorkPaperByVersion(versionId: string): Promise<MemberWorkPaperLink> {
