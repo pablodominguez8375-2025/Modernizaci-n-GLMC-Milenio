@@ -84,6 +84,9 @@ public sealed class AuditMetadataSanitizerTests
 
     [Theory]
     [InlineData("Authorization")]
+    [InlineData("Authorization-Header")]
+    [InlineData("Proxy-Authorization")]
+    [InlineData("authorization_code")]
     [InlineData("Refresh-Token")]
     [InlineData("pass_word")]
     [InlineData("biometric_template")]
@@ -102,6 +105,28 @@ public sealed class AuditMetadataSanitizerTests
         Assert.NotNull(result);
         Assert.DoesNotContain(key, result, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("synthetic-never-store", result);
+    }
+
+    [Fact]
+    public void Institutional_authorization_proof_is_preserved_without_http_credentials()
+    {
+        // #470: an institutional digest is audit evidence, not a bearer secret.
+        var payload = new Dictionary<string, object?>
+        {
+            ["sourceAuthorizationSnapshotSha256"] = "synthetic-provenance-digest",
+            ["Status"] = "issued",
+            ["Authorization"] = "Bearer synthetic-not-for-audit",
+            ["Proxy-Authorization"] = "Basic synthetic-not-for-audit",
+        };
+        var serialized = AuditMetadataSanitizer.Serialize(payload);
+        Assert.NotNull(serialized);
+        using var doc = JsonDocument.Parse(serialized!);
+        var root = doc.RootElement;
+        Assert.Equal("synthetic-provenance-digest",
+            root.GetProperty("sourceAuthorizationSnapshotSha256").GetString());
+        Assert.Equal("issued", root.GetProperty("Status").GetString());
+        Assert.False(root.TryGetProperty("Authorization", out _));
+        Assert.False(root.TryGetProperty("Proxy-Authorization", out _));
     }
 
     [Fact]
