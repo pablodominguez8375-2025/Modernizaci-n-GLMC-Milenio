@@ -4,7 +4,8 @@ import { organizationNumberOf } from './displayFormat'
 import type { MembershipApiClient, MemberSelfProfile } from './api/membershipApi'
 import type { SessionProfile } from './api/pmgmApi'
 import type { DocumentApiClient } from './api/documentApi'
-import MaskedRut from './MaskedRut'
+import { maskRut } from './MaskedRut'
+import { cropToSquareJpeg } from './photoCrop'
 import { formatChileanRut } from './chileanRut'
 import MemberWorkPapersPanel from './MemberWorkPapersPanel'
 import { TreasuryPayments, HospitalariaPayments, CeremonyPayments } from './MemberPayments'
@@ -196,8 +197,45 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
       ? `${selfProfile.member.firstNames} ${selfProfile.member.lastNames}`.trim()
       : (profile?.displayName ?? 'Hermano')
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [photoDraft, setPhotoDraft] = useState<string | null>(null)
+  const [photoDraft, setPhotoDraft] = useState<{ url: string; blob: Blob } | null>(null)
   const [photoVisible, setPhotoVisible] = useState(false)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    membershipApi.getOwnPhotoStatus().then(async status => {
+      if (!active) return
+      setPhotoVisible(status.visibleToMembers)
+      setPhotoUrl(status.hasPhoto ? await membershipApi.getOwnPhotoUrl() : null)
+    }).catch(() => { /* sin foto o sin vínculo: se muestra el avatar institucional */ })
+    return () => { active = false }
+  }, [membershipApi])
+  async function choosePhoto(file: File | undefined) {
+    setPhotoError(null); setPhotoDraft(null)
+    if (!file) return
+    try {
+      const blob = await cropToSquareJpeg(file)
+      setPhotoDraft({ url: URL.createObjectURL(blob), blob })
+    } catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible preparar la foto.') }
+  }
+  async function savePhoto() {
+    if (!photoDraft || photoBusy) return
+    setPhotoBusy(true); setPhotoError(null)
+    try {
+      const status = await membershipApi.uploadOwnPhoto(photoDraft.blob)
+      setPhotoUrl(await membershipApi.getOwnPhotoUrl()); setPhotoVisible(status.visibleToMembers); setPhotoDraft(null)
+    } catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible guardar la foto.') } finally { setPhotoBusy(false) }
+  }
+  async function removePhoto() {
+    setPhotoBusy(true); setPhotoError(null)
+    try { await membershipApi.removeOwnPhoto(); setPhotoUrl(null); setPhotoDraft(null); setPhotoVisible(false) }
+    catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible quitar la foto.') } finally { setPhotoBusy(false) }
+  }
+  async function changeVisibility(visible: boolean) {
+    setPhotoError(null)
+    try { const status = await membershipApi.setOwnPhotoVisibility(visible); setPhotoVisible(status.visibleToMembers) }
+    catch (reason) { setPhotoError(reason instanceof Error ? reason.message : 'No fue posible cambiar la visibilidad.') }
+  }
   const memberId = useMocks ? memberPortalDemoData.memberId : (selfProfile?.member.institutionalNumber ?? 'Sin número institucional')
   const lodge = useMocks ? memberPortalDemoData.institutional.lodge : (selfProfile?.current.membership?.organization ?? 'Sin Taller vigente')
   const lodgeSeal = organizationNumberOf(lodge) ?? (lodge.trim().charAt(0).toUpperCase() || '∴')
@@ -258,18 +296,20 @@ export default function MemberPortalPage({ section = 'datos', profile, useMocks,
             <MemberDatum label="Profesión" value={useMocks ? memberPortalDemoData.profession : 'No expuesto en autoservicio'} />
             <MemberDatum label={useMocks ? 'Ciudad' : 'Domicilio'} value={useMocks ? personal.city : (personal.address || 'Sin registrar')} />
           </div>
-          {useMocks && <p className="member-rut-hint">En otros módulos tu RUT aparece protegido: <MaskedRut rut="12.345.678-5" /></p>}
-          {useMocks && <div className="member-photo-actions">
-            <ActionDrawer label={photoUrl ? 'Cambiar foto' : 'Subir foto'} tone="secondary" title="Mi foto de perfil" description="JPG o PNG, hasta 2 MB. Se recorta en formato cuadrado.">
-              <form className="library-admin-form" onSubmit={event => { event.preventDefault(); if (photoDraft) setPhotoUrl(photoDraft) }}>
-                <label><span>Archivo</span><input type="file" accept="image/jpeg,image/png" onChange={event => { const file = event.target.files?.[0]; setPhotoDraft(file && file.size <= 2 * 1024 * 1024 ? URL.createObjectURL(file) : null) }} /></label>
-                {photoDraft ? <div className="member-photo-preview"><img src={photoDraft} alt="Vista previa de tu foto" /><small>Vista previa (recorte cuadrado)</small></div> : <small>Elige una imagen para ver la vista previa.</small>}
-                <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={!photoDraft}>Guardar foto</button></div>
+          {useMocks && <p className="member-rut-hint">En otros módulos tu RUT aparece protegido: <strong>{maskRut('12.345.678-5')}</strong></p>}
+          {canEdit && <div className="member-photo-actions">
+            <ActionDrawer label={photoUrl ? 'Cambiar foto' : 'Subir foto'} tone="secondary" title="Mi foto de perfil" description="JPG o PNG. Se recorta en formato cuadrado y se guarda sin datos de la cámara ni ubicación.">
+              <form className="library-admin-form" onSubmit={event => { event.preventDefault(); void savePhoto() }}>
+                <label><span>Archivo</span><input type="file" accept="image/jpeg,image/png" onChange={event => void choosePhoto(event.target.files?.[0])} /></label>
+                {photoDraft ? <div className="member-photo-preview"><img src={photoDraft.url} alt="Vista previa de tu foto" /><small>Vista previa (recorte cuadrado centrado)</small></div> : <small>Elige una imagen para ver la vista previa.</small>}
+                {photoError && <p role="alert" className="form-error">{photoError}</p>}
+                <div className="library-admin-actions"><button type="submit" className="action-trigger primary" disabled={!photoDraft || photoBusy}>{photoBusy ? 'Guardando…' : 'Guardar foto'}</button></div>
               </form>
             </ActionDrawer>
-            {photoUrl && <ConfirmAction tone="secondary" label="Quitar foto" message="Se mostrará el avatar con tus iniciales." onConfirm={() => { setPhotoUrl(null); setPhotoDraft(null); setPhotoVisible(false) }} />}
-            <label className="member-photo-visible"><input type="checkbox" checked={photoVisible} disabled={!photoUrl} onChange={event => setPhotoVisible(event.target.checked)} /><span>Mi foto es visible para los demás hermanos</span></label>
+            {photoUrl && <ConfirmAction tone="secondary" label="Quitar foto" message="Se mostrará el avatar con tus iniciales." onConfirm={() => void removePhoto()} />}
+            <label className="member-photo-visible"><input type="checkbox" checked={photoVisible} disabled={!photoUrl} onChange={event => void changeVisibility(event.target.checked)} /><span>Mi foto es visible para los demás hermanos</span></label>
             <small>{photoUrl && photoVisible ? 'Los demás hermanos ven tu foto.' : 'Los demás hermanos ven un avatar con tus iniciales.'}</small>
+            {photoError && !photoDraft && <small role="alert" className="form-error">{photoError}</small>}
           </div>}
         </div>
       </article>

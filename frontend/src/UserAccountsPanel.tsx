@@ -1,8 +1,56 @@
 import { useEffect,useState } from 'react'
 import { ActionDrawer } from './actionKit'
 import type { PmgmApiClient } from './api/pmgmApi'
-import type { AccountCandidates,AccountUser } from './api/userAccounts'
+import { setSupportViewAs } from './api/supportViewAs'
+import type { AccessResetModality,AccessResetResult,AccountCandidates,AccountUser } from './api/userAccounts'
 
+function ResetAccessForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
+ const hasEmail=user.email.includes('@');const [modality,setModality]=useState<AccessResetModality>(hasEmail?'email':'temporary');const [reason,setReason]=useState('')
+ const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [result,setResult]=useState<AccessResetResult|null>(null)
+ const submit=async()=>{setBusy(true);setError('');try{setResult(await api.resetUserAccountAccess(user.subject,{modality,reason:reason.trim()||undefined}))}catch(e){setError(e instanceof Error?e.message:'No se pudo restablecer el acceso.')}finally{setBusy(false)}}
+ if(result?.modality==='email')return <div role="status"><p><strong>Enlace enviado.</strong> {api.useMocks?'En esta demostración el correo se simula.':`Se envió a ${result.email}.`} El enlace es de un solo uso y vence en {result.expiresInMinutes} minutos. Se cerraron las sesiones activas de la cuenta.</p><button type="button" onClick={onDone}>Listo</button></div>
+ if(result?.temporaryPassword)return <div role="status"><p><strong>Clave temporal de {result.name}</strong></p><p className="system-temp-password" aria-label="Clave temporal">{result.temporaryPassword}</p>
+  <p>Esta clave <strong>se muestra una sola vez</strong>: no queda guardada y no se podrá volver a ver. Entréguela en forma segura al Hermano; deberá cambiarla en su primer ingreso. Se cerraron sus sesiones activas.</p>
+  <button type="button" onClick={()=>void navigator.clipboard?.writeText(result.temporaryPassword!)}>Copiar clave</button> <button type="button" onClick={onDone}>Ya la entregué, cerrar</button></div>
+ return <form onSubmit={e=>{e.preventDefault();void submit()}}>
+  <p>Cuenta de <strong>{user.name}</strong>. Se cerrarán sus sesiones activas y la acción queda en la auditoría.</p>
+  {error&&<p role="alert">{error}</p>}
+  <fieldset className="system-reset-choice"><legend>¿Cómo desea restablecer el acceso?</legend>
+   <label><input type="radio" name="modality" checked={modality==='email'} disabled={!hasEmail||busy} onChange={()=>setModality('email')}/> <span><strong>Enviar un enlace al correo</strong><small>{hasEmail?`Recomendado. Llega a ${user.email}, es de un solo uso y vence en 30 minutos.`:'No disponible: la cuenta no tiene correo.'}</small></span></label>
+   <label><input type="radio" name="modality" checked={modality==='temporary'} disabled={busy} onChange={()=>setModality('temporary')}/> <span><strong>Entregar una clave temporal</strong><small>Para quien no recibe correo. Se muestra una sola vez y debe cambiarse al ingresar.</small></span></label>
+  </fieldset>
+  {modality==='temporary'&&<label><span>Motivo (10 a 200 caracteres)</span><input required minLength={10} maxLength={200} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)} placeholder="Ej.: Hermano sin correo, identidad verificada en persona"/></label>}
+  <button disabled={busy}>{busy?'Restableciendo…':modality==='email'?'Enviar enlace de acceso':'Generar clave temporal'}</button>
+ </form>
+}
+function ResetAccessDrawer({api,user}:{api:PmgmApiClient;user:AccountUser}){
+ const [open,setOpen]=useState(false)
+ return <ActionDrawer label="Restablecer acceso" title="Restablecer acceso" description="El Hermano recupera su ingreso sin que nadie conozca su clave." tone="secondary" open={open} onOpenChange={setOpen} keepOpen>
+  {open&&<ResetAccessForm api={api} user={user} onDone={()=>setOpen(false)}/>}
+ </ActionDrawer>
+}
+
+function ViewAsForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
+ const [reason,setReason]=useState('');const [busy,setBusy]=useState(false);const [error,setError]=useState('')
+ const submit=async()=>{setBusy(true);setError('');try{
+  const started=await api.startSupportView({targetSubject:user.subject,reason:reason.trim()})
+  setSupportViewAs({sessionId:started.sessionId,targetSubject:started.targetSubject,targetName:started.targetName,expiresAtUtc:started.expiresAtUtc,demoProfile:api.useMocks?user.subject.slice(5):undefined})
+  onDone();if(!api.useMocks)window.location.reload()
+ }catch(e){setError(e instanceof Error?e.message:'No se pudo iniciar «Ver como».')}finally{setBusy(false)}}
+ return <form onSubmit={e=>{e.preventDefault();void submit()}}>
+  <p>Verá la plataforma como la ve <strong>{user.name}</strong>, <strong>solo para mirar</strong>: no podrá cambiar nada, no verá su RUT, contacto ni pagos, y no conocerá su clave.</p>
+  <p>Dura 30 minutos como máximo. Queda registrado quién miró, a quién y por qué.</p>
+  {error&&<p role="alert">{error}</p>}
+  <label><span>Motivo (10 a 500 caracteres)</span><input required minLength={10} maxLength={500} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)} placeholder="Ej.: El Hermano no ve su Taller en el menú"/></label>
+  <button disabled={busy||reason.trim().length<10}>{busy?'Iniciando…':'Ver como este Hermano'}</button>
+ </form>
+}
+function ViewAsDrawer({api,user}:{api:PmgmApiClient;user:AccountUser}){
+ const [open,setOpen]=useState(false)
+ return <ActionDrawer label="Ver como" title="Ver como este Hermano" description="Apoyo de soporte en solo lectura, con motivo y auditoría." tone="secondary" open={open} onOpenChange={setOpen} keepOpen>
+  {open&&<ViewAsForm api={api} user={user} onDone={()=>setOpen(false)}/>}
+ </ActionDrawer>
+}
 export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
  const [data,setData]=useState<AccountCandidates|null>(null);const [users,setUsers]=useState<AccountUser[]>([])
  const [selection,setSelection]=useState('');const [platform,setPlatform]=useState(false);const [name,setName]=useState('');const [email,setEmail]=useState('')
@@ -31,6 +79,6 @@ export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
     </>}
     <p>Los permisos técnicos y cargos se asignan mediante los flujos institucionales correspondientes.</p>
     <button disabled={busy||!data?.deliveryConfigured||(!platform&&!chosen)}>{busy?'Creando cuenta…':'Crear usuario y enviar clave inicial'}</button>
-   </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small></div>)}</div></div>
+   </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}</div>}</div>)}</div></div>
  </section>
 }

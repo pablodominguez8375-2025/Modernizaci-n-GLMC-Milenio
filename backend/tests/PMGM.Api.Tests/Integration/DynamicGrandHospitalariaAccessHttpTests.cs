@@ -28,7 +28,7 @@ public sealed class DynamicGrandHospitalariaAccessHttpTests
         using var factory = root.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddAuthentication(o =>
         { o.DefaultAuthenticateScheme = Auth.Name; o.DefaultChallengeScheme = Auth.Name; o.DefaultForbidScheme = Auth.Name; })
             .AddScheme<AuthenticationSchemeOptions, Auth>(Auth.Name, _ => { })));
-        using var admin = factory.CreateClient(); using var client = factory.CreateClient();
+        using var admin = factory.CreateClient(); admin.DefaultRequestHeaders.Add("X-Hosp-Role", InstitutionalRoles.PlatformSuperAdmin); using var client = factory.CreateClient();
         var org = new Organization { Name = "Gran Hospitalaria permisos QA", Type = "workshop" };
         var submission = new HospitalariaMonthlySubmission { OrganizationId = org.Id, PeriodYear = 2026, PeriodMonth = 10,
             CutoffDate = new DateOnly(2026,10,31), Status = "submitted", CreatedBySubject = "qa" };

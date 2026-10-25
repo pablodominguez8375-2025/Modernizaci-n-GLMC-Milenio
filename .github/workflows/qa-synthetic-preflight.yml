@@ -1,0 +1,31 @@
+name: QA synthetic preflight offline contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa_synthetic_preflight.py'
+      - 'scripts/qa/qa_operational_fixtures.py'
+      - 'tests/test_qa_synthetic_preflight.py'
+      - '.github/workflows/qa-synthetic-preflight.yml'
+  push:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa_synthetic_preflight.py'
+      - 'scripts/qa/qa_operational_fixtures.py'
+      - 'tests/test_qa_synthetic_preflight.py'
+      - '.github/workflows/qa-synthetic-preflight.yml'
+permissions:
+  contents: read
+jobs:
+  preflight:
+    name: Offline structural validation (zero imports)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Compile and exercise malicious fixture contract
+        run: |
+          python3 -m py_compile scripts/qa/qa_synthetic_preflight.py tests/test_qa_synthetic_preflight.py
+          python3 -m unittest discover -s tests -p test_qa_synthetic_preflight.py -v

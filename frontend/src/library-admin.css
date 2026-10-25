@@ -27,3 +27,7 @@
 .masked-rut{display:inline-flex;flex-wrap:wrap;gap:8px;align-items:center}
 .masked-rut strong{color:#06148E;font-variant-numeric:tabular-nums}
 .library-file-button{cursor:pointer;display:inline-flex;align-items:center}
+.member-avatar.has-photo{padding:0;overflow:hidden;background:#e9eef7}
+.member-avatar.has-photo img{display:block;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.area-collaborators>header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;flex-wrap:wrap}.area-collaborators h2{margin:0 0 4px}.area-collaborators-actions{border:1px solid #cbd3df;border-radius:10px;padding:10px 12px;display:grid;gap:8px}.area-collaborators-actions legend{font-weight:800;color:#43516c;padding:0 6px}.area-collaborators-actions label{display:flex;gap:10px;align-items:center}.area-collaborators-actions input{width:20px;height:20px;min-height:0;padding:0}
+.action-drawer-body .area-collaborators-actions label{display:flex!important;flex-direction:row;align-items:center;gap:10px;grid-template-columns:none}.action-drawer-body .area-collaborators-actions input[type=checkbox]{flex:none;width:20px;height:20px;min-height:0;padding:0;margin:0}.area-collaborators .library-admin-card>div:first-child{display:grid;gap:3px}

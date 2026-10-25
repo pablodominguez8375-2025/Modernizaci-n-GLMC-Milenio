@@ -27,6 +27,8 @@ export type MembershipStatus = 'active' | 'transferred' | 'closed'
 
 export interface MemberDirectoryItem {
   memberId: string
+  /** El Hermano hizo visible su foto para los demás (#609). */
+  hasPhoto?: boolean
   displayName: string
   institutionalNumber: string | null
   membershipStatus: MembershipStatus | string
@@ -45,7 +47,7 @@ export interface MemberDirectoryResponse {
 }
 
 export interface MemberProfile {
-  member: { id: string; personId: string; institutionalNumber: string | null; firstNames: string; lastNames: string; createdAtUtc: string; rutMasked?: string | null }
+  member: { id: string; personId: string; institutionalNumber: string | null; firstNames: string; lastNames: string; createdAtUtc: string; rutMasked?: string | null; hasPhoto?: boolean }
   contactVisible: boolean
   contact: { email: string | null; phone: string | null; address: string | null } | null
   scope: 'order' | 'authorized_organizations'
@@ -176,7 +178,7 @@ export class MembershipApiClient {
       if (filters.status) items = items.filter(x => x.membershipStatus === filters.status)
       if (filters.query?.trim()) { const q = normalize(filters.query); items = items.filter(x => normalize(`${x.displayName} ${x.institutionalNumber ?? ''}`).includes(q)) }
       const max = Math.max(1, Math.min(filters.limit ?? 100, 250))
-      return { organization: { id: organizationId, name: `Taller Demostrativo Nº ${workshopNumber}`, number: workshopNumber, type: 'workshop' }, total: items.length, returned: Math.min(items.length, max), items: items.slice(0, max).map(x => ({ ...x })) }
+      return { organization: { id: organizationId, name: `Taller Demostrativo Nº ${workshopNumber}`, number: workshopNumber, type: 'workshop' }, total: items.length, returned: Math.min(items.length, max), items: items.slice(0, max).map(x => ({ ...x, hasPhoto: demoHasPhoto(x.memberId) })) }
     }
     const query = new URLSearchParams({ organizationId })
     if (filters.query?.trim()) query.set('query', filters.query.trim())
@@ -192,6 +194,83 @@ export class MembershipApiClient {
       return mockProfile(item)
     }
     return this.request<MemberProfile>(`/api/members/${encodeURIComponent(memberId)}/profile`)
+  }
+
+  /** «Ver completo» del RUT de un tercero (#609): motivo de catálogo; el servidor audita antes de responder. */
+  async revealMemberRut(memberId: string, reason: string): Promise<{ rut: string; expiresInSeconds: number }> {
+    if (this.useMocks) {
+      if (!reason) throw new Error('Seleccione un motivo válido para ver el RUT completo.')
+      return { rut: '12.345.678-5', expiresInSeconds: 10 }
+    }
+    return this.request(`/api/members/${encodeURIComponent(memberId)}/rut/reveal`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    })
+  }
+
+  private mockPhoto: { url: string; visible: boolean } | null = null
+  private readonly photoUrlCache = new Map<string, string>()
+
+  async getOwnPhotoStatus(): Promise<{ hasPhoto: boolean; visibleToMembers: boolean }> {
+    if (this.useMocks) return { hasPhoto: this.mockPhoto !== null, visibleToMembers: this.mockPhoto?.visible ?? false }
+    return this.request('/api/member-self/photo')
+  }
+
+  /** Foto propia (siempre visible para su titular) como URL de objeto; null si no tiene. */
+  async getOwnPhotoUrl(): Promise<string | null> {
+    if (this.useMocks) return this.mockPhoto?.url ?? null
+    return this.fetchPhoto('/api/member-self/photo/content')
+  }
+
+  async uploadOwnPhoto(photo: Blob): Promise<{ hasPhoto: boolean; visibleToMembers: boolean }> {
+    if (this.useMocks) {
+      this.mockPhoto = { url: URL.createObjectURL(photo), visible: this.mockPhoto?.visible ?? false }
+      return { hasPhoto: true, visibleToMembers: this.mockPhoto.visible }
+    }
+    return this.request('/api/member-self/photo', { method: 'PUT', headers: { 'Content-Type': photo.type || 'image/jpeg' }, body: photo })
+  }
+
+  async removeOwnPhoto(): Promise<void> {
+    if (this.useMocks) { this.mockPhoto = null; return }
+    await this.requestNoContent('/api/member-self/photo', { method: 'DELETE' })
+  }
+
+  async setOwnPhotoVisibility(visible: boolean): Promise<{ hasPhoto: boolean; visibleToMembers: boolean }> {
+    if (this.useMocks) {
+      if (!this.mockPhoto) throw new Error('Primero suba una foto.')
+      this.mockPhoto.visible = visible
+      return { hasPhoto: true, visibleToMembers: visible }
+    }
+    return this.request('/api/member-self/photo/visibility', { method: 'PUT', body: JSON.stringify({ visible }) })
+  }
+
+  /** Foto de otro Hermano; solo existe si él la hizo visible. */
+  async getMemberPhotoUrl(memberId: string): Promise<string | null> {
+    if (this.useMocks) return demoPhotoFor(memberId)
+    const cached = this.photoUrlCache.get(memberId)
+    if (cached) return cached
+    const url = await this.fetchPhoto(`/api/member-photos/${encodeURIComponent(memberId)}`)
+    if (url) this.photoUrlCache.set(memberId, url)
+    return url
+  }
+
+  private async fetchPhoto(path: string): Promise<string | null> {
+    const token = await this.getAccessToken?.()
+    if (!token) return null
+    const response = await fetch(`${this.baseUrl}${path}`, { credentials: 'omit', redirect: 'error', cache: 'no-cache', headers: { Authorization: `Bearer ${token}` } })
+    if (response.status === 401) await this.onUnauthorized?.()
+    if (!response.ok) return null
+    return URL.createObjectURL(await response.blob())
+  }
+
+  private async requestNoContent(path: string, init: RequestInit): Promise<void> {
+    const token = await this.getAccessToken?.()
+    if (!token) throw new Error('Debe ingresar para modificar su ficha.')
+    const response = await fetch(`${this.baseUrl}${path}`, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', headers: { Authorization: `Bearer ${token}` } })
+    if (response.status === 401) await this.onUnauthorized?.()
+    if (!response.ok && response.status !== 204) {
+      const problem = await response.json().catch(() => null) as { message?: string } | null
+      throw new Error(problem?.message ?? `La API respondió ${response.status}.`)
+    }
   }
 
   async getOwnOffices(): Promise<{total:number;items:OwnOffice[]}> {
@@ -299,6 +378,17 @@ export class MembershipApiClient {
   }
 }
 
+/** Fotos ficticias (siluetas de colores) para la demo: solo algunos Hermanos hicieron visible la suya. */
+const demoPhotoColors = ['#1e3a8a', '#0f766e', '#9a3412', '#6b21a8']
+function demoPhotoIndex(memberId: string) { let h = 0; for (const c of memberId) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h % 5 }
+export function demoHasPhoto(memberId: string) { return demoPhotoIndex(memberId) < 4 }
+function demoPhotoFor(memberId: string): string | null {
+  if (!demoHasPhoto(memberId)) return null
+  const color = demoPhotoColors[demoPhotoIndex(memberId)]
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="${color}"/><circle cx="50" cy="38" r="18" fill="#f3d9b1"/><path d="M14 100c2-26 20-38 36-38s34 12 36 38z" fill="#f3d9b1" opacity=".9"/></svg>`
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
+}
+
 function mockProfile(item: MemberDirectoryItem): MemberProfile {
   const transferred = item.membershipStatus === 'transferred'
   const activeOrg = transferred ? org23 : org1
@@ -311,7 +401,7 @@ function mockProfile(item: MemberDirectoryItem): MemberProfile {
   const oldMembership: MemberMembership = { ...currentMembership, id: `old-${item.memberId}`, organizationId: org1, organization: 'Taller Demostrativo Nº 1', organizationNumber: '1', startDate: item.startDate, endDate: '2026-06-30', status: 'transferred', endReason: 'Cambio de Taller aprobado', evidenceReference: 'TR-DEMO-001' }
   const transfer: MemberTransfer = { id: `t-${item.memberId}`, sourceOrganizationId: org1, sourceOrganization: 'Taller Demostrativo Nº 1', targetOrganizationId: org23, targetOrganization: 'Taller Demostrativo Nº 23', requestedDate: '2026-06-10', proposedEffectiveDate: '2026-07-01', approvedEffectiveDate: '2026-07-01', status: 'executed', reason: 'Continuidad de trabajo logial.', resolution: 'Traslado aprobado con historial preservado.', evidenceReference: 'TR-DEMO-001', executedAtUtc: '2026-07-01T15:00:00Z' }
   const parts = item.displayName.split(' ')
-  return { member: { id: item.memberId, personId: `p-${item.memberId}`, institutionalNumber: item.institutionalNumber, firstNames: parts.slice(0, -2).join(' ') || parts[0], lastNames: parts.slice(-2).join(' '), createdAtUtc: '2026-09-08T12:00:00Z', rutMasked: '12.345.***-5' }, contactVisible: true, contact: { email: accountEmails[item.memberId]??null, phone: null, address: null }, scope: 'order', current: { membership: currentMembership, degree, institutionalStatus: statusEvent, offices: office }, memberships: transferred ? [currentMembership, oldMembership] : [currentMembership], degreeEvents: [degree], offices: office, statusEvents: [statusEvent], transfers: transferred ? [transfer] : [], regularity: { financial: { status: item.displayName.includes('Marcelo') ? 'delinquent' : 'up_to_date', asOfDate: '2026-09-08', scope: 'member', sourceReference: 'TES-DEMO' }, hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO' } } }
+  return { member: { id: item.memberId, personId: `p-${item.memberId}`, institutionalNumber: item.institutionalNumber, firstNames: parts.slice(0, -2).join(' ') || parts[0], lastNames: parts.slice(-2).join(' '), createdAtUtc: '2026-09-08T12:00:00Z', rutMasked: '12.345.***-5', hasPhoto: demoHasPhoto(item.memberId) }, contactVisible: true, contact: { email: accountEmails[item.memberId]??null, phone: null, address: null }, scope: 'order', current: { membership: currentMembership, degree, institutionalStatus: statusEvent, offices: office }, memberships: transferred ? [currentMembership, oldMembership] : [currentMembership], degreeEvents: [degree], offices: office, statusEvents: [statusEvent], transfers: transferred ? [transfer] : [], regularity: { financial: { status: item.displayName.includes('Marcelo') ? 'delinquent' : 'up_to_date', asOfDate: '2026-09-08', scope: 'member', sourceReference: 'TES-DEMO' }, hospitalaria: { status: 'up_to_date', asOfDate: '2026-09-08', sourceReference: 'HOSP-DEMO' } } }
 }
 
 export function createDefaultMembershipApiClient(getAccessToken?: MembershipAccessTokenProvider, onUnauthorized?: () => Promise<void>): MembershipApiClient {

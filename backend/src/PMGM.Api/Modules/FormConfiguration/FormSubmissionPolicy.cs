@@ -147,7 +147,8 @@ public static partial class FormSubmissionPolicy
             "phone" => PhonePattern().IsMatch(text) && text.Count(char.IsDigit) >= 6,
             // Client-side uploads must refer to an opaque, server-authorized ID;
             // never accept inline base64, URLs, paths or document content here.
-            "document" or "photo" or "reference" => Guid.TryParse(text, out _),
+            "document" or "photo" or "reference" =>
+                Guid.TryParse(text, out var resourceId) && resourceId != Guid.Empty,
             _ => false
         };
     }

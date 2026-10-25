@@ -279,7 +279,11 @@ public sealed class PostgreSqlMigrationTests
             await db.Database.ExecuteSqlRawAsync(
                 "TRUNCATE TABLE core.audit_events", cancellationToken);
         });
-        Assert.Equal("55000", truncateError.SqlState);
+        // A foreign key from core.initial_load_windows can cause PostgreSQL to
+        // reject TRUNCATE before our append-only trigger gets control (0A000).
+        // Both SQLSTATEs deny truncation; the persisted readback below proves
+        // no audit event was removed. Neither result is authorization to erase.
+        Assert.Contains(truncateError.SqlState, new[] { "55000", "0A000" });
 
         var persisted = await db.AuditEvents.AsNoTracking()
             .SingleAsync(x => x.Id == auditEvent.Id, cancellationToken);

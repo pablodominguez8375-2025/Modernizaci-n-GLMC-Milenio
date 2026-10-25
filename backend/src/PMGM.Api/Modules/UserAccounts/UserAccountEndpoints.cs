@@ -24,6 +24,7 @@ public static class UserAccountEndpoints
         group.MapGet("/eligible-members",GetEligibleMembers);
         group.MapGet("",GetUsers);
         group.MapPost("",CreateUserAccount);
+        group.MapPost("/{subject}/password-recovery",ResetAccountAccess);
         return endpoints;
     }
     private static async Task<IResult> GetEligibleMembers(HttpContext ctx,PmgmDbContext db,IInstitutionalAccessService access,
@@ -126,6 +127,74 @@ public static class UserAccountEndpoints
                 new { request.Superuser,reason=e is AccountConflictException?"conflict":"delivery_or_identity" });
             await db.SaveChangesAsync(CancellationToken.None);
             return e is AccountConflictException ? Results.Conflict(new { message="Ya existe una cuenta o vínculo de identidad para este Hermano/correo." }) : Failure();
+        }
+    }
+    // Restablecer acceso (#556). Decisión PO 19-10: A) enlace de un solo uso por correo; B) clave temporal mostrada UNA vez.
+    // Solo el Máster; nunca a sí mismo ni a la cuenta Máster; la clave jamás se guarda, audita ni registra.
+    private static readonly Dictionary<string,Queue<DateTimeOffset>> RecoveryAttempts=new();
+    private static bool RateLimited(string key,int max,TimeSpan window)
+    {
+        lock(RecoveryAttempts)
+        {
+            var now=DateTimeOffset.UtcNow;
+            if(!RecoveryAttempts.TryGetValue(key,out var q)) RecoveryAttempts[key]=q=new();
+            while(q.Count>0 && now-q.Peek()>window) q.Dequeue();
+            if(q.Count>=max) return true;
+            q.Enqueue(now);return false;
+        }
+    }
+    public static void ResetRateLimits(){lock(RecoveryAttempts)RecoveryAttempts.Clear();}
+    private static async Task<IResult> ResetAccountAccess(string subject,PasswordRecoveryRequest request,HttpContext ctx,PmgmDbContext db,
+        IInstitutionalAccessService access,IAccountIdentityProvider identity,IAuditService audit,ILoggerFactory logs,CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+        var temporary=request.Modality=="temporary";
+        var reason=request.Reason?.Trim()??"";
+        if(request.Modality is not ("email" or "temporary") || reason.Length>200 || temporary && reason.Length<10)
+            return Results.BadRequest(new { message=temporary?"Indique el motivo (10 a 200 caracteres) para entregar una clave temporal.":"Seleccione cómo restablecer el acceso." });
+        var actor=DynamicTreasuryAccess.Subject(ctx.User)??"";
+        var selfTarget=string.Equals(actor,subject,StringComparison.OrdinalIgnoreCase);
+        if(!selfTarget)
+        {
+            if(!Guid.TryParse(subject,out var parsed)) return Results.NotFound(new { message="La cuenta no existe o no es administrada por la plataforma." });
+            subject=parsed.ToString();
+        }
+        async Task<IResult> Reject(int status,string message,string why)
+        {
+            audit.Add(ctx,"system.users.access_reset_denied","UserAccount",subject,null,AuditResults.Rejected,new { modality=request.Modality,reason=why });
+            await db.SaveChangesAsync(ct);
+            return Results.Json(new { message },statusCode:status);
+        }
+        if(selfTarget)
+            return await Reject(StatusCodes.Status403Forbidden,"No puede restablecer su propio acceso; solicítelo a otra autoridad o use «Olvidé mi clave».","self");
+        if(!identity.Configured) return Failure();
+        if(RateLimited("actor:"+actor,10,TimeSpan.FromMinutes(10)) || RateLimited("account:"+subject,3,TimeSpan.FromMinutes(10)))
+            return await Reject(StatusCodes.Status429TooManyRequests,"Demasiados intentos. Espere unos minutos antes de reintentar.","rate_limited");
+        try
+        {
+            var user=await identity.FindManagedAsync(subject,ct);
+            if(user is null) return await Reject(StatusCodes.Status404NotFound,"La cuenta no existe o no es administrada por la plataforma.","unknown_account");
+            if(user.Kind=="platform") return await Reject(StatusCodes.Status403Forbidden,"La cuenta Máster no se restablece desde esta pantalla.","master_account");
+            if(!user.Enabled) return await Reject(StatusCodes.Status409Conflict,"La cuenta tiene el alta pendiente; complete o repita el alta.","not_enabled");
+            if(!temporary && !AccountPassword.ValidEmail(user.Email))
+                return await Reject(StatusCodes.Status400BadRequest,"La cuenta no tiene un correo válido. Use la clave temporal con motivo.","no_email");
+            string? password=null;
+            if(temporary){password=AccountPassword.Generate();await identity.SetTemporaryPasswordAsync(subject,password,ct);}
+            else await identity.SendPasswordRecoveryEmailAsync(subject,ct);
+            audit.Add(ctx,"system.users.access_reset","UserAccount",subject,null,AuditResults.Success,
+                new { modality=request.Modality,accountKind=user.Kind,reason=temporary?reason:null,requiresPasswordChange=true,sessionsClosed=true });
+            await db.SaveChangesAsync(ct);
+            return temporary
+                ? Results.Ok(new { subject,modality="temporary",temporaryPassword=password,requiresPasswordChange=true,shownOnce=true,name=user.Name })
+                : Results.Ok(new { subject,modality="email",emailSent=true,expiresInMinutes=30,name=user.Name,email=user.Email });
+        }
+        catch(Exception e) when(e is AccountDeliveryException or AccountConflictException or HttpRequestException or TaskCanceledException)
+        {
+            logs.CreateLogger("UserAccounts").LogError("No se completó el restablecimiento de acceso. Correlación {CorrelationId}.",ctx.TraceIdentifier);
+            audit.Add(ctx,"system.users.access_reset_failed","UserAccount",subject,null,AuditResults.Rejected,new { modality=request.Modality,reason="identity_or_delivery" });
+            await db.SaveChangesAsync(CancellationToken.None);
+            return Results.Json(new { message="No se pudo restablecer el acceso. Revise la configuración de identidad/correo e inténtelo más tarde." },statusCode:503);
         }
     }
     private static IResult Failure()=>Results.Json(new { message="No se completó el alta o el envío. Revise la configuración de identidad/correo antes de reintentar." },statusCode:503);

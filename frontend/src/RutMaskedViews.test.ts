@@ -14,3 +14,10 @@ it('third-party views never print the full RUT (#609)', () => {
   expect(read('InternalAffairsMemberControlPage.tsx')).not.toMatch(/item\.rut\b(?!Masked)/)
   expect(read('MemberDirectoryPage.tsx')).toContain('profile.member.rutMasked')
 })
+
+it('«Ver completo» solo muestra el RUT tras la respuesta auditada del servidor (#609)', () => {
+  const component = read('MaskedRut.tsx')
+  expect(component).toContain('await onReveal(reason)')
+  expect(component).not.toContain('MaskedRut({ rut')
+  expect(read('MemberDirectoryPage.tsx')).toContain('membershipApi.revealMemberRut(profile.member.id, reason)')
+})

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { officeLabel } from './officeLabels'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
+import MaskedRut from './MaskedRut'
+import MemberAvatar from './MemberAvatar'
 import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient } from './api/membershipApi'
 import './memberDirectory.css'
 import { organizationDisplayName } from './displayFormat'
@@ -114,12 +116,12 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
     <section className={tableView ? 'member-layout member-layout-table' : 'member-layout'}>
       <article className="panel member-roster">
         <div className="panel-heading"><div><p className="eyebrow">Taller seleccionado</p><h2>Fichas e historial</h2></div><span className="count-badge">{members.length}</span></div>
-        {loading || working ? <Loading /> : members.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong><span>Pruebe otro filtro o Taller.</span></div> : tableView ? <MemberTable items={listing.visible} selectedId={selectedId} onSelect={setSelectedId} /> : <div className="member-list">{listing.visible.map(item => <button key={item.memberId} type="button" className={item.memberId === selectedId ? 'member-row selected' : 'member-row'} onClick={() => setSelectedId(item.memberId)}><span className="member-avatar">{initials(item.displayName)}</span><span className="member-row-main"><strong>{item.displayName}</strong><small>{degreeLabel(item.currentDegree)} · {item.institutionalNumber ?? 'Sin Nº institucional'}</small></span><span className={statusClass(item.membershipStatus)}>{membershipLabel(item.membershipStatus)}</span></button>)}</div>}
+        {loading || working ? <Loading /> : members.length === 0 ? <div className="empty-state"><strong>No hay coincidencias.</strong><span>Pruebe otro filtro o Taller.</span></div> : tableView ? <MemberTable items={listing.visible} selectedId={selectedId} onSelect={setSelectedId} /> : <div className="member-list">{listing.visible.map(item => <button key={item.memberId} type="button" className={item.memberId === selectedId ? 'member-row selected' : 'member-row'} onClick={() => setSelectedId(item.memberId)}><MemberAvatar api={membershipApi} memberId={item.memberId} hasPhoto={item.hasPhoto} name={item.displayName} /><span className="member-row-main"><strong>{item.displayName}</strong><small>{degreeLabel(item.currentDegree)} · {item.institutionalNumber ?? 'Sin Nº institucional'}</small></span><span className={statusClass(item.membershipStatus)}>{membershipLabel(item.membershipStatus)}</span></button>)}</div>}
         <LoadMore hasMore={listing.hasMore} onMore={listing.loadMore} remaining={listing.total - listing.visible.length} />
       </article>
 
       <article className="panel member-profile">
-        {!selectedId ? <div className="empty-state"><strong>Seleccione un miembro.</strong></div> : !profile ? <Loading /> : <Profile profile={profile} />}
+        {!selectedId ? <div className="empty-state"><strong>Seleccione un miembro.</strong></div> : !profile ? <Loading /> : <Profile profile={profile} membershipApi={membershipApi} />}
       </article>
     </section>
   </>
@@ -136,13 +138,13 @@ function MemberTable({ items, selectedId, onSelect }: { items: MemberDirectoryIt
 
 function degreeRank(value: string | null | undefined) { return value === 'master' ? 3 : value === 'fellowcraft' ? 2 : value === 'apprentice' ? 1 : 0 }
 
-function Profile({ profile }: { profile: MemberProfile }) {
+function Profile({ profile, membershipApi }: { profile: MemberProfile; membershipApi: MembershipApiClient }) {
   const displayName = `${profile.member.firstNames} ${profile.member.lastNames}`.trim()
   const currentMembership = profile.current.membership
   return <>
     <div className="member-profile-hero">
-      <span className="member-avatar large">{initials(displayName)}</span>
-      <div><p className="eyebrow">Ficha institucional</p><h2>{displayName}</h2><p>{profile.member.institutionalNumber ?? 'Sin número institucional'} · {degreeLabel(profile.current.degree?.degree ?? null)}</p>{profile.member.rutMasked && <p className="member-rut-hint">RUT protegido: <strong>{profile.member.rutMasked}</strong></p>}</div>
+      <MemberAvatar api={membershipApi} memberId={profile.member.id} hasPhoto={profile.member.hasPhoto} name={displayName} large />
+      <div><p className="eyebrow">Ficha institucional</p><h2>{displayName}</h2><p>{profile.member.institutionalNumber ?? 'Sin número institucional'} · {degreeLabel(profile.current.degree?.degree ?? null)}</p>{profile.member.rutMasked && <p className="member-rut-hint">RUT protegido: <MaskedRut masked={profile.member.rutMasked} onReveal={reason => membershipApi.revealMemberRut(profile.member.id, reason)} /></p>}</div>
       <span className="profile-scope">{profile.scope === 'order' ? 'Vista Orden' : 'Vista autorizada'}</span>
     </div>
 
@@ -176,7 +178,6 @@ function Metric({ label, value, detail }: { label: string; value: number; detail
 function Summary({ label, value, detail }: { label: string; value: string; detail: string }) { return <div className="profile-summary"><span>{label}</span><strong>{value}</strong><small>{detail}</small></div> }
 function Loading() { return <div className="loading-rows"><span /><span /><span /></div> }
 function organizationLabel(item: OrganizationOption) { return `${organizationDisplayName(item.name, item.number)}` }
-function initials(value: string) { return value.split(/\s+/).filter(Boolean).slice(0, 2).map(item => item[0]?.toUpperCase()).join('') }
 export function officePeriod(startDate: string, endDate: string | null) { return `${formatDate(startDate)} → ${endDate ? formatDate(endDate) : 'vigente'}` }
 function formatDate(value: string) { return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${value}T12:00:00Z`)) }
 function degreeLabel(value: string | null | undefined) { return value === 'master' ? 'Maestro/a' : value === 'fellowcraft' ? 'Compañero/a' : value === 'apprentice' ? 'Aprendiz' : value || 'Sin grado registrado' }

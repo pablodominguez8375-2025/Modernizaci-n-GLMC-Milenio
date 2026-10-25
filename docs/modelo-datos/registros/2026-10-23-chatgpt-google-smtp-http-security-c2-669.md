@@ -1,0 +1,4 @@
+# GOV-004 — #669 C2 límites por actor y trazabilidad HTTP
+Fecha 23-10-2026. No se añaden tablas ni columnas. `RequestRateLimiting:SmtpTestsPerMinute` (entero mayor que cero, predeterminado 5) restringe los POST /api/system/mail/test por minuto y por actor autenticado, con respuesta 429 y Retry-After si corresponde. El control global de escritura continúa para otros endpoints.
+
+El nuevo contrato de pruebas E2E comprueba vía endpoint real: contraseña cifrada en institutional_rule_settings código interno, nunca devuelta en GET configuración ni versiones, no escrita en audit_events.MetadataJson, envío mediante ISystemMailSender ficticio (sin red) con estado 200, errores 400 y exceso 429. El destino de prueba no se registra en auditoría. Se restauran configuraciones sintéticas al concluir. No equivale a haber enviado desde Gmail ni autoriza credenciales reales en la base QA.

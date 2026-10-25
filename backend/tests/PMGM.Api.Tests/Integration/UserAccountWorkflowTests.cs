@@ -162,6 +162,56 @@ public sealed class UserAccountWorkflowTests
         Assert.True(candidates.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
     }
 
+    [Fact]
+    public async Task Access_reset_is_master_only_audited_and_never_exposes_the_password_outside_the_response()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        UserAccountEndpoints.ResetRateLimits();
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();
+        var target=Guid.NewGuid().ToString();var noEmail=Guid.NewGuid().ToString();var master=Guid.NewGuid().ToString();var pending=Guid.NewGuid().ToString();
+        identity.Managed[target]=new(target,"Hermano Ficticio","reset@example.invalid",true,"member");
+        identity.Managed[noEmail]=new(noEmail,"Sin Correo","",true,"member");
+        identity.Managed[master]=new(master,"Máster","master@example.invalid",true,"platform");
+        identity.Managed[pending]=new(pending,"Pendiente","p@example.invalid",false,"member");
+        var ct=TestContext.Current.CancellationToken;
+        // Sin rol de Máster: prohibido, sin tocar la identidad.
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.GranLogiaAdmin);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync($"/api/system/user-accounts/{target}/password-recovery",new{modality="email"},ct)).StatusCode);
+        Assert.Equal(0,identity.Emails);
+        client.DefaultRequestHeaders.Remove("X-Account-Role");client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        string P(string s)=>$"/api/system/user-accounts/{s}/password-recovery";
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync(P(target),new{modality="otra"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync(P(target),new{modality="temporary",reason="corto"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await client.PostAsJsonAsync(P("no-es-guid"),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await client.PostAsJsonAsync(P(Guid.NewGuid().ToString()),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync(P("ci-account-admin"),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync(P(master),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync(P(pending),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync(P(noEmail),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(0,identity.Emails+identity.Temporary);
+        // A) enlace por correo
+        var a=await client.PostAsJsonAsync(P(target),new{modality="email"},ct);Assert.Equal(HttpStatusCode.OK,a.StatusCode);Assert.Equal(1,identity.Emails);
+        Assert.Contains("no-store",a.Headers.CacheControl?.ToString()??"");
+        Assert.DoesNotContain("temporaryPassword",await a.Content.ReadAsStringAsync(ct));
+        // B) clave temporal mostrada una vez
+        var b=await client.PostAsJsonAsync(P(noEmail),new{modality="temporary",reason="Hermano sin correo, identidad verificada en persona"},ct);
+        Assert.Equal(HttpStatusCode.OK,b.StatusCode);var text=await b.Content.ReadAsStringAsync(ct);
+        using var json=JsonDocument.Parse(text);Assert.Equal(identity.TemporaryPassword,json.RootElement.GetProperty("temporaryPassword").GetString());
+        Assert.True(json.RootElement.GetProperty("requiresPasswordChange").GetBoolean());Assert.Equal(24,identity.TemporaryPassword!.Length);
+        await using var scope=factory.Services.CreateAsyncScope();var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        var audits=await db.AuditEvents.Where(x=>x.Action.StartsWith("system.users.access_reset")).ToListAsync(ct);
+        Assert.Contains(audits,x=>x.Action=="system.users.access_reset"&&x.EntityId==target);
+        Assert.Contains(audits,x=>x.Action=="system.users.access_reset_denied");
+        Assert.All(audits,x=>{Assert.DoesNotContain(identity.TemporaryPassword,x.MetadataJson??"");Assert.DoesNotContain("example.invalid",x.MetadataJson??"");});
+        // Falla del proveedor: 503 genérico y auditoría de rechazo
+        UserAccountEndpoints.ResetRateLimits();identity.RecoveryFails=true;
+        var fail=await client.PostAsJsonAsync(P(target),new{modality="email"},ct);Assert.Equal(HttpStatusCode.ServiceUnavailable,fail.StatusCode);
+        // Límite por cuenta
+        UserAccountEndpoints.ResetRateLimits();identity.RecoveryFails=false;
+        for(var i=0;i<3;i++)Assert.Equal(HttpStatusCode.OK,(await client.PostAsJsonAsync(P(target),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests,(await client.PostAsJsonAsync(P(target),new{modality="email"},ct)).StatusCode);
+    }
+
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection,Identity identity,Mail mail)
         => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(builder=>builder.ConfigureTestServices(services=>
         {
@@ -188,6 +238,11 @@ public sealed class UserAccountWorkflowTests
         public Task EnableAsync(string subject,CancellationToken ct){if(EnableFails)throw new AccountDeliveryException();Enabled=true;return Task.CompletedTask;}
         public Task RemoveAsync(string subject,CancellationToken ct){Enabled=false;Removed=true;return Task.CompletedTask;}
         public Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct)=>Task.FromResult<IReadOnlyList<AccountUser>>([]);
+        public Dictionary<string,AccountUser> Managed{get;}=new();public int Emails,Temporary;public string? TemporaryPassword;public bool RecoveryFails;
+        public Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)=>Task.FromResult(Managed.GetValueOrDefault(subject));
+        public Task<AccountClaims?> GetClaimsAsync(string subject,CancellationToken ct)=>Task.FromResult<AccountClaims?>(null);
+        public Task SendPasswordRecoveryEmailAsync(string subject,CancellationToken ct){if(RecoveryFails)throw new AccountDeliveryException();Emails++;return Task.CompletedTask;}
+        public Task SetTemporaryPasswordAsync(string subject,string password,CancellationToken ct){if(RecoveryFails)throw new AccountDeliveryException();Temporary++;TemporaryPassword=password;return Task.CompletedTask;}
     }
     private sealed class Mail:IInitialAccountMail
     {

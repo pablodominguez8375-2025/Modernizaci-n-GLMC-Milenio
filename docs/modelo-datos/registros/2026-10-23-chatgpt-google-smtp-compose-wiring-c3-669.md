@@ -1,0 +1,5 @@
+# GOV-004 / #669 C3 — clave de cifrado SMTP como configuración de infraestructura
+Fecha 23-10-2026.
+Campo nuevo de **entorno** (no base de datos): `PMGM_SMTP_ENCRYPTION_KEY`, opcional en Compose; representa 32 bytes aleatorios base64 bajo custodia del operador. Es enviado sólo al servicio backend API con nombre .NET `SystemMail__EncryptionKey` (ruta lógica `SystemMail:EncryptionKey`). No es valor de `core.institutional_rule_settings` ni se audita. El campo de credencial cifrada en BD permanece como C1, `system.mail.smtp_secret.protected`. Sin cambio de esquema ni migración.
+
+El alcance no registra material de clave, no lo inventa ni lo rota. Las plantillas .env son vacías. Keycloak continúa con SMTP propio del realm y no recibe esta clave. Se verifica el cableado mediante shell+Python estándar en CI. La persistencia ya cifrada exige conservación de la misma clave entre despliegues, respaldo y restauración. Si se cambia la clave sin procedimiento formal, la credencial no es descifrable, por lo que se deberá reingresar una contraseña de aplicación mediante Parámetros.
