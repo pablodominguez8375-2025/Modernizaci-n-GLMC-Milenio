@@ -15,3 +15,13 @@ describe('alcances de perfiles dinámicos', () => {
     expect(isLodgeScoped('order')).toBe(false)
   })
 })
+
+import { CONFERRABLE_ROLES, rolesForScope } from './dynamicAccess'
+describe('cargos que concede un perfil', () => {
+  it('ofrece cargos de Taller o de Gran Logia según el alcance y nunca áreas sensibles', () => {
+    expect(rolesForScope('own-lodge').every(r => r.level === 'lodge')).toBe(true)
+    expect(rolesForScope('order').some(r => r.value === 'librarian')).toBe(true)
+    for (const sensitive of ['lodge_treasury', 'lodge_hospitalaria', 'grand_treasury', 'grand_hospitalaria', 'privacy_officer', 'grand_lodge_admin', 'platform_superadmin', 'internal_affairs', 'lodge_venerable'])
+      expect(CONFERRABLE_ROLES.some(r => r.value === sensitive)).toBe(false)
+  })
+})

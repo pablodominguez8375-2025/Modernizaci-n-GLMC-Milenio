@@ -171,6 +171,7 @@ app.UseAuthentication();
 app.UseMiddleware<SupportViewAsMiddleware>();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
 app.UseMiddleware<DynamicScopeExpansionMiddleware>();
+app.UseMiddleware<DynamicRoleConferralMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();

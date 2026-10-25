@@ -11,10 +11,15 @@ export const ACCESS_SCOPES:{value:AccessScope;label:string;help:string}[]=[
 export const scopeLabel=(scope:string)=>ACCESS_SCOPES.find(x=>x.value===scope)?.label??scope
 export const isLodgeScoped=(scope:string)=>scope!=='order'
 export const isDerivedScope=(scope:string)=>scope==='own-lodge'||scope==='all-lodges'
-export interface DynamicProfile { id:string; code:string; name:string; scope:AccessScope; isSystem:boolean; isActive:boolean; menuCodes:string[]; grants:DynamicGrant[] }
+export interface DynamicProfile { id:string; code:string; name:string; scope:AccessScope; isSystem:boolean; isActive:boolean; menuCodes:string[]; grants:DynamicGrant[]; baseRoles?:string[] }
+/* Cargos que un perfil del Máster puede conferir (lista cerrada, sin Tesorería, Hospitalaria, Privacidad ni administración). */
+export const CONFERRABLE_ROLES:{value:string;label:string;level:'lodge'|'order'}[]=[
+ {value:'lodge_secretariat',label:'Secretaría del Taller',level:'lodge'},{value:'lodge_orator',label:'Orador del Taller',level:'lodge'},{value:'lodge_first_warden',label:'Primer Vigilante del Taller',level:'lodge'},{value:'lodge_second_warden',label:'Segundo Vigilante del Taller',level:'lodge'},{value:'lodge_past_master',label:'Inmediato Ex-Venerable Maestro',level:'lodge'},
+ {value:'librarian',label:'Bibliotecario',level:'order'},{value:'communications',label:'Comunicaciones',level:'order'},{value:'grand_archivist',label:'Gran Archivero',level:'order'},{value:'document_manager',label:'Gestión Documental',level:'order'},{value:'instruction_department_head',label:'Jefatura de Docencia',level:'order'},{value:'grand_first_warden',label:'Gran Primer Vigilante',level:'order'},{value:'grand_second_warden',label:'Gran Segundo Vigilante',level:'order'},{value:'immediate_past_grand_master',label:'Inmediato Ex Gran Maestro',level:'order'}]
+export const rolesForScope=(scope:string)=>CONFERRABLE_ROLES.filter(r=>r.level===(scope==='order'?'order':'lodge'))
 export interface DynamicAssignment { id:string; subject:string; profileCode:string; organizationId:string|null; effectiveFrom:string; effectiveTo:string|null; isActive:boolean }
 export interface DynamicCatalog { version:number; actions:AccessAction[]; menus:DynamicMenu[]; profiles:DynamicProfile[]; assignments:DynamicAssignment[] }
-export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'>
+export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'|'baseRoles'>
 export const actionLabels:Record<AccessAction,string>={view:'Ver',create:'Crear / hacer',write:'Escribir / registrar',edit:'Editar',delete:'Borrar lógico',search:'Buscar',print:'Imprimir'}
 const actions:AccessAction[]=['view','create','write','edit','delete','search','print']
 export function initialDynamicCatalog():DynamicCatalog {
@@ -63,7 +68,7 @@ export class DynamicAccessClient {
  async revoke(id:string,version:number){return this.mutate(`/api/system/access/assignments/${encodeURIComponent(id)}?expectedVersion=${version}`,'DELETE',version,undefined,c=>{const a=c.assignments.find(a=>a.id===id);if(!a)throw new Error('Asignación inexistente.');a.isActive=false})}
  async print(){if(!this.useMocks)await this.transport('/api/system/access/print',{method:'POST'});return {allowed:true}}
  private profile(c:DynamicCatalog,code:string){const p=c.profiles.find(p=>p.code===code);if(!p||p.isSystem)throw new Error('El perfil no existe o es protegido.');return p}
- private validate(d:ProfileDraft,c:DynamicCatalog){if(!/^[a-z][a-z0-9-]{0,79}$/.test(d.code)||!d.name.trim()||d.name.length>240||!ACCESS_SCOPES.some(x=>x.value===d.scope)||(isLodgeScoped(d.scope)&&d.menuCodes.includes('system'))||d.menuCodes.some(code=>!c.menus.some(m=>m.isActive&&m.code===code)))throw new Error('Código, nombre, alcance o menús inválidos.')}
+ private validate(d:ProfileDraft,c:DynamicCatalog){if(!/^[a-z][a-z0-9-]{0,79}$/.test(d.code)||!d.name.trim()||d.name.length>240||!ACCESS_SCOPES.some(x=>x.value===d.scope)||(isLodgeScoped(d.scope)&&d.menuCodes.includes('system'))||(d.baseRoles??[]).some(r=>!rolesForScope(d.scope).some(x=>x.value===r))||d.menuCodes.some(code=>!c.menus.some(m=>m.isActive&&m.code===code)))throw new Error('Código, nombre, alcance o menús inválidos.')}
 }
 
 export interface TreasuryAccess { version:number; organizationId:string; managed:boolean; actions:AccessAction[] }
