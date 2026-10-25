@@ -266,7 +266,7 @@ def validate_config(text, ident, issuer):
                 values[k] = v.strip().strip('"')
     # Docker QA uses internal Keycloak metadata transport. OIDC issuer
     # remains canonical HTTPS; no forced rewrite of a healthy authority.
-    internal_authority = "http://keycloak:8080/realms/" + issuer.rsplit("/", 1)[-1]
+    internal_authority = "http://keycloak:8080/identity/realms/" + issuer.rsplit("/", 1)[-1]
     if (values.get("InitialLoad__MasterSubject") != ident or
             values.get("InitialLoad__MasterIssuer") != issuer or
             values.get("Authentication__Authority") not in (issuer, internal_authority) or
