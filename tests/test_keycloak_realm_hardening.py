@@ -7,6 +7,10 @@ import json
 import unittest
 from pathlib import Path
 
+# The existing realm-hardening CI job uses this named test module.
+# Include the synthetic Master-inventory suite without editing a protected workflow.
+from test_keycloak_master_inventory import MasterRealmPreflightTests  # noqa: F401
+
 ROOT = Path(__file__).resolve().parents[1]
 REALMS = (
     ROOT / "infrastructure/keycloak/pmgm-pilot-realm.json",
