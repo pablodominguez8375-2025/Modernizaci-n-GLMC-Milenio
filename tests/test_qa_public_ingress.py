@@ -64,7 +64,21 @@ class PublicIngressTests(unittest.TestCase):
         source = json.loads((ROOT / 'infrastructure/keycloak/pmgm-realm.json').read_text())
         realm = json.loads((ROOT / 'infrastructure/keycloak/pmgm-qa-public-realm.json').read_text())
         self.assertEqual(ingress.public_realm(source), realm)
-        self.assertEqual(source['users'], realm['users'])
+        # Operational QA intentionally excludes the synthetic CI Master role.
+        self.assertEqual(len(source['users']), len(realm['users']))
+        for source_user, qa_user in zip(source['users'], realm['users']):
+            s, q = dict(source_user), dict(qa_user)
+            s_roles, q_roles = s.pop('realmRoles'), q.pop('realmRoles')
+            self.assertEqual(s, q)
+            self.assertEqual(
+                [role for role in s_roles if role != 'platform_superadmin'],
+                q_roles,
+            )
+            if source_user['username'] == 'qa.admin':
+                self.assertIn('platform_superadmin', s_roles)
+                self.assertNotIn('platform_superadmin', q_roles)
+        self.assertTrue(all('platform_superadmin' not in u['realmRoles']
+                            for u in realm['users']))
         client = next(c for c in realm['clients'] if c['clientId'] == 'pmgm-web')
         self.assertEqual([ingress.ORIGIN + '/auth/callback'], client['redirectUris'])
         self.assertEqual([ingress.ORIGIN], client['webOrigins'])

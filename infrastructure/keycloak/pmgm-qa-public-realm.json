@@ -192,7 +192,6 @@
         ]
       },
       "realmRoles": [
-        "platform_superadmin",
         "grand_lodge_admin",
         "internal_affairs",
         "grand_secretariat",

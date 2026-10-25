@@ -1,0 +1,14 @@
+# QA-only overlay for #604. Add last in docker compose -f order.
+# The private host file is NEVER committed, printed, or stored in Drive.
+# Its Authentication__Authority should match the existing healthy internal
+# Keycloak metadata URL; the verified MasterIssuer remains canonical HTTPS.
+services:
+  # Operational QA only: never import CI's synthetic technical Master.
+  # On existing realms --import-realm does not modify users; use exact
+  # backed-up legacy role retirement and readback instead.
+  keycloak:
+    volumes:
+      - ./keycloak/pmgm-qa-public-realm.json:/opt/keycloak/data/import/pmgm-realm.json:ro
+  api:
+    env_file:
+      - ${PMGM_QA_MASTER_APP_ENV_FILE:?Root-only host master QA app configuration required}
