@@ -32,6 +32,11 @@ class QaG8Contracts(unittest.TestCase):
                                  u["credentials"][0]["value"])
 
         profile = {u["username"]: u for u in users}
+        # The CI fixture deliberately uses qa.admin to test the isolated
+        # synthetic technical Master. glmdch must import PUBLIC (no Master).
+        self.assertIn("platform_superadmin", profile["qa.admin"]["realmRoles"])
+        self.assertTrue(all("platform_superadmin" not in u["realmRoles"]
+                            for u in users if u["username"] != "qa.admin"))
         for grade in (1, 2, 3):
             user = profile[f"qa.hermano{grade}"]
             self.assertEqual([], user["realmRoles"], "Un hermano sin cargo no recibe roles elevados")
@@ -78,7 +83,29 @@ class QaG8Contracts(unittest.TestCase):
 
     def test_public_realm_equal_users_and_install_guards(self):
         src, dst = json.loads(BASE.read_text()), json.loads(PUBLIC.read_text())
-        self.assertEqual(src["users"], dst["users"])
+        self.assertEqual(len(src["users"]), len(dst["users"]))
+        for lab_user, qa_user in zip(src["users"], dst["users"]):
+            self.assertEqual(lab_user["id"], qa_user["id"])
+            self.assertEqual(lab_user["username"], qa_user["username"])
+            lab_copy, qa_copy = dict(lab_user), dict(qa_user)
+            lab_roles = lab_copy.pop("realmRoles")
+            qa_roles = qa_copy.pop("realmRoles")
+            self.assertEqual(lab_copy, qa_copy)
+            if qa_user["username"] == "qa.admin":
+                self.assertEqual(["platform_superadmin"] + qa_roles, lab_roles)
+                self.assertNotIn("platform_superadmin", qa_roles)
+            else:
+                self.assertEqual(lab_roles, qa_roles)
+        self.assertTrue(all("platform_superadmin" not in u["realmRoles"]
+                            for u in dst["users"]))
+        # Master QA is provisioned only by the restricted host bootstrap.
+        overlay = (ROOT / "infrastructure/docker-compose.qa-master.yml").read_text()
+        self.assertIn("pmgm-qa-public-realm.json", overlay)
+        self.assertIn("PMGM_QA_MASTER_APP_ENV_FILE", overlay)
+        qa_compose = (ROOT / "infrastructure/docker-compose.srv01.yml").read_text()
+        ci_compose = (ROOT / "infrastructure/docker-compose.first.yml").read_text()
+        self.assertIn("./keycloak/pmgm-qa-public-realm.json:", qa_compose)
+        self.assertIn("./keycloak/pmgm-realm.json:", ci_compose)
         self.assertEqual("external", dst["sslRequired"])
         self.assertEqual("false", COMPOSE.read_text().split("PMGM_QA_G8_ENABLED: ${PMGM_QA_G8_ENABLED:-")[1].split("}")[0])
         self.assertIn('[ "${PMGM_QA_G8_ENABLED:-false}" != true ]', PREFLIGHT.read_text())

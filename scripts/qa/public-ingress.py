@@ -12,6 +12,19 @@ ROOT = Path(__file__).resolve().parents[2]
 def public_realm(source):
     realm = copy.deepcopy(source)
     realm['sslRequired'] = 'external'
+    # #604: keep the isolated CI fixture Master intact, but never import an
+    # implicit second Master from the derived canonical operational QA realm.
+    # A real QA admin is provided by the host-only controlled bootstrap.
+    for user in realm['users']:
+        if user['username'] == 'qa.admin':
+            if user['id'] != 'aa820001-0000-4000-8000-000000000001':
+                raise ValueError('unexpected QA synthetic admin subject')
+            roles = user['realmRoles']
+            if roles.count('platform_superadmin') != 1:
+                raise ValueError('unexpected QA synthetic Master role fixture')
+            user['realmRoles'] = [role for role in roles if role != 'platform_superadmin']
+        elif 'platform_superadmin' in user.get('realmRoles', []):
+            raise ValueError('unexpected second synthetic Master role')
     client = next(c for c in realm['clients'] if c['clientId'] == 'pmgm-web')
     client['redirectUris'] = [ORIGIN + '/auth/callback']
     client['webOrigins'] = [ORIGIN]
