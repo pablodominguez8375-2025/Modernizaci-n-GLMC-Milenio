@@ -1,22 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
-import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
+import { type DocumentApiClient, type LibraryCatalogItem, type WorkPaperReview, type ManagedPublication, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 import './library-ppt-enhancement.css'
 import LibraryMagazineEditorial from './LibraryMagazineEditorial'
+import AreaCollaboratorsSection from './AreaCollaborators'
+import LibraryManagedUpload from './LibraryManagedUpload'
 import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
 const pageSize = 12
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [], degrees: [], topics: [], officialDocumentTypes: [] }
+// Categorías que no se administran desde la tabla del Bibliotecario: documentos oficiales y videos (futuro).
+const fixedCategories: LibraryCategory[] = [
+  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
+  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+]
 const initialCategories: LibraryCategory[] = [
   { value: 'work_paper', label: 'Planchas de Trabajo', base: true, active: true },
   { value: 'book', label: 'Libros', base: true, active: true },
   { value: 'magazine', label: 'Revistas', base: true, active: true },
-  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
-  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+  { value: 'bulletin', label: 'Boletines', base: true, active: true },
+  ...fixedCategories,
 ]
 
-export default function LibraryPage({ documentApi }: { documentApi: DocumentApiClient }) {
+export type LibraryEditorRole = 'librarian' | 'communications' | null
+
+export default function LibraryPage({ documentApi, editorRole = null }: { documentApi: DocumentApiClient; editorRole?: LibraryEditorRole }) {
   const [items, setItems] = useState<LibraryCatalogItem[]>([])
   const [facets, setFacets] = useState<LibraryFacetsResponse>(emptyFacets)
   const [query, setQuery] = useState('')
@@ -34,7 +43,62 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
   const [submissions, setSubmissions] = useState<LibrarySubmission[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [reviews, setReviews] = useState<WorkPaperReview[]>([])
+  const [reviewKey, setReviewKey] = useState(0)
+  const [managed, setManaged] = useState<ManagedPublication[]>([])
   const submissionsTouched = useRef(false)
+
+  useEffect(() => {
+    let active = true
+    documentApi.listLibraryCategories()
+      .then(response => { if (active) setCategories([...response.items.map(c => ({ value: c.value, label: c.label, base: c.base, active: c.active })), ...fixedCategories]) })
+      .catch(() => { /* se conservan las categorías base si el servidor no responde */ })
+    return () => { active = false }
+  }, [documentApi, reloadKey])
+
+  async function categoryAction(run: () => Promise<unknown>, okMessage?: string) {
+    try { await run(); setReloadKey(key => key + 1); if (okMessage) setNotice(okMessage) }
+    catch (reason) { setNotice(toMessage(reason)) }
+  }
+  const categoryActions = {
+    create: (label: string) => categoryAction(() => documentApi.createLibraryCategory(label), `Categoría «${label}» creada. Ya puede recibir documentos.`),
+    patch: (code: string, patch: { label?: string; active?: boolean }) => categoryAction(() => documentApi.updateLibraryCategory(code, patch), 'Categoría actualizada y registrada en auditoría.'),
+    reorder: (codes: string[]) => categoryAction(() => documentApi.reorderLibraryCategories(codes)),
+  }
+
+  useEffect(() => {
+    if (editorRole !== 'librarian') { setReviews([]); return }
+    let active = true
+    documentApi.listWorkPaperReviews().then(list => { if (active) setReviews(list) }).catch(() => { if (active) setReviews([]) })
+    return () => { active = false }
+  }, [documentApi, editorRole, reviewKey])
+
+  useEffect(() => {
+    if (editorRole !== 'librarian') { setManaged([]); return }
+    let active = true
+    documentApi.listManagedPublications().then(list => { if (active) setManaged(list) }).catch(() => { if (active) setManaged([]) })
+    return () => { active = false }
+  }, [documentApi, editorRole, reloadKey])
+
+  const reviewActions = {
+    approve: async (review: WorkPaperReview) => {
+      try {
+        await documentApi.approveWorkPaper(review.id)
+        if (documentApi.useMocks) setAddedItems(current => [{ id: review.id, collectionId: demoCollectionId, title: review.title, documentType: 'work_paper', collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: review.sizeBytes, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: review.degree, authorName: review.authorName, authorLodgeName: review.lodge, shortDescription: review.description }, ...current])
+        setNotice(`«${review.title}» aprobada y publicada. Quedó registrado quién la aprobó.`); setReviewKey(k => k + 1); setReloadKey(k => k + 1)
+      } catch (reason) { setNotice(toMessage(reason)) }
+    },
+    returnWith: async (review: WorkPaperReview, reason: string) => {
+      try { await documentApi.returnWorkPaper(review.id, reason); setNotice(`«${review.title}» devuelta al Taller con el motivo indicado.`); setReviewKey(k => k + 1) }
+      catch (failure) { setNotice(toMessage(failure)) }
+    },
+    download: async (review: WorkPaperReview) => {
+      try {
+        const blob = await documentApi.downloadWorkPaperForReview(review.id)
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = review.fileName; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+      } catch (reason) { setNotice(toMessage(reason)) }
+    },
+  }
 
   useEffect(() => {
     let active = true
@@ -118,17 +182,20 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
       <div>
         <p className="eyebrow">Conocimiento institucional</p>
         <h1>Biblioteca Virtual</h1>
-        <p>Planchas de Trabajo, libros, la revista Horizonte Masónico y documentos oficiales catalogados para encontrar el material autorizado con mayor precisión.</p>
+        <p>Planchas de Trabajo, libros, la revista Horizonte Masónico, el Boletín mensual de la Orden y documentos oficiales catalogados para encontrar el material autorizado con mayor precisión.</p>
       </div>
       <span className="count-badge">{loading && !documentApi.useMocks ? 'cargando…' : publicationCountLabel(visibleTotal)}</span>
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
-    {!documentApi.useMocks && <LibraryMagazineEditorial documentApi={documentApi} onChanged={() => setReloadKey(value => value + 1)} />}
-    {documentApi.useMocks && <>
+    {editorRole === 'librarian' && <AreaCollaboratorsSection documentApi={documentApi} area="library" />}
+    {<LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
+    {editorRole && (documentApi.useMocks || editorRole === 'librarian') && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
-      <LibraryManagement categories={categories} onCategories={setCategories} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
+      <LibraryManagement mode={editorRole} categories={categories} categoryActions={categoryActions} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
+        reviews={reviews} reviewActions={reviewActions} uploadEnabled={documentApi.useMocks && editorRole === 'communications'}
+        extraActions={editorRole === 'librarian' ? <LibraryManagedUpload api={documentApi} categories={categories} drafts={managed} notify={setNotice} onChanged={() => setReloadKey(k => k + 1)} onPublished={item => { if (documentApi.useMocks) setAddedItems(current => [{ id: item.id, collectionId: demoCollectionId, title: item.title, documentType: item.categoryCode, collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: 1_200_000, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: item.degree, authorName: item.author, topic: item.topic, edition: item.edition, abstractText: item.description, shortDescription: item.description }, ...current]) }} /> : undefined}
         onSubmission={next => { submissionsTouched.current = true; setSubmissions(next) }}
         onPublish={item => setAddedItems(current => [item, ...current])} />
     </>}
@@ -153,7 +220,7 @@ export default function LibraryPage({ documentApi }: { documentApi: DocumentApiC
         </label>
         <div className="library-filters library-catalog-filters">
           <label className="document-field"><span>Grado</span><select value={degree} onChange={event => { setDegree(event.target.value); setPage(1) }}><option value="">Todos los habilitados</option><option value="1">1° grado</option><option value="2">2° grado</option><option value="3">3° grado</option></select></label>
-          <label className="document-field"><span>{documentType === 'magazine' ? 'Mes de la edición' : 'Tema del libro'}</span><select value={topic} onChange={event => { setTopic(event.target.value); setPage(1) }}><option value="">Todos</option>{topicFacets.map(item => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select></label>
+          <label className="document-field"><span>{documentType === 'magazine' ? 'Mes de la edición' : documentType === 'bulletin' ? 'Tema' : 'Tema del libro'}</span><select value={topic} onChange={event => { setTopic(event.target.value); setPage(1) }}><option value="">Todos</option>{topicFacets.map(item => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select></label>
           {documentType === 'official_document' && <label className="document-field"><span>Tipo oficial</span><select value={officialDocumentType} onChange={event => { setOfficialDocumentType(event.target.value); setPage(1) }}><option value="">Todos</option>{officialTypeFacets.map(item => <option key={item.value} value={item.value}>{item.label} ({item.count})</option>)}</select></label>}
         </div>
       </div>
@@ -211,6 +278,14 @@ function LibraryCard({ item, downloading, onDownload }: { item: LibraryCatalogIt
       <CatalogText label="En este número" value={item.abstractText} />
     </>}
 
+    {kind === 'bulletin' && <>
+      <dl className="library-catalog-meta">
+        <Meta label="Mes" value={formatCatalogPeriod(item.documentDate)} />
+        <Meta label="Grado" value={degreeLabel(item.minimumDegreeRequired)} />
+      </dl>
+      <CatalogText label={`Resumen del mes · ${item.authorName ?? 'Comunicaciones'}`} value={item.shortDescription ?? item.abstractText} />
+    </>}
+
     {kind === 'official_document' && <dl className="library-catalog-meta">
       <Meta label="Tipo documental" value={item.officialDocumentType ?? 'Documento oficial'} />
       <Meta label="Grado" value={degreeLabel(item.minimumDegreeRequired)} />
@@ -218,7 +293,7 @@ function LibraryCard({ item, downloading, onDownload }: { item: LibraryCatalogIt
       <Meta label="Versión" value={`v${item.versionNumber}`} />
     </dl>}
 
-    {!['work_paper', 'book', 'magazine', 'official_document'].includes(kind) && <dl className="library-catalog-meta"><Meta label="Colección" value={item.collectionName} /><Meta label="Grado" value={degreeLabel(item.minimumDegreeRequired)} /></dl>}
+    {!['work_paper', 'book', 'magazine', 'bulletin', 'official_document'].includes(kind) && <dl className="library-catalog-meta"><Meta label="Colección" value={item.collectionName} /><Meta label="Grado" value={degreeLabel(item.minimumDegreeRequired)} /></dl>}
 
     <div className="library-file-meta"><span>{contentTypeLabel(item.contentType)}</span><span>{formatBytes(item.sizeBytes)}</span><span>Publicado {formatChile(item.publishedAtUtc)}</span></div>
     <div className="library-card-action"><button type="button" className="document-primary compact" disabled={downloading} onClick={onDownload}>{downloading ? 'Preparando…' : 'Descargar'}</button></div>
@@ -237,6 +312,7 @@ const documentTypeLabels: Record<string, string> = {
   work_paper: 'Plancha de Trabajo',
   book: 'Libro',
   magazine: 'Revista',
+  bulletin: 'Boletín',
   official_document: 'Documento Oficial',
   video: 'Video',
 }
@@ -246,7 +322,7 @@ function typeTone(value: string) {
   const kind = canonicalCatalogType(value)
   if (kind === 'work_paper') return 'work'
   if (kind === 'book') return 'books'
-  if (kind === 'magazine') return 'magazine'
+  if (kind === 'magazine' || kind === 'bulletin') return 'magazine'
   if (kind === 'official_document') return 'official'
   if (kind === 'video') return 'video'
   return 'general'
@@ -258,6 +334,7 @@ function canonicalCatalogType(value: string) {
   if (['book', 'books', 'libro', 'libros'].includes(normalized)) return 'book'
   if (['official_document', 'documento_oficial', 'regulation', 'reglamento', 'constitution', 'constitucion', 'ritual'].includes(normalized)) return 'official_document'
   if (['magazine', 'magazines', 'revista', 'revistas'].includes(normalized)) return 'magazine'
+  if (['bulletin', 'bulletins', 'boletin', 'boletines'].includes(normalized)) return 'bulletin'
   if (['video', 'videos'].includes(normalized)) return 'video'
   return normalized
 }
@@ -274,19 +351,17 @@ function createDemoShowcaseCatalog(collectionId: string): LibraryCatalogItem[] {
     { id: 'demo-magazine-1', collectionId, title: 'Horizonte Masónico · N° 3', documentType: 'magazine', collectionName, versionNumber: 1, contentType: 'application/pdf', sizeBytes: 5210000, publishedAtUtc: '2026-09-10T15:00:00Z', minimumDegreeRequired: null, documentDate: '2026-09-01', topic: 'Septiembre 2026', edition: 'N° 3', abstractText: 'Crónica de las actividades del mes, entrevistas a Talleres y artículo central de la edición.' },
     { id: 'demo-magazine-2', collectionId, title: 'Horizonte Masónico · N° 2', documentType: 'magazine', collectionName, versionNumber: 1, contentType: 'application/pdf', sizeBytes: 4870000, publishedAtUtc: '2026-08-10T15:00:00Z', minimumDegreeRequired: null, documentDate: '2026-08-01', topic: 'Agosto 2026', edition: 'N° 2', abstractText: 'Reportaje sobre la labor solidaria de los Talleres y columna de opinión de la Gran Maestra.' },
     { id: 'demo-magazine-3', collectionId, title: 'Horizonte Masónico · N° 1', documentType: 'magazine', collectionName, versionNumber: 1, contentType: 'application/pdf', sizeBytes: 4390000, publishedAtUtc: '2026-07-10T15:00:00Z', minimumDegreeRequired: null, documentDate: '2026-07-01', topic: 'Julio 2026', edition: 'N° 1', abstractText: 'Primera edición de la revista interna: presentación, historia breve de la Gran Logia y agenda del semestre.' },
+    { id: 'demo-bulletin-2', collectionId, title: 'Boletín de la Orden · Septiembre 2026', documentType: 'bulletin', collectionName, versionNumber: 1, contentType: 'application/pdf', sizeBytes: 640000, publishedAtUtc: '2026-10-03T15:00:00Z', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-09-01', shortDescription: 'Resumen de las actividades de la Orden en septiembre: tenidas magnas, iniciaciones y labor solidaria de los Talleres.' },
+    { id: 'demo-bulletin-1', collectionId, title: 'Boletín de la Orden · Agosto 2026', documentType: 'bulletin', collectionName, versionNumber: 1, contentType: 'application/pdf', sizeBytes: 590000, publishedAtUtc: '2026-09-03T15:00:00Z', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-08-01', shortDescription: 'Resumen de agosto: agenda institucional, visitas de la Gran Maestra y actividades culturales.' },
     { id: 'demo-official-1', collectionId, title: 'Constitución de la Gran Logia Mixta', documentType: 'official_document', collectionName, versionNumber: 4, contentType: 'application/pdf', sizeBytes: 920000, publishedAtUtc: '2026-09-04T15:00:00Z', minimumDegreeRequired: null, documentDate: '2026-01-01', officialDocumentType: 'Constitución' },
     { id: 'demo-official-2', collectionId, title: 'Reglamento General', documentType: 'official_document', collectionName, versionNumber: 5, contentType: 'application/pdf', sizeBytes: 780000, publishedAtUtc: '2026-09-03T15:00:00Z', minimumDegreeRequired: 1, documentDate: '2026-02-10', officialDocumentType: 'Reglamento' },
     { id: 'demo-official-3', collectionId, title: 'Ritual de Segundo Grado', documentType: 'official_document', collectionName, versionNumber: 3, contentType: 'application/pdf', sizeBytes: 1120000, publishedAtUtc: '2026-09-02T15:00:00Z', minimumDegreeRequired: 2, documentDate: '2026-03-15', officialDocumentType: 'Ritual' },
   ]
 }
 
-function createDemoSubmissions(collectionId: string): LibrarySubmission[] {
-  const mk = (id: string, title: string, author: string, lodge: string, degree: number, description: string): LibrarySubmission => ({ id, kind: 'taller', title, documentType: 'work_paper', author, lodge, degree, description, sentAt: '2026-10-18',
-    item: { id, collectionId, title, documentType: 'work_paper', collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: 380000, publishedAtUtc: '2026-10-18T15:00:00Z', minimumDegreeRequired: degree, authorName: author, authorLodgeName: lodge, documentDate: '2026-10-18', topic: 'Trabajo masónico', shortDescription: description, abstractText: description } })
-  return [
-    mk('demo-sub-1', 'La palabra perdida y el trabajo del Aprendiz', 'Hermano Ejemplo Uno', 'Taller Fraternidad N° 3', 1, 'Reflexión sobre el silencio y el estudio en el primer grado.'),
-    mk('demo-sub-2', 'El simbolismo de la columna Boaz', 'Hermana Ejemplo Dos', 'Taller Luz del Sur N° 7', 2, 'Estudio comparado de las columnas del Templo.'),
-  ]
+function createDemoSubmissions(_collectionId: string): LibrarySubmission[] {
+  // Las planchas de los Talleres ya no son un borrador local: vienen del servidor (revisión del Bibliotecario).
+  return []
 }
 
 function filterDemoCatalog(items: LibraryCatalogItem[], filters: { query: string; documentType: string; degree: string; topic: string; officialDocumentType: string }) {
@@ -303,7 +378,7 @@ function filterDemoCatalog(items: LibraryCatalogItem[], filters: { query: string
 }
 
 function buildCategoryCounts(items: LibraryCatalogItem[]) {
-  const result: Record<string, number> = { work_paper: 0, book: 0, magazine: 0, official_document: 0, video: 0 }
+  const result: Record<string, number> = { work_paper: 0, book: 0, magazine: 0, bulletin: 0, official_document: 0, video: 0 }
   for (const item of items) {
     const kind = canonicalCatalogType(item.documentType)
     result[kind] = (result[kind] ?? 0) + 1
@@ -312,7 +387,7 @@ function buildCategoryCounts(items: LibraryCatalogItem[]) {
 }
 
 function buildCategoryCountsFromFacets(items: LibraryFacetItem[]) {
-  const result: Record<string, number> = { work_paper: 0, book: 0, magazine: 0, official_document: 0, video: 0 }
+  const result: Record<string, number> = { work_paper: 0, book: 0, magazine: 0, bulletin: 0, official_document: 0, video: 0 }
   for (const item of items) {
     const kind = canonicalCatalogType(item.value)
     result[kind] = (result[kind] ?? 0) + item.count
@@ -330,6 +405,12 @@ function buildStringFacet(values: Array<string | null | undefined>): LibraryFace
 
 function normalizeSearch(value: string) { return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim() }
 function degreeLabel(value?: number | null) { return value ? `${value}° grado` : 'General' }
+function formatCatalogPeriod(value?: string | null) {
+  if (!value) return '—'
+  const date = new Date(`${value}T12:00:00-03:00`)
+  const month = new Intl.DateTimeFormat('es-CL', { month: 'short', timeZone: 'America/Santiago' }).format(date).replace('.', '')
+  return `${month.charAt(0).toUpperCase()}${month.slice(1)} ${date.getFullYear()}`
+}
 function formatCatalogDate(value?: string | null) { if (!value) return '—'; return new Intl.DateTimeFormat('es-CL', { dateStyle: 'medium', timeZone: 'America/Santiago' }).format(new Date(`${value}T12:00:00-03:00`)) }
 function publicationCountLabel(total: number) { return `${total} ${total === 1 ? 'publicación' : 'publicaciones'}` }
 function contentTypeLabel(value: string) { return value === 'application/pdf' ? 'PDF' : value.includes('wordprocessingml') ? 'Word' : value.includes('spreadsheetml') ? 'Excel' : value.includes('presentationml') ? 'PowerPoint' : value.split('/').at(-1)?.toUpperCase() ?? value }

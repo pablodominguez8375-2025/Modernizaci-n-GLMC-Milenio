@@ -47,6 +47,7 @@ def inspect(probe):
         "oidc_issuer": "NOT_CHECKED",
         "admin_and_master_denied": "NOT_CHECKED",
         "decision": "NOT_CHECKED",
+        "brand_assets": "NOT_CHECKED",
     }
     if not probe:
         return evidence
@@ -97,10 +98,31 @@ def inspect(probe):
     except (OSError, ssl.SSLError, TimeoutError, http.client.HTTPException):
         statuses = []
     evidence["admin_and_master_denied"] = "PASS" if statuses == [404, 404, 404] else "BLOCKED"
+    if evidence["admin_and_master_denied"] != "PASS":
+        evidence["decision"] = "BLOCKED_ADMIN_MASTER"
+        return evidence
+
+    # #553 P0. Public, static, fixed GET routes: never submit credentials or
+    # follow redirects. A healthy SPA/issuer does not prove that brand files
+    # are readable by nginx. Only emit HTTP statuses, never asset contents.
+    brand_paths = (
+        "/brand/logo-glmch-reducido-v2-azul.svg",
+        "/brand/favicon-glmch.svg",
+        "/brand/favicon-32.png",
+        "/brand/apple-touch-icon.png",
+    )
+    statuses = []
+    for path in brand_paths:
+        try:
+            code, _, _ = request(path)
+            statuses.append(code)
+        except (OSError, ssl.SSLError, TimeoutError, http.client.HTTPException):
+            statuses.append(0)
+    evidence["brand_http"] = statuses
+    evidence["brand_assets"] = "PASS" if all(code == 200 for code in statuses) else "BLOCKED"
     evidence["decision"] = (
         "PUBLIC_ENTRY_CHECKS_PASS_ONLY"
-        if evidence["admin_and_master_denied"] == "PASS"
-        else "BLOCKED_ADMIN_MASTER"
+        if evidence["brand_assets"] == "PASS" else "BLOCKED_BRAND_ASSETS"
     )
     return evidence
 

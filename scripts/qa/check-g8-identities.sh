@@ -29,7 +29,7 @@ WITH expected AS (
          'aa820001-0000-4000-8000-' || lpad(n::text,12,'0') AS subject,
          CASE WHEN n=11 THEN 'apprentice'
               WHEN n=12 THEN 'fellowcraft' ELSE 'master' END AS degree
-  FROM generate_series(2,19) AS n
+  FROM generate_series(2,21) AS n
 ),
 valid AS (
   SELECT DISTINCT e.n
@@ -71,7 +71,7 @@ for _ in $(seq 1 45); do
   members="$(query pmgm "$member_sql" || true)"
   kc_users="$(query pmgm_keycloak "$kc_sql" || true)"
   offices="$(query pmgm "$office_sql" || true)"
-  if [ "$members" = 18 ] && [ "$kc_users" = 19 ] && [ "$offices" = t ]; then
+  if [ "$members" = 20 ] && [ "$kc_users" = 21 ] && [ "$offices" = t ]; then
     ready=true
     break
   fi
@@ -81,4 +81,4 @@ done
   echo "G8 FAIL: las cuentas Keycloak, enlaces OIDC, grados u oficinas sintéticas no concuerdan" >&2
   exit 1
 }
-echo "G8 PASS: 19 cuentas Keycloak, 18 enlaces por iss+sub y grados, cargos vigentes/vencidos. Datos exclusivamente sintéticos."
+echo "G8 PASS: 21 cuentas Keycloak, 20 enlaces por iss+sub y grados, cargos vigentes/vencidos. Datos exclusivamente sintéticos."

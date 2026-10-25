@@ -381,6 +381,12 @@ jobs:
           MINIO_SECRET_KEY: ci_qa_storage_secret_only
         run: docker compose -f infrastructure/docker-compose.qa.yml config
 
+      - name: Validate protected Google SMTP Compose wiring
+        run: bash scripts/qa/check-google-smtp-compose-wiring.sh
+
+      - name: Test SMTP runtime preflight with synthetic key (no network)
+        run: python3 -m unittest discover -s tests -p test_google_smtp_runtime_preflight.py
+
       - name: Validate standalone showcase Docker Compose
         run: docker compose -f infrastructure/docker-compose.showcase.yml config
 

@@ -47,6 +47,7 @@ public static class AssemblyMasterTermEvidenceAdapter
             reasons.Add("FOREIGN_OR_UNRELATED_ATTESTATION");
 
         var joined = new List<AssemblyMasterOfficeEvidence>();
+        var verifiedTerms = new List<(OfficeAssignment Office, AssemblyMasterTermAttestation Attestation)>();
         foreach (var term in terms)
         {
             var evidence = officialAttestations.Where(x => x.OfficeAssignmentId == term.Id).ToArray();
@@ -83,6 +84,7 @@ public static class AssemblyMasterTermEvidenceAdapter
                 continue;
             }
 
+            verifiedTerms.Add((term, attestation));
             joined.Add(new AssemblyMasterOfficeEvidence(
                 term.Id, term.StartDate.Value, term.EndDate, true,
                 attestation.CertificationActReference,
@@ -94,8 +96,42 @@ public static class AssemblyMasterTermEvidenceAdapter
             return AssemblyMasterTermEvidenceResult.Pending(reasons);
 
         var status = AssemblyAccreditedCategoryPolicy.Classify(joined, cutoff);
+
+        // Fuente oficial INDIVIDUAL para la futura materialización auditada:
+        // permanente usa período completo certificado; representante el vigente.
+        // No se confunde el período anterior con el Taller actual del hermano.
+        var selected = status.Category switch
+        {
+            AssemblyMemberCategoryPolicy.PermanentAssemblyMember =>
+                verifiedTerms.Where(x => x.Attestation.FullTermCompleted)
+                    .OrderBy(x => x.Office.EndDate)
+                    .ThenBy(x => x.Office.StartDate)
+                    .ThenBy(x => x.Office.Id).Select(x => (
+                        OfficeAssignment: (OfficeAssignment?)x.Office,
+                        Attestation: (AssemblyMasterTermAttestation?)x.Attestation))
+                    .FirstOrDefault(),
+            AssemblyMemberCategoryPolicy.Representative =>
+                verifiedTerms.Where(x => x.Attestation.CurrentServiceVerified)
+                    .OrderByDescending(x => x.Office.StartDate)
+                    .ThenBy(x => x.Office.Id).Select(x => (
+                        OfficeAssignment: (OfficeAssignment?)x.Office,
+                        Attestation: (AssemblyMasterTermAttestation?)x.Attestation))
+                    .FirstOrDefault(),
+            _ => default
+        };
+
+        AssemblyAccreditedOfficeSource? source = selected.OfficeAssignment is not null &&
+            selected.Attestation is not null
+            ? new(selected.OfficeAssignment.Id, selected.OfficeAssignment.OrganizationId,
+                selected.Attestation.CertificationActReference,
+                selected.OfficeAssignment.StartDate!.Value, selected.OfficeAssignment.EndDate)
+            : null;
+        if (status.Qualifies && source is null)
+            return AssemblyMasterTermEvidenceResult.Pending(
+                ["ACCREDITED_MASTER_OFFICE_SOURCE_MISSING"]);
+
         return new AssemblyMasterTermEvidenceResult(
-            true, status, Array.Empty<string>());
+            true, status, Array.Empty<string>(), source);
     }
 }
 
@@ -106,10 +142,19 @@ public sealed record AssemblyMasterTermAttestation(
     bool InstitutionallyVerified, bool FullTermCompleted,
     bool CurrentServiceVerified, DateTimeOffset CertifiedAtUtc);
 
+/// <summary>
+/// Referencia derivada de una constancia V.M. ya verificada, NO certificación nueva.
+/// El Taller en esta fuente puede diferir del Taller de membresía actual.
+/// </summary>
+public sealed record AssemblyAccreditedOfficeSource(
+    Guid OfficeAssignmentId, Guid OrganizationId, string EvidenceReference,
+    DateOnly StartDate, DateOnly? EndDate);
+
 public sealed record AssemblyMasterTermEvidenceResult(
     bool OfficialCoverageValidated,
     AssemblyMemberCategoryDecision? Category,
-    IReadOnlyList<string> BlockingReasons)
+    IReadOnlyList<string> BlockingReasons,
+    AssemblyAccreditedOfficeSource? AccreditedSource = null)
 {
     public static AssemblyMasterTermEvidenceResult Pending(IEnumerable<string> reasons) =>
         new(false, null, reasons.OrderBy(x => x, StringComparer.Ordinal).ToArray());

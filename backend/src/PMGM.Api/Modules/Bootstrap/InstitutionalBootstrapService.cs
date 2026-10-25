@@ -88,6 +88,26 @@ public sealed class InstitutionalBootstrapService(BootstrapDbContext db) : IInst
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
 
+        // #694: serialize all legacy bootstrap writes with changes to the
+        // initial-load window. No organization/catalog mutation may occur
+        // after the window is opened or closed. This lock is held until
+        // transaction completion, avoiding a read-then-write race.
+        // ToListAsync avoids EF wrapping a PostgreSQL FOR UPDATE query.
+        var windows = await db.InitialLoadWindows
+            .FromSqlRaw("""
+                SELECT * FROM core.initial_load_windows
+                WHERE "Id" = 1 FOR UPDATE
+                """)
+            .AsNoTracking()
+            .ToListAsync(cancellationToken);
+        if (windows.Count != 1 ||
+            !InitialLoadLegacyBootstrapWriteGuard.AllowsApply(windows[0]))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return BootstrapApplyResponse.Invalid(hash,
+                ["La configuración institucional ya no admite escrituras por bootstrap inicial."]);
+        }
+
         var existingApplication = await db.BootstrapApplications
             .SingleOrDefaultAsync(
                 x => x.PackageKey == normalized.PackageKey && x.PackageVersion == normalized.PackageVersion,

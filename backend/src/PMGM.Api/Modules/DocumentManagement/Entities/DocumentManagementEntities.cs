@@ -39,6 +39,24 @@ public sealed class InstitutionalDocument
     public string? AbstractText { get; set; }
     public string? OfficialDocumentType { get; set; }
 
+    /// <summary>
+    /// Perfil institucional (librarian | communications) que creó la publicación
+    /// editorial. La titularidad es por perfil/cargo, no por persona. Null en
+    /// documentos históricos: se comportan como antes.
+    /// </summary>
+    public string? PublisherProfile { get; set; }
+
+    /// <summary>
+    /// #588 — revisión del Bibliotecario sobre planchas: pending_review | returned | approved.
+    /// Null en documentos que no pasan por revisión (y planchas históricas ya publicadas).
+    /// </summary>
+    public string? ReviewStatus { get; set; }
+    public Guid? ReviewVersionId { get; set; }
+    public DateTimeOffset? ReviewSubmittedAtUtc { get; set; }
+    public string? ReviewReason { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+    public string? ReviewedBySubject { get; set; }
+
     public string Status { get; set; } = DocumentManagementCodes.DocumentStatus.Draft;
     public Guid? PublishedVersionId { get; set; }
     public DateTimeOffset? PublishedAtUtc { get; set; }
@@ -64,4 +82,22 @@ public sealed class DocumentVersion
     public string? SubmittedShortDescription { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     public string CreatedBySubject { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// #588 — categorías de la Biblioteca Virtual administradas por el Bibliotecario. El código
+/// (`DocumentType`) es estable; el rótulo, el orden y la vigencia son editables. Las categorías
+/// base no se eliminan ni se desactivan.
+/// </summary>
+public sealed class LibraryCategory
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Code { get; set; } = string.Empty;
+    public string Label { get; set; } = string.Empty;
+    public int Position { get; set; }
+    public bool Active { get; set; } = true;
+    public bool IsBase { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset? UpdatedAtUtc { get; set; }
+    public string? UpdatedBySubject { get; set; }
 }

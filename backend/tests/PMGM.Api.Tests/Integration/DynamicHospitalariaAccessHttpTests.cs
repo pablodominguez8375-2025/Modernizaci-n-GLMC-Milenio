@@ -32,7 +32,7 @@ public sealed class DynamicHospitalariaAccessHttpTests
     {
         if (string.IsNullOrWhiteSpace(Connection)) return;
         var ct = TestContext.Current.CancellationToken;
-        using var factory = Factory(Connection); using var admin = factory.CreateClient(); using var client = factory.CreateClient();
+        using var factory = Factory(Connection); using var admin = factory.CreateClient(); admin.DefaultRequestHeaders.Add("X-Dynamic-Role", InstitutionalRoles.PlatformSuperAdmin); using var client = factory.CreateClient();
         var org = new Organization { Name = "Hospitalaria permisos QA", Type = "workshop" };
         var other = new Organization { Name = "Otro Taller QA", Type = "workshop" };
         var submission = new PMGM.Api.Modules.Hospitalaria.Entities.HospitalariaMonthlySubmission { OrganizationId = org.Id, PeriodYear = 2026, PeriodMonth = 10, CutoffDate = new DateOnly(2026,10,31), Status = "draft", CreatedBySubject = "qa" };

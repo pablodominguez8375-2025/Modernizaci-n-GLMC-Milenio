@@ -137,6 +137,8 @@ services:
       UserAccounts__Mail__Password: ${PMGM_ACCOUNT_SMTP_PASSWORD:-}
       UserAccounts__Mail__From: ${PMGM_ACCOUNT_SMTP_FROM:-}
       UserAccounts__Mail__LoginUrl: ${PMGM_ACCOUNT_LOGIN_URL:-}
+      # Secreto local opcional: jamás en repositorio ni contenedor Keycloak/web.
+      SystemMail__EncryptionKey: ${PMGM_SMTP_ENCRYPTION_KEY:-}
       Authentication__Authority: http://keycloak:8080/realms/pmgm
       Authentication__Audience: pmgm-api
       Authentication__RequireHttpsMetadata: "false"

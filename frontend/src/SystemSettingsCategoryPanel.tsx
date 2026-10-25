@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react'
 import { ActionDrawer } from './actionKit'
+import GoogleSmtpSettingsPanel from './GoogleSmtpSettingsPanel'
 import { type PmgmApiClient, type SystemSetting, type SystemSettingVersion } from './api/pmgmApi'
 
 const todayChile = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
@@ -65,6 +66,7 @@ export default function SystemSettingsCategoryPanel({ api, category, items, onSa
         </form>
       </ActionDrawer>
     </header>
+    {category === 'Correo electrónico' && <GoogleSmtpSettingsPanel api={api} />}
     <dl className="system-category-list">
       {items.map(item => <div key={item.code} className="system-category-row">
         <dt>{item.label}</dt>

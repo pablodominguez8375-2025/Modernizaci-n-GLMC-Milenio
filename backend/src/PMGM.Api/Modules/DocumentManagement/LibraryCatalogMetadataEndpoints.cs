@@ -61,7 +61,9 @@ public static class LibraryCatalogMetadataEndpoints
             return Results.Forbid();
 
         var subject = DynamicTreasuryAccess.Subject(ctx.User);
-        var isLibrarian = access.CanManageLibrary(ctx.User, null) &&
+        // Bibliotecario y Comunicaciones institucional ven todas las versiones;
+        // un colaborador sólo las que él mismo reservó.
+        var isLibrarian = (access.CanManageLibrary(ctx.User, null) || access.CanManageCommunications(ctx.User)) &&
             DynamicViewAccess.Allows(catalog, subject, "library", "write",
                 null, DynamicAccessEndpoints.Today());
         if (!isLibrarian && string.IsNullOrWhiteSpace(subject)) return Results.Forbid();
@@ -100,7 +102,7 @@ public static class LibraryCatalogMetadataEndpoints
 
         if (document.Status != DocumentManagementCodes.DocumentStatus.Published ||
             document.PublishedVersionId is null)
-            return Results.Conflict(new { message = "La revista no tiene una versión publicada." });
+            return Results.Conflict(new { message = "La publicación no tiene una versión publicada." });
 
         var previousVersionId = document.PublishedVersionId.Value;
         document.PublishedVersionId = null;
@@ -109,7 +111,7 @@ public static class LibraryCatalogMetadataEndpoints
         // colaboradores vigentes; la anterior versión se conserva y audita.
         document.Status = DocumentManagementCodes.DocumentStatus.Draft;
         db.AuditEvents.Add(AuditEventFactory.Create(
-            ctx, "library.editorial.magazine_unpublished",
+            ctx, $"library.editorial.{LibraryEditorialTypes.AuditKey(document.DocumentType)}_unpublished",
             nameof(InstitutionalDocument), document.Id.ToString(),
             null, AuditResults.Success,
             new { PreviousVersionId = previousVersionId, document.Status }));
@@ -141,6 +143,18 @@ public static class LibraryCatalogMetadataEndpoints
 
         if (request.VersionId == Guid.Empty)
             return Results.BadRequest(new { message = "VersionId obligatorio." });
+
+        // Reemplazo de una publicación vigente sin despublicar: motivo obligatorio.
+        var previousVersionId = document.Status == DocumentManagementCodes.DocumentStatus.Published
+            ? document.PublishedVersionId : null;
+        var reason = request.Reason?.Trim();
+        if (previousVersionId is not null)
+        {
+            if (previousVersionId == request.VersionId)
+                return Results.Conflict(new { message = "Esa versión ya es la publicada." });
+            if (string.IsNullOrWhiteSpace(reason) || reason.Length is < 10 or > 2000 || reason.Any(char.IsControl))
+                return Results.BadRequest(new { message = "Indique el motivo del reemplazo (10 a 2000 caracteres)." });
+        }
 
         var version = await db.DocumentVersions.SingleOrDefaultAsync(
             x => x.DocumentId == document.Id && x.Id == request.VersionId,
@@ -174,10 +188,14 @@ public static class LibraryCatalogMetadataEndpoints
         document.Status = DocumentManagementCodes.DocumentStatus.Published;
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
-            "library.editorial.magazine_published",
+            $"library.editorial.{LibraryEditorialTypes.AuditKey(document.DocumentType)}_published",
             nameof(InstitutionalDocument),
             document.Id.ToString(), null, AuditResults.Success,
-            new { document.CollectionId, VersionId = version.Id, version.VersionNumber, document.Status }));
+            new
+            {
+                document.CollectionId, VersionId = version.Id, version.VersionNumber, document.Status,
+                PreviousVersionId = previousVersionId, Reason = previousVersionId is null ? null : reason
+            }));
         await db.SaveChangesAsync(cancellationToken);
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
@@ -198,9 +216,17 @@ public static class LibraryCatalogMetadataEndpoints
     {
         // Sin type, classification, accessPolicy, status o grado elegidos
         // por el cliente. El servidor fija esos valores y sólo crea borrador.
+        // Único dato de tipo que el cliente puede elegir: Revista (por omisión)
+        // o Boletín. Cualquier otro valor se rechaza antes de autorizar.
+        var documentType = string.IsNullOrWhiteSpace(request.DocumentType)
+            ? LibraryEditorialTypes.Magazine
+            : LibraryEditorialTypes.Canonical(request.DocumentType);
+        if (documentType is null)
+            return Results.BadRequest(new { message = "La publicación editorial debe ser Revista o Boletín." });
+
         var catalog = await DynamicAccessEndpoints.LoadAsync(institutionalDb, cancellationToken);
-        if (!LibraryMagazineMetadataAuthorization.CanCreateEditorialMagazine(
-                httpContext.User, access, catalog))
+        if (!LibraryMagazineMetadataAuthorization.CanCreateEditorial(
+                httpContext.User, access, catalog, documentType))
             return Results.Forbid();
 
         var title = request.Title?.Trim();
@@ -222,16 +248,17 @@ public static class LibraryCatalogMetadataEndpoints
             Collection = collection,
             OrganizationId = null,
             Title = title,
-            DocumentType = "magazine",
+            DocumentType = documentType,
             Classification = DocumentManagementCodes.Classification.Internal,
             AccessPolicy = DocumentManagementCodes.AccessPolicy.LibraryAuthenticated,
             Status = DocumentManagementCodes.DocumentStatus.Draft,
+            PublisherProfile = LibraryMagazineMetadataAuthorization.ActorProfile(httpContext.User, access),
             CreatedBySubject = DynamicTreasuryAccess.Subject(httpContext.User) ?? string.Empty
         };
         db.InstitutionalDocuments.Add(document);
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
-            "library.editorial.magazine_draft.created",
+            $"library.editorial.{documentType}_draft.created",
             nameof(InstitutionalDocument),
             document.Id.ToString(),
             null,
@@ -261,6 +288,10 @@ public static class LibraryCatalogMetadataEndpoints
         if (!LibraryMagazineMetadataAuthorization.CanListEditableMagazines(
                 httpContext.User, access, catalog))
             return Results.Forbid();
+        var includeMagazines = LibraryMagazineMetadataAuthorization.CanListEditable(
+            httpContext.User, access, catalog, LibraryEditorialTypes.Magazine);
+        var includeBulletins = LibraryMagazineMetadataAuthorization.CanListEditable(
+            httpContext.User, access, catalog, LibraryEditorialTypes.Bulletin);
 
         // Una colección/organización indicada por el solicitante jamás amplía
         // el conjunto: filtros sobre las relaciones persistidas en PostgreSQL.
@@ -273,10 +304,17 @@ public static class LibraryCatalogMetadataEndpoints
                 document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
                 document.Classification == DocumentManagementCodes.Classification.Internal &&
                 document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated &&
-                (document.DocumentType.ToLower() == "magazine" ||
-                 document.DocumentType.ToLower() == "magazines" ||
-                 document.DocumentType.ToLower() == "revista" ||
-                 document.DocumentType.ToLower() == "revistas"));
+                ((includeMagazines &&
+                  (document.DocumentType.ToLower() == "magazine" ||
+                   document.DocumentType.ToLower() == "magazines" ||
+                   document.DocumentType.ToLower() == "revista" ||
+                   document.DocumentType.ToLower() == "revistas")) ||
+                 (includeBulletins &&
+                  (document.DocumentType.ToLower() == "bulletin" ||
+                   document.DocumentType.ToLower() == "bulletins" ||
+                   document.DocumentType.ToLower() == "boletin" ||
+                   document.DocumentType.ToLower() == "boletines" ||
+                   document.DocumentType.ToLower() == "boletín"))));
 
         var total = await query.CountAsync(cancellationToken);
         var items = await query
@@ -297,8 +335,23 @@ public static class LibraryCatalogMetadataEndpoints
                 document.Edition,
                 document.ShortDescription,
                 document.CreatedAtUtc,
-                document.PublishedAtUtc))
+                document.PublishedAtUtc,
+                document.PublisherProfile,
+                false))
             .ToListAsync(cancellationToken);
+        // Titularidad por perfil: la interfaz sólo ofrece corregir lo propio.
+        var librarian = access.CanManageLibrary(httpContext.User, null);
+        var communications = access.CanManageCommunications(httpContext.User);
+        items = items.Select(item => item with
+        {
+            CanCorrect = item.PublisherProfile switch
+            {
+                null => true,
+                LibraryPublisherProfiles.Librarian => librarian,
+                LibraryPublisherProfiles.Communications => communications,
+                _ => false
+            }
+        }).ToList();
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new EditorialMagazineListDto(total, page, pageSize, items));
@@ -347,6 +400,12 @@ public static class LibraryCatalogMetadataEndpoints
         if (document.Status == DocumentManagementCodes.DocumentStatus.Retired)
             return Results.Conflict(new { message = "No se pueden modificar los metadatos de un documento retirado." });
 
+        // Decisión del PO (22-10-2026, #635): la revista institucional y el
+        // Boletín mensual son de lectura para todos los grados (General).
+        if (LibraryEditorialTypes.Canonical(document.DocumentType) is not null &&
+            request.MinimumDegreeRequired is not null)
+            return Results.BadRequest(new { message = "La revista y el boletín son visibles para todos los grados; no admiten grado mínimo." });
+
         var authorName = Normalize(request.AuthorName);
         var authorLodgeName = Normalize(request.AuthorLodgeName);
         var topic = Normalize(request.Topic);
@@ -391,6 +450,13 @@ public static class LibraryCatalogMetadataEndpoints
                 // No se exige el abstract propio de los libros ni se expone contenido privado.
                 break;
 
+            case LibraryCatalogKind.Bulletin:
+                // Boletín: informe resumido mensual de actividades de la Orden.
+                // El período (mes/año) es obligatorio y se normaliza al día 1.
+                if (request.DocumentDate is null)
+                    return Results.BadRequest(new { message = "Un Boletín requiere el mes y año que informa." });
+                break;
+
             case LibraryCatalogKind.Video:
                 // Categoría preparada para una habilitación posterior. Los metadatos
                 // de tema/autor/fecha/descripción ya pueden almacenarse sin activar
@@ -406,7 +472,9 @@ public static class LibraryCatalogMetadataEndpoints
 
         document.MinimumDegreeRequired = request.MinimumDegreeRequired;
         document.AuthorName = authorName;
-        document.DocumentDate = request.DocumentDate;
+        document.DocumentDate = kind == LibraryCatalogKind.Bulletin && request.DocumentDate is { } period
+            ? new DateOnly(period.Year, period.Month, 1)
+            : request.DocumentDate;
 
         if (kind == LibraryCatalogKind.WorkPaper)
         {
@@ -426,7 +494,7 @@ public static class LibraryCatalogMetadataEndpoints
             document.ShortDescription = null;
             document.OfficialDocumentType = null;
         }
-        else if (kind == LibraryCatalogKind.Magazine)
+        else if (kind is LibraryCatalogKind.Magazine or LibraryCatalogKind.Bulletin)
         {
             document.AuthorLodgeName = null;
             document.Topic = topic;
@@ -504,6 +572,7 @@ public static class LibraryCatalogMetadataEndpoints
             "constitution" or "constitucion" or "ritual" => LibraryCatalogKind.OfficialDocument,
             "video" or "videos" => LibraryCatalogKind.Video,
             "magazine" or "magazines" or "revista" or "revistas" => LibraryCatalogKind.Magazine,
+            "bulletin" or "bulletins" or "boletin" or "boletines" or "boletín" => LibraryCatalogKind.Bulletin,
             _ => LibraryCatalogKind.Other
         };
     }
@@ -525,7 +594,8 @@ public enum LibraryCatalogKind
     Book,
     OfficialDocument,
     Video,
-    Magazine
+    Magazine,
+    Bulletin
 }
 
 public sealed record SetLibraryCatalogMetadataRequest(
@@ -565,7 +635,9 @@ public sealed record EditorialMagazineDto(
     string? Edition,
     string? ShortDescription,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset? PublishedAtUtc);
+    DateTimeOffset? PublishedAtUtc,
+    string? PublisherProfile = null,
+    bool CanCorrect = false);
 
 public sealed record EditorialMagazineListDto(
     int Total,
@@ -573,7 +645,7 @@ public sealed record EditorialMagazineListDto(
     int PageSize,
     IReadOnlyList<EditorialMagazineDto> Items);
 
-public sealed record CreateEditorialMagazineRequest(Guid CollectionId, string? Title);
+public sealed record CreateEditorialMagazineRequest(Guid CollectionId, string? Title, string? DocumentType = null);
 public sealed record EditorialMagazineCreatedDto(Guid DocumentId, string Status);
 
 public sealed record EditorialMagazineVersionDto(
@@ -584,4 +656,4 @@ public sealed record EditorialMagazineVersionsResponse(
     Guid DocumentId, int Total, int Page, int PageSize,
     IReadOnlyList<EditorialMagazineVersionDto> Items);
 
-public sealed record PublishEditorialMagazineRequest(Guid VersionId);
+public sealed record PublishEditorialMagazineRequest(Guid VersionId, string? Reason = null);

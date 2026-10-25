@@ -108,12 +108,79 @@ public sealed class DynamicViewAccessHttpTests
         await using var check=factory.Services.CreateAsyncScope();var checkDb=check.ServiceProvider.GetRequiredService<PmgmDbContext>();
         Assert.Equal(1,await checkDb.AuditEvents.CountAsync(a=>a.Action=="system.access.view_print_requested"&&a.OrganizationId==org.Id,ct));
     }
+    [Fact]
+    public async Task Library_search_requires_search_grant_without_leaking_catalog_when_revoked()
+    {
+        if (string.IsNullOrWhiteSpace(Connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(Connection);
+        using var client = factory.CreateClient();
+        var subject = "library-search-" + Guid.NewGuid().ToString("N");
+        var profileCode = "qa-library-" + Guid.NewGuid().ToString("N");
+        var assignmentId = Guid.NewGuid();
+        client.DefaultRequestHeaders.Add("X-View-Subject", subject);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var documents = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
+            await core.Database.MigrateAsync(ct);
+            await documents.Database.MigrateAsync(ct);
+            var catalog = await DynamicAccessEndpoints.LoadAsync(core, ct);
+            catalog.Profiles.Add(new DynamicProfile(
+                Guid.NewGuid(), profileCode, "Lectura sin búsqueda", "order",
+                false, true, ["documents"],
+                [new DynamicGrant("library", ["view"])]));
+            catalog.Assignments.Add(new DynamicAssignment(
+                assignmentId, subject, profileCode, null,
+                new DateOnly(2020, 1, 1), null, true));
+            await Save(core, catalog, ct);
+        }
+
+        // A technical view grant permits facets but not search, even if the
+        // user's institutional role could otherwise access the library.
+        using (var facets = await client.GetAsync("/api/biblioteca/facetas", ct))
+            Assert.Equal(HttpStatusCode.OK, facets.StatusCode);
+        using (var denied = await client.GetAsync("/api/biblioteca/buscar?q=demostracion", ct))
+            Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var catalog = await DynamicAccessEndpoints.LoadAsync(core, ct);
+            var index = catalog.Profiles.FindIndex(p => p.Code == profileCode);
+            catalog.Profiles[index] = catalog.Profiles[index] with
+            {
+                Grants = [new DynamicGrant("library", ["view", "search"])]
+            };
+            await Save(core, catalog, ct);
+        }
+
+        using (var allowed = await client.GetAsync("/api/biblioteca/buscar?q=demostracion", ct))
+        {
+            Assert.Equal(HttpStatusCode.OK, allowed.StatusCode);
+            var json = await allowed.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.True(json.TryGetProperty("items", out _));
+        }
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var catalog = await DynamicAccessEndpoints.LoadAsync(core, ct);
+            var index = catalog.Assignments.FindIndex(a => a.Id == assignmentId);
+            catalog.Assignments[index] = catalog.Assignments[index] with { IsActive = false };
+            await Save(core, catalog, ct);
+        }
+        using var revoked = await client.GetAsync("/api/biblioteca/buscar?q=demostracion", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, revoked.StatusCode);
+    }
+
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options,ILoggerFactory logger,UrlEncoder encoder):AuthenticationHandler<AuthenticationSchemeOptions>(options,logger,encoder)
     {
         public const string Name="DynamicView-CI";
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            var claims=new List<Claim>{new("sub",Request.Headers["X-View-Subject"].FirstOrDefault()??"view-ci"),new(InstitutionalClaims.Scope,"order"),new(InstitutionalClaims.Role,Request.Headers["X-View-Role"].FirstOrDefault()??InstitutionalRoles.GranLogiaAdmin)};
+            var claims=new List<Claim>{new("sub",Request.Headers["X-View-Subject"].FirstOrDefault()??"view-ci"),new(InstitutionalClaims.Scope,"order"),new(InstitutionalClaims.Role,Request.Headers["X-View-Role"].FirstOrDefault()??InstitutionalRoles.PlatformSuperAdmin)};
             if(Guid.TryParse(Request.Headers["X-View-Organization"].FirstOrDefault(),out var org))claims.Add(new(InstitutionalClaims.Organization,org.ToString()));
             return Task.FromResult(AuthenticateResult.Success(new(new ClaimsPrincipal(new ClaimsIdentity(claims,Name)),Name)));
         }

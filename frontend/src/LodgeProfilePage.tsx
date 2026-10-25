@@ -6,7 +6,7 @@ import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './lodgeProfile.css'
 import { organizationDisplayName } from './displayFormat'
 
-export default function LodgeProfilePage({ api, organizationProfileApi, canManageAccess = false, canEditWorkshopProfile = false }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient; canManageAccess?: boolean; canEditWorkshopProfile?: boolean }) {
+export default function LodgeProfilePage({ api, organizationProfileApi, canManageAccess = false, canEditWorkshopProfile = false, sharedOrganizationId }: { api: PmgmApiClient; organizationProfileApi: OrganizationProfileApiClient; canManageAccess?: boolean; canEditWorkshopProfile?: boolean; /** #681 — Taller elegido por la pantalla que contiene la Ficha: evita un segundo selector. */ sharedOrganizationId?: string }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [profile, setProfile] = useState<OrganizationProfile | null>(null)
@@ -31,12 +31,18 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
         const workshops = response.items.filter(item => item.type.toLowerCase() === 'workshop')
         setOrganizations(workshops)
         const requested = new URLSearchParams(window.location.search).get('taller')
-        setOrganizationId(workshops.find(item => item.id === requested)?.id ?? workshops[0]?.id ?? '')
+        setOrganizationId(workshops.find(item => item.id === sharedOrganizationId)?.id ?? workshops.find(item => item.id === requested)?.id ?? workshops[0]?.id ?? '')
       })
       .catch(reason => { if (active) setError(toMessage(reason)) })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [api])
+
+  useEffect(() => {
+    if (sharedOrganizationId === undefined) return
+    setOrganizationId(current => organizations.some(item => item.id === sharedOrganizationId) ? sharedOrganizationId : sharedOrganizationId === '' ? current : '')
+  }, [sharedOrganizationId, organizations])
 
   useEffect(() => {
     if (!organizationId) { setProfile(null); return }
@@ -131,7 +137,7 @@ export default function LodgeProfilePage({ api, organizationProfileApi, canManag
   return <>
     <section className="page-heading lodge-profile-heading">
       <div><p className="eyebrow">Identidad y administración</p><h1>Ficha del Taller</h1><p>Datos de identidad, origen, autoridades, regularidad y actividad logial.</p></div>
-      <label className="lodge-profile-selector"><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>
+      {sharedOrganizationId !== undefined ? <div className="lodge-profile-selector"><span>Taller</span><strong>{organizations.find(item => item.id === organizationId) ? organizationLabel(organizations.find(item => item.id === organizationId)!) : 'Taller seleccionado arriba'}</strong></div> : <label className="lodge-profile-selector"><span>Taller</span><select value={organizationId} onChange={event => setOrganizationId(event.target.value)}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></label>}
     </section>
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta o guardar la ficha.</strong><span>{error}</span></div>}

@@ -14,7 +14,10 @@ public static class DynamicViewAccess
 {
     public static bool Allows(DynamicAccessCatalog catalog, string? subject, string view, string action, Guid? organization, DateOnly today)
         => DynamicAccessEndpoints.AllowedActions.Contains(action) &&
-           (!catalog.Assignments.Any(a => a.Subject == subject && a.OrganizationId == organization) ||
+           // Una vez enrolado en cualquier ámbito, el sujeto no puede volver al
+           // acceso legado al consultar otro Taller sin asignación expresa.
+           // Se consideran también las asignaciones revocadas y vencidas.
+           (!catalog.Assignments.Any(a => a.Subject == subject) ||
             DynamicAccessEndpoints.IsGranted(catalog, subject, view, action, organization, today));
 
     // A collection with no organization selector must not leak a denied context. All historical
@@ -61,6 +64,7 @@ public static class DynamicViewAccess
         if (route.StartsWith("/api/biblioteca")) return "library";
         if (route.StartsWith("/api/documentos")) return "documentmanager";
         if (route.StartsWith("/api/grand-archive")) return "grandarchive";
+        if (route.StartsWith("/api/publicaciones-oficiales")) return "officialdocuments";
         if (route.StartsWith("/api/calendar")) return "calendar";
         if (route.StartsWith("/api/notifications")) return "notifications";
         if (route.StartsWith("/api/system/audit")) return "access-review";
@@ -70,6 +74,11 @@ public static class DynamicViewAccess
 
     public static string ActionFor(string method, string route, string handler)
     {
+        // Biblioteca Virtual: consultar portada/facetas es "view"; ejecutar una
+        // búsqueda de catálogo requiere "search" independiente cuando hay perfiles.
+        if (method is "GET" or "HEAD" &&
+            route.Equals("/api/biblioteca/buscar", StringComparison.OrdinalIgnoreCase))
+            return "search";
         // Download/export is a read. Print is independently authorized and audited below.
         // Buscar es una acción técnica distinta de leer. El endpoint conserva
         // además la autorización de dominio por rol y Taller.
@@ -133,6 +142,7 @@ public static class DynamicViewAccess
             "secretariat" => access.CanManageGrandSecretariat(user),
             "library" => org is null || Local(access.CanReadOrganizationLibrary),
             "documentmanager" => access.CanManageDocuments(user, org),
+            "officialdocuments" => user.Identity?.IsAuthenticated == true,
             "grandarchive" => access.CanManageGrandArchive(user),
             "treasury" => access.CanManageTreasuryRegularity(user),
             "lodgetreasury" => Local(access.CanManageLodgeTreasury) || Local(access.CanApproveLodgeExpenses),

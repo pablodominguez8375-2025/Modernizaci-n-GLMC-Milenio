@@ -40,6 +40,8 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
     }
     public async Task<PreparedIdentity> PrepareDisabledAsync(AccountIdentity account, string temporaryPassword, CancellationToken ct)
     {
+        // Fail-closed: el rol global de Máster jamás se concede por esta vía (regla del PO 22-10).
+        if(account.PlatformAdministrator) throw new AccountConflictException();
         string? subject=null; var created=false;
         using(var lookup=await Send(HttpMethod.Get,$"users?username={Uri.EscapeDataString(account.Email.ToLowerInvariant())}&exact=true",null,ct))
         {
@@ -49,7 +51,7 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
                 var existing=json.RootElement[0];
                 if(existing.GetProperty("enabled").GetBoolean() || Attribute(existing,"pmgm_managed")!="active-member-accounts" ||
                    Attribute(existing,"pmgm_member_id")!=(account.MemberId?.ToString()??"") ||
-                   Attribute(existing,"pmgm_account_kind")!=(account.PlatformAdministrator?"platform":"member") ||
+                   Attribute(existing,"pmgm_account_kind")!=(account.Superuser?"superuser":"member") ||
                    !string.Equals(existing.GetProperty("email").GetString(),account.Email,StringComparison.OrdinalIgnoreCase)) throw new AccountConflictException();
                 subject=existing.GetProperty("id").GetString();
             }
@@ -59,8 +61,8 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
         var userRepresentation=new { username=account.Email.ToLowerInvariant(),email=account.Email,
                 firstName=names,lastName=parts.Length>1?parts[^1]:"Plataforma",enabled=false,emailVerified=false,
                 requiredActions=new[]{"UPDATE_PASSWORD"}, attributes=new Dictionary<string,string[]> {
-                    ["pmgm_managed"]=["active-member-accounts"],["pmgm_account_kind"]=[account.PlatformAdministrator?"platform":"member"],
-                    ["pmgm_member_id"]=[account.MemberId?.ToString()??""],["pmgm_scope"]=[account.PlatformAdministrator?"order":"organization"],
+                    ["pmgm_managed"]=["active-member-accounts"],["pmgm_account_kind"]=[account.Superuser?"superuser":"member"],
+                    ["pmgm_member_id"]=[account.MemberId?.ToString()??""],["pmgm_scope"]=[account.Superuser?"order":"organization"],
                     ["pmgm_org"]=[account.OrganizationId?.ToString()??""] } };
         if(subject is null)
         {
@@ -76,12 +78,6 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
             if(!created)
             {
                 using var update=await Send(HttpMethod.Put,$"users/{Uri.EscapeDataString(subject)}",userRepresentation,ct);Success(update);
-            }
-            if(account.PlatformAdministrator)
-            {
-                using var role=await Send(HttpMethod.Get,"roles/platform_superadmin",null,ct);Success(role);
-                using var roleJson=JsonDocument.Parse(await role.Content.ReadAsStringAsync(ct));
-                using var mapping=await Send(HttpMethod.Post,$"users/{subject}/role-mappings/realm",new[]{roleJson.RootElement.Clone()},ct);Success(mapping);
             }
             using var password=await Send(HttpMethod.Put,$"users/{subject}/reset-password",new { type="password",value=temporaryPassword,temporary=true },ct);Success(password);
             return new(subject,created);
@@ -117,6 +113,52 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
                     $"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),Text(x,"email"),x.GetProperty("enabled").GetBoolean(),Attribute(x,"pmgm_account_kind")));
             if(json.RootElement.GetArrayLength()<100) return result;
         }
+    }
+    public async Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) return null;
+        using var response=await Send(HttpMethod.Get,$"users/{id}",null,ct);
+        if(response.StatusCode==HttpStatusCode.NotFound) return null;
+        Success(response);
+        using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));var x=json.RootElement;
+        if(Attribute(x,"pmgm_managed")!="active-member-accounts") return null;
+        return new AccountUser(id.ToString(),$"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),Text(x,"email"),x.GetProperty("enabled").GetBoolean(),Attribute(x,"pmgm_account_kind"));
+    }
+    public async Task<AccountClaims?> GetClaimsAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) return null;
+        using var response=await Send(HttpMethod.Get,$"users/{id}",null,ct);
+        if(response.StatusCode==HttpStatusCode.NotFound) return null;
+        Success(response);
+        using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));var x=json.RootElement;
+        if(Attribute(x,"pmgm_managed")!="active-member-accounts") return null;
+        using var rolesResponse=await Send(HttpMethod.Get,$"users/{id}/role-mappings/realm/composite",null,ct);
+        Success(rolesResponse);
+        using var roles=JsonDocument.Parse(await rolesResponse.Content.ReadAsStringAsync(ct));
+        var names=roles.RootElement.EnumerateArray().Select(r=>r.TryGetProperty("name",out var n)?n.GetString():null).OfType<string>().ToArray();
+        var scope=Attribute(x,"pmgm_scope");
+        var orgs=x.TryGetProperty("attributes",out var a)&&a.TryGetProperty("pmgm_org",out var o)&&o.ValueKind==JsonValueKind.Array
+            ?o.EnumerateArray().Select(v=>v.GetString()).OfType<string>().Where(v=>Guid.TryParse(v,out _)).ToArray():[];
+        return new AccountClaims(id.ToString(),$"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),Attribute(x,"pmgm_account_kind"),
+            x.GetProperty("enabled").GetBoolean(),names,string.IsNullOrWhiteSpace(scope)?null:scope,orgs);
+    }
+    public async Task SendPasswordRecoveryEmailAsync(string subject,CancellationToken ct)
+    {
+        // Enlace de un solo uso con vigencia corta (30 min); el correo lo envía el proveedor, la API nunca ve la clave.
+        using var response=await Send(HttpMethod.Put,$"users/{Uri.EscapeDataString(subject)}/execute-actions-email?lifespan=1800",new[]{"UPDATE_PASSWORD"},ct);
+        Success(response);
+        await LogoutAsync(subject,ct);
+    }
+    public async Task SetTemporaryPasswordAsync(string subject,string temporaryPassword,CancellationToken ct)
+    {
+        using var password=await Send(HttpMethod.Put,$"users/{Uri.EscapeDataString(subject)}/reset-password",new{type="password",value=temporaryPassword,temporary=true},ct);
+        Success(password);
+        await LogoutAsync(subject,ct);
+    }
+    private async Task LogoutAsync(string subject,CancellationToken ct)
+    {
+        using var response=await Send(HttpMethod.Post,$"users/{Uri.EscapeDataString(subject)}/logout",null,ct);
+        if(response.StatusCode!=HttpStatusCode.NotFound) Success(response);
     }
     private static string Text(JsonElement user,string field)=>user.TryGetProperty(field,out var value)?value.GetString()??"":"";
 }

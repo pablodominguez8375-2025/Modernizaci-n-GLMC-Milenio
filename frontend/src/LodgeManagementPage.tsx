@@ -1,5 +1,5 @@
 import { ActionDrawer, HelpNote, WorkspaceTabs, type WorkspaceTab } from './actionKit'
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type FormEvent, type ReactElement, type ReactNode, cloneElement, isValidElement, useEffect, useMemo, useState } from 'react'
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import { type DocumentApiClient } from './api/documentApi'
 import {
@@ -159,16 +159,23 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
     if (!organizationId) { setMeetings([]); setMembers([]); setSelectedMeetingId(''); return }
     let active = true
     setWorking(true); setError(null)
-    Promise.all([lodgeApi.getMeetings(organizationId), lodgeApi.getMemberOptions(organizationId), lodgeApi.getInstructions(organizationId)])
-      .then(([meetingResponse, memberResponse, instructionResponse]) => {
+    Promise.allSettled([lodgeApi.getMeetings(organizationId), lodgeApi.getMemberOptions(organizationId), lodgeApi.getInstructions(organizationId)])
+      .then(([meetingResult, memberResult, instructionResult]) => {
         if (!active) return
-        setMeetings(meetingResponse.items)
-        setMembers(memberResponse.items)
-        setInstructions(instructionResponse.items)
-        setMemberId(memberResponse.items[0]?.id ?? '')
-        setSelectedMeetingId(current => meetingResponse.items.some(item => item.id === current) ? current : meetingResponse.items[0]?.id ?? '')
+        const meetingItems = meetingResult.status === 'fulfilled' ? meetingResult.value.items : []
+        const memberItems = memberResult.status === 'fulfilled' ? memberResult.value.items : []
+        setMeetings(meetingItems)
+        setMembers(memberItems)
+        setInstructions(instructionResult.status === 'fulfilled' ? instructionResult.value.items : [])
+        setMemberId(memberItems[0]?.id ?? '')
+        setSelectedMeetingId(current => meetingItems.some(item => item.id === current) ? current : meetingItems[0]?.id ?? '')
+        const failures = [
+          meetingResult.status === 'rejected' ? `las tenidas (${toMessage(meetingResult.reason)})` : '',
+          memberResult.status === 'rejected' ? `los hermanos del Taller (${toMessage(memberResult.reason)})` : '',
+          instructionResult.status === 'rejected' ? `las instrucciones (${toMessage(instructionResult.reason)})` : '',
+        ].filter(Boolean)
+        if (failures.length > 0) setError(`No se pudieron cargar ${failures.join(', ')}. El resto de la pantalla sigue disponible.`)
       })
-      .catch(reason => { if (active) setError(toMessage(reason)) })
       .finally(() => { if (active) setWorking(false) })
     return () => { active = false }
   }, [lodgeApi, organizationId])
@@ -193,13 +200,17 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
   useEffect(() => {
     if (!selectedMeetingId) { setAttendance([]); setMinutes([]); return }
     let active = true
-    Promise.all([lodgeApi.getAttendance(selectedMeetingId), lodgeApi.getMinutes(selectedMeetingId)])
-      .then(([attendanceResponse, minuteResponse]) => {
+    Promise.allSettled([lodgeApi.getAttendance(selectedMeetingId), lodgeApi.getMinutes(selectedMeetingId)])
+      .then(([attendanceResult, minuteResult]) => {
         if (!active) return
-        setAttendance(attendanceResponse.items)
-        setMinutes(minuteResponse.items)
+        setAttendance(attendanceResult.status === 'fulfilled' ? attendanceResult.value.items : [])
+        setMinutes(minuteResult.status === 'fulfilled' ? minuteResult.value.items : [])
+        const failures = [
+          attendanceResult.status === 'rejected' ? `la asistencia (${toMessage(attendanceResult.reason)})` : '',
+          minuteResult.status === 'rejected' ? `las actas (${toMessage(minuteResult.reason)})` : '',
+        ].filter(Boolean)
+        if (failures.length > 0) setError(`No se pudo cargar ${failures.join(' ni ')} de la tenida.`)
       })
-      .catch(reason => { if (active) setError(toMessage(reason)) })
     return () => { active = false }
   }, [lodgeApi, selectedMeetingId])
 
@@ -366,7 +377,7 @@ export default function LodgeManagementPage({ api, lodgeApi, documentApi, canRea
 
     </section>
 
-    {profileSlot && <div className="workspace-panel" hidden={tab !== 'ficha'}>{profileSlot}</div>}
+    {profileSlot && <div className="workspace-panel" hidden={tab !== 'ficha'}>{isValidElement(profileSlot) ? cloneElement(profileSlot as ReactElement<{ sharedOrganizationId?: string }>, { sharedOrganizationId: organizationId }) : profileSlot}</div>}
     <div className="workspace-panel" hidden={tab !== 'consejo'}><LodgeCouncilPanel organizationId={organizationId} members={members} /></div>
 
     {canReadSecretariat && <div className="workspace-panel" hidden={!secretariatSection}><LodgeSecretariatPanel organizationId={organizationId} lodgeApi={lodgeApi} documentApi={documentApi} meetings={meetings} members={members} canManage={canManageSecretariat} onMeetingChanged={meetingId => refreshMeetings(meetingId)} section={secretariatSection ?? 'daily'} /></div>}

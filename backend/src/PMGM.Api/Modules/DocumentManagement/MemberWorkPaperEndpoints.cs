@@ -60,6 +60,8 @@ public static class MemberWorkPaperEndpoints
             .Select(x => new MemberWorkPaperDto(
                 x.Id, x.Title, x.ShortDescription ?? string.Empty, x.MinimumDegreeRequired ?? 1,
                 x.Status, x.PublishedVersionId,
+                x.ReviewStatus ?? (x.Status == DocumentManagementCodes.DocumentStatus.Published ? WorkPaperReviewStatus.Approved : "draft"),
+                x.ReviewStatus == WorkPaperReviewStatus.Returned ? x.ReviewReason : null,
                 x.Versions.OrderByDescending(v => v.VersionNumber).Select(v => new MemberWorkPaperVersionDto(
                     v.Id, v.VersionNumber, v.OriginalFileName, v.ProcessingStatus, v.CreatedAtUtc,
                     v.Id == x.PublishedVersionId)).ToArray()))
@@ -150,6 +152,8 @@ public static class MemberWorkPaperEndpoints
         if (document is null) return Results.NotFound();
         if (!await CanManageAsync(document, context, institutionalDb, access, memberResolver, cancellationToken)) return Results.Forbid();
         if (document.OrganizationId is null || document.AuthorMemberId is null) return Results.Conflict(new { message = "La plancha no tiene autoría o Taller asociado." });
+        if (document.ReviewStatus == WorkPaperReviewStatus.Pending)
+            return Results.Conflict(new { message = "La plancha está en revisión del Bibliotecario; espera su respuesta antes de enviar otra versión." });
         if (await documentsDb.DocumentVersions.AnyAsync(x => x.DocumentId == documentId &&
                 (x.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.PendingUpload ||
                  x.ProcessingStatus == DocumentManagementCodes.ProcessingStatus.Uploaded ||
@@ -225,7 +229,7 @@ public static class MemberWorkPaperEndpoints
 public sealed record CreateMemberWorkPaperRequest(Guid OrganizationId, Guid? AuthorMemberId, string Title, string ShortDescription, string OriginalFileName, string ContentType, long SizeBytes);
 public sealed record CreateMemberWorkPaperVersionRequest(string Title, string ShortDescription, string OriginalFileName, string ContentType, long SizeBytes);
 public sealed record MemberWorkPapersResponse(IReadOnlyList<MemberWorkPaperDto> Items);
-public sealed record MemberWorkPaperDto(Guid Id, string Title, string ShortDescription, int MinimumDegreeRequired, string Status, Guid? PublishedVersionId, IReadOnlyList<MemberWorkPaperVersionDto> Versions);
+public sealed record MemberWorkPaperDto(Guid Id, string Title, string ShortDescription, int MinimumDegreeRequired, string Status, Guid? PublishedVersionId, string ReviewStatus, string? ReturnReason, IReadOnlyList<MemberWorkPaperVersionDto> Versions);
 public sealed record MemberWorkPaperVersionDto(Guid Id, int VersionNumber, string OriginalFileName, string ProcessingStatus, DateTimeOffset CreatedAtUtc, bool IsCurrent);
 public sealed record MemberWorkPaperCreatedDto(Guid DocumentId, Guid VersionId, int VersionNumber, string ProcessingStatus);
 public sealed record MemberWorkPaperLinkDto(Guid DocumentId, Guid? AuthorMemberId, string Title, string ShortDescription);
