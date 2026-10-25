@@ -24,4 +24,35 @@ public sealed class InitialLoadPreflightReceiptPolicyTests
         Assert.False(result.CanApply);
         Assert.Equal(0, result.WritesPerformed);
     }
+
+    private static Dictionary<string, string> Fixture()
+    {
+        var files = InitialLoadTemplateEndpoints.Sheets.ToDictionary(
+            s => s.Name, s => string.Join(",", s.Columns) + "\r\n",
+            StringComparer.Ordinal);
+        files["Talleres.csv"] += "qa23,23,Logia de prueba,STGO,Santiago,Chile\r\n";
+        files["Hermanos.csv"] +=
+            "p1,passport,FAKE1234,Test,Member,test@example.invalid,qa23,3,active\r\n";
+        files["CargosVigentes.csv"] += "p1,qa23,worshipful_master,2026-01-01\r\n";
+        return files;
+    }
+
+    [Fact]
+    public void Valid_synthetic_receipt_is_verifiable_but_not_apply_permission()
+    {
+        var utc = new DateTimeOffset(2026, 10, 24, 22, 0, 0, TimeSpan.Zero);
+        var files = Fixture();
+        var key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+        var proof = InitialLoadPreflightReceiptPolicy.Issue(files, key, utc);
+        Assert.NotNull(proof);
+        Assert.False(proof.CanApply);
+        Assert.Equal(0, proof.WritesPerformed);
+        var result = InitialLoadPreflightReceiptPolicy.Verify(
+            files, proof.Token, key, utc.AddMinutes(1));
+        Assert.True(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Equal(proof.BatchFingerprint, result.BatchFingerprint);
+        Assert.DoesNotContain("test@example.invalid", proof.Token);
+        Assert.DoesNotContain("FAKE1234", proof.BatchFingerprint);
+    }
 }
