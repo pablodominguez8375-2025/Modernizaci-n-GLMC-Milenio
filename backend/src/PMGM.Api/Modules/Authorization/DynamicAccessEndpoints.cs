@@ -30,7 +30,10 @@ public static class DynamicAccessEndpoints
                 if (error is not null) return Results.BadRequest(new { message = error });
                 if (catalog.Profiles.Any(p => Eq(p.Code, request.Code))) return Conflict("El código del perfil ya existe.");
                 if (!ValidMenus(catalog, request.MenuCodes) || IsLodgeScoped(request.Scope) && (request.MenuCodes ?? []).Any(m => Eq(m, "system"))) return Results.BadRequest(new { message = "Menú inexistente o inactivo." });
-                var profile = new DynamicProfile(Guid.NewGuid(), request.Code.Trim().ToLowerInvariant(), request.Name.Trim(), request.Scope, false, true, Normalize(request.MenuCodes), []);
+                var roles = Normalize(request.BaseRoles);
+                var roleError = DynamicRoleConferral.Validate(roles, request.Scope);
+                if (roleError is not null) return Results.BadRequest(new { message = roleError });
+                var profile = new DynamicProfile(Guid.NewGuid(), request.Code.Trim().ToLowerInvariant(), request.Name.Trim(), request.Scope, false, true, Normalize(request.MenuCodes), [], roles);
                 catalog.Profiles.Add(profile);
                 return Results.Ok(profile);
             }, ct));
@@ -47,7 +50,10 @@ public static class DynamicAccessEndpoints
                 if (current.Scope != request.Scope && catalog.Assignments.Any(a => a.IsActive && Eq(a.ProfileCode, current.Code))) return Conflict("Revoque las asignaciones antes de cambiar el alcance.");
                 var menus = Normalize(request.MenuCodes);
                 var views = catalog.Menus.Where(m => menus.Contains(m.Code)).SelectMany(m => m.Views).Select(v => v.Code).ToHashSet();
-                var profile = current with { Name = request.Name.Trim(), Scope = request.Scope, MenuCodes = menus, Grants = current.Grants.Where(g => views.Contains(g.ViewCode)).ToList() };
+                var roles = request.BaseRoles is null ? current.BaseRoles ?? [] : Normalize(request.BaseRoles);
+                var roleError = DynamicRoleConferral.Validate(roles, request.Scope);
+                if (roleError is not null) return Results.BadRequest(new { message = roleError });
+                var profile = current with { Name = request.Name.Trim(), Scope = request.Scope, MenuCodes = menus, Grants = current.Grants.Where(g => views.Contains(g.ViewCode)).ToList(), BaseRoles = roles };
                 catalog.Profiles[index] = profile;
                 return Results.Ok(profile);
             }, ct));
@@ -250,7 +256,7 @@ public static class DynamicAccessEndpoints
     }
     public static DateOnly Today() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTimeOffset.UtcNow, "America/Santiago").DateTime);
     private static bool Eq(string? left, string? right) => string.Equals(left?.Trim(), right?.Trim(), StringComparison.OrdinalIgnoreCase);
-    private static string[] Normalize(string[]? values) => (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct().ToArray();
+    internal static string[] Normalize(string[]? values) => (values ?? []).Where(v => !string.IsNullOrWhiteSpace(v)).Select(v => v.Trim().ToLowerInvariant()).Distinct().ToArray();
     private static bool ValidMenus(DynamicAccessCatalog catalog, string[]? menus) => (menus ?? []).All(m => catalog.Menus.Any(x => x.IsActive && Eq(x.Code, m)));
     private static IResult Conflict(string message) => Results.Conflict(new { message });
     private static string? ValidateProfile(string? code, string? name, string scope) => code is null || !Regex.IsMatch(code, "^[a-z][a-z0-9-]{0,79}$") ? "Código: letras minúsculas, números y guiones (máximo 80)." : string.IsNullOrWhiteSpace(name) || name.Length > 240 ? "Nombre obligatorio (máximo 240)." : scope is not ("order" or "lodge" or "own-lodge" or "all-lodges") ? "Alcance inválido." : null;
@@ -258,10 +264,10 @@ public static class DynamicAccessEndpoints
 public sealed record DynamicAccessCatalog(int Version, string[] Actions, List<DynamicMenu> Menus, List<DynamicProfile> Profiles, List<DynamicAssignment> Assignments);
 public sealed record DynamicMenu(string Code, string Name, bool IsActive, List<DynamicView> Views);
 public sealed record DynamicView(string Code, string Name, bool IsActive);
-public sealed record DynamicProfile(Guid Id, string Code, string Name, string Scope, bool IsSystem, bool IsActive, string[] MenuCodes, List<DynamicGrant> Grants);
+public sealed record DynamicProfile(Guid Id, string Code, string Name, string Scope, bool IsSystem, bool IsActive, string[] MenuCodes, List<DynamicGrant> Grants, string[]? BaseRoles = null);
 public sealed record DynamicGrant(string ViewCode, string[] Actions, string[]? Categories = null);
 public sealed record DynamicAssignment(Guid Id, string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, bool IsActive);
-public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion);
-public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion);
+public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null);
+public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null);
 public sealed record ReplaceDynamicGrantsRequest(List<DynamicGrant>? Grants, int ExpectedVersion);
 public sealed record AssignDynamicProfileRequest(string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, int ExpectedVersion);
