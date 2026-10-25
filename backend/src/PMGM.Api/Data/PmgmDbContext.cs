@@ -236,6 +236,7 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.OperatorSubject).HasMaxLength(320).IsRequired();
             entity.Property(x => x.OperatorName).HasMaxLength(300).IsRequired();
             entity.Property(x => x.Field).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Detail).HasMaxLength(200);
             entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
             entity.HasIndex(x => new { x.MemberId, x.CreatedAtUtc });
         });

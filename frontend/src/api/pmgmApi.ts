@@ -3,7 +3,7 @@ import { MockAssemblyStore, type AssemblyDebtBlockPayload, type AssemblyListResp
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
-import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest, type SupportCorrectionStatus, type SupportCorrectionGrant, type SupportCorrectionGrantRequest, type SupportCorrectionRequest, type MySupportCorrection } from './userAccounts'
+import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest, type SupportCorrectionStatus, type SupportCorrectionGrant, type SupportCorrectionGrantRequest, type SupportCorrectionRequest, type MySupportCorrection, type SupportNotice, type SupportResendRequest } from './userAccounts'
 import type { SupportViewStart } from './supportViewAs'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
@@ -512,6 +512,8 @@ export class PmgmApiClient {
   async grantSupportCorrection(request:SupportCorrectionGrantRequest):Promise<SupportCorrectionGrant>{if(this.useMocks)return this.userAccountsDemo.grantCorrection(request);return this.request('/api/system/support/corrections/grants',{method:'POST',body:JSON.stringify(request)})}
   async revokeSupportCorrection(grantId:string):Promise<void>{if(this.useMocks){this.userAccountsDemo.revokeCorrectionGrant(grantId);return}await this.request(`/api/system/support/corrections/grants/${encodeURIComponent(grantId)}/revoke`,{method:'POST'})}
   async correctAsSupport(request:SupportCorrectionRequest):Promise<{status:string;label?:string}>{if(this.useMocks)return this.userAccountsDemo.correct(request);return this.request('/api/system/support/corrections',{method:'POST',body:JSON.stringify(request)})}
+  async getSupportNotices(targetSubject:string):Promise<SupportNotice[]>{if(this.useMocks)return this.userAccountsDemo.listNotices(targetSubject);return (await this.request<{items:SupportNotice[]}>(`/api/system/support/corrections/notices?targetSubject=${encodeURIComponent(targetSubject)}`)).items}
+  async resendSupportNotice(request:SupportResendRequest):Promise<{status:string;label?:string}>{if(this.useMocks)return this.userAccountsDemo.resendNotice(request);return this.request('/api/system/support/corrections/resend',{method:'POST',body:JSON.stringify(request)})}
   async getMySupportCorrections():Promise<MySupportCorrection[]>{if(this.useMocks)return this.userAccountsDemo.myCorrections();return (await this.request<{items:MySupportCorrection[]}>('/api/session/support-corrections')).items}
   async createUserAccount(request:CreateUserAccount):Promise<UserAccountCreated>{if(this.useMocks)return this.userAccountsDemo.create(request);return this.request('/api/system/user-accounts',{method:'POST',body:JSON.stringify(request)})}
   readonly dynamicAccess: DynamicAccessClient
