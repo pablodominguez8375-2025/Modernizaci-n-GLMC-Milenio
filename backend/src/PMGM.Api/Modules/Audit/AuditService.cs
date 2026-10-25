@@ -48,7 +48,7 @@ public static class AuditMetadataSanitizer
     [
         "password", "passwd", "token", "apikey", "credential",
         "secretkey", "privatekey", "encryptionkey", "accesskey", "connectionstring",
-        "authorization", "cookie", "rut", "passport", "nationalid",
+        "cookie", "rut", "passport", "nationalid",
         "identitynumber", "email", "phone", "telephone", "address",
         "birthdate", "dateofbirth", "biometric", "medical", "health",
         "bankaccount", "creditcard", "cardnumber"
@@ -59,7 +59,9 @@ public static class AuditMetadataSanitizer
         if (ForbiddenKeys.Contains(key)) return true;
         var normalized = new string(key.Where(char.IsLetterOrDigit)
             .Select(char.ToLowerInvariant).ToArray());
-        return normalized is "secret" or "clientsecret" or "privatekey"
+        return normalized is "authorization" or "authorizationheader"
+            or "proxyauthorization" or "httpauthorization"
+            or "authorizationcode" or "secret" or "clientsecret" or "privatekey"
             or "otp" or "totp" or "pin" or "cvv" or "cvc"
             || normalized.EndsWith("secret", StringComparison.Ordinal)
             || SensitiveKeyFragments.Any(fragment =>
