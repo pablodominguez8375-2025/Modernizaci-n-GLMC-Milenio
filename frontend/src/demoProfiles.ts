@@ -1,6 +1,6 @@
 import type { SessionProfile } from './api/pmgmApi'
 
-export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'grandFirstWarden' | 'grandSecondWarden' | 'immediatePastGrandMaster' | 'instructionDepartmentHead' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandArchivist' | 'librarian' | 'communications' | 'systemAdmin' | 'grandLodge'
+export type DemoProfileKey = 'brother' | 'lodge' | 'lodgeTreasurer' | 'lodgeSecretary' | 'lodgeHospitalaria' | 'lodgeOrator' | 'lodgeFirstWarden' | 'lodgeSecondWarden' | 'lodgePastMaster' | 'grandFirstWarden' | 'grandSecondWarden' | 'immediatePastGrandMaster' | 'instructionDepartmentHead' | 'regimen' | 'treasury' | 'hospitalaria' | 'secretariat' | 'grandMaster' | 'grandArchivist' | 'librarian' | 'communications' | 'systemAdmin' | 'supportUser' | 'grandLodge'
 
 type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canBootstrapInstitutional?: boolean
@@ -141,6 +141,10 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   systemAdmin: {
     displayName: 'Administrador del Sistema · Demostración', accessScope: 'order',
     capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canManageAccessProfiles: true, canBootstrapInstitutional: true, canManageDocuments: true, canReadLibrary: true, canManageLibrary: true, canManageCommunications: true },
+  },
+  supportUser: {
+    displayName: 'Superusuario de soporte · Demostración', accessScope: 'order',
+    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canManageAccessProfiles: true, canReadLibrary: true },
   },
   grandArchivist: {
     displayName: 'Gran Archivero · Demostración',

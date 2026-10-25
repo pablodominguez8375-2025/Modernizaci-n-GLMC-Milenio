@@ -3,7 +3,7 @@ import { MockAssemblyStore, type AssemblyDebtBlockPayload, type AssemblyListResp
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
-import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest } from './userAccounts'
+import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest, type SupportCorrectionStatus, type SupportCorrectionGrant, type SupportCorrectionGrantRequest, type SupportCorrectionRequest, type MySupportCorrection } from './userAccounts'
 import type { SupportViewStart } from './supportViewAs'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
@@ -450,6 +450,7 @@ const demoViewAsAccounts:AccountUser[]=[
  {subject:'demo:brother',name:'Hermano Demostrativo',email:'hermano.demo@ejemplo.cl',enabled:true,kind:'member'},
  {subject:'demo:lodgeSecretary',name:'Secretario Demostrativo',email:'secretario.demo@ejemplo.cl',enabled:true,kind:'member'},
  {subject:'demo:librarian',name:'Bibliotecario Demostrativo',email:'biblioteca.demo@ejemplo.cl',enabled:true,kind:'member'},
+ {subject:'demo:supportUser',name:'Soporte Demostrativo',email:'soporte.demo@ejemplo.cl',enabled:true,kind:'superuser'},
 ]
 export class PmgmApiClient {
   private readonly mockUnrecoveredDues = new Map<string,UnrecoveredDue[]>()
@@ -501,12 +502,17 @@ export class PmgmApiClient {
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
   demoAccessSubject = 'demo:brother'
-  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin',demoViewAsAccounts)
+  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin',demoViewAsAccounts,()=>this.demoAccessSubject,()=>this.demoAccessSubject==='demo:supportUser')
   async getUserAccountCandidates():Promise<AccountCandidates>{if(this.useMocks)return this.userAccountsDemo.candidatesForCreation();return this.request('/api/system/user-accounts/eligible-members')}
   async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
   async resetUserAccountAccess(subject:string,request:AccessResetRequest):Promise<AccessResetResult>{if(this.useMocks)return this.userAccountsDemo.resetAccess(subject,request);return this.request(`/api/system/user-accounts/${encodeURIComponent(subject)}/password-recovery`,{method:'POST',body:JSON.stringify(request)})}
   async startSupportView(request:SupportViewStartRequest):Promise<SupportViewStart>{if(this.useMocks)return this.userAccountsDemo.startViewAs(request);return this.request('/api/system/support/view-as',{method:'POST',body:JSON.stringify(request)})}
   async endSupportView(sessionId:string):Promise<void>{if(this.useMocks)return;await this.request(`/api/system/support/view-as/${encodeURIComponent(sessionId)}/end`,{method:'POST'})}
+  async getSupportCorrectionStatus():Promise<SupportCorrectionStatus>{if(this.useMocks)return this.userAccountsDemo.correctionStatus();return this.request('/api/system/support/corrections')}
+  async grantSupportCorrection(request:SupportCorrectionGrantRequest):Promise<SupportCorrectionGrant>{if(this.useMocks)return this.userAccountsDemo.grantCorrection(request);return this.request('/api/system/support/corrections/grants',{method:'POST',body:JSON.stringify(request)})}
+  async revokeSupportCorrection(grantId:string):Promise<void>{if(this.useMocks){this.userAccountsDemo.revokeCorrectionGrant(grantId);return}await this.request(`/api/system/support/corrections/grants/${encodeURIComponent(grantId)}/revoke`,{method:'POST'})}
+  async correctAsSupport(request:SupportCorrectionRequest):Promise<{status:string;label?:string}>{if(this.useMocks)return this.userAccountsDemo.correct(request);return this.request('/api/system/support/corrections',{method:'POST',body:JSON.stringify(request)})}
+  async getMySupportCorrections():Promise<MySupportCorrection[]>{if(this.useMocks)return this.userAccountsDemo.myCorrections();return (await this.request<{items:MySupportCorrection[]}>('/api/session/support-corrections')).items}
   async createUserAccount(request:CreateUserAccount):Promise<UserAccountCreated>{if(this.useMocks)return this.userAccountsDemo.create(request);return this.request('/api/system/user-accounts',{method:'POST',body:JSON.stringify(request)})}
   readonly dynamicAccess: DynamicAccessClient
   private canMockManageGrandTreasury(){return getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity}
