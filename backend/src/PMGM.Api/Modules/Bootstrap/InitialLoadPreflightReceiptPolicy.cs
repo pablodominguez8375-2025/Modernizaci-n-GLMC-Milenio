@@ -9,7 +9,9 @@ namespace PMGM.Api.Modules.Bootstrap;
 /// Offline/server-internal preflight receipt for #694. No HTTP endpoint, DI
 /// registration, persistence, audit write, legal admission or CSV apply.
 /// Always treat the receipt as proof of bytes checked, NEVER permission to
-/// import members. This fingerprints the exact UTF-8 re-encoding of\n/// already-decoded CSV strings; callers must not transcode/normalize between\n/// preflight and verification. The real server must hold a random key outside source
+/// import members. This fingerprints the exact UTF-8 re-encoding of
+/// already-decoded CSV strings; callers must not transcode/normalize between
+/// preflight and verification. The real server must hold a random key outside source
 /// control and must never include it in logs, API payloads or exports.
 /// </summary>
 public static class InitialLoadPreflightReceiptPolicy
@@ -57,7 +59,10 @@ public static class InitialLoadPreflightReceiptPolicy
             .ToLowerInvariant();
         var signature = Sign(issuedAt, nonce, digest, serverSecret!);
         var token = $"v1.{issuedAt.ToString(CultureInfo.InvariantCulture)}.{nonce}.{signature}";
-        // The token stores whole Unix seconds; advertise precisely the same\n        // expiration instant enforced by Verify (never a later timestamp).\n        return new Receipt(token, digest,\n            DateTimeOffset.FromUnixTimeSeconds(issuedAt).Add(Validity));
+        // The token stores whole Unix seconds; advertise precisely the same
+        // expiration instant enforced by Verify (never a later timestamp).
+        return new Receipt(token, digest,
+            DateTimeOffset.FromUnixTimeSeconds(issuedAt).Add(Validity));
     }
 
     public static Verification Verify(
@@ -103,7 +108,8 @@ public static class InitialLoadPreflightReceiptPolicy
         if (!CryptographicOperations.FixedTimeEquals(suppliedBytes, expectedBytes))
             return Deny("INVALID_RECEIPT");
 
-        // Valid means identical decoded CSV text after strict UTF-8 encoding,\n        // from a passing, unexpired preflight.
+        // Valid means identical decoded CSV text after strict UTF-8 encoding,
+        // from a passing, unexpired preflight.
         // This is NOT legal approval, an audit record, or a one-time ticket.
         return new Verification(true, "PREFLIGHT_RECEIPT_VALID", fingerprint);
     }
