@@ -4,7 +4,7 @@
 
 ## Diccionario físico de la entidad
 
-Cada fila describe una propiedad persistida nueva, registrada en `Entities/InitialLoadBatchLedger.cs`, `BootstrapDbContext.cs` y migración `20261025220000_AddInitialLoadBatchLedger`. Clasificación de TODOS los campos: **metadatos operativos de seguridad restringidos**; acceso futuro solo al Máster/servicio de auditoría autorizado; no publicación en UI pública ni logs. La huella HMAC, aunque no sea un RUT ni SHA público, puede correlacionar lotes: tratarla como restringida, no como información anónima certificada.
+Cada fila describe una propiedad persistida nueva, registrada en `Entities/InitialLoadBatchLedger.cs`, `BootstrapDbContext.cs` y migración `20261025220000_AddInitialLoadBatchLedger`. Clasificación propuesta de TODOS los campos: **`internal`** (siguiendo el vocabulario de `docs/seguridad/PMGM-DATA-CLASSIFICATION-BOOTSTRAP.json`, estado `engineering_baseline_pending_legal_review`), con exposición más restrictiva: `allowInLogs=false`, `allowExport=false`, `publicProjection=false`, `masking=authorized_platform_view_only`, `owner=Administración de Plataforma` y retención referida al código existente `RET-AUDIT-SECURITY` sin fijar plazos nuevos. La asignación detallada campo por campo al manifiesto de clasificación **queda pendiente de revisión**, no se declara aprobada. Acceso futuro solo al Máster/servicio de auditoría autorizado; no publicación en UI pública ni logs. La huella HMAC, aunque no sea un RUT ni SHA público, puede correlacionar lotes: tratarla como restringida, no como información anónima certificada.
 
 | Campo funcional / SQL | Finalidad | Tipo SQL | Nullable / default | Validación / catálogo |
 |---|---|---|---|---|
