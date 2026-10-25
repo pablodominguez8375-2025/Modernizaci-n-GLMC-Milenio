@@ -58,7 +58,7 @@ public static class DynamicScopeExpansion
         return catalog with { Assignments = assignments };
     }
 
-    private static async Task<HashSet<Guid>> OwnLodgesAsync(PmgmDbContext db, ClaimsPrincipal user, CancellationToken ct)
+    internal static async Task<HashSet<Guid>> OwnLodgesAsync(PmgmDbContext db, ClaimsPrincipal user, CancellationToken ct)
     {
         // Solo el vínculo identidad↔ficha (sin exigir grado), para no cerrar el acceso por un dato ajeno.
         var subject = DynamicTreasuryAccess.Subject(user);
