@@ -7,21 +7,23 @@ namespace PMGM.Api.Modules.Authorization;
 /// <summary>
 /// Perfiles institucionales sin desarrollo: un perfil dinámico puede CONFERIR cargos base (de una lista cerrada
 /// y no sensible) dentro de su alcance. Los permisos concretos (vistas y acciones) siguen siendo los del perfil.
-/// Solo el Máster crea o edita perfiles. Nunca se confieren cargos de Tesorería, Hospitalaria, Privacidad,
-/// administración, Gran Maestría ni Régimen Interior (esas áreas van en una etapa posterior con aprobación del PO y Jurídico).
+/// Solo el Máster crea o edita perfiles. Etapa 2 (PO 25-10): se suman Venerable Maestro, Gran Secretaría y Régimen Interior. Tesorería, Hospitalaria,
+/// Privacidad, administración y Gran Maestría quedan para una entrega posterior con aprobación del PO.
 /// </summary>
 public static class DynamicRoleConferral
 {
     public static readonly string[] LodgeRoles =
     [
         InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerOrador, InstitutionalRoles.TallerPrimerVigilante,
-        InstitutionalRoles.TallerSegundoVigilante, InstitutionalRoles.TallerInmediatoExVenerable
+        InstitutionalRoles.TallerSegundoVigilante, InstitutionalRoles.TallerInmediatoExVenerable,
+        InstitutionalRoles.TallerVenerable
     ];
     public static readonly string[] OrderRoles =
     [
         InstitutionalRoles.Librarian, InstitutionalRoles.Communications, InstitutionalRoles.GrandArchivist,
         InstitutionalRoles.DocumentManager, InstitutionalRoles.JefaturaDepartamentoDocencia,
-        InstitutionalRoles.GranPrimerVigilante, InstitutionalRoles.GranSegundoVigilante, InstitutionalRoles.InmediatoExGranMaestro
+        InstitutionalRoles.GranPrimerVigilante, InstitutionalRoles.GranSegundoVigilante, InstitutionalRoles.InmediatoExGranMaestro,
+        InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior
     ];
 
     public static string? Validate(string[] roles, string scope)
