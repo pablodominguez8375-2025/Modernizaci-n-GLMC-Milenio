@@ -129,7 +129,7 @@ def main(argv=None):
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username or
                 parsed.password or parsed.query or parsed.fragment or
                 not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", args.realm) or
-                not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]*", parsed.path)):
+                (parsed.path != "" and not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]*", parsed.path))):
             raise Blocked("MASTER_CONFIG_INVALID")
         base = args.base_url.rstrip("/")
         token = _read_protected_file(args.token_file)
