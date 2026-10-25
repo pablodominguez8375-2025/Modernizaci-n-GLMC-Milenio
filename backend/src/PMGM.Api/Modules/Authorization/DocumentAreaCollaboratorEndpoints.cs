@@ -133,7 +133,7 @@ public static class DocumentAreaCollaboratorEndpoints
     {
         if (!CanAdminister(view, ctx, access)) return Results.Forbid();
         ctx.Response.Headers.CacheControl = "private, no-store";
-        var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
         return Results.Ok(new { version = catalog.Version, items = Project(catalog, view) });
     }
 
@@ -165,7 +165,7 @@ public static class DocumentAreaCollaboratorEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
-        var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
         if (request.ExpectedVersion != catalog.Version)
             return Results.Conflict(new { code = "STALE_COLLABORATOR_CATALOG" });
         var endsOn = request.EffectiveTo ?? DateOnly.MaxValue;
@@ -213,7 +213,7 @@ public static class DocumentAreaCollaboratorEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
-        var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
         if (expectedVersion != catalog.Version)
             return Results.Conflict(new { code = "STALE_COLLABORATOR_CATALOG" });
 

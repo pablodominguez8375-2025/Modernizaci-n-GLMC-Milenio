@@ -11,6 +11,7 @@ type ExtendedDemoCapabilities = SessionProfile['capabilities'] & {
   canReadLodgeSecretariat?: boolean
   canManageLodgeSecretariat?: boolean
   canConfigureSystem?: boolean
+  canManageAccessProfiles?: boolean
   canManageLodgeTreasury?: boolean
   canReadLodgeHospitalaria?: boolean
   canManageLodgeHospitalaria?: boolean
@@ -139,7 +140,7 @@ export const demoProfiles: Record<DemoProfileKey, DemoSessionProfile> = {
   },
   systemAdmin: {
     displayName: 'Administrador del Sistema · Demostración', accessScope: 'order',
-    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canBootstrapInstitutional: true, canManageDocuments: true, canReadLibrary: true, canManageLibrary: true, canManageCommunications: true },
+    capabilities: { ...deniedCoreCapabilities, canConfigureSystem: true, canManageAccessProfiles: true, canBootstrapInstitutional: true, canManageDocuments: true, canReadLibrary: true, canManageLibrary: true, canManageCommunications: true },
   },
   grandArchivist: {
     displayName: 'Gran Archivero · Demostración',

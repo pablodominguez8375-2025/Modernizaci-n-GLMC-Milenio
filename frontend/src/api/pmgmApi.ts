@@ -42,6 +42,7 @@ export interface SessionCapabilities {
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
   canConfigureSystem?: boolean
+  canManageAccessProfiles?: boolean
   canReadLodgeCouncilSummary?: boolean
   canManageLodgeCouncilSummaryAccess?: boolean
   canManageAnyWorkshopProfile?: boolean
@@ -349,6 +350,7 @@ const mockSession: SessionProfile = {
     canManagePrivacy: true,
     canManageLodgeTreasury: true,
     canConfigureSystem: true,
+    canManageAccessProfiles: true,
   },
 }
 const publicationFieldsCode = 'system.publication.candidate.visible_fields'

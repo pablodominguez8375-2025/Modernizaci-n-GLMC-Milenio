@@ -64,6 +64,7 @@ public static class DynamicViewAccess
         if (route.StartsWith("/api/biblioteca")) return "library";
         if (route.StartsWith("/api/documentos")) return "documentmanager";
         if (route.StartsWith("/api/grand-archive")) return "grandarchive";
+        if (route.StartsWith("/api/publicaciones-oficiales")) return "officialdocuments";
         if (route.StartsWith("/api/calendar")) return "calendar";
         if (route.StartsWith("/api/notifications")) return "notifications";
         if (route.StartsWith("/api/system/audit")) return "access-review";
@@ -141,6 +142,7 @@ public static class DynamicViewAccess
             "secretariat" => access.CanManageGrandSecretariat(user),
             "library" => org is null || Local(access.CanReadOrganizationLibrary),
             "documentmanager" => access.CanManageDocuments(user, org),
+            "officialdocuments" => user.Identity?.IsAuthenticated == true,
             "grandarchive" => access.CanManageGrandArchive(user),
             "treasury" => access.CanManageTreasuryRegularity(user),
             "lodgetreasury" => Local(access.CanManageLodgeTreasury) || Local(access.CanApproveLodgeExpenses),

@@ -170,6 +170,7 @@ app.UseRequestLocalization();
 app.UseAuthentication();
 app.UseMiddleware<SupportViewAsMiddleware>();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
+app.UseMiddleware<DynamicScopeExpansionMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();
