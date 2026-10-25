@@ -15,12 +15,12 @@ describe('Privacidad y mis datos', () => {
     const html = renderToStaticMarkup(<PrivacyPage contactEmail="privacidad@example.test" corrections={[
       { id: '1', field: 'phone', label: 'Teléfono', operatorName: 'Soporte Demostrativo', reason: 'Teléfono mal digitado', createdAtUtc: '2026-10-25T18:00:00Z' },
     ]} />)
-    expect(html).toContain('Correcciones hechas por soporte')
+    expect(html).toContain('Acciones de soporte sobre tus datos')
     expect(html).toContain('Teléfono')
     expect(html).toContain('Soporte Demostrativo')
     expect(html).toContain('Teléfono mal digitado')
   })
   it('sin correcciones no muestra la sección', () => {
-    expect(renderToStaticMarkup(<PrivacyPage contactEmail="privacidad@example.test" />)).not.toContain('Correcciones hechas por soporte')
+    expect(renderToStaticMarkup(<PrivacyPage contactEmail="privacidad@example.test" />)).not.toContain('Acciones de soporte sobre tus datos')
   })
 })

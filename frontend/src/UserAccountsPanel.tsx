@@ -2,7 +2,7 @@ import { useEffect,useState } from 'react'
 import { ActionDrawer } from './actionKit'
 import type { PmgmApiClient } from './api/pmgmApi'
 import { setSupportViewAs } from './api/supportViewAs'
-import { SUPPORT_CORRECTION_DURATIONS,type AccessResetModality,type AccessResetResult,type AccountCandidates,type AccountUser,type SupportCorrectionFieldKey,type SupportCorrectionGrant,type SupportCorrectionStatus } from './api/userAccounts'
+import { SUPPORT_CORRECTION_DURATIONS,type AccessResetModality,type AccessResetResult,type AccountCandidates,type AccountUser,type SupportCorrectionFieldKey,type SupportCorrectionGrant,type SupportCorrectionStatus,type SupportNotice } from './api/userAccounts'
 
 function ResetAccessForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
  const hasEmail=user.email.includes('@');const [modality,setModality]=useState<AccessResetModality>(hasEmail?'email':'temporary');const [reason,setReason]=useState('')
@@ -58,7 +58,7 @@ function GrantCorrectionForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUs
  const [reason,setReason]=useState('');const [minutes,setMinutes]=useState(60);const [busy,setBusy]=useState(false);const [error,setError]=useState('')
  const submit=async()=>{setBusy(true);setError('');try{await api.grantSupportCorrection({operatorSubject:user.subject,reason:reason.trim(),minutes});onDone()}catch(e){setError(e instanceof Error?e.message:'No se pudo dar el permiso.')}finally{setBusy(false)}}
  return <form onSubmit={e=>{e.preventDefault();void submit()}}>
-  <p>Con este permiso, <strong>{user.name}</strong> podrá corregir el <strong>correo, teléfono o domicilio</strong> de un Hermano, uno por uno y siempre con motivo. No alcanza a Tesorería, Hospitalaria, firmas ni claves.</p>
+  <p>Con este permiso, <strong>{user.name}</strong> podrá corregir el <strong>correo, teléfono o domicilio</strong> de un Hermano y reenviarle un aviso ya emitido, uno por uno y siempre con motivo. No alcanza a Tesorería, Hospitalaria, firmas ni claves.</p>
   <p>Cada corrección queda registrada con su nombre y el Hermano la verá en «Privacidad y mis datos». El permiso se acaba solo al vencer.</p>
   {error&&<p role="alert">{error}</p>}
   <label><span>Vigencia</span><select value={minutes} disabled={busy} onChange={e=>setMinutes(Number(e.target.value))}>{SUPPORT_CORRECTION_DURATIONS.map(d=><option key={d.minutes} value={d.minutes}>{d.label}</option>)}</select></label>
@@ -93,6 +93,30 @@ function CorrectContactDrawer({api,user,status}:{api:PmgmApiClient;user:AccountU
  const [open,setOpen]=useState(false)
  return <ActionDrawer label="Corregir contacto" title="Corregir un dato de contacto" description="Solo con permiso vigente del Máster; queda registrado a su nombre." tone="secondary" open={open} onOpenChange={setOpen} keepOpen>
   {open&&<CorrectContactForm api={api} user={user} status={status} onDone={()=>setOpen(false)}/>}
+ </ActionDrawer>
+}
+/** Reenvía al MISMO correo registrado un aviso ya emitido; no cambia contenido ni destino. */
+function ResendNoticeForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
+ const [notices,setNotices]=useState<SupportNotice[]|null>(null);const [messageId,setMessageId]=useState('');const [reason,setReason]=useState('')
+ const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [done,setDone]=useState(false)
+ useEffect(()=>{let live=true;void api.getSupportNotices(user.subject).then(n=>{if(live){setNotices(n);setMessageId(n[0]?.messageId??'')}}).catch(e=>{if(live){setNotices([]);setError(e instanceof Error?e.message:'No se pudieron consultar los avisos.')}});return()=>{live=false}},[api,user.subject])
+ const submit=async()=>{setBusy(true);setError('');try{await api.resendSupportNotice({targetSubject:user.subject,messageId,reason:reason.trim()});setDone(true)}catch(e){setError(e instanceof Error?e.message:'No se pudo reenviar el aviso.')}finally{setBusy(false)}}
+ if(done)return <div role="status"><p><strong>Aviso reenviado.</strong> Saldrá al correo registrado de {user.name}. Quedó anotado a su nombre y él lo verá en «Privacidad y mis datos».</p><button type="button" onClick={onDone}>Listo</button></div>
+ const status:Record<string,string>={delivered:'entregado',failed:'falló el envío',queued:'en cola',dead_letter:'no se pudo entregar'}
+ return <form onSubmit={e=>{e.preventDefault();void submit()}}>
+  <p>Reenvía un aviso ya emitido a <strong>{user.name}</strong>, <strong>al mismo correo registrado</strong>. No se puede cambiar el contenido ni el destino, y los avisos reservados no se reenvían.</p>
+  {error&&<p role="alert">{error}</p>}
+  {notices&&notices.length===0&&!error&&<p>No hay avisos recientes que se puedan reenviar.</p>}
+  {notices&&notices.length>0&&<><label><span>Aviso</span><select value={messageId} disabled={busy} onChange={e=>setMessageId(e.target.value)}>{notices.map(n=><option key={n.messageId} value={n.messageId}>{n.subject} · {new Date(n.createdAtUtc).toLocaleDateString('es-CL',{day:'2-digit',month:'short',timeZone:'America/Santiago'})}{n.emailStatus?` · ${status[n.emailStatus]??n.emailStatus}`:''}</option>)}</select></label>
+  <label><span>Motivo (10 a 500 caracteres)</span><input required minLength={10} maxLength={500} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)} placeholder="Ej.: El Hermano no recibió el correo"/></label>
+  <p>Un mismo aviso no se reenvía más de una vez cada 10 minutos. Queda en la auditoría a su nombre.</p>
+  <button disabled={busy||reason.trim().length<10||!messageId}>{busy?'Reenviando…':'Reenviar aviso'}</button></>}
+ </form>
+}
+function ResendNoticeDrawer({api,user}:{api:PmgmApiClient;user:AccountUser}){
+ const [open,setOpen]=useState(false)
+ return <ActionDrawer label="Reenviar un aviso" title="Reenviar un aviso" description="Al mismo correo registrado, con motivo y a su nombre." tone="secondary" open={open} onOpenChange={setOpen} keepOpen>
+  {open&&<ResendNoticeForm api={api} user={user} onDone={()=>setOpen(false)}/>}
  </ActionDrawer>
 }
 function CorrectionGrantLine({api,grant,onChanged}:{api:PmgmApiClient;grant:SupportCorrectionGrant;onChanged:()=>void}){
@@ -131,6 +155,6 @@ export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
     </>}
     <p>Los permisos técnicos y cargos se asignan mediante los flujos institucionales correspondientes.</p>
     <button disabled={busy||!data?.deliveryConfigured||(!platform&&!chosen)}>{busy?'Creando cuenta…':'Crear usuario y enviar clave inicial'}</button>
-   </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}{corr?.isMaster&&u.kind==='superuser'&&<GrantCorrectionDrawer api={api} user={u} onChanged={refreshCorrections}/>}</div>}{corr?.isMaster&&u.kind==='superuser'&&corr.grants.filter(g=>g.operatorSubject===u.subject).map(g=><CorrectionGrantLine key={g.grantId} api={api} grant={g} onChanged={refreshCorrections}/>)}{corr?.canCorrect&&u.kind==='member'&&u.enabled&&<div className="action-bar"><CorrectContactDrawer api={api} user={u} status={corr}/></div>}</div>)}</div></div>
+   </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}{corr?.isMaster&&u.kind==='superuser'&&<GrantCorrectionDrawer api={api} user={u} onChanged={refreshCorrections}/>}</div>}{corr?.isMaster&&u.kind==='superuser'&&corr.grants.filter(g=>g.operatorSubject===u.subject).map(g=><CorrectionGrantLine key={g.grantId} api={api} grant={g} onChanged={refreshCorrections}/>)}{corr?.canCorrect&&u.kind==='member'&&u.enabled&&<div className="action-bar"><CorrectContactDrawer api={api} user={u} status={corr}/><ResendNoticeDrawer api={api} user={u}/></div>}</div>)}</div></div>
  </section>
 }

@@ -13,6 +13,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Membership.Entities;
+using PMGM.Api.Modules.Notifications.Entities;
 using PMGM.Api.Modules.UserAccounts;
 using Xunit;
 
@@ -94,6 +95,69 @@ public sealed class SupportCorrectionHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await Correct(op, Hermano, "phone", "+56 9 3333 4444", "Intento tras revocar", ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Resend_notice_goes_to_the_same_email_only_for_internal_notices_with_cooldown_reason_and_audit()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = await CreateAsync(cs);
+        await SeedMemberAsync(factory, ct);
+        Guid internalId, restrictedId;
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var n = scope.ServiceProvider.GetRequiredService<PMGM.Api.Data.NotificationDbContext>();
+            var template = new NotificationTemplate { Code = "support.test." + Guid.NewGuid().ToString("N"), Name = "Plantilla de prueba", BodyTemplate = "Cuerpo" };
+            n.NotificationTemplates.Add(template);
+            NotificationMessage Msg(string classification) => new()
+            {
+                NotificationTemplateId = template.Id, TypeCode = "candidate.interview.assigned", RecipientSubject = Hermano, RecipientEmail = "hermano.correccion@example.invalid",
+                Subject = "Entrevista asignada", Body = "Cuerpo", Classification = classification, IdempotencyKey = Guid.NewGuid().ToString("N"), CorrelationId = "t"
+            };
+            var a = Msg("internal"); var b = Msg("restricted");
+            n.NotificationMessages.AddRange(a, b); await n.SaveChangesAsync(ct);
+            internalId = a.Id; restrictedId = b.Id;
+        }
+        using var master = factory.CreateClient(); master.DefaultRequestHeaders.Add("X-Who", "master");
+        using var op = factory.CreateClient(); op.DefaultRequestHeaders.Add("X-Who", "super");
+        using var brother = factory.CreateClient(); brother.DefaultRequestHeaders.Add("X-Who", "brother");
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await Resend(op, internalId, "Sin permiso vigente todavía", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Grant(master, Superusuario, "Reenviar avisos reportados esta semana", 60, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Resend(master, internalId, "El Máster no reenvía avisos", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await Resend(op, internalId, "corto", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await Resend(op, Guid.NewGuid(), "Aviso que no existe en la base", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Resend(op, restrictedId, "Aviso reservado no reenviable", ct)).StatusCode);
+
+        var list = await op.GetFromJsonAsync<JsonElement>($"/api/system/support/corrections/notices?targetSubject={Hermano}", ct);
+        var only = Assert.Single(list.GetProperty("items").EnumerateArray());
+        Assert.Equal(internalId, only.GetProperty("messageId").GetGuid());
+
+        var ok = await Resend(op, internalId, "El Hermano no recibió el correo", ct);
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        // Segundo reenvío inmediato: bloqueado.
+        Assert.Equal((HttpStatusCode)429, (await Resend(op, internalId, "Reintento inmediato del reenvío", ct)).StatusCode);
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var n = scope.ServiceProvider.GetRequiredService<PMGM.Api.Data.NotificationDbContext>();
+            var d = await n.NotificationDeliveries.Where(x => x.NotificationMessageId == internalId).ToListAsync(ct);
+            var queued = Assert.Single(d);
+            Assert.Equal("email", queued.Channel); Assert.Equal("queued", queued.Status);
+            var audits = await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().AuditEvents.Where(a => a.Action.StartsWith("support.resend")).ToListAsync(ct);
+            Assert.Contains(audits, a => a.Action == "support.resend.applied" && a.ActorSubject == Superusuario);
+            Assert.All(audits, a => Assert.DoesNotContain("example.invalid", a.MetadataJson ?? ""));
+        }
+        var mine = await brother.GetFromJsonAsync<JsonElement>("/api/session/support-corrections", ct);
+        var item = Assert.Single(mine.GetProperty("items").EnumerateArray());
+        Assert.Equal("Aviso reenviado", item.GetProperty("label").GetString());
+        Assert.Equal("Entrevista asignada", item.GetProperty("detail").GetString());
+        Assert.Equal("Soporte Ficticio", item.GetProperty("operatorName").GetString());
+    }
+
+    private static Task<HttpResponseMessage> Resend(HttpClient c, Guid messageId, string reason, CancellationToken ct)
+        => c.PostAsJsonAsync("/api/system/support/corrections/resend", new { targetSubject = Hermano, messageId, reason }, ct);
+
     private static Task<HttpResponseMessage> Grant(HttpClient c, string operatorSubject, string reason, int minutes, CancellationToken ct)
         => c.PostAsJsonAsync("/api/system/support/corrections/grants", new { operatorSubject, reason, minutes }, ct);
     private static Task<HttpResponseMessage> Correct(HttpClient c, string target, string field, string value, string reason, CancellationToken ct)
@@ -107,6 +171,7 @@ public sealed class SupportCorrectionHttpTests
         var member = new Member { PersonId = person.Id, Person = person };
         db.Members.Add(member);
         await db.SaveChangesAsync(ct);
+        await db.Database.ExecuteSqlAsync($"UPDATE core.member_identity_links SET \"RevokedAtUtc\" = {DateTimeOffset.UtcNow} WHERE \"Subject\" = {Hermano} AND \"RevokedAtUtc\" IS NULL", ct);
         await db.Database.ExecuteSqlAsync(
             $"INSERT INTO core.member_identity_links (\"Id\", \"MemberId\", \"Issuer\", \"Subject\", \"CreatedAtUtc\", \"CreatedBySubject\") VALUES ({Guid.NewGuid()}, {member.Id}, {Issuer}, {Hermano}, {DateTimeOffset.UtcNow}, {"test"})", ct);
         return member.Id;
@@ -130,6 +195,9 @@ public sealed class SupportCorrectionHttpTests
         });
         await using var scope = factory.Services.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.MigrateAsync(TestContext.Current.CancellationToken);
+        await scope.ServiceProvider.GetRequiredService<PMGM.Api.Data.NotificationDbContext>().Database.MigrateAsync(TestContext.Current.CancellationToken);
+        await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.ExecuteSqlAsync(
+            $"UPDATE core.support_correction_grants SET \"RevokedAtUtc\" = now() WHERE \"RevokedAtUtc\" IS NULL", TestContext.Current.CancellationToken);
         return factory;
     }
 

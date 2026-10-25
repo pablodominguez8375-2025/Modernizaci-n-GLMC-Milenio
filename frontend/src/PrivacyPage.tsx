@@ -31,12 +31,14 @@ export default function PrivacyPage({ contactEmail, onOpenProfile, corrections =
       </article>)}
     </div>
     {corrections.length > 0 && <>
-      <h3 className="privacy-subtitle">Correcciones hechas por soporte</h3>
-      <p>Cuando el soporte de la plataforma corrige un dato tuyo, queda anotado aquí: qué dato, quién, cuándo y por qué.</p>
+      <h3 className="privacy-subtitle">Acciones de soporte sobre tus datos</h3>
+      <p>Cuando el soporte de la plataforma corrige un dato tuyo o te reenvía un aviso, queda anotado aquí: qué, quién, cuándo y por qué.</p>
       <div className="privacy-grid">
         {corrections.map(c => <article key={c.id} className="privacy-card">
           <h4>{c.label}</h4>
-          <p>Corregido por <strong>{c.operatorName}</strong> el {new Date(c.createdAtUtc).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Santiago' })}.</p>
+          {c.field === 'resend_notice'
+            ? <p>Se reenvió a tu correo registrado el aviso «{c.detail}». Lo hizo <strong>{c.operatorName}</strong> el {new Date(c.createdAtUtc).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Santiago' })}.</p>
+            : <p>Corregido por <strong>{c.operatorName}</strong> el {new Date(c.createdAtUtc).toLocaleDateString('es-CL', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'America/Santiago' })}.</p>}
           <p>Motivo: {c.reason}</p>
         </article>)}
       </div>
