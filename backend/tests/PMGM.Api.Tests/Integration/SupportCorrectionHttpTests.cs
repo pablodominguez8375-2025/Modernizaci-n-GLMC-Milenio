@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
@@ -186,6 +187,9 @@ public sealed class SupportCorrectionHttpTests
             b.UseSetting("InitialLoad:MasterIssuer", Issuer);
             b.ConfigureTestServices(services =>
             {
+                services.RemoveAll<PMGM.Api.Data.NotificationDbContext>();
+                services.RemoveAll<DbContextOptions<PMGM.Api.Data.NotificationDbContext>>();
+                services.AddDbContext<PMGM.Api.Data.NotificationDbContext>(o => o.UseNpgsql(cs));
                 services.AddSingleton<IAccountIdentityProvider>(new Identity());
                 services.AddAuthentication(o =>
                 {
