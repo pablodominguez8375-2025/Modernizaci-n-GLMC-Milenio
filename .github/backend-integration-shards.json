@@ -3,6 +3,7 @@
   "shards": {
     "a": [
       "UserAccountWorkflowTests",
+      "WorkPaperReviewHttpTests",
       "AdmissionWithdrawalLetterHttpTests",
       "CandidatePublicationHttpWorkflowTests",
       "LodgeReceiptConcurrencyPostgreSqlTests",

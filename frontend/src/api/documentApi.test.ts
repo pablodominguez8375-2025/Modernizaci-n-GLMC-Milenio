@@ -127,7 +127,7 @@ it('submits a work paper through the server scan pipeline and does not publish a
   expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer member-token')
 })
 
-it('demo work paper replacement retains older versions in the member history', async () => {
+it('demo work paper replacement goes to review and keeps the published version until the Librarian approves', async () => {
   const client = new DocumentApiClient({ useMocks: true })
   const file = new File(['revision'], 'revision.pdf', { type: 'application/pdf' })
   const before = await client.getMyWorkPapers()
@@ -135,11 +135,45 @@ it('demo work paper replacement retains older versions in the member history', a
 
   await client.replaceWorkPaper(id, { title: 'Trabajo revisado', shortDescription: 'Versión mejorada', file })
 
-  const after = await client.getMyWorkPapers()
-  expect(after[0].versions).toHaveLength(2)
-  expect(after[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: true, processingStatus: 'available' })
-  expect(after[0].versions[1]).toMatchObject({ versionNumber: 1, isCurrent: false })
-  expect(after[0].title).toBe('Trabajo revisado')
+  const pending = await client.getMyWorkPapers()
+  expect(pending[0].reviewStatus).toBe('pending_review')
+  expect(pending[0].versions).toHaveLength(2)
+  expect(pending[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: false })
+  expect(pending[0].versions[1]).toMatchObject({ versionNumber: 1, isCurrent: true })
+  await expect(client.replaceWorkPaper(id, { title: 'Otra', shortDescription: 'Otra', file })).rejects.toThrow(/en revisión/)
+  expect((await client.listWorkPaperReviews()).some(item => item.id === id)).toBe(true)
+
+  await client.approveWorkPaper(id)
+  const approved = await client.getMyWorkPapers()
+  expect(approved[0].reviewStatus).toBe('approved')
+  expect(approved[0].versions[0]).toMatchObject({ versionNumber: 2, isCurrent: true })
+  expect((await client.listWorkPaperReviews()).some(item => item.id === id)).toBe(false)
+})
+
+it('demo returned work paper shows the reason to the Taller and can be corrected and resubmitted', async () => {
+  const client = new DocumentApiClient({ useMocks: true })
+  const file = new File(['x'], 'x.pdf', { type: 'application/pdf' })
+  const { documentId } = await client.submitWorkPaper({ organizationId: 'o', title: 'Para devolver', shortDescription: 'Breve', file })
+  expect((await client.getMyWorkPapers()).find(item => item.id === documentId)?.status).toBe('draft')
+  await client.returnWorkPaper(documentId, 'Falta la portada con el nombre del Taller.')
+  const returned = (await client.getMyWorkPapers()).find(item => item.id === documentId)
+  expect(returned).toMatchObject({ reviewStatus: 'returned', returnReason: 'Falta la portada con el nombre del Taller.' })
+  await client.replaceWorkPaper(documentId, { title: 'Para devolver', shortDescription: 'Breve', file })
+  expect((await client.getMyWorkPapers()).find(item => item.id === documentId)).toMatchObject({ reviewStatus: 'pending_review', returnReason: null })
+})
+
+it('review calls use the dedicated Librarian endpoints', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ items: [] })))
+    .mockResolvedValueOnce(new Response('{}'))
+    .mockResolvedValueOnce(new Response('{}'))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'librarian-token' })
+  await client.listWorkPaperReviews()
+  await client.approveWorkPaper('doc-1')
+  await client.returnWorkPaper('doc-2', '  Motivo suficiente para devolver.  ')
+  expect(fetch.mock.calls.map(call => call[0])).toEqual(['/api/biblioteca/revision', '/api/biblioteca/revision/doc-1/aprobar', '/api/biblioteca/revision/doc-2/devolver'])
+  expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({ reason: 'Motivo suficiente para devolver.' })
 })
 
 it('resolves a Tenida plancha link only through the authenticated work-paper endpoint', async () => {
