@@ -70,12 +70,42 @@ class QaPublicReadinessTests(TestCase):
         with mock.patch.object(module.socket, "getaddrinfo", return_value=[(1,)]), \
              mock.patch.object(module, "request", side_effect=[
                  (200, {}, b""), (200, {}, oidc_body()),
-                 (404, {}, b""), (404, {}, b""), (404, {}, b"")
+                 (404, {}, b""), (404, {}, b""), (404, {}, b""),
+                (200, {}, b""), (200, {}, b""), (200, {}, b""),
+                (200, {}, b""),
              ]):
             state = module.inspect(True)
         self.assertEqual("PUBLIC_ENTRY_CHECKS_PASS_ONLY", state["decision"])
+        self.assertEqual("PASS", state["brand_assets"])
+        self.assertEqual([200, 200, 200, 200], state["brand_http"])
         self.assertEqual("NOT_VERIFIED", state["physical_deployment"])
         self.assertEqual("NOT_VERIFIED", state["database_roles_on_glmdch"])
+
+    def test_brand_403_blocks_even_when_root_oidc_and_admin_are_secure(self):
+        with mock.patch.object(module.socket, "getaddrinfo", return_value=[(1,)]), \
+             mock.patch.object(module, "request", side_effect=[
+                (200, {}, b""), (200, {}, oidc_body()),
+                (404, {}, b""), (404, {}, b""), (404, {}, b""),
+                (200, {}, b""), (403, {}, b""), (200, {}, b""),
+                (200, {}, b""),
+             ]):
+            state = module.inspect(True)
+        self.assertEqual("BLOCKED_BRAND_ASSETS", state["decision"])
+        self.assertEqual("BLOCKED", state["brand_assets"])
+        self.assertEqual([200, 403, 200, 200], state["brand_http"])
+        self.assertEqual("NOT_VERIFIED", state["smoke_regression_uat"])
+
+    def test_brand_redirect_cannot_be_counted_as_ok(self):
+        with mock.patch.object(module.socket, "getaddrinfo", return_value=[(1,)]), \
+             mock.patch.object(module, "request", side_effect=[
+                (200, {}, b""), (200, {}, oidc_body()),
+                (404, {}, b""), (404, {}, b""), (404, {}, b""),
+                (302, {"Location": "https://elsewhere.invalid/"}, b""),
+                (200, {}, b""), (200, {}, b""), (200, {}, b""),
+             ]):
+            state = module.inspect(True)
+        self.assertEqual("BLOCKED_BRAND_ASSETS", state["decision"])
+        self.assertEqual([302, 200, 200, 200], state["brand_http"])
 
 
 if __name__ == "__main__":

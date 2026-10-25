@@ -180,7 +180,7 @@ public sealed class DynamicViewAccessHttpTests
         public const string Name="DynamicView-CI";
         protected override Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            var claims=new List<Claim>{new("sub",Request.Headers["X-View-Subject"].FirstOrDefault()??"view-ci"),new(InstitutionalClaims.Scope,"order"),new(InstitutionalClaims.Role,Request.Headers["X-View-Role"].FirstOrDefault()??InstitutionalRoles.GranLogiaAdmin)};
+            var claims=new List<Claim>{new("sub",Request.Headers["X-View-Subject"].FirstOrDefault()??"view-ci"),new(InstitutionalClaims.Scope,"order"),new(InstitutionalClaims.Role,Request.Headers["X-View-Role"].FirstOrDefault()??InstitutionalRoles.PlatformSuperAdmin)};
             if(Guid.TryParse(Request.Headers["X-View-Organization"].FirstOrDefault(),out var org))claims.Add(new(InstitutionalClaims.Organization,org.ToString()));
             return Task.FromResult(AuthenticateResult.Success(new(new ClaimsPrincipal(new ClaimsIdentity(claims,Name)),Name)));
         }

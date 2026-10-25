@@ -111,7 +111,7 @@ public static class LibraryCatalogMetadataEndpoints
         // colaboradores vigentes; la anterior versión se conserva y audita.
         document.Status = DocumentManagementCodes.DocumentStatus.Draft;
         db.AuditEvents.Add(AuditEventFactory.Create(
-            ctx, $"library.editorial.{LibraryEditorialTypes.Canonical(document.DocumentType)}_unpublished",
+            ctx, $"library.editorial.{LibraryEditorialTypes.AuditKey(document.DocumentType)}_unpublished",
             nameof(InstitutionalDocument), document.Id.ToString(),
             null, AuditResults.Success,
             new { PreviousVersionId = previousVersionId, document.Status }));
@@ -188,7 +188,7 @@ public static class LibraryCatalogMetadataEndpoints
         document.Status = DocumentManagementCodes.DocumentStatus.Published;
         db.AuditEvents.Add(AuditEventFactory.Create(
             httpContext,
-            $"library.editorial.{LibraryEditorialTypes.Canonical(document.DocumentType)}_published",
+            $"library.editorial.{LibraryEditorialTypes.AuditKey(document.DocumentType)}_published",
             nameof(InstitutionalDocument),
             document.Id.ToString(), null, AuditResults.Success,
             new

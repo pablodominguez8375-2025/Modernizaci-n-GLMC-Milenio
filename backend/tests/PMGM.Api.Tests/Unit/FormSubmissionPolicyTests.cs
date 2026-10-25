@@ -141,6 +141,27 @@ public sealed class FormSubmissionPolicyTests
         Assert.False(result.IsValid);
     }
 
+    [Theory]
+    [InlineData("document")]
+    [InlineData("photo")]
+    [InlineData("reference")]
+    public void OptionalReferencesRejectEmptyUuidButAllowRealUuidOrNoValue(string kind)
+    {
+        var schema = Schema(new FormFieldDefinition(
+            "private_resource", "Referencia privada", kind, Required: false));
+        var empty = FormSubmissionPolicy.Validate(schema, 2,
+            Values(("private_resource", Guid.Empty.ToString("D"))));
+        var real = FormSubmissionPolicy.Validate(schema, 2,
+            Values(("private_resource", "a8199495-64d8-4830-8f7d-ddb17adcf23a")));
+        var missing = FormSubmissionPolicy.Validate(schema, 2, Values());
+
+        Assert.False(empty.IsValid);
+        Assert.Contains(empty.Errors, e => e.Contains("private_resource", StringComparison.Ordinal));
+        Assert.True(real.IsValid, string.Join("; ", real.Errors));
+        Assert.True(missing.IsValid, string.Join("; ", missing.Errors));
+        Assert.DoesNotContain(empty.Errors, e => e.Contains(Guid.Empty.ToString("D")));
+    }
+
     [Fact]
     public void ReadonlyServerOwnedRequiredFieldIsNotClientWritable()
     {

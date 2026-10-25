@@ -9,7 +9,10 @@ export function aggregateViewAccess(catalog: DynamicCatalog, subject: string, to
   return { version: catalog.version, views: Object.fromEntries(catalog.menus.flatMap(m => m.views).map(view => [view.code, catalog.actions.filter(action => scopes.every(org => allowsView(catalog, subject, view.code, action, org, today)))])) }
 }
 export function allowsView(catalog: DynamicCatalog, subject: string, view: string, action: AccessAction, organization: string | null, today: string) {
-  return !catalog.assignments.some(a => a.subject === subject && a.organizationId === organization) || technicalGrant(catalog, subject, view, action, organization, today)
+  // Una asignación histórica en cualquier ámbito elimina el fallback
+  // permisivo en Talleres sin grant explícito. Sujetos legacy no enrolados
+  // mantienen la autorización institucional heredada.
+  return !catalog.assignments.some(a => a.subject === subject) || technicalGrant(catalog, subject, view, action, organization, today)
 }
 export function chileDate() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()) }
 
@@ -29,8 +32,12 @@ export function restrictClient<T extends object>(client: T, kind: string, api: P
         const payloadOrg = args.find(arg => arg && typeof arg === 'object' && 'organizationId' in arg) as { organizationId?: string } | undefined
         const scope = typeof organization === 'string' ? organization : payloadOrg?.organizationId
         if (scope) {
+          // El control de Orden es acumulativo solo cuando existe una
+          // asignación explícita de Orden; un grant local no debe requerirlo.
+          const hasOrderAssignment = catalog.assignments.some(a =>
+            a.subject === api.demoAccessSubject && a.organizationId === null)
           permitted = allowsView(catalog, api.demoAccessSubject, policy.view, policy.action, scope, chileDate()) &&
-            allowsView(catalog, api.demoAccessSubject, policy.view, policy.action, null, chileDate())
+            (!hasOrderAssignment || allowsView(catalog, api.demoAccessSubject, policy.view, policy.action, null, chileDate()))
         } else permitted = aggregateViewAccess(catalog, api.demoAccessSubject, chileDate()).views[policy.view]?.includes(policy.action) ?? false
       } else permitted = current()?.views[policy.view]?.includes(policy.action) ?? false
       if (!permitted) throw new Error('Tu perfil no permite esta acción en la vista seleccionada.')

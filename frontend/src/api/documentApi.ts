@@ -1,3 +1,4 @@
+import { AreaCollaboratorsDemo, type AddAreaCollaborator, type AreaCollaboratorCandidates, type AreaCollaborators, type CollaboratorArea } from './areaCollaborators'
 export type DocumentScope = 'order' | 'organization'
 export type DocumentClassification = 'internal' | 'confidential' | 'sensitive' | 'restricted'
 export type DocumentAccessPolicy = 'library_authenticated' | 'organization_authenticated' | 'management_only'
@@ -83,10 +84,16 @@ export interface CreateDocumentCollectionRequest { code: string; name: string; d
 export interface CreateInstitutionalDocumentRequest { title: string; documentType: string; classification: DocumentClassification; accessPolicy: DocumentAccessPolicy }
 export interface CreateDocumentVersionRequest { originalFileName: string; contentType: string; sizeBytes: number }
 export interface MemberWorkPaperVersion { id: string; versionNumber: number; originalFileName: string; processingStatus: DocumentProcessingStatus; createdAtUtc: string; isCurrent: boolean }
-export interface MemberWorkPaper { id: string; title: string; shortDescription: string; minimumDegreeRequired: number; status: DocumentStatus; publishedVersionId: string | null; versions: MemberWorkPaperVersion[] }
+export interface MemberWorkPaper { id: string; title: string; shortDescription: string; minimumDegreeRequired: number; status: DocumentStatus; publishedVersionId: string | null; reviewStatus: WorkPaperReviewStatus; returnReason?: string | null; versions: MemberWorkPaperVersion[] }
+/** draft = aún sin enviar a revisión · pending_review = espera al Bibliotecario · returned = devuelta con motivo · approved = en Biblioteca. */
+export type WorkPaperReviewStatus = 'draft' | 'pending_review' | 'returned' | 'approved'
+export interface ManagedPublication { id: string; title: string; categoryCode: string; status: DocumentStatus; degree: number | null; author: string | null; topic: string | null; edition: string | null; description: string | null; createdAtUtc: string; publishedAtUtc: string | null }
+export interface ManagedPublicationInput { categoryCode: string; title: string; authorName?: string; topic?: string; edition?: string; description?: string; minimumDegreeRequired: number | null }
+export interface WorkPaperReview { id: string; title: string; authorName: string | null; lodge: string | null; description: string | null; submittedAtUtc: string; degree: number | null; replacesPublished: boolean; versionId: string; fileName: string; sizeBytes: number }
 export interface MemberWorkPaperLink { documentId: string; authorMemberId: string | null; title: string; shortDescription: string }
 export type DocumentAccessTokenProvider = () => Promise<string | null>
 
+export interface LibraryCategoryDto { value: string; label: string; base: boolean; active: boolean; position: number; publications?: number }
 interface DocumentApiClientOptions { baseUrl?: string; getAccessToken?: DocumentAccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
 export class DocumentApiHttpError extends Error {
@@ -170,10 +177,14 @@ export class DocumentApiClient {
   private readonly mockDocuments = new Map<string, InstitutionalDocument>()
   private readonly mockLibrary: LibraryDocument[] = demoLibrary.map(item => ({ ...item }))
   private readonly mockWorkPapers: MemberWorkPaper[] = [{
-    id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1',
+    id: 'demo-own-work-paper-1', title: 'El trabajo interior del Aprendiz', shortDescription: 'Una reflexión demostrativa sobre disciplina y constancia.', minimumDegreeRequired: 1, status: 'published', publishedVersionId: 'demo-own-work-paper-version-1', reviewStatus: 'approved',
     versions: [{ id: 'demo-own-work-paper-version-1', versionNumber: 1, originalFileName: 'trabajo-aprendiz-demo.pdf', processingStatus: 'available', createdAtUtc: '2026-09-10T15:00:00Z', isCurrent: true }],
   }]
 
+  private mockReviews: WorkPaperReview[] = [
+    { id: 'demo-sub-1', title: 'La palabra perdida y el trabajo del Aprendiz', authorName: 'Hermano Ejemplo Uno', lodge: 'Taller Fraternidad N° 3', description: 'Reflexión sobre el silencio y el estudio en el primer grado.', submittedAtUtc: '2026-10-18T15:00:00Z', degree: 1, replacesPublished: false, versionId: 'demo-sub-1-v1', fileName: 'palabra-perdida.pdf', sizeBytes: 380000 },
+    { id: 'demo-sub-2', title: 'El simbolismo de la columna Boaz', authorName: 'Hermana Ejemplo Dos', lodge: 'Taller Luz del Sur N° 7', description: 'Estudio comparado de las columnas del Templo.', submittedAtUtc: '2026-10-18T16:00:00Z', degree: 2, replacesPublished: false, versionId: 'demo-sub-2-v1', fileName: 'columna-boaz.pdf', sizeBytes: 410000 },
+  ]
   private mockEditorial: EditorialMagazine[] = [
     { documentId: 'demo-ed-boletin-oct', title: 'Boletín de la Orden · Octubre 2026', documentType: 'bulletin', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-10-01', topic: null, edition: null, shortDescription: 'Actividades de la Orden durante octubre.', createdAtUtc: '2026-10-02T12:00:00Z', publishedAtUtc: '2026-10-03T12:00:00Z', publisherProfile: 'communications', canCorrect: true },
     { documentId: 'demo-ed-horizonte-4', title: 'Horizonte Masónico · N° 4', documentType: 'magazine', collectionName: 'Publicaciones de la Orden', status: 'published', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-09-15', topic: 'El trabajo en logia', edition: 'N° 4', shortDescription: 'Cuarto número de la revista institucional.', createdAtUtc: '2026-09-10T12:00:00Z', publishedAtUtc: '2026-09-15T12:00:00Z', publisherProfile: 'communications', canCorrect: true },
@@ -181,6 +192,28 @@ export class DocumentApiClient {
     { documentId: 'demo-ed-boletin-nov', title: 'Boletín de la Orden · Noviembre 2026', documentType: 'bulletin', collectionName: 'Publicaciones de la Orden', status: 'draft', minimumDegreeRequired: null, authorName: 'Comunicaciones', documentDate: '2026-11-01', topic: null, edition: null, shortDescription: 'Borrador en preparación.', createdAtUtc: '2026-10-20T12:00:00Z', publishedAtUtc: null, publisherProfile: 'communications', canCorrect: true }
   ]
   private mockEditorialVersions: Array<EditorialMagazineVersion & { documentId: string }> = this.mockEditorial.map(item => ({ documentId: item.documentId, id: `${item.documentId}-v1`, versionNumber: 1, processingStatus: 'available', originalFileName: `${item.documentId}.pdf`, contentType: 'application/pdf', sizeBytes: 1_200_000, createdAtUtc: item.createdAtUtc }))
+
+  private readonly collaboratorsDemo = new AreaCollaboratorsDemo()
+  private collaboratorsPath(area: CollaboratorArea) { return area === 'library' ? '/api/biblioteca/colaboradores' : '/api/documentos/colaboradores' }
+  // Sin política de vista en el cliente: el servidor decide (solo Bibliotecario / Gran Archivero responsables) y falla cerrado.
+  async getAreaCollaborators(area: CollaboratorArea): Promise<AreaCollaborators> {
+    if (this.useMocks) return this.collaboratorsDemo.list(area)
+    return this.request<AreaCollaborators>(this.collaboratorsPath(area))
+  }
+  async getAreaCollaboratorCandidates(area: CollaboratorArea): Promise<AreaCollaboratorCandidates> {
+    if (this.useMocks) return this.collaboratorsDemo.candidates()
+    return this.request<AreaCollaboratorCandidates>(`${this.collaboratorsPath(area)}/candidatos`)
+  }
+  async addAreaCollaborator(area: CollaboratorArea, request: AddAreaCollaborator): Promise<AreaCollaborators> {
+    if (this.useMocks) return this.collaboratorsDemo.add(area, request)
+    await this.postJson(this.collaboratorsPath(area), request)
+    return this.getAreaCollaborators(area)
+  }
+  async revokeAreaCollaborator(area: CollaboratorArea, assignmentId: string, expectedVersion: number): Promise<AreaCollaborators> {
+    if (this.useMocks) return this.collaboratorsDemo.revoke(area, assignmentId, expectedVersion)
+    await this.authorizedFetch(`${this.collaboratorsPath(area)}/${encodeURIComponent(assignmentId)}?expectedVersion=${expectedVersion}`, { method: 'DELETE' })
+    return this.getAreaCollaborators(area)
+  }
 
   constructor(options: DocumentApiClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? '').replace(/\/$/, '')
@@ -200,6 +233,62 @@ export class DocumentApiClient {
     return response.items
   }
 
+  // #588 — revisión del Bibliotecario. El servidor decide (solo perfil Bibliotecario) y falla cerrado.
+  async listWorkPaperReviews(): Promise<WorkPaperReview[]> {
+    if (this.useMocks) return this.mockReviews.map(item => ({ ...item }))
+    const response = await this.request<{ items: WorkPaperReview[] }>('/api/biblioteca/revision')
+    return response.items
+  }
+
+  async approveWorkPaper(documentId: string): Promise<void> {
+    if (this.useMocks) { this.mockReviews = this.mockReviews.filter(item => item.id !== documentId); const own = this.mockWorkPapers.find(item => item.id === documentId); if (own) { own.reviewStatus = 'approved'; own.status = 'published'; own.returnReason = null; own.versions = own.versions.map((version, index) => ({ ...version, isCurrent: index === 0 })); own.publishedVersionId = own.versions[0]?.id ?? null } return }
+    await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/aprobar`, { method: 'POST' })
+  }
+
+  async returnWorkPaper(documentId: string, reason: string): Promise<void> {
+    if (this.useMocks) { this.mockReviews = this.mockReviews.filter(item => item.id !== documentId); const own = this.mockWorkPapers.find(item => item.id === documentId); if (own) { own.reviewStatus = 'returned'; own.returnReason = reason.trim() } return }
+    await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/devolver`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: reason.trim() }) })
+  }
+
+  async downloadWorkPaperForReview(documentId: string): Promise<Blob> {
+    if (this.useMocks) return new Blob(['Plancha demostrativa en revisión'], { type: 'text/plain' })
+    const response = await this.authorizedFetch(`/api/biblioteca/revision/${encodeURIComponent(documentId)}/contenido`, {}, 'application/octet-stream')
+    return response.blob()
+  }
+
+  // #588 — carga del Bibliotecario (libros y categorías propias). Solo perfil Bibliotecario; el servidor falla cerrado.
+  private mockManaged: ManagedPublication[] = []
+  async listManagedPublications(): Promise<ManagedPublication[]> {
+    if (this.useMocks) return this.mockManaged.map(item => ({ ...item }))
+    const response = await this.request<{ items: ManagedPublication[] }>('/api/biblioteca/gestion/publicaciones')
+    return response.items
+  }
+
+  /** Crea el borrador, carga el archivo, lo hace analizar y, si se pide, lo publica. Devuelve el id del documento. */
+  async uploadManagedPublication(input: ManagedPublicationInput, file: File, publishNow: boolean): Promise<{ documentId: string; published: boolean }> {
+    if (this.useMocks) {
+      const id = crypto.randomUUID(); const now = new Date().toISOString()
+      this.mockManaged.unshift({ id, title: input.title.trim(), categoryCode: input.categoryCode, status: publishNow ? 'published' : 'draft', degree: input.minimumDegreeRequired, author: input.authorName ?? null, topic: input.topic ?? null, edition: input.edition ?? null, description: input.description ?? null, createdAtUtc: now, publishedAtUtc: publishNow ? now : null })
+      return { documentId: id, published: publishNow }
+    }
+    const created = await this.postJson<{ documentId: string }>('/api/biblioteca/gestion/publicaciones', input)
+    const version = await this.createVersion(created.documentId, { originalFileName: file.name, contentType: file.type, sizeBytes: file.size })
+    await this.uploadVersionContent(version.id, file)
+    const scanned = await this.scanVersionContent(version.id)
+    if (scanned.processingStatus !== 'available') throw new Error('El archivo no quedó disponible después del análisis de seguridad; el borrador quedó sin publicar.')
+    if (publishNow) await this.publishEditorialMagazine(created.documentId, version.id)
+    return { documentId: created.documentId, published: publishNow }
+  }
+
+  /** Publica la última versión disponible de un borrador propio del Bibliotecario. */
+  async publishManagedDraft(documentId: string): Promise<void> {
+    if (this.useMocks) { const item = this.mockManaged.find(entry => entry.id === documentId); if (item) { item.status = 'published'; item.publishedAtUtc = new Date().toISOString() } return }
+    const versions = await this.listMagazineVersions(documentId)
+    const latest = versions.filter(version => version.processingStatus === 'available').sort((a, b) => b.versionNumber - a.versionNumber)[0]
+    if (!latest) throw new Error('El borrador no tiene un archivo disponible para publicar.')
+    await this.publishEditorialMagazine(documentId, latest.id)
+  }
+
   async getWorkPaperByVersion(versionId: string): Promise<MemberWorkPaperLink> {
     if (this.useMocks) {
       const paper = this.mockWorkPapers.find(item => item.versions.some(version => version.id === versionId))
@@ -213,8 +302,9 @@ export class DocumentApiClient {
     const { file } = input
     if (this.useMocks) {
       const id = crypto.randomUUID(); const versionId = crypto.randomUUID(); const now = new Date().toISOString()
-      this.mockWorkPapers.unshift({ id, title: input.title.trim(), shortDescription: input.shortDescription.trim(), minimumDegreeRequired: 3, status: 'published', publishedVersionId: versionId, versions: [{ id: versionId, versionNumber: 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: true }] })
-      this.mockLibrary.unshift({ id, title: input.title.trim(), documentType: 'work_paper', collectionName: 'Planchas de Trabajo', versionNumber: 1, contentType: file.type, sizeBytes: file.size, publishedAtUtc: now, minimumDegreeRequired: 3, shortDescription: input.shortDescription.trim(), authorName: 'Hermano Demostrativo', authorLodgeName: 'Taller Demostrativo Nº 23' })
+      // #588: la plancha queda «para revisión»; no entra a la Biblioteca hasta que el Bibliotecario la apruebe.
+      this.mockWorkPapers.unshift({ id, title: input.title.trim(), shortDescription: input.shortDescription.trim(), minimumDegreeRequired: 3, status: 'draft', publishedVersionId: null, reviewStatus: 'pending_review', returnReason: null, versions: [{ id: versionId, versionNumber: 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: false }] })
+      this.mockReviews.unshift({ id, title: input.title.trim(), authorName: 'Hermano Demostrativo', lodge: 'Taller Demostrativo Nº 23', description: input.shortDescription.trim(), submittedAtUtc: now, degree: 3, replacesPublished: false, versionId, fileName: file.name, sizeBytes: file.size })
       return { documentId: id, versionId }
     }
     const created = await this.postJson<{ documentId: string; versionId: string }>('/api/biblioteca/mis-planchas', {
@@ -223,7 +313,7 @@ export class DocumentApiClient {
     })
     await this.uploadVersionContent(created.versionId, file)
     const scanned = await this.scanVersionContent(created.versionId)
-    if (scanned.processingStatus !== 'available') throw new Error('La plancha no quedó publicada: el análisis de seguridad no la declaró disponible.')
+    if (scanned.processingStatus !== 'available') throw new Error('La plancha no quedó enviada: el análisis de seguridad no la declaró disponible.')
     return created
   }
 
@@ -233,10 +323,11 @@ export class DocumentApiClient {
       const document = this.mockWorkPapers.find(item => item.id === documentId)
       if (!document) throw new Error('La plancha indicada no existe en tus trabajos.')
       const versionId = crypto.randomUUID(); const now = new Date().toISOString()
-      document.title = input.title.trim(); document.shortDescription = input.shortDescription.trim(); document.publishedVersionId = versionId; document.status = 'published'
-      document.versions = [{ id: versionId, versionNumber: Math.max(0, ...document.versions.map(version => version.versionNumber)) + 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: true }, ...document.versions.map(version => ({ ...version, isCurrent: false }))]
-      const libraryIndex = this.mockLibrary.findIndex(item => item.id === documentId)
-      if (libraryIndex >= 0) this.mockLibrary[libraryIndex] = { ...this.mockLibrary[libraryIndex], title: document.title, shortDescription: document.shortDescription, versionNumber: document.versions[0].versionNumber, sizeBytes: file.size, publishedAtUtc: now }
+      if (document.reviewStatus === 'pending_review') throw new Error('La plancha está en revisión del Bibliotecario; espera su respuesta antes de enviar otra versión.')
+      document.reviewStatus = 'pending_review'; document.returnReason = null
+      document.versions = [{ id: versionId, versionNumber: Math.max(0, ...document.versions.map(version => version.versionNumber)) + 1, originalFileName: file.name, processingStatus: 'available', createdAtUtc: now, isCurrent: false }, ...document.versions]
+      this.mockReviews = this.mockReviews.filter(item => item.id !== documentId)
+      this.mockReviews.unshift({ id: documentId, title: input.title.trim(), authorName: 'Hermano Demostrativo', lodge: 'Taller Demostrativo Nº 23', description: input.shortDescription.trim(), submittedAtUtc: now, degree: document.minimumDegreeRequired, replacesPublished: document.publishedVersionId !== null, versionId, fileName: file.name, sizeBytes: file.size })
       return { versionId }
     }
     const created = await this.postJson<{ versionId: string }>(`/api/biblioteca/mis-planchas/${encodeURIComponent(documentId)}/versiones`, {
@@ -244,7 +335,7 @@ export class DocumentApiClient {
     })
     await this.uploadVersionContent(created.versionId, file)
     const scanned = await this.scanVersionContent(created.versionId)
-    if (scanned.processingStatus !== 'available') throw new Error('La nueva versión no quedó disponible; se conserva publicada la versión anterior.')
+    if (scanned.processingStatus !== 'available') throw new Error('La nueva versión no quedó disponible; se conserva la versión anterior.')
     return created
   }
 
@@ -331,6 +422,44 @@ export class DocumentApiClient {
       }
     }
     return this.request<LibraryFacetsResponse>('/api/biblioteca/facetas')
+  }
+
+  private mockCategories: LibraryCategoryDto[] = [
+    { value: 'work_paper', label: 'Planchas de Trabajo', base: true, active: true, position: 1 },
+    { value: 'book', label: 'Libros', base: true, active: true, position: 2 },
+    { value: 'magazine', label: 'Revistas', base: true, active: true, position: 3 },
+    { value: 'bulletin', label: 'Boletines', base: true, active: true, position: 4 },
+  ]
+
+  /** #588 — categorías persistentes de la Biblioteca (el Bibliotecario las administra). */
+  async listLibraryCategories(): Promise<{ canManage: boolean; items: LibraryCategoryDto[] }> {
+    if (this.useMocks) return { canManage: true, items: this.mockCategories.map(c => ({ ...c })) }
+    return this.request('/api/biblioteca/categorias')
+  }
+  async createLibraryCategory(label: string): Promise<LibraryCategoryDto> {
+    if (this.useMocks) {
+      const clean = label.trim()
+      if (this.mockCategories.some(c => c.label.toLowerCase() === clean.toLowerCase())) throw new Error('Ya existe una categoría con ese nombre.')
+      let value = clean.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 36) || 'categoria'
+      while (this.mockCategories.some(c => c.value === value)) value += '_2'
+      const created = { value, label: clean, base: false, active: true, position: this.mockCategories.length + 1 }
+      this.mockCategories.push(created); return { ...created }
+    }
+    return this.postJson('/api/biblioteca/categorias', { label })
+  }
+  async updateLibraryCategory(code: string, patch: { label?: string; active?: boolean }): Promise<LibraryCategoryDto> {
+    if (this.useMocks) {
+      const c = this.mockCategories.find(x => x.value === code); if (!c) throw new Error('Categoría no encontrada.')
+      if (patch.active === false && c.base) throw new Error('Las categorías base no se desactivan.')
+      if (patch.label !== undefined) c.label = patch.label.trim()
+      if (patch.active !== undefined) c.active = patch.active
+      return { ...c }
+    }
+    return this.putJson(`/api/biblioteca/categorias/${encodeURIComponent(code)}`, patch)
+  }
+  async reorderLibraryCategories(codes: string[]): Promise<void> {
+    if (this.useMocks) { this.mockCategories = codes.map((v, i) => ({ ...this.mockCategories.find(c => c.value === v)!, position: i + 1 })); return }
+    await this.putJson('/api/biblioteca/categorias/orden', { codes })
   }
 
   async setLibraryCatalogMetadata(documentId: string, payload: LibraryCatalogMetadataRequest): Promise<LibraryCatalogMetadata> {

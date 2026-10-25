@@ -34,6 +34,8 @@ using PMGM.Api.Modules.UserAccounts;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddProblemDetails();
+// Support HTTP failure metadata only: bounded in-memory buffer, no payloads or PII.
+builder.Services.AddSingleton<SupportDiagnosticBuffer>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
     TrustedProxyForwarding.Configure(options, builder.Configuration));
 builder.Services.AddLocalization();
@@ -108,6 +110,7 @@ builder.Services.AddScoped<IOfficialDocumentNoticeService, OfficialDocumentNotic
 builder.Services.AddScoped<FirstImplementationSeedService>();
 builder.Services.Configure<AccountIdentityOptions>(builder.Configuration.GetSection("UserAccounts:Identity"));
 builder.Services.Configure<InitialAccountMailOptions>(builder.Configuration.GetSection("UserAccounts:Mail"));
+builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IAccountIdentityProvider, KeycloakAccountIdentityProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddSingleton<SystemMailCredentialVault>();
 builder.Services.AddSingleton<ISystemMailSender, SystemMailSender>();
@@ -160,10 +163,14 @@ if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
 
 // IP normalizada para auditoría y partición de rate limits. Solo proxies de confianza explícita.
 app.UseForwardedHeaders();
+// Capture the final HTTP error status after exception handling, without raw logs.
+app.UseMiddleware<SupportDiagnosticMiddleware>();
 app.UseExceptionHandler();
 app.UseRequestLocalization();
 app.UseAuthentication();
+app.UseMiddleware<SupportViewAsMiddleware>();
 app.UseMiddleware<LibraryDegreeAccessMiddleware>();
+app.UseMiddleware<DynamicScopeExpansionMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.UseMiddleware<CandidatePublishedLockMiddleware>();
@@ -201,6 +208,8 @@ var api = app.MapGroup("").AddEndpointFilterFactory((context, next) =>
 });
 api.MapSessionEndpoints();
 api.MapBootstrapEndpoints();
+api.MapInitialLoadTemplateEndpoints();
+api.MapInitialLoadWindowStatusEndpoints();
 api.MapOrganizationEndpoints();
 api.MapLodgeSummaryAccessEndpoints();
 api.MapMembershipEndpoints();
@@ -241,12 +250,15 @@ api.MapLodgeCouncilEndpoints();
 api.MapLodgeInstructionEndpoints();
 api.MapDocumentManagementEndpoints();
 api.MapMemberWorkPaperEndpoints();
+api.MapWorkPaperReviewEndpoints();
+api.MapLibraryManagedPublicationEndpoints();
 api.MapDocumentManagementQueryEndpoints();
 api.MapDocumentContentEndpoints();
 api.MapDocumentContentRecoveryEndpoints();
 api.MapLibraryCatalogEndpoints();
 api.MapLibraryAccessPolicyEndpoints();
 api.MapLibraryCatalogMetadataEndpoints();
+api.MapLibraryCategoryEndpoints();
 api.MapGrandArchiveEndpoints();
 api.MapNotificationEndpoints();
 api.MapInstitutionalCalendarEndpoints();
@@ -262,9 +274,13 @@ api.MapSystemConfigurationEndpoints();
 api.MapSystemMailConfigurationEndpoints();
 api.MapFormSchemaAdministrationEndpoints();
 api.MapUserAccountEndpoints();
+api.MapSupportViewAsEndpoints();
 api.MapDynamicAccessEndpoints();
 api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
+api.MapSupportDiagnosticEndpoints();
+api.MapSupportLodgeDataHealthEndpoints();
+api.MapQaSyntheticPlanEndpoints();
 
 api.MapViewAccessEndpoints();
 

@@ -26,7 +26,15 @@ describe('PMGM-UX administración ordenada (04-10-2026)', () => {
   })
 
   it('restauración, correo e identidad se abren en panel', () => {
-    for (const label of ['Restaurar un respaldo', 'Editar configuración de correo', 'Editar logos y colores', 'Diseñar perfiles de acceso']) expect(ops).toContain(`<ActionDrawer label="${label}"`)
+    for (const label of ['Restaurar un respaldo', 'Editar logos y colores', 'Diseñar perfiles de acceso']) expect(ops).toContain(`<ActionDrawer label="${label}"`)
+  })
+  it('el correo vive solo en su tarjeta, funcional y auditable (sin repetirse en Parámetros)', () => {
+    const page = readFileSync(new URL('./SystemConfigurationPage.tsx', import.meta.url), 'utf8')
+    expect(page).toContain("{id:'mail',label:'Correo',icon:'mail' as const}")
+    expect(page).toContain('<WorkspacePanel id="mail" active={tab===\'mail\'}>')
+    expect(page).toContain('category={MAIL}')
+    expect(page).toContain('items.filter(item=>item.category!==MAIL)')
+    expect(ops).not.toContain("area==='mail'")
   })
   it('la asignación de perfiles se abre en panel', () => {
     expect(readFileSync(new URL('./UserAccessAssignments.tsx', import.meta.url), 'utf8')).toContain('<ActionDrawer label="Asignar perfil a un usuario"')

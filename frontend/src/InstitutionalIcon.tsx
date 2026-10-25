@@ -3,6 +3,7 @@ export type InstitutionalIconName =
   | 'member'
   | 'calendar'
   | 'bell'
+  | 'mail'
   | 'settings'
   | 'candidate'
   | 'members'
@@ -54,6 +55,8 @@ export default function InstitutionalIcon({ name, size = 20, className }: Instit
       return <svg {...common}><circle cx="12" cy="8" r="3.5"/><path d="M5.5 20c.7-4 3-6 6.5-6s5.8 2 6.5 6"/></svg>
     case 'calendar':
       return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M8 14h2M14 14h2M8 17.5h2M14 17.5h2"/></svg>
+    case 'mail':
+      return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 7 8.5 6.5L20.5 7"/></svg>
     case 'bell':
       return <svg {...common}><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
     case 'settings':
