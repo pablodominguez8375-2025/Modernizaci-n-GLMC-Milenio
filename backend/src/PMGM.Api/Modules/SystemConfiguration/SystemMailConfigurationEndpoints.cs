@@ -177,8 +177,32 @@ public static class SystemMailConfigurationEndpoints
         ctx.Response.Headers.CacheControl = "no-store";
         var found = await db.InstitutionalRuleSettings.AsNoTracking()
             .AnyAsync(x => x.Code == GoogleSmtpPolicy.SecretCode && x.Status == "active", ct);
-        return Results.Ok(new { configured = found && vault.Available,
-            encryptionReady = vault.Available });
+        var encryptionReady = vault.Available;
+        var transportReady = false;
+        var reason = !encryptionReady ? "missing_encryption_key" :
+            !found ? "missing_password" : "incomplete_transport";
+        if (found && encryptionReady)
+        {
+            try
+            {
+                // Sólo lectura de configuración privada: NO abre red ni realiza SMTP.
+                // Distinguir secreto almacenado de transporte realmente utilizable.
+                transportReady = await GoogleSmtpPolicy.ResolveAsync(db, vault, ct) is not null;
+                reason = transportReady ? "ready_to_test" : "incomplete_transport";
+            }
+            catch (InvalidOperationException)
+            {
+                // Una clave raíz reemplazada sin rotación no descifra el secreto
+                // guardado. Nunca filtrar ciphertext ni detalles criptográficos.
+                reason = "unreadable_password";
+            }
+        }
+        return Results.Ok(new {
+            configured = found && encryptionReady,
+            encryptionReady,
+            transportReady,
+            reason
+        });
     }
 
     private sealed record CredentialInput(string Password);
