@@ -21,6 +21,8 @@ import urllib.request
 ROLE = "platform_superadmin"
 LIMIT = 10000
 PAGE = 100
+QA_LOCAL_BASE = "http://127.0.0.1:18180/identity"
+QA_ISSUER = "https://sistema.granlogiamixta.cl/identity/realms/pmgm"
 LEGACY_QA_SUBJECT = "aa820001-0000-4000-8000-000000000001"
 
 
@@ -63,14 +65,12 @@ def save_subject(path, value):
 
 
 def validate_endpoint(base, realm, issuer):
-    p = urllib.parse.urlsplit(base)
-    if (p.scheme != "https" or not p.hostname or p.username or p.password or
-            p.query or p.fragment or
-            (p.path and not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]*", p.path)) or
-            not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", realm) or
-            issuer != base.rstrip("/") + "/realms/" + realm):
+    # Only a localhost Docker port opened by the QA-only overlay is allowed.
+    # Public HTTPS /identity/admin is correctly blocked by Caddy.
+    # The token never crosses external HTTP: this endpoint is 127.0.0.1 only.
+    if base != QA_LOCAL_BASE or realm != "pmgm" or issuer != QA_ISSUER:
         raise Blocked("ENDPOINT_INVALID")
-    return base.rstrip("/")
+    return base
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
