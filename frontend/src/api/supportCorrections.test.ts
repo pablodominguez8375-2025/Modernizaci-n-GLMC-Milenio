@@ -48,3 +48,21 @@ describe('Corregir como soporte (demo)', () => {
     expect(demo.correctionStatus().canCorrect).toBe(false)
   })
 })
+
+describe('Reenviar un aviso (demo)', () => {
+  it('solo con permiso vigente, con motivo, sin repetir en 10 minutos y visible para el Hermano', () => {
+    const who = { current: 'demo:systemAdmin' }
+    const demo = build(who)
+    demo.grantCorrection({ operatorSubject: 'demo:supportUser', reason: 'Reenviar avisos de la semana', minutes: 60 })
+    expect(() => demo.listNotices('demo:brother')).toThrow() // el Máster no opera
+    who.current = 'demo:supportUser'
+    const notices = demo.listNotices('demo:brother')
+    expect(notices.length).toBeGreaterThan(0)
+    expect(() => demo.resendNotice({ targetSubject: 'demo:brother', messageId: notices[0].messageId, reason: 'corto' })).toThrow()
+    expect(() => demo.resendNotice({ targetSubject: 'demo:brother', messageId: 'otro', reason: 'Aviso que no existe en la lista' })).toThrow()
+    expect(demo.resendNotice({ targetSubject: 'demo:brother', messageId: notices[0].messageId, reason: 'El Hermano no recibió el correo' }).status).toBe('queued')
+    expect(() => demo.resendNotice({ targetSubject: 'demo:brother', messageId: notices[0].messageId, reason: 'Reintento inmediato del reenvío' })).toThrow()
+    who.current = 'demo:brother'
+    expect(demo.myCorrections()[0]).toMatchObject({ label: 'Aviso reenviado', detail: notices[0].subject, operatorName: 'Soporte Demostrativo' })
+  })
+})

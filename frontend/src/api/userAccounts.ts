@@ -10,7 +10,9 @@ export interface SupportCorrectionGrant { grantId:string;operatorSubject:string;
 export interface SupportCorrectionStatus { isMaster:boolean;canCorrect:boolean;grants:SupportCorrectionGrant[];maxHours:number;fields:SupportCorrectionField[] }
 export interface SupportCorrectionGrantRequest { operatorSubject:string;reason:string;minutes:number }
 export interface SupportCorrectionRequest { targetSubject:string;field:SupportCorrectionFieldKey;newValue:string;reason:string }
-export interface MySupportCorrection { id:string;field:string;label:string;operatorName:string;reason:string;createdAtUtc:string }
+export interface MySupportCorrection { id:string;field:string;label:string;detail?:string|null;operatorName:string;reason:string;createdAtUtc:string }
+export interface SupportNotice { messageId:string;typeCode:string;subject:string;createdAtUtc:string;emailStatus?:string|null }
+export interface SupportResendRequest { targetSubject:string;messageId:string;reason:string }
 export const SUPPORT_CORRECTION_FIELDS:SupportCorrectionField[]=[{field:'email',label:'Correo electrónico'},{field:'phone',label:'Teléfono'},{field:'address',label:'Domicilio'}]
 export const SUPPORT_CORRECTION_DURATIONS=[{minutes:30,label:'30 minutos'},{minutes:60,label:'1 hora'},{minutes:120,label:'2 horas'},{minutes:240,label:'4 horas'}]
 
@@ -51,6 +53,16 @@ export class UserAccountsDemo {
   const op=st.grants[0];const label=SUPPORT_CORRECTION_FIELDS.find(f=>f.field===request.field)!.label
   this.corrections.unshift({id:crypto.randomUUID(),field:request.field,label,operatorName:op.operatorName,reason:request.reason.trim(),createdAtUtc:new Date().toISOString(),targetSubject:user.subject})
   return{status:'corrected' as const,field:request.field,label}
+ }
+ private notices:Record<string,SupportNotice[]>={'demo:brother':[{messageId:'demo-notice-1',typeCode:'candidate.interview.assigned',subject:'Entrevista asignada',createdAtUtc:'2026-10-20T14:00:00Z',emailStatus:'delivered'},{messageId:'demo-notice-2',typeCode:'grandarchive.official.published',subject:'Nuevo documento oficial publicado',createdAtUtc:'2026-10-22T16:30:00Z',emailStatus:'failed'}]}
+ listNotices(targetSubject:string):SupportNotice[]{if(!this.correctionStatus().canCorrect)throw new Error('No tiene un permiso vigente del Máster para corregir datos.');return structuredClone(this.notices[targetSubject]??[])}
+ resendNotice(request:SupportResendRequest){
+  this.authorize();const st=this.correctionStatus();if(!st.canCorrect)throw new Error('No tiene un permiso vigente del Máster para corregir datos.')
+  if(request.reason.trim().length<10||request.reason.trim().length>500)throw new Error('Indique el motivo (10 a 500 caracteres).')
+  const notice=(this.notices[request.targetSubject]??[]).find(n=>n.messageId===request.messageId);if(!notice)throw new Error('El aviso no existe o no es de este Hermano.')
+  if(this.corrections.some(c=>c.field==='resend_notice'&&c.detail===notice.subject&&c.targetSubject===request.targetSubject&&Date.now()-Date.parse(c.createdAtUtc)<600000))throw new Error('Este aviso se envió hace muy poco. Espere 10 minutos antes de reenviarlo.')
+  this.corrections.unshift({id:crypto.randomUUID(),field:'resend_notice',label:'Aviso reenviado',detail:notice.subject,operatorName:st.grants[0].operatorName,reason:request.reason.trim(),createdAtUtc:new Date().toISOString(),targetSubject:request.targetSubject})
+  return{status:'queued' as const,label:'Aviso reenviado'}
  }
  myCorrections():MySupportCorrection[]{const me=this.currentSubject();return this.corrections.filter(c=>c.targetSubject===me).map(({targetSubject:_t,...c})=>c)}
  startViewAs(request:SupportViewStartRequest){

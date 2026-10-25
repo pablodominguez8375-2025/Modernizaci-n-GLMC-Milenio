@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Bootstrap;
+using PMGM.Api.Modules.Notifications;
+using PMGM.Api.Modules.Notifications.Entities;
 using PMGM.Api.Modules.UserAccounts;
 
 namespace PMGM.Api.Modules.Authorization;
@@ -34,6 +36,8 @@ public sealed class SupportCorrection
     public string OperatorName { get; set; } = string.Empty;
     public string Field { get; set; } = string.Empty;
     public string Reason { get; set; } = string.Empty;
+    /// <summary>Complemento visible para el Hermano (p. ej. el título del aviso reenviado). Nunca el valor de un dato personal.</summary>
+    public string? Detail { get; set; }
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }
 
@@ -43,9 +47,12 @@ public static class SupportCorrectionPolicy
     public static readonly TimeSpan DefaultGrantLifetime = TimeSpan.FromHours(1);
     /// <summary>Lista cerrada de datos que soporte puede corregir: solo contacto.</summary>
     public static readonly string[] Fields = ["email", "phone", "address"];
+    public const string ResendField = "resend_notice";
+    /// <summary>Un mismo aviso no se reenvía más de una vez cada 10 minutos.</summary>
+    public static readonly TimeSpan ResendCooldown = TimeSpan.FromMinutes(10);
     public static string Label(string field) => field switch
     {
-        "email" => "Correo electrónico", "phone" => "Teléfono", "address" => "Domicilio", _ => field
+        "email" => "Correo electrónico", "phone" => "Teléfono", "address" => "Domicilio", ResendField => "Aviso reenviado", _ => field
     };
     public static bool ValidReason(string? reason) => reason?.Trim().Length is >= 10 and <= 500;
 }
@@ -53,6 +60,7 @@ public static class SupportCorrectionPolicy
 public static class SupportCorrectionEndpoints
 {
     public sealed record GrantRequest(string? OperatorSubject, string? Reason, int? Minutes);
+    public sealed record ResendRequest(string? TargetSubject, Guid? MessageId, string? Reason);
     public sealed record CorrectRequest(string? TargetSubject, string? Field, string? NewValue, string? Reason);
 
     public static IEndpointRouteBuilder MapSupportCorrectionEndpoints(this IEndpointRouteBuilder endpoints)
@@ -62,6 +70,8 @@ public static class SupportCorrectionEndpoints
         group.MapPost("/grants", CreateGrant);
         group.MapPost("/grants/{grantId:guid}/revoke", RevokeGrant);
         group.MapPost("", Correct);
+        group.MapGet("/notices", ListNotices);
+        group.MapPost("/resend", ResendNotice);
         endpoints.MapGet("/api/session/support-corrections", MyCorrections).RequireAuthorization().WithTags("Privacidad");
         return endpoints;
     }
@@ -205,6 +215,101 @@ public static class SupportCorrectionEndpoints
         return Results.Ok(new { status = "corrected", correctionId = correction.Id, field, label = SupportCorrectionPolicy.Label(field) });
     }
 
+    /// <summary>Operador con permiso vigente (nunca el Máster) y Hermano objetivo habilitado; resuelve su ficha.</summary>
+    private sealed record Resolved(SupportCorrectionGrant Grant, Guid MemberId, string Subject);
+    private static async Task<(Resolved? Ok, IResult? Error)> ResolveAsync(string rawTarget, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+        IAccountIdentityProvider identity, IAuditService audit, IConfiguration configuration, string deniedAction, CancellationToken ct)
+    {
+        if (!Authorized(ctx, access)) return (null, Results.Forbid());
+        var me = Subject(ctx); var now = DateTimeOffset.UtcNow;
+        async Task<(Resolved?, IResult?)> Reject(int status, string code, string message)
+        {
+            audit.Add(ctx, deniedAction, "SupportCorrection", "none", null, AuditResults.Rejected, new { code });
+            await db.SaveChangesAsync(CancellationToken.None);
+            return (null, Results.Json(new { code, message }, statusCode: status));
+        }
+        if (InitialLoadWindowStatusEndpoints.IsRegisteredMaster(ctx.User, access, configuration))
+            return await Reject(StatusCodes.Status403Forbidden, "SUPPORT_CORRECTION_MASTER_DENIED", "El Máster da el permiso, pero no corrige datos.");
+        var grant = await db.SupportCorrectionGrants.AsNoTracking()
+            .Where(x => x.OperatorSubject == me && x.RevokedAtUtc == null && x.ExpiresAtUtc > now).OrderByDescending(x => x.StartedAtUtc).FirstOrDefaultAsync(ct);
+        if (grant is null)
+            return await Reject(StatusCodes.Status403Forbidden, "SUPPORT_CORRECTION_PERMISSION_REQUIRED", "No tiene un permiso vigente del Máster para corregir datos.");
+        var target = rawTarget.Trim();
+        if (!Guid.TryParse(target, out _)) return (null, Results.BadRequest(new { code = "SUPPORT_CORRECTION_TARGET_REQUIRED", message = "Seleccione al Hermano." }));
+        if (!identity.Configured) return (null, Results.Json(new { code = "IDENTITY_UNAVAILABLE", message = "La identidad no está disponible; reintente más tarde." }, statusCode: 503));
+        AccountClaims? claims;
+        try { claims = await identity.GetClaimsAsync(target, ct); }
+        catch (Exception e) when (e is AccountDeliveryException or HttpRequestException or TaskCanceledException)
+        { return (null, Results.Json(new { code = "IDENTITY_UNAVAILABLE", message = "La identidad no está disponible; reintente más tarde." }, statusCode: 503)); }
+        if (claims is null || !claims.Enabled || SupportViewAsClaims.IsPrivileged(claims))
+            return await Reject(StatusCodes.Status403Forbidden, "SUPPORT_CORRECTION_TARGET_DENIED", "Solo se atienden Hermanos con cuenta habilitada, no cuentas de administración.");
+        var memberId = await db.Database.SqlQuery<Guid>(
+            $"SELECT \"MemberId\" AS \"Value\" FROM core.member_identity_links WHERE \"Subject\" = {target} AND \"RevokedAtUtc\" IS NULL LIMIT 1").FirstOrDefaultAsync(ct);
+        if (memberId == Guid.Empty) return await Reject(StatusCodes.Status404NotFound, "SUPPORT_CORRECTION_MEMBER_NOT_FOUND", "La cuenta no está vinculada a una ficha de Hermano.");
+        return (new Resolved(grant, memberId, target), null);
+    }
+
+    /// <summary>Avisos recientes del Hermano que soporte puede reenviar: solo clasificación interna y con correo registrado.</summary>
+    private static async Task<IResult> ListNotices(string? targetSubject, HttpContext ctx, PmgmDbContext db, NotificationDbContext notifications,
+        IInstitutionalAccessService access, IAccountIdentityProvider identity, IAuditService audit, IConfiguration configuration, CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        var (ok, error) = await ResolveAsync(targetSubject ?? "", ctx, db, access, identity, audit, configuration, "support.resend.denied", ct);
+        if (error is not null) return error;
+        var rows = await notifications.NotificationMessages.AsNoTracking()
+            .Where(x => x.RecipientSubject == ok!.Subject && x.Classification == NotificationCodes.Classification.Internal && x.RecipientEmail != null)
+            .OrderByDescending(x => x.CreatedAtUtc).Take(20)
+            .Select(x => new
+            {
+                messageId = x.Id, typeCode = x.TypeCode, subject = x.Subject, createdAtUtc = x.CreatedAtUtc,
+                emailStatus = x.Deliveries.Where(d => d.Channel == NotificationCodes.Channel.Email).OrderByDescending(d => d.CreatedAtUtc).Select(d => d.Status).FirstOrDefault()
+            }).ToListAsync(ct);
+        return Results.Ok(new { items = rows });
+    }
+
+    /// <summary>Reenvía un aviso ya emitido al MISMO correo registrado; no cambia contenido ni destino.</summary>
+    private static async Task<IResult> ResendNotice(ResendRequest request, HttpContext ctx, PmgmDbContext db, NotificationDbContext notifications,
+        IInstitutionalAccessService access, IAccountIdentityProvider identity, IAuditService audit, IConfiguration configuration, CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        var reason = request.Reason?.Trim() ?? "";
+        if (!SupportCorrectionPolicy.ValidReason(reason))
+            return Results.BadRequest(new { code = "SUPPORT_CORRECTION_REASON_REQUIRED", message = "Indique el motivo (10 a 500 caracteres)." });
+        if (request.MessageId is null) return Results.BadRequest(new { code = "SUPPORT_RESEND_NOTICE_REQUIRED", message = "Seleccione el aviso." });
+        var (ok, error) = await ResolveAsync(request.TargetSubject ?? "", ctx, db, access, identity, audit, configuration, "support.resend.denied", ct);
+        if (error is not null) return error;
+        async Task<IResult> Reject(int status, string code, string message)
+        {
+            audit.Add(ctx, "support.resend.denied", "SupportCorrection", "none", null, AuditResults.Rejected, new { code });
+            await db.SaveChangesAsync(CancellationToken.None);
+            return Results.Json(new { code, message }, statusCode: status);
+        }
+        var message = await notifications.NotificationMessages.Include(x => x.Deliveries).FirstOrDefaultAsync(x => x.Id == request.MessageId, ct);
+        if (message is null || message.RecipientSubject != ok!.Subject || string.IsNullOrWhiteSpace(message.RecipientEmail))
+            return await Reject(StatusCodes.Status404NotFound, "SUPPORT_RESEND_NOTICE_NOT_FOUND", "El aviso no existe o no es de este Hermano.");
+        if (message.Classification != NotificationCodes.Classification.Internal)
+            return await Reject(StatusCodes.Status403Forbidden, "SUPPORT_RESEND_NOTICE_PROTECTED", "Este aviso es reservado y soporte no puede reenviarlo.");
+        var now = DateTimeOffset.UtcNow;
+        if (message.Deliveries.Any(d => d.Channel == NotificationCodes.Channel.Email && d.CreatedAtUtc > now - SupportCorrectionPolicy.ResendCooldown))
+            return await Reject(StatusCodes.Status429TooManyRequests, "SUPPORT_RESEND_TOO_SOON", "Este aviso se envió hace muy poco. Espere 10 minutos antes de reenviarlo.");
+        notifications.NotificationDeliveries.Add(new NotificationDelivery
+        {
+            NotificationMessageId = message.Id, Channel = NotificationCodes.Channel.Email, Status = NotificationCodes.DeliveryStatus.Queued, ScheduledAtUtc = now
+        });
+        await notifications.SaveChangesAsync(ct);
+        var detail = message.Subject.Length > 200 ? message.Subject[..200] : message.Subject;
+        var record = new SupportCorrection
+        {
+            GrantId = ok.Grant.Id, MemberId = ok.MemberId, OperatorSubject = Subject(ctx), OperatorName = ok.Grant.OperatorName,
+            Field = SupportCorrectionPolicy.ResendField, Reason = reason, Detail = detail, CreatedAtUtc = now
+        };
+        db.SupportCorrections.Add(record);
+        audit.Add(ctx, "support.resend.applied", "NotificationMessage", message.Id.ToString("D"), null, AuditResults.Success,
+            new { correctionId = record.Id, typeCode = message.TypeCode, reason, operatorName = ok.Grant.OperatorName, grantId = ok.Grant.Id });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { status = "queued", correctionId = record.Id, label = SupportCorrectionPolicy.Label(SupportCorrectionPolicy.ResendField) });
+    }
+
     /// <summary>Lo que el propio Hermano ve en «Privacidad y mis datos»: qué se corrigió, cuándo, por quién y por qué.</summary>
     private static async Task<IResult> MyCorrections(HttpContext ctx, PmgmDbContext db, CancellationToken ct)
     {
@@ -218,7 +323,7 @@ public static class SupportCorrectionEndpoints
             .OrderByDescending(x => x.CreatedAtUtc).Take(50).ToListAsync(ct);
         return Results.Ok(new
         {
-            items = rows.Select(x => new { id = x.Id, field = x.Field, label = SupportCorrectionPolicy.Label(x.Field), operatorName = x.OperatorName, reason = x.Reason, createdAtUtc = x.CreatedAtUtc })
+            items = rows.Select(x => new { id = x.Id, field = x.Field, label = SupportCorrectionPolicy.Label(x.Field), detail = x.Detail, operatorName = x.OperatorName, reason = x.Reason, createdAtUtc = x.CreatedAtUtc })
         });
     }
 }
