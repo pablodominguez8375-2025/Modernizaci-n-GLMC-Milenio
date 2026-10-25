@@ -97,9 +97,12 @@ public static class DocumentAreaCollaboratorEndpoints
         string view, HttpContext ctx, IInstitutionalAccessService access)
         => ctx.User.Identity?.IsAuthenticated == true &&
            !string.IsNullOrWhiteSpace(ctx.User.FindFirst("sub")?.Value) &&
-           (view == "library"
+           // Cada área administra sus propios colaboradores (Bibliotecario → Biblioteca, Gran Archivero →
+           // Gestión Documental); el Máster y los superadmin pueden editarlos en ambas (PO 25-10).
+           (access.IsPlatformSuperAdmin(ctx.User) ||
+            (view == "library"
                ? access.CanManageLibrary(ctx.User, null)
-               : view == "documentmanager" && access.CanManageGrandArchive(ctx.User));
+               : view == "documentmanager" && access.CanManageGrandArchive(ctx.User)));
 
     private static string CodePrefix(string view) => "collab-" + view + "-";
 
