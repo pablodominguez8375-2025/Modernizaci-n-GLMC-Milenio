@@ -53,7 +53,8 @@
       "MemberRutRevealPostgreSqlTests",
       "MemberPhotoPostgreSqlTests",
       "SupportLodgeDataHealthHttpTests",
-      "QaSyntheticPlanContractTests"
+      "QaSyntheticPlanContractTests",
+      "InitialLoadWindowAtomicPostgreSqlTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
