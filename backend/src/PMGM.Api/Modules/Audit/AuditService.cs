@@ -40,6 +40,34 @@ public static class AuditMetadataSanitizer
         "ScanReference"
     };
 
+    // Only field names are inspected. Never copy field values to diagnostics.
+    // Normalize separators/case so access_token, Access-Token and accessToken
+    // receive the same protection. Keep "secret" exact to avoid confusing
+    // legitimate "secretariat" institutional fields with credentials.
+    private static readonly string[] SensitiveKeyFragments =
+    [
+        "password", "passwd", "token", "apikey", "credential",
+        "secretkey", "privatekey", "encryptionkey", "accesskey", "connectionstring",
+        "cookie", "rut", "passport", "nationalid",
+        "identitynumber", "email", "phone", "telephone", "address",
+        "birthdate", "dateofbirth", "biometric", "medical", "health",
+        "bankaccount", "creditcard", "cardnumber"
+    ];
+
+    private static bool IsForbiddenKey(string key)
+    {
+        if (ForbiddenKeys.Contains(key)) return true;
+        var normalized = new string(key.Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant).ToArray());
+        return normalized is "authorization" or "authorizationheader"
+            or "proxyauthorization" or "httpauthorization"
+            or "authorizationcode" or "secret" or "clientsecret" or "privatekey"
+            or "otp" or "totp" or "pin" or "cvv" or "cvc"
+            || normalized.EndsWith("secret", StringComparison.Ordinal)
+            || SensitiveKeyFragments.Any(fragment =>
+                normalized.Contains(fragment, StringComparison.Ordinal));
+    }
+
     public static string? Serialize(object? metadata)
     {
         if (metadata is null) return null;
@@ -54,7 +82,7 @@ public static class AuditMetadataSanitizer
         {
             foreach (var key in obj.Select(x => x.Key).ToArray())
             {
-                if (ForbiddenKeys.Contains(key))
+                if (IsForbiddenKey(key))
                 {
                     obj.Remove(key);
                     continue;
