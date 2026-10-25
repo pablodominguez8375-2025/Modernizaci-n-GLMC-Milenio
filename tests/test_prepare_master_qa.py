@@ -190,9 +190,11 @@ class MasterQaBootstrapTests(unittest.TestCase):
         self.assert_denied(api, "ISSUER_MISMATCH")
 
     def test_canonical_internal_qa_authority_and_legacy_path_denied(self):
-        valid = ("InitialLoad__MasterSubject=" + SUBJECT + "\\n" +
-                 "InitialLoad__MasterIssuer=" + ISSUER + "\\n" +
-                 "Authentication__Authority=http://keycloak:8080/identity/realms/pmgm")
+        valid = chr(10).join([
+            "InitialLoad__MasterSubject=" + SUBJECT,
+            "InitialLoad__MasterIssuer=" + ISSUER,
+            "Authentication__Authority=http://keycloak:8080/identity/realms/pmgm",
+        ])
         mod.validate_config(valid, SUBJECT, ISSUER)
         legacy = valid.replace("keycloak:8080/identity/realms/", "keycloak:8080/realms/")
         with self.assertRaisesRegex(mod.Blocked, "RUNTIME_MASTER_CONFIG_MISMATCH"):
