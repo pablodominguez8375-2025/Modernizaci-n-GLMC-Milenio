@@ -16,7 +16,7 @@ const toMessage = (e: unknown) => {
 const fmt = (d: string) => d.split('-').reverse().join('-')
 
 /** Colaboradores de un área: acceso limitado por categoría, acciones y vigencia. Solo lo ve el responsable del área. */
-export default function AreaCollaboratorsSection({ documentApi, area }: { documentApi: DocumentApiClient; area: CollaboratorArea }) {
+export default function AreaCollaboratorsSection({ documentApi, area, title = 'Colaboradores' }: { documentApi: DocumentApiClient; area: CollaboratorArea; title?: string }) {
   const [data, setData] = useState<AreaCollaborators | null>(null)
   const [denied, setDenied] = useState(false)
   const [error, setError] = useState('')
@@ -64,7 +64,7 @@ export default function AreaCollaboratorsSection({ documentApi, area }: { docume
   const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
 
   return <section className="panel area-collaborators" aria-label={`Colaboradores de ${areaTitle[area]}`}>
-    <header><div><h2>Colaboradores</h2><p>Personas con acceso limitado a una categoría de {areaTitle[area]}. No pueden dar acceso a otros ni salir de su categoría.</p></div>
+    <header><div><h2>{title}</h2><p>Personas con acceso limitado a una categoría de {areaTitle[area]}. No pueden dar acceso a otros ni salir de su categoría.</p></div>
       <ActionDrawer label="Agregar colaborador" title="Agregar colaborador" description="Elija la persona, la categoría, lo que puede hacer y hasta cuándo." keepOpen>
         <form className="library-admin-form" onSubmit={event => void add(event)}>
           {people.length > 0 && !manual
@@ -82,7 +82,7 @@ export default function AreaCollaboratorsSection({ documentApi, area }: { docume
         </form>
       </ActionDrawer></header>
     {error && <p role="alert">{error}</p>}{notice && <p role="status">{notice}</p>}
-    {data && data.items.length === 0 && <p className="library-admin-empty">No hay colaboradores. Solo usted administra esta área.</p>}
+    {data && data.items.length === 0 && <p className="library-admin-empty">No hay colaboradores. Solo quien administra esta área y el Máster pueden agregarlos.</p>}
     <div className="library-admin-list">{data?.items.map(item => <article key={item.assignmentId} className="library-admin-card">
       <div><strong>{label(item.category)}</strong><span>{people.find(p => p.subject === item.subject)?.name ?? item.subject}</span><small>{item.actions.map(a => collaboratorActionLabels[a]).join(' · ')} · desde {fmt(item.effectiveFrom)}{item.effectiveTo ? ` hasta ${fmt(item.effectiveTo)}` : ' sin fecha de término'}{item.effectiveTo && item.effectiveTo < today() ? ' · vencido' : ''}</small></div>
       <div className="library-admin-row-actions"><ConfirmAction label="Revocar" tone="secondary" message="Pierde el acceso de inmediato. Queda registrado en auditoría." disabled={busy} onConfirm={() => void revoke(item)} /></div>

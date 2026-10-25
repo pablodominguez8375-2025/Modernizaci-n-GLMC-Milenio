@@ -40,6 +40,14 @@ public sealed class DocumentAreaCollaboratorCandidatesTests
         client.DefaultRequestHeaders.Remove("X-Collab-Role");
         client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/documentos/colaboradores/candidatos", ct)).StatusCode);
+        // Máster/superadmin: pueden administrar los colaboradores de ambas áreas (PO 25-10).
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.PlatformSuperAdmin);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/documentos/colaboradores/candidatos", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/biblioteca/colaboradores", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/documentos/colaboradores", ct)).StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
         var response = await client.GetAsync("/api/biblioteca/colaboradores/candidatos", ct);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString() ?? "");

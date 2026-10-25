@@ -360,7 +360,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.155' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.156' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
@@ -435,7 +435,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'dashboard' && <DashboardPage membershipApi={membershipApi} pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {activeViewAllowed && <>
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
-        {(view === 'system' || view === 'bootstrap') && canConfigureSystem && <SystemConfigurationPage api={api} canManageProfiles={capabilities?.canManageAccessProfiles === true} bootstrapSlot={canBootstrap ? <BootstrapPage bootstrapApi={bootstrapApi} /> : undefined} />}
+        {(view === 'system' || view === 'bootstrap') && canConfigureSystem && <SystemConfigurationPage api={api} documentApi={documentApi} canManageProfiles={capabilities?.canManageAccessProfiles === true} bootstrapSlot={canBootstrap ? <BootstrapPage bootstrapApi={bootstrapApi} /> : undefined} />}
         {view === 'bootstrap' && canBootstrap && !canConfigureSystem && <BootstrapPage bootstrapApi={bootstrapApi} />}
         {isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs label="Secciones de Insinuaciones e Iniciación" active={view} onChange={setView} hub={{ title: 'Insinuaciones e Iniciación', hints: {
           candidates: 'Consulta de insinuados publicados',
