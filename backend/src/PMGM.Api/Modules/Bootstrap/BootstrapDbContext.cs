@@ -13,6 +13,7 @@ public sealed class BootstrapDbContext(DbContextOptions<BootstrapDbContext> opti
     public DbSet<OfficeDefinition> OfficeDefinitions => Set<OfficeDefinition>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<InitialLoadWindow> InitialLoadWindows => Set<InitialLoadWindow>();
+    public DbSet<InitialLoadBatchLedger> InitialLoadBatchLedgers => Set<InitialLoadBatchLedger>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -84,6 +85,25 @@ public sealed class BootstrapDbContext(DbContextOptions<BootstrapDbContext> opti
                 .HasForeignKey(x => x.OpenedAuditEventId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<AuditEvent>().WithMany()
                 .HasForeignKey(x => x.ClosedAuditEventId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // The fingerprint is a keyed HMAC, never the public SHA of a RUT/CSV.
+        // Primary key enforces uniqueness across concurrent future imports.
+        modelBuilder.Entity<InitialLoadBatchLedger>(entity =>
+        {
+            entity.ToTable("initial_load_batch_ledger");
+            entity.HasKey(x => x.Fingerprint);
+            entity.Property(x => x.Fingerprint).HasMaxLength(64).ValueGeneratedNever();
+            entity.Property(x => x.Status).HasMaxLength(16).IsRequired();
+            entity.Property(x => x.Version).IsConcurrencyToken();
+            entity.Property(x => x.CreatedAtUtc).IsRequired();
+            entity.Property(x => x.UpdatedAtUtc).IsRequired();
+            entity.HasOne<AuditEvent>().WithMany()
+                .HasForeignKey(x => x.ReservedAuditEventId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AuditEvent>().WithMany()
+                .HasForeignKey(x => x.AppliedAuditEventId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<AuditEvent>().WithMany()
+                .HasForeignKey(x => x.ReversedAuditEventId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<AuditEvent>(entity =>
