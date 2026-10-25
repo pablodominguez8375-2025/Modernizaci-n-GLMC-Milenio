@@ -20,6 +20,9 @@ public static class CandidateWorkshopIntakeEndpoints
         endpoints.MapGet("/api/insinuados/taller/organizaciones/{organizationId:guid}/patrocinadores", GetEligibleSponsorsAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
+        endpoints.MapGet("/api/insinuados/taller/organizaciones/{organizationId:guid}/recomendantes", GetEligibleRecommendersAsync)
+            .WithTags("Ficha privada de insinuados")
+            .RequireAuthorization();
         endpoints.MapPost("/api/insinuados/taller/solicitudes", CreateWorkshopRequestAsync)
             .WithTags("Ficha privada de insinuados")
             .RequireAuthorization();
@@ -132,6 +135,81 @@ public static class CandidateWorkshopIntakeEndpoints
 
         httpContext.Response.Headers.CacheControl = "private, no-store";
         return Results.Ok(new { items = choices });
+    }
+
+    /// <summary>
+    /// Consulta privada de hermanos que pueden figurar como ORIGEN de una
+    /// insinuación. La búsqueda es transversal a la Orden, pero solo una
+    /// Secretaría autorizada del Taller receptor puede solicitarla. Ningún
+    /// resultado constituye acreditación para PATROCINAR ni ENTREVISTAR.
+    /// </summary>
+    private static async Task<IResult> GetEligibleRecommendersAsync(
+        Guid organizationId, string? q, HttpContext httpContext,
+        PmgmDbContext coreDb, IInstitutionalAccessService access,
+        CancellationToken cancellationToken)
+    {
+        if (!access.CanManageLodgeSecretariat(httpContext.User, organizationId))
+            return Results.Forbid();
+
+        var search = q?.Trim();
+        // Evita consultas del padrón completo: texto obligatorio y resultados
+        // mínimos, sin RUT, correo, grado, Taller u otros datos personales.
+        if (search is null || search.Length is < 3 or > 80 ||
+            search.Any(char.IsControl))
+            return Results.BadRequest(new {
+                code = "CANDIDATE_RECOMMENDER_SEARCH_INVALID",
+                message = "Ingrese al menos 3 y como máximo 80 caracteres para buscar por nombre."
+            });
+
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeBySystemTimeZoneId(
+            DateTimeOffset.UtcNow, "America/Santiago").DateTime);
+        var term = search.ToLowerInvariant();
+        // Se acota en la propia base de datos antes de cargar y de aplicar
+        // el estado institucional efectivo, sin revelar resultados masivos.
+        var matches = await coreDb.Memberships.AsNoTracking()
+            .Where(m => m.Status == MembershipCodes.MembershipStatus.Active &&
+                (m.StartDate == null || m.StartDate <= today) &&
+                (m.EndDate == null || m.EndDate >= today) &&
+                (m.Member.Person.FirstNames + " " + m.Member.Person.LastNames)
+                    .ToLower().Contains(term))
+            .Select(m => new {
+                m.MemberId, m.Member.Person.FirstNames, m.Member.Person.LastNames
+            })
+            .Distinct().Take(160).ToListAsync(cancellationToken);
+
+        var ids = matches.Select(m => m.MemberId).Distinct().ToArray();
+        var recognized = new[] {
+            MembershipCodes.InstitutionalStatus.Active,
+            MembershipCodes.InstitutionalStatus.Reinstated,
+            MembershipCodes.InstitutionalStatus.Inactive,
+            MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
+            MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
+            MembershipCodes.InstitutionalStatus.Deceased
+        };
+        var events = await coreDb.InstitutionalStatusEvents.AsNoTracking()
+            .Where(x => ids.Contains(x.MemberId) && x.EffectiveDate <= today &&
+                recognized.Contains(x.EventType))
+            .OrderByDescending(x => x.EffectiveDate)
+            .ThenByDescending(x => x.RecordedAtUtc)
+            .Select(x => new { x.MemberId, x.EventType })
+            .ToListAsync(cancellationToken);
+        var latest = events.GroupBy(x => x.MemberId)
+            .ToDictionary(group => group.Key, group => group.First().EventType);
+
+        var items = matches
+            .Where(m => !latest.TryGetValue(m.MemberId, out var state) ||
+                state is MembershipCodes.InstitutionalStatus.Active or
+                    MembershipCodes.InstitutionalStatus.Reinstated)
+            .GroupBy(m => m.MemberId).Select(g => g.First())
+            .Select(m => new {
+                id = m.MemberId,
+                name = (m.FirstNames + " " + m.LastNames).Trim()
+            })
+            .OrderBy(m => m.name, StringComparer.CurrentCultureIgnoreCase)
+            .Take(30).ToArray();
+
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(new { items });
     }
 
     private static async Task<IResult> CreateWorkshopRequestAsync(
