@@ -14,6 +14,7 @@ const dataGroups: Array<{ title: string; text: string }> = [
   { title: 'Qué datos guardamos', text: 'Datos de tu ficha (nombre, contacto, grado, Taller), tu asistencia, tus pagos y los documentos que tú o tu Taller suben.' },
   { title: 'Para qué los usamos', text: 'Solo para la vida de la Orden: llevar el Cuadro, citar a tenidas, cobrar cuotas, emitir certificados y cumplir normas.' },
   { title: 'Quién puede verlos', text: 'Cada persona ve únicamente lo que su cargo necesita. Tu Taller ve tu información de Taller; las oficialías de la Gran Logia ven lo propio de su función.' },
+  { title: 'Acceso de soporte', text: 'Solo con fines de soporte técnico, un administrador autorizado de la plataforma puede ver tu cuenta tal como tú la ves. Se le da permiso solo por un tiempo predeterminado (máximo 30 minutos), en modo solo lectura: no puede cambiar tus datos ni conocer tu clave. Cada acceso queda registrado con su motivo.' },
   { title: 'Cómo los cuidamos', text: 'Acceso con tu cuenta personal, registro de quién consulta o cambia datos, documentos revisados con antivirus y copias de respaldo.' },
 ]
 
