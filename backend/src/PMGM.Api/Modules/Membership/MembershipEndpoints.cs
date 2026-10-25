@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core;
 
 namespace PMGM.Api.Modules.Membership;
 
@@ -15,7 +17,67 @@ public static class MembershipEndpoints
         group.MapGet("", GetMembersAsync);
         group.MapGet("/{id:guid}/profile", GetMemberProfileAsync);
         group.MapGet("/{id:guid}/history", GetMemberHistoryAsync);
+        group.MapPost("/{id:guid}/rut/reveal", RevealMemberRutAsync);
         return endpoints;
+    }
+
+    public static readonly string[] RutRevealReasons =
+        ["identity_verification", "authorized_procedure", "support_with_consent"];
+    private const int RutRevealSeconds = 15;
+
+    /// <summary>
+    /// «Ver completo» del RUT de un tercero (#609): solo para quien ya puede leer los datos de contacto
+    /// del hermano, con motivo de catálogo. La auditoría se guarda ANTES de responder: si falla, no se revela.
+    /// </summary>
+    private static async Task<IResult> RevealMemberRutAsync(
+        Guid id,
+        RevealMemberRutRequest request,
+        HttpContext httpContext,
+        PmgmDbContext db,
+        IInstitutionalAccessService access,
+        IAuditService audit,
+        CancellationToken cancellationToken)
+    {
+        httpContext.Response.Headers.CacheControl = "no-store, private";
+        if (await HasSupportMembershipAsync(db, id, cancellationToken)) return Results.NotFound();
+        var reason = request?.Reason?.Trim();
+        if (reason is null || !RutRevealReasons.Contains(reason))
+            return Results.BadRequest(new { message = "Seleccione un motivo válido para ver el RUT completo." });
+
+        var member = await db.Members.AsNoTracking().Where(x => x.Id == id)
+            .Select(x => new { x.Id, x.Person.Rut }).SingleOrDefaultAsync(cancellationToken);
+        if (member is null) return Results.NotFound();
+
+        var memberOrganizationIds = await db.Memberships.AsNoTracking()
+            .Where(x => x.MemberId == id).Select(x => x.OrganizationId).Distinct().ToListAsync(cancellationToken);
+        var hasOrderAccess = HasOrderHistoryAccess(access, httpContext.User);
+        var allowedOrganizationIds = hasOrderAccess
+            ? memberOrganizationIds
+            : memberOrganizationIds.Where(x => access.CanReadOrganization(httpContext.User, x)).ToList();
+        var allowed = (hasOrderAccess || allowedOrganizationIds.Count > 0) &&
+            MemberProfilePrivacy.CanReadContact(access, httpContext.User, allowedOrganizationIds);
+        var organizationId = allowedOrganizationIds.Count == 1 ? allowedOrganizationIds[0] : (Guid?)null;
+        if (!allowed)
+        {
+            audit.Add(httpContext, "member.rut.reveal_denied", "Member", id.ToString(), organizationId,
+                AuditResults.Rejected, new { reason });
+            try { await db.SaveChangesAsync(cancellationToken); } catch (DbUpdateException) { db.ChangeTracker.Clear(); }
+            return Results.Forbid();
+        }
+
+        if (!ChileanRut.TryNormalize(member.Rut, out _, out var formatted))
+            return Results.Conflict(new { message = "La ficha no tiene un RUT chileno válido para mostrar." });
+
+        audit.Add(httpContext, "member.rut.revealed", "Member", id.ToString(), organizationId,
+            AuditResults.Success, new { reason });
+        try { await db.SaveChangesAsync(cancellationToken); }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            return Results.Problem("No fue posible registrar la auditoría; el RUT no se muestra.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+        return Results.Ok(new { rut = formatted, expiresInSeconds = RutRevealSeconds });
     }
 
     private static async Task<IResult> GetMembersAsync(
@@ -39,8 +101,9 @@ public static class MembershipEndpoints
             .Select(x => new { x.Id, x.Name, x.Number, x.Type })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (organization is null)
+        if (organization is null || SupportWorkshopPolicy.IsSupportOrganization(organization.Type))
         {
+            // Soporte sintético nunca se consulta mediante el padrón institucional.
             return Results.NotFound();
         }
 
@@ -65,6 +128,11 @@ public static class MembershipEndpoints
         var latestMemberships = db.Memberships
             .AsNoTracking()
             .Where(x => x.OrganizationId == organizationId &&
+                        // Aunque alguien vincule por error un miembro ficticio
+                        // al Taller real, no entra al Cuadro ni a los conteos.
+                        !db.Memberships.Any(support =>
+                            support.MemberId == x.MemberId &&
+                            EF.Functions.ILike(support.Organization.Type, SupportWorkshopPolicy.OrganizationType)) &&
                         !db.Memberships.Any(other =>
                             other.OrganizationId == organizationId &&
                             other.MemberId == x.MemberId &&
@@ -96,6 +164,7 @@ public static class MembershipEndpoints
                 x.MemberId,
                 DisplayName = x.Member.Person.FirstNames + " " + x.Member.Person.LastNames,
                 x.Member.InstitutionalNumber,
+                HasPhoto = db.MemberPhotos.Any(photo => photo.MemberId == x.MemberId && photo.VisibleToMembers),
                 MembershipStatus = x.Status,
                 x.MembershipType,
                 x.StartDate,
@@ -124,6 +193,17 @@ public static class MembershipEndpoints
         });
     }
 
+    /// <summary>
+    /// El soporte sintético tendrá un circuito dedicado en fases posteriores.
+    /// Un miembro mixto support/workshop se bloquea por precaución, antes
+    /// de revelar nombres, RUT, ficha o historia institucional.
+    /// </summary>
+    private static Task<bool> HasSupportMembershipAsync(
+        PmgmDbContext db, Guid memberId, CancellationToken ct)
+        => db.Memberships.AsNoTracking().AnyAsync(m =>
+            m.MemberId == memberId &&
+            EF.Functions.ILike(m.Organization.Type, SupportWorkshopPolicy.OrganizationType), ct);
+
     private static async Task<IResult> GetMemberProfileAsync(
         Guid id,
         HttpContext httpContext,
@@ -131,6 +211,9 @@ public static class MembershipEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
+        if (await HasSupportMembershipAsync(db, id, cancellationToken))
+            return Results.NotFound();
+
         var member = await db.Members
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -139,6 +222,7 @@ public static class MembershipEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.CreatedAtUtc
@@ -321,9 +405,18 @@ public static class MembershipEndpoints
             regularity = new { financial, hospitalaria };
         }
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        var hasPhoto = await db.MemberPhotos.AnyAsync(photo => photo.MemberId == id && photo.VisibleToMembers, cancellationToken);
         return Results.Ok(new
         {
-            member,
+            member = new
+            {
+                member.Id, member.PersonId, member.InstitutionalNumber,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc, HasPhoto = hasPhoto,
+                RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
+            },
             contactVisible = canReadContact,
             contact,
             scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",
@@ -350,6 +443,9 @@ public static class MembershipEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
+        if (await HasSupportMembershipAsync(db, id, cancellationToken))
+            return Results.NotFound();
+
         var member = await db.Members
             .AsNoTracking()
             .Where(x => x.Id == id)
@@ -358,6 +454,7 @@ public static class MembershipEndpoints
                 x.Id,
                 x.PersonId,
                 x.InstitutionalNumber,
+                x.Person.Rut,
                 x.Person.FirstNames,
                 x.Person.LastNames,
                 x.CreatedAtUtc
@@ -503,9 +600,18 @@ public static class MembershipEndpoints
             })
             .ToListAsync(cancellationToken);
 
+        // La proyección contiene información de identificación del miembro,
+        // aunque se envíe con máscara: no permitir caché compartida.
+        httpContext.Response.Headers.CacheControl = "private, no-store";
+        var hasPhoto = await db.MemberPhotos.AnyAsync(photo => photo.MemberId == id && photo.VisibleToMembers, cancellationToken);
         return Results.Ok(new
         {
-            member,
+            member = new
+            {
+                member.Id, member.PersonId, member.InstitutionalNumber,
+                member.FirstNames, member.LastNames, member.CreatedAtUtc, HasPhoto = hasPhoto,
+                RutMasked = MemberProfilePrivacy.MaskRutForThirdParty(member.Rut)
+            },
             contactVisible = canReadContact,
             contact,
             scope = hasOrderHistoryAccess ? "order" : "authorized_organizations",
@@ -524,3 +630,5 @@ public static class MembershipEndpoints
                InstitutionalRoles.GranLogiaAdmin,
                InstitutionalRoles.RegimenInterior);
 }
+
+public sealed record RevealMemberRutRequest(string? Reason);

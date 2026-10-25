@@ -1,4 +1,7 @@
 using System.Security.Claims;
+using Microsoft.EntityFrameworkCore;
+using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Authorization;
 
 namespace PMGM.Api.Modules.GrandArchive;
@@ -17,6 +20,17 @@ public static class GrandArchiveEndpoints
         group.MapGet("/{recordId:guid}/content", ContentAsync);
         group.MapPost("/", RegisterAsync);
         group.MapPost("/{recordId:guid}/withdraw", WithdrawAsync);
+        group.MapPost("/{recordId:guid}/publish", PublishAsync);
+        group.MapPost("/{recordId:guid}/unpublish", UnpublishAsync);
+
+        // Vista de lectura para todos los Hermanos (#653). Ruta fuera del prefijo /api/documentos
+        // para no heredar las restricciones del Gestor Documental.
+        var official = endpoints.MapGroup("/api/publicaciones-oficiales")
+            .WithTags("Documentos oficiales")
+            .RequireAuthorization();
+        official.MapGet("/", ListOfficialAsync);
+        official.MapGet("/{recordId:guid}", GetOfficialAsync);
+        official.MapGet("/{recordId:guid}/content", OfficialContentAsync);
         return endpoints;
     }
 
@@ -189,6 +203,145 @@ public static class GrandArchiveEndpoints
         }
     }
 
+    private static async Task<IResult> PublishAsync(
+        Guid recordId,
+        PublishGrandArchiveRequest request,
+        HttpContext httpContext,
+        IGrandArchiveService service,
+        IOfficialDocumentNoticeService notices,
+        IAuditService audit,
+        PmgmDbContext db,
+        CancellationToken cancellationToken)
+    {
+        // Solo el perfil Gran Archivero publica; ni el administrador de Gran Logia ni el Máster.
+        if (!GrandArchivePolicy.IsGrandArchivist(httpContext.User)) return Results.Forbid();
+        var actor = Actor(httpContext.User);
+        if (actor is null) return Results.Unauthorized();
+        if (!GrandArchivePolicy.IsValidDegree(request.MinimumDegree))
+            return Results.BadRequest(new { message = "El grado mínimo debe ser 1 (todos), 2 (desde Compañero) o 3 (solo Maestro)." });
+        try
+        {
+            var until = request.Until is null ? (DateTimeOffset?)null : GrandArchivePolicy.EndOfChileanDay(request.Until.Value);
+            var result = await service.PublishAsync(recordId, request.MinimumDegree, until, actor, cancellationToken);
+            audit.Add(httpContext, "grandarchive.published", "GrandArchiveRecord", recordId.ToString(), null, AuditResults.Success,
+                new { result.ArchiveCode, minimumDegree = request.MinimumDegree, until = result.PublishedUntilUtc });
+            await db.SaveChangesAsync(cancellationToken);
+            // El aviso es complementario: si falla, la publicación ya está hecha y auditada.
+            try
+            {
+                var notice = await notices.NotifyPublishedAsync(recordId, result.ArchiveCode, result.RecordType, result.Title, request.MinimumDegree, result.PublishedAtUtc ?? DateTimeOffset.UtcNow, cancellationToken);
+                audit.Add(httpContext, "grandarchive.publication_notified", "GrandArchiveRecord", recordId.ToString(), null,
+                    notice.Failed == 0 ? AuditResults.Success : AuditResults.Rejected,
+                    new { result.ArchiveCode, notice.Eligible, notice.Queued, notice.Failed });
+                await db.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or DbUpdateException)
+            {
+                db.ChangeTracker.Clear();
+            }
+            NoStore(httpContext);
+            return Results.Ok(result);
+        }
+        catch (KeyNotFoundException ex) { return Results.NotFound(new { message = ex.Message }); }
+        catch (GrandArchivePolicyException ex) { return Results.Conflict(new { message = ex.Message }); }
+        catch (GrandArchiveSourceUnavailableException ex)
+        {
+            return Results.Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
+    private static async Task<IResult> UnpublishAsync(
+        Guid recordId,
+        UnpublishGrandArchiveRequest request,
+        HttpContext httpContext,
+        IGrandArchiveService service,
+        IAuditService audit,
+        PmgmDbContext db,
+        CancellationToken cancellationToken)
+    {
+        if (!GrandArchivePolicy.IsGrandArchivist(httpContext.User)) return Results.Forbid();
+        var actor = Actor(httpContext.User);
+        if (actor is null) return Results.Unauthorized();
+        if (string.IsNullOrWhiteSpace(request.Reason) || request.Reason.Trim().Length is < 10 or > 500)
+            return Results.BadRequest(new { message = "Retirar la publicación requiere un motivo de 10 a 500 caracteres." });
+        try
+        {
+            var result = await service.UnpublishAsync(recordId, request.Reason, actor, cancellationToken);
+            audit.Add(httpContext, "grandarchive.unpublished", "GrandArchiveRecord", recordId.ToString(), null, AuditResults.Success,
+                new { result.ArchiveCode, reason = request.Reason.Trim() });
+            await db.SaveChangesAsync(cancellationToken);
+            NoStore(httpContext);
+            return Results.Ok(result);
+        }
+        catch (KeyNotFoundException ex) { return Results.NotFound(new { message = ex.Message }); }
+        catch (GrandArchivePolicyException ex) { return Results.Conflict(new { message = ex.Message }); }
+    }
+
+    // Grado efectivo del lector: quien administra el archivo ve todo; un usuario sin ficha de Hermano no ve nada.
+    private static async Task<int> ViewerDegreeAsync(
+        HttpContext httpContext, IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver resolver, CancellationToken cancellationToken)
+    {
+        if (access.CanManageGrandArchive(httpContext.User) || access.IsPlatformSuperAdmin(httpContext.User)) return 3;
+        var member = await resolver.ResolveAsync(httpContext.User, cancellationToken);
+        return member?.EffectiveDegree ?? 0;
+    }
+
+    private static async Task<IResult> ListOfficialAsync(
+        string? recordType, int? year, string? search, int? limit,
+        HttpContext httpContext, IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver resolver, IGrandArchiveService service,
+        CancellationToken cancellationToken)
+    {
+        var normalizedType = Normalize(recordType);
+        if (normalizedType is not null && !GrandArchiveCodes.RecordType.IsPublishable(normalizedType))
+            return Results.BadRequest(new { message = "El tipo de documento no es válido." });
+        if (year is not null && year is < 1800 or > 2200)
+            return Results.BadRequest(new { message = "El año indicado no es válido." });
+        if (search?.Length > 200) return Results.BadRequest(new { message = "La búsqueda supera el máximo permitido." });
+        var degree = await ViewerDegreeAsync(httpContext, access, resolver, cancellationToken);
+        var response = await service.ListPublishedAsync(new GrandArchiveQuery(
+            null, normalizedType,
+            year is null ? null : new DateOnly(year.Value, 1, 1),
+            year is null ? null : new DateOnly(year.Value, 12, 31),
+            string.IsNullOrWhiteSpace(search) ? null : search.Trim(),
+            Math.Clamp(limit ?? 200, 1, 500)), degree, cancellationToken);
+        NoStore(httpContext);
+        return Results.Ok(response);
+    }
+
+    private static async Task<IResult> GetOfficialAsync(
+        Guid recordId, HttpContext httpContext, IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver resolver, IGrandArchiveService service,
+        CancellationToken cancellationToken)
+    {
+        var degree = await ViewerDegreeAsync(httpContext, access, resolver, cancellationToken);
+        var item = await service.GetPublishedAsync(recordId, degree, cancellationToken);
+        NoStore(httpContext);
+        return item is null ? Results.NotFound(new { message = "El documento no existe o no está disponible para su grado." }) : Results.Ok(item);
+    }
+
+    private static async Task<IResult> OfficialContentAsync(
+        Guid recordId, HttpContext httpContext, IInstitutionalAccessService access,
+        IInstitutionalMemberContextResolver resolver, IGrandArchiveService service,
+        CancellationToken cancellationToken)
+    {
+        var degree = await ViewerDegreeAsync(httpContext, access, resolver, cancellationToken);
+        try
+        {
+            var content = await service.OpenPublishedContentAsync(recordId, degree, cancellationToken);
+            NoStore(httpContext);
+            if (content is null) return Results.NotFound(new { message = "El documento no existe o no está disponible para su grado." });
+            httpContext.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            return Results.Stream(content.Content, content.ContentType, fileDownloadName: content.FileName, enableRangeProcessing: false);
+        }
+        catch (GrandArchivePolicyException ex) { return Results.Conflict(new { message = ex.Message }); }
+        catch (GrandArchiveSourceUnavailableException ex)
+        {
+            return Results.Problem(ex.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
     private static ArchiveActor? Actor(ClaimsPrincipal user)
     {
         var subject = user.FindFirstValue("sub") ?? user.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -215,3 +368,6 @@ public sealed record RegisterGrandArchiveRequest(
     string? Description);
 
 public sealed record WithdrawGrandArchiveRequest(string Reason);
+
+public sealed record PublishGrandArchiveRequest(int MinimumDegree, DateOnly? Until = null);
+public sealed record UnpublishGrandArchiveRequest(string Reason);

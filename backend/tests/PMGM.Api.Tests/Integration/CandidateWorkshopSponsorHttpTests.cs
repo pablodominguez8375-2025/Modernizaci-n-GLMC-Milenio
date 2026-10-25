@@ -21,6 +21,92 @@ namespace PMGM.Api.Tests.Integration;
 public sealed class CandidateWorkshopSponsorHttpTests
 {
     [Fact]
+    public async Task Declared_Chilean_RUT_requires_modulo_11_but_foreign_and_legacy_ids_remain_accepted()
+    {
+        var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connection)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new CandidatePublicationTestFactory(connection);
+        using var client = factory.CreateClient();
+
+        var workshop = new Organization {
+            Name = "Taller identidad sintetica " + Guid.NewGuid().ToString("N"),
+            Type = "workshop"
+        };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.Organizations.Add(workshop);
+            await db.SaveChangesAsync(ct);
+        }
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Organization", workshop.Id.ToString("D"));
+        client.DefaultRequestHeaders.Add("X-Publication-Test-Role", InstitutionalRoles.TallerSecretaria);
+
+        // Identidad matemática K aleatoria: se minimiza colisión entre CI runs.
+        string body;
+        do { body = Random.Shared.Next(10_000_000, 99_999_999).ToString(); }
+        while (!PMGM.Api.Modules.Core.ChileanRut.IsValid(body + "-K"));
+        var presented = body[..2] + "." + body[2..5] + "." + body[5..] + "-k";
+
+        using (var invalid = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes", new {
+                organizationId = workshop.Id, firstNames = "Identidad",
+                lastNames = "DV invalido", rutOrInstitutionalId = body + "-0",
+                identityType = "chilean_rut"
+            }, ct))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
+            var error = await invalid.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal("INVALID_CHILEAN_RUT", error.GetProperty("code").GetString());
+        }
+
+        using (var unknown = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes", new {
+                organizationId = workshop.Id, firstNames = "Identidad",
+                lastNames = "Tipo desconocido", rutOrInstitutionalId = presented,
+                identityType = "unknown"
+            }, ct))
+        {
+            Assert.Equal(HttpStatusCode.BadRequest, unknown.StatusCode);
+            var error = await unknown.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal("CANDIDATE_IDENTITY_TYPE_INVALID", error.GetProperty("code").GetString());
+        }
+
+        using (var accepted = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes", new {
+                organizationId = workshop.Id, firstNames = "Identidad",
+                lastNames = "RUT chileno", rutOrInstitutionalId = presented,
+                identityType = "chilean_rut"
+            }, ct))
+            Assert.Equal(HttpStatusCode.Created, accepted.StatusCode);
+
+        var foreignId = "EXT-" + Guid.NewGuid().ToString("N")[..10];
+        using (var foreign = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes", new {
+                organizationId = workshop.Id, firstNames = "Identidad",
+                lastNames = "Documento extranjero", rutOrInstitutionalId = foreignId,
+                identityType = "other"
+            }, ct))
+            Assert.Equal(HttpStatusCode.Created, foreign.StatusCode);
+
+        var legacyId = "ID-" + Guid.NewGuid().ToString("N")[..11];
+        using (var legacy = await client.PostAsJsonAsync(
+            "/api/insinuados/taller/solicitudes", new {
+                organizationId = workshop.Id, firstNames = "Identidad",
+                lastNames = "Compatibilidad", rutOrInstitutionalId = legacyId
+            }, ct))
+            Assert.Equal(HttpStatusCode.Created, legacy.StatusCode);
+
+        await using var verify = factory.Services.CreateAsyncScope();
+        var read = verify.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == body + "-K", ct));
+        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == foreignId.ToUpperInvariant(), ct));
+        Assert.True(await read.People.AsNoTracking().AnyAsync(x => x.Rut == legacyId.ToUpperInvariant(), ct));
+        Assert.False(await read.People.AsNoTracking().AnyAsync(x => x.Rut == body + "-0", ct));
+    }
+
+    [Fact]
     public async Task Recommender_other_workshop_and_sponsor_local_are_distinct_and_valid()
     {
         var connection = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");

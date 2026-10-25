@@ -378,3 +378,24 @@ describe('CandidateIntakeApiClient demo workflow', () => {
   })
 
 })
+
+describe('tipo de identificación del postulante (#609/#643)', () => {
+  it('con RUT chileno valida módulo 11 y normaliza en la demo', async () => {
+    const api = new CandidateIntakeApiClient({ baseUrl: '', useMocks: true })
+    await expect(api.createWorkshopRequest({ organizationId: 'o', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '12.345.678-9', identityType: 'chilean_rut' })).rejects.toThrow(/RUT chileno/)
+    const item = await api.createWorkshopRequest({ organizationId: 'o', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '12.345.678-5', identityType: 'chilean_rut' })
+    expect(item.rutOrInstitutionalId).toBe('12345678-5')
+  })
+  it('otra identificación se guarda sin validar y el cliente real envía identityType', async () => {
+    const api = new CandidateIntakeApiClient({ baseUrl: '', useMocks: true })
+    const item = await api.createWorkshopRequest({ organizationId: 'o', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: 'pas-998877', identityType: 'other' })
+    expect(item.rutOrInstitutionalId).toBe('PAS-998877')
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ ceremonyRequestId: 'r2' }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    try {
+      const real = new CandidateIntakeApiClient({ baseUrl: '', getAccessToken: async () => 'token' })
+      await real.createWorkshopRequest({ organizationId: 'o', firstNames: 'A', lastNames: 'B', rutOrInstitutionalId: '12345678-5', identityType: 'chilean_rut' })
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toMatchObject({ identityType: 'chilean_rut' })
+    } finally { vi.unstubAllGlobals() }
+  })
+})

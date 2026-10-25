@@ -27,8 +27,8 @@ public static class LibraryAccessPolicyEndpoints
         IInstitutionalAccessService access,
         CancellationToken cancellationToken)
     {
-        if (request.MinimumDegreeRequired is < 1 or > 99)
-            return Results.BadRequest(new { message = "El grado mínimo debe estar entre 1 y 99 o ser nulo para quitar la restricción por grado." });
+        if (request.MinimumDegreeRequired is < 1 or > 3)
+            return Results.BadRequest(new { message = "El grado mínimo debe ser 1 (todos), 2 (desde Compañero) o 3 (solo Maestro), o nulo para quitar la restricción por grado para quitar la restricción por grado." });
 
         var document = await db.InstitutionalDocuments
             .SingleOrDefaultAsync(x => x.Id == documentId, cancellationToken);

@@ -62,6 +62,12 @@
       },
       {
         "name": "lodge_secretariat"
+      },
+      {
+        "name": "librarian"
+      },
+      {
+        "name": "communications"
       }
     ]
   },

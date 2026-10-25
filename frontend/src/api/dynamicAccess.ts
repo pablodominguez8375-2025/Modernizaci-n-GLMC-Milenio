@@ -2,10 +2,24 @@ export type AccessAction = 'view' | 'create' | 'write' | 'edit' | 'delete' | 'se
 export interface DynamicView { code:string; name:string; isActive:boolean }
 export interface DynamicMenu { code:string; name:string; isActive:boolean; views:DynamicView[] }
 export interface DynamicGrant { viewCode:string; actions:AccessAction[] }
-export interface DynamicProfile { id:string; code:string; name:string; scope:'order'|'lodge'; isSystem:boolean; isActive:boolean; menuCodes:string[]; grants:DynamicGrant[] }
+export type AccessScope='order'|'lodge'|'own-lodge'|'all-lodges'
+export const ACCESS_SCOPES:{value:AccessScope;label:string;help:string}[]=[
+ {value:'own-lodge',label:'Solo su propio Taller',help:'Se toma de la pertenencia vigente en su ficha de hermano; si se traslada, el acceso cambia solo.'},
+ {value:'all-lodges',label:'Todos los Talleres',help:'Cubre todos los Talleres, sin elegir ninguno.'},
+ {value:'lodge',label:'Un Taller específico',help:'Se elige el Taller al asignar el perfil (excepción, con vigencia).'},
+ {value:'order',label:'Toda la Gran Logia (Orden)',help:'Nivel Orden, sin Taller.'}]
+export const scopeLabel=(scope:string)=>ACCESS_SCOPES.find(x=>x.value===scope)?.label??scope
+export const isLodgeScoped=(scope:string)=>scope!=='order'
+export const isDerivedScope=(scope:string)=>scope==='own-lodge'||scope==='all-lodges'
+export interface DynamicProfile { id:string; code:string; name:string; scope:AccessScope; isSystem:boolean; isActive:boolean; menuCodes:string[]; grants:DynamicGrant[]; baseRoles?:string[] }
+/* Cargos que un perfil del Máster puede conferir (lista cerrada, sin Tesorería, Hospitalaria, Privacidad ni administración). */
+export const CONFERRABLE_ROLES:{value:string;label:string;level:'lodge'|'order'}[]=[
+ {value:'lodge_secretariat',label:'Secretaría del Taller',level:'lodge'},{value:'lodge_orator',label:'Orador del Taller',level:'lodge'},{value:'lodge_first_warden',label:'Primer Vigilante del Taller',level:'lodge'},{value:'lodge_second_warden',label:'Segundo Vigilante del Taller',level:'lodge'},{value:'lodge_past_master',label:'Inmediato Ex-Venerable Maestro',level:'lodge'},
+ {value:'librarian',label:'Bibliotecario',level:'order'},{value:'communications',label:'Comunicaciones',level:'order'},{value:'grand_archivist',label:'Gran Archivero',level:'order'},{value:'document_manager',label:'Gestión Documental',level:'order'},{value:'instruction_department_head',label:'Jefatura de Docencia',level:'order'},{value:'grand_first_warden',label:'Gran Primer Vigilante',level:'order'},{value:'grand_second_warden',label:'Gran Segundo Vigilante',level:'order'},{value:'immediate_past_grand_master',label:'Inmediato Ex Gran Maestro',level:'order'}]
+export const rolesForScope=(scope:string)=>CONFERRABLE_ROLES.filter(r=>r.level===(scope==='order'?'order':'lodge'))
 export interface DynamicAssignment { id:string; subject:string; profileCode:string; organizationId:string|null; effectiveFrom:string; effectiveTo:string|null; isActive:boolean }
 export interface DynamicCatalog { version:number; actions:AccessAction[]; menus:DynamicMenu[]; profiles:DynamicProfile[]; assignments:DynamicAssignment[] }
-export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'>
+export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'|'baseRoles'>
 export const actionLabels:Record<AccessAction,string>={view:'Ver',create:'Crear / hacer',write:'Escribir / registrar',edit:'Editar',delete:'Borrar lógico',search:'Buscar',print:'Imprimir'}
 const actions:AccessAction[]=['view','create','write','edit','delete','search','print']
 export function initialDynamicCatalog():DynamicCatalog {
@@ -16,7 +30,7 @@ export function initialDynamicCatalog():DynamicCatalog {
 export function technicalGrant(c:DynamicCatalog,subject:string,viewCode:string,action:AccessAction,organizationId:string|null,today:string):boolean {
  const menu=c.menus.find(m=>m.isActive&&m.views.some(v=>v.isActive&&v.code===viewCode))
  if(!menu)return false
- return c.assignments.filter(a=>a.isActive&&a.subject===subject&&a.organizationId===organizationId&&a.effectiveFrom<=today&&(!a.effectiveTo||a.effectiveTo>=today)).some(a=>c.profiles.some(p=>p.code===a.profileCode&&p.isActive&&!p.isSystem&&p.menuCodes.includes(menu.code)&&(p.scope==='lodge'?organizationId!==null:organizationId===null)&&p.grants.some(g=>g.viewCode===viewCode&&g.actions.includes('view')&&g.actions.includes(action))))
+ return c.assignments.filter(a=>a.isActive&&a.subject===subject&&a.effectiveFrom<=today&&(!a.effectiveTo||a.effectiveTo>=today)).some(a=>c.profiles.some(p=>p.code===a.profileCode&&p.isActive&&!p.isSystem&&p.menuCodes.includes(menu.code)&&(p.scope==='lodge'?organizationId!==null&&a.organizationId===organizationId:isDerivedScope(p.scope)?organizationId!==null&&a.organizationId===null:organizationId===null&&a.organizationId===null)&&p.grants.some(g=>g.viewCode===viewCode&&g.actions.includes('view')&&g.actions.includes(action))))
 }
 type Transport=<T>(path:string,init?:RequestInit)=>Promise<T>
 export type CatalogUpdateReason = 'load' | 'mutation'
@@ -54,7 +68,7 @@ export class DynamicAccessClient {
  async revoke(id:string,version:number){return this.mutate(`/api/system/access/assignments/${encodeURIComponent(id)}?expectedVersion=${version}`,'DELETE',version,undefined,c=>{const a=c.assignments.find(a=>a.id===id);if(!a)throw new Error('Asignación inexistente.');a.isActive=false})}
  async print(){if(!this.useMocks)await this.transport('/api/system/access/print',{method:'POST'});return {allowed:true}}
  private profile(c:DynamicCatalog,code:string){const p=c.profiles.find(p=>p.code===code);if(!p||p.isSystem)throw new Error('El perfil no existe o es protegido.');return p}
- private validate(d:ProfileDraft,c:DynamicCatalog){if(!/^[a-z][a-z0-9-]{0,79}$/.test(d.code)||!d.name.trim()||d.name.length>240||!['order','lodge'].includes(d.scope)||(d.scope==='lodge'&&d.menuCodes.includes('system'))||d.menuCodes.some(code=>!c.menus.some(m=>m.isActive&&m.code===code)))throw new Error('Código, nombre, alcance o menús inválidos.')}
+ private validate(d:ProfileDraft,c:DynamicCatalog){if(!/^[a-z][a-z0-9-]{0,79}$/.test(d.code)||!d.name.trim()||d.name.length>240||!ACCESS_SCOPES.some(x=>x.value===d.scope)||(isLodgeScoped(d.scope)&&d.menuCodes.includes('system'))||(d.baseRoles??[]).some(r=>!rolesForScope(d.scope).some(x=>x.value===r))||d.menuCodes.some(code=>!c.menus.some(m=>m.isActive&&m.code===code)))throw new Error('Código, nombre, alcance o menús inválidos.')}
 }
 
 export interface TreasuryAccess { version:number; organizationId:string; managed:boolean; actions:AccessAction[] }

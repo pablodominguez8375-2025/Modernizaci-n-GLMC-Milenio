@@ -20,6 +20,8 @@ using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Ceremonies.Entities;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.GrandSecretariat;
+using PMGM.Api.Modules.Membership;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.Notifications;
 using Xunit;
 
@@ -360,6 +362,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
         var spaceId = Guid.NewGuid();
         var templeId = Guid.NewGuid();
         var ceremonyId = Guid.NewGuid();
+        var grandRecipient = "qa-grand-space-" + Guid.NewGuid().ToString("N");
+        var assignmentSnapshotId = Guid.NewGuid();
 
         await using (var scope = factory.Services.CreateAsyncScope())
         {
@@ -382,6 +386,42 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 Status = CeremonyCodes.RequestStatus.Authorized
             });
             await db.SaveChangesAsync(ct);
+
+            // Configuración institucional explícita: un subject vinculado a
+            // hermano activo con perfil Gran Secretaría de alcance Orden.
+            var orderLodge = new Organization {
+                Name = "Taller del receptor institucional " + Guid.NewGuid().ToString("N")[..8],
+                Type = "workshop"
+            };
+            var personRecipient = new Person { FirstNames = "Gran", LastNames = "Secretaria Sintética" };
+            var memberRecipient = new Member { Person = personRecipient };
+            db.Organizations.Add(orderLodge);
+            db.Members.Add(memberRecipient);
+            db.Memberships.Add(new Membership {
+                Member = memberRecipient, Organization = orderLodge,
+                MembershipType = "regular", Status = MembershipCodes.MembershipStatus.Active,
+                StartDate = new DateOnly(2020, 1, 1)
+            });
+            var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+            catalog.Profiles.Add(new DynamicProfile(Guid.NewGuid(),
+                SpaceRequestCreatedNotices.RecipientProfileCode, "Gran Secretaría",
+                "order", false, true, ["order"],
+                [new DynamicGrant("secretariat", ["view"])]));
+            catalog.Assignments.Add(new DynamicAssignment(Guid.NewGuid(), grandRecipient,
+                SpaceRequestCreatedNotices.RecipientProfileCode, null,
+                new DateOnly(2020, 1, 1), null, true));
+            db.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Id = assignmentSnapshotId,
+                Version = catalog.Version + 1,
+                Payload = JsonSerializer.Serialize(catalog)
+            });
+            await db.SaveChangesAsync(ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO core.member_identity_links
+                    ("Id", "MemberId", "Issuer", "Subject", "CreatedAtUtc", "CreatedBySubject")
+                VALUES ({Guid.NewGuid()}, {memberRecipient.Id}, {"urn:qa-space-request"},
+                        {grandRecipient}, {DateTimeOffset.UtcNow}, {"qa-space"})
+                """, ct);
             var gs = scope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
             gs.InstitutionalSpaces.Add(new InstitutionalSpace
             {
@@ -398,6 +438,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
             await gs.SaveChangesAsync(ct);
         }
 
+        try
+        {
         using var a = Client(factory, InstitutionalRoles.TallerSecretaria, lodgeA);
         using var b = Client(factory, InstitutionalRoles.TallerSecretaria, lodgeB);
         using var grand = Client(factory, InstitutionalRoles.GranSecretaria, null);
@@ -419,6 +461,23 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var createdJson = await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var requestId = createdJson.GetProperty("id").GetGuid();
+        await using (var notices = new NotificationDbContext(
+            new DbContextOptionsBuilder<NotificationDbContext>().UseNpgsql(connectionString).Options))
+        {
+            var createdNotice = await notices.NotificationMessages.AsNoTracking()
+                .Include(x => x.Deliveries)
+                .SingleAsync(x => x.RelatedResourceType == "space_request" &&
+                                  x.RelatedResourceId == requestId.ToString("D") &&
+                                  x.TypeCode == SpaceRequestCreatedNotices.TemplateCode &&
+                                  x.RecipientSubject == grandRecipient, ct);
+            Assert.Equal(grandRecipient, createdNotice.RecipientSubject);
+            Assert.Null(createdNotice.RecipientEmail);
+            Assert.Equal("internal", createdNotice.Classification);
+            Assert.DoesNotContain("Actividad ficticia", createdNotice.Body);
+            Assert.DoesNotContain("Taller QA A", createdNotice.Body);
+            Assert.Equal(NotificationCodes.Channel.Internal,
+                Assert.Single(createdNotice.Deliveries).Channel);
+        }
         Assert.Equal(lodgeA, createdJson.GetProperty("organizationId").GetGuid());
         Assert.Equal("pending", createdJson.GetProperty("status").GetString());
 
@@ -461,7 +520,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
                 var recorded = await notices.NotificationMessages.AsNoTracking()
                     .Include(x => x.Deliveries)
                     .Where(x => x.RelatedResourceType == "space_request" &&
-                                x.RelatedResourceId == requestId.ToString("D"))
+                                x.RelatedResourceId == requestId.ToString("D") &&
+                                x.TypeCode == "grand_secretariat.space_request.approved")
                     .ToListAsync(ct);
                 var message = Assert.Single(recorded);
                 Assert.Equal("grand_secretariat.space_request.approved", message.TypeCode);
@@ -514,11 +574,13 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             var aApproved = await notices.NotificationMessages.AsNoTracking().CountAsync(x =>
                 x.RelatedResourceType == "space_request" &&
-                x.RelatedResourceId == requestId.ToString("D"), ct);
+                x.RelatedResourceId == requestId.ToString("D") &&
+                x.TypeCode == "grand_secretariat.space_request.approved", ct);
             Assert.Equal(1, aApproved); // Duplicate approval did not send a second notice.
             var rejectedNotice = await notices.NotificationMessages.AsNoTracking()
                 .SingleAsync(x => x.RelatedResourceType == "space_request" &&
-                                  x.RelatedResourceId == conflictingId.ToString("D"), ct);
+                                  x.RelatedResourceId == conflictingId.ToString("D") &&
+                                  x.TypeCode == "grand_secretariat.space_request.rejected", ct);
             Assert.Equal("grand_secretariat.space_request.rejected", rejectedNotice.TypeCode);
             Assert.Equal("synthetic-qa-" + InstitutionalRoles.TallerSecretaria + "-" + lodgeB.ToString("D"),
                 rejectedNotice.RecipientSubject);
@@ -557,7 +619,8 @@ public sealed class GrandSecretariatHttpWorkflowTests
         {
             Assert.False(await notices.NotificationMessages.AnyAsync(x =>
                 x.RelatedResourceType == "space_request" &&
-                x.RelatedResourceId == ceremonySpaceId.ToString("D"), ct));
+                x.RelatedResourceId == ceremonySpaceId.ToString("D") &&
+                x.TypeCode != SpaceRequestCreatedNotices.TemplateCode, ct));
         }
 
         var templeBody = new {
@@ -623,6 +686,104 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.True(await checkDb.AuditEvents.AsNoTracking().AnyAsync(x =>
             x.Action == "grand_secretariat.space_request.approved" &&
             x.EntityId == requestId.ToString(), ct));
+        }
+        finally
+        {
+            await using var cleanup = factory.Services.CreateAsyncScope();
+            var core = cleanup.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var snapshot = await core.DynamicAccessSnapshots
+                .SingleOrDefaultAsync(x => x.Id == assignmentSnapshotId, ct);
+            if (snapshot is not null)
+            {
+                core.DynamicAccessSnapshots.Remove(snapshot);
+                await core.SaveChangesAsync(ct);
+            }
+            await core.Database.ExecuteSqlInterpolatedAsync(
+                $"DELETE FROM core.member_identity_links WHERE \"Subject\" = {grandRecipient}", ct);
+        }
+    }
+
+    [Fact]
+    public async Task New_request_without_verified_grand_secretariat_recipient_rolls_back_request_and_audit()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new SpaceRequestTestFactory(connectionString);
+        var lodgeId = Guid.NewGuid();
+        DynamicAccessCatalog previous;
+        var disabledSnapshotId = Guid.NewGuid();
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await core.Database.MigrateAsync(ct);
+            var notifications = new NotificationDbContext(
+                new DbContextOptionsBuilder<NotificationDbContext>()
+                    .UseNpgsql(connectionString).Options);
+            await using (notifications)
+                await notifications.Database.MigrateAsync(ct);
+
+            core.Organizations.Add(new Organization {
+                Id = lodgeId, Name = "Taller de prueba sin receptor " + Guid.NewGuid().ToString("N")[..8],
+                Type = "workshop"
+            });
+            previous = await DynamicAccessEndpoints.LoadAsync(core, ct);
+            var disabled = previous with {
+                Version = previous.Version + 1,
+                Profiles = previous.Profiles
+                    .Where(x => x.Code != SpaceRequestCreatedNotices.RecipientProfileCode).ToList(),
+                Assignments = previous.Assignments
+                    .Where(x => x.ProfileCode != SpaceRequestCreatedNotices.RecipientProfileCode).ToList()
+            };
+            core.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot {
+                Id = disabledSnapshotId,
+                Version = disabled.Version, Payload = JsonSerializer.Serialize(disabled)
+            });
+            await core.SaveChangesAsync(ct);
+        }
+
+        try
+        {
+            using var client = Client(factory, InstitutionalRoles.TallerSecretaria, lodgeId);
+            var starts = DateTimeOffset.UtcNow.AddDays(20);
+            var body = new {
+                spaceType = "temple", preferredSpaceId = (Guid?)null,
+                startsAtUtc = starts, endsAtUtc = starts.AddHours(2),
+                purpose = "tenida", ceremonyRequestId = (Guid?)null,
+                notes = "Dato reservado que NO debe quedar guardado",
+                expectedAttendees = 20, equipmentRequest = (string?)null,
+                equipmentResponsible = (string?)null, vmApprovalReference = (string?)null
+            };
+            using var response = await client.PostAsJsonAsync(
+                "/api/secretaria/solicitudes-espacio", body, ct);
+            Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+            var payload = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+            Assert.Equal("GRAND_SECRETARIAT_RECIPIENT_UNAVAILABLE",
+                payload.GetProperty("code").GetString());
+
+            await using var checkScope = factory.Services.CreateAsyncScope();
+            var grand = checkScope.ServiceProvider.GetRequiredService<GrandSecretariatDbContext>();
+            Assert.False(await grand.SpaceRequests.AsNoTracking()
+                .AnyAsync(x => x.OrganizationId == lodgeId, ct));
+            Assert.False(await grand.AuditEvents.AsNoTracking()
+                .AnyAsync(x => x.Action == "grand_secretariat.space_request.created" &&
+                    x.OrganizationId == lodgeId, ct));
+        }
+        finally
+        {
+            await using var scope = factory.Services.CreateAsyncScope();
+            var core = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            // Retirar el snapshot temporal, sin incrementar permanentemente
+            // la versión global ni afectar pruebas de permisos dinámicos.
+            var disabled = await core.DynamicAccessSnapshots
+                .SingleOrDefaultAsync(x => x.Id == disabledSnapshotId, ct);
+            if (disabled is not null)
+            {
+                core.DynamicAccessSnapshots.Remove(disabled);
+                await core.SaveChangesAsync(ct);
+            }
+        }
     }
 
     private static HttpClient Client(SpaceRequestTestFactory factory, string role, Guid? organizationId)
@@ -700,7 +861,8 @@ public sealed class SyntheticHeaderAuthenticationHandler(
         if (string.IsNullOrWhiteSpace(role)) return Task.FromResult(AuthenticateResult.NoResult());
         var org = Request.Headers["X-Synthetic-Lodge"].FirstOrDefault();
         var claims = new List<Claim> { new(InstitutionalClaims.Role, role),
-            new("sub", "synthetic-qa-" + role + "-" + (org ?? "order")) };
+            new("sub", "synthetic-qa-" + role + "-" + (org ?? "order")),
+            new("iss", "urn:qa-space-request") };
         if (!string.IsNullOrWhiteSpace(org))
             claims.Add(new Claim(InstitutionalClaims.Organization, org));
         if (role == InstitutionalRoles.GranSecretaria)

@@ -109,7 +109,7 @@ export interface HistoricalIntakeReviewItem {
   cutoffDate: string
   firstNames: string
   lastNames: string
-  rut: string | null
+  rutMasked: string | null
   institutionalNumber: string | null
   currentDegree: string
   membershipStartDate: string | null
@@ -140,7 +140,7 @@ export class InternalAffairsApiClient {
   readonly useMocks: boolean
   private readonly onUnauthorized?: () => Promise<void>
   private readonly mockHistoricalIntakes: HistoricalIntakeReviewItem[] = [
-    { id:'ri-hist-demo-1', organizationId:ORG_23, targetMemberId:null, cutoffDate:'2026-09-18', firstNames:'Hermana', lastNames:'Histórica Demo', rut:'12345678-5', institutionalNumber:'GLM-DEMO-096', currentDegree:'master', membershipStartDate:null, initiationDate:'1998-05-12', wageIncreaseDate:null, exaltationDate:'2002-08-24', evidenceReference:'Cuadro del Taller histórico · demo', status:'submitted', revision:2, submittedAtUtc:'2026-09-18T15:00:00Z', reviewNotes:null, offices:[{id:'office-demo-1',officeType:'lodge_secretariat',period:'2026',startDate:null,endDate:null,isCurrent:true}] }
+    { id:'ri-hist-demo-1', organizationId:ORG_23, targetMemberId:null, cutoffDate:'2026-09-18', firstNames:'Hermana', lastNames:'Histórica Demo', rutMasked:'12.345.***-5', institutionalNumber:'GLM-DEMO-096', currentDegree:'master', membershipStartDate:null, initiationDate:'1998-05-12', wageIncreaseDate:null, exaltationDate:'2002-08-24', evidenceReference:'Cuadro del Taller histórico · demo', status:'submitted', revision:2, submittedAtUtc:'2026-09-18T15:00:00Z', reviewNotes:null, offices:[{id:'office-demo-1',officeType:'lodge_secretariat',period:'2026',startDate:null,endDate:null,isCurrent:true}] }
   ]
 
   constructor(options: InternalAffairsApiClientOptions = {}) {

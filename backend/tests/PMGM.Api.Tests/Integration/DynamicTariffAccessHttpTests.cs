@@ -29,13 +29,13 @@ public sealed class DynamicTariffAccessHttpTests
         using var factory = root.WithWebHostBuilder(b => b.ConfigureTestServices(s => s.AddAuthentication(o =>
         { o.DefaultAuthenticateScheme = Auth.Name; o.DefaultChallengeScheme = Auth.Name; o.DefaultForbidScheme = Auth.Name; })
             .AddScheme<AuthenticationSchemeOptions, Auth>(Auth.Name, _ => { })));
-        using var admin = factory.CreateClient(); using var client = factory.CreateClient();
+        using var admin = factory.CreateClient(); admin.DefaultRequestHeaders.Add("X-Tariff-Role", InstitutionalRoles.PlatformSuperAdmin); using var client = factory.CreateClient(); using var officer = factory.CreateClient();
         await using (var scope = factory.Services.CreateAsyncScope())
             await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.MigrateAsync(ct);
         const string url = "/api/tesoreria/tarifarios/decretos";
         var subject = "tariff-" + Guid.NewGuid().ToString("N"); var code = "qa-" + Guid.NewGuid().ToString("N");
         client.DefaultRequestHeaders.Add("X-Tariff-Subject", subject);
-        var before = await admin.GetFromJsonAsync<JsonElement>(url, ct);
+        var before = await officer.GetFromJsonAsync<JsonElement>(url, ct);
         var tariffVersion = before.GetProperty("version").GetInt32();
         var version = (await admin.GetFromJsonAsync<JsonElement>("/api/system/access/catalog", ct)).GetProperty("version").GetInt32();
         Assert.Equal(HttpStatusCode.OK, (await admin.PostAsJsonAsync("/api/system/access/profiles", new { code, name = "Consulta decreto QA", scope = "order", menuCodes = new[] { "treasury" }, expectedVersion = version++ }, ct)).StatusCode);
@@ -55,7 +55,7 @@ public sealed class DynamicTariffAccessHttpTests
         var request = new RegisterTariffRequest(tariffVersion, "QA-PERM-" + Guid.NewGuid(), GrandTreasuryTariff.Today(), new DateOnly(2999, 2, 1), null,
             "Referencia sintética QA", "published", seed.Rates, seed.CeremonyRights, seed.Unemployment);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(url, request, ct)).StatusCode);
-        Assert.Equal(tariffVersion, (await admin.GetFromJsonAsync<JsonElement>(url, ct)).GetProperty("version").GetInt32());
+        Assert.Equal(tariffVersion, (await officer.GetFromJsonAsync<JsonElement>(url, ct)).GetProperty("version").GetInt32());
         await Grant(["view", "create"]);
         client.DefaultRequestHeaders.Add("X-Tariff-Role", InstitutionalRoles.TallerTesoreria);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(url + "/acceso", ct)).StatusCode);

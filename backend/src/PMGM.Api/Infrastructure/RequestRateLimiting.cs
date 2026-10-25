@@ -12,6 +12,7 @@ public static class RequestRateLimiting
         var writes = ReadPositive(configuration, "WritesPerMinute", 120);
         var uploads = ReadPositive(configuration, "UploadsPerMinute", 20);
         var exports = ReadPositive(configuration, "ExportsPerMinute", 30);
+        var smtpTests = ReadPositive(configuration, "SmtpTestsPerMinute", 5);
 
         services.AddRateLimiter(options =>
         {
@@ -29,7 +30,13 @@ public static class RequestRateLimiting
                 var actor = context.User.Identity?.IsAuthenticated == true && subject is not null
                     ? $"user:{subject.Issuer}:{subject.Value}"
                     : $"peer:{context.Connection.RemoteIpAddress}";
-                var limit = category == "upload" ? uploads : category == "export" ? exports : writes;
+                var limit = category switch
+                {
+                    "smtp-test" => smtpTests,
+                    "upload" => uploads,
+                    "export" => exports,
+                    _ => writes
+                };
                 return RateLimitPartition.GetFixedWindowLimiter($"{category}:{actor}", _ => new()
                 {
                     PermitLimit = limit,
@@ -66,6 +73,10 @@ public static class RequestRateLimiting
         if (!request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase)) return null;
         // Routing accepts a trailing slash; it must not bypass the content/ICS budget.
         var path = (request.Path.Value ?? "").TrimEnd('/');
+        // Evita convertir la cuenta de Google en un relay de correo masivo por abuso de la prueba.
+        if (HttpMethods.IsPost(request.Method) &&
+            path.Equals("/api/system/mail/test", StringComparison.OrdinalIgnoreCase))
+            return "smtp-test";
         var content = path.EndsWith("/contenido", StringComparison.OrdinalIgnoreCase);
         if (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method))
             return content || path.EndsWith("/ics", StringComparison.OrdinalIgnoreCase)

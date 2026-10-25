@@ -18,6 +18,8 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<Person> People => Set<Person>();
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<Member> Members => Set<Member>();
+    public DbSet<MemberPhoto> MemberPhotos => Set<MemberPhoto>();
+    public DbSet<SupportViewSession> SupportViewSessions => Set<SupportViewSession>();
     public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<MemberTransfer> MemberTransfers => Set<MemberTransfer>();
     public DbSet<MemberWithdrawalRequest> MemberWithdrawalRequests => Set<MemberWithdrawalRequest>();
@@ -202,6 +204,26 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
                 .WithMany()
                 .HasForeignKey(x => x.ParentOrganizationId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SupportViewSession>(entity =>
+        {
+            entity.ToTable("support_view_sessions");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.OperatorSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.TargetSubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(x => new { x.OperatorSubject, x.EndedAtUtc });
+        });
+
+        modelBuilder.Entity<MemberPhoto>(entity =>
+        {
+            entity.ToTable("member_photos", table => table.HasCheckConstraint("CK_member_photos_content_type", "\"ContentType\" IN ('image/jpeg','image/png')"));
+            entity.HasKey(x => x.MemberId);
+            entity.Property(x => x.ContentType).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Content).IsRequired();
+            entity.Property(x => x.Sha256).HasMaxLength(64).IsRequired();
+            entity.HasOne(x => x.Member).WithOne().HasForeignKey<MemberPhoto>(x => x.MemberId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Member>(entity =>

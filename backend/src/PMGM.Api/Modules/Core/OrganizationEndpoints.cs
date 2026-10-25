@@ -42,6 +42,9 @@ public static class OrganizationEndpoints
     {
         var rows = await db.Organizations
             .AsNoTracking()
+            // El Taller 00 de soporte no integra el directorio de organizaciones
+            // reales. Su futura API privada tendrá autorización propia.
+            .Where(x => x.Type.ToLower() != SupportWorkshopPolicy.OrganizationType)
             .OrderBy(x => x.Type)
             .ThenBy(x => x.Number)
             .ThenBy(x => x.Name)
@@ -99,8 +102,10 @@ public static class OrganizationEndpoints
             })
             .SingleOrDefaultAsync(cancellationToken);
 
-        if (organization is null)
+        if (organization is null || SupportWorkshopPolicy.IsSupportOrganization(organization.Type))
         {
+            // La ficha completa y los conteos institucionales no incluyen Taller 00.
+            // Una futura API privada del simulador tendrá otro control de acceso.
             return Results.NotFound();
         }
 

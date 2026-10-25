@@ -3,6 +3,11 @@
   "shards": {
     "a": [
       "UserAccountWorkflowTests",
+      "WorkPaperReviewHttpTests",
+      "DynamicProfilesMasterOnlyHttpTests",
+      "DynamicLodgeScopeHttpTests",
+      "DynamicRoleConferralHttpTests",
+      "LibraryManagedPublicationHttpTests",
       "AdmissionWithdrawalLetterHttpTests",
       "CandidatePublicationHttpWorkflowTests",
       "LodgeReceiptConcurrencyPostgreSqlTests",
@@ -27,9 +32,11 @@
       "GrandTreasuryTariffHttpTests",
       "DocumentManagementQueryHttpTests",
       "LibraryCatalogMetadataHttpTests",
+      "LibraryCategoryHttpTests",
       "RequestRateLimitingHttpTests",
       "CalendarSourceSyncPostgreSqlTests",
       "GrandArchivePostgreSqlTests",
+      "CommunicationsBulletinHttpTests",
       "ClamAvDocumentMalwareIntegrationTests",
       "PostgreSqlMigrationTests",
       "TreasuryOrdinaryDuesEligibilityPostgreSqlTests",
@@ -44,13 +51,23 @@
       "CandidateWorkshopSponsorHttpTests",
       "CandidateOriginCorrectionHttpTests",
       "MagazineEditorialVersionStatusHttpTests",
-      "CandidateFormalSponsorGatesHttpTests"
+      "LibraryPublicationReplacementHttpTests",
+      "CandidateFormalSponsorGatesHttpTests",
+      "OfficialDocumentNoticePostgreSqlTests",
+      "MemberRutRevealPostgreSqlTests",
+      "MemberPhotoPostgreSqlTests",
+      "SupportLodgeDataHealthHttpTests",
+      "QaSyntheticPlanContractTests",
+      "InitialLoadWindowAtomicPostgreSqlTests",
+      "InitialLoadBatchLedgerPostgreSqlTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
       "LodgeReceiptAllocationConcurrencyPostgreSqlTests",
       "DynamicAccessHttpTests",
       "DocumentAreaCollaboratorHttpTests",
+      "DocumentAreaCollaboratorCandidatesTests",
+      "SupportViewAsPostgreSqlTests",
       "DocumentContentRecoveryHttpTests",
       "LodgeUnrecoveredDuesPostgreSqlTests",
       "MemberHospitalariaV2HttpTests",
@@ -67,6 +84,7 @@
       "MemberOwnCeremonyReceiptPostgreSqlTests",
       "PrivacyRequestReadAuditPostgreSqlTests",
       "PrivacyContactEmailHttpTests",
+      "SystemMailGoogleHttpTests",
       "PrivacyContactMemberAccessHttpTests",
       "LibraryDegreeAuthorizationTests",
       "AdmissionPersonLookupHttpTests",
@@ -83,6 +101,7 @@
       "RegimenInteriorReinstatementMovementPostgreSqlTests",
       "RegimenInteriorDataQualityPostgreSqlTests",
       "AssemblyFoundationPostgreSqlTests",
+      "AssemblyAccreditedRosterPersistencePostgreSqlTests",
       "AssemblyGrandTreasuryReviewEventsPostgreSqlTests",
       "AssemblyReviewDecisionEventsPostgreSqlTests",
       "AssemblyReviewDecisionHttpTests",
@@ -90,6 +109,7 @@
       "AssemblyTreasurySignedReviewPostgreSqlTests",
       "AssemblyTreasurySignedReviewRevalidationPostgreSqlTests",
       "AssemblyPreliminaryReviewHttpTests",
+      "AssemblyRosterListingHttpTests",
       "AssemblyTreasuryStatementInspectionPostgreSqlTests",
       "RegimenInteriorMemberControlPostgreSqlTests",
       "CandidateInterviewAssignmentHttpTests",
@@ -98,7 +118,8 @@
       "CandidateRePresentationReviewHttpTests",
       "CeremonyAuthorizationStateHttpTests",
       "CalendarGradeAccessPostgreSqlTests",
-      "CalendarNotificationRecipientPostgreSqlTests"
+      "CalendarNotificationRecipientPostgreSqlTests",
+      "QaSyntheticPlanHttpTests"
     ]
   }
 }

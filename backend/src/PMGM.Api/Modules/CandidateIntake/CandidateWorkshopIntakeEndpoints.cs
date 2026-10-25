@@ -3,6 +3,7 @@ using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
 using PMGM.Api.Modules.Audit;
 using PMGM.Api.Modules.Ceremonies.Entities;
+using PMGM.Api.Modules.Core;
 using PMGM.Api.Modules.Core.Entities;
 using PMGM.Api.Modules.Ceremonies;
 using PMGM.Api.Modules.Membership;
@@ -144,6 +145,23 @@ public static class CandidateWorkshopIntakeEndpoints
         var firstNames = request.FirstNames?.Trim();
         var lastNames = request.LastNames?.Trim();
         var rut = request.RutOrInstitutionalId?.Trim().ToUpperInvariant();
+        if (request.IdentityType is not null and not ("chilean_rut" or "other"))
+            return Results.BadRequest(new {
+                code = "CANDIDATE_IDENTITY_TYPE_INVALID",
+                message = "Seleccione RUT chileno u otra identificación."
+            });
+        // RUT chileno explícito: normalizar antes de buscar duplicados/crear persona.
+        // El campo mixto también admite documentos extranjeros y expedientes
+        // anteriores que no declaraban tipo: no aplicar módulo 11 a ciegas.
+        if (request.IdentityType == "chilean_rut")
+        {
+            if (!ChileanRut.TryNormalize(rut, out var normalizedRut, out _))
+                return Results.BadRequest(new {
+                    code = "INVALID_CHILEAN_RUT",
+                    message = "El RUT chileno informado no supera la validación de dígito verificador (módulo 11)."
+                });
+            rut = normalizedRut;
+        }
         var normalizedId = rut is null ? null : new string(rut.Where(char.IsLetterOrDigit).ToArray());
         if (request.OrganizationId == Guid.Empty || string.IsNullOrWhiteSpace(firstNames) ||
             string.IsNullOrWhiteSpace(lastNames) || string.IsNullOrWhiteSpace(rut) ||
@@ -503,7 +521,8 @@ public sealed record CreateCandidateWorkshopRequest(
     Guid OrganizationId, string FirstNames, string LastNames, string RutOrInstitutionalId,
     bool RejectionCausesRemedied = false, string? RePresentationSourceReference = null,
     string? OriginKind = null, Guid? RecommenderMemberId = null,
-    string? OriginOtherDescription = null, Guid? SponsorMemberId = null);
+    string? OriginOtherDescription = null, Guid? SponsorMemberId = null,
+    string? IdentityType = null);
 
 public sealed record AssignCandidateWorkshopSponsor(
     Guid SponsorMemberId, string? Reason = null);

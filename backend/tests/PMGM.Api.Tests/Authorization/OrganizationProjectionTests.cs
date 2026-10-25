@@ -5,6 +5,18 @@ namespace PMGM.Api.Tests.Authorization;
 
 public sealed class OrganizationProjectionTests
 {
+    [Theory]
+    [InlineData("support", false)]
+    [InlineData("SUPPORT", false)]
+    [InlineData("Support", false)]
+    [InlineData("workshop", true)]
+    [InlineData("order", true)]
+    public void Support_is_not_an_institutional_workshop_or_directory_entry(string type, bool visible)
+    {
+        Assert.Equal(visible, SupportWorkshopPolicy.IncludeInInstitutionalDirectory(type));
+        Assert.Equal(!visible, SupportWorkshopPolicy.IsSupportOrganization(type));
+    }
+
     [Fact]
     public void WorkshopMetadataUpdateContract_ContainsOnlyApprovedFields()
     {

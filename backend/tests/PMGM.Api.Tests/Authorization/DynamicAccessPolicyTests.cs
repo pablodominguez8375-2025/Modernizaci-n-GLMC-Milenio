@@ -73,6 +73,28 @@ public sealed class DynamicAccessPolicyTests
         c.Assignments[0] = c.Assignments[0] with { IsActive = false }; Assert.False(Grant());
     }
     [Fact]
+    public void Library_search_is_independent_from_catalog_read_for_assigned_profile()
+    {
+        var c = DynamicAccessEndpoints.CreateCatalog();
+        var today = new DateOnly(2026, 10, 21);
+        var profile = new DynamicProfile(Guid.NewGuid(), "library-catalogue",
+            "Lectura de biblioteca", "order", false, true,
+            ["documents"], [new DynamicGrant("library", ["view"])]);
+        c.Profiles.Add(profile);
+        c.Assignments.Add(new DynamicAssignment(Guid.NewGuid(), "reader",
+            profile.Code, null, today, null, true));
+        Assert.True(DynamicViewAccess.Allows(c, "reader", "library", "view", null, today));
+        Assert.False(DynamicViewAccess.Allows(c, "reader", "library", "search", null, today));
+        c.Profiles[^1] = profile with
+        {
+            Grants = [new DynamicGrant("library", ["view", "search"])]
+        };
+        Assert.True(DynamicViewAccess.Allows(c, "reader", "library", "search", null, today));
+        c.Assignments[0] = c.Assignments[0] with { IsActive = false };
+        Assert.False(DynamicViewAccess.Allows(c, "reader", "library", "search", null, today));
+    }
+
+    [Fact]
     public void Search_requires_an_explicit_grant_and_never_inherits_read_permission()
     {
         var catalog = DynamicAccessEndpoints.CreateCatalog();

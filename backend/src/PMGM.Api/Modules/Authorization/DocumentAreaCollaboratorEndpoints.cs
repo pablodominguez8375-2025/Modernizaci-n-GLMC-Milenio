@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.UserAccounts;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -34,6 +35,11 @@ public static class DocumentAreaCollaboratorEndpoints
             IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             RevokeAsync("library", assignmentId, expectedVersion, ctx, db, access, audit, ct));
 
+        library.MapGet("/candidatos", (HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, IAccountIdentityProvider identity,
+            IAuditService audit, CancellationToken ct) =>
+            CandidatesAsync("library", ctx, db, access, identity, audit, ct));
+
         var documents = endpoints.MapGroup("/api/documentos/colaboradores")
             .WithTags("Gestión Documental - Colaboradores").RequireAuthorization();
         documents.MapGet("", (HttpContext ctx, PmgmDbContext db,
@@ -48,16 +54,55 @@ public static class DocumentAreaCollaboratorEndpoints
             IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             RevokeAsync("documentmanager", assignmentId, expectedVersion,
                 ctx, db, access, audit, ct));
+        documents.MapGet("/candidatos", (HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, IAccountIdentityProvider identity,
+            IAuditService audit, CancellationToken ct) =>
+            CandidatesAsync("documentmanager", ctx, db, access, identity, audit, ct));
         return endpoints;
+    }
+
+    /// <summary>
+    /// Personas elegibles para recibir acceso: solo nombre e identificador (nunca correo ni RUT),
+    /// únicamente cuentas de Hermanos habilitadas; excluye al Máster, al Superusuario y al propio solicitante.
+    /// Solo el responsable del área. Si la identidad no está disponible, devuelve lista vacía y la
+    /// pantalla permite ingresar el identificador a mano.
+    /// </summary>
+    private static async Task<IResult> CandidatesAsync(
+        string view, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+        IAccountIdentityProvider identity, IAuditService audit, CancellationToken ct)
+    {
+        if (!CanAdminister(view, ctx, access)) return Results.Forbid();
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        var self = ctx.User.FindFirst("sub")?.Value;
+        IReadOnlyList<AccountUser> users = [];
+        var available = identity.Configured;
+        if (available)
+        {
+            try { users = await identity.ListAsync(ct); }
+            catch (Exception e) when (e is AccountDeliveryException or HttpRequestException or TaskCanceledException)
+            { available = false; }
+        }
+        var items = users.Where(u => u.Enabled && u.Kind == "member" &&
+                !string.Equals(u.Subject, self, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrWhiteSpace(u.Name))
+            .OrderBy(u => u.Name, StringComparer.CurrentCultureIgnoreCase)
+            .Select(u => new { subject = u.Subject, name = u.Name }).ToArray();
+        audit.Add(ctx, "library.collaborator.candidates_viewed", "DynamicAccessCatalog", view, null,
+            available ? AuditResults.Success : AuditResults.Rejected, new { area = view, count = items.Length });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { available, items });
     }
 
     private static bool CanAdminister(
         string view, HttpContext ctx, IInstitutionalAccessService access)
         => ctx.User.Identity?.IsAuthenticated == true &&
            !string.IsNullOrWhiteSpace(ctx.User.FindFirst("sub")?.Value) &&
-           (view == "library"
+           // Cada área administra sus propios colaboradores (Bibliotecario → Biblioteca, Gran Archivero →
+           // Gestión Documental); el Máster y los superadmin pueden editarlos en ambas (PO 25-10).
+           (access.IsPlatformSuperAdmin(ctx.User) ||
+            (view == "library"
                ? access.CanManageLibrary(ctx.User, null)
-               : view == "documentmanager" && access.CanManageGrandArchive(ctx.User));
+               : view == "documentmanager" && access.CanManageGrandArchive(ctx.User)));
 
     private static string CodePrefix(string view) => "collab-" + view + "-";
 
@@ -91,7 +136,7 @@ public static class DocumentAreaCollaboratorEndpoints
     {
         if (!CanAdminister(view, ctx, access)) return Results.Forbid();
         ctx.Response.Headers.CacheControl = "private, no-store";
-        var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
         return Results.Ok(new { version = catalog.Version, items = Project(catalog, view) });
     }
 
@@ -112,9 +157,10 @@ public static class DocumentAreaCollaboratorEndpoints
             string.IsNullOrWhiteSpace(category) ||
             !DynamicAccessEndpoints.CatalogCategories.Contains(category) ||
             actions.Length == 0 || actions.Any(a => !DelegableActions.Contains(a)) ||
-            // El permiso de contenido se delega sólo en revistas de Biblioteca;
-            // otras categorías y Gestión Documental no reciben una vía de carga.
-            (actions.Contains("write") && (view != "library" || category != "magazine")) ||
+            // El permiso de contenido se delega sólo en publicaciones editoriales
+            // de Biblioteca (Revista y Boletín); otras categorías y Gestión
+            // Documental no reciben una vía de carga.
+            (actions.Contains("write") && (view != "library" || category is not ("magazine" or "bulletin"))) ||
             !actions.Contains("view") ||
             request.EffectiveTo < request.EffectiveFrom)
             return Results.BadRequest(new { code = "INVALID_COLLABORATOR_SCOPE" });
@@ -122,7 +168,7 @@ public static class DocumentAreaCollaboratorEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
-        var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
         if (request.ExpectedVersion != catalog.Version)
             return Results.Conflict(new { code = "STALE_COLLABORATOR_CATALOG" });
         var endsOn = request.EffectiveTo ?? DateOnly.MaxValue;
@@ -170,7 +216,7 @@ public static class DocumentAreaCollaboratorEndpoints
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync(
             $"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
-        var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
         if (expectedVersion != catalog.Version)
             return Results.Conflict(new { code = "STALE_COLLABORATOR_CATALOG" });
 
