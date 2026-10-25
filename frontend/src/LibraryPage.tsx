@@ -1,21 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
-import { type DocumentApiClient, type LibraryCatalogItem, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
+import { type DocumentApiClient, type LibraryCatalogItem, type WorkPaperReview, type ManagedPublication, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 import './library-ppt-enhancement.css'
 import LibraryMagazineEditorial from './LibraryMagazineEditorial'
 import AreaCollaboratorsSection from './AreaCollaborators'
+import LibraryManagedUpload from './LibraryManagedUpload'
 import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
 const pageSize = 12
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [], degrees: [], topics: [], officialDocumentTypes: [] }
+// Categorías que no se administran desde la tabla del Bibliotecario: documentos oficiales y videos (futuro).
+const fixedCategories: LibraryCategory[] = [
+  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
+  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+]
 const initialCategories: LibraryCategory[] = [
   { value: 'work_paper', label: 'Planchas de Trabajo', base: true, active: true },
   { value: 'book', label: 'Libros', base: true, active: true },
   { value: 'magazine', label: 'Revistas', base: true, active: true },
   { value: 'bulletin', label: 'Boletines', base: true, active: true },
-  { value: 'official_document', label: 'Documentos Oficiales', base: true, active: true },
-  { value: 'video', label: 'Videos', base: true, active: true, future: true },
+  ...fixedCategories,
 ]
 
 export type LibraryEditorRole = 'librarian' | 'communications' | null
@@ -38,7 +43,62 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
   const [submissions, setSubmissions] = useState<LibrarySubmission[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [reviews, setReviews] = useState<WorkPaperReview[]>([])
+  const [reviewKey, setReviewKey] = useState(0)
+  const [managed, setManaged] = useState<ManagedPublication[]>([])
   const submissionsTouched = useRef(false)
+
+  useEffect(() => {
+    let active = true
+    documentApi.listLibraryCategories()
+      .then(response => { if (active) setCategories([...response.items.map(c => ({ value: c.value, label: c.label, base: c.base, active: c.active })), ...fixedCategories]) })
+      .catch(() => { /* se conservan las categorías base si el servidor no responde */ })
+    return () => { active = false }
+  }, [documentApi, reloadKey])
+
+  async function categoryAction(run: () => Promise<unknown>, okMessage?: string) {
+    try { await run(); setReloadKey(key => key + 1); if (okMessage) setNotice(okMessage) }
+    catch (reason) { setNotice(toMessage(reason)) }
+  }
+  const categoryActions = {
+    create: (label: string) => categoryAction(() => documentApi.createLibraryCategory(label), `Categoría «${label}» creada. Ya puede recibir documentos.`),
+    patch: (code: string, patch: { label?: string; active?: boolean }) => categoryAction(() => documentApi.updateLibraryCategory(code, patch), 'Categoría actualizada y registrada en auditoría.'),
+    reorder: (codes: string[]) => categoryAction(() => documentApi.reorderLibraryCategories(codes)),
+  }
+
+  useEffect(() => {
+    if (editorRole !== 'librarian') { setReviews([]); return }
+    let active = true
+    documentApi.listWorkPaperReviews().then(list => { if (active) setReviews(list) }).catch(() => { if (active) setReviews([]) })
+    return () => { active = false }
+  }, [documentApi, editorRole, reviewKey])
+
+  useEffect(() => {
+    if (editorRole !== 'librarian') { setManaged([]); return }
+    let active = true
+    documentApi.listManagedPublications().then(list => { if (active) setManaged(list) }).catch(() => { if (active) setManaged([]) })
+    return () => { active = false }
+  }, [documentApi, editorRole, reloadKey])
+
+  const reviewActions = {
+    approve: async (review: WorkPaperReview) => {
+      try {
+        await documentApi.approveWorkPaper(review.id)
+        if (documentApi.useMocks) setAddedItems(current => [{ id: review.id, collectionId: demoCollectionId, title: review.title, documentType: 'work_paper', collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: review.sizeBytes, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: review.degree, authorName: review.authorName, authorLodgeName: review.lodge, shortDescription: review.description }, ...current])
+        setNotice(`«${review.title}» aprobada y publicada. Quedó registrado quién la aprobó.`); setReviewKey(k => k + 1); setReloadKey(k => k + 1)
+      } catch (reason) { setNotice(toMessage(reason)) }
+    },
+    returnWith: async (review: WorkPaperReview, reason: string) => {
+      try { await documentApi.returnWorkPaper(review.id, reason); setNotice(`«${review.title}» devuelta al Taller con el motivo indicado.`); setReviewKey(k => k + 1) }
+      catch (failure) { setNotice(toMessage(failure)) }
+    },
+    download: async (review: WorkPaperReview) => {
+      try {
+        const blob = await documentApi.downloadWorkPaperForReview(review.id)
+        const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = review.fileName; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+      } catch (reason) { setNotice(toMessage(reason)) }
+    },
+  }
 
   useEffect(() => {
     let active = true
@@ -131,9 +191,11 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
 
     {editorRole === 'librarian' && <AreaCollaboratorsSection documentApi={documentApi} area="library" />}
     {<LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
-    {documentApi.useMocks && editorRole && <>
+    {editorRole && (documentApi.useMocks || editorRole === 'librarian') && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
-      <LibraryManagement mode={editorRole} categories={categories} onCategories={setCategories} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
+      <LibraryManagement mode={editorRole} categories={categories} categoryActions={categoryActions} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
+        reviews={reviews} reviewActions={reviewActions} uploadEnabled={documentApi.useMocks && editorRole === 'communications'}
+        extraActions={editorRole === 'librarian' ? <LibraryManagedUpload api={documentApi} categories={categories} drafts={managed} notify={setNotice} onChanged={() => setReloadKey(k => k + 1)} onPublished={item => { if (documentApi.useMocks) setAddedItems(current => [{ id: item.id, collectionId: demoCollectionId, title: item.title, documentType: item.categoryCode, collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: 1_200_000, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: item.degree, authorName: item.author, topic: item.topic, edition: item.edition, abstractText: item.description, shortDescription: item.description }, ...current]) }} /> : undefined}
         onSubmission={next => { submissionsTouched.current = true; setSubmissions(next) }}
         onPublish={item => setAddedItems(current => [item, ...current])} />
     </>}
@@ -297,13 +359,9 @@ function createDemoShowcaseCatalog(collectionId: string): LibraryCatalogItem[] {
   ]
 }
 
-function createDemoSubmissions(collectionId: string): LibrarySubmission[] {
-  const mk = (id: string, title: string, author: string, lodge: string, degree: number, description: string): LibrarySubmission => ({ id, kind: 'taller', title, documentType: 'work_paper', author, lodge, degree, description, sentAt: '2026-10-18',
-    item: { id, collectionId, title, documentType: 'work_paper', collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: 380000, publishedAtUtc: '2026-10-18T15:00:00Z', minimumDegreeRequired: degree, authorName: author, authorLodgeName: lodge, documentDate: '2026-10-18', topic: 'Trabajo masónico', shortDescription: description, abstractText: description } })
-  return [
-    mk('demo-sub-1', 'La palabra perdida y el trabajo del Aprendiz', 'Hermano Ejemplo Uno', 'Taller Fraternidad N° 3', 1, 'Reflexión sobre el silencio y el estudio en el primer grado.'),
-    mk('demo-sub-2', 'El simbolismo de la columna Boaz', 'Hermana Ejemplo Dos', 'Taller Luz del Sur N° 7', 2, 'Estudio comparado de las columnas del Templo.'),
-  ]
+function createDemoSubmissions(_collectionId: string): LibrarySubmission[] {
+  // Las planchas de los Talleres ya no son un borrador local: vienen del servidor (revisión del Bibliotecario).
+  return []
 }
 
 function filterDemoCatalog(items: LibraryCatalogItem[], filters: { query: string; documentType: string; degree: string; topic: string; officialDocumentType: string }) {

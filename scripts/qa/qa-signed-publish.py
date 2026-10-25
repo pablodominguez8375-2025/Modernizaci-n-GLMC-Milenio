@@ -93,8 +93,10 @@ def main():
             return 0
         time.sleep(30)
     if published:
+        # An older validated release is useful, but is not proof that this
+        # push has been published. Do not report a false-green workflow.
         print("QA_VALIDATED_CUT_PUBLISHED_NEWER_PUSH_NOT_YET_GREEN")
-        return 0
+        raise SystemExit("QA_TARGET_SHA_NOT_PUBLISHED")
     raise SystemExit("QA_PUBLICATION_GATES_NOT_READY")
 
 

@@ -3,6 +3,10 @@
   "shards": {
     "a": [
       "UserAccountWorkflowTests",
+      "WorkPaperReviewHttpTests",
+      "DynamicProfilesMasterOnlyHttpTests",
+      "DynamicLodgeScopeHttpTests",
+      "LibraryManagedPublicationHttpTests",
       "AdmissionWithdrawalLetterHttpTests",
       "CandidatePublicationHttpWorkflowTests",
       "LodgeReceiptConcurrencyPostgreSqlTests",
@@ -27,6 +31,7 @@
       "GrandTreasuryTariffHttpTests",
       "DocumentManagementQueryHttpTests",
       "LibraryCatalogMetadataHttpTests",
+      "LibraryCategoryHttpTests",
       "RequestRateLimitingHttpTests",
       "CalendarSourceSyncPostgreSqlTests",
       "GrandArchivePostgreSqlTests",
@@ -49,13 +54,19 @@
       "CandidateFormalSponsorGatesHttpTests",
       "OfficialDocumentNoticePostgreSqlTests",
       "MemberRutRevealPostgreSqlTests",
-      "MemberPhotoPostgreSqlTests"
+      "MemberPhotoPostgreSqlTests",
+      "SupportLodgeDataHealthHttpTests",
+      "QaSyntheticPlanContractTests",
+      "InitialLoadWindowAtomicPostgreSqlTests",
+      "InitialLoadBatchLedgerPostgreSqlTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
       "LodgeReceiptAllocationConcurrencyPostgreSqlTests",
       "DynamicAccessHttpTests",
       "DocumentAreaCollaboratorHttpTests",
+      "DocumentAreaCollaboratorCandidatesTests",
+      "SupportViewAsPostgreSqlTests",
       "DocumentContentRecoveryHttpTests",
       "LodgeUnrecoveredDuesPostgreSqlTests",
       "MemberHospitalariaV2HttpTests",
@@ -106,7 +117,8 @@
       "CandidateRePresentationReviewHttpTests",
       "CeremonyAuthorizationStateHttpTests",
       "CalendarGradeAccessPostgreSqlTests",
-      "CalendarNotificationRecipientPostgreSqlTests"
+      "CalendarNotificationRecipientPostgreSqlTests",
+      "QaSyntheticPlanHttpTests"
     ]
   }
 }

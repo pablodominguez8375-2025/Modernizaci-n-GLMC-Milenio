@@ -63,10 +63,12 @@ import { defaultPrivacyContactEmail, type CandidatePublication, type CandidatePo
 import { type ReportingApiClient } from './api/reportingApi'
 import { getDemoProfile, type DemoProfileKey } from './demoProfiles'
 import { organizationDisplayName } from './displayFormat'
+import { SupportViewBanner, useSupportViewAs } from './SupportViewBanner'
+import { setSupportViewAs } from './api/supportViewAs'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
 type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'officialDocuments' | 'workbench' | 'privacy'
-type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canReadOfficialDocuments?: boolean; canPublishOfficialDocuments?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
+type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageAccessProfiles?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canReadOfficialDocuments?: boolean; canPublishOfficialDocuments?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
   api: PmgmApiClient
@@ -335,6 +337,17 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     setView('dashboard')
   }
 
+  // «Ver como» (#574): en la demostración cambia el perfil; en producción el servidor ya responde como el objetivo.
+  const supportView = useSupportViewAs()
+  const supportDemoProfile = supportView?.demoProfile as DemoProfileKey | undefined
+  useEffect(() => { if (api.useMocks && supportDemoProfile) changeDemoProfile(supportDemoProfile) }, [supportDemoProfile])
+  const exitSupportView = useCallback(() => {
+    const session = supportView
+    setSupportViewAs(null)
+    if (api.useMocks) { changeDemoProfile('systemAdmin'); return }
+    void (session ? rawApi.endSupportView(session.sessionId) : Promise.resolve()).catch(() => undefined).finally(() => window.location.reload())
+  }, [supportView, api, rawApi])
+
   const openNotificationAction = (actionUrl: string) => {
     const path = actionUrl.split(/[?#]/, 1)[0]
     if (path === '/initiation-circuit') return setView('initiationCircuit')
@@ -347,8 +360,9 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.143' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.156' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
+    <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Inicio"><span className="brand-mark brand-mark-reduced"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-glmch-reducido-v2-azul.svg`} alt="Gran Logia Mixta de Chile" /></span><span><strong>Proyecto Centenario</strong></span></button>
@@ -421,7 +435,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'dashboard' && <DashboardPage membershipApi={membershipApi} pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {activeViewAllowed && <>
         {/* PMGM-UX menús sin repetir: módulos relacionados como pestañas de una sola opción del menú. */}
-        {(view === 'system' || view === 'bootstrap') && canConfigureSystem && <SystemConfigurationPage api={api} bootstrapSlot={canBootstrap ? <BootstrapPage bootstrapApi={bootstrapApi} /> : undefined} />}
+        {(view === 'system' || view === 'bootstrap') && canConfigureSystem && <SystemConfigurationPage api={api} documentApi={documentApi} canManageProfiles={capabilities?.canManageAccessProfiles === true} bootstrapSlot={canBootstrap ? <BootstrapPage bootstrapApi={bootstrapApi} /> : undefined} />}
         {view === 'bootstrap' && canBootstrap && !canConfigureSystem && <BootstrapPage bootstrapApi={bootstrapApi} />}
         {isInitiationView && (canCandidateProfile || canCeremonies) && <WorkspaceTabs label="Secciones de Insinuaciones e Iniciación" active={view} onChange={setView} hub={{ title: 'Insinuaciones e Iniciación', hints: {
           candidates: 'Consulta de insinuados publicados',

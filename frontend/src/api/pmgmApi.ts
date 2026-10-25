@@ -3,7 +3,8 @@ import { MockAssemblyStore, type AssemblyDebtBlockPayload, type AssemblyListResp
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
-import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult } from './userAccounts'
+import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest } from './userAccounts'
+import type { SupportViewStart } from './supportViewAs'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
 export interface HospitalariaContributionObligation { id:string;organizationId:string;taller:string;rateId:string;periodYear:number;periodMonth:number;currency:'CLP';amountDue:number;status:'pending'|'submitted'|'observed'|'reconciled';paymentDate:string|null;paymentReference:string|null;reviewedAtUtc:string|null;reviewNotes:string|null }
@@ -41,6 +42,7 @@ export interface SessionCapabilities {
   canManageLodgeHospitalaria?: boolean
   canApproveLodgeExpenses?: boolean
   canConfigureSystem?: boolean
+  canManageAccessProfiles?: boolean
   canReadLodgeCouncilSummary?: boolean
   canManageLodgeCouncilSummaryAccess?: boolean
   canManageAnyWorkshopProfile?: boolean
@@ -72,6 +74,11 @@ export interface SystemSettingVersion { id: string; value: string; effectiveFrom
 export interface SystemSettingVersionsResponse { total: number; items: SystemSettingVersion[] }
 export interface AuditLogEvent { id:string; occurredAtUtc:string; user:string; ipAddress:string; menu:string|null; submenu:string|null; summary:string; action:string; result:'success'|'rejected'|'observed'; correlationId:string }
 export interface AuditLogResponse { total:number; page:number; pageSize:number; immutable:boolean; items:AuditLogEvent[] }
+export interface SupportDiagnosticEntry { occurredAtUtc:string; severity:'error'|'warning'; statusCode:number; method:string; route:string; correlationId:string }
+export interface SupportDiagnosticsResponse { total:number; limit:number; capacity:number; volatileStorage:boolean; source:string; note:string; items:SupportDiagnosticEntry[] }
+export interface SupportLodgeDataHealthItem { resource:string; relation:string; present:boolean; schemaUsable:boolean; selectGranted:boolean; requiredColumnsPresent:boolean }
+export interface SupportLodgeDataHealthResponse { status:'ready'|'attention'; mode:string; scope:string; note:string; checkedAtUtc:string; items:SupportLodgeDataHealthItem[] }
+export interface SupportDiagnosticFilters { severity?:'error'|'warning'; route?:string; from?:string; to?:string; limit?:number }
 export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_active'
 export interface LodgeFeePlan { id: string; organizationId: string; feeType: LodgeFeeType; memberAmount: number; currency?:'CLP'|'USD'; grandTreasuryAmount: number | null; workshopAmount: number | null; rateAvailable?: boolean; effectiveFrom: string; effectiveUntil: string | null; isActive: boolean }
 export interface LodgeTreasurySummary { organizationId: string; currency?: 'CLP'|'USD'; periodYear: number; periodMonth: number; members: number; memberExpected: number; collected: number; receivable: number; grandTreasuryExpected: number; workshopMarginProjected: number; paid: number; partial: number; overdue: number; trafficLight: 'green' | 'amber' | 'red' | 'no_data' }
@@ -321,7 +328,7 @@ export interface AddTreasuryPaymentRequest { paymentMethod: 'transfer' | 'deposi
 export type AccessTokenProvider = () => Promise<string | null>
 export interface PmgmApiClientOptions { baseUrl?: string; getAccessToken?: AccessTokenProvider; useMocks?: boolean; onUnauthorized?: () => Promise<void> }
 
-class PmgmApiHttpError extends Error { constructor(readonly status: number, message: string) { super(message); this.name = 'PmgmApiHttpError' } }
+export class PmgmApiHttpError extends Error { constructor(readonly status: number, message: string) { super(message); this.name = 'PmgmApiHttpError' } }
 
 const mockCandidates: CandidatePublication[] = [
   { displayName: 'Persona Demostrativa Uno', workshopName: 'Taller Demostrativo Nº 1', workshopNumber: '1', publishedFromUtc: '2026-08-25T15:00:00Z', publishedUntilUtc: null, requiredDays: 20, elapsedDays: 13, complianceDateUtc: '2026-09-14T15:00:00Z', ruleCode: 'initiation.publication.minimum_days', status: 'published' },
@@ -343,6 +350,7 @@ const mockSession: SessionProfile = {
     canManagePrivacy: true,
     canManageLodgeTreasury: true,
     canConfigureSystem: true,
+    canManageAccessProfiles: true,
   },
 }
 const publicationFieldsCode = 'system.publication.candidate.visible_fields'
@@ -438,6 +446,11 @@ const defaultMockReviewCeremonies: CeremonyReviewQueueItem[] = [
   },
 ]
 
+const demoViewAsAccounts:AccountUser[]=[
+ {subject:'demo:brother',name:'Hermano Demostrativo',email:'hermano.demo@ejemplo.cl',enabled:true,kind:'member'},
+ {subject:'demo:lodgeSecretary',name:'Secretario Demostrativo',email:'secretario.demo@ejemplo.cl',enabled:true,kind:'member'},
+ {subject:'demo:librarian',name:'Bibliotecario Demostrativo',email:'biblioteca.demo@ejemplo.cl',enabled:true,kind:'member'},
+]
 export class PmgmApiClient {
   private readonly mockUnrecoveredDues = new Map<string,UnrecoveredDue[]>()
   private readonly withdrawalReviewDemo = withdrawalReviewFixture()
@@ -488,10 +501,12 @@ export class PmgmApiClient {
   private readonly mockSystemSettingVersions = new Map<string, SystemSettingVersion[]>()
 
   demoAccessSubject = 'demo:brother'
-  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin')
+  private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin',demoViewAsAccounts)
   async getUserAccountCandidates():Promise<AccountCandidates>{if(this.useMocks)return this.userAccountsDemo.candidatesForCreation();return this.request('/api/system/user-accounts/eligible-members')}
   async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
   async resetUserAccountAccess(subject:string,request:AccessResetRequest):Promise<AccessResetResult>{if(this.useMocks)return this.userAccountsDemo.resetAccess(subject,request);return this.request(`/api/system/user-accounts/${encodeURIComponent(subject)}/password-recovery`,{method:'POST',body:JSON.stringify(request)})}
+  async startSupportView(request:SupportViewStartRequest):Promise<SupportViewStart>{if(this.useMocks)return this.userAccountsDemo.startViewAs(request);return this.request('/api/system/support/view-as',{method:'POST',body:JSON.stringify(request)})}
+  async endSupportView(sessionId:string):Promise<void>{if(this.useMocks)return;await this.request(`/api/system/support/view-as/${encodeURIComponent(sessionId)}/end`,{method:'POST'})}
   async createUserAccount(request:CreateUserAccount):Promise<UserAccountCreated>{if(this.useMocks)return this.userAccountsDemo.create(request);return this.request('/api/system/user-accounts',{method:'POST',body:JSON.stringify(request)})}
   readonly dynamicAccess: DynamicAccessClient
   private canMockManageGrandTreasury(){return getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canManageTreasuryRegularity}
@@ -659,6 +674,40 @@ export class PmgmApiClient {
   }
   async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
   async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'Asignó perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'Probó configuración SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesión',summary:'Intento de autenticación rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
+
+  /** #688 — estado de tablas/columnas/permisos de Talleres (solo metadatos; GET explícito). */
+  async getSupportLodgeDataHealth():Promise<SupportLodgeDataHealthResponse>{
+    if(this.useMocks){
+      const ok=(resource:string,relation:string)=>({resource,relation,present:true,schemaUsable:true,selectGranted:true,requiredColumnsPresent:true})
+      return {status:'attention',mode:'read_only_catalog',scope:'gestion_logial_taller',note:'Datos ficticios de demostración: solo metadatos del esquema y permisos del rol API; no garantiza que las consultas reales respondan 200.',checkedAtUtc:new Date().toISOString(),items:[
+        ok('tenidas','core.lodge_meetings'),
+        {...ok('instrucciones','core.lodge_instruction_sessions'),requiredColumnsPresent:false},
+        ok('miembros','core.memberships'),ok('miembros','core.members'),ok('miembros','core.people')]}
+    }
+    return this.request<SupportLodgeDataHealthResponse>('/api/system/support/lodge-data-health')
+  }
+
+  async getSupportDiagnostics(filters:SupportDiagnosticFilters={}):Promise<SupportDiagnosticsResponse>{
+    if(this.useMocks){
+      const items:SupportDiagnosticEntry[]=[
+        {occurredAtUtc:'2026-10-23T22:41:05Z',severity:'error',statusCode:500,method:'GET',route:'/api/gestion-logial/talleres/{organizationId:guid}/tenidas',correlationId:'qa-synthetic-http-500'},
+        {occurredAtUtc:'2026-10-23T22:40:10Z',severity:'warning',statusCode:403,method:'GET',route:'/api/system/settings/',correlationId:'qa-synthetic-http-403'}
+      ]
+      const matching=items.filter(item=>
+        (!filters.severity||item.severity===filters.severity)&&
+        (!filters.route||item.route.toLowerCase().includes(filters.route.toLowerCase()))&&
+        (!filters.from||item.occurredAtUtc>=filters.from)&&
+        (!filters.to||item.occurredAtUtc<=filters.to))
+      return {total:matching.length,limit:filters.limit??100,capacity:500,volatileStorage:true,source:'qa-demo-memory',note:'Datos exclusivamente ficticios de demostración.',items:matching.slice(0,filters.limit??100)}
+    }
+    const query=new URLSearchParams()
+    if(filters.severity)query.set('severity',filters.severity)
+    if(filters.route)query.set('route',filters.route)
+    if(filters.from)query.set('from',filters.from)
+    if(filters.to)query.set('to',filters.to)
+    query.set('limit',String(filters.limit??100))
+    return this.request<SupportDiagnosticsResponse>('/api/system/support/diagnostics?'+query.toString())
+  }
 
   async createLodgeFeePlan(organizationId: string, payload: { feeType: LodgeFeeType; memberAmount: number; grandTreasuryAmount: number; effectiveFrom: string; effectiveUntil?: string | null }): Promise<LodgeFeePlan> {
     this.assertMockTreasuryAccess(organizationId,'create')

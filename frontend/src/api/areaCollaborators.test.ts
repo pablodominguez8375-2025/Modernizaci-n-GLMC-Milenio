@@ -21,4 +21,9 @@ describe('colaboradores por área', () => {
     await expect(c.addAreaCollaborator('library', { ...base, subject: 'demo:communications', actions: ['view'], expectedVersion: v })).rejects.toThrow('ya tiene acceso')
     expect((await c.getAreaCollaborators('documentmanager')).items).toHaveLength(0)
   })
+  it('ofrece personas por nombre, sin correo ni datos de contacto', async () => {
+    const r = await api().getAreaCollaboratorCandidates('library')
+    expect(r.available).toBe(true); expect(r.items.length).toBeGreaterThan(0)
+    expect(r.items.every(i => Object.keys(i).sort().join() === 'name,subject')).toBe(true)
+  })
 })

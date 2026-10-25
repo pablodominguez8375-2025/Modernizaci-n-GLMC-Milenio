@@ -11,7 +11,7 @@ const categories: LibraryCategory[] = [
   { value: 'magazine', label: 'Revistas', base: true, active: true },
   { value: 'bulletin', label: 'Boletines', base: true, active: true },
 ]
-const props = { categories, onCategories: () => {}, counts: {}, submissions: [], onSubmission: () => {}, onPublish: () => {}, collectionId: 'c', notify: () => {} }
+const props = { categories, categoryActions: { create: async () => {}, patch: async () => {}, reorder: async () => {} }, counts: {}, submissions: [], onSubmission: () => {}, onPublish: () => {}, collectionId: 'c', notify: () => {} }
 
 describe('perfiles institucionales Bibliotecario y Comunicaciones (#635)', () => {
   it('declara ambos perfiles en la demo con capacidades separadas y sin Gestión Documental', () => {
@@ -57,7 +57,10 @@ describe('perfiles institucionales Bibliotecario y Comunicaciones (#635)', () =>
     expect(reader).not.toContain('Subir a la biblioteca')
     expect(reader).not.toContain('Subir revista o boletín')
     expect(renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="communications" />)).toContain('Subir revista o boletín')
-    expect(renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="librarian" />)).toContain('Subir a la biblioteca')
+    const librarian = renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="librarian" />)
+    expect(librarian).toContain('Subir a la Biblioteca')
+    expect(librarian).toContain('Subir un libro o documento')
+    expect(librarian).not.toContain('Subir revista o boletín')
   })
 
   it('revista y boletín no ofrecen grado mínimo: son para todos los grados', () => {

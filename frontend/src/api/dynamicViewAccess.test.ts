@@ -29,6 +29,37 @@ describe('restricciones comunes por vista', () => {
     expect(allowsView(c,subject,'lodge','create','B',today)).toBe(false)
     expect(aggregateViewAccess(c,subject,today).views.lodge).toEqual([])
   })
+  it('deniega un Taller ajeno no asignado y no castiga el grant local válido', async () => {
+    const c = catalog(['view', 'create'])
+    c.profiles[9].scope = 'lodge'
+    c.assignments[0].organizationId = 'taller-A'
+    expect(allowsView(c, subject, 'lodge', 'create', 'taller-A', today)).toBe(true)
+    expect(allowsView(c, subject, 'lodge', 'create', 'taller-B', today)).toBe(false)
+    expect(allowsView(c, subject, 'lodge', 'view', null, today)).toBe(false)
+    expect(allowsView(c, 'legacy-otro', 'lodge', 'create', 'taller-B', today)).toBe(true)
+
+    const api = new PmgmApiClient({ useMocks: true })
+    api.demoAccessSubject = subject
+    const workshops = (await api.getOrganizationOptions()).items
+      .filter(org => org.type === 'workshop')
+    const workshopA = workshops[0].id
+    const workshopB = workshops[1].id
+    const otherCode = 'permisos-locales-test'
+    let state = await api.dynamicAccess.create({
+      code: otherCode, name: 'Taller', scope: 'lodge', menuCodes: ['lodge']
+    }, 0)
+    state = await api.dynamicAccess.grants(otherCode,
+      [{ viewCode: 'lodge', actions: ['view', 'create'] }], state.version)
+    await api.dynamicAccess.assign({
+      subject, profileCode: otherCode, organizationId: workshopA,
+      effectiveFrom: '2020-01-01', effectiveTo: null
+    }, state.version)
+    const call = vi.fn(async (_org:string) => true)
+    const guarded = restrictClient({ createMeeting:call }, 'lodgeApi', api, () => null)
+    await expect(guarded.createMeeting(workshopA)).resolves.toBe(true)
+    await expect(guarded.createMeeting(workshopB)).rejects.toThrow('no permite')
+    expect(call).toHaveBeenCalledTimes(1)
+  })
   it('el guard impide la mutación y las llamadas indirectas antes de cambiar datos', async () => {
     const api=new PmgmApiClient({useMocks:true}); api.demoAccessSubject=subject
     let c=await api.dynamicAccess.create({code:'test',name:'Consulta',scope:'order',menuCodes:['lodge']},0)

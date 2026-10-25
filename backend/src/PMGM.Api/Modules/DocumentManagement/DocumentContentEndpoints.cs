@@ -281,11 +281,13 @@ public static class DocumentContentEndpoints
         {
             version.Document.Title = version.SubmittedTitle ?? version.Document.Title;
             version.Document.ShortDescription = version.SubmittedShortDescription ?? version.Document.ShortDescription;
-            version.Document.PublishedVersionId = version.Id;
-            version.Document.PublishedAtUtc = DateTimeOffset.UtcNow;
-            version.Document.Status = DocumentManagementCodes.DocumentStatus.Published;
-            if (version.AuthorEffectiveDegreeAtUpload is >= 1)
-                version.Document.MinimumDegreeRequired = version.AuthorEffectiveDegreeAtUpload;
+            // #588: la plancha ya no se publica sola. Supera integridad y antivirus y queda «para revisión»:
+            // el Bibliotecario la aprueba (y fija el grado) o la devuelve con motivo. Una versión anterior
+            // ya publicada sigue visible hasta que se apruebe la nueva.
+            version.Document.ReviewStatus = WorkPaperReviewStatus.Pending;
+            version.Document.ReviewVersionId = version.Id;
+            version.Document.ReviewSubmittedAtUtc = DateTimeOffset.UtcNow;
+            version.Document.ReviewReason = null;
         }
 
         db.AuditEvents.Add(AuditEventFactory.Create(
