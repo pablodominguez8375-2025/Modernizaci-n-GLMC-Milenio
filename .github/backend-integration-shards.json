@@ -5,6 +5,7 @@
       "UserAccountWorkflowTests",
       "WorkPaperReviewHttpTests",
       "DynamicProfilesMasterOnlyHttpTests",
+      "DynamicLodgeScopeHttpTests",
       "LibraryManagedPublicationHttpTests",
       "AdmissionWithdrawalLetterHttpTests",
       "CandidatePublicationHttpWorkflowTests",
