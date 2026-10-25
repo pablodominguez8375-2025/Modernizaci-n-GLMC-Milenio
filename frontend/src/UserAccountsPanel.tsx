@@ -2,7 +2,7 @@ import { useEffect,useState } from 'react'
 import { ActionDrawer } from './actionKit'
 import type { PmgmApiClient } from './api/pmgmApi'
 import { setSupportViewAs } from './api/supportViewAs'
-import type { AccessResetModality,AccessResetResult,AccountCandidates,AccountUser } from './api/userAccounts'
+import { SUPPORT_CORRECTION_DURATIONS,type AccessResetModality,type AccessResetResult,type AccountCandidates,type AccountUser,type SupportCorrectionFieldKey,type SupportCorrectionGrant,type SupportCorrectionStatus } from './api/userAccounts'
 
 function ResetAccessForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
  const hasEmail=user.email.includes('@');const [modality,setModality]=useState<AccessResetModality>(hasEmail?'email':'temporary');const [reason,setReason]=useState('')
@@ -51,13 +51,65 @@ function ViewAsDrawer({api,user}:{api:PmgmApiClient;user:AccountUser}){
   {open&&<ViewAsForm api={api} user={user} onDone={()=>setOpen(false)}/>}
  </ActionDrawer>
 }
+const clock=(iso:string)=>new Date(iso).toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit',timeZone:'America/Santiago'})
+
+/** El Máster da al Superusuario un permiso con vigencia para corregir datos de contacto. */
+function GrantCorrectionForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
+ const [reason,setReason]=useState('');const [minutes,setMinutes]=useState(60);const [busy,setBusy]=useState(false);const [error,setError]=useState('')
+ const submit=async()=>{setBusy(true);setError('');try{await api.grantSupportCorrection({operatorSubject:user.subject,reason:reason.trim(),minutes});onDone()}catch(e){setError(e instanceof Error?e.message:'No se pudo dar el permiso.')}finally{setBusy(false)}}
+ return <form onSubmit={e=>{e.preventDefault();void submit()}}>
+  <p>Con este permiso, <strong>{user.name}</strong> podrá corregir el <strong>correo, teléfono o domicilio</strong> de un Hermano, uno por uno y siempre con motivo. No alcanza a Tesorería, Hospitalaria, firmas ni claves.</p>
+  <p>Cada corrección queda registrada con su nombre y el Hermano la verá en «Privacidad y mis datos». El permiso se acaba solo al vencer.</p>
+  {error&&<p role="alert">{error}</p>}
+  <label><span>Vigencia</span><select value={minutes} disabled={busy} onChange={e=>setMinutes(Number(e.target.value))}>{SUPPORT_CORRECTION_DURATIONS.map(d=><option key={d.minutes} value={d.minutes}>{d.label}</option>)}</select></label>
+  <label><span>Motivo (10 a 500 caracteres)</span><input required minLength={10} maxLength={500} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)} placeholder="Ej.: Corregir contactos reportados esta semana"/></label>
+  <button disabled={busy||reason.trim().length<10}>{busy?'Dando permiso…':'Dar permiso para corregir'}</button>
+ </form>
+}
+function GrantCorrectionDrawer({api,user,onChanged}:{api:PmgmApiClient;user:AccountUser;onChanged:()=>void}){
+ const [open,setOpen]=useState(false)
+ return <ActionDrawer label="Permiso para corregir datos" title="Permiso para corregir datos" description="Lo da solo el Máster, por un tiempo limitado." tone="secondary" open={open} onOpenChange={setOpen} keepOpen>
+  {open&&<GrantCorrectionForm api={api} user={user} onDone={()=>{setOpen(false);onChanged()}}/>}
+ </ActionDrawer>
+}
+
+/** El Superusuario con permiso vigente corrige UN dato de contacto, con motivo. */
+function CorrectContactForm({api,user,status,onDone}:{api:PmgmApiClient;user:AccountUser;status:SupportCorrectionStatus;onDone:()=>void}){
+ const [field,setField]=useState<SupportCorrectionFieldKey>('phone');const [value,setValue]=useState('');const [reason,setReason]=useState('')
+ const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [done,setDone]=useState('')
+ const submit=async()=>{setBusy(true);setError('');try{const r=await api.correctAsSupport({targetSubject:user.subject,field,newValue:value.trim(),reason:reason.trim()});setDone(r.label??'Dato')}catch(e){setError(e instanceof Error?e.message:'No se pudo corregir el dato.')}finally{setBusy(false)}}
+ if(done)return <div role="status"><p><strong>{done} corregido.</strong> Quedó registrado a su nombre y {user.name} lo verá en «Privacidad y mis datos».</p><button type="button" onClick={onDone}>Listo</button></div>
+ return <form onSubmit={e=>{e.preventDefault();void submit()}}>
+  <p>Corrige un dato de contacto de <strong>{user.name}</strong>. Su permiso vence a las <strong>{clock(status.grants[0].expiresAtUtc)}</strong>.</p>
+  {error&&<p role="alert">{error}</p>}
+  <label><span>¿Qué dato corrige?</span><select value={field} disabled={busy} onChange={e=>setField(e.target.value as SupportCorrectionFieldKey)}>{status.fields.map(f=><option key={f.field} value={f.field}>{f.label}</option>)}</select></label>
+  <label><span>Dato correcto</span><input required maxLength={field==='address'?500:field==='phone'?80:320} type={field==='email'?'email':'text'} value={value} disabled={busy} onChange={e=>setValue(e.target.value)}/></label>
+  <label><span>Motivo (10 a 500 caracteres)</span><input required minLength={10} maxLength={500} value={reason} disabled={busy} onChange={e=>setReason(e.target.value)} placeholder="Ej.: El Hermano informó que su teléfono estaba mal digitado"/></label>
+  <p>El motivo y su nombre quedan en la auditoría. El valor anterior no se guarda.</p>
+  <button disabled={busy||reason.trim().length<10||!value.trim()}>{busy?'Corrigiendo…':'Corregir dato'}</button>
+ </form>
+}
+function CorrectContactDrawer({api,user,status}:{api:PmgmApiClient;user:AccountUser;status:SupportCorrectionStatus}){
+ const [open,setOpen]=useState(false)
+ return <ActionDrawer label="Corregir contacto" title="Corregir un dato de contacto" description="Solo con permiso vigente del Máster; queda registrado a su nombre." tone="secondary" open={open} onOpenChange={setOpen} keepOpen>
+  {open&&<CorrectContactForm api={api} user={user} status={status} onDone={()=>setOpen(false)}/>}
+ </ActionDrawer>
+}
+function CorrectionGrantLine({api,grant,onChanged}:{api:PmgmApiClient;grant:SupportCorrectionGrant;onChanged:()=>void}){
+ const [busy,setBusy]=useState(false)
+ return <small>Permiso para corregir datos hasta las {clock(grant.expiresAtUtc)} · <button type="button" className="secondary" disabled={busy} onClick={()=>{setBusy(true);void api.revokeSupportCorrection(grant.grantId).then(onChanged).finally(()=>setBusy(false))}}>Retirar permiso</button></small>
+}
+
 export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
  const [data,setData]=useState<AccountCandidates|null>(null);const [users,setUsers]=useState<AccountUser[]>([])
  const [selection,setSelection]=useState('');const [platform,setPlatform]=useState(false);const [name,setName]=useState('');const [email,setEmail]=useState('')
  const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');const [error,setError]=useState('')
+ const [corr,setCorr]=useState<SupportCorrectionStatus|null>(null)
+ const refreshCorrections=()=>{void api.getSupportCorrectionStatus().then(setCorr).catch(()=>setCorr(null))}
  const chosen=data?.items.find(x=>`${x.memberId}:${x.organizationId}`===selection)
  useEffect(()=>{let live=true;setData(null);setUsers([]);setPlatform(false);setSelection('');setError('')
   void Promise.all([api.getUserAccountCandidates(),api.getUserAccounts()]).then(([c,u])=>{if(live){setData(c);setUsers(u.items)}}).catch(e=>{if(live)setError(e instanceof Error?e.message:'No se pudo consultar el alta de usuarios.')})
+  setCorr(null);void api.getSupportCorrectionStatus().then(c=>{if(live)setCorr(c)}).catch(()=>{if(live)setCorr(null)})
   return()=>{live=false}
  },[api,api.demoAccessSubject])
  const create=async()=>{setBusy(true);setError('');setNotice('');try{
@@ -79,6 +131,6 @@ export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
     </>}
     <p>Los permisos técnicos y cargos se asignan mediante los flujos institucionales correspondientes.</p>
     <button disabled={busy||!data?.deliveryConfigured||(!platform&&!chosen)}>{busy?'Creando cuenta…':'Crear usuario y enviar clave inicial'}</button>
-   </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}</div>}</div>)}</div></div>
+   </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}{corr?.isMaster&&u.kind==='superuser'&&<GrantCorrectionDrawer api={api} user={u} onChanged={refreshCorrections}/>}</div>}{corr?.isMaster&&u.kind==='superuser'&&corr.grants.filter(g=>g.operatorSubject===u.subject).map(g=><CorrectionGrantLine key={g.grantId} api={api} grant={g} onChanged={refreshCorrections}/>)}{corr?.canCorrect&&u.kind==='member'&&u.enabled&&<div className="action-bar"><CorrectContactDrawer api={api} user={u} status={corr}/></div>}</div>)}</div></div>
  </section>
 }

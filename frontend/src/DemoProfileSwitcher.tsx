@@ -44,6 +44,7 @@ export default function DemoProfileSwitcher({ value, onChange }: DemoProfileSwit
       <option value="secretariat">Gran Secretaría</option>
       <option value="grandMaster">Gran Maestra</option>
       <option value="systemAdmin">Administrador del Sistema</option>
+      <option value="supportUser">Superusuario de soporte</option>
       <option value="grandLodge">Autoridad de Gran Logia</option>
     </select>
   </label>

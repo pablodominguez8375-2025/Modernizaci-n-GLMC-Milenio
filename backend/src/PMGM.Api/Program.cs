@@ -276,6 +276,7 @@ api.MapSystemMailConfigurationEndpoints();
 api.MapFormSchemaAdministrationEndpoints();
 api.MapUserAccountEndpoints();
 api.MapSupportViewAsEndpoints();
+api.MapSupportCorrectionEndpoints();
 api.MapDynamicAccessEndpoints();
 api.MapDocumentAreaCollaboratorEndpoints();
 api.MapAuditLogEndpoints();
