@@ -2,8 +2,11 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using PMGM.Api.Data;
+using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.LodgeManagement.Entities;
 using PMGM.Api.Modules.Authorization;
 using Xunit;
 
@@ -12,6 +15,45 @@ namespace PMGM.Api.Tests.Integration;
 [Collection(PostgresIntegrationCollection.Name)]
 public sealed class SupportLodgeDataHealthHttpTests
 {
+    [Fact]
+    public void Catalog_health_checks_cover_all_materialized_lodge_entity_columns()
+    {
+        // A ready flag must not hide a missing column selected by an EF entity query.
+        // This is a model-only regression: it never opens a database connection.
+        var checksField = typeof(SupportLodgeDataHealthEndpoints).GetField(
+            "Checks", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(checksField);
+        var checks = Assert.IsAssignableFrom<Array>(checksField!.GetValue(null));
+        var requiredByRelation = checks.Cast<object>().ToDictionary(
+            check => (string)check.GetType().GetProperty("Relation")!.GetValue(check)!,
+            check => (string[])check.GetType().GetProperty("RequiredColumns")!.GetValue(check)!);
+
+        var options = new DbContextOptionsBuilder<LodgeManagementDbContext>()
+            .UseNpgsql("Host=localhost;Database=not_connected;Username=not_connected;Password=not_connected")
+            .Options;
+        using var db = new LodgeManagementDbContext(options);
+
+        foreach (var (clrType, table) in new[]
+        {
+            (typeof(LodgeMeeting), "lodge_meetings"),
+            (typeof(LodgeInstructionSession), "lodge_instruction_sessions")
+        })
+        {
+            var relation = $"core.{table}";
+            Assert.True(requiredByRelation.TryGetValue(relation, out var required),
+                $"No catalog check for {relation}");
+            var entity = db.Model.FindEntityType(clrType);
+            Assert.NotNull(entity);
+            var storeObject = StoreObjectIdentifier.Table(table, "core");
+            foreach (var mappedProperty in entity!.GetProperties())
+            {
+                var column = mappedProperty.GetColumnName(storeObject);
+                Assert.NotNull(column);
+                Assert.Contains(column!, required!);
+            }
+        }
+    }
+
     [Fact]
     public async Task Only_system_administrator_can_read_lodge_metadata()
     {

@@ -21,11 +21,11 @@ public static class SupportLodgeDataHealthEndpoints
     [
         new("tenidas", "core.lodge_meetings",
             ["Id", "OrganizationId", "MeetingDate", "MeetingType", "Grade", "Status",
-             "Title", "CreatedAtUtc", "ClosedAtUtc", "Modality", "CeremonyType",
+             "Title", "CreatedAtUtc", "HeldAtUtc", "ClosedAtUtc", "Modality", "CeremonyType",
              "LocationReference", "VirtualAccessReference"]),
         new("instrucciones", "core.lodge_instruction_sessions",
             ["Id", "OrganizationId", "InstructionDate", "Grade", "Topic",
-             "ResponsibleOffice", "InstructorMemberId", "Status", "CreatedAtUtc"]),
+             "ResponsibleOffice", "InstructorMemberId", "Status", "CreatedAtUtc", "CreatedBySubject"]),
         new("miembros", "core.memberships",
             ["Id", "OrganizationId", "MemberId", "EndDate", "Status"]),
         new("miembros", "core.members",
