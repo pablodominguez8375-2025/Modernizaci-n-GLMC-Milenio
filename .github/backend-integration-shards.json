@@ -55,7 +55,8 @@
       "MemberPhotoPostgreSqlTests",
       "SupportLodgeDataHealthHttpTests",
       "QaSyntheticPlanContractTests",
-      "InitialLoadWindowAtomicPostgreSqlTests"
+      "InitialLoadWindowAtomicPostgreSqlTests",
+      "InitialLoadBatchLedgerPostgreSqlTests"
     ],
     "b": [
       "LodgeReceiptYearClosureConcurrencyPostgreSqlTests",
