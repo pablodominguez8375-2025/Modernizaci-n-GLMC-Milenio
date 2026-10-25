@@ -241,3 +241,39 @@ it('creates a monthly Boletín draft through the same editorial endpoint (#635)'
   expect(fetch.mock.calls[0][1].headers.get('Authorization')).toBe('Bearer communications-token')
   vi.unstubAllGlobals()
 })
+
+it('librarian upload creates the draft, verifies the file through the server pipeline and only then publishes', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'doc-1', status: 'draft' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-1', documentId: 'doc-1', versionNumber: 1, originalFileName: 'libro.pdf', contentType: 'application/pdf', sizeBytes: 8, processingStatus: 'pending_upload', hasIntegrityHash: false, scanEvidenceRecorded: false, createdAtUtc: '2026-10-24T00:00:00Z' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-1', processingStatus: 'uploaded', sizeBytes: 8, hasIntegrityHash: true })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ processingStatus: 'available', clean: true })))
+    .mockResolvedValueOnce(new Response('{}'))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'librarian-token' })
+  const file = new File([new Uint8Array([37, 80, 68, 70, 45, 49, 46, 55])], 'libro.pdf', { type: 'application/pdf' })
+
+  const result = await client.uploadManagedPublication({ categoryCode: 'book', title: 'Libro', authorName: 'A', topic: 'T', edition: '1', description: 'D', minimumDegreeRequired: 2 }, file, true)
+
+  expect(result).toEqual({ documentId: 'doc-1', published: true })
+  expect(fetch.mock.calls.map(call => call[0])).toEqual([
+    '/api/biblioteca/gestion/publicaciones',
+    '/api/documentos/doc-1/versiones',
+    '/api/documentos/versiones/ver-1/contenido',
+    '/api/documentos/versiones/ver-1/analizar',
+    '/api/biblioteca/editorial/revistas/doc-1/publicar',
+  ])
+})
+
+it('librarian upload leaves the draft unpublished when the security scan does not make the file available', async () => {
+  const fetch = vi.fn()
+    .mockResolvedValueOnce(new Response(JSON.stringify({ documentId: 'doc-2', status: 'draft' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-2', documentId: 'doc-2', versionNumber: 1, originalFileName: 'x.pdf', contentType: 'application/pdf', sizeBytes: 8, processingStatus: 'pending_upload', hasIntegrityHash: false, scanEvidenceRecorded: false, createdAtUtc: '2026-10-24T00:00:00Z' }), { status: 201 }))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'ver-2', processingStatus: 'uploaded', sizeBytes: 8, hasIntegrityHash: true })))
+    .mockResolvedValueOnce(new Response(JSON.stringify({ processingStatus: 'rejected', clean: false })))
+  vi.stubGlobal('fetch', fetch)
+  const client = new DocumentApiClient({ getAccessToken: async () => 'librarian-token' })
+  const file = new File([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])], 'x.pdf', { type: 'application/pdf' })
+  await expect(client.uploadManagedPublication({ categoryCode: 'book', title: 'X', minimumDegreeRequired: null }, file, true)).rejects.toThrow(/sin publicar/)
+  expect(fetch.mock.calls.some(call => String(call[0]).endsWith('/publicar'))).toBe(false)
+})

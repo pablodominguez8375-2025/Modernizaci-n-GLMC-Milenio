@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { ActionBar, ActionDrawer, ConfirmAction, HelpNote } from './actionKit'
 import type { LibraryCatalogItem, WorkPaperReview } from './api/documentApi'
 
@@ -19,6 +19,8 @@ type Props = {
   reviewActions?: { approve: (review: WorkPaperReview) => Promise<void>; returnWith: (review: WorkPaperReview, reason: string) => Promise<void>; download: (review: WorkPaperReview) => Promise<void> }
   /** En producción la carga de documentos nuevos aún no está habilitada: solo revisión y categorías. */
   uploadEnabled?: boolean
+  /** Acciones reales de carga (producción), antes de las demás. */
+  extraActions?: ReactNode
   collectionId: string
   notify: (message: string) => void
 }
@@ -28,7 +30,7 @@ const currentMonth = () => today().slice(0, 7)
 const degreeOptions = [{ v: '', t: 'General (todos los grados)' }, { v: '1', t: '1° grado' }, { v: '2', t: '2° grado' }, { v: '3', t: '3° grado' }]
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
 
-export default function LibraryManagement({ mode = 'librarian', categories, categoryActions, counts, submissions, onSubmission, onPublish, reviews = [], reviewActions, uploadEnabled = true, collectionId, notify }: Props) {
+export default function LibraryManagement({ mode = 'librarian', categories, categoryActions, counts, submissions, onSubmission, onPublish, reviews = [], reviewActions, uploadEnabled = true, extraActions, collectionId, notify }: Props) {
   const isCommunications = mode === 'communications'
   const active = categories.filter(c => c.active && !c.future && (!isCommunications || editorialCategories.includes(c.value)))
   const [type, setType] = useState(active[0]?.value ?? 'work_paper')
@@ -84,6 +86,7 @@ export default function LibraryManagement({ mode = 'librarian', categories, cate
   const label = (v: string) => categories.find(c => c.value === v)?.label ?? v
   return <>
     <ActionBar>
+      {extraActions}
       {uploadEnabled && <ActionDrawer label={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} wide title={isCommunications ? 'Subir revista o boletín' : 'Subir a la biblioteca'} description={isCommunications ? 'Comunicaciones publica la revista Horizonte Masónico y el Boletín mensual de actividades de la Orden (PDF). Puede guardarlo como borrador o publicarlo.' : 'Planchas, libros, revistas, boletines, documentos oficiales o la categoría que usted cree. Puede guardarlo como borrador o publicarlo.'}>
         <form className="library-admin-form" onSubmit={submit}>
           <label><span>Categoría</span><select value={type} onChange={e => setType(e.target.value)}>{active.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}</select></label>

@@ -4,6 +4,7 @@
     "a": [
       "UserAccountWorkflowTests",
       "WorkPaperReviewHttpTests",
+      "LibraryManagedPublicationHttpTests",
       "AdmissionWithdrawalLetterHttpTests",
       "CandidatePublicationHttpWorkflowTests",
       "LodgeReceiptConcurrencyPostgreSqlTests",

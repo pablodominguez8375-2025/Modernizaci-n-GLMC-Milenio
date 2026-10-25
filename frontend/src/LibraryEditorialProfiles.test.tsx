@@ -57,7 +57,10 @@ describe('perfiles institucionales Bibliotecario y Comunicaciones (#635)', () =>
     expect(reader).not.toContain('Subir a la biblioteca')
     expect(reader).not.toContain('Subir revista o boletín')
     expect(renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="communications" />)).toContain('Subir revista o boletín')
-    expect(renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="librarian" />)).toContain('Subir a la biblioteca')
+    const librarian = renderToStaticMarkup(<LibraryPage documentApi={documentApi} editorRole="librarian" />)
+    expect(librarian).toContain('Subir a la Biblioteca')
+    expect(librarian).toContain('Subir un libro o documento')
+    expect(librarian).not.toContain('Subir revista o boletín')
   })
 
   it('revista y boletín no ofrecen grado mínimo: son para todos los grados', () => {

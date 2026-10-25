@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
-import { type DocumentApiClient, type LibraryCatalogItem, type WorkPaperReview, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
+import { type DocumentApiClient, type LibraryCatalogItem, type WorkPaperReview, type ManagedPublication, type LibraryFacetItem, type LibraryFacetsResponse } from './api/documentApi'
 import './documents.css'
 import './library-ppt-enhancement.css'
 import LibraryMagazineEditorial from './LibraryMagazineEditorial'
 import AreaCollaboratorsSection from './AreaCollaborators'
+import LibraryManagedUpload from './LibraryManagedUpload'
 import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
 const pageSize = 12
@@ -44,6 +45,7 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
   const [reloadKey, setReloadKey] = useState(0)
   const [reviews, setReviews] = useState<WorkPaperReview[]>([])
   const [reviewKey, setReviewKey] = useState(0)
+  const [managed, setManaged] = useState<ManagedPublication[]>([])
   const submissionsTouched = useRef(false)
 
   useEffect(() => {
@@ -70,6 +72,13 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
     documentApi.listWorkPaperReviews().then(list => { if (active) setReviews(list) }).catch(() => { if (active) setReviews([]) })
     return () => { active = false }
   }, [documentApi, editorRole, reviewKey])
+
+  useEffect(() => {
+    if (editorRole !== 'librarian') { setManaged([]); return }
+    let active = true
+    documentApi.listManagedPublications().then(list => { if (active) setManaged(list) }).catch(() => { if (active) setManaged([]) })
+    return () => { active = false }
+  }, [documentApi, editorRole, reloadKey])
 
   const reviewActions = {
     approve: async (review: WorkPaperReview) => {
@@ -185,7 +194,8 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
     {editorRole && (documentApi.useMocks || editorRole === 'librarian') && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}
       <LibraryManagement mode={editorRole} categories={categories} categoryActions={categoryActions} counts={categoryCounts} submissions={allSubmissions} collectionId={demoCollectionId} notify={setNotice}
-        reviews={reviews} reviewActions={reviewActions} uploadEnabled={documentApi.useMocks}
+        reviews={reviews} reviewActions={reviewActions} uploadEnabled={documentApi.useMocks && editorRole === 'communications'}
+        extraActions={editorRole === 'librarian' ? <LibraryManagedUpload api={documentApi} categories={categories} drafts={managed} notify={setNotice} onChanged={() => setReloadKey(k => k + 1)} onPublished={item => { if (documentApi.useMocks) setAddedItems(current => [{ id: item.id, collectionId: demoCollectionId, title: item.title, documentType: item.categoryCode, collectionName: 'Biblioteca Virtual', versionNumber: 1, contentType: 'application/pdf', sizeBytes: 1_200_000, publishedAtUtc: new Date().toISOString(), minimumDegreeRequired: item.degree, authorName: item.author, topic: item.topic, edition: item.edition, abstractText: item.description, shortDescription: item.description }, ...current]) }} /> : undefined}
         onSubmission={next => { submissionsTouched.current = true; setSubmissions(next) }}
         onPublish={item => setAddedItems(current => [item, ...current])} />
     </>}

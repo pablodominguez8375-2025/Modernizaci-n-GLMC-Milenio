@@ -22,6 +22,21 @@ public static class LibraryEditorialTypes
             _ => null
         };
 
+    /// <summary>Clave para auditoría: el tipo editorial canónico o el código de la categoría gestionada.</summary>
+    public static string AuditKey(string? documentType) => Canonical(documentType) ?? documentType?.Trim().ToLowerInvariant() ?? "unknown";
+
+    /// <summary>
+    /// #588 — categorías que el Bibliotecario gestiona directamente (libros y las que cree). Quedan fuera las
+    /// editoriales (Comunicaciones/Revista/Boletín), las planchas (flujo del Taller con revisión), los documentos
+    /// oficiales (Gestión Documental) y videos.
+    /// </summary>
+    public static bool IsManagedType(string? documentType)
+    {
+        var t = documentType?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(t) || Canonical(t) is not null) return false;
+        return t is not ("work_paper" or "working_paper" or "plancha" or "plancha_de_trabajo" or "official_document" or "video");
+    }
+
     public static bool IsMagazine(string? documentType) => Canonical(documentType) == Magazine;
     public static bool IsBulletin(string? documentType) => Canonical(documentType) == Bulletin;
 }
@@ -96,6 +111,26 @@ public static class LibraryMagazineMetadataAuthorization
            document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated &&
            LibraryEditorialTypes.Canonical(document.DocumentType) is not null;
 
+    public static bool IsManagedPublication(InstitutionalDocument document)
+        => document.OrganizationId is null &&
+           document.Collection is
+           {
+               OrganizationId: null,
+               Scope: DocumentManagementCodes.Scope.Order,
+               Status: DocumentManagementCodes.CollectionStatus.Active
+           } &&
+           document.Classification == DocumentManagementCodes.Classification.Internal &&
+           document.AccessPolicy == DocumentManagementCodes.AccessPolicy.LibraryAuthenticated &&
+           document.PublisherProfile == LibraryPublisherProfiles.Librarian &&
+           LibraryEditorialTypes.IsManagedType(document.DocumentType);
+
+    // Solo el perfil Bibliotecario (no colaboradores con grant, no Comunicaciones, no admin de Gran Logia).
+    private static bool IsLibrarianFor(
+        ClaimsPrincipal user, IInstitutionalAccessService access, DynamicAccessCatalog catalog, string action)
+        => access.HasOrderScope(user) && IsLibrarianProfile(user, access) &&
+           DynamicViewAccess.Allows(catalog, DynamicTreasuryAccess.Subject(user),
+               "library", action, null, DynamicAccessEndpoints.Today());
+
     /// <summary>
     /// Bibliotecario o Comunicaciones institucional, respetando la restricción
     /// técnica dinámica de la vista Biblioteca cuando existe para el sujeto.
@@ -129,11 +164,12 @@ public static class LibraryMagazineMetadataAuthorization
     public static bool CanPublishEditorialMagazine(
         ClaimsPrincipal user, IInstitutionalAccessService access,
         DynamicAccessCatalog catalog, InstitutionalDocument document)
-        => IsEligible(document) &&
-           document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
-           access.HasOrderScope(user) &&
-           IsInstitutionalEditor(user, access, catalog, "edit") &&
-           OwnsPublication(user, access, document);
+        => document.Status != DocumentManagementCodes.DocumentStatus.Retired &&
+           ((IsEligible(document) &&
+             access.HasOrderScope(user) &&
+             IsInstitutionalEditor(user, access, catalog, "edit") &&
+             OwnsPublication(user, access, document)) ||
+            (IsManagedPublication(document) && IsLibrarianFor(user, access, catalog, "edit")));
 
     /// <summary>Alta de borrador de cualquier categoría editorial (filtro de ruta).</summary>
     public static bool CanCreateEditorialMagazine(
@@ -179,10 +215,10 @@ public static class LibraryMagazineMetadataAuthorization
         IInstitutionalAccessService access,
         DynamicAccessCatalog catalog,
         InstitutionalDocument document)
-        => IsEligible(document) &&
-           document.Status is DocumentManagementCodes.DocumentStatus.Draft
+        => document.Status is DocumentManagementCodes.DocumentStatus.Draft
                or DocumentManagementCodes.DocumentStatus.Published &&
-           CanStageInState(user, access, catalog, document);
+           ((IsEligible(document) && CanStageInState(user, access, catalog, document)) ||
+            (IsManagedPublication(document) && IsLibrarianFor(user, access, catalog, "write")));
 
     // Borrador: grant "write" de colaborador o perfil titular. Publicado: sólo
     // el perfil titular puede preparar un reemplazo sin despublicar (el
