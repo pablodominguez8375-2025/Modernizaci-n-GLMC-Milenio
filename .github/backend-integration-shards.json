@@ -53,6 +53,7 @@
       "MagazineEditorialVersionStatusHttpTests",
       "LibraryPublicationReplacementHttpTests",
       "CandidateFormalSponsorGatesHttpTests",
+      "CandidateRecommenderDirectoryHttpTests",
       "OfficialDocumentNoticePostgreSqlTests",
       "MemberRutRevealPostgreSqlTests",
       "MemberPhotoPostgreSqlTests",
