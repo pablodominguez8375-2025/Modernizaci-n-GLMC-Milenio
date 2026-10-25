@@ -33,3 +33,5 @@
 El uso de “dato” comprende campos persistidos, contratos y proyecciones/calculados. La modificación de un pago o una ficha individual sigue su auditoría funcional, sin producir una nueva versión del diccionario.
 
 - 04-10, #190 / PR #318: [registro tarifario v2](cambios/2026-10-04-issue-190-tarifario.md), [DB-007](PMGM-DB-007-tarifario-decretos.md). Catálogo persistido y Ficha; implementación de rama, sin instalación.
+
+- 24-10, #694 / PR #721 (fase Q): [registro de ledger de carga inicial](cambios/2026-10-24-issue-694-initial-load-batch-ledger.md); tabla técnica HMAC, auditoría FK, transiciones protegidas y pruebas sintéticas. **En PR; no instalado físicamente.**

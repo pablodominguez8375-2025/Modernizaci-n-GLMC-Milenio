@@ -5,3 +5,8 @@ Fecha 24-10-2026 (Chile). Agente ChatGPT. Base `dev@b4ce7e9319667ca954c14edf616f
 Alcance reservado: `backend/src/PMGM.Api/Modules/Bootstrap/Entities/InitialLoadBatchLedger.cs`, `backend/src/PMGM.Api/Modules/Bootstrap/BootstrapDbContext.cs`, `backend/src/PMGM.Api/Migrations/20261025220000_AddInitialLoadBatchLedger.cs`, `backend/tests/PMGM.Api.Tests/Integration/InitialLoadBatchLedgerPostgreSqlTests.cs`, `.github/backend-integration-shards.json` y este handoff. Pruebas sintéticas con rollback. Exclusión: ningún endpoint nuevo, ninguna autorización jurídica automática, ningún importador operativo, ninguna modificación de main o glmdch.
 
 El sistema asegura acceso, integridad y auditoría. La valoración de licitud, política institucional y visto bueno humano quedan fuera del software. Respetar 3/3 gates exact-head antes de integrar sólo a dev. Próxima fase: servicio transaccional idempotente de reserva/aplicación con JWT Máster, referenciar consentimiento institucional externo sin evaluarlo automáticamente; no activar datos reales sin autorización.
+
+## Registro de salida de estructuras (PMGM-GOV-004)
+- [Diccionario y control de cambio #694 Q](../modelo-datos/cambios/2026-10-24-issue-694-initial-load-batch-ledger.md).
+- [Índice PMGM-DB-004](../modelo-datos/PMGM-DB-004-diccionario-y-estructuras.md).
+- Se registran 10 columnas, PK/FK, CHECK, triggers y reversión/rollback de prueba; sin PII real.
