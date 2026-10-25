@@ -24,7 +24,9 @@ public static class DynamicAccessEndpoints
             return Results.Ok(await LoadRawAsync(db, ct));
         });
         group.MapPost("/profiles", (CreateDynamicProfileRequest request, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
-            MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_created", catalog =>
+        {
+            var sensitive = Array.Empty<string>();
+            return MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_created", catalog =>
             {
                 var error = ValidateProfile(request.Code, request.Name, request.Scope);
                 if (error is not null) return Results.BadRequest(new { message = error });
@@ -33,12 +35,18 @@ public static class DynamicAccessEndpoints
                 var roles = Normalize(request.BaseRoles);
                 var roleError = DynamicRoleConferral.Validate(roles, request.Scope);
                 if (roleError is not null) return Results.BadRequest(new { message = roleError });
+                var created = DynamicRoleConferral.NewSensitive(null, roles);
+                if (created.Length > 0 && !DynamicRoleConferral.ValidReason(request.SensitiveReason)) return Results.BadRequest(new { message = DynamicRoleConferral.ReasonMessage });
+                sensitive = created;
                 var profile = new DynamicProfile(Guid.NewGuid(), request.Code.Trim().ToLowerInvariant(), request.Name.Trim(), request.Scope, false, true, Normalize(request.MenuCodes), [], roles);
                 catalog.Profiles.Add(profile);
                 return Results.Ok(profile);
-            }, ct));
+            }, ct, () => sensitive.Length == 0 ? null : new { profile = request.Code.Trim().ToLowerInvariant(), roles = sensitive, reason = request.SensitiveReason!.Trim() });
+        });
         group.MapPut("/profiles/{profileCode}", (string profileCode, UpdateDynamicProfileRequest request, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
-            MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_updated", catalog =>
+        {
+            var sensitive = Array.Empty<string>();
+            return MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_updated", catalog =>
             {
                 var index = catalog.Profiles.FindIndex(p => Eq(p.Code, profileCode));
                 if (index < 0) return Results.NotFound();
@@ -53,10 +61,14 @@ public static class DynamicAccessEndpoints
                 var roles = request.BaseRoles is null ? current.BaseRoles ?? [] : Normalize(request.BaseRoles);
                 var roleError = DynamicRoleConferral.Validate(roles, request.Scope);
                 if (roleError is not null) return Results.BadRequest(new { message = roleError });
+                var added = DynamicRoleConferral.NewSensitive(current.BaseRoles, roles);
+                if (added.Length > 0 && !DynamicRoleConferral.ValidReason(request.SensitiveReason)) return Results.BadRequest(new { message = DynamicRoleConferral.ReasonMessage });
+                sensitive = added;
                 var profile = current with { Name = request.Name.Trim(), Scope = request.Scope, MenuCodes = menus, Grants = current.Grants.Where(g => views.Contains(g.ViewCode)).ToList(), BaseRoles = roles };
                 catalog.Profiles[index] = profile;
                 return Results.Ok(profile);
-            }, ct));
+            }, ct, () => sensitive.Length == 0 ? null : new { profile = profileCode.Trim().ToLowerInvariant(), roles = sensitive, reason = request.SensitiveReason!.Trim() });
+        });
         group.MapDelete("/profiles/{profileCode}", (string profileCode, int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             MutateAsync(expectedVersion, ctx, db, access, audit, "profile_deleted_logically", catalog =>
             {
@@ -102,6 +114,7 @@ public static class DynamicAccessEndpoints
                 if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Length > 320 || request.Subject != request.Subject.Trim()) return Results.BadRequest(new { message = "Indique el identificador exacto del sujeto OIDC (hasta 320 caracteres)." });
                 var profile = catalog.Profiles.FirstOrDefault(p => Eq(p.Code, request.ProfileCode) && p.IsActive);
                 if (profile is null || profile.IsSystem) return Results.BadRequest(new { message = "Seleccione un perfil técnico activo; los cargos base se gestionan institucionalmente." });
+                if (DynamicRoleConferral.HasSensitive(profile.BaseRoles) && (request.EffectiveTo is not DateOnly until || until > request.EffectiveFrom.AddYears(1))) return Results.BadRequest(new { message = DynamicRoleConferral.TermMessage });
                 if (request.EffectiveTo < request.EffectiveFrom || (profile.Scope == "lodge" ? request.OrganizationId is null || request.OrganizationId == Guid.Empty : request.OrganizationId is not null)) return Results.BadRequest(new { message = "Alcance o vigencia no válidos." });
                 if (request.OrganizationId is Guid org && !db.Organizations.Any(o => o.Id == org && o.Type == "workshop")) return Results.BadRequest(new { message = "El Taller no existe." });
                 if (catalog.Assignments.Any(a => a.IsActive && a.Subject == request.Subject && Eq(a.ProfileCode, profile.Code) && a.OrganizationId == request.OrganizationId && a.EffectiveFrom <= (request.EffectiveTo ?? DateOnly.MaxValue) && (a.EffectiveTo ?? DateOnly.MaxValue) >= request.EffectiveFrom)) return Conflict("La asignación se superpone con una ya vigente o programada.");
@@ -185,7 +198,7 @@ public static class DynamicAccessEndpoints
                 g.Actions.Contains("view") && g.Actions.Contains(action));
     }
 
-    private static async Task<IResult> MutateAsync(int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, string action, Func<DynamicAccessCatalog, IResult> mutate, CancellationToken ct)
+    private static async Task<IResult> MutateAsync(int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, string action, Func<DynamicAccessCatalog, IResult> mutate, CancellationToken ct, Func<object?>? extraAudit = null)
     {
         if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -197,6 +210,8 @@ public static class DynamicAccessEndpoints
         var next = catalog with { Version = catalog.Version + 1 };
         db.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot { Version = next.Version, Payload = JsonSerializer.Serialize(next, JsonOptions) });
         audit.Add(ctx, "system.access." + action, "DynamicAccessCatalog", next.Version.ToString(), null, AuditResults.Success, new { previousVersion = catalog.Version, version = next.Version });
+        if (extraAudit?.Invoke() is { } extra)
+            audit.Add(ctx, "system.access.sensitive_roles_conferred", "DynamicAccessCatalog", next.Version.ToString(), null, AuditResults.Success, extra);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         return Results.Ok(next);
@@ -267,7 +282,7 @@ public sealed record DynamicView(string Code, string Name, bool IsActive);
 public sealed record DynamicProfile(Guid Id, string Code, string Name, string Scope, bool IsSystem, bool IsActive, string[] MenuCodes, List<DynamicGrant> Grants, string[]? BaseRoles = null);
 public sealed record DynamicGrant(string ViewCode, string[] Actions, string[]? Categories = null);
 public sealed record DynamicAssignment(Guid Id, string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, bool IsActive);
-public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null);
-public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null);
+public sealed record CreateDynamicProfileRequest(string Code, string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null, string? SensitiveReason = null);
+public sealed record UpdateDynamicProfileRequest(string Name, string Scope, string[]? MenuCodes, int ExpectedVersion, string[]? BaseRoles = null, string? SensitiveReason = null);
 public sealed record ReplaceDynamicGrantsRequest(List<DynamicGrant>? Grants, int ExpectedVersion);
 public sealed record AssignDynamicProfileRequest(string Subject, string ProfileCode, Guid? OrganizationId, DateOnly EffectiveFrom, DateOnly? EffectiveTo, int ExpectedVersion);

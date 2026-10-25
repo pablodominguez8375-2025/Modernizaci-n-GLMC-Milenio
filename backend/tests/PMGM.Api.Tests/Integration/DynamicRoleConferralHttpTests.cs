@@ -62,6 +62,45 @@ public sealed class DynamicRoleConferralHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await master.PostAsJsonAsync("/api/biblioteca/categorias", new { label = label + " M" }, ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Sensitive_roles_need_a_reason_and_a_term_and_are_audited()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var root = new PmgmWebApplicationFactory(cs);
+        using var factory = root.WithWebHostBuilder(builder =>
+            builder.ConfigureTestServices(services =>
+                services.AddAuthentication(o =>
+                {
+                    o.DefaultAuthenticateScheme = Auth.Name; o.DefaultChallengeScheme = Auth.Name; o.DefaultForbidScheme = Auth.Name;
+                }).AddScheme<AuthenticationSchemeOptions, Auth>(Auth.Name, _ => { })));
+        await using (var scope = factory.Services.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.MigrateAsync(ct);
+        using var master = factory.CreateClient(); master.DefaultRequestHeaders.Add("X-Role", InstitutionalRoles.PlatformSuperAdmin);
+        async Task<int> Version() => (await master.GetFromJsonAsync<JsonElement>("/api/system/access/catalog", ct)).GetProperty("version").GetInt32();
+        var code = "sens-" + Guid.NewGuid().ToString("N")[..8];
+        var roles = new[] { InstitutionalRoles.GranTesoreria };
+
+        // Sin motivo, o con motivo corto, se rechaza.
+        Assert.Equal(HttpStatusCode.BadRequest, (await master.PostAsJsonAsync("/api/system/access/profiles", new { code, name = code, scope = "order", menuCodes = new[] { "treasury" }, baseRoles = roles, expectedVersion = await Version() }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await master.PostAsJsonAsync("/api/system/access/profiles", new { code, name = code, scope = "order", menuCodes = new[] { "treasury" }, baseRoles = roles, sensitiveReason = "corto", expectedVersion = await Version() }, ct)).StatusCode);
+        // Con motivo válido se crea.
+        Assert.Equal(HttpStatusCode.OK, (await master.PostAsJsonAsync("/api/system/access/profiles", new { code, name = code, scope = "order", menuCodes = new[] { "treasury" }, baseRoles = roles, sensitiveReason = "Reemplazo temporal del Gran Tesorero", expectedVersion = await Version() }, ct)).StatusCode);
+
+        // Asignación: sin término o a más de 12 meses se rechaza; con término de 6 meses se acepta.
+        var subject = "sens-" + Guid.NewGuid().ToString("N");
+        var from = DynamicAccessEndpoints.Today();
+        Assert.Equal(HttpStatusCode.BadRequest, (await master.PostAsJsonAsync("/api/system/access/assignments", new { subject, profileCode = code, organizationId = (Guid?)null, effectiveFrom = from.ToString("yyyy-MM-dd"), effectiveTo = (string?)null, expectedVersion = await Version() }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await master.PostAsJsonAsync("/api/system/access/assignments", new { subject, profileCode = code, organizationId = (Guid?)null, effectiveFrom = from.ToString("yyyy-MM-dd"), effectiveTo = from.AddYears(2).ToString("yyyy-MM-dd"), expectedVersion = await Version() }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await master.PostAsJsonAsync("/api/system/access/assignments", new { subject, profileCode = code, organizationId = (Guid?)null, effectiveFrom = from.ToString("yyyy-MM-dd"), effectiveTo = from.AddMonths(6).ToString("yyyy-MM-dd"), expectedVersion = await Version() }, ct)).StatusCode);
+
+        // Quedó auditado el otorgamiento sensible.
+        await using var scope2 = factory.Services.CreateAsyncScope();
+        var db = scope2.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        Assert.True(await db.AuditEvents.AnyAsync(a => a.Action == "system.access.sensitive_roles_conferred", ct));
+    }
+
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder)
         : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
     {
