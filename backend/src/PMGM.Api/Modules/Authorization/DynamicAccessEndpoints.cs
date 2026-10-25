@@ -19,7 +19,7 @@ public static class DynamicAccessEndpoints
         var group = endpoints.MapGroup("/api/system/access").WithTags("Sistema — Acceso dinámico").RequireAuthorization();
         group.MapGet("/catalog", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
         {
-            if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+            if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
             ctx.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(await LoadAsync(db, ct));
         });
@@ -116,13 +116,13 @@ public static class DynamicAccessEndpoints
             if (!AllowedActions.Contains(action)) return Results.BadRequest(new { message = "Acción inválida." });
             ctx.Response.Headers.CacheControl = "private, no-store";
             var subject = ctx.User.FindFirstValue("sub") ?? ctx.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var boundary = organizationId is Guid org ? access.CanReadOrganization(ctx.User, org) : access.HasOrderScope(ctx.User) || access.CanConfigureSystem(ctx.User);
+            var boundary = organizationId is Guid org ? access.CanReadOrganization(ctx.User, org) : access.HasOrderScope(ctx.User) || access.IsPlatformSuperAdmin(ctx.User);
             var catalog = await LoadAsync(db, ct);
             return Results.Ok(new { allowed = boundary && IsGranted(catalog, subject, viewCode.Trim().ToLowerInvariant(), action, organizationId, Today()), catalog.Version });
         });
         group.MapPost("/print", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
         {
-            if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+            if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
             audit.Add(ctx, "system.access.review_print_requested", "DynamicAccessCatalog", "review", null, AuditResults.Success);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { allowed = true });
@@ -181,7 +181,7 @@ public static class DynamicAccessEndpoints
 
     private static async Task<IResult> MutateAsync(int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, string action, Func<DynamicAccessCatalog, IResult> mutate, CancellationToken ct)
     {
-        if (!access.CanConfigureSystem(ctx.User)) return Results.Forbid();
+        if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
         var catalog = await LoadAsync(db, ct);
@@ -200,8 +200,30 @@ public static class DynamicAccessEndpoints
         var snapshot = await db.DynamicAccessSnapshots.AsNoTracking().OrderByDescending(x => x.Version).FirstOrDefaultAsync(ct);
         if (snapshot is null) return CreateCatalog();
         // A malformed stored snapshot is a fault, never a silent reset of grants.
-        return JsonSerializer.Deserialize<DynamicAccessCatalog>(snapshot.Payload, JsonOptions) ?? throw new InvalidOperationException("Catálogo de accesos inválido.");
+        var stored = JsonSerializer.Deserialize<DynamicAccessCatalog>(snapshot.Payload, JsonOptions) ?? throw new InvalidOperationException("Catálogo de accesos inválido.");
+        return WithMissingDefaults(stored);
     }
+    /// <summary>
+    /// Un catálogo guardado antes de que existiera una vista nueva la recibe sin tocar perfiles ni asignaciones
+    /// (en memoria; se persiste en la próxima mutación del Master). Nunca quita ni modifica lo guardado.
+    /// </summary>
+    public static DynamicAccessCatalog WithMissingDefaults(DynamicAccessCatalog stored)
+    {
+        var defaults = CreateCatalog().Menus;
+        var menus = stored.Menus.Select(m => m).ToList();
+        var changed = false;
+        foreach (var d in defaults)
+        {
+            var i = menus.FindIndex(m => m.Code == d.Code);
+            if (i < 0) { menus.Add(d); changed = true; continue; }
+            var missing = d.Views.Where(v => menus[i].Views.All(x => x.Code != v.Code)).ToList();
+            if (missing.Count == 0) continue;
+            menus[i] = menus[i] with { Views = [.. menus[i].Views, .. missing] };
+            changed = true;
+        }
+        return changed ? stored with { Menus = menus } : stored;
+    }
+
     public static DynamicAccessCatalog CreateCatalog()
     {
         DynamicMenu Menu(string code, string name, params (string code, string name)[] views) => new(code, name, true, views.Select(v => new DynamicView(v.code.ToLowerInvariant(), v.name, true)).ToList());
@@ -211,7 +233,7 @@ public static class DynamicAccessEndpoints
             Menu("lodge", "Taller", ("lodge", "Gestión Logial"), ("lodgeProfile", "Ficha del Taller"), ("members", "Fichas de miembros")),
             Menu("treasury", "Tesorería", ("lodgeTreasury", "Tesorería del Taller"), ("treasury", "Gran Tesorería")),
             Menu("hospitalaria", "Hospitalaria", ("hospitalaria", "Hospitalaria")),
-            Menu("documents", "Documentos", ("library", "Biblioteca"), ("documentManager", "Gestor documental"), ("grandArchive", "Gran Archivo")),
+            Menu("documents", "Documentos", ("library", "Biblioteca"), ("officialDocuments", "Documentos oficiales"), ("documentManager", "Gestor documental"), ("grandArchive", "Gran Archivo")),
             Menu("order", "Gran Logia", ("secretariat", "Gran Secretaría"), ("regimen", "Régimen Interior"), ("ceremonies", "Ceremonias")),
             Menu("system", "Sistema", ("system", "Parámetros"), ("access-review", "Revisión de accesos")) };
         var names = new[] { "Venerable Maestro", "Secretaría del Taller", "Tesorería del Taller", "Hospitalaria del Taller", "Orador del Taller", "Primer Vigilante", "Segundo Vigilante", "Inmediato Ex-Venerable Maestro", "Administrador del Sistema" };

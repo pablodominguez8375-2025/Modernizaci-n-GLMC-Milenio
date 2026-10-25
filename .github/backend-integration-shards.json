@@ -4,6 +4,7 @@
     "a": [
       "UserAccountWorkflowTests",
       "WorkPaperReviewHttpTests",
+      "DynamicProfilesMasterOnlyHttpTests",
       "LibraryManagedPublicationHttpTests",
       "AdmissionWithdrawalLetterHttpTests",
       "CandidatePublicationHttpWorkflowTests",
