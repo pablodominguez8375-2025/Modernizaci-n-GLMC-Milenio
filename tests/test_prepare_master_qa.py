@@ -189,6 +189,29 @@ class MasterQaBootstrapTests(unittest.TestCase):
         api.issuer = "https://attacker.invalid/realms/pmgm"
         self.assert_denied(api, "ISSUER_MISMATCH")
 
+    def test_qa_compose_explicit_authority_overrides_legacy_base(self):
+        # Compose environment overrides env_file, even when the private file
+        # contains another Authority. Never trust the file check alone.
+        root = SCRIPT.parents[2]
+        base = (root / "infrastructure/docker-compose.srv01.yml").read_text()
+        overlay = (root / "infrastructure/docker-compose.qa-master.yml").read_text()
+        expected = 'Authentication__Authority: "http://keycloak:8080/identity/realms/pmgm"'
+        self.assertIn("Authentication__Authority: http://keycloak:8080/realms/pmgm", base)
+        self.assertIn("\n  api:\n", overlay)
+        api = overlay.split("\n  api:\n", 1)[1]
+        self.assertIn("\n    env_file:\n", "\n" + api)
+        self.assertIn("PMGM_QA_MASTER_APP_ENV_FILE", api)
+        self.assertIn("\n    environment:\n", "\n" + api)
+        self.assertIn("      " + expected, api)
+        self.assertNotIn("InitialLoad__MasterSubject:", api)
+        self.assertNotIn("InitialLoad__MasterIssuer:", api)
+        # Keycloak administrative API must remain loopback-only.
+        self.assertIn('"127.0.0.1:18180:8080"', overlay)
+        self.assertIn("ports: !override", overlay)
+        # Without !override the inherited base 8180 mapping survives.
+        self.assertIn("PMGM_QA_OIDC_PORT:-8180", base)
+        self.assertEqual(1, api.count("Authentication__Authority:"))
+
     def test_canonical_internal_qa_authority_and_legacy_path_denied(self):
         valid = chr(10).join([
             "InitialLoad__MasterSubject=" + SUBJECT,
