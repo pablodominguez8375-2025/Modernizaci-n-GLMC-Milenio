@@ -935,6 +935,15 @@ export class PmgmApiClient {
     if (this.useMocks) return this.mockAssemblies.balancesOverview(source)
     return this.request('/api/regimen-interior/saldos-padron')
   }
+  async downloadAssemblyOfficialRoster(assemblyId: string, list: import('./assemblyApi').AssemblyOfficialList, format: 'pdf' | 'csv'): Promise<{ blob: Blob; fileName: string }> {
+    if (this.useMocks) return this.mockAssemblies.officialRoster(assemblyId, list, format)
+    const token = await this.getAccessToken?.(); if (!token) throw new Error('Debe ingresar para descargar el padrón oficial.')
+    const response = await fetch(`${this.baseUrl}/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/padron-oficial?listado=${list}&formato=${format}`, { credentials: 'omit', redirect: 'error', cache: 'no-store', headers: new Headers({ Authorization: `Bearer ${token}` }) })
+    if (!response.ok) { if (response.status === 401) await this.onUnauthorized?.(); throw new PmgmApiHttpError(response.status, response.status === 409 ? 'El padrón oficial solo se puede descargar cuando la Asamblea está cerrada.' : response.status === 403 ? 'Su cuenta no tiene permiso para descargar el padrón oficial.' : `La API respondió ${response.status}.`) }
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(disposition)
+    return { blob: await response.blob(), fileName: match ? decodeURIComponent(match[1]) : `padron-${list}.${format}` }
+  }
   async recordAssemblyBalances(assemblyId: string, payload: AssemblyBalancesPayload): Promise<void> {
     if (this.useMocks) { this.mockAssemblies.recordBalances(assemblyId, payload); return }
     await this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/saldos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })

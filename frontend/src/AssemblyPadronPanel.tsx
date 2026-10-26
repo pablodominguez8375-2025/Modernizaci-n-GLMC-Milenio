@@ -83,6 +83,14 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   const stepForm = (e: FormEvent<HTMLFormElement>) => new FormData(e.currentTarget)
   const accredit = (e: FormEvent<HTMLFormElement>) => runStep(e, async () => { await api.accreditAssembly(assemblyId); return 'Asambleístas acreditados desde las fichas, con las constancias de Régimen Interior. Aún no tienen habilitación: falta evaluarlos.' })
   const evaluate = (e: FormEvent<HTMLFormElement>) => runStep(e, async () => { const r = await api.evaluateAssembly(assemblyId); return `Evaluación registrada: ${r.evaluated} asambleístas (${Object.entries(r.counts).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}).` })
+  async function downloadOfficial(list: 'asambleistas' | 'sufragantes', format: 'pdf' | 'csv') {
+    setError(null); setMessage(null)
+    try {
+      const { blob, fileName } = await api.downloadAssemblyOfficialRoster(assemblyId, list, format)
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = fileName; a.click(); URL.revokeObjectURL(url)
+      setMessage('Descarga lista. La descarga del padrón oficial queda en la auditoría.')
+    } catch (reason) { fail(reason, 'No fue posible descargar el padrón oficial.') }
+  }
   const closeRoster = (e: FormEvent<HTMLFormElement>) => { const d = stepForm(e); return runStep(e, async () => {
     const r = await api.closeAssembly(assemblyId, String(d.get('acta') ?? ''))
     return `Padrón cerrado con ${r.voters} sufragantes habilitados. Resumen de verificación ${r.digest.slice(0, 12)}…` }) }
@@ -173,6 +181,18 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
 
     {loading && !listing ? <div className="panel"><p>Cargando listados…</p></div> : null}
     {listing && listing.asambleistas.length === 0 && !loading && <div className="panel"><p className="muted">Esta Asamblea aún no tiene asambleístas acreditados. Aparecerán cuando los Talleres y Gran Logia entreguen sus fuentes oficiales.</p></div>}
+
+    {isClosed && listing && <section className="panel report-wide assembly-official" aria-label="Padrón oficial">
+      <div className="panel-heading"><div><p className="eyebrow">Padrón oficial · cerrado</p><h2>Descargar el padrón oficial</h2>
+        <p>Los dos listados oficiales de la Asamblea cerrada, en orden alfabético por apellidos, con el RUT parcialmente protegido y la columna de firma en blanco. Cada descarga queda en la auditoría.</p></div></div>
+      <div className="assembly-official-grid">
+        {([['sufragantes', 'Sufragantes habilitados', 'Quienes pueden votar'], ['asambleistas', 'Asambleístas', 'Todos los asambleístas del corte']] as const).map(([key, title, hint]) => <div key={key} className="assembly-official-item">
+          <strong>{title}</strong><small>{hint}</small>
+          <div className="assembly-official-actions"><button type="button" className="action-trigger primary" onClick={() => void downloadOfficial(key, 'pdf')}>Descargar PDF</button>
+            <button type="button" className="action-trigger secondary" onClick={() => void downloadOfficial(key, 'csv')}>Descargar planilla (CSV)</button></div>
+        </div>)}
+      </div>
+    </section>}
 
     {listing && listing.talleresConBloqueo.length > 0 && <section className="panel report-wide" aria-label="Talleres con saldo pendiente">
       <div className="panel-heading"><div><p className="eyebrow">Gran Tesorería · regla del Padrón</p><h2>Talleres con saldo pendiente</h2>

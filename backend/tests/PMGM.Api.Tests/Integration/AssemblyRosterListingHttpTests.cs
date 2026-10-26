@@ -293,6 +293,8 @@ public sealed class AssemblyRosterListingHttpTests
         Assert.Equal(HttpStatusCode.OK, await Post($"/talleres/{workshopY.Id}/bloqueo-saldo", new { action = "lift", reason = "Convenio de pago acreditado", evidenceReference = "ACTA-RI-LEVANTA" }));
         var readiness = await (await client.GetAsync(root + "/cierre/estado", ct)).Content.ReadAsStringAsync(ct);
         Assert.Contains("\"mayClose\":true", readiness);
+        // El padrón oficial NO se descarga mientras la Asamblea esté en borrador.
+        Assert.Equal(HttpStatusCode.Conflict, (await client.GetAsync(root + "/padron-oficial?listado=sufragantes&formato=pdf", ct)).StatusCode);
         var closed = await client.PostAsJsonAsync(root + "/cerrar", close, ct);
         Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
         var closedText = await closed.Content.ReadAsStringAsync(ct);
@@ -307,6 +309,21 @@ public sealed class AssemblyRosterListingHttpTests
         Assert.Contains("\"officiallyClosed\":true", listing);
         Assert.Contains("\"provisional\":false", listing);
         Assert.Contains("\"mayVote\":true", listing);
+        // Padrón oficial: PDF y CSV de ambos listados, solo con la Asamblea cerrada; RUT enmascarado; firma en blanco.
+        var pdf = await client.GetAsync(root + "/padron-oficial?listado=sufragantes&formato=pdf", ct);
+        Assert.Equal(HttpStatusCode.OK, pdf.StatusCode);
+        Assert.Equal("application/pdf", pdf.Content.Headers.ContentType?.MediaType);
+        Assert.StartsWith("%PDF-", System.Text.Encoding.ASCII.GetString((await pdf.Content.ReadAsByteArrayAsync(ct))[..5]));
+        Assert.Equal("true", pdf.Headers.GetValues("X-PMGM-Official-Roster").Single());
+        Assert.Matches("^[0-9a-f]{64}$", pdf.Headers.GetValues("X-PMGM-Closure-Digest").Single());
+        var csvAll = await (await client.GetAsync(root + "/padron-oficial?listado=asambleistas&formato=csv", ct)).Content.ReadAsStringAsync(ct);
+        Assert.Contains("Álvarez, Nombre", csvAll);
+        Assert.Contains(".***-", csvAll);
+        Assert.Equal(4, csvAll.Trim().Split("\r\n").Length); // encabezado + 3 asambleístas
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(root + "/padron-oficial?listado=otro", ct)).StatusCode);
+        client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranTesoreria);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(root + "/padron-oficial?listado=sufragantes&formato=csv", ct)).StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
         await using var scope2 = factory.Services.CreateAsyncScope();
         var check = scope2.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
         await Assert.ThrowsAsync<PostgresException>(() => check.Database.ExecuteSqlInterpolatedAsync(
