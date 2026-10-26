@@ -328,6 +328,13 @@ public sealed class AssemblyRosterListingHttpTests
         Assert.Contains("Representante", csvAll);
         var csvVoters = await (await client.GetAsync(root + "/padron-oficial?listado=sufragantes&formato=csv", ct)).Content.ReadAsStringAsync(ct);
         Assert.Equal(4, csvVoters.Trim().Split("\r\n").Length); // el padrón de sufragio coincide con los 3 sufragantes del cierre
+        var csvControl = await client.GetAsync(root + "/padron-oficial?listado=inhabilitados&formato=csv", ct);
+        Assert.Equal(HttpStatusCode.OK, csvControl.StatusCode);
+        Assert.Equal("false", csvControl.Headers.GetValues("X-PMGM-Official-Roster").Single());
+        var controlText = await csvControl.Content.ReadAsStringAsync(ct);
+        Assert.Contains("Motivo", controlText);
+        Assert.Single(controlText.Trim().Split("\r\n")); // los 3 asambleístas pueden votar: solo encabezado
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(root + "/padron-oficial?listado=inhabilitados&formato=pdf", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(root + "/padron-oficial?listado=otro", ct)).StatusCode);
         client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranTesoreria);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(root + "/padron-oficial?listado=sufragantes&formato=csv", ct)).StatusCode);

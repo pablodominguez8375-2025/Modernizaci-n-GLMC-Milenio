@@ -83,7 +83,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   const stepForm = (e: FormEvent<HTMLFormElement>) => new FormData(e.currentTarget)
   const accredit = (e: FormEvent<HTMLFormElement>) => runStep(e, async () => { await api.accreditAssembly(assemblyId); return 'Asambleístas acreditados desde las fichas, con las constancias de Régimen Interior. Aún no tienen habilitación: falta evaluarlos.' })
   const evaluate = (e: FormEvent<HTMLFormElement>) => runStep(e, async () => { const r = await api.evaluateAssembly(assemblyId); return `Evaluación registrada: ${r.evaluated} asambleístas (${Object.entries(r.counts).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}).` })
-  async function downloadOfficial(list: 'asambleistas' | 'sufragantes', format: 'pdf' | 'csv') {
+  async function downloadOfficial(list: 'asambleistas' | 'sufragantes' | 'inhabilitados', format: 'pdf' | 'csv') {
     setError(null); setMessage(null)
     try {
       const { blob, fileName } = await api.downloadAssemblyOfficialRoster(assemblyId, list, format)
@@ -184,9 +184,9 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
 
     {isClosed && listing && <section className="panel report-wide assembly-official" aria-label="Padrón oficial">
       <div className="panel-heading"><div><p className="eyebrow">Padrón oficial · cerrado</p><h2>Descargar el padrón oficial</h2>
-        <p>Los dos listados oficiales de la Asamblea cerrada: quienes pueden asistir y el padrón de sufragio, en orden alfabético por apellidos, con el RUT completo (para identificar bien a quien vota) y la columna de firma en blanco. Es un documento reservado: su custodia se regula fuera del sistema. Cada descarga queda en la auditoría.</p></div></div>
+        <p>Los listados de la Asamblea cerrada: quienes pueden asistir y el padrón de sufragio, en orden alfabético por apellidos, con el RUT completo (para identificar bien a quien vota) y la columna de firma en blanco; y el control de inhabilitados, para saber quién no puede votar y por qué. Es un documento reservado: su custodia se regula fuera del sistema. Cada descarga queda en la auditoría.</p></div></div>
       <div className="assembly-official-grid">
-        {([['sufragantes', 'Sufragantes habilitados', 'Quienes pueden votar'], ['asambleistas', 'Asambleístas', 'Con derecho a asistir: Ex Venerables y Venerables en su primer período']] as const).map(([key, title, hint]) => <div key={key} className="assembly-official-item">
+        {([['sufragantes', 'Sufragantes habilitados', 'Quienes pueden votar'], ['asambleistas', 'Asambleístas', 'Con derecho a asistir: Ex Venerables y Venerables en su primer período'], ['inhabilitados', 'Inhabilitados (control)', `${listing.asambleistas.filter(r => !r.mayVote).length} persona(s) que no pueden votar, con el motivo y quién regulariza. Es un documento de control: RUT protegido y sin montos`]] as const).map(([key, title, hint]) => <div key={key} className="assembly-official-item">
           <strong>{title}</strong><small>{hint}</small>
           <div className="assembly-official-actions"><button type="button" className="action-trigger primary" onClick={() => void downloadOfficial(key, 'pdf')}>Descargar PDF</button>
             <button type="button" className="action-trigger secondary" onClick={() => void downloadOfficial(key, 'csv')}>Descargar planilla (CSV)</button></div>

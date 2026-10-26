@@ -48,4 +48,19 @@ public sealed class AssemblyOfficialRosterPdfTests
         var pdf = AssemblyOfficialRosterPdf.Render("Listado de asambleístas — con derecho a asistir — oficial", ["Info"], cols, widths, rows, "Pie");
         Assert.StartsWith("%PDF-1.4", Encoding.Latin1.GetString(pdf));
     }
+
+    [Theory]
+    [InlineData("MOROSIDAD_GRAN_TESORERIA", true, "Asiste, sin voto", "saldo pendiente")]
+    [InlineData("RESTRICCION_ASISTENCIA", false, "No puede asistir", "restricción de asistencia")]
+    [InlineData("DERECHOS_O_CALIDAD_INVALIDOS", false, "No puede asistir", "miembro activo")]
+    public void Control_de_inhabilitados_explica_la_situacion_y_el_motivo_sin_montos(string code, bool mayAttend, string situation, string reasonPart)
+    {
+        var row = new AssemblyListingRow(1, Guid.NewGuid(), Guid.NewGuid(), "Álvarez, Luis", "11.222.***-3", "Taller 1",
+            "representative", "x", mayAttend, false, code == "MOROSIDAD_GRAN_TESORERIA", false, code, "");
+        var (s, reason, who) = AssemblyOfficialRosterEndpoints.Explain(row);
+        Assert.Equal(situation, s);
+        Assert.Contains(reasonPart, reason);
+        Assert.False(string.IsNullOrWhiteSpace(who));
+        Assert.DoesNotContain("$", reason);
+    }
 }
