@@ -131,6 +131,11 @@ if (builder.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
     await using var scope = app.Services.CreateAsyncScope();
     var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
     await db.Database.MigrateAsync();
+    // #752: Las votaciones anónimas y ProcedureNumber pertenecen a este
+    // DbContext; su migración depende de core.lodge_meetings, creada arriba.
+    // Mantener en el migrador de uso único (DDL), nunca en la API DML runtime.
+    var lodgeDb = scope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
+    await lodgeDb.Database.MigrateAsync();
     var bootstrapDb = scope.ServiceProvider.GetRequiredService<BootstrapDbContext>();
     await bootstrapDb.Database.MigrateAsync();
     var documentDb = scope.ServiceProvider.GetRequiredService<DocumentManagementDbContext>();
