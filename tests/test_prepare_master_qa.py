@@ -28,6 +28,7 @@ class FakeKeycloak:
         self.issuer = ISSUER
         self.password = None
         self.truncate = False
+        self.strip_scope_when_enabled = False
 
     def get(self, path):
         self.operations.append(("GET", path))
@@ -92,6 +93,8 @@ class FakeKeycloak:
             return
         if path == PREFIX + "/users/" + SUBJECT:
             self.accounts[-1]["enabled"] = body["enabled"]
+            if self.strip_scope_when_enabled and body["enabled"]:
+                self.accounts[-1]["attributes"].pop("pmgm_scope", None)
             return
         raise AssertionError("unexpected PUT")
 
@@ -119,6 +122,26 @@ class MasterQaBootstrapTests(unittest.TestCase):
                          mod.activate(api, REALM, ISSUER, SUBJECT, config))
         self.assertEqual("REALM_SNAPSHOT_OK_UAT_REQUIRED",
                          mod.status(api, REALM, ISSUER, SUBJECT, config))
+
+    def test_activation_never_reports_success_when_keycloak_drops_scope(self):
+        api = FakeKeycloak()
+        with TemporaryDirectory() as folder:
+            with patch.object(mod, "save_subject"):
+                mod.prepare(api, REALM, ISSUER, "SyntheticPass12345!",
+                            Path(folder) / "subject")
+        api.strip_scope_when_enabled = True
+        config = ("InitialLoad__MasterSubject=" + SUBJECT + "\n" +
+                  "InitialLoad__MasterIssuer=" + ISSUER + "\n" +
+                  "Authentication__Authority=" + ISSUER + "\n")
+        with self.assertRaisesRegex(mod.Blocked, "MASTER_SCOPE_NOT_PROVISIONED"):
+            mod.activate(api, REALM, ISSUER, SUBJECT, config)
+        # This deliberately leaves an ambiguous external operation for
+        # manual host recovery, never pretending rollback or success.
+        self.assertTrue(api.accounts[-1]["enabled"])
+        with self.assertRaisesRegex(mod.Blocked, "MASTER_SCOPE_NOT_PROVISIONED"):
+            mod.status(api, REALM, ISSUER, SUBJECT, config)
+        self.assertEqual(1, sum(op == "PUT" and path == PREFIX + "/users/" + SUBJECT
+                                for op, path in api.operations))
 
     def test_master_scope_is_part_of_new_account_registration(self):
         api = FakeKeycloak()
