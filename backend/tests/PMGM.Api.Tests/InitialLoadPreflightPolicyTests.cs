@@ -70,6 +70,55 @@ public sealed class InitialLoadPreflightPolicyTests
         Assert.DoesNotContain("qa@example.invalid", System.Text.Json.JsonSerializer.Serialize(result));
     }
 
+    [Theory]
+    [InlineData("not_a_status")]
+    [InlineData("active_pending")]
+    [InlineData("ACTIVE")]
+    public void Unknown_institutional_status_is_redacted_and_never_applyable(string input)
+    {
+        var sheets = Example();
+        Set(sheets, "Hermanos.csv", "institutionalStatus", input);
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.False(result.Valid);
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+        Assert.Contains(result.Findings, x => x.Sheet == "Hermanos.csv" &&
+            x.Row == 2 && x.Field == "institutionalStatus" &&
+            x.Code == "INVALID_STATUS");
+        Assert.DoesNotContain(input, System.Text.Json.JsonSerializer.Serialize(result));
+    }
+
+    [Theory]
+    [InlineData("active")]
+    [InlineData("inactive")]
+    [InlineData("past_active")]
+    [InlineData("voluntary_withdrawal")]
+    [InlineData("forced_withdrawal")]
+    [InlineData("reinstated")]
+    [InlineData("deceased")]
+    [InlineData("workshop_transfer")]
+    public void Canonical_institutional_statuses_pass_static_preflight_only(string input)
+    {
+        var sheets = Example();
+        Set(sheets, "Hermanos.csv", "institutionalStatus", input);
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.True(result.Valid, string.Join(",", result.Findings.Select(x => x.Code)));
+        Assert.False(result.CanApply);
+        Assert.Equal(0, result.WritesPerformed);
+    }
+
+    [Fact]
+    public void Missing_status_has_only_required_finding()
+    {
+        var sheets = Example();
+        Set(sheets, "Hermanos.csv", "institutionalStatus", "");
+        var result = InitialLoadPreflightPolicy.Inspect(sheets);
+        Assert.False(result.Valid);
+        Assert.Contains(result.Findings, x => x.Code == "REQUIRED" &&
+            x.Field == "institutionalStatus");
+        Assert.DoesNotContain(result.Findings, x => x.Code == "INVALID_STATUS");
+    }
+
     [Fact]
     public void Rejects_missing_reference_cross_workshop_and_unknown_office()
     {
