@@ -11,6 +11,7 @@ export interface HospitalariaContributionObligation { id:string;organizationId:s
 
 import { initialTariff, tariffAt, tariffRate, demoWorkshopLocation, zoneFromLocation, nextTariffPeriod, type TariffVersion, type RegisterTariff, type OfficialSchedule } from './treasuryTariffs'
 import { DynamicAccessClient, treasuryAccess, tariffAccess, hospitalariaAccess, grandHospitalariaAccess, grandTreasuryAccess, type GrandTreasuryAccess, type GrandHospitalariaAccess, type HospitalariaAccess, type TariffAccess, type TreasuryAccess, type AccessAction } from './dynamicAccess'
+import { SUPPORT_VIEW_PROFILES,type SupportViewProfile } from './supportViewProfiles'
 import { getDemoProfile, type DemoProfileKey } from '../demoProfiles'
 import { chileCivilDate } from '../admissionDates'
 import { correctWithdrawalDateDemo, type WithdrawalDateCorrectionRequest, type WithdrawalDateCorrectionResponse, reviewWithdrawalSignatureDemo, withdrawalReviewFixture, type WithdrawalSignatureReviewRequest, type WithdrawalSignatureDecision } from './admissionWithdrawalEvidence'
@@ -507,6 +508,7 @@ export class PmgmApiClient {
   async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
   async resetUserAccountAccess(subject:string,request:AccessResetRequest):Promise<AccessResetResult>{if(this.useMocks)return this.userAccountsDemo.resetAccess(subject,request);return this.request(`/api/system/user-accounts/${encodeURIComponent(subject)}/password-recovery`,{method:'POST',body:JSON.stringify(request)})}
   async startSupportView(request:SupportViewStartRequest):Promise<SupportViewStart>{if(this.useMocks)return this.userAccountsDemo.startViewAs(request);return this.request('/api/system/support/view-as',{method:'POST',body:JSON.stringify(request)})}
+  async getSupportViewProfiles():Promise<SupportViewProfile[]>{if(this.useMocks)return SUPPORT_VIEW_PROFILES;return (await this.request<{items:SupportViewProfile[]}>('/api/system/support/view-as/profiles')).items}
   async endSupportView(sessionId:string):Promise<void>{if(this.useMocks)return;await this.request(`/api/system/support/view-as/${encodeURIComponent(sessionId)}/end`,{method:'POST'})}
   async getSupportCorrectionStatus():Promise<SupportCorrectionStatus>{if(this.useMocks)return this.userAccountsDemo.correctionStatus();return this.request('/api/system/support/corrections')}
   async grantSupportCorrection(request:SupportCorrectionGrantRequest):Promise<SupportCorrectionGrant>{if(this.useMocks)return this.userAccountsDemo.grantCorrection(request);return this.request('/api/system/support/corrections/grants',{method:'POST',body:JSON.stringify(request)})}

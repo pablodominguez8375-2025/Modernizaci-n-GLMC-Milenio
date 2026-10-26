@@ -92,12 +92,22 @@ public sealed class SupportViewAsMiddleware(RequestDelegate next)
         var sid = session.Id.ToString("D");
         if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method))
         { await Deny(StatusCodes.Status403Forbidden, "SUPPORT_VIEW_READ_ONLY", sid); return; }
-        var allowed = SupportViewAsAllowlist.Allows(route);
+        var profile = SupportViewProfiles.FromSubject(session.TargetSubject);
+        if (SupportViewProfiles.IsProfileSubject(session.TargetSubject) && profile is null)
+        { await Deny(StatusCodes.Status403Forbidden, "SUPPORT_VIEW_SESSION_INVALID", sid); return; }
+        var allowed = profile is null ? SupportViewAsAllowlist.Allows(route) : SupportViewProfiles.AllowsRoute(profile, route);
         if (!allowed) { await Deny(StatusCodes.Status403Forbidden, "SUPPORT_VIEW_RESOURCE_DENIED", sid); return; }
 
         AccountClaims? target;
         try
         {
+            if (profile is not null)
+            {
+                var supportOrg = await db.Organizations.AsNoTracking().Where(o => o.Type.ToLower() == PMGM.Api.Modules.Core.SupportWorkshopPolicy.OrganizationType)
+                    .Select(o => (Guid?)o.Id).FirstOrDefaultAsync(ctx.RequestAborted);
+                target = SupportViewProfiles.Claims(profile, supportOrg);
+            }
+            else
             target = await cache.GetOrCreateAsync("support-view-target:" + sid, async entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60);
@@ -138,12 +148,13 @@ public sealed class SupportViewAsMiddleware(RequestDelegate next)
 
 public static class SupportViewAsEndpoints
 {
-    public sealed record StartRequest(string? TargetSubject, string? Reason);
+    public sealed record StartRequest(string? TargetSubject, string? Reason, string? ProfileKey = null);
 
     public static IEndpointRouteBuilder MapSupportViewAsEndpoints(this IEndpointRouteBuilder endpoints)
     {
         var group = endpoints.MapGroup(SupportViewAsClaims.RoutePrefix).RequireAuthorization().WithTags("Sistema — Ver como");
         group.MapGet("", GetCurrent);
+        group.MapGet("/profiles", GetProfiles);
         group.MapPost("", StartViewAs);
         group.MapPost("/{sessionId:guid}/end", EndViewAs);
         return endpoints;
@@ -165,11 +176,36 @@ public static class SupportViewAsEndpoints
             : Results.Ok(new { active = true, sessionId = s.Id, targetSubject = s.TargetSubject, startedAtUtc = s.StartedAtUtc, expiresAtUtc = s.ExpiresAtUtc, readOnly = true });
     }
 
+    private static IResult GetProfiles(HttpContext ctx, IInstitutionalAccessService access)
+    {
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        if (!Authorized(ctx, access)) return Results.Forbid();
+        return Results.Ok(new { items = SupportViewProfiles.All.Select(p => new { key = p.Key, label = p.Label, group = p.Group }) });
+    }
+
+    private static async Task<IResult> StartProfileView(StartRequest request, HttpContext ctx, PmgmDbContext db, IAuditService audit, CancellationToken ct)
+    {
+        var profile = SupportViewProfiles.Find(request.ProfileKey?.Trim());
+        if (profile is null || !string.IsNullOrWhiteSpace(request.TargetSubject))
+            return Results.BadRequest(new { code = "SUPPORT_VIEW_PROFILE_UNKNOWN", message = "Seleccione un perfil de la lista." });
+        var op = Operator(ctx); var now = DateTimeOffset.UtcNow; var subject = SupportViewProfiles.SubjectPrefix + profile.Key;
+        var open = await db.SupportViewSessions.Where(x => x.OperatorSubject == op && x.EndedAtUtc == null).ToListAsync(ct);
+        foreach (var previous in open) previous.EndedAtUtc = now;
+        var session = new SupportViewSession { OperatorSubject = op, TargetSubject = subject, Reason = "Revisión de vistas por perfil", StartedAtUtc = now, ExpiresAtUtc = now + SupportViewAsPolicy.MaxLifetime };
+        db.SupportViewSessions.Add(session);
+        audit.Add(ctx, "support.view_as.started", "SupportViewSession", session.Id.ToString("D"), null, AuditResults.Success,
+            new { profile = profile.Key, expiresAtUtc = session.ExpiresAtUtc });
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(new { sessionId = session.Id, targetSubject = subject, targetName = SupportViewProfiles.DisplayName(profile),
+            startedAtUtc = session.StartedAtUtc, expiresAtUtc = session.ExpiresAtUtc, readOnly = true });
+    }
+
     private static async Task<IResult> StartViewAs(StartRequest request, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
         IAccountIdentityProvider identity, IAuditService audit, CancellationToken ct)
     {
         ctx.Response.Headers.CacheControl = "private, no-store";
         if (!Authorized(ctx, access)) return Results.Forbid();
+        if (request.ProfileKey is not null) return await StartProfileView(request, ctx, db, audit, ct);
         var op = Operator(ctx); var target = request.TargetSubject?.Trim() ?? ""; var reason = request.Reason?.Trim() ?? "";
         async Task<IResult> Reject(int status, string code, string message)
         {

@@ -121,6 +121,56 @@ public sealed class SupportViewAsPostgreSqlTests
         Assert.All(audits, a => Assert.DoesNotContain("example.invalid", a.MetadataJson ?? ""));
     }
 
+    [Fact]
+    public async Task Profile_view_is_read_only_synthetic_and_never_exposes_the_master_or_a_real_person()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = await CreateAsync(cs);
+        using var client = factory.CreateClient();
+
+        client.DefaultRequestHeaders.Add("X-View-Role", InstitutionalRoles.GranLogiaAdmin);
+        Assert.Equal(HttpStatusCode.Forbidden, (await StartProfile(client, "tesorero", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/system/support/view-as/profiles", ct)).StatusCode);
+
+        client.DefaultRequestHeaders.Remove("X-View-Role");
+        client.DefaultRequestHeaders.Add("X-View-Role", InstitutionalRoles.PlatformSuperAdmin);
+        var list = await client.GetFromJsonAsync<JsonElement>("/api/system/support/view-as/profiles", ct);
+        Assert.Contains(list.GetProperty("items").EnumerateArray(), x => x.GetProperty("key").GetString() == "tesorero");
+        Assert.Equal(HttpStatusCode.BadRequest, (await StartProfile(client, "platform_superadmin", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync("/api/system/support/view-as", new { profileKey = "tesorero", targetSubject = Hermano }, ct)).StatusCode);
+
+        var ok = await StartProfile(client, "tesorero", ct);
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        var json = await ok.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.True(json.GetProperty("readOnly").GetBoolean());
+        Assert.Equal("Tesorero · Taller 00", json.GetProperty("targetName").GetString());
+        var sid = json.GetProperty("sessionId").GetString()!;
+
+        var me = await Get(client, "/api/session/me", sid, ct);
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        var text = await me.Content.ReadAsStringAsync(ct);
+        Assert.DoesNotContain("platform_superadmin", text);
+        Assert.DoesNotContain("Hermano Ficticio", text);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(client, HttpMethod.Post, "/api/session/me", sid, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Send(client, HttpMethod.Delete, "/api/members/" + Guid.NewGuid(), sid, ct)).StatusCode);
+
+        // Gran Logia: alcance de toda la Orden, solo la lista cerrada de rutas.
+        var gl = await (await StartProfile(client, "gran-secretario", ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        var gsid = gl.GetProperty("sessionId").GetString()!;
+        Assert.Equal("Gran Secretario", gl.GetProperty("targetName").GetString());
+        Assert.Equal(HttpStatusCode.OK, (await Get(client, "/api/session/me", gsid, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await Get(client, "/api/system/user-accounts", gsid, ct)).StatusCode);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var audits = await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().AuditEvents.Where(a => a.Action.StartsWith("support.view_as")).ToListAsync(ct);
+        Assert.Contains(audits, a => a.Action == "support.view_as.started" && (a.MetadataJson ?? "").Contains("tesorero"));
+        Assert.All(audits, a => Assert.Equal("master-op", a.ActorSubject));
+    }
+
+    private static Task<HttpResponseMessage> StartProfile(HttpClient c, string key, CancellationToken ct)
+        => c.PostAsJsonAsync("/api/system/support/view-as", new { profileKey = key }, ct);
     private static Task<HttpResponseMessage> Start(HttpClient c, string target, string reason, CancellationToken ct)
         => c.PostAsJsonAsync("/api/system/support/view-as", new { targetSubject = target, reason }, ct);
     private static Task<HttpResponseMessage> Get(HttpClient c, string url, string session, CancellationToken ct) => Send(c, HttpMethod.Get, url, session, ct);

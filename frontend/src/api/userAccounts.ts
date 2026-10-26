@@ -1,3 +1,4 @@
+import { SUPPORT_VIEW_PROFILES,profileDisplayName } from './supportViewProfiles'
 export interface AccountCandidate { memberId:string;organizationId:string;name:string;email:string;workshop:string }
 export interface AccountCandidates { items:AccountCandidate[];canCreateUser?:boolean;canCreateSuperuser:boolean;deliveryConfigured:boolean;identityConfigured?:boolean;mailConfigured?:boolean }
 export interface AccountUser { subject:string;name:string;email:string;enabled:boolean;kind:'member'|'superuser'|'platform' }
@@ -16,7 +17,7 @@ export interface SupportResendRequest { targetSubject:string;messageId:string;re
 export const SUPPORT_CORRECTION_FIELDS:SupportCorrectionField[]=[{field:'email',label:'Correo electrónico'},{field:'phone',label:'Teléfono'},{field:'address',label:'Domicilio'}]
 export const SUPPORT_CORRECTION_DURATIONS=[{minutes:30,label:'30 minutos'},{minutes:60,label:'1 hora'},{minutes:120,label:'2 horas'},{minutes:240,label:'4 horas'}]
 
-export interface SupportViewStartRequest { targetSubject:string;reason:string }
+export interface SupportViewStartRequest { targetSubject?:string;reason?:string;profileKey?:string }
 export type AccessResetModality='email'|'temporary'
 export interface AccessResetRequest { modality:AccessResetModality;reason?:string }
 export interface AccessResetResult { subject:string;name:string;modality:AccessResetModality;emailSent?:boolean;email?:string;expiresInMinutes?:number;temporaryPassword?:string;requiresPasswordChange?:boolean;shownOnce?:boolean }
@@ -67,7 +68,8 @@ export class UserAccountsDemo {
  myCorrections():MySupportCorrection[]{const me=this.currentSubject();return this.corrections.filter(c=>c.targetSubject===me).map(({targetSubject:_t,...c})=>c)}
  startViewAs(request:SupportViewStartRequest){
   this.authorize();if(!this.platformAllowed())throw new Error('Sólo el Máster de plataforma puede usar «Ver como».')
-  if((request.reason?.trim().length??0)<10||request.reason.trim().length>500)throw new Error('Indique el motivo (10 a 500 caracteres).')
+  if(request.profileKey){const p=SUPPORT_VIEW_PROFILES.find(x=>x.key===request.profileKey);if(!p)throw new Error('Seleccione un perfil de la lista.');const t=Date.now();return{sessionId:crypto.randomUUID(),targetSubject:'profile:'+p.key,targetName:profileDisplayName(p),startedAtUtc:new Date(t).toISOString(),expiresAtUtc:new Date(t+30*60000).toISOString(),readOnly:true as const}}
+  if((request.reason?.trim().length??0)<10||request.reason!.trim().length>500)throw new Error('Indique el motivo (10 a 500 caracteres).')
   const user=this.users.find(u=>u.subject===request.targetSubject&&u.enabled);if(!user)throw new Error('La cuenta no existe o no está habilitada.')
   if(user.kind!=='member')throw new Error('No se puede ver como una cuenta con cargos de administración.')
   const now=Date.now();return{sessionId:crypto.randomUUID(),targetSubject:user.subject,targetName:user.name,startedAtUtc:new Date(now).toISOString(),expiresAtUtc:new Date(now+30*60000).toISOString(),readOnly:true as const}
