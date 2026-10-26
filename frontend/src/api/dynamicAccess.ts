@@ -13,13 +13,21 @@ export const isLodgeScoped=(scope:string)=>scope!=='order'
 export const isDerivedScope=(scope:string)=>scope==='own-lodge'||scope==='all-lodges'
 export interface DynamicProfile { id:string; code:string; name:string; scope:AccessScope; isSystem:boolean; isActive:boolean; menuCodes:string[]; grants:DynamicGrant[]; baseRoles?:string[] }
 /* Cargos que un perfil del Máster puede conferir (lista cerrada, sin Tesorería, Hospitalaria, Privacidad, administración ni Gran Maestría). */
-export const CONFERRABLE_ROLES:{value:string;label:string;level:'lodge'|'order';hint?:string}[]=[
+export const CONFERRABLE_ROLES:{value:string;label:string;level:'lodge'|'order';hint?:string;sensitive?:boolean}[]=[
  {value:'lodge_secretariat',label:'Secretaría del Taller',level:'lodge'},{value:'lodge_orator',label:'Orador del Taller',level:'lodge'},{value:'lodge_first_warden',label:'Primer Vigilante del Taller',level:'lodge'},{value:'lodge_second_warden',label:'Segundo Vigilante del Taller',level:'lodge'},{value:'lodge_past_master',label:'Inmediato Ex-Venerable Maestro',level:'lodge'},{value:'lodge_venerable',label:'Venerable Maestro del Taller',level:'lodge',hint:'Incluye aprobar gastos y firmar documentos del Taller.'},
- {value:'librarian',label:'Bibliotecario',level:'order'},{value:'communications',label:'Comunicaciones',level:'order'},{value:'grand_archivist',label:'Gran Archivero',level:'order'},{value:'document_manager',label:'Gestión Documental',level:'order'},{value:'instruction_department_head',label:'Jefatura de Docencia',level:'order'},{value:'grand_first_warden',label:'Gran Primer Vigilante',level:'order'},{value:'grand_second_warden',label:'Gran Segundo Vigilante',level:'order'},{value:'immediate_past_grand_master',label:'Inmediato Ex Gran Maestro',level:'order'},{value:'grand_secretariat',label:'Gran Secretaría',level:'order',hint:'Aprueba solicitudes de templo y gestiona la Secretaría de la Gran Logia.'},{value:'internal_affairs',label:'Régimen Interior',level:'order',hint:'Incluye levantar bloqueos del Padrón de la Gran Asamblea, con motivo y auditoría.'}]
+ {value:'librarian',label:'Bibliotecario',level:'order'},{value:'communications',label:'Comunicaciones',level:'order'},{value:'grand_archivist',label:'Gran Archivero',level:'order'},{value:'document_manager',label:'Gestión Documental',level:'order'},{value:'instruction_department_head',label:'Jefatura de Docencia',level:'order'},{value:'grand_first_warden',label:'Gran Primer Vigilante',level:'order'},{value:'grand_second_warden',label:'Gran Segundo Vigilante',level:'order'},{value:'immediate_past_grand_master',label:'Inmediato Ex Gran Maestro',level:'order'},{value:'grand_secretariat',label:'Gran Secretaría',level:'order',hint:'Aprueba solicitudes de templo y gestiona la Secretaría de la Gran Logia.'},{value:'internal_affairs',label:'Régimen Interior',level:'order',hint:'Incluye levantar bloqueos del Padrón de la Gran Asamblea, con motivo y auditoría.'},
+ {value:'lodge_treasury',label:'Tesorería del Taller',level:'lodge',sensitive:true,hint:'Maneja cobros, pagos y estados de cuenta del Taller.'},{value:'lodge_hospitalaria',label:'Hospitalaria del Taller',level:'lodge',sensitive:true,hint:'Maneja la ayuda solidaria y datos de salud solidaria del Taller.'},
+ {value:'grand_treasury',label:'Gran Tesorería',level:'order',sensitive:true,hint:'Maneja cuotas, decretos de cobro y saldos de todos los Talleres.'},{value:'grand_hospitalaria',label:'Gran Hospitalaria',level:'order',sensitive:true,hint:'Maneja aportes y reposiciones por fallecimiento de todos los Talleres.'},{value:'privacy_officer',label:'Privacidad (Ley 21.719)',level:'order',sensitive:true,hint:'Atiende solicitudes de datos personales de los Hermanos.'}]
+export const isSensitiveRole=(role:string)=>CONFERRABLE_ROLES.some(r=>r.value===role&&r.sensitive)
+export const hasSensitiveRole=(roles?:string[])=>(roles??[]).some(isSensitiveRole)
+export const newSensitiveRoles=(previous:string[]|undefined,next:string[]|undefined)=>(next??[]).filter(r=>isSensitiveRole(r)&&!(previous??[]).includes(r))
+export const SENSITIVE_REASON_MESSAGE='Para conceder Tesorería, Hospitalaria o Privacidad indique el motivo (10 a 500 caracteres).'
+export const SENSITIVE_TERM_MESSAGE='Un perfil con Tesorería, Hospitalaria o Privacidad se asigna con fecha de término, de hasta 12 meses.'
+export const addOneYear=(date:string)=>{const d=new Date(date+'T00:00:00Z');d.setUTCFullYear(d.getUTCFullYear()+1);return d.toISOString().slice(0,10)}
 export const rolesForScope=(scope:string)=>CONFERRABLE_ROLES.filter(r=>r.level===(scope==='order'?'order':'lodge'))
 export interface DynamicAssignment { id:string; subject:string; profileCode:string; organizationId:string|null; effectiveFrom:string; effectiveTo:string|null; isActive:boolean }
 export interface DynamicCatalog { version:number; actions:AccessAction[]; menus:DynamicMenu[]; profiles:DynamicProfile[]; assignments:DynamicAssignment[] }
-export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'|'baseRoles'>
+export type ProfileDraft = Pick<DynamicProfile,'code'|'name'|'scope'|'menuCodes'|'baseRoles'>&{sensitiveReason?:string}
 export const actionLabels:Record<AccessAction,string>={view:'Ver',create:'Crear / hacer',write:'Escribir / registrar',edit:'Editar',delete:'Borrar lógico',search:'Buscar',print:'Imprimir'}
 const actions:AccessAction[]=['view','create','write','edit','delete','search','print']
 export function initialDynamicCatalog():DynamicCatalog {
@@ -49,11 +57,12 @@ export class DynamicAccessClient {
  }
  async create(d:ProfileDraft,version:number){return this.mutate('/api/system/access/profiles','POST',version,d,c=>{
   this.validate(d,c);if(c.profiles.some(p=>p.code===d.code))throw new Error('El código del perfil ya existe.')
-  c.profiles.push({...d,id:crypto.randomUUID(),isSystem:false,isActive:true,grants:[]})
+  this.requireReason(undefined,d)
+  const {sensitiveReason:_r,...rest}=d;c.profiles.push({...rest,id:crypto.randomUUID(),isSystem:false,isActive:true,grants:[]})
  })}
  async update(code:string,d:Omit<ProfileDraft,'code'>,version:number){return this.mutate(`/api/system/access/profiles/${encodeURIComponent(code)}`,'PUT',version,d,c=>{
   const p=this.profile(c,code);if(!p.isActive)throw new Error('El perfil está inactivo.');this.validate({...d,code},c);if(p.scope!==d.scope&&c.assignments.some(a=>a.isActive&&a.profileCode===code))throw new Error('Revoque las asignaciones antes de cambiar el alcance.')
-  Object.assign(p,d);p.grants=p.grants.filter(g=>c.menus.some(m=>d.menuCodes.includes(m.code)&&m.views.some(v=>v.code===g.viewCode)))
+  this.requireReason(p.baseRoles,d);const {sensitiveReason:_r,...rest}=d;Object.assign(p,rest);p.grants=p.grants.filter(g=>c.menus.some(m=>d.menuCodes.includes(m.code)&&m.views.some(v=>v.code===g.viewCode)))
  })}
  async grants(code:string,grants:DynamicGrant[],version:number){return this.mutate(`/api/system/access/profiles/${encodeURIComponent(code)}/grants`,'PUT',version,{grants},c=>{
   const p=this.profile(c,code);if(!p.isActive)throw new Error('El perfil está inactivo.')
@@ -63,10 +72,12 @@ export class DynamicAccessClient {
  async assign(d:Omit<DynamicAssignment,'id'|'isActive'>,version:number){return this.mutate('/api/system/access/assignments','POST',version,d,c=>{
   const p=this.profile(c,d.profileCode);if(!p.isActive||!d.subject.trim()||d.subject!==d.subject.trim()||d.subject.length>320||d.effectiveTo&&d.effectiveTo<d.effectiveFrom||(p.scope==='lodge'?!d.organizationId||!this.organizationExists(d.organizationId):d.organizationId!==null))throw new Error('Sujeto, Taller o vigencia inválidos.')
   if(c.assignments.some(a=>a.isActive&&a.subject===d.subject&&a.profileCode===d.profileCode&&a.organizationId===d.organizationId&&a.effectiveFrom<=(d.effectiveTo??'9999-12-31')&&(a.effectiveTo??'9999-12-31')>=d.effectiveFrom))throw new Error('La asignación se superpone con una ya vigente o programada.')
+  if(hasSensitiveRole(p.baseRoles)&&(!d.effectiveTo||d.effectiveTo>addOneYear(d.effectiveFrom)))throw new Error(SENSITIVE_TERM_MESSAGE)
   c.assignments.push({...d,id:crypto.randomUUID(),isActive:true})
  })}
  async revoke(id:string,version:number){return this.mutate(`/api/system/access/assignments/${encodeURIComponent(id)}?expectedVersion=${version}`,'DELETE',version,undefined,c=>{const a=c.assignments.find(a=>a.id===id);if(!a)throw new Error('Asignación inexistente.');a.isActive=false})}
  async print(){if(!this.useMocks)await this.transport('/api/system/access/print',{method:'POST'});return {allowed:true}}
+ private requireReason(previous:string[]|undefined,d:{baseRoles?:string[];sensitiveReason?:string}){if(newSensitiveRoles(previous,d.baseRoles).length&&(d.sensitiveReason?.trim().length??0)<10)throw new Error(SENSITIVE_REASON_MESSAGE)}
  private profile(c:DynamicCatalog,code:string){const p=c.profiles.find(p=>p.code===code);if(!p||p.isSystem)throw new Error('El perfil no existe o es protegido.');return p}
  private validate(d:ProfileDraft,c:DynamicCatalog){if(!/^[a-z][a-z0-9-]{0,79}$/.test(d.code)||!d.name.trim()||d.name.length>240||!ACCESS_SCOPES.some(x=>x.value===d.scope)||(isLodgeScoped(d.scope)&&d.menuCodes.includes('system'))||(d.baseRoles??[]).some(r=>!rolesForScope(d.scope).some(x=>x.value===r))||d.menuCodes.some(code=>!c.menus.some(m=>m.isActive&&m.code===code)))throw new Error('Código, nombre, alcance o menús inválidos.')}
 }

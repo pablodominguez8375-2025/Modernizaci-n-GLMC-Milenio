@@ -7,8 +7,8 @@ namespace PMGM.Api.Modules.Authorization;
 /// <summary>
 /// Perfiles institucionales sin desarrollo: un perfil dinámico puede CONFERIR cargos base (de una lista cerrada
 /// y no sensible) dentro de su alcance. Los permisos concretos (vistas y acciones) siguen siendo los del perfil.
-/// Solo el Máster crea o edita perfiles. Etapa 2 (PO 25-10): se suman Venerable Maestro, Gran Secretaría y Régimen Interior. Tesorería, Hospitalaria,
-/// Privacidad, administración y Gran Maestría quedan para una entrega posterior con aprobación del PO.
+/// Solo el Máster crea o edita perfiles. Etapa 2 (PO 25-10): Venerable Maestro, Gran Secretaría y Régimen Interior; y, con resguardos (motivo auditado al guardar el perfil
+/// y asignación con término de hasta 12 meses), Tesorería, Hospitalaria y Privacidad. Administración y Gran Maestría siguen fuera.
 /// </summary>
 public static class DynamicRoleConferral
 {
@@ -16,15 +16,30 @@ public static class DynamicRoleConferral
     [
         InstitutionalRoles.TallerSecretaria, InstitutionalRoles.TallerOrador, InstitutionalRoles.TallerPrimerVigilante,
         InstitutionalRoles.TallerSegundoVigilante, InstitutionalRoles.TallerInmediatoExVenerable,
-        InstitutionalRoles.TallerVenerable
+        InstitutionalRoles.TallerVenerable,
+        InstitutionalRoles.TallerTesoreria, InstitutionalRoles.TallerHospitalaria
     ];
     public static readonly string[] OrderRoles =
     [
         InstitutionalRoles.Librarian, InstitutionalRoles.Communications, InstitutionalRoles.GrandArchivist,
         InstitutionalRoles.DocumentManager, InstitutionalRoles.JefaturaDepartamentoDocencia,
         InstitutionalRoles.GranPrimerVigilante, InstitutionalRoles.GranSegundoVigilante, InstitutionalRoles.InmediatoExGranMaestro,
-        InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior
+        InstitutionalRoles.GranSecretaria, InstitutionalRoles.RegimenInterior,
+        InstitutionalRoles.GranTesoreria, InstitutionalRoles.GranHospitalaria, InstitutionalRoles.PrivacyOfficer
     ];
+    /// <summary>Áreas sensibles (dinero, salud solidaria y datos personales): exigen motivo al guardar el perfil y vigencia con término al asignarlo.</summary>
+    public static readonly string[] SensitiveRoles =
+    [
+        InstitutionalRoles.TallerTesoreria, InstitutionalRoles.TallerHospitalaria,
+        InstitutionalRoles.GranTesoreria, InstitutionalRoles.GranHospitalaria, InstitutionalRoles.PrivacyOfficer
+    ];
+    public static bool IsSensitive(string role) => SensitiveRoles.Contains(role);
+    public static bool HasSensitive(IEnumerable<string>? roles) => (roles ?? []).Any(IsSensitive);
+    public static string[] NewSensitive(IEnumerable<string>? previous, IEnumerable<string> next)
+        => next.Where(r => IsSensitive(r) && !(previous ?? []).Contains(r)).ToArray();
+    public static bool ValidReason(string? reason) => reason is not null && reason.Trim().Length is >= 10 and <= 500;
+    public const string ReasonMessage = "Para conceder Tesorería, Hospitalaria o Privacidad indique el motivo (10 a 500 caracteres).";
+    public const string TermMessage = "Un perfil con Tesorería, Hospitalaria o Privacidad se asigna con fecha de término, de hasta 12 meses.";
 
     public static string? Validate(string[] roles, string scope)
     {
