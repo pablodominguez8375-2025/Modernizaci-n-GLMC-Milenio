@@ -43,19 +43,19 @@ public static class AssemblyRosterCsvPolicy
     }
 
     /// <summary>CSV de un listado de una Asamblea CERRADA (el llamador ya verificó el cierre y enmascaró el RUT).</summary>
-    public static byte[] SerializeOfficial(IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark)
+    public static byte[] SerializeOfficial(IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark, string markHeader = "Estado de sufragio")
     {
         ArgumentNullException.ThrowIfNull(rows);
         if (rows.Count > MaxRows) throw new ArgumentException("INVALID_ROSTER_CANDIDATES", nameof(rows));
-        return Serialize(rows, includeSuffrageMark);
+        return Serialize(rows, includeSuffrageMark, markHeader);
     }
 
     private static byte[] Serialize(
-        IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark)
+        IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark, string markHeader = "Estado de sufragio")
     {
         var buffer = new StringBuilder();
         var header = includeSuffrageMark
-            ? new[] { "N°", "Apellidos y nombres", "RUT", "Taller", "Firma", "Estado de sufragio" }
+            ? new[] { "N°", "Apellidos y nombres", "RUT", "Taller", "Firma", markHeader }
             : new[] { "N°", "Apellidos y nombres", "RUT", "Taller", "Firma" };
         AppendLine(buffer, header);
 
@@ -73,6 +73,7 @@ public static class AssemblyRosterCsvPolicy
                 {
                     "Habilitado" => "Habilitado",
                     "Pendiente" => "Pendiente",
+                    { Length: > 0 } other when markHeader != "Estado de sufragio" => other,
                     _ => "Sin sufragio"
                 });
             AppendLine(buffer, values);

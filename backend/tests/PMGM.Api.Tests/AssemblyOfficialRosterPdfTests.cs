@@ -36,4 +36,16 @@ public sealed class AssemblyOfficialRosterPdfTests
     {
         Assert.Throws<ArgumentException>(() => AssemblyOfficialRosterPdf.Render("T", [], Cols, [10], [], "P"));
     }
+
+    [Fact]
+    public void El_listado_de_asambleistas_lleva_la_calidad_y_deja_espacio_para_la_firma()
+    {
+        string[] cols = ["N°", "Apellidos y nombres", "RUT", "Taller", "Calidad", "Firma"];
+        double[] widths = [34, 230, 90, 180, 130, 97];
+        Assert.True(widths.Sum() <= 761.89);
+        var rows = new[] { (IReadOnlyList<string>)["1", "Álvarez Soto, Luis", "11.222.333-3", "Taller Demostrativo Nº 1", "Ex Venerable Maestro", ""],
+            ["2", "Bravo Núñez, Carla", "12.333.444-4", "Taller Demostrativo Nº 23", "Venerable Maestro (primer período)", ""] };
+        var pdf = AssemblyOfficialRosterPdf.Render("Listado de asambleístas — con derecho a asistir — oficial", ["Info"], cols, widths, rows, "Pie");
+        Assert.StartsWith("%PDF-1.4", Encoding.Latin1.GetString(pdf));
+    }
 }
