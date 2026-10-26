@@ -146,6 +146,21 @@
           }
         },
         {
+          "name": "pmgm-account-kind",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "pmgm_account_kind",
+            "claim.name": "pmgm_account_kind",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
           "name": "pmgm-scope",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-attribute-mapper",
@@ -182,7 +197,7 @@
     {
       "username": "qa.admin",
       "enabled": true,
-      "firstName": "Administración",
+      "firstName": "Administraci\u00f3n",
       "lastName": "QA Milenio",
       "email": "qa.admin@pmgm.invalid",
       "emailVerified": true,
@@ -213,7 +228,7 @@
     {
       "username": "qa.taller23",
       "enabled": true,
-      "firstName": "Secretaría",
+      "firstName": "Secretar\u00eda",
       "lastName": "Taller QA 23",
       "email": "qa.taller23@pmgm.invalid",
       "emailVerified": true,
@@ -376,7 +391,7 @@
     {
       "username": "qa.secretaria23",
       "enabled": true,
-      "firstName": "Secretaría",
+      "firstName": "Secretar\u00eda",
       "lastName": "Taller QA 23",
       "email": "qa.secretaria23@pmgm.invalid",
       "emailVerified": true,
@@ -403,7 +418,7 @@
     {
       "username": "qa.tesoreria23",
       "enabled": true,
-      "firstName": "Tesorería",
+      "firstName": "Tesorer\u00eda",
       "lastName": "Taller QA 23",
       "email": "qa.tesoreria23@pmgm.invalid",
       "emailVerified": true,
@@ -458,7 +473,7 @@
       "username": "qa.hermano1",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.hermano1@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -483,7 +498,7 @@
       "username": "qa.hermano2",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.hermano2@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -508,7 +523,7 @@
       "username": "qa.hermano3",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.hermano3@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -533,7 +548,7 @@
       "username": "qa.cargovencido23",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.cargovencido23@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -558,7 +573,7 @@
       "username": "qa.gransecretaria",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.gransecretaria@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -582,7 +597,7 @@
       "username": "qa.regimeninterior",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.regimeninterior@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -606,7 +621,7 @@
       "username": "qa.granarchivero",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.granarchivero@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -630,7 +645,7 @@
       "username": "qa.bibliotecaeditor",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.bibliotecaeditor@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -654,7 +669,7 @@
       "username": "qa.bibliotecarevisor",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.bibliotecarevisor@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -678,7 +693,7 @@
       "username": "qa.bibliotecario",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.bibliotecario@pmgm.invalid",
       "emailVerified": true,
       "attributes": {
@@ -702,7 +717,7 @@
       "username": "qa.comunicaciones",
       "enabled": true,
       "firstName": "Cuenta",
-      "lastName": "Sintética QA",
+      "lastName": "Sint\u00e9tica QA",
       "email": "qa.comunicaciones@pmgm.invalid",
       "emailVerified": true,
       "attributes": {

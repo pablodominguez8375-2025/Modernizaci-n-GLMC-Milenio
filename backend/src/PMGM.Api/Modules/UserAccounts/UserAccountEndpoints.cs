@@ -35,7 +35,7 @@ public static class UserAccountEndpoints
         var rows=await Eligible(db,DynamicAccessEndpoints.Today()).Select(m=>new AccountCandidate(m.MemberId,m.OrganizationId,
             m.Member.Person.FirstNames+" "+m.Member.Person.LastNames,m.Member.Person.Email??"",m.Organization.Name)).Distinct().ToListAsync(ct);
         return Results.Ok(new { items=rows.Where(x=>AccountPassword.ValidEmail(x.Email)).ToArray(),
-            canCreatePlatformAdministrator=false,canCreateUser=access.IsPlatformSuperAdmin(ctx.User),canCreateSuperuser=access.IsPlatformSuperAdmin(ctx.User),
+            canCreatePlatformAdministrator=false,canCreateUser=access.IsPlatformOperator(ctx.User),canCreateSuperuser=access.IsPlatformSuperAdmin(ctx.User),
             identityConfigured=identity.Configured,mailConfigured=mail.Configured,
             deliveryConfigured=identity.Configured&&mail.Configured });
     }
@@ -55,8 +55,15 @@ public static class UserAccountEndpoints
         // Decisión Sponsor #604: el Máster único es la única autoridad para
         // altas de usuarios y superusuarios, aun si otro rol puede administrar
         // vistas del Sistema. Denegar antes de tocar identidad, SMTP o BD.
-        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User))
+        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformOperator(ctx.User))
             return Results.Forbid();
+        // Solo el Máster crea Superusuarios; un Superusuario crea usuarios comunes.
+        if(request.Superuser && !access.IsPlatformSuperAdmin(ctx.User))
+        {
+            audit.Add(ctx,"system.users.superuser_creation_denied","UserAccount","platform",null,AuditResults.Rejected,new { });
+            await db.SaveChangesAsync(ct);
+            return Results.Json(new { message="Solo el Máster puede crear Superusuarios." },statusCode:StatusCodes.Status403Forbidden);
+        }
         // Solo existe UN Máster (cuenta «admin», provista fuera de esta API). Nadie, ni siquiera el Máster,
         // puede crear, duplicar ni promover otro: se rechaza antes de tocar identidad, correo o base.
         if(request.PlatformAdministrator)
@@ -150,7 +157,7 @@ public static class UserAccountEndpoints
         IInstitutionalAccessService access,IAccountIdentityProvider identity,IAuditService audit,ILoggerFactory logs,CancellationToken ct)
     {
         ctx.Response.Headers.CacheControl="private, no-store";
-        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformOperator(ctx.User)) return Results.Forbid();
         var temporary=request.Modality=="temporary";
         var reason=request.Reason?.Trim()??"";
         if(request.Modality is not ("email" or "temporary") || reason.Length>200 || temporary && reason.Length<10)
@@ -178,6 +185,8 @@ public static class UserAccountEndpoints
             var user=await identity.FindManagedAsync(subject,ct);
             if(user is null) return await Reject(StatusCodes.Status404NotFound,"La cuenta no existe o no es administrada por la plataforma.","unknown_account");
             if(user.Kind=="platform") return await Reject(StatusCodes.Status403Forbidden,"La cuenta Máster no se restablece desde esta pantalla.","master_account");
+            if(user.Kind=="superuser" && !access.IsPlatformSuperAdmin(ctx.User))
+                return await Reject(StatusCodes.Status403Forbidden,"Solo el Máster puede restablecer el acceso de otro Superusuario.","superuser_account");
             if(!user.Enabled) return await Reject(StatusCodes.Status409Conflict,"La cuenta tiene el alta pendiente; complete o repita el alta.","not_enabled");
             if(!temporary && !AccountPassword.ValidEmail(user.Email))
                 return await Reject(StatusCodes.Status400BadRequest,"La cuenta no tiene un correo válido. Use la clave temporal con motivo.","no_email");

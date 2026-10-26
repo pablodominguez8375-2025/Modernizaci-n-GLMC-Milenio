@@ -19,7 +19,7 @@ public static class DynamicAccessEndpoints
         var group = endpoints.MapGroup("/api/system/access").WithTags("Sistema — Acceso dinámico").RequireAuthorization();
         group.MapGet("/catalog", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
         {
-            if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+            if (!access.IsPlatformOperator(ctx.User)) return Results.Forbid();
             ctx.Response.Headers.CacheControl = "private, no-store";
             return Results.Ok(await LoadRawAsync(db, ct));
         });
@@ -112,6 +112,9 @@ public static class DynamicAccessEndpoints
             MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_assigned", catalog =>
             {
                 if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Length > 320 || request.Subject != request.Subject.Trim()) return Results.BadRequest(new { message = "Indique el identificador exacto del sujeto OIDC (hasta 320 caracteres)." });
+                // Un Superusuario no se asigna perfiles a sí mismo (no se otorga cargos); el Máster no ejerce cargos por diseño.
+                if (!access.IsPlatformSuperAdmin(ctx.User) && string.Equals(request.Subject, DynamicTreasuryAccess.Subject(ctx.User), StringComparison.OrdinalIgnoreCase))
+                    return Results.Json(new { message = "No puede asignarse un perfil a sí mismo." }, statusCode: StatusCodes.Status403Forbidden);
                 var profile = catalog.Profiles.FirstOrDefault(p => Eq(p.Code, request.ProfileCode) && p.IsActive);
                 if (profile is null || profile.IsSystem) return Results.BadRequest(new { message = "Seleccione un perfil técnico activo; los cargos base se gestionan institucionalmente." });
                 if (DynamicRoleConferral.HasSensitive(profile.BaseRoles) && (request.EffectiveTo is not DateOnly until || until > request.EffectiveFrom.AddYears(1))) return Results.BadRequest(new { message = DynamicRoleConferral.TermMessage });
@@ -141,7 +144,7 @@ public static class DynamicAccessEndpoints
         });
         group.MapPost("/print", async (HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
         {
-            if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+            if (!access.IsPlatformOperator(ctx.User)) return Results.Forbid();
             audit.Add(ctx, "system.access.review_print_requested", "DynamicAccessCatalog", "review", null, AuditResults.Success);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { allowed = true });
@@ -200,7 +203,7 @@ public static class DynamicAccessEndpoints
 
     private static async Task<IResult> MutateAsync(int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, string action, Func<DynamicAccessCatalog, IResult> mutate, CancellationToken ct, Func<object?>? extraAudit = null)
     {
-        if (!access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+        if (!access.IsPlatformOperator(ctx.User)) return Results.Forbid();
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await db.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
         var catalog = await LoadRawAsync(db, ct);

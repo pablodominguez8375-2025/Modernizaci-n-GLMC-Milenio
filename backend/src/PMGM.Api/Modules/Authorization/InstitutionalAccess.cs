@@ -7,6 +7,8 @@ public static class InstitutionalClaims
     public const string Role = "pmgm_role";
     public const string Organization = "pmgm_org";
     public const string Scope = "pmgm_scope";
+    /// <summary>Tipo de cuenta que gestiona la plataforma: «superuser» o «member» (atributo pmgm_account_kind).</summary>
+    public const string AccountKind = "pmgm_account_kind";
 }
 
 public static class InstitutionalRoles
@@ -47,6 +49,10 @@ public interface IInstitutionalAccessService
 {
     bool HasOrderScope(ClaimsPrincipal user);
     bool IsPlatformSuperAdmin(ClaimsPrincipal user);
+    /// <summary>Superusuario de soporte: ve lo mismo que el Máster, pero no puede tocar al Máster ni a otro superusuario.</summary>
+    bool IsPlatformSuperUser(ClaimsPrincipal user);
+    /// <summary>Máster o Superusuario: operadores de plataforma.</summary>
+    bool IsPlatformOperator(ClaimsPrincipal user);
     bool HasRole(ClaimsPrincipal user, params string[] roles);
     bool CanReadOrganization(ClaimsPrincipal user, Guid organizationId);
     bool CanManageOrganization(ClaimsPrincipal user, Guid organizationId);
@@ -106,6 +112,14 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
 
     public bool IsPlatformSuperAdmin(ClaimsPrincipal user)
         => HasOrderScope(user) && HasPlatformMasterClaim(user);
+
+    public bool IsPlatformSuperUser(ClaimsPrincipal user)
+        => HasOrderScope(user) && !HasPlatformMasterClaim(user) && user.Claims.Any(x =>
+            x.Type == InstitutionalClaims.AccountKind &&
+            string.Equals(x.Value, "superuser", StringComparison.OrdinalIgnoreCase));
+
+    public bool IsPlatformOperator(ClaimsPrincipal user)
+        => IsPlatformSuperAdmin(user) || IsPlatformSuperUser(user);
 
     public bool HasRole(ClaimsPrincipal user, params string[] roles)
     {
@@ -391,7 +405,7 @@ public sealed class InstitutionalAccessService : IInstitutionalAccessService
            HasRole(user, InstitutionalRoles.GranLogiaAdmin, InstitutionalRoles.PrivacyOfficer);
 
     public bool CanConfigureSystem(ClaimsPrincipal user)
-        => IsPlatformSuperAdmin(user) ||
+        => IsPlatformOperator(user) ||
            (HasOrderScope(user) && HasRole(user, InstitutionalRoles.GranLogiaAdmin));
 
     private bool HasOrganizationClaim(ClaimsPrincipal user, Guid organizationId)

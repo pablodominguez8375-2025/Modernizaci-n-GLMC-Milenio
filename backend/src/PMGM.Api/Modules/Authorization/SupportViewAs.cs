@@ -87,7 +87,7 @@ public sealed class SupportViewAsMiddleware(RequestDelegate next)
         var session = await db.SupportViewSessions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == sessionGuid, ctx.RequestAborted);
         var now = DateTimeOffset.UtcNow;
         if (session is null || session.OperatorSubject != operatorSubject || session.EndedAtUtc is not null || session.ExpiresAtUtc <= now
-            || !access.IsPlatformSuperAdmin(ctx.User))
+            || !access.IsPlatformOperator(ctx.User))
         { await Deny(StatusCodes.Status403Forbidden, "SUPPORT_VIEW_SESSION_INVALID"); return; }
         var sid = session.Id.ToString("D");
         if (!HttpMethods.IsGet(ctx.Request.Method) && !HttpMethods.IsHead(ctx.Request.Method))
@@ -161,7 +161,7 @@ public static class SupportViewAsEndpoints
     }
 
     private static bool Authorized(HttpContext ctx, IInstitutionalAccessService access)
-        => access.CanConfigureSystem(ctx.User) && access.IsPlatformSuperAdmin(ctx.User) &&
+        => access.CanConfigureSystem(ctx.User) && access.IsPlatformOperator(ctx.User) &&
            string.IsNullOrEmpty(ctx.User.FindFirstValue(SupportViewAsClaims.Operator));
     private static string Operator(HttpContext ctx) => ctx.User.FindFirstValue("sub") ?? ctx.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "";
 
