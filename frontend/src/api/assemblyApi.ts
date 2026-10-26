@@ -4,6 +4,7 @@
 //   GET  /api/regimen-interior/asambleas/{id}/listados
 //   POST /api/regimen-interior/asambleas/{id}/talleres/{orgId}/bloqueo-saldo   (solo Régimen Interior)
 //   POST /api/regimen-interior/asambleas/{id}/revision/{personId}/decision     (solo Régimen Interior)
+//   GET  /api/regimen-interior/asambleas/{id}/cierre/estado                    (informe «Qué falta para cerrar»)
 // Todo es PRELIMINAR: el servidor nunca confirma sufragio ni cierra el padrón.
 
 export interface AssemblySummary {
@@ -24,6 +25,14 @@ export interface AssemblyListing {
   provisional: boolean; officiallyClosed: boolean; mayIssueBallots: boolean
   asambleistas: AssemblyListingRow[]; sufragantes: AssemblyVoterRow[]; talleresConBloqueo: AssemblyWorkshopDebtRow[]
 }
+
+export type AssemblyReadinessState = 'ok' | 'pending' | 'blocked'
+export interface AssemblyReadinessItem { code: string; title: string; state: AssemblyReadinessState; detail: string; count: number | null }
+export interface AssemblyClosureReadiness {
+  assemblyId: string; name: string; status: string; meetingDate: string; cutoffDate: string
+  mayClose: boolean; provisional: boolean; items: AssemblyReadinessItem[]; blockingCodes: string[]
+}
+export const assemblyReadinessStateLabel: Record<AssemblyReadinessState, string> = { ok: 'Listo', pending: 'Pendiente', blocked: 'Bloqueado' }
 
 export type AssemblyDebtAction = 'lift' | 'revoke'
 export interface AssemblyDebtBlockPayload { action: AssemblyDebtAction; reason: string; evidenceReference: string }
@@ -72,6 +81,25 @@ export class MockAssemblyStore {
     const created: AssemblySummary = { id: crypto.randomUUID(), name, meetingDate: payload.meetingDate, cutoffDate: payload.cutoffDate, status: 'draft', provisional: true, officiallyClosed: false, mayVoteConfirmed: false }
     this.assemblies = [created, ...this.assemblies]
     return created
+  }
+  readiness(assemblyId: string): AssemblyClosureReadiness {
+    const assembly = this.assemblies.find(a => a.id === assemblyId)
+    if (!assembly) throw new Error('No existe la Asamblea indicada.')
+    const demo = assembly.id === 'demo-asamblea-2026'
+    const members = demo ? demoRows.length : 0
+    const pendingEval = demo ? demoRows.filter(r => r.status === 'pendiente').length : 0
+    const items: AssemblyReadinessItem[] = [
+      { code: 'assembly', title: 'Asamblea y fecha de corte', state: 'ok', detail: `Corte al ${assembly.cutoffDate.split('-').reverse().join('-')}, reunión el ${assembly.meetingDate.split('-').reverse().join('-')}.`, count: null },
+      demo
+        ? { code: 'master_terms', title: 'Períodos de Venerable Maestro', state: 'pending', detail: 'Se encontraron 9 hermanos con cargo de Venerable Maestro. Falta la constancia oficial de cada período (acta).', count: 9 }
+        : { code: 'master_terms', title: 'Períodos de Venerable Maestro', state: 'blocked', detail: 'No hay cargos de Venerable Maestro registrados en las fichas. Primero deben cargarse (Carga inicial).', count: 0 },
+      { code: 'roster', title: 'Asambleístas acreditados', state: members > 0 ? 'ok' : 'pending', detail: members > 0 ? `${members} asambleístas acreditados para esta Asamblea.` : 'Todavía no se han acreditado asambleístas.', count: members },
+      { code: 'evaluation', title: 'Evaluación de habilitación', state: members > 0 && pendingEval === 0 ? 'ok' : 'pending', detail: members === 0 ? 'No hay asambleístas para evaluar.' : pendingEval === 0 ? `Los ${members} asambleístas tienen una evaluación vigente.` : `${pendingEval} de ${members} asambleístas siguen pendientes de evaluación.`, count: pendingEval },
+      { code: 'grand_treasury', title: 'Saldo certificado de Gran Tesorería', state: 'pending', detail: demo ? '1 de 4 Talleres tienen revisión firmada de Gran Tesorería.' : 'Se evalúa cuando haya asambleístas acreditados.', count: demo ? 3 : 0 },
+      { code: 'rights', title: 'Tribunal de Honor y Régimen Interior', state: 'pending', detail: 'Falta la declaración de cobertura completa de ambas fuentes al corte (sin restricciones registradas).', count: 0 },
+      { code: 'closure', title: 'Cierre del padrón', state: 'blocked', detail: 'El cierre se habilita cuando todos los pasos anteriores estén completos y certificados.', count: null },
+    ]
+    return { assemblyId, name: assembly.name, status: assembly.status, meetingDate: assembly.meetingDate, cutoffDate: assembly.cutoffDate, mayClose: false, provisional: true, items, blockingCodes: items.filter(i => i.state !== 'ok').map(i => i.code) }
   }
   listing(assemblyId: string): AssemblyListing {
     const assembly = this.assemblies.find(a => a.id === assemblyId)

@@ -1,5 +1,5 @@
 import { technicalGrant } from './dynamicAccess'
-import { MockAssemblyStore, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
+import { MockAssemblyStore, type AssemblyClosureReadiness, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
@@ -914,6 +914,10 @@ export class PmgmApiClient {
   async getAssemblyListing(assemblyId: string): Promise<AssemblyListing> {
     if (this.useMocks) return this.mockAssemblies.listing(assemblyId)
     return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/listados`)
+  }
+  async getAssemblyClosureReadiness(assemblyId: string): Promise<AssemblyClosureReadiness> {
+    if (this.useMocks) return this.mockAssemblies.readiness(assemblyId)
+    return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/cierre/estado`)
   }
   async decideAssemblyDebtBlock(assemblyId: string, organizationId: string, payload: AssemblyDebtBlockPayload): Promise<void> {
     if (this.useMocks) { this.mockAssemblies.decideDebtBlock(organizationId, payload); return }

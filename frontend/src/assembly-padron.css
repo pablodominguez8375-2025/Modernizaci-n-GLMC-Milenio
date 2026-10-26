@@ -7,3 +7,9 @@
 .assembly-signature { display: inline-block; min-width: 9rem; height: 1.6rem; border-bottom: 1px solid currentColor; vertical-align: bottom; }
 .assembly-table td small { display: block; color: var(--muted); }
 @media (max-width: 640px) { .assembly-signature { min-width: 5rem; } }
+.assembly-readiness-list{list-style:none;margin:0;padding:0;display:grid;gap:.6rem}
+.assembly-readiness-item{display:grid;grid-template-columns:7rem 1fr;gap:.75rem;align-items:start;padding:.6rem .75rem;border:1px solid #dfe5ee;border-radius:10px;background:#fff}
+.assembly-readiness-item.blocked{border-color:#d9b3b3;background:#fff7f7}
+.assembly-readiness-item.ok{border-color:#b9d8bd;background:#f6fbf6}
+.assembly-readiness-item p{margin:.15rem 0 0;color:#4a5a73;font-size:.95rem}
+@media(max-width:520px){.assembly-readiness-item{grid-template-columns:1fr}}
