@@ -4,6 +4,8 @@ using Npgsql;
 using NpgsqlTypes;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.LodgeManagement.Entities;
+using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.Audit;
 
@@ -54,6 +56,9 @@ public static class SupportLodgeDataHealthEndpoints
         this IEndpointRouteBuilder endpoints)
     {
         endpoints.MapGet("/api/system/support/lodge-data-health", GetAsync)
+            .RequireAuthorization()
+            .WithTags("Sistema — Soporte técnico");
+        endpoints.MapGet("/api/system/support/lodge-query-probe/{organizationId:guid}", ProbeAsync)
             .RequireAuthorization()
             .WithTags("Sistema — Soporte técnico");
         return endpoints;
@@ -130,6 +135,111 @@ public static class SupportLodgeDataHealthEndpoints
             items = results
         });
     }
+
+    // Support-only, read-only replay of the three DB query shapes used by
+    // Talleres (supervisión). The result NEVER includes records, names,
+    // identifiers, exception text, SQLSTATE, claims, or SQL.
+    private static async Task<IResult> ProbeAsync(
+        Guid organizationId,
+        HttpContext context,
+        IInstitutionalAccessService access,
+        PmgmDbContext institutionalDb,
+        LodgeManagementDbContext lodgeDb,
+        CancellationToken cancellationToken)
+    {
+        // Check authorization BEFORE any database access; the caller must also
+        // be authenticated by RequireAuthorization.
+        if (!access.CanConfigureSystem(context.User)) return Results.Forbid();
+        context.Response.Headers.CacheControl = "private, no-store";
+
+        bool isWorkshop;
+        try
+        {
+            isWorkshop = await institutionalDb.Organizations.AsNoTracking()
+                .AnyAsync(x => x.Id == organizationId && x.Type == "workshop",
+                    cancellationToken);
+        }
+        catch (Exception) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
+        if (!isWorkshop) return Results.NotFound();
+
+        var checks = new[]
+        {
+            await ReadProbeAsync("tenidas", async ct =>
+            {
+                var rows = await lodgeDb.LodgeMeetings.AsNoTracking()
+                    .Where(x => x.OrganizationId == organizationId)
+                    .OrderByDescending(x => x.MeetingDate)
+                    .ThenByDescending(x => x.CreatedAtUtc)
+                    .Take(250).ToListAsync(ct);
+                _ = rows.Count;
+            }, cancellationToken),
+            await ReadProbeAsync("miembros", async ct =>
+            {
+                // Identical materialized columns, JOIN and ordering to
+                // GetMemberOptionsAsync; values remain exclusively in memory.
+                var rows = await institutionalDb.Memberships.AsNoTracking()
+                    .Where(x => x.OrganizationId == organizationId &&
+                                x.EndDate == null &&
+                                x.Status == MembershipCodes.MembershipStatus.Active)
+                    .OrderBy(x => x.Member.Person.LastNames)
+                    .ThenBy(x => x.Member.Person.FirstNames)
+                    .Select(x => new
+                    {
+                        x.MemberId,
+                        Name = (x.Member.Person.FirstNames + " " +
+                                x.Member.Person.LastNames).Trim()
+                    })
+                    .Take(1000).ToListAsync(ct);
+                _ = rows.Count;
+            }, cancellationToken),
+            await ReadProbeAsync("instrucciones", async ct =>
+            {
+                var rows = await lodgeDb.LodgeInstructionSessions.AsNoTracking()
+                    .Where(x => x.OrganizationId == organizationId)
+                    .OrderByDescending(x => x.InstructionDate)
+                    .ThenByDescending(x => x.CreatedAtUtc)
+                    .Take(250)
+                    .Select(x => new
+                    {
+                        x.Id, x.OrganizationId, x.InstructionDate, x.Grade,
+                        x.Topic, x.ResponsibleOffice, x.InstructorMemberId,
+                        x.Status
+                    }).ToListAsync(ct);
+                _ = rows.Count;
+            }, cancellationToken)
+        };
+
+        return Results.Ok(new
+        {
+            status = checks.All(x => x.Result == "ok") ? "ready" : "attention",
+            mode = "read_only_queries",
+            scope = "gestion_logial_taller",
+            note = "Solo resultado de tres lecturas aisladas; no diagnostica por sí solo permisos del usuario ni causa raíz.",
+            items = checks
+        });
+    }
+
+    private static async Task<SupportLodgeProbeStatus> ReadProbeAsync(
+        string resource, Func<CancellationToken, Task> read, CancellationToken ct)
+    {
+        try
+        {
+            await read(ct);
+            return new SupportLodgeProbeStatus(resource, "ok");
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            // Failed query gets a fixed status; no sensitive exception details.
+            // The next step is the protected, correlated QA host log.
+            return new SupportLodgeProbeStatus(resource, "failed");
+        }
+    }
+
+    public sealed record SupportLodgeProbeStatus(string Resource, string Result);
 
     public sealed record SupportLodgeRelationStatus(
         string Resource,
