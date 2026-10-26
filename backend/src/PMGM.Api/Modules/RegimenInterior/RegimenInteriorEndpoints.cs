@@ -21,6 +21,8 @@ public static class RegimenInteriorEndpoints
             AssemblyPreliminaryReviewEndpoints.GetAsync);
         group.MapGet("/asambleas/{assemblyId:guid}/asambleistas-preliminar.csv",
             AssemblyPreliminaryRosterCsvEndpoints.GetAsync);
+        group.MapGet("/asambleas/{assemblyId:guid}/cierre/estado",
+            AssemblyClosureReadinessEndpoints.GetAsync);
         group.MapGet("/asambleas/{assemblyId:guid}/listados",
             AssemblyRosterListingEndpoints.GetAsync);
         group.MapPost("/asambleas/{assemblyId:guid}/talleres/{organizationId:guid}/bloqueo-saldo",

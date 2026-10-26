@@ -1,8 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import type { PmgmApiClient } from './api/pmgmApi'
 import {
-  assemblyReviewActionLabels, assemblyStatusLabel,
-  type AssemblyListing, type AssemblyListingRow, type AssemblyReviewAction, type AssemblySummary,
+  assemblyReadinessStateLabel, assemblyReviewActionLabels, assemblyStatusLabel,
+  type AssemblyClosureReadiness, type AssemblyListing, type AssemblyListingRow, type AssemblyReviewAction, type AssemblySummary,
 } from './api/assemblyApi'
 import { ActionDrawer } from './actionKit'
 
@@ -12,6 +12,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   const [assemblies, setAssemblies] = useState<AssemblySummary[]>([])
   const [assemblyId, setAssemblyId] = useState('')
   const [listing, setListing] = useState<AssemblyListing | null>(null)
+  const [readiness, setReadiness] = useState<AssemblyClosureReadiness | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -19,9 +20,12 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   const fail = (reason: unknown, fallback: string) => setError(reason instanceof Error ? reason.message : fallback)
 
   const loadListing = useCallback(async (id: string) => {
-    if (!id) { setListing(null); return }
+    if (!id) { setListing(null); setReadiness(null); return }
     setLoading(true); setError(null)
-    try { setListing(await api.getAssemblyListing(id)) }
+    try {
+      const [rows, state] = await Promise.all([api.getAssemblyListing(id), api.getAssemblyClosureReadiness(id)])
+      setListing(rows); setReadiness(state)
+    }
     catch (reason) { fail(reason, 'No fue posible cargar los listados.') }
     finally { setLoading(false) }
   }, [api])
@@ -95,6 +99,18 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
     </section>
 
     <p className="assembly-note" role="note"><strong>Listados preliminares.</strong> El cierre del padrón y su exportación oficial siguen bloqueados mientras falten las fuentes oficiales (Venerables Maestros, Gran Tesorería, Régimen Interior y Tribunal de Honor).</p>
+
+    {readiness && <section className="panel report-wide assembly-readiness" aria-label="Qué falta para cerrar el padrón">
+      <div className="panel-heading"><div><p className="eyebrow">Cierre del Padrón</p><h2>Qué falta para cerrar el padrón</h2>
+        <p>Cada paso muestra si su fuente oficial ya está lista. El padrón solo se cierra cuando todos estén completos.</p></div>
+        <span className="count-badge">{readiness.items.filter(i => i.state === 'ok').length} de {readiness.items.length} listos</span></div>
+      <ol className="assembly-readiness-list">
+        {readiness.items.map(item => <li key={item.code} className={`assembly-readiness-item ${item.state}`}>
+          <span className={`status-pill ${item.state === 'ok' ? 'complete' : 'attention'}`}>{assemblyReadinessStateLabel[item.state]}</span>
+          <div><strong>{item.title}</strong><p>{item.detail}</p></div>
+        </li>)}
+      </ol>
+    </section>}
 
     {loading && !listing ? <div className="panel"><p>Cargando listados…</p></div> : null}
     {listing && listing.asambleistas.length === 0 && !loading && <div className="panel"><p className="muted">Esta Asamblea aún no tiene asambleístas acreditados. Aparecerán cuando los Talleres y Gran Logia entreguen sus fuentes oficiales.</p></div>}
