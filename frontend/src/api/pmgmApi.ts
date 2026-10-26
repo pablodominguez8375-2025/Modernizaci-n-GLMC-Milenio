@@ -1,5 +1,5 @@
 import { technicalGrant } from './dynamicAccess'
-import { MockAssemblyStore, type AssemblyClosureReadiness, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
+import { MockAssemblyStore, type AssemblyAttestationList, type AssemblyAttestationPayload, type AssemblyClosureReadiness, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
@@ -918,6 +918,14 @@ export class PmgmApiClient {
   async getAssemblyClosureReadiness(assemblyId: string): Promise<AssemblyClosureReadiness> {
     if (this.useMocks) return this.mockAssemblies.readiness(assemblyId)
     return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/cierre/estado`)
+  }
+  async getAssemblyAttestations(assemblyId: string): Promise<AssemblyAttestationList> {
+    if (this.useMocks) return this.mockAssemblies.attestationList(assemblyId)
+    return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/constancias`)
+  }
+  async recordAssemblyAttestation(assemblyId: string, payload: AssemblyAttestationPayload): Promise<void> {
+    if (this.useMocks) { this.mockAssemblies.recordAttestation(assemblyId, payload); return }
+    await this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/constancias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
   }
   async decideAssemblyDebtBlock(assemblyId: string, organizationId: string, payload: AssemblyDebtBlockPayload): Promise<void> {
     if (this.useMocks) { this.mockAssemblies.decideDebtBlock(organizationId, payload); return }

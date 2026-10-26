@@ -34,6 +34,19 @@ export interface AssemblyClosureReadiness {
 }
 export const assemblyReadinessStateLabel: Record<AssemblyReadinessState, string> = { ok: 'Listo', pending: 'Pendiente', blocked: 'Bloqueado' }
 
+export type AssemblyAttestationKind = 'membership' | 'master_periods' | 'honor_coverage' | 'regimen_coverage'
+export interface AssemblyAttestationStatus { kind: AssemblyAttestationKind; title: string; attested: boolean; actaReference: string | null; statement: string | null; recordedAtUtc: string | null }
+export interface AssemblyAttestationList { assemblyId: string; items: AssemblyAttestationStatus[] }
+export interface AssemblyAttestationPayload { kind: AssemblyAttestationKind; action: 'attest' | 'revoke'; actaReference: string; statement: string }
+/** Qué constancias de Régimen Interior respaldan cada paso del informe. */
+export const assemblyAttestationsByStep: Record<string, AssemblyAttestationKind[]> = {
+  master_terms: ['master_periods'], membership: ['membership'], rights: ['honor_coverage', 'regimen_coverage'],
+}
+export const assemblyAttestationTitles: Record<AssemblyAttestationKind, string> = {
+  membership: 'Calidad de miembro activo', master_periods: 'Períodos de Venerable Maestro',
+  honor_coverage: 'Cobertura del Tribunal de Honor', regimen_coverage: 'Cobertura de Régimen Interior',
+}
+
 export type AssemblyDebtAction = 'lift' | 'revoke'
 export interface AssemblyDebtBlockPayload { action: AssemblyDebtAction; reason: string; evidenceReference: string }
 export type AssemblyReviewAction = 'request_correction' | 'refer_validation' | 'confirm_ineligible' | 'attendance_only'
@@ -69,6 +82,7 @@ const demoRows = [
 
 export class MockAssemblyStore {
   private lifted = new Set<string>()
+  private attestations = new Map<string, Map<AssemblyAttestationKind, { actaReference: string; statement: string; recordedAtUtc: string }>>()
   private assemblies: AssemblySummary[] = [{
     id: 'demo-asamblea-2026', name: 'Gran Asamblea Ordinaria 2026 (datos ficticios)', meetingDate: '2026-11-21', cutoffDate: '2026-10-19',
     status: 'draft', provisional: true, officiallyClosed: false, mayVoteConfirmed: false,
@@ -88,18 +102,48 @@ export class MockAssemblyStore {
     const demo = assembly.id === 'demo-asamblea-2026'
     const members = demo ? demoRows.length : 0
     const pendingEval = demo ? demoRows.filter(r => r.status === 'pendiente').length : 0
+    const att = this.attestations.get(assemblyId) ?? new Map()
+    const has = (k: AssemblyAttestationKind) => att.has(k)
     const items: AssemblyReadinessItem[] = [
       { code: 'assembly', title: 'Asamblea y fecha de corte', state: 'ok', detail: `Corte al ${assembly.cutoffDate.split('-').reverse().join('-')}, reunión el ${assembly.meetingDate.split('-').reverse().join('-')}.`, count: null },
       demo
-        ? { code: 'master_terms', title: 'Períodos de Venerable Maestro', state: 'pending', detail: 'Se encontraron 9 hermanos con cargo de Venerable Maestro. Falta la constancia oficial de cada período (acta).', count: 9 }
+        ? { code: 'master_terms', title: 'Períodos de Venerable Maestro', state: has('master_periods') ? 'ok' : 'pending', detail: has('master_periods') ? 'Régimen Interior certificó los períodos de los 9 Venerables Maestros con su acta.' : 'Se encontraron 9 hermanos con cargo de Venerable Maestro. Falta la constancia oficial de cada período (acta).', count: 9 }
         : { code: 'master_terms', title: 'Períodos de Venerable Maestro', state: 'blocked', detail: 'No hay cargos de Venerable Maestro registrados en las fichas. Primero deben cargarse (Carga inicial).', count: 0 },
+      { code: 'membership', title: 'Calidad de miembro activo', state: has('membership') ? 'ok' : 'pending', detail: has('membership') ? 'Régimen Interior certificó la calidad de miembro activo de los asambleístas al corte, con su acta.' : 'Falta la constancia de Régimen Interior sobre la calidad de miembro activo al corte (acta).', count: null },
       { code: 'roster', title: 'Asambleístas acreditados', state: members > 0 ? 'ok' : 'pending', detail: members > 0 ? `${members} asambleístas acreditados para esta Asamblea.` : 'Todavía no se han acreditado asambleístas.', count: members },
       { code: 'evaluation', title: 'Evaluación de habilitación', state: members > 0 && pendingEval === 0 ? 'ok' : 'pending', detail: members === 0 ? 'No hay asambleístas para evaluar.' : pendingEval === 0 ? `Los ${members} asambleístas tienen una evaluación vigente.` : `${pendingEval} de ${members} asambleístas siguen pendientes de evaluación.`, count: pendingEval },
       { code: 'grand_treasury', title: 'Saldo certificado de Gran Tesorería', state: 'pending', detail: demo ? '1 de 4 Talleres tienen revisión firmada de Gran Tesorería.' : 'Se evalúa cuando haya asambleístas acreditados.', count: demo ? 3 : 0 },
-      { code: 'rights', title: 'Tribunal de Honor y Régimen Interior', state: 'pending', detail: 'Falta la declaración de cobertura completa de ambas fuentes al corte (sin restricciones registradas).', count: 0 },
+      { code: 'rights', title: 'Tribunal de Honor y Régimen Interior', state: has('honor_coverage') && has('regimen_coverage') ? 'ok' : 'pending',
+        detail: has('honor_coverage') && has('regimen_coverage') ? 'Ambas fuentes están certificadas como completas al corte (sin restricciones registradas).'
+          : has('honor_coverage') ? 'Falta la constancia de cobertura completa de Régimen Interior al corte (sin restricciones registradas).'
+          : has('regimen_coverage') ? 'Falta la constancia de cobertura completa del Tribunal de Honor al corte (sin restricciones registradas).'
+          : 'Falta la declaración de cobertura completa de ambas fuentes al corte (sin restricciones registradas).', count: 0 },
       { code: 'closure', title: 'Cierre del padrón', state: 'blocked', detail: 'El cierre se habilita cuando todos los pasos anteriores estén completos y certificados.', count: null },
     ]
     return { assemblyId, name: assembly.name, status: assembly.status, meetingDate: assembly.meetingDate, cutoffDate: assembly.cutoffDate, mayClose: false, provisional: true, items, blockingCodes: items.filter(i => i.state !== 'ok').map(i => i.code) }
+  }
+  attestationList(assemblyId: string): AssemblyAttestationList {
+    if (!this.assemblies.some(a => a.id === assemblyId)) throw new Error('No existe la Asamblea indicada.')
+    const att = this.attestations.get(assemblyId)
+    return { assemblyId, items: (Object.keys(assemblyAttestationTitles) as AssemblyAttestationKind[]).map(kind => {
+      const a = att?.get(kind)
+      return { kind, title: assemblyAttestationTitles[kind], attested: !!a, actaReference: a?.actaReference ?? null, statement: a?.statement ?? null, recordedAtUtc: a?.recordedAtUtc ?? null }
+    }) }
+  }
+  recordAttestation(assemblyId: string, payload: AssemblyAttestationPayload): void {
+    const assembly = this.assemblies.find(a => a.id === assemblyId)
+    if (!assembly) throw new Error('No existe la Asamblea indicada.')
+    if (payload.actaReference.trim().length < 1 || payload.statement.trim().length < 10) throw new Error('Indique la referencia del acta y una declaración de al menos 10 caracteres.')
+    if (assembly.id !== 'demo-asamblea-2026') throw new Error('Esta Asamblea aún no tiene asambleístas acreditados: no hay nada que certificar.')
+    const att = this.attestations.get(assemblyId) ?? new Map()
+    if (payload.action === 'attest') {
+      if (att.has(payload.kind)) throw new Error('Esa constancia ya está vigente.')
+      att.set(payload.kind, { actaReference: payload.actaReference.trim(), statement: payload.statement.trim(), recordedAtUtc: new Date().toISOString() })
+    } else {
+      if (!att.has(payload.kind)) throw new Error('No hay una constancia vigente que retirar.')
+      att.delete(payload.kind)
+    }
+    this.attestations.set(assemblyId, att)
   }
   listing(assemblyId: string): AssemblyListing {
     const assembly = this.assemblies.find(a => a.id === assemblyId)

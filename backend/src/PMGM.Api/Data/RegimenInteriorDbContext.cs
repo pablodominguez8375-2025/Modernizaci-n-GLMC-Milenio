@@ -11,6 +11,7 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
     public DbSet<AssemblyMemberStatusRecord> AssemblyMemberStatuses => Set<AssemblyMemberStatusRecord>();
     public DbSet<AssemblyEligibilityRecord> AssemblyEligibilities => Set<AssemblyEligibilityRecord>();
     public DbSet<AssemblyDebtDecisionEventRecord> AssemblyDebtDecisionEvents => Set<AssemblyDebtDecisionEventRecord>();
+    public DbSet<AssemblyAttestationEventRecord> AssemblyAttestationEvents => Set<AssemblyAttestationEventRecord>();
     public DbSet<InstitutionalRestrictionRecord> InstitutionalRestrictions => Set<InstitutionalRestrictionRecord>();
     public DbSet<AssemblyTreasuryCertificationEventRecord> AssemblyTreasuryCertificationEvents => Set<AssemblyTreasuryCertificationEventRecord>();
     public DbSet<AssemblyTreasurySignedReviewRecord> AssemblyTreasurySignedReviews => Set<AssemblyTreasurySignedReviewRecord>();
@@ -108,6 +109,22 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.HasOne<AssemblyRecord>().WithMany()
                 .HasForeignKey(x => x.AssemblyId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.OccurredAtUtc });
+            entity.HasIndex(x => x.ReversesEventId).IsUnique()
+                .HasFilter("\"ReversesEventId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<AssemblyAttestationEventRecord>(entity =>
+        {
+            entity.ToTable("assembly_attestation_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.ActaReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Statement).HasMaxLength(2000).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne<AssemblyRecord>().WithMany()
+                .HasForeignKey(x => x.AssemblyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AssemblyId, x.Kind, x.OccurredAtUtc });
             entity.HasIndex(x => x.ReversesEventId).IsUnique()
                 .HasFilter("\"ReversesEventId\" IS NOT NULL");
         });
