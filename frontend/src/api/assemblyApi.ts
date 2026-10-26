@@ -82,8 +82,8 @@ export function assemblyStatusLabel(row: Pick<AssemblyListingRow, 'status' | 'bl
 
 /** Calidad por la que el asambleísta puede asistir (regla de asambleístas). */
 export function assemblyCategoryLabel(category: string): string {
-  if (category === 'permanent_assembly_member') return 'Ex Venerable Maestro'
-  if (category === 'representative') return 'Venerable Maestro (primer período)'
+  if (category === 'permanent_assembly_member') return 'Asambleísta'
+  if (category === 'representative') return 'Representante'
   return category
 }
 

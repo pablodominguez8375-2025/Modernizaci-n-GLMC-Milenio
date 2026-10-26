@@ -45,7 +45,7 @@ public static class AssemblyOfficialRosterEndpoints
         // período); NO es el padrón de sufragio. Se numera de nuevo y se indica la calidad, sin estado de sufragio.
         var attendees = roster.Asambleistas.Where(r => r.MayAttend).Select((r, i) => (Row: r, Number: i + 1)).ToArray();
         static string Quality(string category) => category == AssemblyMemberCategoryPolicy.PermanentAssemblyMember
-            ? "Ex Venerable Maestro" : category == AssemblyMemberCategoryPolicy.Representative ? "Venerable Maestro (primer período)" : category;
+            ? "Asambleísta" : category == AssemblyMemberCategoryPolicy.Representative ? "Representante" : category;
         var count = asVoters ? roster.Sufragantes.Count : attendees.Length;
         var digest = assembly.ClosureEvidenceDigest!;
         var name = (asVoters ? "padron-sufragantes-" : "padron-asambleistas-") + closedOn + "-" + assemblyId.ToString("N")[..8];

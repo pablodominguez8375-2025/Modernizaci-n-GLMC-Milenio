@@ -324,8 +324,8 @@ public sealed class AssemblyRosterListingHttpTests
         Assert.Equal(4, csvAll.Trim().Split("\r\n").Length); // encabezado + 3 asambleístas
         Assert.Contains("Calidad", csvAll); // el listado de asambleístas indica la calidad, no el sufragio
         Assert.DoesNotContain("Estado de sufragio", csvAll);
-        Assert.Contains("Ex Venerable Maestro", csvAll);
-        Assert.Contains("Venerable Maestro (primer período)", csvAll);
+        Assert.Contains("Asambleísta", csvAll);
+        Assert.Contains("Representante", csvAll);
         var csvVoters = await (await client.GetAsync(root + "/padron-oficial?listado=sufragantes&formato=csv", ct)).Content.ReadAsStringAsync(ct);
         Assert.Equal(4, csvVoters.Trim().Split("\r\n").Length); // el padrón de sufragio coincide con los 3 sufragantes del cierre
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(root + "/padron-oficial?listado=otro", ct)).StatusCode);
