@@ -35,7 +35,9 @@ public static class UserAccountEndpoints
         var rows=await Eligible(db,DynamicAccessEndpoints.Today()).Select(m=>new AccountCandidate(m.MemberId,m.OrganizationId,
             m.Member.Person.FirstNames+" "+m.Member.Person.LastNames,m.Member.Person.Email??"",m.Organization.Name)).Distinct().ToListAsync(ct);
         return Results.Ok(new { items=rows.Where(x=>AccountPassword.ValidEmail(x.Email)).ToArray(),
-            canCreatePlatformAdministrator=false,canCreateUser=access.IsPlatformSuperAdmin(ctx.User),canCreateSuperuser=access.IsPlatformSuperAdmin(ctx.User),deliveryConfigured=identity.Configured&&mail.Configured });
+            canCreatePlatformAdministrator=false,canCreateUser=access.IsPlatformSuperAdmin(ctx.User),canCreateSuperuser=access.IsPlatformSuperAdmin(ctx.User),
+            identityConfigured=identity.Configured,mailConfigured=mail.Configured,
+            deliveryConfigured=identity.Configured&&mail.Configured });
     }
     private static async Task<IResult> GetUsers(HttpContext ctx,IInstitutionalAccessService access,IAccountIdentityProvider identity,CancellationToken ct)
     {
