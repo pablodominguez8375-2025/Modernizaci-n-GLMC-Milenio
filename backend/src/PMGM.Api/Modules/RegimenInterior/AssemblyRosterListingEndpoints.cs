@@ -101,7 +101,7 @@ public static class AssemblyRosterListingBuilder
             .OrderBy(t => t.Workshop, StringComparer.CurrentCultureIgnoreCase).ToArray();
 
         return new AssemblyRosterListing(assembly.Id, assembly.Name, assembly.MeetingDate,
-            assembly.CutoffDate, assembly.Status, true, false, false, asambleistas, sufragantes, talleres);
+            assembly.CutoffDate, assembly.Status, assembly.Status != "closed", assembly.Status == "closed" && assembly.ClosedAtUtc is not null, false, asambleistas, sufragantes, talleres);
     }
 
     /// <summary>Talleres con un 'lift' vigente (no revertido por un 'revoke' posterior).</summary>

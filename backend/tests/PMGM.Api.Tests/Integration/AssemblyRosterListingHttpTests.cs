@@ -10,7 +10,10 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
+using Npgsql;
 using PMGM.Api.Modules.Authorization;
+using PMGM.Api.Modules.Core.Entities;
+using PMGM.Api.Modules.Membership.Entities;
 using PMGM.Api.Modules.RegimenInterior;
 using PMGM.Api.Modules.RegimenInterior.Entities;
 using Xunit;
@@ -183,6 +186,133 @@ public sealed class AssemblyRosterListingHttpTests
 
         var readiness = await (await client.GetAsync($"/api/regimen-interior/asambleas/{assembly.Id}/cierre/estado", ct)).Content.ReadAsStringAsync(ct);
         Assert.Contains("\"mayClose\":false", readiness);
+    }
+
+    [Fact]
+    public async Task Full_closure_flow_accredits_evaluates_closes_once_and_freezes_the_assembly()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new PmgmWebApplicationFactory(cs)
+            .WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+            {
+                s.RemoveAll<RegimenInteriorDbContext>();
+                s.RemoveAll<DbContextOptions<RegimenInteriorDbContext>>();
+                s.AddDbContext<RegimenInteriorDbContext>(o => o.UseNpgsql(cs));
+                s.AddAuthentication(o =>
+                {
+                    o.DefaultAuthenticateScheme = ListingTestAuth.SchemeName;
+                    o.DefaultChallengeScheme = ListingTestAuth.SchemeName;
+                    o.DefaultForbidScheme = ListingTestAuth.SchemeName;
+                }).AddScheme<AuthenticationSchemeOptions, ListingTestAuth>(
+                    ListingTestAuth.SchemeName, _ => {});
+            }));
+
+        var assembly = new AssemblyRecord { Name = "Asamblea de cierre", MeetingDate = new(2026, 11, 19), CutoffDate = new(2026, 10, 19), CreatedBySubject = "qa-interno" };
+        var workshopX = new Organization { Name = "Taller X sintético", Type = "workshop" };
+        var workshopY = new Organization { Name = "Taller Y sintético", Type = "workshop" };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var app = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await app.Database.MigrateAsync(ct);
+            // Registro canónico del cargo: solo debe existir el de esta prueba.
+            app.OfficeAssignments.RemoveRange(app.OfficeAssignments.Where(o => o.OfficeType == "venerable_master" || o.OfficeType == "worshipful_master"));
+            await app.SaveChangesAsync(ct);
+            (string last, Organization org, DateOnly? end)[] people =
+            [("Álvarez", workshopX, new DateOnly(2021, 12, 31)), ("Bravo", workshopX, null), ("Castro", workshopY, new DateOnly(2022, 12, 31))];
+            app.AddRange(workshopX, workshopY);
+            foreach (var (last, org, end) in people)
+            {
+                var person = new Person { FirstNames = "Nombre", LastNames = last, Rut = "9" + Random.Shared.Next(100000, 999999) + "-" + last.Length };
+                var member = new Member { Person = person, PersonId = person.Id };
+                app.AddRange(person, member,
+                    new Membership { MemberId = member.Id, OrganizationId = org.Id, Status = "active", MembershipType = "regular", StartDate = new DateOnly(2015, 1, 1) },
+                    new OfficeAssignment { MemberId = member.Id, OrganizationId = org.Id, OfficeType = "venerable_master", Period = "sintético",
+                        StartDate = end is null ? new DateOnly(2026, 1, 1) : new DateOnly(2020, 1, 1), EndDate = end, EvidenceReference = "ACTA-VM-" + last });
+            }
+            await app.SaveChangesAsync(ct);
+            var db = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.Assemblies.Add(assembly);
+            await db.SaveChangesAsync(ct);
+        }
+
+        using var client = factory.CreateClient();
+        var root = $"/api/regimen-interior/asambleas/{assembly.Id}";
+        async Task<HttpStatusCode> Post(string path, object body) => (await client.PostAsJsonAsync(root + path, body, ct)).StatusCode;
+        var close = new { rosterReference = "ACTA-RI-CIERRE-1" };
+
+        // Sin constancias nada avanza.
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/acreditar", new { }));
+        Task<HttpStatusCode> Attest(string kind) => Post("/constancias", new { kind, action = "attest", actaReference = "ACTA-" + kind, statement = "Fuente verificada y completa al corte." });
+        // Honor y Régimen Interior se certifican sobre asambleístas ya acreditados.
+        Assert.Equal(HttpStatusCode.Conflict, await Attest("honor_coverage"));
+        Assert.Equal(HttpStatusCode.OK, await Attest("master_periods"));
+        Assert.Equal(HttpStatusCode.OK, await Attest("membership"));
+        var accredit = await client.PostAsJsonAsync(root + "/acreditar", new { }, ct);
+        Assert.Equal(HttpStatusCode.OK, accredit.StatusCode);
+        Assert.Contains("\"accredited\":3", await accredit.Content.ReadAsStringAsync(ct));
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/acreditar", new { }));
+        Assert.Equal(HttpStatusCode.OK, await Attest("honor_coverage"));
+        Assert.Equal(HttpStatusCode.OK, await Attest("regimen_coverage"));
+
+        // Sin saldos de Gran Tesorería no se puede cerrar, y el rechazo no deja rastro.
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/cerrar", close));
+        // Los pagos y saldos solo los valida su responsable (Gran Tesorero o Gran Hospitalario), no Régimen Interior.
+        var balances = new { sourceReference = "OFICIO-GT-1", currency = "CLP",
+            items = new[] { new { organizationId = workshopX.Id, amountPending = 0m }, new { organizationId = workshopY.Id, amountPending = 1500m } } };
+        Assert.Equal(HttpStatusCode.Forbidden, await Post("/saldos", balances));
+        client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranTesoreria);
+        Assert.Equal(HttpStatusCode.BadRequest, await Post("/saldos", new { sourceReference = "OFICIO-GT-1", currency = "CLP", items = new[] { new { organizationId = workshopX.Id, amountPending = -1 } } }));
+        Assert.Equal(HttpStatusCode.OK, await Post("/saldos", balances));
+        var readBalances = await client.GetAsync("/api/regimen-interior/saldos-padron", ct);
+        Assert.Equal(HttpStatusCode.OK, readBalances.StatusCode);
+        var balanceBody = await readBalances.Content.ReadAsStringAsync(ct); Assert.True(balanceBody.Contains("1500"), balanceBody);
+        // Con solo Gran Tesorería el saldo no está completo: falta lo que valida Gran Hospitalaria.
+        client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/cerrar", close));
+        client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranHospitalaria);
+        Assert.Equal(HttpStatusCode.OK, await Post("/saldos", new { sourceReference = "REG-GH-1", currency = "CLP",
+            items = new[] { new { organizationId = workshopX.Id, amountPending = 0m }, new { organizationId = workshopY.Id, amountPending = 0m } } }));
+        client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
+
+        var evaluated = await client.PostAsJsonAsync(root + "/evaluar", new { }, ct);
+        Assert.Equal(HttpStatusCode.OK, evaluated.StatusCode);
+        var text = await evaluated.Content.ReadAsStringAsync(ct);
+        Assert.Contains("\"habilitado\":2", text);
+        Assert.Contains("\"solo_asistencia\":1", text);
+
+        // Solo Régimen Interior cierra.
+        client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranSecretaria);
+        Assert.Equal(HttpStatusCode.Forbidden, await Post("/cerrar", close));
+        client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
+        Assert.Equal(HttpStatusCode.BadRequest, await Post("/cerrar", new { rosterReference = "" }));
+
+        // Régimen Interior levanta el bloqueo del Taller Y; el cierre re-evalúa y habilita a los 3.
+        Assert.Equal(HttpStatusCode.OK, await Post($"/talleres/{workshopY.Id}/bloqueo-saldo", new { action = "lift", reason = "Convenio de pago acreditado", evidenceReference = "ACTA-RI-LEVANTA" }));
+        var readiness = await (await client.GetAsync(root + "/cierre/estado", ct)).Content.ReadAsStringAsync(ct);
+        Assert.Contains("\"mayClose\":true", readiness);
+        var closed = await client.PostAsJsonAsync(root + "/cerrar", close, ct);
+        Assert.Equal(HttpStatusCode.OK, closed.StatusCode);
+        var closedText = await closed.Content.ReadAsStringAsync(ct);
+        Assert.Contains("\"voters\":3", closedText);
+        Assert.Matches("\"digest\":\"[0-9a-f]{64}\"", closedText);
+
+        // Una Asamblea cerrada no admite más cambios ni segundo cierre, por la API ni por la base.
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/cerrar", close));
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/evaluar", new { }));
+        Assert.Equal(HttpStatusCode.Conflict, await Post("/constancias", new { kind = "membership", action = "revoke", actaReference = "X", statement = "Intento tardío de retiro." }));
+        var listing = await (await client.GetAsync(root + "/listados", ct)).Content.ReadAsStringAsync(ct);
+        Assert.Contains("\"officiallyClosed\":true", listing);
+        Assert.Contains("\"provisional\":false", listing);
+        Assert.Contains("\"mayVote\":true", listing);
+        await using var scope2 = factory.Services.CreateAsyncScope();
+        var check = scope2.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
+        await Assert.ThrowsAsync<PostgresException>(() => check.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE core.assemblies SET \"Name\" = 'otro' WHERE \"Id\" = {assembly.Id}", ct));
+        await Assert.ThrowsAsync<PostgresException>(() => check.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM core.assembly_eligibilities WHERE \"AssemblyId\" = {assembly.Id}", ct));
     }
 
     private sealed class ListingTestAuth(

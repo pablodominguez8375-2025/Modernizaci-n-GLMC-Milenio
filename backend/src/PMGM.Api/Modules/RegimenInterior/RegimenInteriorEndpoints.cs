@@ -27,6 +27,11 @@ public static class RegimenInteriorEndpoints
             AssemblyAttestationEndpoints.GetAsync);
         group.MapPost("/asambleas/{assemblyId:guid}/constancias",
             AssemblyAttestationEndpoints.PostAsync);
+        group.MapPost("/asambleas/{assemblyId:guid}/acreditar", AssemblyClosureEndpoints.AccreditAsync);
+        group.MapGet("/saldos-padron", AssemblyClosureEndpoints.GetBalancesAsync);
+        group.MapPost("/asambleas/{assemblyId:guid}/saldos", AssemblyClosureEndpoints.PostBalancesAsync);
+        group.MapPost("/asambleas/{assemblyId:guid}/evaluar", AssemblyClosureEndpoints.EvaluateAsync);
+        group.MapPost("/asambleas/{assemblyId:guid}/cerrar", AssemblyClosureEndpoints.CloseAsync);
         group.MapGet("/asambleas/{assemblyId:guid}/listados",
             AssemblyRosterListingEndpoints.GetAsync);
         group.MapPost("/asambleas/{assemblyId:guid}/talleres/{organizationId:guid}/bloqueo-saldo",
