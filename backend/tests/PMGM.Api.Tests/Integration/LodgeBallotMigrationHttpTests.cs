@@ -38,7 +38,7 @@ public sealed class LodgeBallotMigrationHttpTests
             await institutional.Database.MigrateAsync(cancellationToken);
 
             var lodge = scope.ServiceProvider.GetRequiredService<LodgeManagementDbContext>();
-            var knownMigrations = (await lodge.Database.GetMigrationsAsync(cancellationToken)).ToArray();
+            var knownMigrations = (lodge.Database.GetMigrations()).ToArray();
             Assert.Contains("20260912140000_AddAnonymousLodgeBallots", knownMigrations);
             Assert.Contains("20260912141000_AddBallotProcedureNumber", knownMigrations);
 
@@ -110,7 +110,7 @@ public sealed class LodgeBallotMigrationHttpTests
         }
 
         using var unauthorized = new HttpRequestMessage(HttpMethod.Get, path);
-        unauthorized.Headers.Add("X-Test-Role", InstitutionalRoles.TallerTesorero);
+        unauthorized.Headers.Add("X-Test-Role", InstitutionalRoles.TallerTesoreria);
         using var denied = await client.SendAsync(unauthorized, cancellationToken);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
     }
