@@ -72,6 +72,11 @@ public sealed class SupportDiagnosticMiddleware(RequestDelegate next)
     public async Task InvokeAsync(HttpContext context, SupportDiagnosticBuffer buffer)
     {
         var recorded = false;
+        // Router-selected *template* is safe metadata. Snapshot BEFORE the
+        // inner exception handler: it can clear HttpContext.GetEndpoint() while
+        // handling an exception, otherwise a known API route becomes "(sin ruta)".
+        // Never retain Request.Path, route values, query, claims or the exception.
+        var selectedTemplate = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText;
         try
         {
             // Inner exception handler turns exceptions into status 500.
@@ -95,7 +100,8 @@ public sealed class SupportDiagnosticMiddleware(RequestDelegate next)
         {
             // Do not use Request.Path, QueryString, endpoint display names,
             // user-provided headers or exception messages.
-            var template = (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText
+            var template = selectedTemplate
+                           ?? (context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText
                            ?? "(sin ruta)";
             buffer.Record(new SupportDiagnosticEntry(
                 DateTimeOffset.UtcNow, "", status, context.Request.Method,
