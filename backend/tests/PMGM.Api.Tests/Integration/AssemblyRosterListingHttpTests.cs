@@ -119,6 +119,72 @@ public sealed class AssemblyRosterListingHttpTests
             $"/api/regimen-interior/asambleas/{assembly.Id}/talleres/{Guid.NewGuid()}/bloqueo-saldo", body, ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Only_internal_affairs_records_attestations_and_the_readiness_report_reflects_them()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = new PmgmWebApplicationFactory(cs)
+            .WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+            {
+                s.RemoveAll<RegimenInteriorDbContext>();
+                s.RemoveAll<DbContextOptions<RegimenInteriorDbContext>>();
+                s.AddDbContext<RegimenInteriorDbContext>(o => o.UseNpgsql(cs));
+                s.AddAuthentication(o =>
+                {
+                    o.DefaultAuthenticateScheme = ListingTestAuth.SchemeName;
+                    o.DefaultChallengeScheme = ListingTestAuth.SchemeName;
+                    o.DefaultForbidScheme = ListingTestAuth.SchemeName;
+                }).AddScheme<AuthenticationSchemeOptions, ListingTestAuth>(
+                    ListingTestAuth.SchemeName, _ => {});
+            }));
+
+        var empty = new AssemblyRecord { Name = "Asamblea sin asambleístas", MeetingDate = new(2026, 11, 19), CutoffDate = new(2026, 10, 19), CreatedBySubject = "qa-interno" };
+        var assembly = new AssemblyRecord { Name = "Asamblea de constancias", MeetingDate = new(2026, 11, 19), CutoffDate = new(2026, 10, 19), CreatedBySubject = "qa-interno" };
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.MigrateAsync(ct);
+            var db = scope.ServiceProvider.GetRequiredService<RegimenInteriorDbContext>();
+            await db.Database.MigrateAsync(ct);
+            db.Assemblies.AddRange(empty, assembly);
+            db.AssemblyMemberStatuses.Add(new AssemblyMemberStatusRecord
+            {
+                AssemblyId = assembly.Id, MemberId = Guid.NewGuid(), PersonId = Guid.NewGuid(), OrganizationId = Guid.NewGuid(),
+                Category = "representative", SourceOfficeAssignmentId = Guid.NewGuid(), SourceEvidenceReference = "VM-TEST",
+                FirstNamesAtCutoff = "Nombre", LastNamesAtCutoff = "Apellido", RutAtCutoff = "12345678-5",
+                WorkshopAtCutoff = "Taller sintético", VerifiedAtUtc = DateTimeOffset.UtcNow.AddDays(-1)
+            });
+            await db.SaveChangesAsync(ct);
+        }
+
+        using var client = factory.CreateClient();
+        var url = $"/api/regimen-interior/asambleas/{assembly.Id}/constancias";
+        var good = new { kind = "honor_coverage", action = "attest", actaReference = "ACTA-RI-7", statement = "El Tribunal de Honor informó cobertura completa al corte." };
+
+        client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranSecretaria);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(url, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(url, good, ct)).StatusCode);
+        client.DefaultRequestHeaders.Remove("X-Assembly-Test-Role");
+
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(url, new { kind = "honor_coverage", action = "attest", actaReference = "", statement = "Declaración suficiente." }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(url, new { kind = "tesoreria", action = "attest", actaReference = "A", statement = "Declaración suficiente." }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync($"/api/regimen-interior/asambleas/{empty.Id}/constancias", good, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(url, new { kind = "honor_coverage", action = "revoke", actaReference = "A", statement = "Declaración suficiente." }, ct)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(url, good, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(url, good, ct)).StatusCode);
+        var listed = await (await client.GetAsync(url, ct)).Content.ReadAsStringAsync(ct);
+        Assert.Contains("ACTA-RI-7", listed);
+
+        Assert.Equal(HttpStatusCode.OK, (await client.PostAsJsonAsync(url, new { kind = "honor_coverage", action = "revoke", actaReference = "ACTA-RI-8", statement = "Se retira por corrección del acta." }, ct)).StatusCode);
+        var after = await (await client.GetAsync(url, ct)).Content.ReadAsStringAsync(ct);
+        Assert.DoesNotContain("ACTA-RI-7", after);
+
+        var readiness = await (await client.GetAsync($"/api/regimen-interior/asambleas/{assembly.Id}/cierre/estado", ct)).Content.ReadAsStringAsync(ct);
+        Assert.Contains("\"mayClose\":false", readiness);
+    }
+
     private sealed class ListingTestAuth(
         IOptionsMonitor<AuthenticationSchemeOptions> options,
         ILoggerFactory logger, UrlEncoder encoder)

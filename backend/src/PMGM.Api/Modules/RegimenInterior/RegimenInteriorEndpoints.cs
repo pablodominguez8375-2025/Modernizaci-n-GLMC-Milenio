@@ -23,6 +23,10 @@ public static class RegimenInteriorEndpoints
             AssemblyPreliminaryRosterCsvEndpoints.GetAsync);
         group.MapGet("/asambleas/{assemblyId:guid}/cierre/estado",
             AssemblyClosureReadinessEndpoints.GetAsync);
+        group.MapGet("/asambleas/{assemblyId:guid}/constancias",
+            AssemblyAttestationEndpoints.GetAsync);
+        group.MapPost("/asambleas/{assemblyId:guid}/constancias",
+            AssemblyAttestationEndpoints.PostAsync);
         group.MapGet("/asambleas/{assemblyId:guid}/listados",
             AssemblyRosterListingEndpoints.GetAsync);
         group.MapPost("/asambleas/{assemblyId:guid}/talleres/{organizationId:guid}/bloqueo-saldo",

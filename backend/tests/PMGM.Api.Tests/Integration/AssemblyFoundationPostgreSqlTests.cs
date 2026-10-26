@@ -176,4 +176,40 @@ public sealed class AssemblyFoundationPostgreSqlTests
             return null;
         }
     }
+
+    [Fact]
+    public async Task Attestation_events_are_append_only_and_restricted_to_known_kinds()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(connectionString)) return;
+
+        var ct = TestContext.Current.CancellationToken;
+        var options = new DbContextOptionsBuilder<RegimenInteriorDbContext>().UseNpgsql(connectionString).Options;
+        await using var db = new RegimenInteriorDbContext(options);
+        await db.Database.MigrateAsync(ct);
+        Assert.Contains("20261026130000_AddAssemblyAttestationEvents", await db.Database.GetAppliedMigrationsAsync(ct));
+
+        var assembly = new AssemblyRecord { Name = "GA constancias ficticia", MeetingDate = new(2026, 12, 31), CutoffDate = new(2026, 10, 19), CreatedBySubject = "qa-ri" };
+        db.Assemblies.Add(assembly);
+        var ev = new AssemblyAttestationEventRecord
+        {
+            AssemblyId = assembly.Id, Kind = "membership", Action = "attest", ActaReference = "Acta ficticia 1",
+            Statement = "Declaración ficticia de prueba.", RecordedBySubject = "qa-ri", CutoffDate = assembly.CutoffDate
+        };
+        db.AssemblyAttestationEvents.Add(ev);
+        await db.SaveChangesAsync(ct);
+
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE core.assembly_attestation_events SET \"Statement\" = 'otra' WHERE \"Id\" = {ev.Id}", ct));
+        await Assert.ThrowsAsync<PostgresException>(() => db.Database.ExecuteSqlInterpolatedAsync(
+            $"DELETE FROM core.assembly_attestation_events WHERE \"Id\" = {ev.Id}", ct));
+
+        db.AssemblyAttestationEvents.Add(new AssemblyAttestationEventRecord
+        {
+            AssemblyId = assembly.Id, Kind = "tesoreria", Action = "attest", ActaReference = "x",
+            Statement = "Tipo desconocido no permitido.", RecordedBySubject = "qa-ri", CutoffDate = assembly.CutoffDate
+        });
+        var ex = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync(ct));
+        Assert.IsType<PostgresException>(ex.InnerException);
+    }
 }

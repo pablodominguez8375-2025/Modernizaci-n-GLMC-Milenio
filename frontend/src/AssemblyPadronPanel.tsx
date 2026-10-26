@@ -1,8 +1,8 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import type { PmgmApiClient } from './api/pmgmApi'
 import {
-  assemblyReadinessStateLabel, assemblyReviewActionLabels, assemblyStatusLabel,
-  type AssemblyClosureReadiness, type AssemblyListing, type AssemblyListingRow, type AssemblyReviewAction, type AssemblySummary,
+  assemblyAttestationsByStep, assemblyAttestationTitles, assemblyReadinessStateLabel, assemblyReviewActionLabels, assemblyStatusLabel,
+  type AssemblyAttestationKind, type AssemblyAttestationStatus, type AssemblyClosureReadiness, type AssemblyListing, type AssemblyListingRow, type AssemblyReviewAction, type AssemblySummary,
 } from './api/assemblyApi'
 import { ActionDrawer } from './actionKit'
 
@@ -13,6 +13,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   const [assemblyId, setAssemblyId] = useState('')
   const [listing, setListing] = useState<AssemblyListing | null>(null)
   const [readiness, setReadiness] = useState<AssemblyClosureReadiness | null>(null)
+  const [attestations, setAttestations] = useState<AssemblyAttestationStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
@@ -20,11 +21,11 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   const fail = (reason: unknown, fallback: string) => setError(reason instanceof Error ? reason.message : fallback)
 
   const loadListing = useCallback(async (id: string) => {
-    if (!id) { setListing(null); setReadiness(null); return }
+    if (!id) { setListing(null); setReadiness(null); setAttestations([]); return }
     setLoading(true); setError(null)
     try {
-      const [rows, state] = await Promise.all([api.getAssemblyListing(id), api.getAssemblyClosureReadiness(id)])
-      setListing(rows); setReadiness(state)
+      const [rows, state, atts] = await Promise.all([api.getAssemblyListing(id), api.getAssemblyClosureReadiness(id), api.getAssemblyAttestations(id)])
+      setListing(rows); setReadiness(state); setAttestations(atts.items)
     }
     catch (reason) { fail(reason, 'No fue posible cargar los listados.') }
     finally { setLoading(false) }
@@ -60,6 +61,17 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
       setMessage(action === 'lift' ? 'Bloqueo levantado por Régimen Interior, con motivo y referencia registrados en la auditoría.' : 'Bloqueo restablecido; el Taller vuelve a quedar sin sufragio.')
       await loadListing(assemblyId)
     } catch (reason) { fail(reason, 'No fue posible registrar la decisión.') }
+  }
+
+  async function attest(event: FormEvent<HTMLFormElement>, kind: AssemblyAttestationKind, action: 'attest' | 'revoke') {
+    event.preventDefault()
+    const data = new FormData(event.currentTarget)
+    setError(null); setMessage(null)
+    try {
+      await api.recordAssemblyAttestation(assemblyId, { kind, action, actaReference: String(data.get('acta') ?? ''), statement: String(data.get('statement') ?? '') })
+      setMessage(action === 'attest' ? 'Constancia registrada por Régimen Interior, con su acta, en la auditoría.' : 'Constancia retirada; el paso vuelve a quedar pendiente.')
+      await loadListing(assemblyId)
+    } catch (reason) { fail(reason, 'No fue posible registrar la constancia.') }
   }
 
   async function memberDecision(event: FormEvent<HTMLFormElement>, row: AssemblyListingRow) {
@@ -107,7 +119,22 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
       <ol className="assembly-readiness-list">
         {readiness.items.map(item => <li key={item.code} className={`assembly-readiness-item ${item.state}`}>
           <span className={`status-pill ${item.state === 'ok' ? 'complete' : 'attention'}`}>{assemblyReadinessStateLabel[item.state]}</span>
-          <div><strong>{item.title}</strong><p>{item.detail}</p></div>
+          <div><strong>{item.title}</strong><p>{item.detail}</p>
+            {(assemblyAttestationsByStep[item.code] ?? []).map(kind => {
+              const current = attestations.find(a => a.kind === kind)
+              const title = assemblyAttestationTitles[kind]
+              return <div key={kind} className="assembly-attestation">
+                {current?.attested && <span className="muted">Constancia registrada · acta {current.actaReference}</span>}
+                {current?.attested
+                  ? <ActionDrawer label="Retirar constancia" tone="secondary" title={`Retirar constancia · ${title}`} description="Deja el paso otra vez pendiente. Queda en la auditoría.">
+                      <AttestationForm submitLabel="Retirar constancia" onSubmit={e => attest(e, kind, 'revoke')} />
+                    </ActionDrawer>
+                  : <ActionDrawer label={`Registrar constancia · ${title}`} title={`Constancia · ${title}`} description="Declaración de Régimen Interior, con el acta que la respalda, de que esta fuente está completa y verificada al corte. No concede sufragio ni cierra el padrón.">
+                      <AttestationForm submitLabel="Registrar constancia" onSubmit={e => attest(e, kind, 'attest')} />
+                    </ActionDrawer>}
+              </div>
+            })}
+          </div>
         </li>)}
       </ol>
     </section>}
@@ -173,6 +200,14 @@ function DebtForm({ submitLabel, onSubmit }: { submitLabel: string; onSubmit: (e
   return <form className="assembly-form" onSubmit={onSubmit}>
     <label className="field"><span>Motivo (mínimo 10 caracteres)</span><textarea name="reason" required minLength={10} maxLength={2000} rows={3} /></label>
     <label className="field"><span>Referencia del acta o resolución</span><input name="evidence" required maxLength={500} placeholder="ACTA-RI-2026-001" /></label>
+    <button type="submit" className="action-trigger primary">{submitLabel}</button>
+  </form>
+}
+
+function AttestationForm({ submitLabel, onSubmit }: { submitLabel: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <form className="assembly-form" onSubmit={onSubmit}>
+    <label className="field"><span>Referencia del acta</span><input name="acta" required maxLength={500} placeholder="ACTA-RI-2026-014" /></label>
+    <label className="field"><span>Declaración (mínimo 10 caracteres)</span><textarea name="statement" required minLength={10} maxLength={2000} rows={3} /></label>
     <button type="submit" className="action-trigger primary">{submitLabel}</button>
   </form>
 }

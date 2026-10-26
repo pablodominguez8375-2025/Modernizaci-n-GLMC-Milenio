@@ -36,6 +36,9 @@ public static class AssemblyClosureReadinessEndpoints
         var signedWorkshops = workshopIds.Length == 0 ? [] : await db.AssemblyTreasurySignedReviews.AsNoTracking()
             .Where(x => x.AssemblyId == assemblyId && workshopIds.Contains(x.OrganizationId))
             .Select(x => x.OrganizationId).Distinct().ToArrayAsync(ct);
+        var attested = AssemblyAttestationPolicy.Current(
+            await db.AssemblyAttestationEvents.AsNoTracking().Where(x => x.AssemblyId == assemblyId).ToArrayAsync(ct))
+            .Keys.ToArray();
         var restrictions = await db.InstitutionalRestrictions.AsNoTracking().CountAsync(x => x.RevokedAtUtc == null, ct);
 
         AssemblyMemberSourceInventoryResult? inventory = null; string? officeCode = null;
@@ -48,7 +51,7 @@ public static class AssemblyClosureReadinessEndpoints
 
         var report = AssemblyClosureReadinessBuilder.Build(assembly, new AssemblyReadinessFacts(
             inventory?.CandidateFacts.Count ?? 0, inventory?.BlockingReasons ?? ["MASTER_OFFICE_RECORDS_MISSING"], officeCode,
-            members.Length, statuses, workshopIds.Length, signedWorkshops.Length, restrictions));
+            members.Length, statuses, workshopIds.Length, signedWorkshops.Length, restrictions, attested));
 
         audit.Add(context, "regimen.asamblea.cierre.estado.consultado", nameof(AssemblyRecord), assemblyId.ToString("D"),
             null, AuditResults.Success, new { Items = report.Items.Count, MayClose = report.MayClose });
@@ -60,7 +63,8 @@ public static class AssemblyClosureReadinessEndpoints
 public sealed record AssemblyReadinessFacts(
     int MasterCandidatesFound, IReadOnlyList<string> InventoryBlockingReasons, string? MasterOfficeCode,
     int MaterializedMembers, IReadOnlyList<string> MemberStatuses,
-    int Workshops, int WorkshopsWithSignedTreasuryReview, int ActiveRestrictions);
+    int Workshops, int WorkshopsWithSignedTreasuryReview, int ActiveRestrictions,
+    IReadOnlyCollection<string>? AttestedKinds = null);
 
 public sealed record AssemblyReadinessItem(string Code, string Title, string State, string Detail, int? Count);
 
@@ -82,14 +86,23 @@ public static class AssemblyClosureReadinessBuilder
             isDraft ? $"Corte al {assembly.CutoffDate:dd-MM-yyyy}, reunión el {assembly.MeetingDate:dd-MM-yyyy}."
                     : "La Asamblea ya no está en borrador.", null));
 
+        var attested = f.AttestedKinds ?? [];
+        var masterAttested = attested.Contains(AssemblyAttestationPolicy.MasterPeriods);
         var offices = f.MasterCandidatesFound > 0
-            ? new AssemblyReadinessItem("master_terms", "Períodos de Venerable Maestro", Pending,
-                $"Se encontraron {f.MasterCandidatesFound} hermanos con cargo de Venerable Maestro. Falta la constancia oficial de cada período (acta).", f.MasterCandidatesFound)
+            ? new AssemblyReadinessItem("master_terms", "Períodos de Venerable Maestro", masterAttested ? Ok : Pending,
+                masterAttested
+                    ? $"Régimen Interior certificó los períodos de los {f.MasterCandidatesFound} Venerables Maestros con su acta."
+                    : $"Se encontraron {f.MasterCandidatesFound} hermanos con cargo de Venerable Maestro. Falta la constancia oficial de cada período (acta).", f.MasterCandidatesFound)
             : new AssemblyReadinessItem("master_terms", "Períodos de Venerable Maestro", Blocked,
                 f.InventoryBlockingReasons.Contains("MASTER_OFFICE_RECORDS_MISSING")
                     ? "No hay cargos de Venerable Maestro registrados en las fichas. Primero deben cargarse (Carga inicial)."
                     : "Los registros de Venerables Maestros tienen inconsistencias: " + string.Join(", ", f.InventoryBlockingReasons) + ".", 0);
         items.Add(offices);
+
+        var membershipAttested = attested.Contains(AssemblyAttestationPolicy.Membership);
+        items.Add(new("membership", "Calidad de miembro activo", membershipAttested ? Ok : Pending,
+            membershipAttested ? "Régimen Interior certificó la calidad de miembro activo de los asambleístas al corte, con su acta."
+                               : "Falta la constancia de Régimen Interior sobre la calidad de miembro activo al corte (acta).", null));
 
         items.Add(new("roster", "Asambleístas acreditados", f.MaterializedMembers > 0 ? Ok : Pending,
             f.MaterializedMembers > 0 ? $"{f.MaterializedMembers} asambleístas acreditados para esta Asamblea."
@@ -108,9 +121,14 @@ public static class AssemblyClosureReadinessBuilder
                 : gtOk ? $"Los {f.Workshops} Talleres tienen revisión firmada de Gran Tesorería."
                 : $"{f.WorkshopsWithSignedTreasuryReview} de {f.Workshops} Talleres tienen revisión firmada de Gran Tesorería.", f.Workshops - f.WorkshopsWithSignedTreasuryReview));
 
-        items.Add(new("rights", "Tribunal de Honor y Régimen Interior", Pending,
-            "Falta la declaración de cobertura completa de ambas fuentes al corte" +
-            (f.ActiveRestrictions > 0 ? $" ({f.ActiveRestrictions} restricciones vigentes registradas)." : " (sin restricciones registradas)."), f.ActiveRestrictions));
+        var honor = attested.Contains(AssemblyAttestationPolicy.HonorCoverage);
+        var regimen = attested.Contains(AssemblyAttestationPolicy.RegimenCoverage);
+        var restrictionNote = f.ActiveRestrictions > 0 ? $" ({f.ActiveRestrictions} restricciones vigentes registradas)." : " (sin restricciones registradas).";
+        items.Add(new("rights", "Tribunal de Honor y Régimen Interior", honor && regimen ? Ok : Pending,
+            honor && regimen ? "Ambas fuentes están certificadas como completas al corte" + restrictionNote
+            : honor ? "Falta la constancia de cobertura completa de Régimen Interior al corte" + restrictionNote
+            : regimen ? "Falta la constancia de cobertura completa del Tribunal de Honor al corte" + restrictionNote
+            : "Falta la declaración de cobertura completa de ambas fuentes al corte" + restrictionNote, f.ActiveRestrictions));
 
         var blocking = items.Where(i => i.State != Ok).Select(i => i.Code).ToList();
         items.Add(new("closure", "Cierre del padrón", Blocked,

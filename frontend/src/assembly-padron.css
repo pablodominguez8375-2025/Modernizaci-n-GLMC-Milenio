@@ -13,3 +13,5 @@
 .assembly-readiness-item.ok{border-color:#b9d8bd;background:#f6fbf6}
 .assembly-readiness-item p{margin:.15rem 0 0;color:#4a5a73;font-size:.95rem}
 @media(max-width:520px){.assembly-readiness-item{grid-template-columns:1fr}}
+
+.assembly-attestation{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem;margin-top:.5rem}
