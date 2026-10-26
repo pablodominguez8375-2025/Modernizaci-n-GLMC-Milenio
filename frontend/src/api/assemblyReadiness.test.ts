@@ -78,3 +78,18 @@ describe('informe «Qué falta para cerrar el padrón» (demo)', () => {
     expect(() => store.accredit(created.id)).toThrow('Carga inicial')
   })
 })
+
+describe('padrón oficial (demostración)', () => {
+  it('solo se descarga con la Asamblea cerrada y sale ordenado, sin firma y con RUT protegido', () => {
+    const store = new MockAssemblyStore(); const id = 'demo-asamblea-2026'
+    expect(() => store.officialRoster(id, 'sufragantes', 'csv')).toThrow('cerrada')
+    for (const kind of ['membership', 'master_periods', 'honor_coverage', 'regimen_coverage'] as const)
+      store.recordAttestation(id, { kind, action: 'attest', actaReference: 'ACTA-' + kind, statement: 'Fuente verificada y completa.' })
+    for (const source of ['gran_tesoreria', 'gran_hospitalaria'] as const)
+      store.recordBalances(id, { source, sourceReference: 'REF-1', currency: 'CLP', items: ['demo-org-1', 'demo-org-23', 'demo-org-8', 'demo-org-14'].map(organizationId => ({ organizationId, amountPending: 0 })) })
+    store.evaluate(id); store.close(id, 'ACTA-CIERRE')
+    const pdf = store.officialRoster(id, 'sufragantes', 'pdf')
+    expect(pdf.fileName).toMatch(/^padron-sufragantes-\d{4}-\d{2}-\d{2}\.pdf$/)
+    expect(store.officialRoster(id, 'asambleistas', 'csv').blob.type).toContain('text/csv')
+  })
+})

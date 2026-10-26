@@ -190,7 +190,7 @@ public static class CandidateFormCapturePdf
         return builder.ToString();
     }
 
-    private static string Printable(string input)
+    internal static string Printable(string input)
     {
         var builder = new StringBuilder(input.Length);
         foreach (var rune in input.EnumerateRunes())
@@ -216,7 +216,7 @@ public static class CandidateFormCapturePdf
             [0x0153] = 0x9C, [0x017E] = 0x9E, [0x0178] = 0x9F,
         };
 
-    private static string HexWinAnsi(string value)
+    internal static string HexWinAnsi(string value)
     {
         var builder = new StringBuilder(value.Length * 2);
         foreach (var rune in value.EnumerateRunes())

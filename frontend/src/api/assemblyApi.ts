@@ -40,6 +40,7 @@ export interface AssemblyBalancesOverviewItem {
   id: string; name: string; cutoffDate: string; meetingDate: string
   workshops: { organizationId: string; name: string; amountPending: number | null; currency: string | null; sourceReference: string | null }[]
 }
+export type AssemblyOfficialList = 'asambleistas' | 'sufragantes'
 export interface AssemblyCloseResult { assemblyId: string; closed: boolean; closedAtUtc: string; voters: number; digest: string }
 export interface AssemblyEvaluateResult { assemblyId: string; evaluated: number; appended: number; counts: Record<string, number> }
 export const assemblyReadinessStateLabel: Record<AssemblyReadinessState, string> = { ok: 'Listo', pending: 'Pendiente', blocked: 'Bloqueado' }
@@ -212,6 +213,16 @@ export class MockAssemblyStore {
       att.delete(payload.kind)
     }
     this.attestations.set(assemblyId, att)
+  }
+  officialRoster(assemblyId: string, list: AssemblyOfficialList, format: 'pdf' | 'csv'): { blob: Blob; fileName: string } {
+    const info = this.closedIds.get(assemblyId)
+    if (!info) throw new Error('El padrón oficial solo se puede descargar cuando la Asamblea está cerrada.')
+    const l = this.listing(assemblyId)
+    const rows = list === 'sufragantes' ? l.sufragantes.map(v => [v.number, v.name, v.rut.replace('***', '000'), v.workshop]) : l.asambleistas.map(r => [r.number, r.name, r.rut.replace('***', '000'), r.workshop])
+    const day = info.at.slice(0, 10)
+    const name = `padron-${list}-${day}.${format}`
+    if (format === 'pdf') return { blob: new Blob(['Padrón oficial DEMOSTRATIVO (datos ficticios)'], { type: 'application/pdf' }), fileName: name }
+    return { blob: new Blob(['\uFEFF' + [['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Firma'], ...rows.map(r => [...r, ''])].map(r => r.map(c => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileName: name }
   }
   listing(assemblyId: string): AssemblyListing {
     const assembly = this.assemblies.find(a => a.id === assemblyId)

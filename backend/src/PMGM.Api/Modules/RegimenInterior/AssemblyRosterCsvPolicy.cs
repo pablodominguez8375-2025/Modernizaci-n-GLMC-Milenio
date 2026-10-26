@@ -42,6 +42,14 @@ public static class AssemblyRosterCsvPolicy
             false);
     }
 
+    /// <summary>CSV de un listado de una Asamblea CERRADA (el llamador ya verificó el cierre y enmascaró el RUT).</summary>
+    public static byte[] SerializeOfficial(IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        if (rows.Count > MaxRows) throw new ArgumentException("INVALID_ROSTER_CANDIDATES", nameof(rows));
+        return Serialize(rows, includeSuffrageMark);
+    }
+
     private static byte[] Serialize(
         IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark)
     {

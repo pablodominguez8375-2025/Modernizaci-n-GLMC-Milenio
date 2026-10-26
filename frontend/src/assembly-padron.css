@@ -21,3 +21,8 @@
 .assembly-balance-card { border-top: 1px solid var(--line, #d9dfef); padding-top: 1rem; margin-top: 1rem; }
 .assembly-balance-summary { list-style: none; margin: 0.5rem 0 1rem; padding: 0; display: grid; gap: 0.4rem; }
 .assembly-balance-summary li { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; justify-content: space-between; }
+
+.assembly-official-grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); }
+.assembly-official-item { display: grid; gap: 0.5rem; padding: 1rem; border: 1px solid var(--line, #d9dfef); border-radius: 0.75rem; align-content: start; }
+.assembly-official-item small { color: var(--muted, #5b6478); }
+.assembly-official-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
