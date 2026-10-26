@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Mail;
 using System.Text.RegularExpressions;
 using PMGM.Api.Modules.Core;
+using PMGM.Api.Modules.Membership;
 
 namespace PMGM.Api.Modules.Bootstrap;
 
@@ -16,6 +17,20 @@ public static class InitialLoadPreflightPolicy
     public const int MaxRowsPerSheet = 2000;
     public const int MaxFieldLength = 256;
     public const int MaxIssues = 100;
+    // The CSV carries canonical institutional history codes, not arbitrary
+    // free text. This is a syntax/domain check, not legal approval to load.
+    private static readonly HashSet<string> InstitutionalStatuses = new(StringComparer.Ordinal)
+    {
+        MembershipCodes.InstitutionalStatus.Active,
+        MembershipCodes.InstitutionalStatus.Inactive,
+        MembershipCodes.InstitutionalStatus.PastActive,
+        MembershipCodes.InstitutionalStatus.VoluntaryWithdrawal,
+        MembershipCodes.InstitutionalStatus.ForcedWithdrawal,
+        MembershipCodes.InstitutionalStatus.Reinstated,
+        MembershipCodes.InstitutionalStatus.Deceased,
+        MembershipCodes.InstitutionalStatus.WorkshopTransfer
+    };
+
 
     public sealed record Finding(string Sheet, int Row, string Field, string Code);
     public sealed record Result(
@@ -127,8 +142,12 @@ public static class InitialLoadPreflightPolicy
             if (Code(personFile, i, row, "workshopCode") &&
                 !workshops.Contains(Read(row, "workshopCode")))
                 Add(personFile, i + 2, "workshopCode", "UNKNOWN_WORKSHOP");
-            foreach (var key in new[] { "firstNames", "lastNames", "institutionalStatus" })
+            foreach (var key in new[] { "firstNames", "lastNames" })
                 Required(personFile, i, row, key);
+
+            if (Required(personFile, i, row, "institutionalStatus") &&
+                !InstitutionalStatuses.Contains(Read(row, "institutionalStatus")))
+                Add(personFile, i + 2, "institutionalStatus", "INVALID_STATUS");
 
             var grade = Read(row, "grade");
             if (!new[] { "1", "2", "3" }.Contains(grade, StringComparer.Ordinal))
