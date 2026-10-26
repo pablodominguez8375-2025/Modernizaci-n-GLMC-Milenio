@@ -109,12 +109,28 @@ class PilotDb2RealMigrationsTests(unittest.TestCase):
             # Verify a genuine EF table and the main module's migration history.
             self.assertEqual("t", psql("pmgm_migrator", pw["migrator"],
                 "SELECT to_regclass('core.audit_events') IS NOT NULL;").stdout.strip())
+            # #752: el migrador REAL de la imagen debe aplicar también las
+            # migraciones propias de LodgeManagementDbContext (antes omitidas).
+            self.assertEqual("t", psql("pmgm_migrator", pw["migrator"],
+                "SELECT to_regclass('core.lodge_anonymous_ballots') IS NOT NULL;").stdout.strip())
+            self.assertEqual("t", psql("pmgm_migrator", pw["migrator"],
+                "SELECT EXISTS (SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema='core' AND table_name='lodge_anonymous_ballots' "
+                "AND column_name='ProcedureNumber');").stdout.strip())
             self.assertGreater(int(psql("pmgm_migrator", pw["migrator"],
                 'SELECT count(*) FROM public."__EFMigrationsHistory";'
             ).stdout.strip()), 20)
 
             run(["docker", "exec", "-e", "PGPASSWORD=" + pw["admin"],
                  db, "bash", "/scripts/grant-pilot-db2.sh"], timeout=90)
+            # El rol de API puede leer la tabla, pero no migrarla.
+            self.assertEqual("t", psql("pmgm_app", pw["admin"],
+                "SELECT has_table_privilege('pmgm_runtime', "
+                "'core.lodge_anonymous_ballots', 'SELECT');").stdout.strip())
+            self.assertEqual(0, psql("pmgm_runtime", pw["runtime"],
+                'SELECT "ProcedureNumber" FROM core.lodge_anonymous_ballots LIMIT 0;',
+                check=False).returncode)
+
             # Historial EF migrator-only: no SELECT ni DML para runtime/reportes.
             # Comprobar tanto ACL como intentos SQL con identidades auténticas.
             for role in ("runtime", "reports"):
