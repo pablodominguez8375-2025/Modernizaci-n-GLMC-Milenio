@@ -4,7 +4,7 @@ Fecha: 2026-10-26. Base `dev@301a576c6d75187aeeb71901d9c276bf7b4e334c`, `main@6d
 
 ## Cambios reservados y realizados
 1. `backend/src/PMGM.Api/Program.cs`: migrador DDL BD2 ejecuta `LodgeManagementDbContext.MigrateAsync()` justo después de `PmgmDbContext.MigrateAsync()` y antes de Bootstrap, preservando los otros nueve contextos y la separación API DML/migrador. Estas migraciones (ya existentes) crean `core.lodge_anonymous_ballots` y añaden `ProcedureNumber`; no se crea migración adicional ni se altera dominio/roles.
-2. `backend/tests/PMGM.Api.Tests/Integration/LodgeBallotMigrationHttpTests.cs`: regresión real PostgreSQL, reproduce la secuencia de migraciones, comprueba ambas y reejecución idempotente, GET autorizado sin filas 200 + no-store + items vacíos, inserta votación **sintética** y comprueba readback, perfil Tesorero 403. Se omite si no se dispone de PMGM_TEST_POSTGRES.
+2. `backend/tests/PMGM.Api.Tests/Integration/LodgeManagementHttpWorkflowTests.cs`: regresión real PostgreSQL, reproduce la secuencia de migraciones, comprueba ambas y reejecución idempotente, GET autorizado sin filas 200 + no-store + items vacíos, inserta votación **sintética** y comprueba readback, perfil Tesorero 403. Se omite si no se dispone de PMGM_TEST_POSTGRES.
 
 ## Evidencia / límites
 Fuente Issue #752, incidente #681, código y 61 eventos agregados CSV. **Hipótesis de causa física:** migraciones omitidas, falta tabla/columna o permiso SELECT; no afirmar confirmación hasta inspección real del QA runtime/DDL y logs privados. Especial cuidado: si tabla ya existe creada fuera del historial EF, el migrador puede fallar por colisión; comprobar estado físico previo al procedimiento de actualización y no aplicar DDL manual. Backup verificado, plan rollback y rol migrador; nunca API DML con permisos DDL.
@@ -16,3 +16,4 @@ Fuente Issue #752, incidente #681, código y 61 eventos agregados CSV. **Hipóte
 - Cierre #752 sólo tras QA físico y UAT; #681 sigue su diagnóstico aparte.
 
 Enlaces: https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/752 y https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/753 .
+\nNotas CI: el test se incorporó en la clase de integración ya asignada a shards CI, sin modificar workflows calientes ni dejar una clase sin cobertura de shard. Primer intento tuvo errores de compilación corregidos (GetMigrations API y rol TallerTesoreria); segundo detectó cobertura de shard incompleta; resuelto reubicando la prueba en clase existente. Gates deben revalidarse en nuevo HEAD.\n
