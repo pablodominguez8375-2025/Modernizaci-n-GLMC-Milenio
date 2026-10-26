@@ -173,7 +173,7 @@ public static class SessionProfileBuilder
                 CanReadLibrary: user.Identity?.IsAuthenticated == true,
                 CanManagePrivacy: access.CanManagePrivacy(user),
                 CanConfigureSystem: access.CanConfigureSystem(user),
-                CanManageAccessProfiles: access.IsPlatformSuperAdmin(user),
+                CanManageAccessProfiles: access.IsPlatformOperator(user),
                 CanReadLodgeCouncilSummary: false,
                 CanManageLodgeCouncilSummaryAccess: false,
                 CanManageAnyWorkshopProfile: access.CanEditAnyWorkshopProfile(user),

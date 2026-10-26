@@ -148,6 +148,21 @@
           }
         },
         {
+          "name": "pmgm-account-kind",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "pmgm_account_kind",
+            "claim.name": "pmgm_account_kind",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
           "name": "pmgm-scope",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-attribute-mapper",

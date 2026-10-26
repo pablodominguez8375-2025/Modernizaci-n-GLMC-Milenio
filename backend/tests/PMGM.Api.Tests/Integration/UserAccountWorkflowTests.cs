@@ -190,6 +190,39 @@ public sealed class UserAccountWorkflowTests
         Assert.True(candidates.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
     }
 
+    // Regla del PO (26-10 19:49): los superusuarios ven lo mismo que el Máster y crean usuarios y perfiles,
+    // pero no pueden crear superusuarios ni tocar al Máster ni a otro superusuario.
+    [Fact]
+    public async Task Superuser_creates_regular_users_but_never_superusers_and_cannot_touch_master_or_other_superusers()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        UserAccountEndpoints.ResetRateLimits();
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var client=factory.CreateClient();var ids=await Seed(factory,"active");
+        var ct=TestContext.Current.CancellationToken;
+        client.DefaultRequestHeaders.Add("X-Account-Kind","superuser");
+        using var options=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",ct));
+        Assert.True(options.RootElement.GetProperty("canCreateUser").GetBoolean());
+        Assert.False(options.RootElement.GetProperty("canCreateSuperuser").GetBoolean());
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync("/api/system/user-accounts",new {superuser=true,platformName="Otro Soporte",platformEmail=$"o-{Guid.NewGuid():N}@example.invalid"},ct)).StatusCode);
+        Assert.Equal(0,identity.Prepares);
+        Assert.Equal(HttpStatusCode.Created,(await client.PostAsJsonAsync("/api/system/user-accounts",new {memberId=ids.Member,organizationId=ids.Organization},ct)).StatusCode);
+        var member=Guid.NewGuid().ToString();var other=Guid.NewGuid().ToString();var master=Guid.NewGuid().ToString();
+        identity.Managed[member]=new(member,"Hermano Ficticio","m@example.invalid",true,"member");
+        identity.Managed[other]=new(other,"Otro Soporte","o@example.invalid",true,"superuser");
+        identity.Managed[master]=new(master,"Máster","x@example.invalid",true,"platform");
+        string P(string s)=>$"/api/system/user-accounts/{s}/password-recovery";
+        Assert.Equal(HttpStatusCode.OK,(await client.PostAsJsonAsync(P(member),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync(P(other),new{modality="email"},ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await client.PostAsJsonAsync(P(master),new{modality="email"},ct)).StatusCode);
+        // El Máster sí puede restablecer a un Superusuario.
+        using var asMaster=factory.CreateClient();asMaster.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        Assert.Equal(HttpStatusCode.OK,(await asMaster.PostAsJsonAsync(P(other),new{modality="email"},ct)).StatusCode);
+        // Un miembro con atributo «superuser» pero sin alcance de la Orden no es operador (el claim solo vale con pmgm_scope=order).
+        var access=new InstitutionalAccessService();
+        var noScope=new ClaimsPrincipal(new ClaimsIdentity([new Claim(InstitutionalClaims.AccountKind,"superuser")],"t"));
+        Assert.False(access.IsPlatformOperator(noScope));
+    }
+
     [Fact]
     public async Task Access_reset_is_master_only_audited_and_never_exposes_the_password_outside_the_response()
     {
@@ -283,8 +316,12 @@ internal sealed class AccountAuth(IOptionsMonitor<AuthenticationSchemeOptions> o
     public const string SchemeName="PMGM-Account-Test";
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        var role=Request.Headers["X-Account-Role"].FirstOrDefault()??InstitutionalRoles.GranLogiaAdmin;
-        var principal=new ClaimsPrincipal(new ClaimsIdentity([new Claim("sub","ci-account-admin"),new Claim(ClaimTypes.NameIdentifier,"ci-account-admin"),new Claim(InstitutionalClaims.Scope,"order"),new Claim(InstitutionalClaims.Role,role)],SchemeName));
+        var kind=Request.Headers["X-Account-Kind"].FirstOrDefault();
+        var role=Request.Headers["X-Account-Role"].FirstOrDefault()??(kind is null?InstitutionalRoles.GranLogiaAdmin:null);
+        var claims=new List<Claim>{new("sub","ci-account-admin"),new(ClaimTypes.NameIdentifier,"ci-account-admin"),new(InstitutionalClaims.Scope,"order")};
+        if(role is not null)claims.Add(new Claim(InstitutionalClaims.Role,role));
+        if(kind is not null)claims.Add(new Claim(InstitutionalClaims.AccountKind,kind));
+        var principal=new ClaimsPrincipal(new ClaimsIdentity(claims,SchemeName));
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal,SchemeName)));
     }
 }
