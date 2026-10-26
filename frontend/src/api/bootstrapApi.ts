@@ -1,3 +1,5 @@
+import type { InitialLoadPreviewResult } from '../initialLoadPreview'
+import { describePreviewHttpError } from '../initialLoadPreview'
 export interface BootstrapInstitution { name: string }
 export interface BootstrapWorkshop { name: string; number: string }
 export interface InstitutionalBootstrapRequest {
@@ -46,7 +48,7 @@ const mockCatalog: BootstrapCatalogResponse = {
 export interface InitialLoadContract {
   status: string; revision: string
   files: { name: string; columns: string[] }[]
-  requiresLegalApprovalBeforeRealData: boolean
+  requiresLegalApprovalBeforeRealData?: boolean; legalReviewIsExternal?: boolean
   acceptsUploadedData: boolean; createsAccounts: boolean; assignsProfiles: boolean; supportsApply: boolean
 }
 
@@ -109,6 +111,22 @@ export class BootstrapApiClient {
     return this.get<InitialLoadStatus>('/api/platform/bootstrap/initial-load/status')
   }
 
+  /** #750 — revisión SOLO LECTURA de los 3 CSV (JSON con el texto de cada archivo). No guarda, no importa. Solo el Máster registrado. */
+  async previewInitialLoad(files: Record<string, string>): Promise<InitialLoadPreviewResult> {
+    if (this.useMocks) return mockPreview(files)
+    const token = await this.getAccessToken?.()
+    if (!token) throw new Error('Debe ingresar como Superadmin para revisar los archivos.')
+    const response = await fetch(`${this.baseUrl}/api/platform/bootstrap/initial-load/preview`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify(files), credentials: 'omit', cache: 'no-store', redirect: 'error',
+    })
+    if (!response.ok) {
+      if (response.status === 401) await this.onUnauthorized?.()
+      throw new Error(describePreviewHttpError(response.status))
+    }
+    return response.json() as Promise<InitialLoadPreviewResult>
+  }
+
   /** Descarga el ZIP con las 3 plantillas CSV vacías (solo encabezados). */
   async downloadInitialLoadTemplate(): Promise<{ blob: Blob; fileName: string }> {
     const fileName = 'PMGM-Carga-Inicial-Plantillas-CSV-v1.zip'
@@ -156,3 +174,21 @@ export function createDefaultBootstrapApiClient(getAccessToken?: BootstrapTokenP
 
 function zeroChanges(): BootstrapChangeSummary { return { institutionsToCreate: 0, institutionsUnchanged: 0, workshopsToCreate: 0, workshopsUnchanged: 0, securityProfilesToCreate: 0, officeDefinitionsToCreate: 0 } }
 async function mockHash(input: InstitutionalBootstrapRequest) { const bytes = new TextEncoder().encode(JSON.stringify(input)); const digest = await crypto.subtle.digest('SHA-256', bytes); return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2, '0')).join('') }
+
+/** Demostración: revisa solo la forma (encabezados y columnas) de los textos recibidos; no conserva nada. Datos ficticios únicamente. */
+function mockPreview(files: Record<string, string>): InitialLoadPreviewResult {
+  const findings: InitialLoadPreviewResult['findings'] = []
+  const dataRowCounts: Record<string, number> = {}
+  for (const spec of mockInitialLoadContract.files) {
+    const text = files[spec.name]
+    if (typeof text !== 'string' || text.length === 0) { findings.push({ sheet: spec.name, row: 1, field: 'file', code: 'INVALID_FILE_SIZE' }); continue }
+    const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.length > 0)
+    const sep = lines[0]?.includes(';') && !lines[0]?.includes(',') ? ';' : ','
+    if ((lines[0] ?? '').split(sep).map(c => c.trim().replaceAll('"', '')).join(',') !== spec.columns.join(',')) findings.push({ sheet: spec.name, row: 1, field: 'header', code: 'HEADER_MISMATCH' })
+    dataRowCounts[spec.name] = Math.max(0, lines.length - 1)
+    lines.slice(1).forEach((line, index) => { if (line.split(sep).length !== spec.columns.length && findings.length < 50) findings.push({ sheet: spec.name, row: index + 2, field: 'columns', code: 'COLUMN_COUNT' }) })
+    if (dataRowCounts[spec.name] === 0 && spec.name !== 'CargosVigentes.csv') findings.push({ sheet: spec.name, row: 1, field: 'rows', code: 'REQUIRED_ROWS' })
+  }
+  const valid = findings.length === 0
+  return { valid, canApply: false, writesPerformed: 0, status: valid ? 'PREVIEW_VALID' : 'PREVIEW_REQUIRES_CORRECTION', dataRowCounts, findings }
+}
