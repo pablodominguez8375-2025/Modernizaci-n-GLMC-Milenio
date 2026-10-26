@@ -12,6 +12,7 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
     public DbSet<AssemblyEligibilityRecord> AssemblyEligibilities => Set<AssemblyEligibilityRecord>();
     public DbSet<AssemblyDebtDecisionEventRecord> AssemblyDebtDecisionEvents => Set<AssemblyDebtDecisionEventRecord>();
     public DbSet<AssemblyAttestationEventRecord> AssemblyAttestationEvents => Set<AssemblyAttestationEventRecord>();
+    public DbSet<AssemblyWorkshopBalanceEventRecord> AssemblyWorkshopBalanceEvents => Set<AssemblyWorkshopBalanceEventRecord>();
     public DbSet<InstitutionalRestrictionRecord> InstitutionalRestrictions => Set<InstitutionalRestrictionRecord>();
     public DbSet<AssemblyTreasuryCertificationEventRecord> AssemblyTreasuryCertificationEvents => Set<AssemblyTreasuryCertificationEventRecord>();
     public DbSet<AssemblyTreasurySignedReviewRecord> AssemblyTreasurySignedReviews => Set<AssemblyTreasurySignedReviewRecord>();
@@ -111,6 +112,22 @@ public sealed class RegimenInteriorDbContext(DbContextOptions<RegimenInteriorDbC
             entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.OccurredAtUtc });
             entity.HasIndex(x => x.ReversesEventId).IsUnique()
                 .HasFilter("\"ReversesEventId\" IS NOT NULL");
+        });
+
+        modelBuilder.Entity<AssemblyWorkshopBalanceEventRecord>(entity =>
+        {
+            entity.ToTable("assembly_workshop_balance_events");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Source).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.AmountPending).HasColumnType("numeric(18,2)");
+            entity.Property(x => x.Currency).HasMaxLength(3).IsRequired();
+            entity.Property(x => x.SourceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RecordedBySubject).HasMaxLength(320).IsRequired();
+            entity.HasOne<AssemblyRecord>().WithMany()
+                .HasForeignKey(x => x.AssemblyId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(x => new { x.AssemblyId, x.OrganizationId, x.Source, x.OccurredAtUtc });
+            entity.HasIndex(x => x.SupersedesEventId).IsUnique()
+                .HasFilter("\"SupersedesEventId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<AssemblyAttestationEventRecord>(entity =>

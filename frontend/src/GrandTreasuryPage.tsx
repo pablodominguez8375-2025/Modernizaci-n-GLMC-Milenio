@@ -6,8 +6,9 @@ import TreasuryRoleNavigation from './TreasuryRoleNavigation'
 import TreasuryStatementPage from './TreasuryStatementPage'
 import TariffDecreePage from './TariffDecreePage'
 import CeremonyRightsPage from './CeremonyRightsPage'
+import AssemblyBalancesPanel from './AssemblyBalancesPanel'
 
-type GrandSection = 'regularity' | 'statements' | 'territories' | 'rights'
+type GrandSection = 'regularity' | 'statements' | 'territories' | 'rights' | 'assembly'
 
 export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
   const {access,error}=useGrandTreasuryAccess(api,true)
@@ -26,12 +27,13 @@ export default function GrandTreasuryPage({ api }: { api: PmgmApiClient }) {
         { id:'statements', label:'Cuadros mensuales', description:'Montos por línea de cuota y conciliación', icon:'report' },
         { id:'regularity', label:'Estado de Talleres', description:'Consulta y regularidad institucional', icon:'members' },
         { id:'territories', label:'Tarifario por decreto', description:'Tarifario por decreto y ubicación desde la Ficha', icon:'documents' },
+        { id:'assembly', label:'Saldos para el Padrón', description:'Saldo de cada Taller para la Gran Asamblea', icon:'members' },
         { id:'rights', label:'Derechos ceremoniales', description:'Pagos y saldos por expediente', icon:'ceremony' },
       ]}
       active={section}
       onChange={id => setSection(id as GrandSection)}
     />
-    <Fragment key={context}>{section === 'statements' ? <TreasuryStatementPage api={api} canPrepare={false} canReview={canWrite} /> : section==='regularity'?<RegularityPage api={api} kind="treasury" canWrite={canWrite}/>:section==='territories'?<TariffDecreePage api={api}/>:<CeremonyRightsPage api={api} canWrite={canWrite}/>}
+    <Fragment key={context}>{section === 'statements' ? <TreasuryStatementPage api={api} canPrepare={false} canReview={canWrite} /> : section==='regularity'?<RegularityPage api={api} kind="treasury" canWrite={canWrite}/>:section==='territories'?<TariffDecreePage api={api}/>:section==='assembly'?<AssemblyBalancesPanel api={api} canWrite={canWrite} source="gran_tesoreria"/>:<CeremonyRightsPage api={api} canWrite={canWrite}/>}
     </Fragment>
   </div>
 }

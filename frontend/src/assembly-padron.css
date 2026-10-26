@@ -15,3 +15,9 @@
 @media(max-width:520px){.assembly-readiness-item{grid-template-columns:1fr}}
 
 .assembly-attestation{display:flex;flex-wrap:wrap;align-items:center;gap:.5rem .75rem;margin-top:.5rem}
+.assembly-balance-list{display:grid;gap:.5rem}
+.assembly-readiness code{overflow-wrap:anywhere;font-size:.8rem}
+
+.assembly-balance-card { border-top: 1px solid var(--line, #d9dfef); padding-top: 1rem; margin-top: 1rem; }
+.assembly-balance-summary { list-style: none; margin: 0.5rem 0 1rem; padding: 0; display: grid; gap: 0.4rem; }
+.assembly-balance-summary li { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; justify-content: space-between; }

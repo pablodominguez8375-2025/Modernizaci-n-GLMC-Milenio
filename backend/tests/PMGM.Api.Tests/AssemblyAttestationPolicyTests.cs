@@ -57,7 +57,17 @@ public sealed class AssemblyAttestationPolicyTests
 
         var all = AssemblyClosureReadinessBuilder.Build(asm, F("master_periods", "membership", "honor_coverage", "regimen_coverage"));
         Assert.All(all.Items.Where(i => i.Code != "closure"), i => Assert.Equal("ok", i.State));
-        Assert.False(all.MayClose);
-        Assert.Equal(["closure"], all.BlockingCodes);
+        // Con todo certificado el cierre pasa a «puede intentarse»; el servidor igual vuelve a verificar al cerrar.
+        Assert.True(all.MayClose);
+        Assert.Equal("pending", all.Items.Single(i => i.Code == "closure").State);
+        Assert.Empty(all.BlockingCodes);
+        Assert.False(AssemblyClosureReadinessBuilder.Build(asm, F("membership")).MayClose);
+
+        asm.Status = "closed"; asm.ClosedAtUtc = DateTimeOffset.UtcNow; asm.ClosedBySubject = "ri"; asm.ClosureEvidenceDigest = new string('a', 64);
+        var done = AssemblyClosureReadinessBuilder.Build(asm, F());
+        Assert.False(done.MayClose);
+        Assert.False(done.Provisional);
+        Assert.Equal("ok", done.Items.Single(i => i.Code == "closure").State);
+        Assert.Equal(new string('a', 64), done.ClosureDigest);
     }
 }

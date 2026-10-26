@@ -39,6 +39,8 @@ public static class AssemblyClosureReadinessEndpoints
         var attested = AssemblyAttestationPolicy.Current(
             await db.AssemblyAttestationEvents.AsNoTracking().Where(x => x.AssemblyId == assemblyId).ToArrayAsync(ct))
             .Keys.ToArray();
+        var balanceEvents = await db.AssemblyWorkshopBalanceEvents.AsNoTracking().Where(x => x.AssemblyId == assemblyId).ToArrayAsync(ct);
+        var balancedWorkshops = AssemblyClosureEngine.CurrentBalances(balanceEvents).Keys.Count(o => workshopIds.Contains(o));
         var restrictions = await db.InstitutionalRestrictions.AsNoTracking().CountAsync(x => x.RevokedAtUtc == null, ct);
 
         AssemblyMemberSourceInventoryResult? inventory = null; string? officeCode = null;
@@ -51,7 +53,7 @@ public static class AssemblyClosureReadinessEndpoints
 
         var report = AssemblyClosureReadinessBuilder.Build(assembly, new AssemblyReadinessFacts(
             inventory?.CandidateFacts.Count ?? 0, inventory?.BlockingReasons ?? ["MASTER_OFFICE_RECORDS_MISSING"], officeCode,
-            members.Length, statuses, workshopIds.Length, signedWorkshops.Length, restrictions, attested));
+            members.Length, statuses, workshopIds.Length, balancedWorkshops, restrictions, attested));
 
         audit.Add(context, "regimen.asamblea.cierre.estado.consultado", nameof(AssemblyRecord), assemblyId.ToString("D"),
             null, AuditResults.Success, new { Items = report.Items.Count, MayClose = report.MayClose });
@@ -63,14 +65,15 @@ public static class AssemblyClosureReadinessEndpoints
 public sealed record AssemblyReadinessFacts(
     int MasterCandidatesFound, IReadOnlyList<string> InventoryBlockingReasons, string? MasterOfficeCode,
     int MaterializedMembers, IReadOnlyList<string> MemberStatuses,
-    int Workshops, int WorkshopsWithSignedTreasuryReview, int ActiveRestrictions,
+    int Workshops, int WorkshopsWithBalance, int ActiveRestrictions,
     IReadOnlyCollection<string>? AttestedKinds = null);
 
 public sealed record AssemblyReadinessItem(string Code, string Title, string State, string Detail, int? Count);
 
 public sealed record AssemblyClosureReadiness(
     Guid AssemblyId, string Name, string Status, DateOnly MeetingDate, DateOnly CutoffDate,
-    bool MayClose, bool Provisional, IReadOnlyList<AssemblyReadinessItem> Items, IReadOnlyList<string> BlockingCodes);
+    bool MayClose, bool Provisional, IReadOnlyList<AssemblyReadinessItem> Items, IReadOnlyList<string> BlockingCodes,
+    DateTimeOffset? ClosedAtUtc = null, string? ClosureDigest = null);
 
 /// <summary>Proyección pura (testeable sin base de datos). Estados: ok, pending, blocked.</summary>
 public static class AssemblyClosureReadinessBuilder
@@ -82,8 +85,9 @@ public static class AssemblyClosureReadinessBuilder
         var items = new List<AssemblyReadinessItem>();
         var isDraft = assembly.Status == "draft" && assembly.ClosedAtUtc is null;
         items.Add(new("assembly", "Asamblea y fecha de corte",
-            isDraft && assembly.CutoffDate <= assembly.MeetingDate ? Ok : Blocked,
+            (isDraft && assembly.CutoffDate <= assembly.MeetingDate) || (assembly.Status == "closed" && assembly.ClosedAtUtc is not null) ? Ok : Blocked,
             isDraft ? $"Corte al {assembly.CutoffDate:dd-MM-yyyy}, reunión el {assembly.MeetingDate:dd-MM-yyyy}."
+                    : assembly.Status == "closed" ? $"Corte al {assembly.CutoffDate:dd-MM-yyyy}, reunión el {assembly.MeetingDate:dd-MM-yyyy}."
                     : "La Asamblea ya no está en borrador.", null));
 
         var attested = f.AttestedKinds ?? [];
@@ -115,11 +119,11 @@ public static class AssemblyClosureReadinessBuilder
                 : pending == 0 ? $"Los {evaluated} asambleístas tienen una evaluación vigente."
                 : $"{pending} de {f.MaterializedMembers} asambleístas siguen pendientes de evaluación.", pending));
 
-        var gtOk = f.Workshops > 0 && f.WorkshopsWithSignedTreasuryReview == f.Workshops;
-        items.Add(new("grand_treasury", "Saldo certificado de Gran Tesorería", f.Workshops == 0 ? Pending : gtOk ? Ok : Pending,
-            f.Workshops == 0 ? "Se evalúa cuando haya asambleístas acreditados."
-                : gtOk ? $"Los {f.Workshops} Talleres tienen revisión firmada de Gran Tesorería."
-                : $"{f.WorkshopsWithSignedTreasuryReview} de {f.Workshops} Talleres tienen revisión firmada de Gran Tesorería.", f.Workshops - f.WorkshopsWithSignedTreasuryReview));
+        var gtOk = f.Workshops > 0 && f.WorkshopsWithBalance == f.Workshops;
+        items.Add(new("grand_treasury", "Saldos de Gran Tesorería y Gran Hospitalaria por Taller", f.Workshops == 0 ? Pending : gtOk ? Ok : Pending,
+            f.Workshops == 0 ? "Se registra cuando haya asambleístas acreditados."
+                : gtOk ? $"Los {f.Workshops} Talleres tienen su saldo informado por Gran Tesorería (oficio registrado)."
+                : $"{f.WorkshopsWithBalance} de {f.Workshops} Talleres tienen su saldo validado por Gran Tesorería y Gran Hospitalaria al corte.", f.Workshops - f.WorkshopsWithBalance));
 
         var honor = attested.Contains(AssemblyAttestationPolicy.HonorCoverage);
         var regimen = attested.Contains(AssemblyAttestationPolicy.RegimenCoverage);
@@ -130,11 +134,16 @@ public static class AssemblyClosureReadinessBuilder
             : regimen ? "Falta la constancia de cobertura completa del Tribunal de Honor al corte" + restrictionNote
             : "Falta la declaración de cobertura completa de ambas fuentes al corte" + restrictionNote, f.ActiveRestrictions));
 
+        var closed = assembly.Status == "closed" && assembly.ClosedAtUtc is not null;
+        var allOk = !closed && items.All(i => i.State == Ok);
         var blocking = items.Where(i => i.State != Ok).Select(i => i.Code).ToList();
-        items.Add(new("closure", "Cierre del padrón", Blocked,
-            "El cierre se habilita cuando todos los pasos anteriores estén completos y certificados.", null));
-        blocking.Add("closure");
+        items.Add(closed
+            ? new("closure", "Cierre del padrón", Ok, $"Padrón cerrado el {assembly.ClosedAtUtc:dd-MM-yyyy HH:mm} UTC. Ya no admite cambios.", null)
+            : new("closure", "Cierre del padrón", allOk ? Pending : Blocked,
+                allOk ? "Todo está listo: Régimen Interior puede cerrar el padrón. El sistema vuelve a verificar todo al cerrar."
+                      : "El cierre se habilita cuando todos los pasos anteriores estén completos y certificados.", null));
+        if (!closed && !allOk) blocking.Add("closure");
         return new AssemblyClosureReadiness(assembly.Id, assembly.Name, assembly.Status, assembly.MeetingDate, assembly.CutoffDate,
-            false, true, items, blocking);
+            allOk, !closed, items, closed ? [] : blocking, assembly.ClosedAtUtc, assembly.ClosureEvidenceDigest);
     }
 }

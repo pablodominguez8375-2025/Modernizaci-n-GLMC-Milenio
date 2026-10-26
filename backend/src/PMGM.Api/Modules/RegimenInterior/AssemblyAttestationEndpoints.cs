@@ -68,8 +68,10 @@ public static class AssemblyAttestationEndpoints
         if (request!.Action == AssemblyAttestationPolicy.Attest)
         {
             if (current.ContainsKey(request.Kind!)) return Results.Conflict(new { code = "ATTESTATION_ALREADY_ACTIVE" });
-            // Sin asambleístas acreditados no hay nada que certificar (no se certifica en el vacío).
-            if (!await db.AssemblyMemberStatuses.AsNoTracking().AnyAsync(x => x.AssemblyId == assemblyId, ct))
+            // Los períodos de VM y la membresía son previos a acreditar; la cobertura de Honor y de Régimen
+            // Interior se certifica sobre asambleístas ya acreditados (no se certifica en el vacío).
+            if (request.Kind is AssemblyAttestationPolicy.HonorCoverage or AssemblyAttestationPolicy.RegimenCoverage &&
+                !await db.AssemblyMemberStatuses.AsNoTracking().AnyAsync(x => x.AssemblyId == assemblyId, ct))
                 return Results.Conflict(new { code = "NO_ACCREDITED_MEMBERS" });
         }
         else

@@ -1,5 +1,5 @@
 import { technicalGrant } from './dynamicAccess'
-import { MockAssemblyStore, type AssemblyAttestationList, type AssemblyAttestationPayload, type AssemblyClosureReadiness, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
+import { MockAssemblyStore, type AssemblyAttestationList, type AssemblyBalancesPayload, type AssemblyCloseResult, type AssemblyEvaluateResult, type AssemblyAttestationPayload, type AssemblyClosureReadiness, type AssemblyDebtBlockPayload, type AssemblyListResponse, type AssemblyListing, type AssemblyReviewPayload, type AssemblySummary, type CreateAssemblyPayload } from './assemblyApi'
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
@@ -926,6 +926,26 @@ export class PmgmApiClient {
   async recordAssemblyAttestation(assemblyId: string, payload: AssemblyAttestationPayload): Promise<void> {
     if (this.useMocks) { this.mockAssemblies.recordAttestation(assemblyId, payload); return }
     await this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/constancias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  }
+  async accreditAssembly(assemblyId: string): Promise<{ accredited: number }> {
+    if (this.useMocks) { this.mockAssemblies.accredit(assemblyId); return { accredited: 0 } }
+    return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/acreditar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  }
+  async getAssemblyBalances(source?: import('./assemblyApi').AssemblyBalanceSource): Promise<import('./assemblyApi').AssemblyBalancesOverviewItem[]> {
+    if (this.useMocks) return this.mockAssemblies.balancesOverview(source)
+    return this.request('/api/regimen-interior/saldos-padron')
+  }
+  async recordAssemblyBalances(assemblyId: string, payload: AssemblyBalancesPayload): Promise<void> {
+    if (this.useMocks) { this.mockAssemblies.recordBalances(assemblyId, payload); return }
+    await this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/saldos`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+  }
+  async evaluateAssembly(assemblyId: string): Promise<AssemblyEvaluateResult> {
+    if (this.useMocks) return this.mockAssemblies.evaluate(assemblyId)
+    return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/evaluar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+  }
+  async closeAssembly(assemblyId: string, rosterReference: string): Promise<AssemblyCloseResult> {
+    if (this.useMocks) return this.mockAssemblies.close(assemblyId, rosterReference)
+    return this.request(`/api/regimen-interior/asambleas/${encodeURIComponent(assemblyId)}/cerrar`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rosterReference }) })
   }
   async decideAssemblyDebtBlock(assemblyId: string, organizationId: string, payload: AssemblyDebtBlockPayload): Promise<void> {
     if (this.useMocks) { this.mockAssemblies.decideDebtBlock(organizationId, payload); return }

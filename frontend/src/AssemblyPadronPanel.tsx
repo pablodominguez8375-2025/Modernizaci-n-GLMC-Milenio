@@ -74,6 +74,19 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
     } catch (reason) { fail(reason, 'No fue posible registrar la constancia.') }
   }
 
+  async function runStep(event: FormEvent<HTMLFormElement>, work: () => Promise<string>) {
+    event.preventDefault()
+    setError(null); setMessage(null)
+    try { setMessage(await work()); await loadListing(assemblyId) }
+    catch (reason) { fail(reason, 'No fue posible completar el paso.') }
+  }
+  const stepForm = (e: FormEvent<HTMLFormElement>) => new FormData(e.currentTarget)
+  const accredit = (e: FormEvent<HTMLFormElement>) => runStep(e, async () => { await api.accreditAssembly(assemblyId); return 'Asambleístas acreditados desde las fichas, con las constancias de Régimen Interior. Aún no tienen habilitación: falta evaluarlos.' })
+  const evaluate = (e: FormEvent<HTMLFormElement>) => runStep(e, async () => { const r = await api.evaluateAssembly(assemblyId); return `Evaluación registrada: ${r.evaluated} asambleístas (${Object.entries(r.counts).map(([k, v]) => `${v} ${k.replace('_', ' ')}`).join(', ')}).` })
+  const closeRoster = (e: FormEvent<HTMLFormElement>) => { const d = stepForm(e); return runStep(e, async () => {
+    const r = await api.closeAssembly(assemblyId, String(d.get('acta') ?? ''))
+    return `Padrón cerrado con ${r.voters} sufragantes habilitados. Resumen de verificación ${r.digest.slice(0, 12)}…` }) }
+
   async function memberDecision(event: FormEvent<HTMLFormElement>, row: AssemblyListingRow) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
@@ -86,6 +99,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
   }
 
   const selected = assemblies.find(a => a.id === assemblyId)
+  const isClosed = readiness?.status === 'closed' || listing?.officiallyClosed === true
   const pendingCount = useMemo(() => listing?.asambleistas.filter(r => r.status === 'pendiente').length ?? 0, [listing])
 
   return <>
@@ -120,12 +134,30 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
         {readiness.items.map(item => <li key={item.code} className={`assembly-readiness-item ${item.state}`}>
           <span className={`status-pill ${item.state === 'ok' ? 'complete' : 'attention'}`}>{assemblyReadinessStateLabel[item.state]}</span>
           <div><strong>{item.title}</strong><p>{item.detail}</p>
+            {item.code === 'roster' && item.state !== 'ok' && readiness.status === 'draft' &&
+              <ActionDrawer label="Acreditar asambleístas" title="Acreditar asambleístas" description="Toma de las fichas a los Venerables Maestros (actuales y anteriores) activos al corte, con las constancias de Régimen Interior ya registradas. No los habilita: después se evalúan.">
+                <form className="assembly-form" onSubmit={accredit}><p>Requiere las constancias de períodos de Venerable Maestro y de calidad de miembro activo. Si algo no cuadra, no se acredita a nadie.</p><button type="submit" className="action-trigger primary">Acreditar asambleístas</button></form>
+              </ActionDrawer>}
+            {item.code === 'grand_treasury' && item.state !== 'ok' && readiness.status === 'draft' &&
+              <p className="assembly-note" role="note">Los saldos y pagos solo los valida su responsable: el Gran Tesorero (cuotas) y el Gran Hospitalario (reposiciones por fallecimiento y cuota anual). Se necesita el de ambos; Régimen Interior no los ingresa ni los modifica.</p>}
+            {item.code === 'evaluation' && item.state !== 'ok' && item.count !== undefined && readiness.status === 'draft' &&
+              <ActionDrawer label="Evaluar asambleístas" title="Evaluar asambleístas" description="Aplica las reglas de habilitación con la evidencia registrada. Si falta algo, el asambleísta queda pendiente. No cierra el padrón.">
+                <form className="assembly-form" onSubmit={evaluate}><p>Requiere las cuatro constancias de Régimen Interior. Queda en la auditoría y se puede repetir si cambia la evidencia.</p><button type="submit" className="action-trigger primary">Evaluar asambleístas</button></form>
+              </ActionDrawer>}
+            {item.code === 'closure' && readiness.mayClose &&
+              <ActionDrawer label="Cerrar padrón" title="Cerrar el Padrón de la Gran Asamblea" description="El cierre es definitivo: el padrón queda congelado y auditado. El sistema vuelve a verificar toda la evidencia antes de cerrar." confirmMessage="¿Cerrar definitivamente el padrón? No podrá modificarse después.">
+                <form className="assembly-form" onSubmit={closeRoster}>
+                  <label className="field"><span>Referencia del acta de cierre</span><input name="acta" required maxLength={500} placeholder="ACTA-RI-CIERRE-2026" /></label>
+                  <button type="submit" className="action-trigger primary">Cerrar padrón</button>
+                </form>
+              </ActionDrawer>}
+            {item.code === 'closure' && readiness.closureDigest && <p className="muted">Resumen de verificación (SHA-256): <code>{readiness.closureDigest}</code></p>}
             {(assemblyAttestationsByStep[item.code] ?? []).map(kind => {
               const current = attestations.find(a => a.kind === kind)
               const title = assemblyAttestationTitles[kind]
               return <div key={kind} className="assembly-attestation">
                 {current?.attested && <span className="muted">Constancia registrada · acta {current.actaReference}</span>}
-                {current?.attested
+                {isClosed ? null : current?.attested
                   ? <ActionDrawer label="Retirar constancia" tone="secondary" title={`Retirar constancia · ${title}`} description="Deja el paso otra vez pendiente. Queda en la auditoría.">
                       <AttestationForm submitLabel="Retirar constancia" onSubmit={e => attest(e, kind, 'revoke')} />
                     </ActionDrawer>
@@ -150,7 +182,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
         {listing.talleresConBloqueo.map(t => <tr key={t.organizationId}>
           <td><strong>{t.workshop}</strong></td><td>{t.affected} de {t.members}</td>
           <td><span className={t.blockLifted ? 'status-pill complete' : 'status-pill attention'}>{t.blockLifted ? 'Bloqueo levantado por Régimen Interior' : 'Sufragio bloqueado'}</span></td>
-          <td>{t.blockLifted
+          <td>{isClosed ? <span className="muted">Padrón cerrado</span> : t.blockLifted
             ? <ActionDrawer label="Restablecer bloqueo" tone="secondary" title={`Restablecer bloqueo · ${t.workshop}`} description="Vuelve a bloquear el sufragio del Taller. Queda en la auditoría.">
                 <DebtForm submitLabel="Restablecer bloqueo" onSubmit={e => debtBlock(e, t.organizationId, 'revoke')} />
               </ActionDrawer>
@@ -170,7 +202,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
           <td>{r.number}</td><td><strong>{r.name}</strong><small>{r.category}</small></td><td>{r.rut}</td><td>{r.workshop}</td>
           <td><span className={r.mayVote ? 'status-pill complete' : 'status-pill attention'}>{assemblyStatusLabel(r)}</span></td>
           <td><span className="assembly-signature" aria-label="Espacio para la firma" /></td>
-          <td>{r.mayVote ? <span className="muted">—</span> : <ActionDrawer label="Registrar gestión" tone="secondary" title={`Gestión · ${r.name}`} description="Registra la gestión de Régimen Interior sobre este asambleísta. No confirma sufragio.">
+          <td>{r.mayVote || isClosed ? <span className="muted">—</span> : <ActionDrawer label="Registrar gestión" tone="secondary" title={`Gestión · ${r.name}`} description="Registra la gestión de Régimen Interior sobre este asambleísta. No confirma sufragio.">
             <form className="assembly-form" onSubmit={e => memberDecision(e, r)}>
               <label className="field"><span>Gestión</span><select name="action" defaultValue="request_correction">{(Object.keys(assemblyReviewActionLabels) as AssemblyReviewAction[]).map(k => <option key={k} value={k}>{assemblyReviewActionLabels[k]}</option>)}</select></label>
               <label className="field"><span>Motivo</span><textarea name="reason" required maxLength={2000} rows={3} /></label>
