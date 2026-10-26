@@ -34,3 +34,16 @@ describe('#688 estado de datos de Talleres', () => {
     expect(JSON.stringify(response)).not.toMatch(/@|rut|password/i)
   })
 })
+
+describe('#688 verificar lecturas del Taller', () => {
+  it('ordena las lecturas y explica la que falla sin detalles internos', async () => {
+    const { summarizeLodgeProbe, lodgeProbeErrorMessage } = await import('./lodgeDataHealth')
+    const lines = summarizeLodgeProbe([{ resource: 'instrucciones', result: 'failed' }, { resource: 'tenidas', result: 'ok' }, { resource: 'miembros', result: 'ok' }])
+    expect(lines.map(l => l.resource)).toEqual(['tenidas', 'instrucciones', 'miembros'])
+    expect(lines[1]).toMatchObject({ ok: false, label: 'Instrucciones' })
+    expect(lines[1].text).not.toMatch(/sql|exception|stack|sqlstate/i)
+    expect(lines[0].ok).toBe(true)
+    expect(lodgeProbeErrorMessage(404)).toContain('no existe')
+    expect(lodgeProbeErrorMessage(403)).toContain('no tiene permiso')
+  })
+})

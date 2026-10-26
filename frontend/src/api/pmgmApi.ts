@@ -78,6 +78,8 @@ export interface AuditLogResponse { total:number; page:number; pageSize:number; 
 export interface SupportDiagnosticEntry { occurredAtUtc:string; severity:'error'|'warning'; statusCode:number; method:string; route:string; correlationId:string }
 export interface SupportDiagnosticsResponse { total:number; limit:number; capacity:number; volatileStorage:boolean; source:string; note:string; items:SupportDiagnosticEntry[] }
 export interface SupportLodgeDataHealthItem { resource:string; relation:string; present:boolean; schemaUsable:boolean; selectGranted:boolean; requiredColumnsPresent:boolean }
+export interface SupportLodgeProbeItem { resource:string; result:'ok'|'failed' }
+export interface SupportLodgeProbeResponse { status:'ready'|'attention'; mode:string; scope:string; note:string; items:SupportLodgeProbeItem[] }
 export interface SupportLodgeDataHealthResponse { status:'ready'|'attention'; mode:string; scope:string; note:string; checkedAtUtc:string; items:SupportLodgeDataHealthItem[] }
 export interface SupportDiagnosticFilters { severity?:'error'|'warning'; route?:string; from?:string; to?:string; limit?:number }
 export type LodgeFeeType = 'normal' | 'student' | 'senior' | 'spouse' | 'past_active'
@@ -685,6 +687,14 @@ export class PmgmApiClient {
   }
   async getSystemSettingVersions(code: string): Promise<SystemSettingVersionsResponse> { if(this.useMocks){const items=this.mockSystemSettingVersions.get(code)??[];return{total:items.length,items:items.map(item=>({...item}))}} return this.request<SystemSettingVersionsResponse>(`/api/system/settings/${encodeURIComponent(code)}/versions`) }
   async getAuditLog():Promise<AuditLogResponse>{if(this.useMocks){const items:AuditLogEvent[]=[{id:'audit-1',occurredAtUtc:'2026-09-14T12:42:18Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Usuarios',summary:'Asignó perfil temporal a usuario demostrativo',action:'system.access.assignment.created',result:'success',correlationId:'qa-audit-001'},{id:'audit-2',occurredAtUtc:'2026-09-14T12:35:04Z',user:'Administrador QA',ipAddress:'192.0.2.14',menu:'Sistema',submenu:'Correo',summary:'Probó configuración SMTP',action:'system.mail.connection.tested',result:'success',correlationId:'qa-audit-002'},{id:'audit-3',occurredAtUtc:'2026-09-14T12:20:51Z',user:'Usuario QA',ipAddress:'198.51.100.22',menu:'Acceso',submenu:'Inicio de sesión',summary:'Intento de autenticación rechazado',action:'identity.login.rejected',result:'rejected',correlationId:'qa-audit-003'}];return{total:items.length,page:1,pageSize:50,immutable:true,items}}return this.request<AuditLogResponse>('/api/system/audit-events')}
+
+  /** #688 — repite en solo lectura las tres consultas de «Talleres (supervisión)» para un Taller; sin filas ni datos personales. */
+  async getSupportLodgeQueryProbe(organizationId:string):Promise<SupportLodgeProbeResponse>{
+    if(this.useMocks){
+      return {status:'attention',mode:'read_only_queries',scope:'gestion_logial_taller',note:'Datos ficticios de demostración.',items:[{resource:'tenidas',result:'ok'},{resource:'miembros',result:'ok'},{resource:'instrucciones',result:'failed'}]}
+    }
+    return this.request<SupportLodgeProbeResponse>(`/api/system/support/lodge-query-probe/${encodeURIComponent(organizationId)}`)
+  }
 
   /** #688 — estado de tablas/columnas/permisos de Talleres (solo metadatos; GET explícito). */
   async getSupportLodgeDataHealth():Promise<SupportLodgeDataHealthResponse>{

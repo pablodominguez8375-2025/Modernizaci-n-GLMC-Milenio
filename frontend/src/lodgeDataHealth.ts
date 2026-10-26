@@ -1,4 +1,4 @@
-import type { SupportLodgeDataHealthItem } from './api/pmgmApi'
+import type { SupportLodgeDataHealthItem, SupportLodgeProbeItem } from './api/pmgmApi'
 
 export type HealthLight = 'ok' | 'attention'
 export interface ResourceHealth {
@@ -38,4 +38,23 @@ export function lodgeHealthErrorMessage(status: number | undefined): string {
   if (status === 403) return 'Su cuenta no tiene permiso para ver este diagnóstico.'
   if (status === 503) return 'El diagnóstico no está disponible ahora. Intente nuevamente en unos minutos.'
   return 'No fue posible verificar el estado de los datos de Talleres.'
+}
+
+export interface ProbeLine { resource: string; label: string; ok: boolean; text: string }
+
+/** Traduce las tres lecturas de prueba a líneas simples; una lectura que falla se explica sin detalles internos. */
+export function summarizeLodgeProbe(items: SupportLodgeProbeItem[]): ProbeLine[] {
+  return [...items]
+    .sort((a, b) => (order.indexOf(a.resource) + 1 || 99) - (order.indexOf(b.resource) + 1 || 99))
+    .map(item => ({
+      resource: item.resource,
+      label: labels[item.resource] ?? item.resource,
+      ok: item.result === 'ok',
+      text: item.result === 'ok' ? 'La lectura respondió bien' : 'La lectura falló: revise el registro del servidor con el ID de correlación',
+    }))
+}
+
+export function lodgeProbeErrorMessage(status: number | undefined): string {
+  if (status === 404) return 'Ese Taller no existe o no es un Taller de la Orden.'
+  return lodgeHealthErrorMessage(status)
 }

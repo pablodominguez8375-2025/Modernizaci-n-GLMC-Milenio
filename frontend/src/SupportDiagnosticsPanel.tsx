@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { PmgmApiClient, SupportDiagnosticsResponse } from './api/pmgmApi'
 import { diagnosticCsv, diagnosticJson } from './supportDiagnosticExport'
 import LodgeDataHealthCard from './LodgeDataHealthCard'
+import LodgeQueryProbeCard from './LodgeQueryProbeCard'
 import './auditableEventLog.css'
 
 function exportFile(content: string, type: string, name: string) {
@@ -57,6 +58,7 @@ export default function SupportDiagnosticsPanel({
 
   return <>
   <LodgeDataHealthCard api={api} />
+  <LodgeQueryProbeCard api={api} />
   <section className="system-event-log" aria-label="Diagnóstico de soporte">
     <header>
       <div>
