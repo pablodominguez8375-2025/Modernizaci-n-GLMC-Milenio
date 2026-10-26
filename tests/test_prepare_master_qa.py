@@ -65,7 +65,10 @@ class FakeKeycloak:
         if path == PREFIX + "/users":
             if any(x["username"] == body["username"] for x in self.accounts):
                 raise AssertionError("duplicate account")
-            self.accounts.append({"username": body["username"], "enabled": body["enabled"], "id": self.next_id})
+            self.accounts.append({
+                "username": body["username"], "enabled": body["enabled"],
+                "id": self.next_id, "attributes": body.get("attributes", {}),
+            })
             return
         if path == PREFIX + "/users/" + SUBJECT + "/role-mappings/realm":
             self.realm_roles[SUBJECT] = [body[0]["name"]]
@@ -116,6 +119,73 @@ class MasterQaBootstrapTests(unittest.TestCase):
                          mod.activate(api, REALM, ISSUER, SUBJECT, config))
         self.assertEqual("REALM_SNAPSHOT_OK_UAT_REQUIRED",
                          mod.status(api, REALM, ISSUER, SUBJECT, config))
+
+    def test_master_scope_is_part_of_new_account_registration(self):
+        api = FakeKeycloak()
+        with TemporaryDirectory() as folder:
+            with patch.object(mod, "save_subject"):
+                result = mod.prepare(api, REALM, ISSUER, "SyntheticPass12345!",
+                                     Path(folder) / "subject")
+        self.assertEqual("PREPARED_DISABLED_FOR_QA_CONFIG", result)
+        attrs = api.accounts[-1]["attributes"]
+        self.assertEqual(["order"], attrs["pmgm_scope"])
+        self.assertEqual(["issue-604"], attrs["pmgm_master_qa_bootstrap"])
+
+    def test_missing_scope_fails_closed_before_master_activation(self):
+        api = FakeKeycloak()
+        with TemporaryDirectory() as folder:
+            with patch.object(mod, "save_subject"):
+                mod.prepare(api, REALM, ISSUER, "SyntheticPass12345!",
+                            Path(folder) / "subject")
+        api.accounts[-1]["attributes"].pop("pmgm_scope")
+        config = ("InitialLoad__MasterSubject=" + SUBJECT + "\n" +
+                  "InitialLoad__MasterIssuer=" + ISSUER + "\n" +
+                  "Authentication__Authority=" + ISSUER + "\n")
+        count = len(api.operations)
+        with self.assertRaisesRegex(mod.Blocked, "MASTER_SCOPE_NOT_PROVISIONED"):
+            mod.activate(api, REALM, ISSUER, SUBJECT, config)
+        self.assertFalse(any(op == "PUT" for op, _ in api.operations[count:]))
+        self.assertFalse(api.accounts[-1]["enabled"])
+
+    def test_tampered_scope_or_bootstrap_marker_blocks_status(self):
+        api = FakeKeycloak()
+        with TemporaryDirectory() as folder:
+            with patch.object(mod, "save_subject"):
+                mod.prepare(api, REALM, ISSUER, "SyntheticPass12345!",
+                            Path(folder) / "subject")
+        api.accounts[-1]["enabled"] = True
+        config = ("InitialLoad__MasterSubject=" + SUBJECT + "\n" +
+                  "InitialLoad__MasterIssuer=" + ISSUER + "\n" +
+                  "Authentication__Authority=" + ISSUER + "\n")
+        for attrs in (
+            {"pmgm_scope": ["workshop"], "pmgm_master_qa_bootstrap": ["issue-604"]},
+            {"pmgm_scope": ["order"], "pmgm_master_qa_bootstrap": ["other"]},
+        ):
+            api.accounts[-1]["attributes"] = attrs
+            with self.assertRaisesRegex(mod.Blocked, "MASTER_SCOPE_NOT_PROVISIONED"):
+                mod.status(api, REALM, ISSUER, SUBJECT, config)
+
+    def test_missing_scope_during_prepare_does_not_assign_role(self):
+        api = FakeKeycloak()
+        # Simulate an identity provider that silently drops the scope attribute.
+        original_post = api.post
+
+        def strip_scope(path, body):
+            if path == PREFIX + "/users":
+                body = {**body, "attributes": {
+                    "pmgm_master_qa_bootstrap": ["issue-604"]}}
+            return original_post(path, body)
+
+        api.post = strip_scope
+        with TemporaryDirectory() as folder:
+            with patch.object(mod, "save_subject") as save:
+                with self.assertRaisesRegex(mod.Blocked, "MASTER_SCOPE_NOT_PROVISIONED"):
+                    mod.prepare(api, REALM, ISSUER, "SyntheticPass12345!",
+                                Path(folder) / "subject")
+                save.assert_not_called()
+        self.assertFalse(any(path.endswith("/role-mappings/realm") and op == "POST"
+                             for op, path in api.operations))
+        self.assertFalse(api.accounts[-1]["enabled"])
 
     def test_retire_only_exact_legacy_fixture_master_role(self):
         api = FakeKeycloak()
@@ -225,7 +295,12 @@ class MasterQaBootstrapTests(unittest.TestCase):
 
     def test_registration_mismatch_never_enables_master(self):
         api = FakeKeycloak()
-        api.accounts.append({"id": SUBJECT, "username": "admin", "enabled": False})
+        api.accounts.append({
+            "id": SUBJECT, "username": "admin", "enabled": False,
+            "attributes": {
+                "pmgm_scope": ["order"], "pmgm_master_qa_bootstrap": ["issue-604"],
+            },
+        })
         api.realm_roles[SUBJECT] = ["platform_superadmin"]
         with self.assertRaisesRegex(mod.Blocked, "RUNTIME_MASTER_CONFIG_MISMATCH"):
             mod.activate(api, REALM, ISSUER, SUBJECT,

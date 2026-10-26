@@ -216,6 +216,24 @@ def retire_exact_legacy_master_role(api, realm, issuer):
     return "LEGACY_QA_MASTER_ROLE_RETIRED_ACCOUNT_PRESERVED"
 
 
+def require_master_scope(api, realm, subject):
+    """The API requires the Keycloak pmgm_scope mapper alongside Master role.
+
+    Inventory returns abbreviated user representations; read the full user
+    to verify immutable bootstrap marker and exact institutional scope.
+    Fail closed before any activation or a purported successful prepare.
+    """
+    full = api.get("/admin/realms/" + realm + "/users/" +
+                   urllib.parse.quote(subject, safe=""))
+    attrs = full.get("attributes") if isinstance(full, dict) else None
+    if (not isinstance(full, dict) or full.get("id") != subject or
+            full.get("username") != "admin" or not isinstance(attrs, dict) or
+            attrs.get("pmgm_scope") != ["order"] or
+            attrs.get("pmgm_master_qa_bootstrap") != ["issue-604"]):
+        raise Blocked("MASTER_SCOPE_NOT_PROVISIONED")
+    return True
+
+
 def prepare(api, realm, issuer, password, subject_path):
     prefix = "/admin/realms/" + realm
     account, master = inventory(api.get, realm, issuer)
@@ -231,12 +249,16 @@ def prepare(api, realm, issuer, password, subject_path):
     api.post(prefix + "/users", {
         "username": "admin", "enabled": False, "emailVerified": False,
         "requiredActions": ["UPDATE_PASSWORD"],
-        "attributes": {"pmgm_master_qa_bootstrap": ["issue-604"]},
+        "attributes": {
+            "pmgm_master_qa_bootstrap": ["issue-604"],
+            "pmgm_scope": ["order"],
+        },
     })
     account, master = inventory(api.get, realm, issuer)
     if not account or master or account.get("enabled") is not False:
         raise Blocked("MASTER_CREATION_AMBIGUOUS")
     ident = account["id"]
+    require_master_scope(api, realm, ident)
     save_subject(subject_path, ident)
     enc = urllib.parse.quote(ident, safe="")
     api.put(prefix + "/users/" + enc + "/reset-password", {
@@ -249,6 +271,7 @@ def prepare(api, realm, issuer, password, subject_path):
     if (not account or not master or account["id"] != ident or
             master["id"] != ident or account.get("enabled") is not False):
         raise Blocked("MASTER_PREPARATION_INCOMPLETE")
+    require_master_scope(api, realm, ident)
     return "PREPARED_DISABLED_FOR_QA_CONFIG"
 
 
@@ -279,6 +302,7 @@ def activate(api, realm, issuer, subject, config):
     if (not account or not master or account["id"] != subject or
             master["id"] != subject or account.get("enabled") is not False):
         raise Blocked("MASTER_NOT_PREPARED")
+    require_master_scope(api, realm, subject)
     validate_config(config, subject, issuer)
     api.put("/admin/realms/" + realm + "/users/" + urllib.parse.quote(subject, safe=""),
             {"enabled": True})
@@ -293,6 +317,7 @@ def status(api, realm, issuer, subject, config):
     account, master = inventory(api.get, realm, issuer)
     if not account or not master or account["id"] != subject or master["id"] != subject:
         raise Blocked("MASTER_NOT_UNIQUE")
+    require_master_scope(api, realm, subject)
     validate_config(config, subject, issuer)
     if account.get("enabled") is not True:
         raise Blocked("MASTER_DISABLED")
