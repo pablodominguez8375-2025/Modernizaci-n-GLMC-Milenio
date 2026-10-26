@@ -1,0 +1,12 @@
+.view-profile-menu{position:relative}
+.view-profile-button{min-height:44px;padding:.4rem .9rem;border:2px solid var(--gold,#f5b800);border-radius:10px;background:#fff;color:#0b1f6b;font-weight:700;font-size:.95rem;cursor:pointer;white-space:nowrap}
+.view-profile-button:focus-visible{outline:3px solid #ffd166;outline-offset:2px}
+.view-profile-popover{position:absolute;top:calc(100% + 6px);left:0;z-index:80;width:min(320px,calc(100vw - 32px));max-height:min(70vh,560px);overflow:auto;padding:.5rem;border-radius:10px;background:#fff;color:#0b1f6b;box-shadow:0 10px 28px rgba(0,0,0,.35)}
+.view-profile-popover button{display:block;width:100%;min-height:44px;padding:.5rem .75rem;border:0;border-radius:8px;background:transparent;color:inherit;text-align:left;font:inherit;cursor:pointer}
+.view-profile-popover button:hover,.view-profile-popover button:focus-visible{background:#eef1fb}
+.view-profile-popover button:disabled{opacity:.6;cursor:wait}
+.view-profile-exit{font-weight:700;background:#fff4d6!important}
+.view-profile-note{margin:.4rem .6rem;font-size:.85rem;opacity:.8}
+.view-profile-group{margin:.6rem .6rem .2rem;font-size:.8rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;opacity:.7}
+.view-profile-error{margin:.4rem .6rem;color:#a40000}
+@media (max-width:640px){.view-profile-button{padding:.3rem .6rem;font-size:.85rem}.view-profile-popover{position:fixed;left:16px;right:16px;top:72px;width:auto}}
