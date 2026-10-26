@@ -122,7 +122,8 @@
       "CeremonyAuthorizationStateHttpTests",
       "CalendarGradeAccessPostgreSqlTests",
       "CalendarNotificationRecipientPostgreSqlTests",
-      "QaSyntheticPlanHttpTests"
+      "QaSyntheticPlanHttpTests",
+      "InitialLoadCsvPreviewHttpTests"
     ]
   }
 }

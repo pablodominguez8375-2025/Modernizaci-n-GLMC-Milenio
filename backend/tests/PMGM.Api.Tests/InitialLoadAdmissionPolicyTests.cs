@@ -92,11 +92,14 @@ public sealed class InitialLoadAdmissionPolicyTests
         Assert.False(open.CanApply);
         Assert.Equal(0, open.WritesPerformed);
 
-        var noLegal = Evaluate(InitialLoadAdmissionPolicy.Window.NotOpened,
+        // Juridical validation occurs outside the product; its legacy flag
+        // may not block an operational transition supported by audit evidence.
+        var externallyReviewed = Evaluate(InitialLoadAdmissionPolicy.Window.NotOpened,
             InitialLoadAdmissionPolicy.Operation.RequestOpen,
             Complete() with { LegalApprovalVerifiedByServer = false });
-        Assert.Contains("LEGAL_APPROVAL_REQUIRED", noLegal.Codes);
-        Assert.Null(noLegal.ProposedNextWindow);
+        Assert.True(externallyReviewed.PrerequisitesSatisfied);
+        Assert.Equal(InitialLoadAdmissionPolicy.Window.Open,
+            externallyReviewed.ProposedNextWindow);
 
         var noAudit = Evaluate(InitialLoadAdmissionPolicy.Window.NotOpened,
             InitialLoadAdmissionPolicy.Operation.RequestOpen,
@@ -141,7 +144,7 @@ public sealed class InitialLoadAdmissionPolicyTests
     }
 
     [Fact]
-    public void Preview_requires_open_window_verified_legal_and_audit()
+    public void Preview_requires_open_window_master_and_audit_not_juridical_gate()
     {
         var open = Evaluate(InitialLoadAdmissionPolicy.Window.Open,
             InitialLoadAdmissionPolicy.Operation.Preview);
@@ -149,7 +152,7 @@ public sealed class InitialLoadAdmissionPolicyTests
         Assert.False(open.CanApply);
         Assert.False(Evaluate(InitialLoadAdmissionPolicy.Window.NotOpened,
             InitialLoadAdmissionPolicy.Operation.Preview).MayPreview);
-        Assert.False(Evaluate(InitialLoadAdmissionPolicy.Window.Open,
+        Assert.True(Evaluate(InitialLoadAdmissionPolicy.Window.Open,
             InitialLoadAdmissionPolicy.Operation.Preview,
             Complete() with { LegalApprovalVerifiedByServer = false }).MayPreview);
         Assert.False(Evaluate(InitialLoadAdmissionPolicy.Window.Open,
@@ -175,7 +178,6 @@ public sealed class InitialLoadAdmissionPolicyTests
     {
         var cases = new (InitialLoadAdmissionPolicy.Evidence Evidence, string Code)[]
         {
-            (Complete() with { LegalApprovalVerifiedByServer = false }, "LEGAL_APPROVAL_REQUIRED"),
             (Complete() with { AuditSinkVerifiedByServer = false }, "AUDIT_UNAVAILABLE"),
             (Complete() with { PreviewValid = false }, "INVALID_PREFLIGHT"),
             (Complete() with { PreviewFresh = false }, "STALE_PREFLIGHT"),
