@@ -184,7 +184,7 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
 
     {isClosed && listing && <section className="panel report-wide assembly-official" aria-label="Padrón oficial">
       <div className="panel-heading"><div><p className="eyebrow">Padrón oficial · cerrado</p><h2>Descargar el padrón oficial</h2>
-        <p>Los dos listados oficiales de la Asamblea cerrada, en orden alfabético por apellidos, con el RUT parcialmente protegido y la columna de firma en blanco. Cada descarga queda en la auditoría.</p></div></div>
+        <p>Los dos listados oficiales de la Asamblea cerrada, en orden alfabético por apellidos, con el RUT completo (para identificar bien a quien vota) y la columna de firma en blanco. Es un documento reservado: su custodia se regula fuera del sistema. Cada descarga queda en la auditoría.</p></div></div>
       <div className="assembly-official-grid">
         {([['sufragantes', 'Sufragantes habilitados', 'Quienes pueden votar'], ['asambleistas', 'Asambleístas', 'Todos los asambleístas del corte']] as const).map(([key, title, hint]) => <div key={key} className="assembly-official-item">
           <strong>{title}</strong><small>{hint}</small>

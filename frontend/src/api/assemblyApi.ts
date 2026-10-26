@@ -218,7 +218,7 @@ export class MockAssemblyStore {
     const info = this.closedIds.get(assemblyId)
     if (!info) throw new Error('El padrón oficial solo se puede descargar cuando la Asamblea está cerrada.')
     const l = this.listing(assemblyId)
-    const rows = list === 'sufragantes' ? l.sufragantes.map(v => [v.number, v.name, v.rut, v.workshop]) : l.asambleistas.map(r => [r.number, r.name, r.rut, r.workshop])
+    const rows = list === 'sufragantes' ? l.sufragantes.map(v => [v.number, v.name, v.rut.replace('***', '000'), v.workshop]) : l.asambleistas.map(r => [r.number, r.name, r.rut.replace('***', '000'), r.workshop])
     const day = info.at.slice(0, 10)
     const name = `padron-${list}-${day}.${format}`
     if (format === 'pdf') return { blob: new Blob(['Padrón oficial DEMOSTRATIVO (datos ficticios)'], { type: 'application/pdf' }), fileName: name }

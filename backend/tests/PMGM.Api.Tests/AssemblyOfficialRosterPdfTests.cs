@@ -13,7 +13,7 @@ public sealed class AssemblyOfficialRosterPdfTests
     public void Genera_un_PDF_valido_paginado_con_acentos_y_la_Ñ()
     {
         var rows = Enumerable.Range(1, 130).Select(i => (IReadOnlyList<string>)
-            [i.ToString(), $"Muñoz Ibáñez, María José {i}", "12.345.***-5", "Taller Demostrativo Nº " + i, ""]).ToArray();
+            [i.ToString(), $"Muñoz Ibáñez, María José {i}", "12.345.678-5", "Taller Demostrativo Nº " + i, ""]).ToArray();
         var pdf = AssemblyOfficialRosterPdf.Render("Padrón de sufragantes habilitados — padrón oficial",
             ["Gran Logia Mixta de Chile · Asamblea"], Cols, Widths, rows, "Padron oficial - Resumen SHA-256 abcdef");
         var text = Encoding.Latin1.GetString(pdf);

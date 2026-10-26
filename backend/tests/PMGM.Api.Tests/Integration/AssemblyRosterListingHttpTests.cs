@@ -318,7 +318,8 @@ public sealed class AssemblyRosterListingHttpTests
         Assert.Matches("^[0-9a-f]{64}$", pdf.Headers.GetValues("X-PMGM-Closure-Digest").Single());
         var csvAll = await (await client.GetAsync(root + "/padron-oficial?listado=asambleistas&formato=csv", ct)).Content.ReadAsStringAsync(ct);
         Assert.Contains("Álvarez, Nombre", csvAll);
-        Assert.Contains(".***-", csvAll);
+        Assert.DoesNotContain("***", csvAll); // el padrón oficial impreso lleva el RUT completo
+        Assert.Matches("\"9\\d{6}-\\d\"", csvAll);
         Assert.Equal(4, csvAll.Trim().Split("\r\n").Length); // encabezado + 3 asambleístas
         Assert.Equal(HttpStatusCode.BadRequest, (await client.GetAsync(root + "/padron-oficial?listado=otro", ct)).StatusCode);
         client.DefaultRequestHeaders.Add("X-Assembly-Test-Role", InstitutionalRoles.GranTesoreria);

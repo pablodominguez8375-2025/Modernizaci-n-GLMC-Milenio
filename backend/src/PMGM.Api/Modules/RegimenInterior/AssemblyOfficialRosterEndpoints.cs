@@ -7,7 +7,8 @@ namespace PMGM.Api.Modules.RegimenInterior;
 
 /// <summary>
 /// Descarga OFICIAL (CSV o PDF) de los dos listados, SOLO de una Asamblea cerrada por el servicio de cierre
-/// (estado closed + fecha + resumen SHA-256). Régimen Interior y Gran Secretaría; RUT siempre enmascarado;
+/// (estado closed + fecha + resumen SHA-256). Régimen Interior y Gran Secretaría. El documento oficial lleva el RUT COMPLETO (identificación correcta
+/// del votante; validado por el PO/Jurídico, el control físico se regula fuera del software); las pantallas siguen enmascaradas;
 /// la columna «Firma» siempre en blanco; cada descarga queda auditada. Una Asamblea en borrador responde 409.
 /// </summary>
 public static class AssemblyOfficialRosterEndpoints
@@ -34,6 +35,9 @@ public static class AssemblyOfficialRosterEndpoints
         var history = await db.AssemblyEligibilities.AsNoTracking().Where(x => x.AssemblyId == assemblyId).ToArrayAsync(ct);
         var debtEvents = await db.AssemblyDebtDecisionEvents.AsNoTracking().Where(x => x.AssemblyId == assemblyId).ToArrayAsync(ct);
         var roster = AssemblyRosterListingBuilder.Build(assembly, members, history, debtEvents);
+        // Identificación completa para el documento oficial: el RUT viene del corte congelado de cada asambleísta.
+        var fullRut = members.ToDictionary(m => m.PersonId, m => (m.RutAtCutoff ?? "").Trim());
+        string Rut(Guid personId) => fullRut.GetValueOrDefault(personId, "");
 
         var closedOn = assembly.ClosedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd");
         var asVoters = list == "sufragantes";
@@ -45,8 +49,8 @@ public static class AssemblyOfficialRosterEndpoints
         if (format == "csv")
         {
             var rows = asVoters
-                ? roster.Sufragantes.Select(v => new AssemblyRosterPrintRow(v.Number, v.Name, v.Rut, v.Workshop, "", null)).ToArray()
-                : roster.Asambleistas.Select(r => new AssemblyRosterPrintRow(r.Number, r.Name, r.Rut, r.Workshop, "", r.MayVote ? "Habilitado" : "Sin sufragio")).ToArray();
+                ? roster.Sufragantes.Select(v => new AssemblyRosterPrintRow(v.Number, v.Name, Rut(v.PersonId), v.Workshop, "", null)).ToArray()
+                : roster.Asambleistas.Select(r => new AssemblyRosterPrintRow(r.Number, r.Name, Rut(r.PersonId), r.Workshop, "", r.MayVote ? "Habilitado" : "Sin sufragio")).ToArray();
             file = AssemblyRosterCsvPolicy.SerializeOfficial(rows, !asVoters); type = "text/csv; charset=utf-8"; name += ".csv";
         }
         else
@@ -55,19 +59,19 @@ public static class AssemblyOfficialRosterEndpoints
             if (!asVoters) { cols.Add("Sufragio"); widths.Add(70); }
             cols.Add("Firma"); widths.Add(asVoters ? 187 : 117);
             IReadOnlyList<IReadOnlyList<string>> body = asVoters
-                ? roster.Sufragantes.Select(v => (IReadOnlyList<string>)[v.Number.ToString(), v.Name, v.Rut, v.Workshop, ""]).ToArray()
-                : roster.Asambleistas.Select(r => (IReadOnlyList<string>)[r.Number.ToString(), r.Name, r.Rut, r.Workshop, r.MayVote ? "Habilitado" : "Sin sufragio", ""]).ToArray();
+                ? roster.Sufragantes.Select(v => (IReadOnlyList<string>)[v.Number.ToString(), v.Name, Rut(v.PersonId), v.Workshop, ""]).ToArray()
+                : roster.Asambleistas.Select(r => (IReadOnlyList<string>)[r.Number.ToString(), r.Name, Rut(r.PersonId), r.Workshop, r.MayVote ? "Habilitado" : "Sin sufragio", ""]).ToArray();
             file = AssemblyOfficialRosterPdf.Render(
                 (asVoters ? "Padrón de sufragantes habilitados" : "Asambleístas de la Gran Asamblea") + " — padrón oficial",
                 [$"Gran Logia Mixta de Chile · {assembly.Name}",
                  $"Asamblea: {assembly.MeetingDate:dd-MM-yyyy} · Corte del padrón: {assembly.CutoffDate:dd-MM-yyyy} · Cerrado el {closedOn} · {count} registros",
-                 "Orden alfabético por apellidos. El RUT se muestra parcialmente protegido. El voto es siempre secreto."],
+                 "Orden alfabético por apellidos. Documento reservado: contiene el RUT completo; su custodia y acceso se regulan institucionalmente. El voto es siempre secreto."],
                 cols, widths, body, $"Padron oficial cerrado el {closedOn} - Resumen SHA-256 {digest[..16]}");
             type = "application/pdf"; name += ".pdf";
         }
 
         audit.Add(context, "regimen.asamblea.padron_oficial.descargado", nameof(AssemblyRecord), assemblyId.ToString("D"), null,
-            AuditResults.Success, new { Listado = list, Formato = format, Registros = count, ClosureDigest = digest });
+            AuditResults.Success, new { Listado = list, Formato = format, Registros = count, RutCompleto = true, ClosureDigest = digest });
         await appDb.SaveChangesAsync(ct);
         context.Response.Headers["X-PMGM-Official-Roster"] = "true";
         context.Response.Headers["X-PMGM-Closure-Digest"] = digest;
