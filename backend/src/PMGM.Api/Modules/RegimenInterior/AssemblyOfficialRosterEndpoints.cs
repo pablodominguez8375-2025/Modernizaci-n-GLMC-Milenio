@@ -21,7 +21,7 @@ public static class AssemblyOfficialRosterEndpoints
         if (!AssemblyPreliminaryReviewEndpoints.CanRead(context.User)) return Results.Forbid();
         var list = (listado ?? "sufragantes").Trim().ToLowerInvariant();
         var format = (formato ?? "pdf").Trim().ToLowerInvariant();
-        if (assemblyId == Guid.Empty || list is not ("asambleistas" or "sufragantes") || format is not ("pdf" or "csv"))
+        if (assemblyId == Guid.Empty || list is not ("asambleistas" or "sufragantes" or "inhabilitados") || format is not ("pdf" or "csv"))
             return Results.BadRequest(new { code = "INVALID_REQUEST" });
 
         var assembly = await db.Assemblies.AsNoTracking().SingleOrDefaultAsync(a => a.Id == assemblyId, ct);
@@ -40,6 +40,7 @@ public static class AssemblyOfficialRosterEndpoints
         string Rut(Guid personId) => fullRut.GetValueOrDefault(personId, "");
 
         var closedOn = assembly.ClosedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd");
+        if (list == "inhabilitados") return await ControlList(assembly, roster, format, closedOn, assemblyId, context, audit, appDb, ct);
         var asVoters = list == "sufragantes";
         // Asambleístas = quienes PUEDEN ASISTIR por su calidad (Ex Venerable Maestro o Venerable Maestro en su primer
         // período); NO es el padrón de sufragio. Se numera de nuevo y se indica la calidad, sin estado de sufragio.
@@ -81,6 +82,63 @@ public static class AssemblyOfficialRosterEndpoints
             AuditResults.Success, new { Listado = list, Formato = format, Registros = count, RutCompleto = true, ClosureDigest = digest });
         await appDb.SaveChangesAsync(ct);
         context.Response.Headers["X-PMGM-Official-Roster"] = "true";
+        context.Response.Headers["X-PMGM-Closure-Digest"] = digest;
+        return Results.File(file, type, name);
+    }
+
+    /// <summary>Texto de situación, motivo y quién regulariza, a partir del código de la evaluación (sin montos).</summary>
+    public static (string Situation, string Reason, string Regularizes) Explain(AssemblyListingRow r)
+    {
+        var situation = r.MayAttend ? "Asiste, sin voto" : "No puede asistir";
+        return r.ReasonCode switch
+        {
+            "MOROSIDAD_GRAN_TESORERIA" => (situation, "Su Taller tiene saldo pendiente con Gran Tesorería o Gran Hospitalaria", "El Taller regulariza el pago; solo Régimen Interior puede levantar el bloqueo"),
+            "RESTRICCION_SUFRAGIO" => (situation, "Tiene una restricción de sufragio vigente", "Régimen Interior"),
+            "RESTRICCION_ASISTENCIA" => (situation, "Tiene una restricción de asistencia vigente", "Régimen Interior"),
+            "DERECHOS_O_CALIDAD_INVALIDOS" => (situation, "No es miembro activo con derechos vigentes o su calidad no lo habilita", "Secretaría del Taller y Régimen Interior"),
+            "EVIDENCIA_DERECHOS_PENDIENTE" or "EVIDENCIA_SUFRAGIO_PENDIENTE" or "SALDO_GRAN_TESORERIA_NO_ACREDITADO"
+                => (situation, "Falta verificar información oficial", "Régimen Interior"),
+            _ => (situation, r.ReasonCode, "Régimen Interior")
+        };
+    }
+
+    // Control de inhabilitados: todo asambleísta del corte que NO puede votar (asiste sin voto o no puede asistir),
+    // con el motivo. RUT enmascarado: no es el documento de identificación del votante. Descarga auditada.
+    private static async Task<IResult> ControlList(
+        AssemblyRecord assembly, AssemblyRosterListing roster, string format, string closedOn, Guid assemblyId,
+        HttpContext context, IAuditService audit, PmgmDbContext appDb, CancellationToken ct)
+    {
+        var digest = assembly.ClosureEvidenceDigest!;
+        var rows = roster.Asambleistas.Where(r => !r.MayVote)
+            .Select((r, i) => (Number: i + 1, Row: r, Why: Explain(r))).ToArray();
+        var name = "control-inhabilitados-" + closedOn + "-" + assemblyId.ToString("N")[..8];
+        byte[] file; string type;
+        if (format == "csv")
+        {
+            file = AssemblyRosterCsvPolicy.SerializeTable(
+                ["N°", "Apellidos y nombres", "RUT", "Taller", "Situación", "Motivo", "Quién regulariza"],
+                rows.Select(x => (IReadOnlyList<string>)[x.Number.ToString(), x.Row.Name, x.Row.Rut, x.Row.Workshop, x.Why.Situation, x.Why.Reason, x.Why.Regularizes]).ToArray());
+            type = "text/csv; charset=utf-8"; name += ".csv";
+        }
+        else
+        {
+            var noAttend = rows.Count(x => !x.Row.MayAttend);
+            file = AssemblyOfficialRosterPdf.Render(
+                "Control de inhabilitados — no pueden votar",
+                [$"Gran Logia Mixta de Chile · {assembly.Name}",
+                 $"Asamblea: {assembly.MeetingDate:dd-MM-yyyy} · Corte del padrón: {assembly.CutoffDate:dd-MM-yyyy} · Cerrado el {closedOn} · {rows.Length} registros ({rows.Length - noAttend} asisten sin voto, {noAttend} no pueden asistir)",
+                 "Documento de control interno: no es el padrón de sufragio ni el listado de asistencia. RUT parcialmente protegido; sin montos. Orden alfabético por apellidos.",
+                 "Documento reservado: su custodia y acceso se regulan institucionalmente."],
+                ["N°", "Apellidos y nombres", "RUT", "Taller", "Situación", "Motivo"],
+                [30, 150, 70, 145, 95, 252],
+                rows.Select(x => (IReadOnlyList<string>)[x.Number.ToString(), x.Row.Name, x.Row.Rut, x.Row.Workshop, x.Why.Situation, x.Why.Reason]).ToArray(),
+                $"Control de inhabilitados - padron cerrado el {closedOn} - Resumen SHA-256 {digest[..16]}");
+            type = "application/pdf"; name += ".pdf";
+        }
+        audit.Add(context, "regimen.asamblea.control_inhabilitados.descargado", nameof(AssemblyRecord), assemblyId.ToString("D"), null,
+            AuditResults.Success, new { Listado = "inhabilitados", Formato = format, Registros = rows.Length, RutCompleto = false, ClosureDigest = digest });
+        await appDb.SaveChangesAsync(ct);
+        context.Response.Headers["X-PMGM-Official-Roster"] = "false";
         context.Response.Headers["X-PMGM-Closure-Digest"] = digest;
         return Results.File(file, type, name);
     }

@@ -50,6 +50,18 @@ public static class AssemblyRosterCsvPolicy
         return Serialize(rows, includeSuffrageMark, markHeader);
     }
 
+    /// <summary>CSV de control con columnas propias (p. ej. inhabilitados); mismas protecciones de texto que el resto.</summary>
+    public static byte[] SerializeTable(IReadOnlyList<string> header, IReadOnlyCollection<IReadOnlyList<string>> rows)
+    {
+        ArgumentNullException.ThrowIfNull(header);
+        ArgumentNullException.ThrowIfNull(rows);
+        if (rows.Count > MaxRows) throw new ArgumentException("INVALID_ROSTER_CANDIDATES", nameof(rows));
+        var buffer = new StringBuilder();
+        AppendLine(buffer, header);
+        foreach (var row in rows) AppendLine(buffer, row);
+        return [.. Utf8Bom.GetPreamble(), .. Encoding.UTF8.GetBytes(buffer.ToString())];
+    }
+
     private static byte[] Serialize(
         IReadOnlyCollection<AssemblyRosterPrintRow> rows, bool includeSuffrageMark, string markHeader = "Estado de sufragio")
     {

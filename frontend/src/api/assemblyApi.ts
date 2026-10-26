@@ -40,7 +40,7 @@ export interface AssemblyBalancesOverviewItem {
   id: string; name: string; cutoffDate: string; meetingDate: string
   workshops: { organizationId: string; name: string; amountPending: number | null; currency: string | null; sourceReference: string | null }[]
 }
-export type AssemblyOfficialList = 'asambleistas' | 'sufragantes'
+export type AssemblyOfficialList = 'asambleistas' | 'sufragantes' | 'inhabilitados'
 export interface AssemblyCloseResult { assemblyId: string; closed: boolean; closedAtUtc: string; voters: number; digest: string }
 export interface AssemblyEvaluateResult { assemblyId: string; evaluated: number; appended: number; counts: Record<string, number> }
 export const assemblyReadinessStateLabel: Record<AssemblyReadinessState, string> = { ok: 'Listo', pending: 'Pendiente', blocked: 'Bloqueado' }
@@ -228,6 +228,13 @@ export class MockAssemblyStore {
     const attendees = l.asambleistas.filter(r => r.mayAttend)
     const rows = list === 'sufragantes' ? l.sufragantes.map(v => [v.number, v.name, v.rut.replace('***', '000'), v.workshop, '']) : attendees.map((r, i) => [i + 1, r.name, r.rut.replace('***', '000'), r.workshop, assemblyCategoryLabel(r.category)])
     const day = info.at.slice(0, 10)
+    if (list === 'inhabilitados') {
+      const blocked = l.asambleistas.filter(r => !r.mayVote)
+      const why = (r: typeof blocked[number]) => r.blockedByDebt ? 'Su Taller tiene saldo pendiente con Gran Tesorería o Gran Hospitalaria' : 'Restricción vigente'
+      const fileName = `control-inhabilitados-${day}.${format}`
+      if (format === 'pdf') return { blob: new Blob(['Control de inhabilitados DEMOSTRATIVO (datos ficticios)'], { type: 'application/pdf' }), fileName }
+      return { blob: new Blob(['\uFEFF' + [['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Situación', 'Motivo', 'Quién regulariza'], ...blocked.map((r, i) => [i + 1, r.name, r.rut, r.workshop, r.mayAttend ? 'Asiste, sin voto' : 'No puede asistir', why(r), 'Régimen Interior'])].map(r => r.map(c => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileName }
+    }
     const name = `padron-${list}-${day}.${format}`
     if (format === 'pdf') return { blob: new Blob(['Padrón oficial DEMOSTRATIVO (datos ficticios)'], { type: 'application/pdf' }), fileName: name }
     return { blob: new Blob(['\uFEFF' + [list === 'sufragantes' ? ['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Firma'] : ['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Firma', 'Calidad'], ...rows.map(r => list === 'sufragantes' ? [r[0], r[1], r[2], r[3], ''] : [r[0], r[1], r[2], r[3], '', r[4]])].map(r => r.map(c => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileName: name }
