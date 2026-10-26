@@ -104,15 +104,15 @@ public sealed class InitialLoadWindowTransitionGuardTests
     }
 
     [Fact]
-    public void Revoked_legal_or_missing_master_authorization_rejects_open()
+    public void External_legal_review_is_not_a_gate_but_master_verification_is()
     {
-        var noLegal = Admission(InitialLoadAdmissionPolicy.Window.NotOpened,
+        var outsideSoftware = Admission(InitialLoadAdmissionPolicy.Window.NotOpened,
             InitialLoadAdmissionPolicy.Operation.RequestOpen,
             Evidence() with { LegalApprovalVerifiedByServer = false });
         var result = InitialLoadWindowTransitionGuard.Plan(
             Initial(), InitialLoadAdmissionPolicy.Operation.RequestOpen,
-            noLegal, Now, OpenAuditId, new string('a', 64));
-        Assert.Equal("AUTHORIZATION_REQUIRED", result.Code);
+            outsideSoftware, Now, OpenAuditId, new string('a', 64));
+        Assert.Equal("TRANSITION_PREPARED", result.Code);
 
         var noMaster = Admission(InitialLoadAdmissionPolicy.Window.NotOpened,
             InitialLoadAdmissionPolicy.Operation.RequestOpen,

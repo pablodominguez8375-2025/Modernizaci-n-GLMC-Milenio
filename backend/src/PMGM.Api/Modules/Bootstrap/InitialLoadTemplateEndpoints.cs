@@ -5,9 +5,10 @@ using PMGM.Api.Modules.Authorization;
 namespace PMGM.Api.Modules.Bootstrap;
 
 /// <summary>
-/// Approved format proposal for the INITIAL LOAD only. Delivers empty CSV files,
-/// never accepts or persists personal data. Real upload/plan/apply requires its
-/// own legal approval, authorization policy and audited transactional workflow.
+/// Initial-load CSV contract and empty template. Preview accepts bounded CSV
+/// content for the registered Master only, without storing or applying rows.
+/// Institutional juridical review happens OUTSIDE this application. Actual
+/// import still requires transactional authorization, idempotency and audit.
 /// </summary>
 public static class InitialLoadTemplateEndpoints
 {
@@ -31,6 +32,10 @@ public static class InitialLoadTemplateEndpoints
         endpoints.MapGet("/api/platform/bootstrap/initial-load/template-csv", DownloadCsvTemplate)
             .RequireAuthorization()
             .WithTags("Bootstrap institucional — Carga inicial");
+        endpoints.MapPost("/api/platform/bootstrap/initial-load/preview",
+                InitialLoadCsvPreviewEndpoints.PreviewAsync)
+            .RequireAuthorization()
+            .WithTags("Bootstrap institucional — Carga inicial");
         return endpoints;
     }
 
@@ -42,11 +47,12 @@ public static class InitialLoadTemplateEndpoints
 
         return Results.Ok(new
         {
-            status = "TEMPLATE_ONLY",
+            status = "PREVIEW_ONLY",
             revision = "INITIAL-LOAD-CSV-v1",
             files = Sheets.Select(s => new { name = s.Name, columns = s.Columns }),
-            requiresLegalApprovalBeforeRealData = true,
-            acceptsUploadedData = false,
+            requiresLegalApprovalBeforeRealData = false,
+            legalReviewIsExternal = true,
+            acceptsUploadedData = true,
             createsAccounts = false,
             assignsProfiles = false,
             supportsApply = false

@@ -16,10 +16,9 @@ public static class InitialLoadAdmissionPolicy
 
     public sealed record Evidence(
         bool MasterAccountVerifiedByServer = false,
-        // Legacy property name: evidence that the institution's HUMAN, external
-        // signoff was recorded and checked against trusted server-owned
-        // records. The application does NOT decide whether processing is
-        // legally permissible. Never derive this from browser/API Boolean input.
+        // Historical compatibility only; legal validation is performed by
+        // the institution outside this application, not an admission gate.
+        // Never accept claimed approval Booleans from browser/API requests.
         bool LegalApprovalVerifiedByServer = false,
         bool AuditSinkVerifiedByServer = false,
         string? AuditReason = null,
@@ -85,7 +84,6 @@ public static class InitialLoadAdmissionPolicy
         if (operation == Operation.RequestOpen)
         {
             if (window != Window.NotOpened) Fail("INVALID_WINDOW_TRANSITION");
-            if (!evidence.LegalApprovalVerifiedByServer) Fail("LEGAL_APPROVAL_REQUIRED");
             ValidateAudit(evidence, Fail);
 
             var ready = codes.Count == 0;
@@ -111,9 +109,8 @@ public static class InitialLoadAdmissionPolicy
                 false, false, 0, codes.ToArray());
         }
 
-        if (!evidence.LegalApprovalVerifiedByServer)
-            Fail("LEGAL_APPROVAL_REQUIRED");
-
+        // Legal/Juridical approval is an external institutional process.
+        // Enforce application-side controls (Master, audit, state) only.
         if (operation == Operation.Preview)
         {
             if (!evidence.AuditSinkVerifiedByServer)
