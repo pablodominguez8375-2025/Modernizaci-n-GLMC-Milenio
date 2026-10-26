@@ -41,7 +41,12 @@ public static class AssemblyOfficialRosterEndpoints
 
         var closedOn = assembly.ClosedAtUtc.Value.UtcDateTime.ToString("yyyy-MM-dd");
         var asVoters = list == "sufragantes";
-        var count = asVoters ? roster.Sufragantes.Count : roster.Asambleistas.Count;
+        // Asambleístas = quienes PUEDEN ASISTIR por su calidad (Ex Venerable Maestro o Venerable Maestro en su primer
+        // período); NO es el padrón de sufragio. Se numera de nuevo y se indica la calidad, sin estado de sufragio.
+        var attendees = roster.Asambleistas.Where(r => r.MayAttend).Select((r, i) => (Row: r, Number: i + 1)).ToArray();
+        static string Quality(string category) => category == AssemblyMemberCategoryPolicy.PermanentAssemblyMember
+            ? "Asambleísta" : category == AssemblyMemberCategoryPolicy.Representative ? "Representante" : category;
+        var count = asVoters ? roster.Sufragantes.Count : attendees.Length;
         var digest = assembly.ClosureEvidenceDigest!;
         var name = (asVoters ? "padron-sufragantes-" : "padron-asambleistas-") + closedOn + "-" + assemblyId.ToString("N")[..8];
 
@@ -50,22 +55,24 @@ public static class AssemblyOfficialRosterEndpoints
         {
             var rows = asVoters
                 ? roster.Sufragantes.Select(v => new AssemblyRosterPrintRow(v.Number, v.Name, Rut(v.PersonId), v.Workshop, "", null)).ToArray()
-                : roster.Asambleistas.Select(r => new AssemblyRosterPrintRow(r.Number, r.Name, Rut(r.PersonId), r.Workshop, "", r.MayVote ? "Habilitado" : "Sin sufragio")).ToArray();
-            file = AssemblyRosterCsvPolicy.SerializeOfficial(rows, !asVoters); type = "text/csv; charset=utf-8"; name += ".csv";
+                : attendees.Select(a => new AssemblyRosterPrintRow(a.Number, a.Row.Name, Rut(a.Row.PersonId), a.Row.Workshop, "", Quality(a.Row.Category))).ToArray();
+            file = AssemblyRosterCsvPolicy.SerializeOfficial(rows, !asVoters, "Calidad"); type = "text/csv; charset=utf-8"; name += ".csv";
         }
         else
         {
-            var cols = new List<string> { "N°", "Apellidos y nombres", "RUT", "Taller" }; var widths = new List<double> { 34, 250, 90, 200 };
-            if (!asVoters) { cols.Add("Sufragio"); widths.Add(70); }
-            cols.Add("Firma"); widths.Add(asVoters ? 187 : 117);
+            var cols = new List<string> { "N°", "Apellidos y nombres", "RUT", "Taller" }; var widths = new List<double> { 34, asVoters ? 250 : 230, 90, asVoters ? 200 : 180 };
+            if (!asVoters) { cols.Add("Calidad"); widths.Add(130); }
+            cols.Add("Firma"); widths.Add(asVoters ? 187 : 97);
             IReadOnlyList<IReadOnlyList<string>> body = asVoters
                 ? roster.Sufragantes.Select(v => (IReadOnlyList<string>)[v.Number.ToString(), v.Name, Rut(v.PersonId), v.Workshop, ""]).ToArray()
-                : roster.Asambleistas.Select(r => (IReadOnlyList<string>)[r.Number.ToString(), r.Name, Rut(r.PersonId), r.Workshop, r.MayVote ? "Habilitado" : "Sin sufragio", ""]).ToArray();
+                : attendees.Select(a => (IReadOnlyList<string>)[a.Number.ToString(), a.Row.Name, Rut(a.Row.PersonId), a.Row.Workshop, Quality(a.Row.Category), ""]).ToArray();
             file = AssemblyOfficialRosterPdf.Render(
-                (asVoters ? "Padrón de sufragantes habilitados" : "Asambleístas de la Gran Asamblea") + " — padrón oficial",
+                (asVoters ? "Padrón de sufragio — sufragantes habilitados" : "Listado de asambleístas — con derecho a asistir") + " — oficial",
                 [$"Gran Logia Mixta de Chile · {assembly.Name}",
                  $"Asamblea: {assembly.MeetingDate:dd-MM-yyyy} · Corte del padrón: {assembly.CutoffDate:dd-MM-yyyy} · Cerrado el {closedOn} · {count} registros",
-                 "Orden alfabético por apellidos. Documento reservado: contiene el RUT completo; su custodia y acceso se regulan institucionalmente. El voto es siempre secreto."],
+                 asVoters ? "Padrón de sufragio: quienes pueden votar. Orden alfabético por apellidos. El voto es siempre secreto."
+                          : "Asisten por su calidad de Ex Venerable Maestro o de Venerable Maestro en su primer período. No es el padrón de sufragio. Orden alfabético por apellidos.",
+                 "Documento reservado: contiene el RUT completo; su custodia y acceso se regulan institucionalmente."],
                 cols, widths, body, $"Padron oficial cerrado el {closedOn} - Resumen SHA-256 {digest[..16]}");
             type = "application/pdf"; name += ".pdf";
         }

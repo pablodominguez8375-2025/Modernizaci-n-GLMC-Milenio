@@ -80,7 +80,8 @@ public static class AssemblyPreliminaryReviewProjection
     public static AssemblyPreliminaryReviewRow Project(
         AssemblyMemberStatusRecord member,
         IReadOnlyCollection<AssemblyEligibilityRecord> history,
-        DateOnly cutoff)
+        DateOnly cutoff,
+        bool debtExceptionActive = false)
     {
         var linked = history.Where(x =>
             x.AssemblyId == member.AssemblyId &&
@@ -134,7 +135,10 @@ public static class AssemblyPreliminaryReviewProjection
              // Una referencia contable no acredita un monto: sin saldo cero
              // y sin acto de excepción RI verificado en esta proyección,
              // nunca afirmar habilitación provisional de sufragio.
-             evaluation.GrandTreasuryPendingAmount != 0m ||
+             // Con un acto vigente de Régimen Interior que levanta el bloqueo del Taller, la habilitación
+             // puede convivir con un saldo positivo (nunca negativo).
+             (evaluation.GrandTreasuryPendingAmount != 0m &&
+              !(debtExceptionActive && evaluation.GrandTreasuryPendingAmount > 0m)) ||
              evaluation.GrandTreasuryAsOfDate != cutoff ||
              string.IsNullOrWhiteSpace(evaluation.InstitutionalRightsSourceReference) ||
              string.IsNullOrWhiteSpace(evaluation.HonorRightsSourceReference)))

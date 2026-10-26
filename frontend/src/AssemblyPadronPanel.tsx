@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 import type { PmgmApiClient } from './api/pmgmApi'
 import {
-  assemblyAttestationsByStep, assemblyAttestationTitles, assemblyReadinessStateLabel, assemblyReviewActionLabels, assemblyStatusLabel,
+  assemblyAttestationsByStep, assemblyAttestationTitles, assemblyCategoryLabel, assemblyReadinessStateLabel, assemblyReviewActionLabels, assemblyStatusLabel,
   type AssemblyAttestationKind, type AssemblyAttestationStatus, type AssemblyClosureReadiness, type AssemblyListing, type AssemblyListingRow, type AssemblyReviewAction, type AssemblySummary,
 } from './api/assemblyApi'
 import { ActionDrawer } from './actionKit'
@@ -184,9 +184,9 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
 
     {isClosed && listing && <section className="panel report-wide assembly-official" aria-label="Padrón oficial">
       <div className="panel-heading"><div><p className="eyebrow">Padrón oficial · cerrado</p><h2>Descargar el padrón oficial</h2>
-        <p>Los dos listados oficiales de la Asamblea cerrada, en orden alfabético por apellidos, con el RUT completo (para identificar bien a quien vota) y la columna de firma en blanco. Es un documento reservado: su custodia se regula fuera del sistema. Cada descarga queda en la auditoría.</p></div></div>
+        <p>Los dos listados oficiales de la Asamblea cerrada: quienes pueden asistir y el padrón de sufragio, en orden alfabético por apellidos, con el RUT completo (para identificar bien a quien vota) y la columna de firma en blanco. Es un documento reservado: su custodia se regula fuera del sistema. Cada descarga queda en la auditoría.</p></div></div>
       <div className="assembly-official-grid">
-        {([['sufragantes', 'Sufragantes habilitados', 'Quienes pueden votar'], ['asambleistas', 'Asambleístas', 'Todos los asambleístas del corte']] as const).map(([key, title, hint]) => <div key={key} className="assembly-official-item">
+        {([['sufragantes', 'Sufragantes habilitados', 'Quienes pueden votar'], ['asambleistas', 'Asambleístas', 'Con derecho a asistir: Ex Venerables y Venerables en su primer período']] as const).map(([key, title, hint]) => <div key={key} className="assembly-official-item">
           <strong>{title}</strong><small>{hint}</small>
           <div className="assembly-official-actions"><button type="button" className="action-trigger primary" onClick={() => void downloadOfficial(key, 'pdf')}>Descargar PDF</button>
             <button type="button" className="action-trigger secondary" onClick={() => void downloadOfficial(key, 'csv')}>Descargar planilla (CSV)</button></div>
@@ -215,11 +215,11 @@ export default function AssemblyPadronPanel({ api }: { api: PmgmApiClient }) {
 
     {listing && listing.asambleistas.length > 0 && <section className="panel report-wide" aria-label="Asambleístas">
       <div className="panel-heading"><div><p className="eyebrow">Gran Asamblea · listado 1</p><h2>Asambleístas</h2>
-        <p>Orden alfabético por apellidos. El RUT se muestra parcialmente protegido.</p></div>
+        <p>Quienes pueden asistir por su calidad de Ex Venerable Maestro o de Venerable Maestro en su primer período. No es el padrón de sufragio (otro listado, solo con quienes pueden votar). Orden alfabético por apellidos; el RUT se muestra parcialmente protegido.</p></div>
         <span className="count-badge">{listing.asambleistas.length} asambleístas{pendingCount ? ` · ${pendingCount} pendientes` : ''}</span></div>
-      <div className="table-wrap"><table className="assembly-table"><thead><tr><th>N°</th><th>Apellidos y nombres</th><th>RUT</th><th>Taller</th><th>Estado</th><th>Firma</th><th>Gestión</th></tr></thead><tbody>
+      <div className="table-wrap"><table className="assembly-table"><thead><tr><th>N°</th><th>Apellidos y nombres</th><th>RUT</th><th>Taller</th><th>Sufragio</th><th>Firma</th><th>Gestión</th></tr></thead><tbody>
         {listing.asambleistas.map(r => <tr key={r.personId}>
-          <td>{r.number}</td><td><strong>{r.name}</strong><small>{r.category}</small></td><td>{r.rut}</td><td>{r.workshop}</td>
+          <td>{r.number}</td><td><strong>{r.name}</strong><small>{assemblyCategoryLabel(r.category)}</small></td><td>{r.rut}</td><td>{r.workshop}</td>
           <td><span className={r.mayVote ? 'status-pill complete' : 'status-pill attention'}>{assemblyStatusLabel(r)}</span></td>
           <td><span className="assembly-signature" aria-label="Espacio para la firma" /></td>
           <td>{r.mayVote || isClosed ? <span className="muted">—</span> : <ActionDrawer label="Registrar gestión" tone="secondary" title={`Gestión · ${r.name}`} description="Registra la gestión de Régimen Interior sobre este asambleísta. No confirma sufragio.">

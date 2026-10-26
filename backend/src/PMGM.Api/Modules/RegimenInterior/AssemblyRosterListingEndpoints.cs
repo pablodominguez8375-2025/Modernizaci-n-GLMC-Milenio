@@ -69,7 +69,7 @@ public static class AssemblyRosterListingBuilder
         foreach (var m in members)
         {
             var row = AssemblyPreliminaryReviewProjection.Project(
-                m, byMember.GetValueOrDefault(m.Id) ?? [], assembly.CutoffDate);
+                m, byMember.GetValueOrDefault(m.Id) ?? [], assembly.CutoffDate, lifted.Contains(m.OrganizationId));
             var blocked = row.Status == AssemblyVoterEligibilityPolicy.AttendanceOnly &&
                           row.ReasonCode == DebtReasonCode;
             var isLifted = blocked && lifted.Contains(m.OrganizationId);

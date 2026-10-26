@@ -80,16 +80,23 @@ export function assemblyStatusLabel(row: Pick<AssemblyListingRow, 'status' | 'bl
   return 'Pendiente de fuentes oficiales'
 }
 
+/** Calidad por la que el asambleísta puede asistir (regla de asambleístas). */
+export function assemblyCategoryLabel(category: string): string {
+  if (category === 'permanent_assembly_member') return 'Asambleísta'
+  if (category === 'representative') return 'Representante'
+  return category
+}
+
 // ---- Demostración (datos ficticios; solo con mocks) ------------------------------------------------
 const TALLER_MOROSO = 'demo-org-23'
 const DEMO_WORKSHOPS = ['demo-org-1', 'demo-org-23', 'demo-org-8', 'demo-org-14']
 const demoRows = [
-  { id: 'a1', org: 'demo-org-1', last: 'Álvarez Soto', first: 'Luis', rut: '11.222.***-3', workshop: 'Taller Demostrativo Nº 1', category: 'Asambleísta permanente', status: 'habilitado', vote: true },
-  { id: 'a2', org: TALLER_MOROSO, last: 'Bravo Núñez', first: 'Carla', rut: '12.333.***-4', workshop: 'Taller Demostrativo Nº 23', category: 'Representante', status: 'solo_asistencia', vote: false, debt: true },
-  { id: 'a3', org: TALLER_MOROSO, last: 'Fuentes Ibáñez', first: 'Pedro', rut: '9.444.***-5', workshop: 'Taller Demostrativo Nº 23', category: 'Asambleísta permanente', status: 'solo_asistencia', vote: false, debt: true },
-  { id: 'a4', org: 'demo-org-8', last: 'Muñoz Rojas', first: 'Ana', rut: '13.555.***-6', workshop: 'Taller Demostrativo Nº 8', category: 'Asambleísta permanente', status: 'inhabilitado', vote: false },
-  { id: 'a5', org: 'demo-org-14', last: 'Ñanco Pérez', first: 'Marta', rut: '10.666.***-7', workshop: 'Taller Demostrativo Nº 14', category: 'Asambleísta permanente', status: 'pendiente', vote: false },
-  { id: 'a6', org: 'demo-org-14', last: 'Zúñiga Vega', first: 'Jorge', rut: '14.777.***-8', workshop: 'Taller Demostrativo Nº 14', category: 'Representante', status: 'habilitado', vote: true },
+  { id: 'a1', org: 'demo-org-1', last: 'Álvarez Soto', first: 'Luis', rut: '11.222.***-3', workshop: 'Taller Demostrativo Nº 1', category: 'permanent_assembly_member', status: 'habilitado', vote: true },
+  { id: 'a2', org: TALLER_MOROSO, last: 'Bravo Núñez', first: 'Carla', rut: '12.333.***-4', workshop: 'Taller Demostrativo Nº 23', category: 'representative', status: 'solo_asistencia', vote: false, debt: true },
+  { id: 'a3', org: TALLER_MOROSO, last: 'Fuentes Ibáñez', first: 'Pedro', rut: '9.444.***-5', workshop: 'Taller Demostrativo Nº 23', category: 'permanent_assembly_member', status: 'solo_asistencia', vote: false, debt: true },
+  { id: 'a4', org: 'demo-org-8', last: 'Muñoz Rojas', first: 'Ana', rut: '13.555.***-6', workshop: 'Taller Demostrativo Nº 8', category: 'permanent_assembly_member', status: 'inhabilitado', vote: false },
+  { id: 'a5', org: 'demo-org-14', last: 'Ñanco Pérez', first: 'Marta', rut: '10.666.***-7', workshop: 'Taller Demostrativo Nº 14', category: 'permanent_assembly_member', status: 'pendiente', vote: false },
+  { id: 'a6', org: 'demo-org-14', last: 'Zúñiga Vega', first: 'Jorge', rut: '14.777.***-8', workshop: 'Taller Demostrativo Nº 14', category: 'representative', status: 'habilitado', vote: true },
 ] as const
 
 export class MockAssemblyStore {
@@ -218,11 +225,12 @@ export class MockAssemblyStore {
     const info = this.closedIds.get(assemblyId)
     if (!info) throw new Error('El padrón oficial solo se puede descargar cuando la Asamblea está cerrada.')
     const l = this.listing(assemblyId)
-    const rows = list === 'sufragantes' ? l.sufragantes.map(v => [v.number, v.name, v.rut.replace('***', '000'), v.workshop]) : l.asambleistas.map(r => [r.number, r.name, r.rut.replace('***', '000'), r.workshop])
+    const attendees = l.asambleistas.filter(r => r.mayAttend)
+    const rows = list === 'sufragantes' ? l.sufragantes.map(v => [v.number, v.name, v.rut.replace('***', '000'), v.workshop, '']) : attendees.map((r, i) => [i + 1, r.name, r.rut.replace('***', '000'), r.workshop, assemblyCategoryLabel(r.category)])
     const day = info.at.slice(0, 10)
     const name = `padron-${list}-${day}.${format}`
     if (format === 'pdf') return { blob: new Blob(['Padrón oficial DEMOSTRATIVO (datos ficticios)'], { type: 'application/pdf' }), fileName: name }
-    return { blob: new Blob(['\uFEFF' + [['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Firma'], ...rows.map(r => [...r, ''])].map(r => r.map(c => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileName: name }
+    return { blob: new Blob(['\uFEFF' + [list === 'sufragantes' ? ['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Firma'] : ['N°', 'Apellidos y nombres', 'RUT', 'Taller', 'Firma', 'Calidad'], ...rows.map(r => list === 'sufragantes' ? [r[0], r[1], r[2], r[3], ''] : [r[0], r[1], r[2], r[3], '', r[4]])].map(r => r.map(c => `"${String(c).replaceAll('"', '""')}"`).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }), fileName: name }
   }
   listing(assemblyId: string): AssemblyListing {
     const assembly = this.assemblies.find(a => a.id === assemblyId)
