@@ -163,6 +163,10 @@ if (builder.Configuration.GetValue<bool>("DemoData:Enabled"))
 
 // IP normalizada para auditoría y partición de rate limits. Solo proxies de confianza explícita.
 app.UseForwardedHeaders();
+// Resolve the framework route template before support diagnostics. Explicit
+// routing lets us snapshot the template before the exception handler clears
+// endpoint metadata; raw paths and route parameters are never logged.
+app.UseRouting();
 // Capture the final HTTP error status after exception handling, without raw logs.
 app.UseMiddleware<SupportDiagnosticMiddleware>();
 app.UseExceptionHandler();
