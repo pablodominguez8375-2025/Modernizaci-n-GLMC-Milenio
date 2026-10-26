@@ -4,6 +4,18 @@ import type { PmgmApiClient } from './api/pmgmApi'
 import { setSupportViewAs } from './api/supportViewAs'
 import { SUPPORT_CORRECTION_DURATIONS,type AccessResetModality,type AccessResetResult,type AccountCandidates,type AccountUser,type SupportCorrectionFieldKey,type SupportCorrectionGrant,type SupportCorrectionStatus,type SupportNotice } from './api/userAccounts'
 
+/** Never bypass server-side delivery requirements. Expose a safe operator-facing reason, never secrets. */
+export function accountCreationBlockReason(data:AccountCandidates|null):string|null{
+ if(!data)return 'No se ha podido verificar el estado del servicio de altas. Consulte al administrador técnico antes de intentar crear una cuenta.'
+ if(data.deliveryConfigured)return null
+ if(data.identityConfigured===false&&data.mailConfigured===false)
+  return 'La conexión de altas con el proveedor de identidad y el envío del correo inicial requieren configuración en el servidor. Compruebe Keycloak, SMTP y la URL HTTPS de ingreso.'
+ if(data.identityConfigured===false)
+  return 'La conexión administrativa para crear cuentas en el proveedor de identidad no está configurada. Verifique su integración con Keycloak.'
+ if(data.mailConfigured===false)
+  return 'Falta configurar el envío de claves iniciales o la URL HTTPS de ingreso en el servidor. El correo institucional general puede funcionar sin que esta función esté habilitada.'
+ return 'El servidor indica que el alta de cuentas no está disponible. Verifique la configuración de identidad, correo inicial y URL HTTPS de ingreso.'
+}
 function ResetAccessForm({api,user,onDone}:{api:PmgmApiClient;user:AccountUser;onDone:()=>void}){
  const hasEmail=user.email.includes('@');const [modality,setModality]=useState<AccessResetModality>(hasEmail?'email':'temporary');const [reason,setReason]=useState('')
  const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [result,setResult]=useState<AccessResetResult|null>(null)
@@ -127,16 +139,19 @@ function CorrectionGrantLine({api,grant,onChanged}:{api:PmgmApiClient;grant:Supp
 export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
  const [data,setData]=useState<AccountCandidates|null>(null);const [users,setUsers]=useState<AccountUser[]>([])
  const [selection,setSelection]=useState('');const [platform,setPlatform]=useState(false);const [name,setName]=useState('');const [email,setEmail]=useState('')
- const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');const [error,setError]=useState('')
+ const [busy,setBusy]=useState(false);const [notice,setNotice]=useState('');const [error,setError]=useState('');const [blockedAttempt,setBlockedAttempt]=useState(false)
  const [corr,setCorr]=useState<SupportCorrectionStatus|null>(null)
  const refreshCorrections=()=>{void api.getSupportCorrectionStatus().then(setCorr).catch(()=>setCorr(null))}
  const chosen=data?.items.find(x=>`${x.memberId}:${x.organizationId}`===selection)
+ const creationBlockReason=accountCreationBlockReason(data)
  useEffect(()=>{let live=true;setData(null);setUsers([]);setPlatform(false);setSelection('');setError('')
   void Promise.all([api.getUserAccountCandidates(),api.getUserAccounts()]).then(([c,u])=>{if(live){setData(c);setUsers(u.items)}}).catch(e=>{if(live)setError(e instanceof Error?e.message:'No se pudo consultar el alta de usuarios.')})
   setCorr(null);void api.getSupportCorrectionStatus().then(c=>{if(live)setCorr(c)}).catch(()=>{if(live)setCorr(null)})
   return()=>{live=false}
  },[api,api.demoAccessSubject])
- const create=async()=>{setBusy(true);setError('');setNotice('');try{
+ const create=async()=>{
+  if(creationBlockReason){setBlockedAttempt(true);return}
+  setBlockedAttempt(false);setBusy(true);setError('');setNotice('');try{
   const result=await api.createUserAccount(platform?{superuser:true,platformName:name,platformEmail:email}:{memberId:chosen?.memberId,organizationId:chosen?.organizationId})
   setSelection('');setName('');setEmail('')
   setNotice(api.useMocks?'Cuenta de demostración creada. El correo y el cambio de clave se simulan.':`Cuenta creada. La clave inicial temporal fue enviada al correo registrado ${result.email}; debe cambiarla al ingresar.`)
@@ -148,13 +163,20 @@ export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
   {data&&!data.deliveryConfigured&&<p role="status">El envío de accesos no está configurado. Solicite su habilitación a la administración de plataforma.</p>}
   <div className="system-console-grid"><div className="action-bar"><ActionDrawer label="Crear usuario" title="Crear cuenta de acceso" description="Hermano activo, correo registrado y clave temporal." keepOpen>
    <form onSubmit={e=>{e.preventDefault();void create()}}>
+    {creationBlockReason&&<p role="alert" id="user-account-create-blocked"><strong>No se puede crear la cuenta todavía.</strong> {creationBlockReason}</p>}
+    {blockedAttempt&&creationBlockReason&&<p role="status">No se envió ninguna solicitud ni se creó una cuenta. Cuando el servidor esté configurado, vuelva a abrir el formulario.</p>}
+    {error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}
     {data?.canCreateSuperuser&&<label><span>Tipo de cuenta</span><select value={platform?'platform':'member'} disabled={busy} onChange={e=>{setPlatform(e.target.value==='platform');setSelection('');setName('');setEmail('')}}><option value="member">Usuario (Hermano de un Taller)</option><option value="platform">Superusuario de soporte</option></select></label>}
     {platform?<><p>El Superusuario es una cuenta de soporte con perfiles limitados, sin datos logiales. Solo existe un Máster y no se puede crear otro.</p><label><span>Nombre del superusuario</span><input required maxLength={200} value={name} disabled={busy} onChange={e=>setName(e.target.value)}/></label><label><span>Correo del superusuario</span><input required type="email" maxLength={320} value={email} disabled={busy} onChange={e=>setEmail(e.target.value)}/></label></>:<>
      <label><span>Hermano activo / Taller</span><select required value={selection} disabled={busy||!data} onChange={e=>setSelection(e.target.value)}><option value="">Seleccione un Hermano activo</option>{data?.items.map(c=><option key={`${c.memberId}:${c.organizationId}`} value={`${c.memberId}:${c.organizationId}`}>{c.name} · {c.workshop}</option>)}</select></label>
      <label><span>Correo registrado en la ficha</span><input readOnly type="email" value={chosen?.email??''}/></label><p>Si el correo falta o es incorrecto, actualice la ficha antes de crear la cuenta.</p>
     </>}
     <p>Los permisos técnicos y cargos se asignan mediante los flujos institucionales correspondientes.</p>
-    <button disabled={busy||!data?.deliveryConfigured||(!platform&&!chosen)}>{busy?'Creando cuenta…':'Crear usuario y enviar clave inicial'}</button>
+    <button type={creationBlockReason?'button':'submit'} disabled={busy||(!creationBlockReason&&!platform&&!chosen)}
+     onClick={creationBlockReason?()=>setBlockedAttempt(true):undefined}
+     aria-describedby={creationBlockReason?'user-account-create-blocked':undefined}>
+     {busy?'Creando cuenta…':creationBlockReason?'Ver por qué no se puede crear la cuenta':'Crear usuario y enviar clave inicial'}
+    </button>
    </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}{corr?.isMaster&&u.kind==='superuser'&&<GrantCorrectionDrawer api={api} user={u} onChanged={refreshCorrections}/>}</div>}{corr?.isMaster&&u.kind==='superuser'&&corr.grants.filter(g=>g.operatorSubject===u.subject).map(g=><CorrectionGrantLine key={g.grantId} api={api} grant={g} onChanged={refreshCorrections}/>)}{corr?.canCorrect&&u.kind==='member'&&u.enabled&&<div className="action-bar"><CorrectContactDrawer api={api} user={u} status={corr}/><ResendNoticeDrawer api={api} user={u}/></div>}</div>)}</div></div>
  </section>
 }

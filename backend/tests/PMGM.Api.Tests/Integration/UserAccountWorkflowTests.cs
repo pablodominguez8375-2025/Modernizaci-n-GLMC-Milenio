@@ -22,6 +22,34 @@ namespace PMGM.Api.Tests.Integration;
 public sealed class UserAccountWorkflowTests
 {
     [Theory]
+    [InlineData(true,true)]
+    [InlineData(true,false)]
+    [InlineData(false,true)]
+    [InlineData(false,false)]
+    public async Task Candidates_expose_only_safe_delivery_readiness_flags_and_fail_closed(bool identityReady,bool mailReady)
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        var identity=new Identity{Available=identityReady};var mail=new Mail{Available=mailReady};
+        using var factory=Factory(connection,identity,mail);using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        await Seed(factory,"active");
+        using var candidates=JsonDocument.Parse(await client.GetStringAsync("/api/system/user-accounts/eligible-members",TestContext.Current.CancellationToken));
+        Assert.Equal(identityReady,candidates.RootElement.GetProperty("identityConfigured").GetBoolean());
+        Assert.Equal(mailReady,candidates.RootElement.GetProperty("mailConfigured").GetBoolean());
+        Assert.Equal(identityReady&&mailReady,candidates.RootElement.GetProperty("deliveryConfigured").GetBoolean());
+        Assert.DoesNotContain("ClientSecret",candidates.RootElement.ToString(),StringComparison.OrdinalIgnoreCase);
+        if(!identityReady||!mailReady)
+        {
+            var response=await client.PostAsJsonAsync("/api/system/user-accounts",
+                new {superuser=true,platformName="Soporte CI",platformEmail=$"soporte-{Guid.NewGuid():N}@example.invalid"},
+                TestContext.Current.CancellationToken);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable,response.StatusCode);
+            Assert.Equal(0,identity.Prepares);
+            Assert.Null(mail.LastAccount);
+        }
+    }
+
+    [Theory]
     [InlineData(false,false)]
     [InlineData(true,false)]
     [InlineData(false,true)]
@@ -231,7 +259,7 @@ public sealed class UserAccountWorkflowTests
     }
     private sealed class Identity:IAccountIdentityProvider
     {
-        public bool Configured=>true;public string Issuer{get;}=$"https://identity.example.invalid/{Guid.NewGuid():N}";
+        public bool Available=true;public bool Configured=>Available;public string Issuer{get;}=$"https://identity.example.invalid/{Guid.NewGuid():N}";
         public string Subject{get;}=Guid.NewGuid().ToString();public bool Enabled,Removed,EnableFails;public int Prepares;public AccountIdentity? Account;
         public Task<PreparedIdentity> PrepareDisabledAsync(AccountIdentity account,string password,CancellationToken ct)
         {Prepares++;if(Enabled)throw new AccountConflictException();Account=account;return Task.FromResult(new PreparedIdentity(Subject,true));}
@@ -246,7 +274,7 @@ public sealed class UserAccountWorkflowTests
     }
     private sealed class Mail:IInitialAccountMail
     {
-        public bool Configured=>true;public bool Fails;public AccountIdentity? LastAccount;public string? Password;
+        public bool Available=true;public bool Configured=>Available;public bool Fails;public AccountIdentity? LastAccount;public string? Password;
         public Task SendAsync(AccountIdentity account,string password,CancellationToken ct){LastAccount=account;Password=password;if(Fails)throw new AccountDeliveryException();return Task.CompletedTask;}
     }
 }
