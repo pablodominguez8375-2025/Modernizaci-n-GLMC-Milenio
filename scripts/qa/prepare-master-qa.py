@@ -310,6 +310,11 @@ def activate(api, realm, issuer, subject, config):
     if (not account or not master or account["id"] != subject or
             master["id"] != subject or account.get("enabled") is not True):
         raise Blocked("MASTER_ACTIVATION_UNVERIFIED")
+    # A successful Keycloak PUT is not evidence that a partial user update
+    # retained attributes. Read the FULL enabled user again: inventory's list
+    # representation can omit them. If they vanished, never report PASS;
+    # operator must isolate/disable and reconcile the live account.
+    require_master_scope(api, realm, subject)
     return "ENABLED_FOR_AUTHENTICATED_UAT_NOT_CERTIFIED"
 
 
