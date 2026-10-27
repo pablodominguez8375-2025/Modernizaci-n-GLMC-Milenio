@@ -7,6 +7,8 @@ from unittest.mock import patch
 import tempfile
 import json
 import os
+import stat
+from types import SimpleNamespace
 
 SRC = Path(__file__).resolve().parents[1]/'scripts/qa/operators/pmgm-qa754-web-hotfix.py'
 if not SRC.is_file(): SRC = Path(__file__).with_name('pmgm-qa754-web-hotfix.py')
@@ -86,11 +88,77 @@ class HotfixContract(TestCase):
         with tempfile.TemporaryDirectory() as td:
             path=Path(td)/('web-'+'a'*64+'.json')
             path.write_text(json.dumps({'services':{'web':{'image':'sha256:'+'a'*64}}}))
-            with patch.object(mod,'PROJECT_DIR',Path(td)),patch.object(mod,'root_regular',return_value=None):
+            pretend_root=SimpleNamespace(st_mode=stat.S_IFDIR|0o700,st_uid=0)
+            with patch.object(mod,'PROJECT_DIR',Path(td)),\
+                 patch.object(mod,'root_regular',return_value=None),\
+                 patch.object(Path,'lstat',return_value=pretend_root):
                 mod.expected_web_override(path,'sha256:'+'a'*64)
                 path.write_text(json.dumps({'services':{'web':{'image':'sha256:'+'a'*64},'api':{}}}))
                 with self.assertRaisesRegex(mod.Blocked,'WEB_OVERRIDE_CONTENT_CHANGED'):
                     mod.expected_web_override(path,'sha256:'+'a'*64)
+
+    def test_legacy_web_overlay_in_private_qa_auto_lite_is_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory=Path(td)
+            image='sha256:'+'d'*64
+            layer=directory/('web-'+'d'*64+'.json')
+            layer.write_text(json.dumps({'services':{'web':{'image':image}}}))
+            rootdir=SimpleNamespace(st_mode=stat.S_IFDIR|0o700,st_uid=0)
+            with patch.object(mod,'LEGACY_WEB_STATE',directory),\
+                 patch.object(mod,'root_regular',return_value=None),\
+                 patch.object(Path,'lstat',return_value=rootdir):
+                mod.expected_web_override(layer,image)
+
+    def test_web_override_parent_must_be_root_controlled(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory=Path(td)
+            image='sha256:'+'d'*64
+            layer=directory/('web-'+'d'*64+'.json')
+            layer.write_text(json.dumps({'services':{'web':{'image':image}}}))
+            unsafe=SimpleNamespace(st_mode=stat.S_IFDIR|0o777,st_uid=0)
+            with patch.object(mod,'LEGACY_WEB_STATE',directory),\
+                 patch.object(mod,'root_regular',return_value=None),\
+                 patch.object(Path,'lstat',return_value=unsafe):
+                with self.assertRaisesRegex(mod.Blocked,'WEB_OVERRIDE_PARENT_NOT_ROOT_CONTROLLED'):
+                    mod.expected_web_override(layer,image)
+
+    def test_web_override_parent_symlink_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            directory=Path(td)
+            image='sha256:'+'e'*64
+            layer=directory/('web-'+'e'*64+'.json')
+            with patch.object(mod,'LEGACY_WEB_STATE',directory),\
+                 patch.object(Path,'is_symlink',return_value=True):
+                with self.assertRaisesRegex(mod.Blocked,'WEB_OVERRIDE_PARENT_SYMLINK'):
+                    mod.expected_web_override(layer,image)
+
+    def test_web_snapshot_accepts_api_three_layers_web_legacy_two(self):
+        root=Path('/opt/centenario/qa-lab-firstboot/recovery-v2')
+        legacy=Path('/opt/centenario/qa-auto-lite')
+        image='sha256:'+'f'*64
+        base=root/'compose.recovery.json'
+        api_image=root/('api-'+'f'*40+'.json')
+        web_image=legacy/('web-'+'f'*64+'.json')
+        api={'Id':'api-stable','Image':image,'Config':{'Labels':{
+             'com.docker.compose.project.working_dir':str(root)}}}
+        web={'Id':'web-running','Image':image,'Config':{'Labels':{
+             'com.docker.compose.project.working_dir':str(root)}}}
+        others={'Id':'unchanged'}
+        def lookup(name):
+            return {'api':api,'web':web}.get(name,others)
+        def paths(obj):
+            return [base,api_image,mod.IDENTITY_STAGE] if obj is api else [base,web_image]
+        with patch.object(mod.os,'geteuid',return_value=0),\
+             patch.object(mod.socket,'gethostname',return_value='glmdch'),\
+             patch.object(mod,'inspect',side_effect=lookup),\
+             patch.object(mod,'compose_paths',side_effect=paths),\
+             patch.object(mod,'root_regular'),\
+             patch.object(mod,'identity_active'),\
+             patch.object(mod,'expected_web_override') as validator:
+            state=mod.get_sanitized_snapshot()
+            self.assertEqual(state['web_paths'],[base,web_image])
+            self.assertEqual(state['boundary']['api'],'api-stable')
+            validator.assert_called_once_with(web_image,image)
 
     def test_root_overlay_wrong_path_denied(self):
         path=Path('/tmp/web-'+'b'*64+'.json')
