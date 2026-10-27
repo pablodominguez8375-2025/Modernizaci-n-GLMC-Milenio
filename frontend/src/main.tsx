@@ -28,6 +28,7 @@ import './support-view-as.css'
 import './support-view-profile.css'
 import './lodge-data-health.css'
 import './initial-load.css'
+import './help-center.css'
 
 installSupportViewAsFetch()
 

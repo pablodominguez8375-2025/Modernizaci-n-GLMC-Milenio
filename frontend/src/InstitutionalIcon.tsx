@@ -26,6 +26,7 @@ export type InstitutionalIconName =
   | 'logout'
   | 'sidebarCollapse'
   | 'sidebarExpand'
+  | 'help'
 
 interface InstitutionalIconProps {
   name: InstitutionalIconName
@@ -103,6 +104,8 @@ export default function InstitutionalIcon({ name, size = 20, className }: Instit
       return <svg {...common}><path d="M4 4h16v16H4zM9 4v16M16 9l-3 3 3 3"/></svg>
     case 'sidebarExpand':
       return <svg {...common}><path d="M4 4h16v16H4zM9 4v16M13 9l3 3-3 3"/></svg>
+    case 'help':
+      return <svg {...common}><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 1c0 1.7-2.5 2.2-2.5 3.8"/><path d="M12 17.4h.01"/></svg>
     default:
       return null
   }
