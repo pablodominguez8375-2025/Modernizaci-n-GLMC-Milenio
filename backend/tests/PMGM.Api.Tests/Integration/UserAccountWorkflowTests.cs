@@ -224,6 +224,32 @@ public sealed class UserAccountWorkflowTests
     }
 
     [Fact]
+    public async Task Superuser_cannot_assign_dynamic_profiles_to_master_or_other_superusers()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
+        var identity=new Identity();using var factory=Factory(connection,identity,new Mail());using var master=factory.CreateClient();await Seed(factory,"active");
+        var ct=TestContext.Current.CancellationToken;
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        async Task<int> Version(HttpClient c)=>(await c.GetFromJsonAsync<JsonElement>("/api/system/access/catalog",ct)).GetProperty("version").GetInt32();
+        var code=$"sup-{Guid.NewGuid():N}"[..20];var version=await Version(master);
+        Assert.Equal(HttpStatusCode.OK,(await master.PostAsJsonAsync("/api/system/access/profiles",new{code,name="Perfil soporte QA",scope="order",menuCodes=Array.Empty<string>(),expectedVersion=version},ct)).StatusCode);
+        var hermano=Guid.NewGuid().ToString();var otro=Guid.NewGuid().ToString();var maestro=Guid.NewGuid().ToString();
+        identity.Managed[hermano]=new(hermano,"Hermano Ficticio","h@example.invalid",true,"member");
+        identity.Managed[otro]=new(otro,"Otro Soporte","o@example.invalid",true,"superuser");
+        identity.Managed[maestro]=new(maestro,"Máster","x@example.invalid",true,"platform");
+        using var superuser=factory.CreateClient();superuser.DefaultRequestHeaders.Add("X-Account-Kind","superuser");
+        Task<HttpResponseMessage> Assign(HttpClient c,string subject)=>c.PostAsJsonAsync("/api/system/access/assignments",new{subject,profileCode=code,organizationId=(Guid?)null,effectiveFrom="2020-01-01",effectiveTo=(string?)null,expectedVersion=Version(c).GetAwaiter().GetResult()},ct);
+        Assert.Equal(HttpStatusCode.Forbidden,(await Assign(superuser,otro)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,(await Assign(superuser,maestro)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,(await Assign(superuser,hermano)).StatusCode);
+        // El Máster sí puede asignar a un Superusuario.
+        Assert.Equal(HttpStatusCode.OK,(await Assign(master,otro)).StatusCode);
+        // Sin poder comprobar el tipo de cuenta de destino, el Superusuario no asigna.
+        identity.Available=false;
+        Assert.Equal(HttpStatusCode.Forbidden,(await Assign(superuser,Guid.NewGuid().ToString())).StatusCode);
+    }
+
+    [Fact]
     public async Task Access_reset_is_master_only_audited_and_never_exposes_the_password_outside_the_response()
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");if(string.IsNullOrWhiteSpace(connection))return;
