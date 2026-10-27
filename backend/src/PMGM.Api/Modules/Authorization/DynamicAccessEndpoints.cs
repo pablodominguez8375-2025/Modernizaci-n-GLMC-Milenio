@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using PMGM.Api.Data;
 using PMGM.Api.Modules.Audit;
+using PMGM.Api.Modules.UserAccounts;
 
 namespace PMGM.Api.Modules.Authorization;
 
@@ -108,8 +109,24 @@ public static class DynamicAccessEndpoints
                 catalog.Profiles[index] = profile with { Grants = grants };
                 return Results.Ok(catalog.Profiles[index]);
             }, ct));
-        group.MapPost("/assignments", (AssignDynamicProfileRequest request, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
-            MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_assigned", catalog =>
+        group.MapPost("/assignments", async (AssignDynamicProfileRequest request, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAccountIdentityProvider identity, IConfiguration configuration, IAuditService audit, CancellationToken ct) =>
+        {
+            // Un Superusuario no asigna perfiles al Máster ni a otro Superusuario (solo el Máster puede hacerlo).
+            if (access.IsPlatformOperator(ctx.User) && !access.IsPlatformSuperAdmin(ctx.User) && !string.IsNullOrWhiteSpace(request.Subject))
+            {
+                var target = request.Subject.Trim();
+                var denied = string.Equals(target, configuration["InitialLoad:MasterSubject"], StringComparison.OrdinalIgnoreCase);
+                if (!denied)
+                {
+                    if (!identity.Configured)
+                        return Results.Json(new { message = "No se puede comprobar el tipo de cuenta de destino; solo el Máster puede asignar este perfil." }, statusCode: StatusCodes.Status403Forbidden);
+                    var user = await identity.FindManagedAsync(target, ct);
+                    denied = user is { Kind: "platform" or "superuser" };
+                }
+                if (denied)
+                    return Results.Json(new { message = "Solo el Máster puede asignar perfiles al Máster o a otro Superusuario." }, statusCode: StatusCodes.Status403Forbidden);
+            }
+            return await MutateAsync(request.ExpectedVersion, ctx, db, access, audit, "profile_assigned", catalog =>
             {
                 if (string.IsNullOrWhiteSpace(request.Subject) || request.Subject.Length > 320 || request.Subject != request.Subject.Trim()) return Results.BadRequest(new { message = "Indique el identificador exacto del sujeto OIDC (hasta 320 caracteres)." });
                 // Un Superusuario no se asigna perfiles a sí mismo (no se otorga cargos); el Máster no ejerce cargos por diseño.
@@ -124,7 +141,8 @@ public static class DynamicAccessEndpoints
                 var assignment = new DynamicAssignment(Guid.NewGuid(), request.Subject, profile.Code, request.OrganizationId, request.EffectiveFrom, request.EffectiveTo, true);
                 catalog.Assignments.Add(assignment);
                 return Results.Ok(assignment);
-            }, ct));
+            }, ct);
+        });
         group.MapDelete("/assignments/{assignmentId:guid}", (Guid assignmentId, int expectedVersion, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
             MutateAsync(expectedVersion, ctx, db, access, audit, "profile_assignment_revoked", catalog =>
             {
