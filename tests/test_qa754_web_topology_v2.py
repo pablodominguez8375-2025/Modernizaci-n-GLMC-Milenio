@@ -2,6 +2,7 @@ import importlib.util
 import io
 from contextlib import redirect_stdout
 from pathlib import Path
+from types import SimpleNamespace
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -29,6 +30,16 @@ class WebTopologyTests(unittest.TestCase):
         self.stagepatch=patch.object(m,'IDENTITY_STAGE',self.p2)
         self.stagepatch.start()
         self.addCleanup(self.stagepatch.stop)
+        # Simulate a root-owned QA stage even in an unprivileged CI runner.
+        actual_stat=Path.stat
+        def fake_stat(path, *args, **kwargs):
+            result=actual_stat(path, *args, **kwargs)
+            if path==self.p2:
+                return SimpleNamespace(st_uid=0,st_mode=result.st_mode,st_size=result.st_size)
+            return result
+        stage_owner=patch.object(Path,'stat',fake_stat)
+        stage_owner.start()
+        self.addCleanup(stage_owner.stop)
         self.api=self.obj('api',[self.p0,self.p1,self.p2])
 
     def obj(self,service,paths):
