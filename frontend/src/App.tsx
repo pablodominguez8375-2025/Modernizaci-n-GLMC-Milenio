@@ -8,6 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCollapsibleNavGroups } from './navGroups'
 import ReportsHub from './ReportsHub'
 import PrivacyPage from './PrivacyPage'
+import HelpCenterPage from './HelpCenterPage'
+import type { HelpAccess, HelpTarget } from './help/helpGuides'
 import type { MySupportCorrection } from './api/userAccounts'
 import WorkbenchPage, { type WorkbenchItem } from './WorkbenchPage'
 import AdmissionsPage from './AdmissionsPage'
@@ -69,7 +71,7 @@ import { setSupportViewAs } from './api/supportViewAs'
 import { SupportViewProfileMenu } from './SupportViewProfileMenu'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
 
-type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'officialDocuments' | 'workbench' | 'privacy'
+type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'officialDocuments' | 'workbench' | 'privacy' | 'help'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageAccessProfiles?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canReadOfficialDocuments?: boolean; canPublishOfficialDocuments?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
 
 interface AppProps {
@@ -302,6 +304,26 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   const toggleSidebar = () => setSidebarCollapsed(current => { const next = !current; writeSidebarPreference(next); return next })
   const openMembersSearch = (query: string) => { setMemberQuery(query); setMemberQueryRevision(revision => revision + 1); setView('members') }
 
+  const supportViewEnabled = api.useMocks ? demoProfileKey === 'systemAdmin' || demoProfileKey === 'supportUser' : canConfigureSystem
+  const helpAccess: HelpAccess = {
+    everyone: true, member: canMemberPortal, calendar: canCalendar, notifications: canNotifications,
+    lodgeSecretariat: isLodgeSecretaryWorkspace && canLodge, grandSecretariat: canSecretariat, systemAdmin: canConfigureSystem,
+    supportView: supportViewEnabled, library: canLibrary, regimen: canRegimen,
+  }
+  const helpCanOpen = (target: HelpTarget): boolean => {
+    switch (target) {
+      case 'memberPortal': case 'memberPayments': case 'memberAttendance': return canMemberPortal
+      case 'calendar': return canCalendar
+      case 'notifications': return canNotifications
+      case 'lodge': return canLodge
+      case 'secretariat': return canSecretariat
+      case 'system': return canConfigureSystem
+      case 'library': return canLibrary
+      case 'regimen': return canRegimen
+      default: return true
+    }
+  }
+
   /** PMGM-UX-003 · Catálogo para la búsqueda global: solo módulos que el perfil puede abrir. */
   const searchEntries: SearchEntry[] = useMemo(() => {
     const entry = (allowed: boolean, id: View, label: string, section: string, icon: InstitutionalIconName, keywords = ''): SearchEntry[] => allowed ? [{ id, label, section, icon, keywords, onSelect: () => setView(id) }] : []
@@ -311,6 +333,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       ...entry(canMemberPortal, 'interviews', canManageLodgeSummaryAccess ? 'Designar entrevistadores' : 'Mis entrevistas', 'Mi Taller', 'candidate', 'designar maestros entrevistas insinuados informes'),
       ...entry(canMemberPortal, 'memberPayments', 'Mis pagos', 'Portal del Hermano', 'treasury', 'cuotas tesoreria estado de cuenta hospitalaria'),
       ...entry(canMemberPortal, 'memberAttendance', 'Mis asistencias', 'Portal del Hermano', 'calendar', 'asistencia tenidas instruccion justificada'),
+      ...entry(true, 'help', 'Ayuda', 'General', 'help', 'ayuda guia como se hace paso a paso manual instrucciones'),
       ...entry(true, 'privacy', 'Privacidad y mis datos', 'Portal del Hermano', 'shield', 'ley 21.719 derechos datos personales politica proteccion'),
       ...entry(canCalendar, 'calendar', 'Agenda', 'Portal del Hermano', 'calendar', 'agenda tenidas eventos'),
       ...entry(canNotifications, 'notifications', 'Avisos', 'Portal del Hermano', 'bell', 'avisos alertas'),
@@ -369,14 +392,14 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.173' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.174' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
     <header className="topbar">
       <button className="brand" type="button" onClick={() => setView('dashboard')} aria-label="Proyecto Centenario — Gran Logia Mixta de Chile; ir a Inicio"><span className="brand-mark brand-mark-reduced"><img className="brand-logo" src={`${import.meta.env.BASE_URL}brand/logo-glmch-reducido-v2-azul.svg`} alt="Gran Logia Mixta de Chile" /></span><span><strong>Proyecto Centenario</strong></span></button>
       <span className="product-motto">Camino al centenario 1929-2029</span>
-      <div className="topbar-meta"><SupportViewProfileMenu api={rawApi} enabled={api.useMocks ? demoProfileKey === 'systemAdmin' || demoProfileKey === 'supportUser' : canConfigureSystem} onExit={exitSupportView} />{effectiveProfile && <GlobalSearch entries={searchEntries} onSearchMembers={canMembers ? openMembersSearch : undefined} />}{effectiveProfile && <span className="environment-badge role-chip">{effectiveProfile.displayName}</span>}{effectiveProfile && <TextSizeMenu />}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" data-badge={unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined} onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{effectiveProfile ? <UserMenu displayName={effectiveProfile.displayName} versionLabel={versionLabel} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} onLogout={onLogout} /> : onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}</div>
+      <div className="topbar-meta"><SupportViewProfileMenu api={rawApi} enabled={supportViewEnabled} onExit={exitSupportView} />{effectiveProfile && <GlobalSearch entries={searchEntries} onSearchMembers={canMembers ? openMembersSearch : undefined} />}{effectiveProfile && <span className="environment-badge role-chip">{effectiveProfile.displayName}</span>}{effectiveProfile && <TextSizeMenu />}{effectiveProfile && <button className={view === 'help' ? 'topbar-help is-active' : 'topbar-help'} type="button" aria-label="Abrir la ayuda" title="Ayuda" onClick={() => { setView('help'); setMenuOpen(false) }}><InstitutionalIcon name="help" size={18} /><span className="topbar-help-label">Ayuda</span></button>}{canNotifications && <button className="topbar-icon-button" type="button" aria-label="Abrir notificaciones" title="Notificaciones" data-badge={unreadCount > 0 ? (unreadCount > 99 ? '99+' : String(unreadCount)) : undefined} onClick={() => setView('notifications')}><InstitutionalIcon name="bell" size={18} /></button>}{effectiveProfile ? <UserMenu displayName={effectiveProfile.displayName} versionLabel={versionLabel} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} onLogout={onLogout} /> : onLogout && <button type="button" onClick={onLogout}>Cerrar sesión</button>}</div>
     </header>
     <div className={sidebarCollapsed ? 'workspace is-sidebar-collapsed' : 'workspace'}>
       <nav ref={navRef} className={menuOpen ? 'sidebar is-open' : 'sidebar'} id="navegacion-principal" aria-label="Navegación principal" onClick={event => { if ((event.target as HTMLElement).closest('button')) setMenuOpen(false) }}>
@@ -439,6 +462,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
              : 'La sesión no tiene autorización confirmada para abrir Sistema. No se han cambiado permisos ni datos; solicita una revisión de acceso QA.'}</p>
            <button type="button" className="secondary" onClick={() => setView('dashboard')}>Volver a Inicio</button>
          </section>}
+        {view === 'help' && <HelpCenterPage access={helpAccess} canOpen={helpCanOpen} onOpenView={target => setView(target)} />}
         {view === 'privacy' && <PrivacyPage contactEmail={privacyEmail} corrections={supportCorrections} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage membershipApi={membershipApi} pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}

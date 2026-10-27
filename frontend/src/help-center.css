@@ -1,0 +1,24 @@
+/* Centro de ayuda · tarjetas y pasos grandes y claros (letra mínima 16 px, contraste alto). */
+.help-center { display: grid; gap: 1rem; }
+.help-search { display: flex; align-items: center; gap: .6rem; padding: .35rem .9rem; border: 2px solid var(--navy, #06148E); border-radius: .75rem; background: #fff; max-width: 40rem; }
+.help-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 1.1rem; min-height: 2.75rem; }
+.help-search:focus-within { box-shadow: 0 0 0 3px rgba(6, 20, 142, .25); }
+.help-topic { display: grid; gap: .75rem; }
+.help-topic-title { display: flex; align-items: center; gap: .5rem; margin: .5rem 0 0; font-size: 1.25rem; color: var(--navy, #06148E); }
+.help-card { min-height: 6.5rem; }
+.help-card-topic { text-transform: uppercase; letter-spacing: .04em; font-weight: 700; }
+.help-empty { margin: 0; padding: 1rem; border-radius: .75rem; background: #f1f5f9; font-size: 1.05rem; }
+.help-guide { display: grid; gap: .9rem; max-width: 46rem; padding: 1.25rem; border: 1px solid #d5dbe8; border-radius: .9rem; background: #fff; }
+.help-guide h1 { margin: 0; font-size: 1.6rem; color: var(--navy, #06148E); }
+.help-guide-summary { margin: 0; font-size: 1.1rem; }
+.help-steps { display: grid; gap: .8rem; margin: 0; padding: 0; list-style: none; }
+.help-steps li { display: flex; align-items: flex-start; gap: .8rem; font-size: 1.1rem; line-height: 1.5; }
+.help-step-number { flex: none; display: inline-grid; place-items: center; width: 2.1rem; height: 2.1rem; border-radius: 50%; background: var(--navy, #06148E); color: #fff; font-weight: 800; }
+.help-tip { margin: 0; padding: .8rem 1rem; border-left: 4px solid #c9a227; border-radius: .4rem; background: #fdf8e6; font-size: 1.05rem; }
+.help-go { justify-self: start; min-height: 2.9rem; }
+@media (max-width: 640px) { .help-go { justify-self: stretch; } .help-guide { padding: 1rem; } }
+
+/* Botón «Ayuda» de la barra azul: con texto en PC, solo el ícono en el celular. */
+.topbar-help { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.25rem; padding: 0 .75rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.1); color: #efd99b; font-weight: 700; font-size: .95rem; cursor: pointer; }
+.topbar-help:hover, .topbar-help:focus-visible, .topbar-help.is-active { background: #efd99b; color: var(--navy, #06148E); }
+@media (max-width: 640px) { .topbar-help { padding: 0; width: 2.25rem; justify-content: center; } .topbar-help-label { display: none; } }
