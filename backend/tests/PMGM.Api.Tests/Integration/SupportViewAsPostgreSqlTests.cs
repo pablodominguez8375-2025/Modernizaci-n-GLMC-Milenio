@@ -156,7 +156,7 @@ public sealed class SupportViewAsPostgreSqlTests
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(client, HttpMethod.Post, "/api/session/me", sid, ct)).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await Send(client, HttpMethod.Delete, "/api/members/" + Guid.NewGuid(), sid, ct)).StatusCode);
 
-        // Gran Logia: alcance de toda la Orden, solo la lista cerrada de rutas.
+        // Gran Logia: alcance de toda la Orden, solo lectura (el Máster ve todo, sin descargas).
         var gl = await (await StartProfile(client, "gran-secretario", ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
         var gsid = gl.GetProperty("sessionId").GetString()!;
         Assert.Equal("Gran Secretario", gl.GetProperty("targetName").GetString());

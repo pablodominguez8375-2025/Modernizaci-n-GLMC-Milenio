@@ -53,9 +53,17 @@ public static class SupportViewProfiles
             supportOrganizationId is Guid org && !p.OrderScope ? [org.ToString()] : []);
 
     /// <summary>
-    /// Perfiles de Taller: toda lectura (GET) con identidad limitada al Taller 00, que no contiene Hermanos reales.
-    /// Perfiles de Gran Logia: tienen alcance de toda la Orden, por eso solo la lista cerrada de rutas sin datos personales.
+    /// Todos los perfiles (de Taller y de Gran Logia): toda lectura (GET); el Máster ve todo (PO, 27-10-2026).
+    /// Perfiles de Taller: identidad limitada al Taller 00. Perfiles de Gran Logia: alcance de la Orden.
+    /// Solo lectura, con motivo, 30 minutos y auditoría con el operador real. Quedan fuera las descargas y
+    /// exportaciones (CSV, PDF, DOCX, padrón oficial), que pueden contener datos personales completos.
     /// </summary>
     public static bool AllowsRoute(SupportViewProfile p, string? routePattern)
-        => !p.OrderScope ? !string.IsNullOrEmpty(routePattern) : SupportViewAsAllowlist.Allows(routePattern);
+        => !string.IsNullOrEmpty(routePattern) && !IsDownload(routePattern);
+
+    private static readonly string[] DownloadMarkers =
+        ["export", ".csv", ".pdf", ".docx", "padron-oficial", "template-csv", "descarg", "download", "/inhabilitados"];
+
+    public static bool IsDownload(string routePattern)
+        => DownloadMarkers.Any(m => routePattern.Contains(m, StringComparison.OrdinalIgnoreCase));
 }
