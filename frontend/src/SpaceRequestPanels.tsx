@@ -224,7 +224,6 @@ function ApproveForm({ api, request, working, approve }: { api: PmgmApiClient; r
   }, [api, request])
   const free = spaces.filter(x => x.isAvailable)
   return <form className="stack-form" onSubmit={(e: FormEvent) => { e.preventDefault(); void approve(spaceId) }}>
-    {request.preferredSpaceType === 'temple' && <div className="space-request-note" role="note">Los templos requieren validar antes el protocolo de uso y la firma del Venerable Maestro. Mientras tanto el sistema no permite aprobarlos.</div>}
     <p>{range(request.startsAtUtc, request.endsAtUtc)}</p>
     <Field label={`${spaceTypeText(request.preferredSpaceType)} disponible`}>
       <select required value={spaceId} onChange={e => setSpaceId(e.target.value)}>

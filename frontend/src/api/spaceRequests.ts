@@ -54,7 +54,6 @@ export const mockSpaceRequests = {
   decide(id: string, status: 'cancelled' | 'rejected' | 'approved', reason: string | null): SpaceRequest {
     const item = store.find(x => x.id === id); if (!item) throw new Error('La solicitud no existe.')
     if (item.status !== 'pending') throw new Error('La solicitud ya fue resuelta.')
-    if (status === 'approved' && item.preferredSpaceType === 'temple') throw new Error('La aprobación de templos requiere validar primero el protocolo institucional de uso y firma del Venerable Maestro.')
     item.status = status; item.responseReason = reason; item.decidedAtUtc = new Date().toISOString()
     if (status === 'approved') item.spaceReservationId = crypto.randomUUID()
     return { ...item }

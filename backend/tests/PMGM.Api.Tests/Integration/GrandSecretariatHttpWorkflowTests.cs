@@ -636,10 +636,11 @@ public sealed class GrandSecretariatHttpWorkflowTests
         Assert.Equal(HttpStatusCode.Created, templeCreated.StatusCode);
         var templeRequestId = (await templeCreated.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
             .GetProperty("id").GetGuid();
-        var templeBlocked = await grand.PostAsJsonAsync(
+        // PO 27-10-2026: el templo se aprueba como una sala, sin firma del Venerable Maestro.
+        var templeApproved = await grand.PostAsJsonAsync(
             "/api/gran-secretaria/solicitudes-espacio/" + templeRequestId + "/aprobar",
             new { spaceId = templeId }, ct);
-        Assert.Equal(HttpStatusCode.Conflict, templeBlocked.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, templeApproved.StatusCode);
 
         // La ceremonia sin expediente es inválida incluso si el usuario omite ceremonyRequestId.
         var missingCeremonyId = await a.PostAsJsonAsync("/api/secretaria/solicitudes-espacio",

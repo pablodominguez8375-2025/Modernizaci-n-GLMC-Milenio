@@ -2,7 +2,7 @@
 
 **Estado:** contrato en PR #539, QA sintético mediante CI; despliegue físico `glmdch` **NO validado**. Baseline `dev@346912923c43c6b6bb9537d5e3fadc9429396356`. Fuente del requisito: Issue #531, `PMGM-REQ-022`, formulario Gran Templo 2026 de Drive.
 
-**Guardia de seguridad de esta fase:** toda solicitud con espacio de tipo `temple` se admite como `pending`, pero el endpoint de aprobación devuelve 409 hasta identificar formalmente el Gran Templo, su calendario de días hábiles/feriados, la autorización V:.M:. y los requisitos técnicos. Para `secretariat_room`, la aprobación funciona con disponibilidad y rol institucional.
+**Decisión del PO (27-10-2026):** solo la Secretaría del Taller pide templo o sala a la Gran Secretaría, que aprueba o rechaza. No se exige firma del Venerable Maestro: el templo se aprueba igual que una sala (disponibilidad, capacidad, Plancha si es ceremonia). Sustituye la guardia anterior que devolvía 409 para templos.
 
 ## Matriz de aceptación (entorno sintético)
 
@@ -20,7 +20,7 @@
 | QA-531-10 | Taller A / cancelar pendiente propia | 200 cancelled, auditable |
 | QA-531-11 | Ceremonia con autorización pero sin Plancha emitida | aprobar da 409, sin reserva |
 | QA-531-12 | Data model | migración aditiva, FK a Taller/espacio/reserva/ceremonia, índices, no PII del candidato |
-| QA-531-13 | Gran Templo | regla fuente de 7 días hábiles, firma V:.M:. y requisitos de equipos: **pendiente de implementar tras identificación del espacio y calendario festivo** |
+| QA-531-13 | Gran Templo | firma V:.M:. **ya no se exige** (PO 27-10-2026); el templo se aprueba como una sala. Plazo de 7 días hábiles y requisitos de equipos: no implementados, sin decisión del PO |
 | QA-531-14 | Avisos por rol/Taller al crear/resolver | **pendiente** de integrar destinatarios seguros, sin avisos a destinatarios genéricos |
 | QA-531-15 | UI Taller + Gran Secretaría | **pendiente** de contrato backend completo y trabajo Claude |
 
@@ -45,4 +45,4 @@ En GitHub Actions de la PR #539, verificar en SHA exacto los jobs `Backend unit 
 - **Host glmdch:** NO EVALUADO; no hubo ejecución SSH ni instalación real desde esta PR.
 - **Main/srv01:** sin cambios, Silo únicamente sintético.
 
-**DoD del Issue #531:** no cerrar ni delegar UI hasta completar notificaciones por destinatario, validaciones Gran Templo y pruebas finales; actualizar contrato y handoff con SHA después de CI.
+**DoD del Issue #531:** no cerrar ni delegar UI hasta completar notificaciones por destinatario, pruebas finales; actualizar contrato y handoff con SHA después de CI.
