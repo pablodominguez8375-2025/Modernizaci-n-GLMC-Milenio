@@ -264,12 +264,8 @@ public static class SpaceRequestEndpoints
             if (space.Status != GrandSecretariatCodes.SpaceStatus.Active ||
                 space.SpaceType != item.PreferredSpaceType)
                 return Results.Conflict(new { message = "El espacio no está habilitado para este tipo de solicitud." });
-            // Fail closed mientras el catálogo no identifica canónicamente el Gran Templo,
-            // su calendario de feriados y la verificación formal del V:.M:.
-            // No imponer siete días hábiles a salas sin la normativa correspondiente.
-            if (space.SpaceType == GrandSecretariatCodes.SpaceType.Temple)
-                return Results.Conflict(new {
-                    message = "La aprobación de templos requiere validar primero el protocolo institucional de uso y firma del Venerable Maestro." });
+            // Decisión del PO (27-10-2026): la Secretaría del Taller pide templo o sala a la Gran Secretaría
+            // y esta aprueba o rechaza; no se exige firma del Venerable Maestro. El templo se aprueba igual que una sala.
             if (item.ExpectedAttendees is not null && space.Capacity is not null &&
                 item.ExpectedAttendees > space.Capacity)
                 return Results.Conflict(new { message = "El espacio no tiene capacidad suficiente." });
