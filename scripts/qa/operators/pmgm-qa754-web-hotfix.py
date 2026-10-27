@@ -41,6 +41,7 @@ PROJECT_DIR = Path('/opt/centenario/qa-lab-firstboot/recovery-v2')
 IDENTITY_STAGE = Path('/etc/pmgm/qa754-identity-overlay.stage.json')
 SCRIPT = Path('/opt/centenario/qa-tools/pmgm-qa754-web-hotfix.py')
 STATE_DIR = Path('/opt/centenario/qa-tools/qa754-web-hotfix')
+LEGACY_WEB_STATE = Path('/opt/centenario/qa-auto-lite')
 PREPARED = STATE_DIR/'prepared.json'
 JOURNAL = STATE_DIR/'deployment.json'
 LOCK = Path('/run/lock/pmgm-qa754-web-hotfix.lock')
@@ -136,7 +137,14 @@ def identity_active(api):
             bool(e['UserAccounts__Identity__ClientSecret']), 'API_IDENTITY_NOT_ACTIVE')
 
 def expected_web_override(path,image):
-    require(WEB_OVERRIDE.fullmatch(path.name) and path.parent==PROJECT_DIR,'WEB_OVERRIDE_UNEXPECTED')
+    require(WEB_OVERRIDE.fullmatch(path.name) and path.parent in (PROJECT_DIR,LEGACY_WEB_STATE),
+            'WEB_OVERRIDE_UNEXPECTED')
+    # The historical WEB image override belongs to the root-controlled QA state,
+    # not to the API's recovery-v2 working directory. Do not accept other paths.
+    require(not path.parent.is_symlink(),'WEB_OVERRIDE_PARENT_SYMLINK')
+    parent=path.parent.lstat()
+    require(stat.S_ISDIR(parent.st_mode) and parent.st_uid==0 and
+            not parent.st_mode&0o022,'WEB_OVERRIDE_PARENT_NOT_ROOT_CONTROLLED')
     root_regular(path,0o600)
     j=parse_json(path.read_text())
     require(j=={'services':{'web':{'image':image}}},'WEB_OVERRIDE_CONTENT_CHANGED')
@@ -152,8 +160,8 @@ def get_sanitized_snapshot(*,after=False):
             'API_IDENTITY_LAYER_CHANGED')
     require(len(web_paths)==2 and web_paths[0]==api_paths[0] and
             web_paths[0].parent==PROJECT_DIR,'WEB_BASE_LAYOUT_CHANGED')
-    require(web_paths[1].parent==PROJECT_DIR and WEB_OVERRIDE.fullmatch(web_paths[1].name),
-            'WEB_IMAGE_LAYER_CHANGED')
+    require(web_paths[1].parent in (PROJECT_DIR,LEGACY_WEB_STATE) and
+            WEB_OVERRIDE.fullmatch(web_paths[1].name), 'WEB_IMAGE_LAYER_CHANGED')
     for p in api_paths[:2]+web_paths:
         root_regular(p)
     require((api.get('Config') or {}).get('Labels',{}).get('com.docker.compose.project.working_dir')==str(PROJECT_DIR),
@@ -408,7 +416,8 @@ def rollback():
             isinstance(state['new_image'],str) and SHA_IMAGE.fullmatch(state['new_image']),
             'ROLLBACK_IMAGE_INVALID')
     old_layer=Path(state['old_layer']);new_layer=Path(state['new_layer'])
-    require(old_layer.parent==PROJECT_DIR and WEB_OVERRIDE.fullmatch(old_layer.name) and
+    require(old_layer.parent in (PROJECT_DIR,LEGACY_WEB_STATE) and
+            WEB_OVERRIDE.fullmatch(old_layer.name) and
             new_layer==PROJECT_DIR/('web-'+state['new_image'][7:]+'.json'),
             'ROLLBACK_OVERRIDE_PATH_INVALID')
     expected_web_override(old_layer,state['old_image'])
