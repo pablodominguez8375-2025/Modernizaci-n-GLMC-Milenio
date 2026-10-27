@@ -13,3 +13,8 @@
 .attention .lodge-health-dot{background:#c0392b}
 .lodge-health-note{color:#526078;margin:8px 0 0}
 @media(max-width:620px){.lodge-health>header{flex-direction:column;align-items:stretch}.lodge-health>header button{width:100%;min-height:48px}}
+
+.lodge-probe-form{display:flex;flex-wrap:wrap;align-items:flex-end;gap:12px;margin-top:12px}
+.lodge-probe-form label{display:grid;gap:4px;min-width:min(100%,280px);flex:1 1 280px}
+.lodge-probe-form select{min-height:44px;width:100%}
+@media (max-width:640px){.lodge-probe-form button{width:100%}}
