@@ -46,7 +46,7 @@ export function SupportViewProfileMenu({api,enabled,onExit}:{api:PmgmApiClient;e
   </button>
   {open&&<div className="view-profile-popover" role="menu" aria-label="Ver como un perfil">
    {session&&<button type="button" role="menuitem" className="view-profile-exit" onClick={()=>{setOpen(false);onExit()}}>↩ Volver a mi perfil</button>}
-   <p className="view-profile-note">Solo lectura · 30 minutos · Taller 00 de soporte. No se ven datos de Hermanos reales.</p>
+   <p className="view-profile-note">Solo lectura · 30 minutos · sin descargas. Perfiles de Taller: Taller 00 de soporte, sin datos de Hermanos reales. Perfiles de Gran Logia: ven los datos de toda la Orden.</p>
    {groups.map(({g,list})=><div key={g} role="group" aria-label={g}><p className="view-profile-group">{g==='Taller'?'Perfiles de Taller':'Perfiles de Gran Logia'}</p>
     {list.map(p=><button type="button" role="menuitem" key={p.key} disabled={busy} onClick={()=>void choose(p)}>{p.label}</button>)}</div>)}
    {error&&<p role="alert" className="view-profile-error">{error}</p>}
