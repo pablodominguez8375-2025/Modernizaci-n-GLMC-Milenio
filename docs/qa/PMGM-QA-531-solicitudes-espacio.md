@@ -20,7 +20,7 @@
 | QA-531-10 | Taller A / cancelar pendiente propia | 200 cancelled, auditable |
 | QA-531-11 | Ceremonia con autorización pero sin Plancha emitida | aprobar da 409, sin reserva |
 | QA-531-12 | Data model | migración aditiva, FK a Taller/espacio/reserva/ceremonia, índices, no PII del candidato |
-| QA-531-13 | Gran Templo | firma V:.M:. **ya no se exige** (PO 27-10-2026); el templo se aprueba como una sala. Plazo de 7 días hábiles y requisitos de equipos: no implementados, sin decisión del PO |
+| QA-531-13 | Gran Templo | firma V:.M:. **ya no se exige** (PO 27-10-2026); el templo se aprueba como una sala. Plazo de 7 días hábiles: DESCARTADO por el PO (27-10-2026 08:48). Requisitos de equipos: no implementados, sin decisión del PO. Aviso al solicitante al aprobar o rechazar: ya existe (PR #614), sirve igual para templos |
 | QA-531-14 | Avisos por rol/Taller al crear/resolver | **pendiente** de integrar destinatarios seguros, sin avisos a destinatarios genéricos |
 | QA-531-15 | UI Taller + Gran Secretaría | **pendiente** de contrato backend completo y trabajo Claude |
 
