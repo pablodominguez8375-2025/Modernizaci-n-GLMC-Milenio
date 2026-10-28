@@ -42,11 +42,11 @@ def evaluate(fetch):
                  and r.get("name") == PUBLISH_WORKFLOW
                  and r.get("head_sha") == sha
                  and r.get("head_branch") == "dev" and r.get("event") == "push"]
-    require(len(publisher) == 1 or (
-        len(publisher) > 1 and all(
-            type(r.get("id")) is int and type(r.get("run_attempt", 1)) is int
-            for r in publisher)), "PUBLISH_WORKFLOW_AMBIGUOUS")
     require(publisher, "PUBLISH_WORKFLOW_MISSING")
+    require(all(type(r.get("id")) is int and r["id"] > 0 and
+                type(r.get("run_attempt", 1)) is int and
+                r.get("run_attempt", 1) > 0 for r in publisher),
+            "PUBLISH_WORKFLOW_AMBIGUOUS")
     latest = max(publisher, key=lambda r: (r["id"], r.get("run_attempt", 1)))
     require(latest.get("status") == "completed" and
             latest.get("conclusion") == "success", "PUBLISH_WORKFLOW_NOT_SUCCESS")
