@@ -576,6 +576,42 @@ public sealed class UserAccountWorkflowTests
     }
 
     [Fact]
+    public async Task Unavailable_identity_inventory_before_external_call_closes_preflight_audit()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity {InventoryFails=true};
+        var subject=Guid.NewGuid().ToString();
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        var ct=TestContext.Current.CancellationToken;
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var result=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Inventario de prueba no disponible durante preflight."},ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,result.StatusCode);
+        Assert.Equal(0,identity.LifecycleDeactivations);
+        Assert.Equal(0,identity.LifecycleDeletions);
+        await using(var scope=factory.Services.CreateAsyncScope())
+        {
+            var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var events=await db.AuditEvents.Where(e=>e.EntityId==subject &&
+                e.Action.StartsWith("system.users.lifecycle_")).ToListAsync(ct);
+            Assert.Contains(events,e=>e.Action=="system.users.lifecycle_requested");
+            Assert.Contains(events,e=>e.Action=="system.users.lifecycle_preflight_rejected");
+            Assert.DoesNotContain(events,e=>e.Action=="system.users.lifecycle_failed");
+        }
+        using var report=await master.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",ct);
+        Assert.Equal(HttpStatusCode.OK,report.StatusCode);
+        using var json=JsonDocument.Parse(await report.Content.ReadAsStringAsync(ct));
+        Assert.Contains(json.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="denied_no_external_mutation" &&
+                !item.GetProperty("requiresReview").GetBoolean());
+    }
+
+    [Fact]
     public async Task Durable_pending_request_from_prior_process_blocks_new_mutation()
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
@@ -794,8 +830,10 @@ public sealed class UserAccountWorkflowTests
         public Task RemoveAsync(string subject,CancellationToken ct){Enabled=false;Removed=true;return Task.CompletedTask;}
         public Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct)=>Task.FromResult<IReadOnlyList<AccountUser>>([]);
         public List<AccountInventoryItem> InventoryItems { get; }=[];
+        public bool InventoryFails;
         public Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct)
-            =>Task.FromResult<IReadOnlyList<AccountInventoryItem>>(InventoryItems);
+            =>InventoryFails?Task.FromException<IReadOnlyList<AccountInventoryItem>>(
+                new AccountDeliveryException()):Task.FromResult<IReadOnlyList<AccountInventoryItem>>(InventoryItems);
         public Dictionary<string,AccountIdentitySecuritySnapshot> SecuritySnapshots { get; }=new();
         public Task<AccountIdentitySecuritySnapshot?> ReadSecuritySnapshotAsync(string subject,CancellationToken ct)
             =>Task.FromResult(SecuritySnapshots.GetValueOrDefault(subject));
