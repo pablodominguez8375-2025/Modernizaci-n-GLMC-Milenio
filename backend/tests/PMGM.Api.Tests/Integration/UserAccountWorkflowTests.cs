@@ -404,6 +404,33 @@ public sealed class UserAccountWorkflowTests
     }
 
     [Fact]
+    public async Task Lifecycle_verification_denies_stale_master_role_and_wrong_actor_subject()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity {MasterVerified=false};
+        var subject=Guid.NewGuid().ToString();
+        identity.SecuritySnapshots[subject]=new(subject,"ficticia@example.invalid",
+            "member",true,true,false,true);
+        using var factory=Factory(connection,identity,new Mail());
+        var path=$"/api/system/user-accounts/{subject}/lifecycle-verification";
+        var ct=TestContext.Current.CancellationToken;
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var stale=await master.GetAsync(path,ct);
+        Assert.Equal(HttpStatusCode.Forbidden,stale.StatusCode);
+        identity.MasterVerified=true;
+        using var forgedSubject=factory.CreateClient();
+        forgedSubject.DefaultRequestHeaders.Add(
+            "X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        forgedSubject.DefaultRequestHeaders.Add("X-Test-Subject",Guid.NewGuid().ToString());
+        using var mismatched=await forgedSubject.GetAsync(path,ct);
+        Assert.Equal(HttpStatusCode.Forbidden,mismatched.StatusCode);
+        Assert.True(identity.SecuritySnapshots[subject].Enabled);
+        Assert.Equal(0,identity.LifecycleDeactivations);
+    }
+
+    [Fact]
     public async Task Lifecycle_operations_are_disabled_by_default_and_never_mutate_test_identity()
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
