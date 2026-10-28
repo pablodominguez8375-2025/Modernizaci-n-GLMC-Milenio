@@ -17,3 +17,6 @@
 - **NO** se desplegó en glmdch, no se alteró Keycloak, DB, WEB ni API física, `main` intacta; historial hotfix QA #754 preservado.
 - Handoff de UI para Claude: consumir `GET /api/system/user-accounts/inventory` exclusivamente con sesión Máster; mostrar `username, name, kind, enabled, protected, origin`, marcar `qa.admin` «Cuenta preexistente · Protegida»; **no incluir botones de mutación en esta fase**. Mantener lista actual para superusuarios y otros operadores.
 - Siguiente ChatGPT: comprobar Actions exact HEAD, revisar fallo si hay, registrar en GitHub/Drive, integrar a dev con gates SUCCESS y base sincronizada, después desarrollar fase B de las tres operaciones aprobadas con seguridad.
+
+## Endurecimiento de autorización — Único Máster
+El inventario no se habilita por el rol heredado platform_superadmin solamente. Se requiere adicionalmente el claim OIDC `preferred_username=admin`, de modo que `qa.admin` aunque tuviese ese rol en algún realm histórico NO obtiene inventario Máster. Test HTTP negativo con rol privilegiado y nombre `qa.admin`. Si OIDC del único Máster no trae ese claim estándar de Keycloak, el endpoint responde 403 (falla cerrada); la infraestructura debe verificar el mapper antes de desplegar, nunca saltarse esta condición.
