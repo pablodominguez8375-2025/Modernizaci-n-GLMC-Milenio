@@ -31,7 +31,7 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
         return await http.SendAsync(request, ct);
     }
     private static string Attribute(JsonElement user, string name)
-        => user.TryGetProperty("attributes",out var a) && a.TryGetProperty(name,out var v) && v.ValueKind==JsonValueKind.Array && v.GetArrayLength()>0
+        => user.TryGetProperty("attributes",out var a) && a.ValueKind==JsonValueKind.Object && a.TryGetProperty(name,out var v) && v.ValueKind==JsonValueKind.Array && v.GetArrayLength()>0
             ? v.EnumerateArray().FirstOrDefault().GetString() ?? "" : "";
     private static void Success(HttpResponseMessage response)
     {
