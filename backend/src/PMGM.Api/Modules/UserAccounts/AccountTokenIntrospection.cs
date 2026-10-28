@@ -43,7 +43,8 @@ public sealed class KeycloakAccountTokenIntrospector(HttpClient http,
             if(root.ValueKind!=JsonValueKind.Object ||
                !root.TryGetProperty("active",out var active) || active.ValueKind!=JsonValueKind.True ||
                !root.TryGetProperty("sub",out var sub) || sub.ValueKind!=JsonValueKind.String ||
-               !Guid.TryParse(sub.GetString(),out var actual) || actual!=expected)
+               !Guid.TryParse(sub.GetString(),out var actual) || actual!=expected ||
+               !TryReadSessionId(root,out var tokenSessionId))
                 return false;
             // La introspección puede seguir marcando activo un access token
             // previamente emitido. Comprobar además la identidad en Keycloak,
@@ -79,11 +80,49 @@ public sealed class KeycloakAccountTokenIntrospector(HttpClient http,
                 !Guid.TryParse(uid.GetString(),out var found) || found!=expected ||
                 !entry.TryGetProperty("enabled",out var enabled) ||
                 enabled.ValueKind!=JsonValueKind.True) return false;
-            // JWT ya fue validado por issuer, firma y audience en JwtBearer.
-            // Ninguna respuesta positiva se almacena en caché.
-            return true;
+            // Tras un logout el access token puede seguir figurando active=true.
+            // Si la cuenta se reactiva, enabled=true tampoco prueba que la
+            // sesión ORIGINAL de ese token continúe abierta. Solo se admite
+            // el token si la sesión exacta sigue registrada para este usuario.
+            using var sessionsRequest=new HttpRequestMessage(HttpMethod.Get,
+                $"{baseUrl}/admin/realms/{realm}/users/{expected}/sessions");
+            sessionsRequest.Headers.Authorization=new AuthenticationHeaderValue(
+                "Bearer",access.GetString());
+            using var sessionsResponse=await http.SendAsync(sessionsRequest,ct);
+            if(!sessionsResponse.IsSuccessStatusCode) return false;
+            using var sessions=JsonDocument.Parse(await sessionsResponse.Content.ReadAsStringAsync(ct));
+            if(sessions.RootElement.ValueKind!=JsonValueKind.Array) return false;
+            return sessions.RootElement.EnumerateArray().Any(session=>
+                session.ValueKind==JsonValueKind.Object &&
+                session.TryGetProperty("id",out var id) &&
+                id.ValueKind==JsonValueKind.String &&
+                string.Equals(id.GetString(),tokenSessionId,StringComparison.Ordinal));
         }
         catch (Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         { return false; }
+    }
+
+    // Keycloak puede exponer sid o session_state según cliente/protocolo.
+    // Si ambos existen deben coincidir; ausencia, tipo inesperado o
+    // identificadores incompatibles son evidencia insuficiente (fail closed).
+    private static bool TryReadSessionId(JsonElement root,out string sessionId)
+    {
+        sessionId="";
+        var found=false;
+        foreach(var name in new[]{"sid","session_state"})
+        {
+            if(!root.TryGetProperty(name,out var value) ||
+               value.ValueKind==JsonValueKind.Null) continue;
+            if(value.ValueKind!=JsonValueKind.String) return false;
+            var candidate=value.GetString();
+            // OIDC sid es un identificador opaco, no necesariamente UUID.
+            if(string.IsNullOrWhiteSpace(candidate) || candidate.Length>256 ||
+               candidate.Any(char.IsControl)) return false;
+            if(found && !string.Equals(sessionId,candidate,StringComparison.Ordinal))
+                return false;
+            sessionId=candidate;
+            found=true;
+        }
+        return found;
     }
 }

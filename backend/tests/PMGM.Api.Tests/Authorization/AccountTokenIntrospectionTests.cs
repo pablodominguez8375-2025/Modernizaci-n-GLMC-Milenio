@@ -22,7 +22,7 @@ public sealed class AccountTokenIntrospectionTests
         using var handler=new IntrospectionHandler();
         Assert.True(await Provider(handler).IsActiveAsync(
             "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
-        Assert.Equal(3,handler.Calls);
+        Assert.Equal(4,handler.Calls);
         Assert.Equal(1,handler.IntrospectionCalls);
         Assert.DoesNotContain("synthetic-bearer",string.Join(" ",handler.Paths));
         Assert.Contains(handler.Paths,p=>p.EndsWith("/protocol/openid-connect/token/introspect",StringComparison.Ordinal));
@@ -62,7 +62,7 @@ public sealed class AccountTokenIntrospectionTests
         Assert.False(await provider.IsActiveAsync(
             "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
         Assert.Equal(2,handler.IntrospectionCalls);
-        Assert.Equal(6,handler.Calls);
+        Assert.Equal(7,handler.Calls);
     }
 
     [Fact]
@@ -94,6 +94,59 @@ public sealed class AccountTokenIntrospectionTests
     }
 
     [Fact]
+    public async Task Old_token_cannot_regain_access_when_user_is_reenabled_with_new_session()
+    {
+        using var handler=new IntrospectionHandler();
+        var provider=Provider(handler);
+        var ct=TestContext.Current.CancellationToken;
+        Assert.True(await provider.IsActiveAsync("synthetic-bearer",handler.Subject,ct));
+        handler.Enabled=false;
+        Assert.False(await provider.IsActiveAsync("synthetic-bearer",handler.Subject,ct));
+        // The old access token still introspects as active=true; Keycloak
+        // has ended the old session and a later login starts a new session.
+        handler.Enabled=true;
+        handler.TokenSessionId=handler.SessionId;
+        handler.SessionId=Guid.NewGuid().ToString();
+        Assert.False(await provider.IsActiveAsync("synthetic-bearer",handler.Subject,ct));
+        handler.TokenSessionId=handler.SessionId; // fresh token from the new session
+        Assert.True(await provider.IsActiveAsync("synthetic-fresh",handler.Subject,ct));
+        Assert.Equal(4,handler.IntrospectionCalls);
+    }
+
+    [Theory]
+    [InlineData(true,false,false,false,false)]
+    [InlineData(false,true,false,false,false)]
+    [InlineData(false,false,true,false,false)]
+    [InlineData(false,false,false,true,false)]
+    [InlineData(false,false,false,false,true)]
+    public async Task Absent_or_inconsistent_session_proof_fails_closed(
+        bool missingSession,bool conflictingFields,bool invalidSessions,
+        bool forbiddenSessions,bool malformedSessionId)
+    {
+        using var handler=new IntrospectionHandler {
+            MissingSession=missingSession,
+            ConflictingSessionEvidence=conflictingFields,
+            InvalidSessionsResponse=invalidSessions,
+            ForbiddenSessions=forbiddenSessions,
+            MalformedSessionId=malformedSessionId
+        };
+        Assert.False(await Provider(handler).IsActiveAsync(
+            "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task Session_state_claim_only_is_accepted_when_active_session_matches()
+    {
+        using var handler=new IntrospectionHandler {SessionStateOnly=true};
+        Assert.True(await Provider(handler).IsActiveAsync(
+            "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
+        handler.TokenSessionId=handler.SessionId; // conservar evidencia del token original
+        handler.SessionId=Guid.NewGuid().ToString();
+        Assert.False(await Provider(handler).IsActiveAsync(
+            "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task Invalid_subject_or_token_does_not_call_provider()
     {
         using var handler=new IntrospectionHandler();
@@ -108,8 +161,12 @@ public sealed class AccountTokenIntrospectionTests
     private sealed class IntrospectionHandler:HttpMessageHandler
     {
         public string Subject{get;}=Guid.NewGuid().ToString();
+        public string SessionId{get;set;}=Guid.NewGuid().ToString();
+        public string? TokenSessionId;
         public bool Active=true,Enabled=true,WrongSubject,Unavailable,Malformed,
-            MissingUser,WrongUserId,MissingEnabled,ForbiddenRead,ServiceUnavailable;
+            MissingUser,WrongUserId,MissingEnabled,ForbiddenRead,ServiceUnavailable,
+            MissingSession,SessionStateOnly,ConflictingSessionEvidence,ForbiddenSessions,
+            InvalidSessionsResponse,MalformedSessionId;
         public int Calls,IntrospectionCalls;
         public readonly List<string> Paths=[];
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)
@@ -121,13 +178,24 @@ public sealed class AccountTokenIntrospectionTests
                 IntrospectionCalls++;
                 Assert.Equal(HttpMethod.Post,request.Method);
                 var body=await request.Content!.ReadAsStringAsync(ct);
-                Assert.Contains("token=synthetic-bearer",body,StringComparison.Ordinal);
+                Assert.True(body.Contains("token=synthetic-bearer",StringComparison.Ordinal) ||
+                    body.Contains("token=synthetic-fresh",StringComparison.Ordinal),
+                    "Token de prueba sintético no reconocido");
                 Assert.Contains("client_secret=synthetic-only",body,StringComparison.Ordinal);
                 if(Unavailable) return new(HttpStatusCode.ServiceUnavailable);
                 if(Malformed) return new(HttpStatusCode.OK) {Content=new StringContent("{invalid")};
-                return new(HttpStatusCode.OK) {Content=JsonContent.Create(new {
-                    active=Active,sub=WrongSubject?Guid.NewGuid().ToString():Subject
-                })};
+                var data=new Dictionary<string,object?> {
+                    ["active"]=Active,
+                    ["sub"]=WrongSubject?Guid.NewGuid().ToString():Subject
+                };
+                if(!MissingSession)
+                {
+                    data[SessionStateOnly?"session_state":"sid"]=
+                        MalformedSessionId?"invalid-session":TokenSessionId??SessionId;
+                    if(ConflictingSessionEvidence)
+                        data["session_state"]=Guid.NewGuid().ToString();
+                }
+                return new(HttpStatusCode.OK) {Content=JsonContent.Create(data)};
             }
             if(path.EndsWith("/token",StringComparison.Ordinal))
             {
@@ -138,6 +206,17 @@ public sealed class AccountTokenIntrospectionTests
                 };
             }
             Assert.Equal(HttpMethod.Get,request.Method);
+            if(path.EndsWith("/sessions",StringComparison.Ordinal))
+            {
+                Assert.Equal("/admin/realms/pmgm/users/"+Subject+"/sessions",path);
+                Assert.Equal("Bearer",request.Headers.Authorization?.Scheme);
+                Assert.Equal("synthetic-service-token",request.Headers.Authorization?.Parameter);
+                if(ForbiddenSessions) return new(HttpStatusCode.Forbidden);
+                if(InvalidSessionsResponse) return new(HttpStatusCode.OK) {
+                    Content=JsonContent.Create(new {unexpected=true})};
+                return new(HttpStatusCode.OK) {
+                    Content=JsonContent.Create(new[]{new{id=SessionId}})};
+            }
             Assert.EndsWith("/admin/realms/pmgm/users/"+Subject,path,StringComparison.Ordinal);
             Assert.Equal("Bearer",request.Headers.Authorization?.Scheme);
             Assert.Equal("synthetic-service-token",request.Headers.Authorization?.Parameter);
