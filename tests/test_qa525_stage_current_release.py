@@ -51,7 +51,7 @@ class CurrentSignedStagingTests(unittest.TestCase):
         (output / "BUILD-INFO.txt").write_text("synthetic already verified by mocked signer")
         return {"status": "SIGNED_CODE_STAGED_NOT_INSTALLED", "source_sha": SHA}
 
-    def run(self, gate_values=None, *, downloader=None, signer=None):
+    def verify_good(self, gate_values=None, *, downloader=None, signer=None):
         replies = list(gate_values or [RELEASE, RELEASE])
         with (patch.object(stage.gate, "evaluate", side_effect=replies) as gates,
               patch.object(stage.download, "download",
@@ -65,7 +65,7 @@ class CurrentSignedStagingTests(unittest.TestCase):
         return result
 
     def test_exact_head_bundle_is_verified_then_staged(self):
-        result = self.run()
+        result = self.verify_good()
         self.assertEqual("SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED", result["status"])
         self.assertEqual(stage.SCOPE, result["scope"])
         self.assertEqual(SHA, result["source_sha"])
