@@ -67,14 +67,14 @@ public sealed class AccountIdentityProviderTests
                 Issuer="https://identity.example.invalid/realms/pmgm",ClientSecret="synthetic-test-only"}));
         var inventory=await provider.ListInventoryAsync(TestContext.Current.CancellationToken);
         Assert.Equal(3,inventory.Count);
-        var qa=Assert.Single(inventory.Where(u=>u.Username=="qa.admin"));
+        var qa=Assert.Single(inventory,u=>u.Username=="qa.admin");
         Assert.True(qa.Protected);
         Assert.False(qa.Managed);
         Assert.Equal("legacy_protected",qa.Kind);
         Assert.Equal("provisioned",qa.Origin);
-        var master=Assert.Single(inventory.Where(u=>u.Username=="admin"));
+        var master=Assert.Single(inventory,u=>u.Username=="admin");
         Assert.True(master.Protected);
-        var managed=Assert.Single(inventory.Where(u=>u.Kind=="superuser"));
+        var managed=Assert.Single(inventory,u=>u.Kind=="superuser");
         Assert.True(managed.Managed);
         Assert.False(managed.Protected);
         Assert.Contains(handler.Paths,p=>p.Contains("users?first=0&max=100",StringComparison.Ordinal));
