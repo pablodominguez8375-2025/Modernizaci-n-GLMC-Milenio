@@ -299,6 +299,45 @@ public sealed class UserAccountWorkflowTests
         Assert.Equal(HttpStatusCode.TooManyRequests,(await client.PostAsJsonAsync(P(target),new{modality="email"},ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Inventory_includes_protected_legacy_accounts_only_for_master()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var legacy=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(legacy,"qa.admin","QA synthetic",true,
+            "legacy_protected",false,true,"provisioned"));
+        var managed=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(managed,"test@example.invalid","Test synthetic",true,
+            "member",true,false,"managed"));
+        using var factory=Factory(connection,identity,new Mail());
+        using var visitor=factory.CreateClient();
+        var path="/api/system/user-accounts/inventory";
+        var ct=TestContext.Current.CancellationToken;
+        Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(path,ct)).StatusCode);
+        visitor.DefaultRequestHeaders.Add("X-Account-Kind","superuser");
+        Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(path,ct)).StatusCode);
+        using var legacyWithPrivilegedRole=factory.CreateClient();
+        legacyWithPrivilegedRole.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        legacyWithPrivilegedRole.DefaultRequestHeaders.Add("X-Test-Username","qa.admin");
+        Assert.Equal(HttpStatusCode.Forbidden,(await legacyWithPrivilegedRole.GetAsync(path,ct)).StatusCode);
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var response=await master.GetAsync(path,ct);
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        Assert.Contains("no-store",response.Headers.CacheControl?.ToString()??"");
+        using var body=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        var items=body.RootElement.GetProperty("items");
+        Assert.Equal(2,items.GetArrayLength());
+        var item=items.EnumerateArray().Single(x=>x.GetProperty("username").GetString()=="qa.admin");
+        Assert.Equal(legacy,item.GetProperty("subject").GetString());
+        Assert.True(item.GetProperty("protected").GetBoolean());
+        Assert.False(item.GetProperty("managed").GetBoolean());
+        Assert.Equal("provisioned",item.GetProperty("origin").GetString());
+        Assert.DoesNotContain("password",await response.Content.ReadAsStringAsync(ct),StringComparison.OrdinalIgnoreCase);
+    }
+
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection,Identity identity,Mail mail)
         => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(builder=>builder.ConfigureTestServices(services=>
         {
@@ -316,7 +355,7 @@ public sealed class UserAccountWorkflowTests
             new InstitutionalStatusEvent{Member=member,MemberId=member.Id,EventType=status,EffectiveDate=DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)});
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);return(member.Id,org.Id,person.Email!);
     }
-    private sealed class Identity:IAccountIdentityProvider
+    private sealed class Identity:IAccountIdentityProvider,IAccountIdentityInventory
     {
         public bool Available=true;public bool Configured=>Available;public string Issuer{get;}=$"https://identity.example.invalid/{Guid.NewGuid():N}";
         public string Subject{get;}=Guid.NewGuid().ToString();public bool Enabled,Removed,EnableFails;public int Prepares;public AccountIdentity? Account;
@@ -325,6 +364,9 @@ public sealed class UserAccountWorkflowTests
         public Task EnableAsync(string subject,CancellationToken ct){if(EnableFails)throw new AccountDeliveryException();Enabled=true;return Task.CompletedTask;}
         public Task RemoveAsync(string subject,CancellationToken ct){Enabled=false;Removed=true;return Task.CompletedTask;}
         public Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct)=>Task.FromResult<IReadOnlyList<AccountUser>>([]);
+        public List<AccountInventoryItem> InventoryItems { get; }=[];
+        public Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct)
+            =>Task.FromResult<IReadOnlyList<AccountInventoryItem>>(InventoryItems);
         public Dictionary<string,AccountUser> Managed{get;}=new();public int Emails,Temporary;public string? TemporaryPassword;public bool RecoveryFails;
         public Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)=>Task.FromResult(Managed.GetValueOrDefault(subject));
         public Task<AccountClaims?> GetClaimsAsync(string subject,CancellationToken ct)=>Task.FromResult<AccountClaims?>(null);
@@ -346,6 +388,8 @@ internal sealed class AccountAuth(IOptionsMonitor<AuthenticationSchemeOptions> o
         var role=Request.Headers["X-Account-Role"].FirstOrDefault()??(kind is null?InstitutionalRoles.GranLogiaAdmin:null);
         var claims=new List<Claim>{new("sub","ci-account-admin"),new(ClaimTypes.NameIdentifier,"ci-account-admin"),new(InstitutionalClaims.Scope,"order")};
         if(role is not null)claims.Add(new Claim(InstitutionalClaims.Role,role));
+        if(role==InstitutionalRoles.PlatformSuperAdmin)
+            claims.Add(new Claim("preferred_username",Request.Headers["X-Test-Username"].FirstOrDefault()??"admin"));
         if(kind is not null)claims.Add(new Claim(InstitutionalClaims.AccountKind,kind));
         var principal=new ClaimsPrincipal(new ClaimsIdentity(claims,SchemeName));
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal,SchemeName)));

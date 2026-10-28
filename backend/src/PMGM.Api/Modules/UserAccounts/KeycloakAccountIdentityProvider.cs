@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace PMGM.Api.Modules.UserAccounts;
 
-public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<AccountIdentityOptions> options) : IAccountIdentityProvider
+public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<AccountIdentityOptions> options) : IAccountIdentityProvider, IAccountIdentityInventory
 {
     private readonly AccountIdentityOptions settings = options.Value;
     public string Issuer => settings.Issuer.Trim();
@@ -31,7 +31,7 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
         return await http.SendAsync(request, ct);
     }
     private static string Attribute(JsonElement user, string name)
-        => user.TryGetProperty("attributes",out var a) && a.TryGetProperty(name,out var v) && v.ValueKind==JsonValueKind.Array && v.GetArrayLength()>0
+        => user.TryGetProperty("attributes",out var a) && a.ValueKind==JsonValueKind.Object && a.TryGetProperty(name,out var v) && v.ValueKind==JsonValueKind.Array && v.GetArrayLength()>0
             ? v.EnumerateArray().FirstOrDefault().GetString() ?? "" : "";
     private static void Success(HttpResponseMessage response)
     {
@@ -113,6 +113,47 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
                     $"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),Text(x,"email"),x.GetProperty("enabled").GetBoolean(),Attribute(x,"pmgm_account_kind")));
             if(json.RootElement.GetArrayLength()<100) return result;
         }
+    }
+    // Inventario master-only: listar TODAS las identidades existentes, incluidas las
+    // provisionadas antes del alta. Las cuentas sin marca verificada se muestran
+    // como protegidas, nunca se reclasifican silenciosamente ni se modifican.
+    public async Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct)
+    {
+        if(!Configured) throw new AccountDeliveryException();
+        var result=new List<AccountInventoryItem>();
+        var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for(var first=0;first<5000;first+=100)
+        {
+            using var response=await Send(HttpMethod.Get,$"users?first={first}&max=100",null,ct);Success(response);
+            using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if(json.RootElement.ValueKind!=JsonValueKind.Array) throw new AccountDeliveryException();
+            foreach(var x in json.RootElement.EnumerateArray())
+            {
+                if(!x.TryGetProperty("id",out var id) || !Guid.TryParse(id.GetString(),out var guid)
+                    || !x.TryGetProperty("username",out var usernameField)
+                    || usernameField.ValueKind!=JsonValueKind.String
+                    || !x.TryGetProperty("enabled",out var enabledField)
+                    || enabledField.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    throw new AccountDeliveryException();
+                var subject=guid.ToString();
+                if(!seen.Add(subject)) throw new AccountDeliveryException();
+                var username=usernameField.GetString()??"";
+                if(string.IsNullOrWhiteSpace(username)) throw new AccountDeliveryException();
+                var accountKind=Attribute(x,"pmgm_account_kind");
+                var managed=Attribute(x,"pmgm_managed")=="active-member-accounts"
+                    && (accountKind is "member" or "superuser");
+                var protectedAccount=!managed || string.Equals(username,"admin",StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(username,"qa.admin",StringComparison.OrdinalIgnoreCase);
+                var kind=protectedAccount?"legacy_protected":accountKind;
+                result.Add(new AccountInventoryItem(subject,username,
+                    $"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),
+                    enabledField.GetBoolean(),kind,managed&&!protectedAccount,
+                    protectedAccount,protectedAccount?"provisioned":"managed"));
+            }
+            if(json.RootElement.GetArrayLength()<100) return result;
+        }
+        // No declarar inventario completo si el realm excede el límite de lectura.
+        throw new AccountDeliveryException();
     }
     public async Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)
     {

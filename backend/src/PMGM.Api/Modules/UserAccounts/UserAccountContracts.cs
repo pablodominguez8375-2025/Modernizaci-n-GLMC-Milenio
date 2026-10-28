@@ -18,6 +18,16 @@ public sealed record PreparedIdentity(string Subject, bool Created);
 public sealed record AccountClaims(string Subject, string Name, string Kind, bool Enabled, string[] Roles, string? Scope, string[] Organizations);
 public sealed record AccountUser(string Subject, string Name, string Email, bool Enabled, string Kind);
 
+// Inventario de solo lectura de Keycloak, separado de la lista de cuentas gestionadas.
+// Nunca concede automáticamente derecho a activar/desactivar/borrar una cuenta heredada.
+public sealed record AccountInventoryItem(string Subject, string Username, string Name, bool Enabled,
+    string Kind, bool Managed, bool Protected, string Origin);
+
+public interface IAccountIdentityInventory
+{
+    Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct);
+}
+
 public interface IAccountIdentityProvider
 {
     bool Configured { get; }
