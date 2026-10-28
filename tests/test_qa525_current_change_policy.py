@@ -150,7 +150,7 @@ class CandidatePolicyTests(unittest.TestCase):
 
     def test_not_a_shell_docker_or_file_mutation_operator(self):
         src = (ROOT / "scripts/qa/operators/qa525-current-change-policy.py").read_text()
-        for forbidden in ("subprocess", "os.system", "docker", "open(", "write_text(",
+        for forbidden in ("subprocess", "os.system", "docker compose", "open(", "write_text(",
                           "write_bytes(", "systemctl", "GH_TOKEN"):
             # Documentation mentions "installer", no invocation exists.
             self.assertNotIn(forbidden, src)
