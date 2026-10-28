@@ -86,3 +86,10 @@
 
 .treasury-filters-toggle > summary small { font-weight: 400; color: var(--brand-muted); }
 .treasury-filters-toggle[open] > summary { margin-bottom: 0.75rem; }
+
+/* Reportes del Taller: período arriba (etiqueta sobre cada fecha), acciones en una fila aparte. */
+.treasury-report-period{display:grid;grid-template-columns:repeat(2,minmax(0,1fr)) auto;gap:.75rem;align-items:end}
+.treasury-report-period label{display:grid;gap:.375rem;font-weight:700;color:#17324d}
+.treasury-report-actions{display:flex;flex-wrap:wrap;gap:.75rem;margin-top:.875rem;padding-top:.875rem;border-top:.0625rem solid #e1e8f0}
+.treasury-report-actions > *{flex:1 1 13.75rem}
+@media (max-width:40em){.treasury-report-period{grid-template-columns:1fr}.treasury-report-actions > *{flex-basis:100%}}

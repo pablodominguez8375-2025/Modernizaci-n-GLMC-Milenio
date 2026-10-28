@@ -27,7 +27,7 @@ describe('Gran Tesorería — límite de pantalla',()=>{
  it('la consulta mantiene visible el estado y no monta formularios de escritura',()=>{
   const api=new PmgmApiClient({useMocks:true})
   const readOnly=renderToStaticMarkup(<RegularityPage api={api} kind="treasury" canWrite={false}/> )
-  expect(readOnly).toContain('Consultar estado');expect(readOnly).not.toContain('Actualizar regularidad');expect(readOnly).not.toContain('Registrar estado')
+  expect(readOnly).toContain('Consultar Taller');expect(readOnly).not.toContain('Actualizar regularidad');expect(readOnly).not.toContain('Registrar estado')
   expect(renderToStaticMarkup(<RegularityPage api={api} kind="treasury" canWrite/>)).toContain('Actualizar regularidad')
   expect(renderToStaticMarkup(<CeremonyRightsPage api={api} canWrite={false}/>)).not.toContain('Registrar abono')
  })
