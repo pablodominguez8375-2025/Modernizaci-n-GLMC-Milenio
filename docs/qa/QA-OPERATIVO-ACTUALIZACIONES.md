@@ -145,3 +145,38 @@ Solo después se registra `UAT_PASS`.
 - Ejecutar en systemd y consultar un solo journal.
 - Usar un solo runbook y un solo comentario final en GitHub/Drive.
 - No repetir V8, V9, V10, hotfixes o diagnósticos ya acreditados.
+
+
+## Modalidad de mínima intervención
+
+La automatización se divide en dos unidades locales y mantiene la política de fallo cerrado:
+
+1. `pmgm-qa-update-check.timer` consulta periódicamente GitHub con lectura limitada. Si no existe un corte firmado y aprobado, registra `WAITING_GATES` o `BLOCKED` y termina sin descargar ni usar Docker.
+2. `pmgm-qa-update-prepare.service` descarga una sola vez el artefacto exacto, verifica digest, firma, identidad del workflow y manifiesto, y prepara las imágenes sin cambiar servicios.
+3. `pmgm-qa-update-apply.service` solo puede consumir un recibo `PREPARED` vigente. Crea respaldos, aplica API y WEB, verifica salud y revierte automáticamente si falla.
+4. Un lock común impide ejecuciones simultáneas. Los recibos por SHA hacen idempotente cada etapa.
+5. Los cortes con migraciones, cambios de identidad, Keycloak, PostgreSQL, Silo, secretos o capas base quedan en `BLOCKED_REVIEW_REQUIRED`; nunca se aplican automáticamente.
+6. Los cortes ordinarios de API/WEB, sin cambios de esquema ni infraestructura, pueden avanzar de `READY` a `APPLIED` sin intervención.
+7. La participación normal del Sponsor se limita a la UAT posterior. Solo los estados `BLOCKED_REVIEW_REQUIRED`, `REVERTED` o `UAT_FAILED` requieren acción.
+
+### Instalación inicial única
+
+La activación exige una única intervención administrativa en glmdch para instalar y habilitar las unidades, crear directorios privados, configurar una credencial de solo lectura y ejecutar una simulación sin despliegue. Después de esa ceremonia, no se vuelven a copiar scripts por Termius ni se solicitan contraseñas en cada actualización.
+
+La primera activación debe comprobar:
+
+- usuario y permisos mínimos de cada unidad;
+- credencial de GitHub solo lectura, root-only y reemplazable;
+- límites de CPU, memoria, disco y tiempo;
+- rutas privadas para staging, recibos y respaldos;
+- `NoNewPrivileges`, protección del sistema y restricciones de red;
+- simulación de bloqueo, preparación, aplicación, fallo de salud y reversión;
+- conservación de Keycloak, Master, SMTP, bases y servicios auxiliares.
+
+### Política recomendada
+
+- Consulta automática cada 30 minutos con desfase aleatorio.
+- Preparación automática solo cuando el corte firmado lleva al menos 10 minutos estable.
+- Aplicación automática en la ventana 02:00–05:00 de Chile.
+- Máximo un intento por SHA; un fallo exige un SHA nuevo o desbloqueo documentado.
+- UAT y registro al inicio de la jornada siguiente.
