@@ -91,7 +91,7 @@ def verify_bundle(directory, source_sha):
     for finding in raw:
         if (finding.get('VulnerabilityID') != 'CVE-2026-39414' or
                 finding.get('PkgName') != 'github.com/minio/minio' or
-                finding.get('InstalledVersion') != 'v0.0.0-20261015052015-7a3ca0f82100' or
+                finding.get('InstalledVersion') != rebuild.SERVER_VERSION or
                 finding.get('Target') != 'usr/bin/silo'):
             raise ValueError('unexpected fixed finding')
     archive = directory / 'silo-qa-review-only.tar'

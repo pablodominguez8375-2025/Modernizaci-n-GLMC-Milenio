@@ -27,11 +27,12 @@ class SiloRebuildContractTests(unittest.TestCase):
         inventory = {'Results': [
             {'Target': 'usr/bin/silo', 'Packages': [
                 {'Name': 'stdlib', 'Version': 'v1.27.3'},
-                {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_PURL.rsplit('@', 1)[1]}]},
+                {'Name': 'github.com/minio/minio', 'Version': rebuild.SERVER_PURL.rsplit('@', 1)[1]},
+                {'Name': 'github.com/go-jose/go-jose/v4', 'Version': rebuild.SERVER_GO_JOSE_VERSION}]},
             {'Target': 'usr/bin/mcli', 'Packages': [{'Name': 'stdlib', 'Version': 'v1.27.3'}]},
         ]}
         rebuild.verify_go_inventory(inventory)
-        for index, package in ((0, 0), (0, 1), (1, 0)):
+        for index, package in ((0, 0), (0, 1), (0, 2), (1, 0)):
             changed = copy.deepcopy(inventory)
             changed['Results'][index]['Packages'][package]['Version'] = '(devel)'
             with self.subTest(target=index, package=package), self.assertRaises(ValueError):
@@ -59,7 +60,7 @@ class SiloRebuildContractTests(unittest.TestCase):
                 patch.object(rebuild.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0)), \
                 patch.object(rebuild.subprocess, 'check_output', side_effect=[content, rebuild.VENDOR_SERVER_BINARY+'  /usr/bin/silo', 'c'*64+'  /usr/bin/silo']):
             output = Path(tmp)
-            (output/'vendor-attestation.json').write_text(rebuild.SERVER_SOURCE)
+            (output/'vendor-attestation.json').write_text(rebuild.VENDOR_SOURCE)
             evidence = rebuild.server_patch_evidence('sha256:'+'a'*64, output, Path('/pinned'))
             self.assertEqual('c'*64, evidence['server_binary_sha256'])
             self.assertFalse(evidence['server_binary_preserved'])
@@ -171,6 +172,9 @@ class SiloRebuildContractTests(unittest.TestCase):
         self.assertIn('GOTOOLCHAIN=local', dockerfile)
         self.assertIn('go1.27.3', dockerfile)
         self.assertIn('COPY --from=silo-build /out/silo', dockerfile)
+        self.assertIn(rebuild.SERVER_SOURCE, dockerfile)
+        self.assertIn(rebuild.SERVER_VERSION, dockerfile)
+        self.assertIn('ref: ' + rebuild.SERVER_SOURCE, workflow)
         self.assertIn('--server-source artifacts/silo-source', workflow)
         self.assertIn('upgrade pcre2 pcre2-syntax', dockerfile)
         self.assertIn('FROM scratch', dockerfile)

@@ -56,7 +56,8 @@ def failure_details(error):
     return details
 
 
-SERVER_SOURCE = '7a3ca0f82100cce06289a465f54139da2639f642'
+VENDOR_SOURCE = '7a3ca0f82100cce06289a465f54139da2639f642'
+SERVER_SOURCE = 'dd905b29f45d29bcef6aa894acef10f8071eb602'
 SERVER_FIX = '3252d5b7f349e0ea41987761e4487972ea977e15'
 SERVER_BLOBS = {
     'internal/s3select/select.go': 'a7abcbeb078224b3b35dbf750b840c2c2ca15221',
@@ -73,7 +74,10 @@ def server_patch_evidence(image, output, source):
                               stderr=subprocess.DEVNULL, timeout=30)
     if ancestor.returncode != 0:
         raise ValueError('server does not inherit the fix')
-    if SERVER_SOURCE not in (output / 'vendor-attestation.json').read_text():
+    # The OCI attestation authenticates the retained vendor rootfs. The newer
+    # rebuilt server source is bound separately by its immutable Git archive
+    # and the project provenance emitted by this workflow.
+    if VENDOR_SOURCE not in (output / 'vendor-attestation.json').read_text():
         raise ValueError('vendor attestation does not identify expected server source')
     files = {}
     for path, expected in SERVER_BLOBS.items():
@@ -114,9 +118,11 @@ def server_patch_evidence(image, output, source):
 
 # Reviewed from authenticated Actions artifact12469593117; independently hashed
 # the sole image layer and matched scan/runtime evidence of source93d85516.
-SERVER_BINARY = '7d1ca6fe1fedfbd6c9b4df3cf2b1aaf53c63499095daeb3d65dd7fcd26e62e04'
+SERVER_BINARY = None  # Phase 1: pin only after reviewing exact-head build evidence.
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
-SERVER_PURL = 'pkg:golang/github.com/minio/minio@v0.0.0-20261015052015-7a3ca0f82100'
+SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
+SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
+SERVER_GO_JOSE_VERSION = 'v4.1.6'
 
 
 def fixed_component_vex(evidence, image):
@@ -209,6 +215,10 @@ def verify_go_inventory(inventory):
     if len(server) != 1 or not any(p.get('Name') == 'github.com/minio/minio' and
             p.get('Version') == SERVER_PURL.rsplit('@', 1)[1] for p in server[0].get('Packages', [])):
         raise ValueError('server main module version missing from scan')
+    go_jose = [p.get('Version') for p in server[0].get('Packages', [])
+               if p.get('Name') == 'github.com/go-jose/go-jose/v4']
+    if go_jose != [SERVER_GO_JOSE_VERSION]:
+        raise ValueError('server go-jose version missing or incorrect in scan')
     for target in ('usr/bin/silo', 'usr/bin/mcli'):
         rows = [r for r in results if r.get('Target') == target]
         if len(rows) != 1 or not any(p.get('Name') == 'stdlib' and p.get('Version') == 'v1.27.3'
@@ -323,7 +333,7 @@ def main():
             # Prevent any unintended filtering beyond this one reviewed component.
             removed = [v for v in report['blocking_findings'] if v not in effective]
             if any(v['VulnerabilityID'] != 'CVE-2026-39414' or v['PkgName'] != 'github.com/minio/minio' or
-                   v['InstalledVersion'] != 'v0.0.0-20261015052015-7a3ca0f82100' or
+                   v['InstalledVersion'] != SERVER_VERSION or
                    v['Target'] != 'usr/bin/silo' for v in removed):
                 raise ValueError('unexpected VEX filtering')
             report['effective_blocking_findings'] = effective
