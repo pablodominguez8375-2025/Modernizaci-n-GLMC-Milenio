@@ -10,7 +10,7 @@ export type HelpAccess = Record<HelpAccessKey, boolean>
 
 export type HelpTarget =
   | 'dashboard' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'calendar' | 'notifications'
-  | 'privacy' | 'lodge' | 'secretariat' | 'system' | 'library' | 'regimen'
+  | 'privacy' | 'lodge' | 'secretariat' | 'system' | 'library' | 'regimen' | 'candidates'
 
 export type HelpTopic = 'Primeros pasos' | 'Mi espacio' | 'Mi Taller' | 'Gran Logia' | 'Sistema'
 
@@ -175,6 +175,22 @@ export const helpGuides: HelpGuide[] = [
     tip: 'Mientras esté en revisión puedes pulsar «Cancelar solicitud». Si la rechazan, verás el motivo.',
     target: { view: 'lodge', label: 'Abrir Secretaría del Taller' },
     keywords: 'templo sala solicitar pedir reserva espacio secretaria taller',
+  },
+  {
+    id: 'imprimir-ficha-insinuado', topic: 'Mi Taller', needs: 'lodgeSecretariat',
+    title: 'Imprimir la ficha de un insinuado',
+    summary: 'La Secretaría del Taller imprime la ficha del candidato en una hoja, con su foto y su firma.',
+    steps: [
+      'Abre «Insinuaciones e Iniciación» en el menú y entra a «Carga».',
+      'En «Solicitudes de iniciación», elige al candidato.',
+      'Revisa que la ficha esté guardada. Si hiciste cambios, pulsa «Guardar cambios y reenviar» primero: se imprime lo guardado.',
+      'Arriba a la derecha, pulsa «Imprimir ficha».',
+      'En la ventana de impresión elige tu impresora o «Guardar como PDF», y confirma.',
+      'Firma la hoja en «Firma Secretaría del Taller».',
+    ],
+    tip: 'El botón se activa solo cuando la ficha está guardada. La hoja no incluye las observaciones internas ni el resumen de entrevista, y debe quedar bajo custodia de la Orden.',
+    target: { view: 'candidates', label: 'Abrir Insinuaciones e Iniciación' },
+    keywords: 'imprimir ficha insinuado candidato postulante hoja papel pdf secretaria taller',
   },
   {
     id: 'responder-espacio', topic: 'Gran Logia', needs: 'grandSecretariat',

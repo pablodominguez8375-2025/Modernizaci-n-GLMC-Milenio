@@ -1,0 +1,23 @@
+/* Hoja de impresión de la ficha del insinuado: invisible en pantalla, única visible al imprimir. */
+.candidate-print-sheet { display: none; }
+
+@media print {
+  body > *:not(.candidate-print-sheet) { display: none !important; }
+  html, body { background: #fff !important; }
+  .candidate-print-sheet { display: block; color: #111; font: 11pt/1.3 Arial, Helvetica, sans-serif; padding: 0; }
+  .candidate-print-head { display: flex; justify-content: space-between; gap: 16pt; align-items: flex-start; border-bottom: 2pt solid #123a6b; padding-bottom: 8pt; margin-bottom: 10pt; }
+  .candidate-print-head p { margin: 0; color: #123a6b; font-size: 11pt; }
+  .candidate-print-head h1 { margin: 2pt 0; font-size: 20pt; color: #123a6b; }
+  .candidate-print-photo { width: 3.5cm; height: 4.5cm; border: 1pt solid #666; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 9pt; color: #555; overflow: hidden; flex: none; }
+  .candidate-print-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .candidate-print-sheet h2 { font-size: 12pt; margin: 9pt 0 3pt; padding-bottom: 2pt; border-bottom: 1pt solid #999; color: #123a6b; break-after: avoid; }
+  .candidate-print-grid { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 3pt 16pt; }
+  .candidate-print-row { break-inside: avoid; }
+  .candidate-print-row dt { font-size: 9pt; color: #555; }
+  .candidate-print-row dd { margin: 0; font-size: 11pt; overflow-wrap: anywhere; }
+  .candidate-print-sign { margin-top: 24pt; break-inside: avoid; }
+  .candidate-print-sign div { width: 9cm; font-size: 10pt; text-align: center; }
+  .candidate-print-sign span { display: block; border-top: 1pt solid #111; margin-bottom: 3pt; }
+  .candidate-print-foot { margin-top: 12pt; font-size: 8.5pt; color: #444; border-top: 1pt solid #ccc; padding-top: 4pt; }
+  @page { size: A4; margin: 12mm; }
+}
