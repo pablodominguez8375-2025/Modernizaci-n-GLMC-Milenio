@@ -30,6 +30,7 @@ import './lodge-data-health.css'
 import './initial-load.css'
 import './help-center.css'
 import './account-inventory.css'
+import './candidate-print.css'
 
 installSupportViewAsFetch()
 

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type CandidateIntakeUpsertPayload, type CandidateWorkshopQueueItem, type CandidateWorkshopOrganization, type CandidateEligibleSponsor } from './api/candidateIntakeApi'
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import CandidateFormCapturePanel from './CandidateFormCapturePanel'
+import CandidateFormPrintSheet from './CandidateFormPrintSheet'
 import './CandidateWorkshopIntakePage.css'
 import { organizationDisplayName } from './displayFormat'
 import { parseChileanRut } from './chileanRut'
@@ -395,9 +396,14 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
       </div>
       <div className="candidate-heading-actions">
         {onBack && <button className="candidate-secondary-button" type="button" onClick={onBack}>Insinuados publicados</button>}
+        <button className="candidate-secondary-button" type="button" disabled={!profile} onClick={() => window.print()}
+          title={profile ? undefined : 'Primero guarde la ficha'}>Imprimir ficha</button>
         <span className="workshop-intake-scope">Ámbito: Taller autorizado</span>
       </div>
     </section>
+    {profile && <CandidateFormPrintSheet profile={profile} photoSrc={photoSrc}
+      originText={originLabel(selectedOrigin, recommenders)}
+      sponsorText={sponsorConfirmedId ? eligibleSponsors.find(item => item.id === sponsorConfirmedId)?.name ?? 'Patrocinio registrado' : null} />}
 
     {api.useMocks && <div className="candidate-protected-notice">Datos ficticios para QA. Esta vista representa la operación real de Secretaría Logial con control de ámbito y auditoría.</div>}
     {error && <div className="error-banner" role="alert"><strong>Ficha de insinuado</strong><span>{error}</span></div>}
