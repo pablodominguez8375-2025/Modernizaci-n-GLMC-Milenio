@@ -180,3 +180,49 @@ La primera activación debe comprobar:
 - Aplicación automática en la ventana 02:00–05:00 de Chile.
 - Máximo un intento por SHA; un fallo exige un SHA nuevo o desbloqueo documentado.
 - UAT y registro al inicio de la jornada siguiente.
+
+
+## Control dinámico de diferencias — revisión sin instalar (28-10-2026)
+
+A partir de los PR #783 y #785 en dev, el nuevo
+`scripts/qa/operators/qa525-current-change-policy.py` (PR #771) sustituye
+el criterio de «cambiar solo TARGET» por una revisión read-only del candidato:
+
+- Comprueba HEAD vivo y firmado, con cinco gates, publisher y digest de la
+  release a través del verificador del PR #783.
+- Compara el SHA **analítico** de la API base con el HEAD vivo mediante
+  GitHub Compare; exige que sea ancestro y que la lista de cambios no esté
+  truncada (máximo 299 archivos y menos de 250 commits).
+- Marca `BLOCKED_REVIEW_REQUIRED` si cambiaron migraciones, modelos/DbContext,
+  arranque `Program.cs`, cuentas/identidad, Master, Docker/Compose, configuración
+  de compilación o archivos runtime desconocidos; los renombres se revisan.
+- Si el corte solo cambia módulos y frontend sin esos riesgos, devuelve
+  `ELIGIBLE_FOR_HOST_PREFLIGHT_ONLY`. **No autoriza compilación automática
+  ni despliegue**, y sigue exigiendo comprobación del baseline físico, staging
+  real con `gh attestation verify`, flags, bloqueo, respaldos, rollback y UAT.
+- Consulta otra vez el gate al finalizar para invalidar un corte si cambió
+  HEAD, publisher o release durante la revisión. Nunca usa un ancestro viejo
+  si el HEAD vigente sigue con workflows pendientes.
+
+Uso documental, sin host y sin credenciales:
+
+~~~bash
+python3 scripts/qa/operators/qa525-current-change-policy.py \
+  --baseline-sha 6ff4ae0d092d4214df4ea31af484efbc969fde54
+~~~
+
+El argumento `--baseline-sha` **no acredita** qué imagen corre realmente en
+glmdch; solo representa una referencia histórica. Se requiere el preflight
+físico y la lectura segura de su recibo. En el corte de análisis
+`dev@700d0e23f9cc98f83bc9d3cef4d55040a2dba446` GitHub Compare
+observó 99 archivos cambiados desde `6ff4ae0`, incluidos
+`backend/src/PMGM.Api/Program.cs` y
+`backend/src/PMGM.Api/Modules/UserAccounts/`; por tanto **este corte no
+puede pasar a aplicación desatendida** sin revisión de identidad.
+
+Los operadores históricos `qa525-prepare-0bd927b.py`,
+`qa525-prepare-e3e90.py` y `qa525-apply-88fb.py` siguen inutilizables
+contra el HEAD actual y NO se ejecutarán. El siguiente incremento los
+reemplaza/adapta sin debilitar la conservación del Master, SMTP, siete
+servicios, 98 migraciones, respaldos frescos y reversión de API+WEB.
+La automatización `systemd` sigue sin instalar ni habilitar.
