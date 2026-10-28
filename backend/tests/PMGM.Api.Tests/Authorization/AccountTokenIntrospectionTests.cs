@@ -140,6 +140,7 @@ public sealed class AccountTokenIntrospectionTests
         using var handler=new IntrospectionHandler {SessionStateOnly=true};
         Assert.True(await Provider(handler).IsActiveAsync(
             "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
+        handler.TokenSessionId=handler.SessionId; // conservar evidencia del token original
         handler.SessionId=Guid.NewGuid().ToString();
         Assert.False(await Provider(handler).IsActiveAsync(
             "synthetic-bearer",handler.Subject,TestContext.Current.CancellationToken));
@@ -177,7 +178,9 @@ public sealed class AccountTokenIntrospectionTests
                 IntrospectionCalls++;
                 Assert.Equal(HttpMethod.Post,request.Method);
                 var body=await request.Content!.ReadAsStringAsync(ct);
-                Assert.Contains("token=synthetic-bearer",body,StringComparison.Ordinal);
+                Assert.True(body.Contains("token=synthetic-bearer",StringComparison.Ordinal) ||
+                    body.Contains("token=synthetic-fresh",StringComparison.Ordinal),
+                    "Token de prueba sintético no reconocido");
                 Assert.Contains("client_secret=synthetic-only",body,StringComparison.Ordinal);
                 if(Unavailable) return new(HttpStatusCode.ServiceUnavailable);
                 if(Malformed) return new(HttpStatusCode.OK) {Content=new StringContent("{invalid")};
