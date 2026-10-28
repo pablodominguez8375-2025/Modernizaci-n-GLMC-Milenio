@@ -42,7 +42,8 @@ def reason_for(path):
             or "master" in filename or "systemmail" in filename
             or "accounttoken" in filename):
         return "ACCOUNT_OR_IDENTITY_CHANGE"
-    if (path == "backend/src/PMGM.Api/Program.cs"
+    if (path == "frontend/src/main.tsx"
+            or path == "backend/src/PMGM.Api/Program.cs"
             or path.startswith("backend/src/PMGM.Api/Configuration/")
             or path.startswith("backend/src/PMGM.Api/Infrastructure/")
             or path.startswith("backend/src/PMGM.Api/Properties/")
@@ -134,9 +135,9 @@ def main(argv=None):
     parser.add_argument("--baseline-sha", required=True)
     args = parser.parse_args(argv)
     try:
-        print(json.dumps(evaluate(gate.readiness.fetch_public, args.baseline_sha),
-                         sort_keys=True))
-        return 0 if evaluate_result_is_eligible() else 1
+        decision = evaluate(gate.readiness.fetch_public, args.baseline_sha)
+        print(json.dumps(decision, sort_keys=True))
+        return 0 if decision["status"] == "ELIGIBLE_FOR_HOST_PREFLIGHT_ONLY" else 2
     except (Blocked, gate.Blocked, gate.readiness.GateFailure) as exc:
         print(json.dumps({"status": "BLOCKED_QA525_CHANGE_REVIEW",
                           "scope": SCOPE, "code": str(exc)}, sort_keys=True))
@@ -146,11 +147,6 @@ def main(argv=None):
                           "scope": SCOPE, "code": "INVALID_REMOTE_EVIDENCE"},
                          sort_keys=True))
         return 1
-
-
-def evaluate_result_is_eligible():
-    # CLI remains read-only; even a classified candidate is NEVER deployable.
-    return False
 
 
 if __name__ == "__main__":
