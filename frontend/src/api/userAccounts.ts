@@ -2,6 +2,8 @@ import { SUPPORT_VIEW_PROFILES,profileDisplayName } from './supportViewProfiles'
 export interface AccountCandidate { memberId:string;organizationId:string;name:string;email:string;workshop:string }
 export interface AccountCandidates { items:AccountCandidate[];canCreateUser?:boolean;canCreateSuperuser:boolean;deliveryConfigured:boolean;identityConfigured?:boolean;mailConfigured?:boolean }
 export interface AccountUser { subject:string;name:string;email:string;enabled:boolean;kind:'member'|'superuser'|'platform' }
+/** Inventario completo de cuentas (solo el Máster único; solo lectura). `protected`: cuenta preexistente que no se activa, desactiva ni elimina desde el sistema. */
+export interface AccountInventoryItem { subject:string;username:string;name:string;enabled:boolean;kind:'legacy_protected'|'member'|'superuser'|string;managed:boolean;protected:boolean;origin:'provisioned'|'managed'|string }
 export interface CreateUserAccount { memberId?:string|null;organizationId?:string|null;superuser?:boolean;platformName?:string|null;platformEmail?:string|null }
 export interface UserAccountCreated { subject:string;email:string;memberId:string|null;organizationId:string|null;superuser:boolean;requiresPasswordChange:true;initialPasswordEmailSent:boolean }
 
@@ -28,6 +30,17 @@ export class UserAccountsDemo {
  private grants:SupportCorrectionGrant[]=[]
  private corrections:Array<MySupportCorrection&{targetSubject:string}>=[]
  constructor(private readonly candidates:AccountCandidate[],private readonly allowed:()=>boolean,private readonly platformAllowed:()=>boolean,seed:AccountUser[]=[],private readonly currentSubject:()=>string=()=>'',private readonly operatorAllowed:()=>boolean=()=>false){this.users=structuredClone(seed)}
+ // Inventario sintético de la demostración (nunca cuentas reales): solo para el Máster registrado.
+ inventory():{items:AccountInventoryItem[];configured:boolean}{
+  this.authorize();if(!this.platformAllowed())throw new Error('Solo el Máster único puede ver el inventario completo de cuentas.')
+  const legacy:AccountInventoryItem[]=[
+   {subject:'demo:legacy-qa-admin',username:'qa.admin',name:'Administrador de pruebas (ficticio)',enabled:true,kind:'legacy_protected',managed:false,protected:true,origin:'provisioned'},
+   {subject:'demo:legacy-admin',username:'admin',name:'Máster de plataforma (ficticio)',enabled:true,kind:'legacy_protected',managed:false,protected:true,origin:'provisioned'},
+   {subject:'demo:legacy-bootstrap',username:'bootstrap.inicial',name:'Cuenta de carga inicial (ficticia)',enabled:false,kind:'legacy_protected',managed:false,protected:true,origin:'provisioned'},
+  ]
+  const managed:AccountInventoryItem[]=this.users.filter(u=>u.kind==='member'||u.kind==='superuser').map(u=>({subject:u.subject,username:u.email.split('@')[0]||'usuario',name:u.name,enabled:u.enabled,kind:u.kind,managed:true,protected:false,origin:'managed'}))
+  return{items:[...legacy,...managed],configured:true}
+ }
  // «Corregir como soporte»: el Máster da el permiso; el Superusuario corrige; el Hermano ve la corrección.
  correctionStatus():SupportCorrectionStatus{
   this.authorize();const now=Date.now();const me=this.currentSubject();const master=this.platformAllowed()

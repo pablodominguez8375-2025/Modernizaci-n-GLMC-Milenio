@@ -3,7 +3,7 @@ import { MockAssemblyStore, type AssemblyAttestationList, type AssemblyBalancesP
 import { type FormSchemaSnapshot, type FormSchemaVersionsResponse, type PublishFormSchema, coreCandidateFormFields } from './candidateFormTypes'
 import { mockFormHistory, mockFormVersion, publishMockFormVersion } from './candidateFormMock'
 import { demoAccountCandidates } from './membershipApi'
-import { UserAccountsDemo, type AccountCandidates, type AccountUser, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest, type SupportCorrectionStatus, type SupportCorrectionGrant, type SupportCorrectionGrantRequest, type SupportCorrectionRequest, type MySupportCorrection, type SupportNotice, type SupportResendRequest } from './userAccounts'
+import { UserAccountsDemo, type AccountCandidates, type AccountUser, type AccountInventoryItem, type CreateUserAccount, type UserAccountCreated, type AccessResetRequest, type AccessResetResult, type SupportViewStartRequest, type SupportCorrectionStatus, type SupportCorrectionGrant, type SupportCorrectionGrantRequest, type SupportCorrectionRequest, type MySupportCorrection, type SupportNotice, type SupportResendRequest } from './userAccounts'
 import type { SupportViewStart } from './supportViewAs'
 import { aggregateViewAccess, chileDate, type ViewAccess } from './dynamicViewAccess'
 export interface HospitalariaContributionRate { id:string;amount:number;effectiveFrom:string;effectiveUntil:string|null }
@@ -508,6 +508,7 @@ export class PmgmApiClient {
   private readonly userAccountsDemo = new UserAccountsDemo(demoAccountCandidates(),()=>getDemoProfile(this.demoAccessSubject.slice(5) as DemoProfileKey).capabilities.canConfigureSystem===true,()=>this.demoAccessSubject==='demo:systemAdmin',demoViewAsAccounts,()=>this.demoAccessSubject,()=>this.demoAccessSubject==='demo:supportUser')
   async getUserAccountCandidates():Promise<AccountCandidates>{if(this.useMocks)return this.userAccountsDemo.candidatesForCreation();return this.request('/api/system/user-accounts/eligible-members')}
   async getUserAccounts():Promise<{items:AccountUser[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.list();return this.request('/api/system/user-accounts')}
+  async getUserAccountInventory():Promise<{items:AccountInventoryItem[];configured:boolean}>{if(this.useMocks)return this.userAccountsDemo.inventory();return this.request('/api/system/user-accounts/inventory')}
   async resetUserAccountAccess(subject:string,request:AccessResetRequest):Promise<AccessResetResult>{if(this.useMocks)return this.userAccountsDemo.resetAccess(subject,request);return this.request(`/api/system/user-accounts/${encodeURIComponent(subject)}/password-recovery`,{method:'POST',body:JSON.stringify(request)})}
   async startSupportView(request:SupportViewStartRequest):Promise<SupportViewStart>{if(this.useMocks)return this.userAccountsDemo.startViewAs(request);return this.request('/api/system/support/view-as',{method:'POST',body:JSON.stringify(request)})}
   async getSupportViewProfiles():Promise<SupportViewProfile[]>{if(this.useMocks)return SUPPORT_VIEW_PROFILES;return (await this.request<{items:SupportViewProfile[]}>('/api/system/support/view-as/profiles')).items}

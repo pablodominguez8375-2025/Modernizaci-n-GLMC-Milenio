@@ -1,0 +1,13 @@
+/* Inventario de cuentas (Máster) · texto mínimo 14 px, sin desborde en celular. */
+.account-inventory { display: grid; gap: .6rem; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #d5dbe8; }
+.account-inventory h3 { margin: 0; color: var(--navy, #06148E); }
+.account-inventory-summary, .account-inventory-note { margin: 0; font-size: 1rem; }
+.account-inventory-note { color: var(--muted, #475569); }
+.account-inventory-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.account-inventory-row { display: grid; gap: .25rem; overflow-wrap: anywhere; }
+.account-protected-badge { justify-self: start; padding: .2rem .6rem; border-radius: 999px; background: #fdf8e6; border: 1px solid #c9a227; color: #5b4500; font-weight: 700; font-size: .95rem; }
+
+/* Celular: con el selector «Ver como» en la barra azul no cabe el nombre del producto (se partía letra por letra); el logo ya identifica a la Gran Logia. */
+@media (max-width: 480px) {
+  .topbar:has(.view-profile-menu) .brand > span:last-child { display: none; }
+}

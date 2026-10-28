@@ -2,6 +2,7 @@ import { useEffect,useState } from 'react'
 import { ActionDrawer } from './actionKit'
 import type { PmgmApiClient } from './api/pmgmApi'
 import { setSupportViewAs } from './api/supportViewAs'
+import AccountInventoryCard from './AccountInventoryCard'
 import { SUPPORT_CORRECTION_DURATIONS,type AccessResetModality,type AccessResetResult,type AccountCandidates,type AccountUser,type SupportCorrectionFieldKey,type SupportCorrectionGrant,type SupportCorrectionStatus,type SupportNotice } from './api/userAccounts'
 
 /** Never bypass server-side delivery requirements. Expose a safe operator-facing reason, never secrets. */
@@ -178,5 +179,6 @@ export default function UserAccountsPanel({api}:{api:PmgmApiClient}){
      {busy?'Creando cuenta…':creationBlockReason?'Ver por qué no se puede crear la cuenta':'Crear usuario y enviar clave inicial'}
     </button>
    </form></ActionDrawer></div><div><h3>Usuarios configurados</h3>{users.length===0&&<p>Sin cuentas creadas mediante este formulario.</p>}{users.map(u=><div className="system-user-row" key={u.subject}><strong>{u.name}</strong><span>{u.email}</span><small>{u.kind==='platform'?'Máster de plataforma':u.kind==='superuser'?'Superusuario de soporte':'Hermano institucional'} · {u.enabled?'Habilitado':'Alta pendiente'}</small><small>Identificador de usuario: {u.subject}</small>{data?.canCreateUser&&u.enabled&&u.kind!=='platform'&&<div className="action-bar"><ResetAccessDrawer api={api} user={u}/>{u.kind==='member'&&<ViewAsDrawer api={api} user={u}/>}{corr?.isMaster&&u.kind==='superuser'&&<GrantCorrectionDrawer api={api} user={u} onChanged={refreshCorrections}/>}</div>}{corr?.isMaster&&u.kind==='superuser'&&corr.grants.filter(g=>g.operatorSubject===u.subject).map(g=><CorrectionGrantLine key={g.grantId} api={api} grant={g} onChanged={refreshCorrections}/>)}{corr?.canCorrect&&u.kind==='member'&&u.enabled&&<div className="action-bar"><CorrectContactDrawer api={api} user={u} status={corr}/><ResendNoticeDrawer api={api} user={u}/></div>}</div>)}</div></div>
+ {corr?.isMaster&&<AccountInventoryCard api={api} refreshKey={users.length}/>}
  </section>
 }
