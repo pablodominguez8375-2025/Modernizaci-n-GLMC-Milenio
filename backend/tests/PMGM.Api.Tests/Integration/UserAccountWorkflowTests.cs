@@ -660,6 +660,54 @@ public sealed class UserAccountWorkflowTests
     }
 
     [Fact]
+    public async Task Contradictory_completed_and_failed_audit_never_resolves_without_manual_review()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var subject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(subject,"ambiguo-ci@example.invalid","Cuenta ficticia",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[subject]=new(subject,"ambiguo-ci@example.invalid",
+            "member",true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        var ct=TestContext.Current.CancellationToken;
+        await using(var scope=factory.Services.CreateAsyncScope())
+        {
+            var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var operationId=Guid.NewGuid().ToString("N");
+            foreach(var (action,result) in new[] {
+                ("system.users.lifecycle_requested",AuditResults.Observed),
+                ("system.users.lifecycle_completed",AuditResults.Success),
+                ("system.users.lifecycle_failed",AuditResults.Rejected)
+            })
+                db.AuditEvents.Add(new PMGM.Api.Modules.Audit.Entities.AuditEvent {
+                    Action=action,EntityType="UserAccount",EntityId=subject,
+                    Result=result,CorrelationId="commit-ambiguo-sintetico",
+                    MetadataJson=JsonSerializer.Serialize(new {operationId,action="deactivate"})
+                });
+            await db.SaveChangesAsync(ct);
+        }
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var report=await master.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",ct);
+        Assert.Equal(HttpStatusCode.OK,report.StatusCode);
+        using var json=JsonDocument.Parse(await report.Content.ReadAsStringAsync(ct));
+        Assert.Contains(json.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="failed_needs_review" &&
+                item.GetProperty("requiresReview").GetBoolean());
+        using var blocked=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Operación ficticia tras auditoría de resultado contradictorio."},ct);
+        Assert.Equal(HttpStatusCode.Conflict,blocked.StatusCode);
+        Assert.Contains("prior_lifecycle_requires_review",
+            await blocked.Content.ReadAsStringAsync(ct));
+        Assert.Equal(0,identity.LifecycleDeactivations);
+    }
+
+    [Fact]
     public async Task Already_completed_operation_does_not_false_block_new_legal_mutation()
     {
         var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
