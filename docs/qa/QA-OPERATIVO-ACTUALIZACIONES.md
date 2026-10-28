@@ -226,3 +226,55 @@ contra el HEAD actual y NO se ejecutarán. El siguiente incremento los
 reemplaza/adapta sin debilitar la conservación del Master, SMTP, siete
 servicios, 98 migraciones, respaldos frescos y reversión de API+WEB.
 La automatización `systemd` sigue sin instalar ni habilitar.
+
+
+## Preflight físico de solo lectura sobre el corte firmado actual
+
+**Incidencia #525; PR #771 (28-10-2026).** Se añadió
+`scripts/qa/operators/qa525-current-host-preflight.py`: es una puerta
+de validación **sin build, descarga, ejecución de instalador ni despliegue**.
+No se ha instalado ni ejecutado en glmdch; sus pruebas son herméticas.
+
+Orden obligatorio del nuevo componente:
+
+1. Solo en host glmdch con UID root y archivos locales no simbólicos,
+   propiedad root y sin permiso de escritura de grupo/otros; valida SHA-256
+   exacto del preflight revisado.
+2. Reutiliza el gate firmado de `dev` y el comparador de cambios del
+   PR #771, con `BASE_API` histórica como referencia analítica.
+3. Si el corte modifica identidad, Master, cuentas, `Program.cs`,
+   migraciones, infraestructura u otros elementos sensibles, devuelve
+   `BLOCKED_QA525_HOST_PREFLIGHT` **antes** de consultar el estado
+   del host; no prepara ningún paquete.
+4. Solo para cortes elegibles ejecuta la validación física read-only
+   existente, que comprueba siete contenedores, identidad y SMTP
+   efectivos, capas Compose, 98 migraciones, histórico G6, temporizador
+   inactivo y endpoints públicos.
+5. Repite la comprobación íntegra del gate y la clasificación GitHub
+   antes de emitir `HOST_READ_ONLY_PREFLIGHT_PASS_NOT_PREPARED`.
+
+Esta salida significa **únicamente** que los controles de lectura
+comprobaron el mismo corte y la línea base en ese instante. No equivale
+a firma real descargada (staging), respaldo fresco o garantía de rollback;
+el resultado incluye `may_build:false`, `may_apply:false`,
+`signed_stage_executed:false` y `fresh_backup_created:false`.
+
+Antes de cualquier ejecución real, se requiere la instalación revisada
+y autorizada de los tres operadores bajo rutas root-only. El archivo
+histórico `qa525-update-readiness-0bd927b.py` se reutiliza como
+**auditor de la línea base actual**, no como autorizador de una release
+antigua, y se fija su hash; si su hipótesis de host dejó de corresponder,
+el procedimiento se bloquea. No se habilita `pmgm-qa-update-*.timer`
+ni se realiza una actualización automática con este componente.
+
+Verificación en CI, sin acceder a glmdch:
+
+~~~bash
+python3 -m unittest discover -s tests -p test_qa525_current_host_preflight.py -v
+~~~
+
+**Pendiente específico:** implementar operador independiente de
+preparación de imagen API+WEB del SHA dinámico y su apply/rollback
+supervisado. Debe tomar un artefacto con firma real comprobada por
+`qa525-stage-current-release.py`, usar evidencia de línea base
+recién verificada y proteger Master/SMTP/Keycloak sin mutaciones.
