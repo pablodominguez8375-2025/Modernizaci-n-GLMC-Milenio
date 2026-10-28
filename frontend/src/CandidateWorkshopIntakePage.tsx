@@ -6,6 +6,8 @@ import { type CandidateIntakeApiClient, type CandidateIntakeProfile, type Candid
 import CandidateWorkflowPanel from './CandidateWorkflowPanel'
 import CandidateFormCapturePanel from './CandidateFormCapturePanel'
 import CandidateFormPrintSheet from './CandidateFormPrintSheet'
+import IntakeCollapsible from './IntakeCollapsible'
+import { intakeProgress, type IntakeSectionId } from './candidateIntakeProgress'
 import './CandidateWorkshopIntakePage.css'
 import { organizationDisplayName } from './displayFormat'
 import { parseChileanRut } from './chileanRut'
@@ -92,7 +94,18 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [openSections, setOpenSections] = useState<IntakeSectionId[]>(['personal'])
   const [error, setError] = useState<string | null>(null)
+
+  const progress = intakeProgress({ form, presentersText, sponsorRegistered: !!sponsorConfirmedId, hasPhoto: !!(photoPreview || photoSrc) })
+  const statusOf = (id: IntakeSectionId) => progress.sections.find(section => section.id === id)!
+  const isOpen = (id: IntakeSectionId) => openSections.includes(id)
+  const toggleSection = (id: IntakeSectionId) => setOpenSections(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id])
+  const goToSection = (id: IntakeSectionId) => {
+    setOpenSections(current => current.includes(id) ? current : [...current, id])
+    window.setTimeout(() => document.getElementById(`intake-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }
+  useEffect(() => { setOpenSections(['personal']) }, [selectedId])
 
   const selected = useMemo(() => queue.find(item => item.ceremonyRequestId === selectedId) ?? null, [queue, selectedId])
   const selectedOrigin: CandidateOrigin | undefined = !selected ? undefined
@@ -412,12 +425,6 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
     <SectionIndex sections={[
       { id: 'intake-new', label: 'Nuevo postulante' },
       { id: 'intake-requests', label: 'Solicitudes' },
-      ...(selected ? [
-        { id: 'intake-personal', label: 'Datos personales' },
-        { id: 'intake-work', label: 'Antecedentes laborales' },
-        { id: 'intake-lodge', label: 'Presentación logial' },
-        { id: 'intake-photo', label: 'Fotografía' },
-      ] : []),
     ]} />
 
     <section id="intake-new" className="candidate-product-card workshop-new-intake">
@@ -512,8 +519,20 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
             requestStatus={selected.requestStatus}
           />}
 
-          <section id="intake-personal" className="candidate-product-card">
-            <div className="candidate-section-title"><span>▣</span><h2>Datos personales y de contacto</h2><em>Núcleo institucional protegido</em></div>
+          <section className="candidate-product-card intake-progress" aria-label="Avance de la ficha">
+            <div className="intake-progress-head">
+              <strong>Avance de la ficha: {progress.done} de {progress.total} secciones completas</strong>
+              {progress.firstPending && <button type="button" className="candidate-secondary-button" onClick={() => goToSection(progress.firstPending!)}>Ir a la primera pendiente</button>}
+            </div>
+            <div className="intake-progress-bar" role="progressbar" aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done} aria-label="Secciones completas"><span style={{ width: `${(progress.done / progress.total) * 100}%` }} /></div>
+            <ul className="intake-progress-list">
+              {progress.sections.map(section => <li key={section.id}><button type="button" onClick={() => goToSection(section.id)}>
+                <span className={section.complete ? 'intake-dot complete' : 'intake-dot pending'} aria-hidden="true">{section.complete ? '✓' : '○'}</span>{section.label}
+              </button></li>)}
+            </ul>
+          </section>
+
+          <IntakeCollapsible id="intake-personal" icon="▣" title="Datos personales y de contacto" note="Núcleo institucional protegido" complete={statusOf('personal').complete} missing={statusOf('personal').missing} open={isOpen('personal')} onToggle={() => toggleSection('personal')}>
             <div className="workshop-form-grid">
               <Field label="Nombres *"><input value={form.firstNames} disabled={locked} onChange={event => setForm({ ...form, firstNames: event.target.value })} /></Field>
               <Field label="Apellido paterno *"><input value={form.paternalSurname} disabled={locked} onChange={event => setForm({ ...form, paternalSurname: event.target.value })} /></Field>
@@ -527,10 +546,9 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Dirección" wide><input value={form.address ?? ''} disabled={locked} onChange={event => setForm({ ...form, address: event.target.value || null })} /></Field>
               <Field label="Ciudad"><input value={form.city ?? ''} disabled={locked} onChange={event => setForm({ ...form, city: event.target.value || null })} /></Field>
             </div>
-          </section>
+          </IntakeCollapsible>
 
-          <section id="intake-work" className="candidate-product-card">
-            <div className="candidate-section-title"><span>▦</span><h2>Antecedentes laborales</h2><em>Formulario 2026</em></div>
+          <IntakeCollapsible id="intake-work" icon="▦" title="Antecedentes laborales" note="Formulario 2026" complete={statusOf('work').complete} missing={statusOf('work').missing} open={isOpen('work')} onToggle={() => toggleSection('work')}>
             <div className="workshop-form-grid">
               <Field label="Actividad, profesión u oficio"><input value={form.occupation ?? ''} disabled={locked} onChange={event => setForm({ ...form, occupation: event.target.value || null })} /></Field>
               <Field label="Empleador"><input value={form.employerName ?? ''} disabled={locked} onChange={event => setForm({ ...form, employerName: event.target.value || null })} /></Field>
@@ -538,10 +556,9 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
               <Field label="Teléfono laboral"><input type="tel" value={form.workPhone ?? ''} disabled={locked} onChange={event => setForm({ ...form, workPhone: event.target.value || null })} /></Field>
               <Field label="Dirección laboral" wide><input value={form.workAddress ?? ''} disabled={locked} onChange={event => setForm({ ...form, workAddress: event.target.value || null })} /></Field>
             </div>
-          </section>
+          </IntakeCollapsible>
 
-          <section id="intake-lodge" className="candidate-product-card">
-            <div className="candidate-section-title"><span>⌂</span><h2>Presentación logial y antecedentes</h2><em>Formulario auditable</em></div>
+          <IntakeCollapsible id="intake-lodge" icon="⌂" title="Presentación logial y antecedentes" note="Formulario auditable" complete={statusOf('lodge').complete} missing={statusOf('lodge').missing} open={isOpen('lodge')} onToggle={() => toggleSection('lodge')}>
             <div className="workshop-form-grid">
               <Field label="Logia/Taller que presenta"><input value={`${organizationDisplayName(selected.workshopName, selected.workshopNumber)}`} disabled /></Field>
               <Field label="Origen del candidato"><input value={originLabel(selectedOrigin, recommenders)} disabled /></Field>
@@ -606,14 +623,16 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
                 </form>
               </ActionDrawer>
             </div>}
+          </IntakeCollapsible>
+
+          <section id="intake-save" className="candidate-product-card workshop-save-bar">
             <div className="workshop-form-actions">
               <small>Al guardar, la ficha queda pendiente de Gran Secretaría. Guardar no publica ni inicia el cómputo de días.</small>
               <button className="candidate-primary-button" type="button" disabled={busy || locked} onClick={() => void save()}>{busy ? 'Guardando…' : profile ? 'Guardar cambios y reenviar' : 'Guardar y enviar a revisión'}</button>
             </div>
           </section>
 
-          <section id="intake-photo" className="candidate-product-card workshop-photo-section">
-            <div className="candidate-section-title"><span>◫</span><h2>Fotografía tipo pasaporte</h2><em>Almacenamiento privado</em></div>
+          <IntakeCollapsible id="intake-photo" icon="◫" title="Fotografía tipo pasaporte" note="Almacenamiento privado" complete={statusOf('photo').complete} missing={statusOf('photo').missing} open={isOpen('photo')} onToggle={() => toggleSection('photo')} className="workshop-photo-section">
             <div className="workshop-photo-layout">
               <div className="candidate-passport-photo">{photoPreview || photoSrc ? <img src={photoPreview ?? photoSrc ?? ''} alt="Vista previa de fotografía tipo pasaporte" /> : <div className="workshop-photo-placeholder">Sin foto</div>}<small>{photoFile ? 'Vista previa · aún no guardada' : profile?.photoAvailable ? 'Fotografía vinculada' : 'Pendiente'}</small></div>
               <div>
@@ -624,7 +643,7 @@ export default function CandidateWorkshopIntakePage({ api, onBack }: CandidateWo
                 {!profile && <small className="workshop-help">Primero guarde la ficha antes de vincular la fotografía.</small>}
               </div>
             </div>
-          </section>
+          </IntakeCollapsible>
 
           {profile ? <CandidateFormCapturePanel key={selected.ceremonyRequestId}
             requestId={selected.ceremonyRequestId} api={api} editable={!locked} />
