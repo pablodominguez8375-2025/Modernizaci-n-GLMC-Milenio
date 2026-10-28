@@ -28,6 +28,33 @@ public interface IAccountIdentityInventory
     Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct);
 }
 
+// Evidencia de seguridad en vivo, independiente del inventario visual. Los
+// permisos privilegiados no se infieren de un atributo pmgm_managed ni del UI.
+public sealed record AccountIdentitySecuritySnapshot(
+    string Subject, string Username, string Kind, bool Enabled, bool Managed,
+    bool PrivilegedRoleDetected, bool EffectiveRoleEvidenceComplete);
+
+public interface IAccountIdentitySecurityReader
+{
+    Task<AccountIdentitySecuritySnapshot?> ReadSecuritySnapshotAsync(string subject, CancellationToken ct);
+}
+
+// Una excepción de borrado de una cuenta heredada exige comprobar
+// el Master real por separado, con rol efectivo en Keycloak.
+public interface IUniqueMasterIdentityVerifier
+{
+    Task<bool> VerifyUniqueMasterDistinctFromAsync(string actorSubject, string targetSubject, CancellationToken ct);
+}
+
+public sealed record AccountLifecycleMutationRequest(string? Reason, string? Confirmation);
+
+public interface IAccountIdentityLifecycleCommands
+{
+    Task DisableAndLogoutAsync(string subject, CancellationToken ct);
+    Task ReactivateAsync(string subject, CancellationToken ct);
+    Task DeleteDisabledAsync(string subject, CancellationToken ct);
+}
+
 public interface IAccountIdentityProvider
 {
     bool Configured { get; }
@@ -77,6 +104,12 @@ public sealed class AccountIdentityOptions
     public string Realm { get; set; } = "pmgm";
     public string ClientId { get; set; } = "pmgm-account-admin";
     public string ClientSecret { get; set; } = "";
+    // Por defecto no cambia la autenticación existente. Se activa solo tras UAT
+    // del servicio de introspección para garantizar revocación efectiva.
+    public bool RequireLiveTokenIntrospection { get; set; } = false;
+    // Gate de activación de endpoints. NO habilitar hasta UAT de introspección y
+    // pruebas de coordinación DB/Keycloak aprobadas para el entorno destino.
+    public bool EnableLifecycleMutations { get; set; } = false;
 }
 public sealed class InitialAccountMailOptions
 {

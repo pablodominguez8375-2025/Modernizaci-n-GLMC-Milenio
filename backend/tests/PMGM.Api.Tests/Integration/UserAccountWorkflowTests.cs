@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Data;
@@ -338,6 +339,433 @@ public sealed class UserAccountWorkflowTests
         Assert.DoesNotContain("password",await response.Content.ReadAsStringAsync(ct),StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Lifecycle_contract_is_readonly_and_only_visible_to_unique_master()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        using var factory=Factory(connection,new Identity(),new Mail());
+        const string path="/api/system/user-accounts/lifecycle-policy";
+        var ct=TestContext.Current.CancellationToken;
+        using var visitor=factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(path,ct)).StatusCode);
+        using var legacy=factory.CreateClient();
+        legacy.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        legacy.DefaultRequestHeaders.Add("X-Test-Username","qa.admin");
+        Assert.Equal(HttpStatusCode.Forbidden,(await legacy.GetAsync(path,ct)).StatusCode);
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var response=await master.GetAsync(path,ct);
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        Assert.Contains("no-store",response.Headers.CacheControl?.ToString()??"");
+        using var payload=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        Assert.False(payload.RootElement.GetProperty("operationsAvailable").GetBoolean());
+        Assert.True(payload.RootElement.GetProperty("reasonRequired").GetBoolean());
+        Assert.Equal(10,payload.RootElement.GetProperty("reasonMinLength").GetInt32());
+        Assert.Equal(200,payload.RootElement.GetProperty("reasonMaxLength").GetInt32());
+        Assert.True(payload.RootElement.GetProperty("requiresLiveIdentityVerification").GetBoolean());
+        Assert.True(payload.RootElement.GetProperty("requiresEffectiveSessionRevocation").GetBoolean());
+        Assert.Equal(3,payload.RootElement.GetProperty("actionNames").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task Lifecycle_verification_reads_effective_identity_only_for_master_and_never_changes_account()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var subject=Guid.NewGuid().ToString();
+        identity.SecuritySnapshots[subject]=new(subject,"cuenta-historica", "legacy_protected",
+            true,false,true,false);
+        using var factory=Factory(connection,identity,new Mail());
+        var path=$"/api/system/user-accounts/{subject}/lifecycle-verification";
+        var ct=TestContext.Current.CancellationToken;
+        using var visitor=factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(path,ct)).StatusCode);
+        using var legacy=factory.CreateClient();
+        legacy.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        legacy.DefaultRequestHeaders.Add("X-Test-Username","cuenta-historica");
+        Assert.Equal(HttpStatusCode.Forbidden,(await legacy.GetAsync(path,ct)).StatusCode);
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        Assert.Equal(HttpStatusCode.NotFound,(await master.GetAsync(
+            "/api/system/user-accounts/no-es-uuid/lifecycle-verification",ct)).StatusCode);
+        using var response=await master.GetAsync(path,ct);
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        Assert.Contains("no-store",response.Headers.CacheControl?.ToString()??"");
+        using var body=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        Assert.Equal(subject,body.RootElement.GetProperty("subject").GetString());
+        Assert.True(body.RootElement.GetProperty("privilegedRoleDetected").GetBoolean());
+        Assert.False(body.RootElement.GetProperty("effectiveRoleEvidenceComplete").GetBoolean());
+        Assert.True(body.RootElement.GetProperty("requiresFurtherVerification").GetBoolean());
+        Assert.False(body.RootElement.GetProperty("operationsAvailable").GetBoolean());
+        Assert.False(identity.Removed);
+    }
+
+    [Fact]
+    public async Task Lifecycle_operations_are_disabled_by_default_and_never_mutate_test_identity()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        using var factory=Factory(connection,identity,new Mail());
+        var subject=Guid.NewGuid().ToString();
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var ct=TestContext.Current.CancellationToken;
+        foreach(var action in new[]{"activate","deactivate","delete-permanently"})
+        {
+            using var response=await master.PostAsJsonAsync(
+                $"/api/system/user-accounts/{subject}/{action}",
+                new {reason="Gestión de cuenta sintética para pruebas.",confirmation="qa.admin"},ct);
+            Assert.Equal(HttpStatusCode.ServiceUnavailable,response.StatusCode);
+        }
+        Assert.False(identity.Removed);
+        Assert.False(identity.Enabled);
+        Assert.Equal(0,identity.Prepares);
+    }
+
+    [Fact]
+    public async Task Lifecycle_operations_reject_non_master_before_feature_gate()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        using var factory=Factory(connection,identity,new Mail());
+        using var user=factory.CreateClient();
+        user.DefaultRequestHeaders.Add("X-Account-Kind","superuser");
+        using var historical=factory.CreateClient();
+        historical.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        historical.DefaultRequestHeaders.Add("X-Test-Username","qa.admin");
+        var subject=Guid.NewGuid().ToString();
+        var ct=TestContext.Current.CancellationToken;
+        foreach(var client in new[]{user,historical})
+        foreach(var action in new[]{"activate","deactivate","delete-permanently"})
+        {
+            using var response=await client.PostAsJsonAsync(
+                $"/api/system/user-accounts/{subject}/{action}",
+                new {reason="Gestión de cuenta sintética para pruebas.",confirmation="qa.admin"},ct);
+            Assert.Equal(HttpStatusCode.Forbidden,response.StatusCode);
+        }
+        Assert.False(identity.Removed);
+    }
+
+    [Fact]
+    public async Task Lifecycle_denies_when_request_subject_differs_from_verified_master_uuid()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var target=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(target,"cuenta-ci@example.invalid","Cuenta ficticia",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[target]=new(target,"cuenta-ci@example.invalid","member",
+            true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        client.DefaultRequestHeaders.Add("X-Test-Subject",Guid.NewGuid().ToString());
+        var result=await client.PostAsJsonAsync(
+            $"/api/system/user-accounts/{target}/deactivate",
+            new {reason="Prueba con identidad de solicitante no concordante."},
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden,result.StatusCode);
+        Assert.Equal(0,identity.LifecycleDeactivations);
+        Assert.True(identity.SecuritySnapshots[target].Enabled);
+    }
+
+    [Fact]
+    public async Task Master_with_revoked_live_role_cannot_mutate_even_when_jwt_claim_still_says_admin()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity {MasterVerified=false};
+        var subject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(subject,"bloqueado@example.invalid","Miembro ficticio",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[subject]=new(subject,"bloqueado@example.invalid","member",
+            true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var result=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Intento sintético con Máster desautorizado en Keycloak."},
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Forbidden,result.StatusCode);
+        Assert.Equal(0,identity.LifecycleDeactivations);
+        Assert.Equal(0,identity.LifecycleDeletions);
+        Assert.True(identity.SecuritySnapshots[subject].Enabled);
+    }
+
+    [Fact]
+    public async Task Failed_keycloak_operation_preserves_durable_request_audit_for_reconciliation()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity{LifecycleDisableFails=true};
+        var subject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(subject,"fallo-sintetico@example.invalid","Cuenta sintética",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[subject]=new(subject,"fallo-sintetico@example.invalid",
+            "member",true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        master.DefaultRequestHeaders.Add("X-Correlation-ID","reused-ci-header");
+        var ct=TestContext.Current.CancellationToken;
+        using var response=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Prueba sintética de error tras marcar cuenta deshabilitada."},ct);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable,response.StatusCode);
+        await using var scope=factory.Services.CreateAsyncScope();
+        var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        var audits=await db.AuditEvents.Where(a=>a.EntityId==subject &&
+            a.Action.StartsWith("system.users.lifecycle_")).ToListAsync(ct);
+        Assert.Contains(audits,a=>a.Action=="system.users.lifecycle_requested");
+        Assert.DoesNotContain(audits,a=>a.Action=="system.users.lifecycle_completed");
+        // Un paso externo pudo aplicarse pese al error; se requiere conciliación,
+        // nunca anunciar la operación como completada.
+        Assert.Equal(0,identity.LifecycleDeletions);
+        using var report=await master.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",ct);
+        Assert.Equal(HttpStatusCode.OK,report.StatusCode);
+        using var reportJson=JsonDocument.Parse(await report.Content.ReadAsStringAsync(ct));
+        Assert.False(reportJson.RootElement.GetProperty("automaticRetryAllowed").GetBoolean());
+        Assert.Contains(reportJson.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="failed_needs_review" &&
+                item.GetProperty("requiresReview").GetBoolean());
+        Assert.DoesNotContain("Prueba sintética",reportJson.RootElement.ToString());
+        Assert.Equal(0,reportJson.RootElement.GetProperty("unlinkedLegacyEvents").GetInt32());
+        var failed=reportJson.RootElement.GetProperty("items").EnumerateArray()
+            .Single(item=>item.GetProperty("state").GetString()=="failed_needs_review");
+        Assert.True(Guid.TryParseExact(failed.GetProperty("operationId").GetString(),
+            "N",out _));
+        // Aunque el fixture vuelva a un estado aparentemente válido, no se
+        // permite repetir la operación mientras el intento anterior requiere
+        // conciliación manual. Reutilizar X-Correlation-ID tampoco evita el veto.
+        identity.LifecycleDisableFails=false;
+        identity.SecuritySnapshots[subject]=identity.SecuritySnapshots[subject] with {Enabled=true};
+        using var blocked=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Repetición sintética denegada por operación anterior."},ct);
+        Assert.Equal(HttpStatusCode.Conflict,blocked.StatusCode);
+        Assert.Contains("prior_lifecycle_requires_review",await blocked.Content.ReadAsStringAsync(ct));
+        Assert.Equal(1,identity.LifecycleDeactivations);
+        using var finalReport=await master.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",ct);
+        using var finalJson=JsonDocument.Parse(await finalReport.Content.ReadAsStringAsync(ct));
+        var items=finalJson.RootElement.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Contains(items,item=>item.GetProperty("state").GetString()=="failed_needs_review" &&
+            item.GetProperty("requiresReview").GetBoolean());
+        Assert.Contains(items,item=>item.GetProperty("state").GetString()=="denied_no_external_mutation" &&
+            !item.GetProperty("requiresReview").GetBoolean());
+        var operationIds=items.Select(item=>item.GetProperty("operationId").GetString())
+            .Distinct().ToArray();
+        Assert.Collection(operationIds,
+            id=>Assert.False(string.IsNullOrWhiteSpace(id)),
+            id=>Assert.False(string.IsNullOrWhiteSpace(id)));
+        using var visitor=factory.CreateClient();
+        visitor.DefaultRequestHeaders.Add("X-Account-Kind","superuser");
+        Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Durable_pending_request_from_prior_process_blocks_new_mutation()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var subject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(subject,"pendiente-ci@example.invalid","Cuenta ficticia",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[subject]=new(subject,"pendiente-ci@example.invalid",
+            "member",true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        var ct=TestContext.Current.CancellationToken;
+        await using(var scope=factory.Services.CreateAsyncScope())
+        {
+            var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            db.AuditEvents.Add(new PMGM.Api.Modules.Audit.Entities.AuditEvent {
+                Action="system.users.lifecycle_requested",
+                EntityType="UserAccount", EntityId=subject,
+                Result=AuditResults.Observed,
+                CorrelationId="fixture-de-proceso-interrumpido",
+                MetadataJson=JsonSerializer.Serialize(new {
+                    operationId=Guid.NewGuid().ToString("N"),action="deactivate"
+                })
+            });
+            await db.SaveChangesAsync(ct);
+        }
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var response=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Intento sintético después de proceso interrumpido."},ct);
+        Assert.Equal(HttpStatusCode.Conflict,response.StatusCode);
+        Assert.Contains("prior_lifecycle_requires_review",
+            await response.Content.ReadAsStringAsync(ct));
+        Assert.Equal(0,identity.LifecycleDeactivations);
+        using var report=await master.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",ct);
+        Assert.Equal(HttpStatusCode.OK,report.StatusCode);
+        using var json=JsonDocument.Parse(await report.Content.ReadAsStringAsync(ct));
+        Assert.Contains(json.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="unresolved_needs_review" &&
+                item.GetProperty("requiresReview").GetBoolean());
+        Assert.Contains(json.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="denied_no_external_mutation");
+    }
+
+    [Fact]
+    public async Task Already_completed_operation_does_not_false_block_new_legal_mutation()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var subject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(subject,"completa-ci@example.invalid","Cuenta ficticia",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[subject]=new(subject,"completa-ci@example.invalid",
+            "member",true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        var ct=TestContext.Current.CancellationToken;
+        await using(var scope=factory.Services.CreateAsyncScope())
+        {
+            var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var operationId=Guid.NewGuid().ToString("N");
+            foreach(var (action,result) in new[] {
+                ("system.users.lifecycle_requested",AuditResults.Observed),
+                ("system.users.lifecycle_completed",AuditResults.Success)
+            })
+                db.AuditEvents.Add(new PMGM.Api.Modules.Audit.Entities.AuditEvent {
+                    Action=action,EntityType="UserAccount",EntityId=subject,
+                    Result=result,CorrelationId="synthetic-complete",
+                    MetadataJson=JsonSerializer.Serialize(new {operationId,action="activate"})
+                });
+            await db.SaveChangesAsync(ct);
+        }
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var response=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Desactivación ficticia posterior a operación ya cerrada."},ct);
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        Assert.Equal(1,identity.LifecycleDeactivations);
+    }
+
+    [Fact]
+    public async Task Enabled_lifecycle_flag_runs_deactivation_with_immutable_audit_and_synthetic_identity()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var subject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(subject,"sintetico@example.invalid","Miembro sintético",
+            true,"member",true,false,"managed"));
+        identity.SecuritySnapshots[subject]=new(subject,"sintetico@example.invalid","member",
+            true,true,false,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        using var client=factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        using var response=await client.PostAsJsonAsync(
+            $"/api/system/user-accounts/{subject}/deactivate",
+            new {reason="Desactivar cuenta de prueba exclusivamente sintética."},
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        Assert.Equal(1,identity.LifecycleDeactivations);
+        Assert.Equal(0,identity.LifecycleDeletions);
+        Assert.False(identity.SecuritySnapshots[subject].Enabled);
+        await using var scope=factory.Services.CreateAsyncScope();
+        var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        var events=await db.AuditEvents.Where(e=>e.EntityId==subject &&
+            e.Action.StartsWith("system.users.lifecycle_")).ToListAsync(TestContext.Current.CancellationToken);
+        Assert.Contains(events,e=>e.Action=="system.users.lifecycle_requested");
+        Assert.Contains(events,e=>e.Action=="system.users.lifecycle_completed");
+        Assert.DoesNotContain(events,e=>e.Action=="system.users.lifecycle_failed");
+        using var report=await client.GetAsync(
+            $"/api/system/user-accounts/{subject}/lifecycle-reconciliation",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK,report.StatusCode);
+        using var reportJson=JsonDocument.Parse(
+            await report.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Contains(reportJson.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="completed" &&
+                !item.GetProperty("requiresReview").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Verified_master_may_delete_synthetic_legacy_qa_admin_but_not_admin()
+    {
+        var connection=Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if(string.IsNullOrWhiteSpace(connection)) return;
+        var identity=new Identity();
+        var qaSubject=Guid.NewGuid().ToString();
+        var adminSubject=Guid.NewGuid().ToString();
+        identity.InventoryItems.Add(new(qaSubject,"qa.admin","QA sintético",
+            true,"legacy_protected",false,true,"provisioned"));
+        identity.SecuritySnapshots[qaSubject]=new(qaSubject,"qa.admin","",
+            true,false,true,true);
+        identity.InventoryItems.Add(new(adminSubject,"admin","Máster sintético",
+            true,"legacy_protected",false,true,"provisioned"));
+        identity.SecuritySnapshots[adminSubject]=new(adminSubject,"admin","",
+            true,false,true,true);
+        using var factory=FactoryLifecycleEnabled(connection,identity);
+        await Seed(factory,"active");
+        using var master=factory.CreateClient();
+        master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        var ct=TestContext.Current.CancellationToken;
+        var body=new {reason="Eliminación ficticia autorizada para prueba.",
+            confirmation="qa.admin"};
+        using var denied=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{adminSubject}/delete-permanently",body,ct);
+        Assert.Equal(HttpStatusCode.Conflict,denied.StatusCode);
+        Assert.Equal(0,identity.LifecycleDeletions);
+        // Rechazo de política antes de tocar Keycloak: cerrado, no pendiente.
+        using var deniedReport=await master.GetAsync(
+            $"/api/system/user-accounts/{adminSubject}/lifecycle-reconciliation",ct);
+        Assert.Equal(HttpStatusCode.OK,deniedReport.StatusCode);
+        using var deniedJson=JsonDocument.Parse(await deniedReport.Content.ReadAsStringAsync(ct));
+        Assert.Contains(deniedJson.RootElement.GetProperty("items").EnumerateArray(),
+            item=>item.GetProperty("state").GetString()=="denied_no_external_mutation" &&
+                !item.GetProperty("requiresReview").GetBoolean());
+        await using(var check=factory.Services.CreateAsyncScope())
+        {
+            var checkDb=check.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            Assert.True(await checkDb.AuditEvents.AnyAsync(e=>e.EntityId==adminSubject &&
+                e.Action=="system.users.lifecycle_preflight_rejected",ct));
+        }
+        using var response=await master.PostAsJsonAsync(
+            $"/api/system/user-accounts/{qaSubject}/delete-permanently",body,ct);
+        Assert.Equal(HttpStatusCode.OK,response.StatusCode);
+        Assert.True(identity.Removed);
+        Assert.Equal(1,identity.LifecycleDeletions);
+        Assert.Equal(1,identity.LifecycleDeactivations);
+        Assert.Contains(adminSubject,identity.SecuritySnapshots.Keys);
+        Assert.DoesNotContain(qaSubject,identity.SecuritySnapshots.Keys);
+        await using var scope=factory.Services.CreateAsyncScope();
+        var db=scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        Assert.True(await db.Memberships.AnyAsync(ct));
+        Assert.True(await db.AuditEvents.AnyAsync(e=>e.EntityId==qaSubject &&
+            e.Action=="system.users.lifecycle_completed",ct));
+    }
+
+    private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> FactoryLifecycleEnabled(
+        string connection,Identity identity)
+        => Factory(connection,identity,new Mail()).WithWebHostBuilder(builder=>
+            builder.ConfigureAppConfiguration((_,configuration)=>
+                configuration.AddInMemoryCollection(new Dictionary<string,string?> {
+                    ["UserAccounts:Identity:RequireLiveTokenIntrospection"]="true",
+                    ["UserAccounts:Identity:EnableLifecycleMutations"]="true"
+                })));
+
     private static Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactory<Program> Factory(string connection,Identity identity,Mail mail)
         => new PmgmWebApplicationFactory(connection).WithWebHostBuilder(builder=>builder.ConfigureTestServices(services=>
         {
@@ -355,7 +783,7 @@ public sealed class UserAccountWorkflowTests
             new InstitutionalStatusEvent{Member=member,MemberId=member.Id,EventType=status,EffectiveDate=DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1)});
         await db.SaveChangesAsync(TestContext.Current.CancellationToken);return(member.Id,org.Id,person.Email!);
     }
-    private sealed class Identity:IAccountIdentityProvider,IAccountIdentityInventory
+    private sealed class Identity:IAccountIdentityProvider,IAccountIdentityInventory,IAccountIdentitySecurityReader,IAccountIdentityLifecycleCommands,IUniqueMasterIdentityVerifier
     {
         public bool Available=true;public bool Configured=>Available;public string Issuer{get;}=$"https://identity.example.invalid/{Guid.NewGuid():N}";
         public string Subject{get;}=Guid.NewGuid().ToString();public bool Enabled,Removed,EnableFails;public int Prepares;public AccountIdentity? Account;
@@ -367,6 +795,39 @@ public sealed class UserAccountWorkflowTests
         public List<AccountInventoryItem> InventoryItems { get; }=[];
         public Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct)
             =>Task.FromResult<IReadOnlyList<AccountInventoryItem>>(InventoryItems);
+        public Dictionary<string,AccountIdentitySecuritySnapshot> SecuritySnapshots { get; }=new();
+        public Task<AccountIdentitySecuritySnapshot?> ReadSecuritySnapshotAsync(string subject,CancellationToken ct)
+            =>Task.FromResult(SecuritySnapshots.GetValueOrDefault(subject));
+        public bool MasterVerified=true;
+        public int LifecycleActivations,LifecycleDeactivations,LifecycleDeletions;
+        public bool LifecycleDisableFails;
+        public Task<bool> VerifyUniqueMasterDistinctFromAsync(string actorSubject,string subject,CancellationToken ct)
+            =>Task.FromResult(MasterVerified &&
+                string.Equals(actorSubject,"ci-account-admin",StringComparison.Ordinal) &&
+                !string.Equals(actorSubject,subject,StringComparison.OrdinalIgnoreCase));
+        public Task DisableAndLogoutAsync(string subject,CancellationToken ct)
+        {
+            LifecycleDeactivations++;
+            if(SecuritySnapshots.TryGetValue(subject,out var snapshot))
+                SecuritySnapshots[subject]=snapshot with {Enabled=false};
+            Enabled=false;
+            if(LifecycleDisableFails) throw new AccountDeliveryException();
+            return Task.CompletedTask;
+        }
+        public Task ReactivateAsync(string subject,CancellationToken ct)
+        {
+            LifecycleActivations++;
+            if(SecuritySnapshots.TryGetValue(subject,out var snapshot))
+                SecuritySnapshots[subject]=snapshot with {Enabled=true};
+            Enabled=true;return Task.CompletedTask;
+        }
+        public Task DeleteDisabledAsync(string subject,CancellationToken ct)
+        {
+            if(!SecuritySnapshots.TryGetValue(subject,out var snapshot) || snapshot.Enabled)
+                throw new AccountConflictException();
+            LifecycleDeletions++;SecuritySnapshots.Remove(subject);Removed=true;
+            return Task.CompletedTask;
+        }
         public Dictionary<string,AccountUser> Managed{get;}=new();public int Emails,Temporary;public string? TemporaryPassword;public bool RecoveryFails;
         public Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)=>Task.FromResult(Managed.GetValueOrDefault(subject));
         public Task<AccountClaims?> GetClaimsAsync(string subject,CancellationToken ct)=>Task.FromResult<AccountClaims?>(null);
@@ -386,7 +847,8 @@ internal sealed class AccountAuth(IOptionsMonitor<AuthenticationSchemeOptions> o
     {
         var kind=Request.Headers["X-Account-Kind"].FirstOrDefault();
         var role=Request.Headers["X-Account-Role"].FirstOrDefault()??(kind is null?InstitutionalRoles.GranLogiaAdmin:null);
-        var claims=new List<Claim>{new("sub","ci-account-admin"),new(ClaimTypes.NameIdentifier,"ci-account-admin"),new(InstitutionalClaims.Scope,"order")};
+        var testSubject=Request.Headers["X-Test-Subject"].FirstOrDefault()??"ci-account-admin";
+        var claims=new List<Claim>{new("sub",testSubject),new(ClaimTypes.NameIdentifier,testSubject),new(InstitutionalClaims.Scope,"order")};
         if(role is not null)claims.Add(new Claim(InstitutionalClaims.Role,role));
         if(role==InstitutionalRoles.PlatformSuperAdmin)
             claims.Add(new Claim("preferred_username",Request.Headers["X-Test-Username"].FirstOrDefault()??"admin"));
