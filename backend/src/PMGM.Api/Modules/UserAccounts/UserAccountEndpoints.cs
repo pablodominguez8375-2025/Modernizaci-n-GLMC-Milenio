@@ -179,14 +179,20 @@ public static class UserAccountEndpoints
                     var hasCompleted=g.Any(e=>e.Action==completed);
                     var hasFailed=g.Any(e=>e.Action==failed);
                     var preflightDenied=g.Any(e=>e.Action==preflightRejected);
+                    // Si coexisten estados terminales contradictorios (p.ej.
+                    // commit ambiguo) nunca declarar una operación completada.
+                    var conflictingTerminal=hasCompleted && (hasFailed || preflightDenied) ||
+                        hasFailed && preflightDenied;
+                    var needsReview=hasFailed || conflictingTerminal ||
+                        (!hasCompleted && !preflightDenied);
                     return new {
                         operationId=g.Key,
                         requestedAtUtc=g.Where(e=>e.Action==requested)
                             .Min(e=>e.OccurredAtUtc),
-                        state=hasCompleted?"completed":hasFailed?
-                            "failed_needs_review":preflightDenied?
+                        state=hasFailed || conflictingTerminal?"failed_needs_review":
+                            hasCompleted?"completed":preflightDenied?
                             "denied_no_external_mutation":"unresolved_needs_review",
-                        requiresReview=!hasCompleted && !preflightDenied
+                        requiresReview=needsReview
                     };
                 })
                 .OrderByDescending(x=>x.requestedAtUtc)
@@ -310,6 +316,8 @@ public static class UserAccountEndpoints
                 .GroupBy(e=>e.Id!,StringComparer.Ordinal);
             if(priorOperations.Any(g=>
                 g.Any(e=>e.Action=="system.users.lifecycle_failed") ||
+                (g.Any(e=>e.Action=="system.users.lifecycle_completed") &&
+                 g.Any(e=>e.Action=="system.users.lifecycle_preflight_rejected")) ||
                 (g.Any(e=>e.Action=="system.users.lifecycle_requested") &&
                  !g.Any(e=>e.Action=="system.users.lifecycle_completed") &&
                  !g.Any(e=>e.Action=="system.users.lifecycle_preflight_rejected"))))
