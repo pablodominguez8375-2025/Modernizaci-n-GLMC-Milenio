@@ -318,6 +318,10 @@ public sealed class UserAccountWorkflowTests
         Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(path,ct)).StatusCode);
         visitor.DefaultRequestHeaders.Add("X-Account-Kind","superuser");
         Assert.Equal(HttpStatusCode.Forbidden,(await visitor.GetAsync(path,ct)).StatusCode);
+        using var legacyWithPrivilegedRole=factory.CreateClient();
+        legacyWithPrivilegedRole.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
+        legacyWithPrivilegedRole.DefaultRequestHeaders.Add("X-Test-Username","qa.admin");
+        Assert.Equal(HttpStatusCode.Forbidden,(await legacyWithPrivilegedRole.GetAsync(path,ct)).StatusCode);
         using var master=factory.CreateClient();
         master.DefaultRequestHeaders.Add("X-Account-Role",InstitutionalRoles.PlatformSuperAdmin);
         var response=await master.GetAsync(path,ct);
@@ -384,6 +388,8 @@ internal sealed class AccountAuth(IOptionsMonitor<AuthenticationSchemeOptions> o
         var role=Request.Headers["X-Account-Role"].FirstOrDefault()??(kind is null?InstitutionalRoles.GranLogiaAdmin:null);
         var claims=new List<Claim>{new("sub","ci-account-admin"),new(ClaimTypes.NameIdentifier,"ci-account-admin"),new(InstitutionalClaims.Scope,"order")};
         if(role is not null)claims.Add(new Claim(InstitutionalClaims.Role,role));
+        if(role==InstitutionalRoles.PlatformSuperAdmin)
+            claims.Add(new Claim("preferred_username",Request.Headers["X-Test-Username"].FirstOrDefault()??"admin"));
         if(kind is not null)claims.Add(new Claim(InstitutionalClaims.AccountKind,kind));
         var principal=new ClaimsPrincipal(new ClaimsIdentity(claims,SchemeName));
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal,SchemeName)));
