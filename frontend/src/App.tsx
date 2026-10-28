@@ -4,50 +4,17 @@ import { shouldReturnHomeForDeniedView, systemNavigationGate } from './systemNav
 import { restrictClient } from './api/dynamicViewAccess'
 import { useTreasuryNavigationAccess } from './useTreasuryAccess'
 import { useFinancialNavigationAccess } from './useFinancialNavigationAccess'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useCollapsibleNavGroups } from './navGroups'
-import ReportsHub from './ReportsHub'
-import PrivacyPage from './PrivacyPage'
-import HelpCenterPage from './HelpCenterPage'
 import type { HelpAccess, HelpTarget } from './help/helpGuides'
 import type { MySupportCorrection } from './api/userAccounts'
-import WorkbenchPage, { type WorkbenchItem } from './WorkbenchPage'
-import AdmissionsPage from './AdmissionsPage'
-import BootstrapPage from './BootstrapPage'
-import CalendarPage from './CalendarPage'
-import CandidateProfilePage from './CandidateProfilePage'
-import CandidateWorkshopIntakePage from './CandidateWorkshopIntakePage'
-import CandidateInterviewAssignmentsPage from './CandidateInterviewAssignmentsPage'
-import CeremoniesPage from './CeremoniesPage'
+import type { WorkbenchItem } from './WorkbenchPage'
 import DashboardPage from './DashboardPage'
-import DataQualityCaseQueuePage from './DataQualityCaseQueuePage'
 import DemoProfileSwitcher from './DemoProfileSwitcher'
-import DocumentManagementPage from './DocumentManagementPage'
 import GlobalSearch, { type SearchEntry } from './GlobalSearch'
-import ExecutiveReportingPage from './ExecutiveReportingPage'
-import GrandArchivePage from './GrandArchivePage'
-import OfficialDocumentsPage from './OfficialDocumentsPage'
-import GrandSecretariatPage from './GrandSecretariatPage'
-import GrandTreasuryPage from './GrandTreasuryPage'
-import HospitalariaPage from './HospitalariaPage'
 import InstitutionalIcon, { type InstitutionalIconName } from './InstitutionalIcon'
-import InternalAffairsDataQualityPage from './InternalAffairsDataQualityPage'
-import InternalAffairsMemberControlPage from './InternalAffairsMemberControlPage'
-import InitiationCircuitPage from './InitiationCircuitPage'
-import LibraryPage from './LibraryPage'
-import LodgeManagementPage from './LodgeManagementPage'
-import LodgeInstructionPage from './LodgeInstructionPage'
-import OrderInstructionReportPage from './OrderInstructionReportPage'
-import LodgeProfilePage from './LodgeProfilePage'
-import LodgeTreasuryPage from './LodgeTreasuryPage'
-import MemberDirectoryPage from './MemberDirectoryPage'
-import MemberPortalPage from './MemberPortalPage'
 import MobileTabBar, { type MobileTabId } from './MobileTabBar'
-import NotificationsPage from './NotificationsPage'
 import PublishedCandidatePhoto from './PublishedCandidatePhoto'
-import RegimenInteriorPage from './RegimenInteriorPage'
-import RegularityPage from './RegularityPage'
-import SystemConfigurationPage from './SystemConfigurationPage'
 import UserMenu from './UserMenu'
 import { WorkspaceTabs } from './actionKit'
 import TextSizeControl, { TextSizeMenu } from './TextSizeControl'
@@ -70,6 +37,42 @@ import { SupportViewBanner, useSupportViewAs } from './SupportViewBanner'
 import { setSupportViewAs } from './api/supportViewAs'
 import { SupportViewProfileMenu } from './SupportViewProfileMenu'
 import { buildPendingTasks, isOperationalProfile, isSystemAdministrator, navigationBadges, totalPending, type PendingCounts, type PendingTarget, type PendingTaskFlags } from './rolePendingTasks'
+
+// Cada módulo se descarga recién cuando se abre (carga inicial más liviana).
+const ReportsHub = lazy(() => import('./ReportsHub'))
+const PrivacyPage = lazy(() => import('./PrivacyPage'))
+const HelpCenterPage = lazy(() => import('./HelpCenterPage'))
+const AdmissionsPage = lazy(() => import('./AdmissionsPage'))
+const BootstrapPage = lazy(() => import('./BootstrapPage'))
+const CalendarPage = lazy(() => import('./CalendarPage'))
+const CandidateProfilePage = lazy(() => import('./CandidateProfilePage'))
+const CandidateWorkshopIntakePage = lazy(() => import('./CandidateWorkshopIntakePage'))
+const CandidateInterviewAssignmentsPage = lazy(() => import('./CandidateInterviewAssignmentsPage'))
+const CeremoniesPage = lazy(() => import('./CeremoniesPage'))
+const DataQualityCaseQueuePage = lazy(() => import('./DataQualityCaseQueuePage'))
+const DocumentManagementPage = lazy(() => import('./DocumentManagementPage'))
+const ExecutiveReportingPage = lazy(() => import('./ExecutiveReportingPage'))
+const GrandArchivePage = lazy(() => import('./GrandArchivePage'))
+const OfficialDocumentsPage = lazy(() => import('./OfficialDocumentsPage'))
+const GrandSecretariatPage = lazy(() => import('./GrandSecretariatPage'))
+const GrandTreasuryPage = lazy(() => import('./GrandTreasuryPage'))
+const HospitalariaPage = lazy(() => import('./HospitalariaPage'))
+const InternalAffairsDataQualityPage = lazy(() => import('./InternalAffairsDataQualityPage'))
+const InternalAffairsMemberControlPage = lazy(() => import('./InternalAffairsMemberControlPage'))
+const InitiationCircuitPage = lazy(() => import('./InitiationCircuitPage'))
+const LibraryPage = lazy(() => import('./LibraryPage'))
+const LodgeManagementPage = lazy(() => import('./LodgeManagementPage'))
+const LodgeInstructionPage = lazy(() => import('./LodgeInstructionPage'))
+const OrderInstructionReportPage = lazy(() => import('./OrderInstructionReportPage'))
+const LodgeProfilePage = lazy(() => import('./LodgeProfilePage'))
+const LodgeTreasuryPage = lazy(() => import('./LodgeTreasuryPage'))
+const MemberDirectoryPage = lazy(() => import('./MemberDirectoryPage'))
+const MemberPortalPage = lazy(() => import('./MemberPortalPage'))
+const NotificationsPage = lazy(() => import('./NotificationsPage'))
+const RegimenInteriorPage = lazy(() => import('./RegimenInteriorPage'))
+const RegularityPage = lazy(() => import('./RegularityPage'))
+const SystemConfigurationPage = lazy(() => import('./SystemConfigurationPage'))
+const WorkbenchPage = lazy(() => import('./WorkbenchPage'))
 
 type View = 'interviews' | 'admissions' | 'memberPortal' | 'memberPayments' | 'memberAttendance' | 'dashboard' | 'bootstrap' | 'system' | 'candidates' | 'candidateProfile' | 'initiationCircuit' | 'members' | 'lodgeProfile' | 'reporting' | 'memberControl' | 'dataQuality' | 'caseQueue' | 'calendar' | 'notifications' | 'ceremonies' | 'regimen' | 'reports' | 'treasury' | 'lodgeTreasury' | 'hospitalaria' | 'secretariat' | 'lodge' | 'lodgeInstruction' | 'orderInstructionReport' | 'library' | 'documents' | 'grandArchive' | 'officialDocuments' | 'workbench' | 'privacy' | 'help'
 type ExtendedCapabilities = SessionProfile['capabilities'] & { canBootstrapInstitutional?: boolean; canConfigureSystem?: boolean; canManageAccessProfiles?: boolean; canManageLodgeOperations?: boolean; canReadLodgeSecretariat?: boolean; canManageLodgeSecretariat?: boolean; canManageDocuments?: boolean; canReadLibrary?: boolean; canReadOfficialDocuments?: boolean; canPublishOfficialDocuments?: boolean; canManageGrandArchive?: boolean; canReadLodgeHospitalaria?: boolean; canManageLodgeHospitalaria?: boolean; canApproveLodgeExpenses?: boolean; canReadLodgeCouncilSummary?: boolean; canManageLodgeCouncilSummaryAccess?: boolean; canManageAnyWorkshopProfile?: boolean }
@@ -393,7 +396,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.178' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.180' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
@@ -456,6 +459,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       </nav>
       <main className="content" id="contenido-principal">
         {error && <ErrorBanner message={error} />}
+        <Suspense fallback={<p className="panel" role="status">Cargando…</p>}>
          {(systemGate === 'checking' || systemGate === 'denied') && <section className="panel" role={systemGate === 'denied' ? 'alert' : 'status'}>
            <h2>{systemGate === 'checking' ? 'Verificando acceso a Sistema…' : 'Acceso a Sistema no confirmado'}</h2>
            <p>{systemGate === 'checking'
@@ -516,6 +520,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'library' && canLibrary && <LibraryPage documentApi={documentApi} editorRole={libraryEditorRole} />}
         {view === 'documents' && canDocuments && <DocumentManagementPage api={api} documentApi={documentApi} />}
         </>}
+        </Suspense>
       </main>
     </div>
     {effectiveProfile && <MobileTabBar active={activeTab} menuOpen={menuOpen} operational={operational} pendingCount={pendingTotal} unreadCount={unreadCount} onHome={() => setView('dashboard')} onSecond={operational ? openPendingInbox : () => setView('memberPortal')} onCalendar={() => setView('calendar')} onNotifications={() => setView('notifications')} onToggleMenu={() => setMenuOpen(open => !open)} />}
