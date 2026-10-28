@@ -30,6 +30,12 @@ describe('Centro de ayuda · guías', () => {
     expect(visibleGuides({ ...nobody, grandSecretariat: true }).some(guide => guide.id === 'responder-espacio')).toBe(true)
   })
 
+  it('la guía de imprimir la ficha del insinuado solo la ve la Secretaría del Taller', () => {
+    expect(visibleGuides(nobody).some(guide => guide.id === 'imprimir-ficha-insinuado')).toBe(false)
+    expect(visibleGuides({ ...nobody, lodgeSecretariat: true }).some(guide => guide.id === 'imprimir-ficha-insinuado')).toBe(true)
+    expect(searchGuides(visibleGuides({ ...nobody, lodgeSecretariat: true }), 'imprimir ficha').map(guide => guide.id)).toContain('imprimir-ficha-insinuado')
+  })
+
   it('la guía de templos no pide firma del Venerable Maestro ni plazo de 7 días ni equipos', () => {
     const guide = helpGuides.find(item => item.id === 'pedir-espacio')!
     const text = `${guide.summary} ${guide.steps.join(' ')} ${guide.tip ?? ''}`.toLowerCase()

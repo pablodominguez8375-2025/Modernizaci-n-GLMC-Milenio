@@ -320,6 +320,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
       case 'system': return canConfigureSystem
       case 'library': return canLibrary
       case 'regimen': return canRegimen
+      case 'candidates': return initiationEntry !== null
       default: return true
     }
   }
