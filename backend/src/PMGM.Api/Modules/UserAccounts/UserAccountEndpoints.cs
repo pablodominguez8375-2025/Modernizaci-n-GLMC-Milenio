@@ -23,6 +23,7 @@ public static class UserAccountEndpoints
         var group=endpoints.MapGroup("/api/system/user-accounts").RequireAuthorization().WithTags("Cuentas de usuarios");
         group.MapGet("/eligible-members",GetEligibleMembers);
         group.MapGet("",GetUsers);
+        group.MapGet("/inventory",GetInventory);
         group.MapPost("",CreateUserAccount);
         group.MapPost("/{subject}/password-recovery",ResetAccountAccess);
         return endpoints;
@@ -46,6 +47,21 @@ public static class UserAccountEndpoints
         try { return Results.Ok(new { items=await identity.ListAsync(ct),configured=identity.Configured }); }
         catch(Exception e) when(e is AccountDeliveryException or HttpRequestException or TaskCanceledException)
         { return Failure(); }
+    }
+    // Inventario de origen Keycloak exclusivo del Máster. No equivale a permiso de
+    // mutación: las cuentas heredadas/externas se clasifican como protegidas.
+    private static async Task<IResult> GetInventory(HttpContext ctx,IInstitutionalAccessService access,
+        IAccountIdentityProvider identity,CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+        if(identity is not IAccountIdentityInventory inventory || !identity.Configured)
+            return Results.Json(new { message="No está disponible el inventario de identidades." },
+                statusCode:StatusCodes.Status503ServiceUnavailable);
+        try { return Results.Ok(new { items=await inventory.ListInventoryAsync(ct),configured=true }); }
+        catch(Exception e) when(e is AccountDeliveryException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        { return Results.Json(new { message="No se pudo consultar el inventario de identidades." },
+                statusCode:StatusCodes.Status503ServiceUnavailable); }
     }
     private static async Task<IResult> CreateUserAccount(CreateUserAccountRequest request,HttpContext ctx,PmgmDbContext db,
         IInstitutionalAccessService access,IAccountIdentityProvider identity,IInitialAccountMail mail,IAuditService audit,
