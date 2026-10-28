@@ -1,5 +1,6 @@
 using Xunit;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using PMGM.Api.Modules.UserAccounts;
@@ -57,6 +58,57 @@ public sealed class AccountIdentityProviderTests
         Assert.Equal("order",attributes.GetProperty("pmgm_scope")[0].GetString());
         Assert.Equal("superuser",attributes.GetProperty("pmgm_account_kind")[0].GetString());
     }
+    [Fact]
+    public async Task Master_inventory_includes_legacy_qa_admin_but_never_reclassifies_it_as_managed()
+    {
+        var handler=new InventoryHandler();
+        var provider=new KeycloakAccountIdentityProvider(new HttpClient(handler),Options.Create(
+            new AccountIdentityOptions {ServerUrl="https://identity.example.invalid",
+                Issuer="https://identity.example.invalid/realms/pmgm",ClientSecret="synthetic-test-only"}));
+        var inventory=await provider.ListInventoryAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(3,inventory.Count);
+        var qa=Assert.Single(inventory.Where(u=>u.Username=="qa.admin"));
+        Assert.True(qa.Protected);
+        Assert.False(qa.Managed);
+        Assert.Equal("legacy_protected",qa.Kind);
+        Assert.Equal("provisioned",qa.Origin);
+        var master=Assert.Single(inventory.Where(u=>u.Username=="admin"));
+        Assert.True(master.Protected);
+        var managed=Assert.Single(inventory.Where(u=>u.Kind=="superuser"));
+        Assert.True(managed.Managed);
+        Assert.False(managed.Protected);
+        Assert.Contains(handler.Paths,p=>p.Contains("users?first=0&max=100",StringComparison.Ordinal));
+        Assert.DoesNotContain(handler.Paths,p=>p.Contains("pmgm_managed:",StringComparison.Ordinal));
+        // El listado histórico (no master) no cambia por esta nueva API.
+        Assert.Empty(await provider.ListAsync(TestContext.Current.CancellationToken));
+    }
+
+    private sealed class InventoryHandler:HttpMessageHandler
+    {
+        public readonly List<string> Paths=[];
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken ct)
+        {
+            var url=request.RequestUri!.ToString();Paths.Add(url);
+            if(url.EndsWith("/token",StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){
+                    Content=new StringContent("{\\"access_token\\":\\"synthetic-token\\"}")});
+            var users=new[]{
+                new {id=Guid.NewGuid().ToString(),username="qa.admin",firstName="QA",lastName="Ficticio",enabled=true,
+                    attributes=new Dictionary<string,string[]> {["pmgm_scope"]=["order"]}},
+                new {id=Guid.NewGuid().ToString(),username="admin",firstName="Master",lastName="Bootstrap",enabled=true,
+                    attributes=new Dictionary<string,string[]> {["pmgm_scope"]=["order"]}},
+                new {id=Guid.NewGuid().ToString(),username="soporte@example.invalid",firstName="Super",lastName="Usuario",enabled=true,
+                    attributes=new Dictionary<string,string[]> {["pmgm_managed"]=["active-member-accounts"],
+                        ["pmgm_account_kind"]=["superuser"]}}
+            };
+            if(url.Contains("users?first=",StringComparison.Ordinal))
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){
+                    Content=JsonContent.Create(users)});
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){
+                Content=new StringContent("[]")});
+        }
+    }
+
     private sealed class Handler:HttpMessageHandler
     {
         public readonly string Subject=Guid.NewGuid().ToString();public List<(string Path,string Body)> Bodies=[];public List<string> Methods=[];
