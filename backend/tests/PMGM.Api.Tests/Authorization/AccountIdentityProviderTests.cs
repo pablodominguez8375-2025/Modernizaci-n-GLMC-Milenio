@@ -91,7 +91,7 @@ public sealed class AccountIdentityProviderTests
             var url=request.RequestUri!.ToString();Paths.Add(url);
             if(url.EndsWith("/token",StringComparison.Ordinal))
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK){
-                    Content=new StringContent("{\\"access_token\\":\\"synthetic-token\\"}")});
+                    Content=JsonContent.Create(new { access_token="synthetic-token" })});
             var users=new[]{
                 new {id=Guid.NewGuid().ToString(),username="qa.admin",firstName="QA",lastName="Ficticio",enabled=true,
                     attributes=new Dictionary<string,string[]> {["pmgm_scope"]=["order"]}},
