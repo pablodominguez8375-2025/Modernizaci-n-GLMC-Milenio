@@ -46,8 +46,8 @@ describe('Inventario de cuentas (Máster)', () => {
     expect(inventoryStateLabel({ ...legacy, enabled: false })).toBe('Deshabilitada')
   })
 
-  it('la tarjeta no ofrece activar, desactivar ni eliminar y avisa mientras consulta', () => {
-    const fake = { getUserAccountInventory: () => new Promise(() => undefined) } as unknown as PmgmApiClient
+  it('mientras consulta, la tarjeta solo avisa y no ofrece acciones', () => {
+    const fake = { getUserAccountInventory: () => new Promise(() => undefined), getUserAccountLifecyclePolicy: () => new Promise(() => undefined) } as unknown as PmgmApiClient
     const html = renderToStaticMarkup(<AccountInventoryCard api={fake} />)
     expect(html).toContain('Consultando el inventario completo')
     expect(html.toLowerCase()).not.toContain('eliminar definitivamente')
@@ -59,5 +59,6 @@ describe('Inventario de cuentas (Máster)', () => {
     const card = readFileSync(new URL('../AccountInventoryCard.tsx', import.meta.url), 'utf8')
     expect(card).not.toMatch(/method:\s*'(POST|DELETE|PUT|PATCH)'/)
     expect(card).not.toContain('Keycloak')
+    expect(readFileSync(new URL('../AccountLifecycleDrawer.tsx', import.meta.url), 'utf8')).not.toContain('Keycloak')
   })
 })
