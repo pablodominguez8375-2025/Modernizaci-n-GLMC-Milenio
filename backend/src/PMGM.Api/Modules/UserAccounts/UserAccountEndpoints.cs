@@ -279,6 +279,7 @@ public static class UserAccountEndpoints
             await db.SaveChangesAsync(CancellationToken.None);
             return response;
         }
+        var externalMutationStarted=false;
         try
         {
             var lockKey="account-lifecycle:"+targetSubject;
@@ -372,6 +373,9 @@ public static class UserAccountEndpoints
                     decision.DenialCode??"policy_denied");
 
 
+            // Todo error a partir de aquí puede implicar una mutación parcial
+            // en Keycloak y exige conciliación manual, incluso si la llamada falla.
+            externalMutationStarted=true;
             if(action==AccountLifecycleAction.Activate)
                 await commands.ReactivateAsync(targetSubject,ct);
             else
@@ -402,6 +406,10 @@ public static class UserAccountEndpoints
             or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException
             or DbUpdateException or System.Data.Common.DbException)
         {
+            if(!externalMutationStarted)
+                return await RejectPreflight(
+                    Results.StatusCode(StatusCodes.Status503ServiceUnavailable),
+                    "preflight_provider_or_storage_unavailable");
             await tx.RollbackAsync(CancellationToken.None);
             db.ChangeTracker.Clear();
             // Si Keycloak cambió pero la transacción DB falló, no anunciar éxito.
