@@ -118,7 +118,12 @@ def server_patch_evidence(image, output, source):
 
 # Reviewed from authenticated Actions artifact12469593117; independently hashed
 # the sole image layer and matched scan/runtime evidence of source93d85516.
-SERVER_BINARY = None  # Phase 1: pin only after reviewing exact-head build evidence.
+# Phase 2: SHA-256 independently verified from the actual /usr/bin/silo
+# inside the OCI layer archived by Actions run 40738446846 (artifact
+# 12838117399); the docker-save archive digest, raw Trivy report,
+# S3 Select regression and Go build inventory were reviewed separately.
+# Any different rebuilt binary fails closed; never trust the report alone.
+SERVER_BINARY = '08f5df008efad6c1664e931a48a06b6e0ed9a09e0629338b774e8af07120d369'
 VENDOR_SERVER_BINARY = '547a8181b6674d2b5c3ae2a3c515807f45e613764dfbbc82cf5ad9ad3800c4e4'
 SERVER_VERSION = 'v0.0.0-20261027000322-dd905b29f45d'
 SERVER_PURL = 'pkg:golang/github.com/minio/minio@' + SERVER_VERSION
