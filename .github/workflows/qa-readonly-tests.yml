@@ -5,6 +5,7 @@ on:
     paths:
       - 'scripts/qa/**'
       - 'tests/test_qa_readonly.py'
+      - 'tests/test_keycloak_session_qa_readonly.py'
       - '.github/workflows/check-qa.yml'
       - '.github/workflows/qa-readonly-tests.yml'
 permissions:
@@ -20,3 +21,5 @@ jobs:
           persist-credentials: false
       - run: bash -n scripts/qa/check-qa.sh
       - run: python3 -m unittest discover -s tests -p test_qa_readonly.py -v
+      - run: python3 -m py_compile scripts/qa/check-keycloak-session-uat.py tests/test_keycloak_session_qa_readonly.py
+      - run: python3 -m unittest discover -s tests -p test_keycloak_session_qa_readonly.py -v

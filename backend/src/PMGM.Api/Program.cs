@@ -79,6 +79,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Audience = builder.Configuration["Authentication:Audience"];
         options.RequireHttpsMetadata = builder.Configuration.GetValue<bool?>("Authentication:RequireHttpsMetadata")
             ?? !builder.Environment.IsDevelopment();
+        options.Events = new JwtBearerEvents {
+            OnTokenValidated = async ctx =>
+            {
+                // Configuración por proceso (no controlable desde UI). Al habilitar,
+                // cada petición autenticada requiere introspección sin caché.
+                // Un fallo del proveedor, token revocado o subject distinto deniega.
+                var opts=ctx.HttpContext.RequestServices
+                    .GetRequiredService<Microsoft.Extensions.Options.IOptions<AccountIdentityOptions>>().Value;
+                if (!opts.RequireLiveTokenIntrospection) return;
+                var header=ctx.HttpContext.Request.Headers.Authorization.ToString();
+                const string prefix="Bearer ";
+                var subject=ctx.Principal?.FindFirst("sub")?.Value ??
+                    ctx.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                if (!header.StartsWith(prefix,StringComparison.OrdinalIgnoreCase) ||
+                    string.IsNullOrWhiteSpace(subject)) {
+                    ctx.Fail("La identidad no se pudo validar en vivo."); return;
+                }
+                var token=header[prefix.Length..].Trim();
+                var introspector=ctx.HttpContext.RequestServices.GetRequiredService<IAccountTokenIntrospector>();
+                if (!await introspector.IsActiveAsync(token,subject,ctx.HttpContext.RequestAborted))
+                    ctx.Fail("Token no activo o identidad no verificable.");
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
@@ -112,6 +135,7 @@ builder.Services.Configure<AccountIdentityOptions>(builder.Configuration.GetSect
 builder.Services.Configure<InitialAccountMailOptions>(builder.Configuration.GetSection("UserAccounts:Mail"));
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient<IAccountIdentityProvider, KeycloakAccountIdentityProvider>(client => client.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient<IAccountTokenIntrospector, KeycloakAccountTokenIntrospector>(client => client.Timeout = TimeSpan.FromSeconds(5));
 builder.Services.AddSingleton<SystemMailCredentialVault>();
 builder.Services.AddSingleton<ISystemMailSender, SystemMailSender>();
 builder.Services.AddScoped<IInitialAccountMail, InitialAccountMail>();

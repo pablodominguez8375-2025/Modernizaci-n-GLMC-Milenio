@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 
 namespace PMGM.Api.Modules.UserAccounts;
 
-public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<AccountIdentityOptions> options) : IAccountIdentityProvider
+public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<AccountIdentityOptions> options) : IAccountIdentityProvider, IAccountIdentityInventory, IAccountIdentitySecurityReader, IUniqueMasterIdentityVerifier, IAccountIdentityLifecycleCommands
 {
     private readonly AccountIdentityOptions settings = options.Value;
     public string Issuer => settings.Issuer.Trim();
@@ -31,7 +31,7 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
         return await http.SendAsync(request, ct);
     }
     private static string Attribute(JsonElement user, string name)
-        => user.TryGetProperty("attributes",out var a) && a.TryGetProperty(name,out var v) && v.ValueKind==JsonValueKind.Array && v.GetArrayLength()>0
+        => user.TryGetProperty("attributes",out var a) && a.ValueKind==JsonValueKind.Object && a.TryGetProperty(name,out var v) && v.ValueKind==JsonValueKind.Array && v.GetArrayLength()>0
             ? v.EnumerateArray().FirstOrDefault().GetString() ?? "" : "";
     private static void Success(HttpResponseMessage response)
     {
@@ -100,6 +100,42 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
         using var removed=await Send(HttpMethod.Delete,$"users/{Uri.EscapeDataString(subject)}",null,ct);
         if(removed.StatusCode!=HttpStatusCode.NotFound) Success(removed);
     }
+    // Comandos separados de RemoveAsync (compensación del alta), que solo
+    // pueden invocarse tras las comprobaciones de la API en un flujo auditado.
+    public async Task DisableAndLogoutAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) throw new AccountConflictException();
+        using var disabled=await Send(HttpMethod.Put,$"users/{id}",new {enabled=false},ct);
+        Success(disabled);
+        using var logout=await Send(HttpMethod.Post,$"users/{id}/logout",null,ct);
+        Success(logout);
+    }
+
+    public async Task ReactivateAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) throw new AccountConflictException();
+        using var enabled=await Send(HttpMethod.Put,$"users/{id}",new {enabled=true},ct);
+        Success(enabled);
+    }
+
+    public async Task DeleteDisabledAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) throw new AccountConflictException();
+        using var lookup=await Send(HttpMethod.Get,$"users/{id}",null,ct);
+        Success(lookup);
+        using var json=JsonDocument.Parse(await lookup.Content.ReadAsStringAsync(ct));
+        var root=json.RootElement;
+        if(root.ValueKind!=JsonValueKind.Object ||
+           !root.TryGetProperty("id",out var match) ||
+           match.ValueKind!=JsonValueKind.String ||
+           !Guid.TryParse(match.GetString(),out var observed) || observed!=id ||
+           !root.TryGetProperty("enabled",out var status) ||
+           status.ValueKind!=JsonValueKind.False)
+            throw new AccountConflictException();
+        using var removed=await Send(HttpMethod.Delete,$"users/{id}",null,ct);
+        Success(removed);
+    }
+
     public async Task<IReadOnlyList<AccountUser>> ListAsync(CancellationToken ct)
     {
         if(!Configured) return [];
@@ -114,6 +150,158 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
             if(json.RootElement.GetArrayLength()<100) return result;
         }
     }
+    // Inventario master-only: listar TODAS las identidades existentes, incluidas las
+    // provisionadas antes del alta. Las cuentas sin marca verificada se muestran
+    // como protegidas, nunca se reclasifican silenciosamente ni se modifican.
+    public async Task<IReadOnlyList<AccountInventoryItem>> ListInventoryAsync(CancellationToken ct)
+    {
+        if(!Configured) throw new AccountDeliveryException();
+        var result=new List<AccountInventoryItem>();
+        var seen=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        for(var first=0;first<5000;first+=100)
+        {
+            using var response=await Send(HttpMethod.Get,$"users?first={first}&max=100",null,ct);Success(response);
+            using var json=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if(json.RootElement.ValueKind!=JsonValueKind.Array) throw new AccountDeliveryException();
+            foreach(var x in json.RootElement.EnumerateArray())
+            {
+                if(!x.TryGetProperty("id",out var id) || !Guid.TryParse(id.GetString(),out var guid)
+                    || !x.TryGetProperty("username",out var usernameField)
+                    || usernameField.ValueKind!=JsonValueKind.String
+                    || !x.TryGetProperty("enabled",out var enabledField)
+                    || enabledField.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+                    throw new AccountDeliveryException();
+                var subject=guid.ToString();
+                if(!seen.Add(subject)) throw new AccountDeliveryException();
+                var username=usernameField.GetString()??"";
+                if(string.IsNullOrWhiteSpace(username)) throw new AccountDeliveryException();
+                var accountKind=Attribute(x,"pmgm_account_kind");
+                var managed=Attribute(x,"pmgm_managed")=="active-member-accounts"
+                    && (accountKind is "member" or "superuser");
+                var protectedAccount=!managed || string.Equals(username,"admin",StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(username,"qa.admin",StringComparison.OrdinalIgnoreCase);
+                var kind=protectedAccount?"legacy_protected":accountKind;
+                result.Add(new AccountInventoryItem(subject,username,
+                    $"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),
+                    enabledField.GetBoolean(),kind,managed&&!protectedAccount,
+                    protectedAccount,protectedAccount?"provisioned":"managed"));
+            }
+            if(json.RootElement.GetArrayLength()<100) return result;
+        }
+        // No declarar inventario completo si el realm excede el límite de lectura.
+        throw new AccountDeliveryException();
+    }
+    // Consulta de evidencia sin mutación: siempre sobre el UUID exacto, jamás
+    // sobre el nombre suministrado por el navegador. Los roles en grupos o
+    // aplicaciones cliente se tratan como pendientes hasta verificar composites.
+    public async Task<AccountIdentitySecuritySnapshot?> ReadSecuritySnapshotAsync(string subject,CancellationToken ct)
+    {
+        if(!Guid.TryParse(subject,out var id)) return null;
+        var canonical=id.ToString();
+        using var userResponse=await Send(HttpMethod.Get,$"users/{canonical}",null,ct);
+        if(userResponse.StatusCode==HttpStatusCode.NotFound) return null;
+        Success(userResponse);
+        using var user=JsonDocument.Parse(await userResponse.Content.ReadAsStringAsync(ct));
+        var root=user.RootElement;
+        if(root.ValueKind!=JsonValueKind.Object ||
+            !root.TryGetProperty("id",out var identityId) || identityId.ValueKind!=JsonValueKind.String ||
+            !Guid.TryParse(identityId.GetString(),out var received) || received!=id ||
+            !root.TryGetProperty("username",out var name) || name.ValueKind!=JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(name.GetString()) ||
+            !root.TryGetProperty("enabled",out var enabled) ||
+            enabled.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            throw new AccountDeliveryException();
+        var username=name.GetString()!;
+        var kind=Attribute(root,"pmgm_account_kind");
+        var managed=Attribute(root,"pmgm_managed")=="active-member-accounts" &&
+            (kind is "member" or "superuser");
+
+        using var realmResponse=await Send(HttpMethod.Get,$"users/{canonical}/role-mappings/realm/composite",null,ct);
+        Success(realmResponse);
+        using var realm=JsonDocument.Parse(await realmResponse.Content.ReadAsStringAsync(ct));
+        if(realm.RootElement.ValueKind!=JsonValueKind.Array) throw new AccountDeliveryException();
+        var privileged=string.Equals(username,"admin",StringComparison.OrdinalIgnoreCase);
+        foreach(var role in realm.RootElement.EnumerateArray())
+        {
+            if(role.ValueKind!=JsonValueKind.Object ||
+                !role.TryGetProperty("name",out var value) || value.ValueKind!=JsonValueKind.String)
+                throw new AccountDeliveryException();
+            var roleName=value.GetString()??"";
+            if(roleName.Equals("platform_superadmin",StringComparison.OrdinalIgnoreCase) ||
+               roleName.Equals("realm-admin",StringComparison.OrdinalIgnoreCase) ||
+               roleName.Equals("admin",StringComparison.OrdinalIgnoreCase) ||
+               roleName.Equals("manage-users",StringComparison.OrdinalIgnoreCase) ||
+               roleName.Equals("manage-realm",StringComparison.OrdinalIgnoreCase) ||
+               roleName.Equals("impersonation",StringComparison.OrdinalIgnoreCase) ||
+               roleName.StartsWith("manage-",StringComparison.OrdinalIgnoreCase))
+                privileged=true;
+        }
+
+        using var mappingResponse=await Send(HttpMethod.Get,$"users/{canonical}/role-mappings",null,ct);
+        Success(mappingResponse);
+        using var mappings=JsonDocument.Parse(await mappingResponse.Content.ReadAsStringAsync(ct));
+        if(mappings.RootElement.ValueKind!=JsonValueKind.Object) throw new AccountDeliveryException();
+        var clientMappingUnknown=false;
+        if(mappings.RootElement.TryGetProperty("clientMappings",out var clients))
+        {
+            if(clients.ValueKind is not (JsonValueKind.Object or JsonValueKind.Null))
+                throw new AccountDeliveryException();
+            clientMappingUnknown=clients.ValueKind==JsonValueKind.Object && clients.EnumerateObject().Any();
+        }
+
+        using var groupResponse=await Send(HttpMethod.Get,$"users/{canonical}/groups?first=0&max=1",null,ct);
+        Success(groupResponse);
+        using var groups=JsonDocument.Parse(await groupResponse.Content.ReadAsStringAsync(ct));
+        if(groups.RootElement.ValueKind!=JsonValueKind.Array) throw new AccountDeliveryException();
+        var unknownGroupRoles=groups.RootElement.GetArrayLength()>0;
+        // Evidencia incompleta implica denegación en la política, no aprobación
+        // por ausencia de un nombre de rol en una lista parcial.
+        return new AccountIdentitySecuritySnapshot(canonical,username,kind,
+            enabled.GetBoolean(),managed,privileged,
+            !clientMappingUnknown && !unknownGroupRoles);
+    }
+
+    public async Task<bool> VerifyUniqueMasterDistinctFromAsync(
+        string actorSubject,string targetSubject,CancellationToken ct)
+    {
+        // El nombre preferred_username del JWT no prueba por sí solo que su
+        // sub sea el mismo que el Máster vivo consultado en Keycloak.
+        if(!Guid.TryParse(actorSubject,out var actor) ||
+           !Guid.TryParse(targetSubject,out var target) || actor==target)
+            return false;
+        using var response=await Send(HttpMethod.Get,"users?username=admin&exact=true",null,ct);
+        Success(response);
+        using var users=JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        if(users.RootElement.ValueKind!=JsonValueKind.Array ||
+           users.RootElement.GetArrayLength()!=1) return false;
+        var master=users.RootElement[0];
+        if(master.ValueKind!=JsonValueKind.Object ||
+           !master.TryGetProperty("id",out var id) || id.ValueKind!=JsonValueKind.String ||
+           !Guid.TryParse(id.GetString(),out var masterId) ||
+           masterId!=actor || masterId==target ||
+           !master.TryGetProperty("username",out var username) ||
+           username.ValueKind!=JsonValueKind.String ||
+           !string.Equals(username.GetString(),"admin",StringComparison.OrdinalIgnoreCase) ||
+           !master.TryGetProperty("enabled",out var enabled) ||
+           enabled.ValueKind!=JsonValueKind.True) return false;
+
+        using var rolesResponse=await Send(HttpMethod.Get,
+            $"users/{masterId}/role-mappings/realm/composite",null,ct);
+        Success(rolesResponse);
+        using var roles=JsonDocument.Parse(await rolesResponse.Content.ReadAsStringAsync(ct));
+        if(roles.RootElement.ValueKind!=JsonValueKind.Array)
+            throw new AccountDeliveryException();
+        foreach(var role in roles.RootElement.EnumerateArray())
+        {
+            if(role.ValueKind!=JsonValueKind.Object ||
+                !role.TryGetProperty("name",out var name) || name.ValueKind!=JsonValueKind.String)
+                throw new AccountDeliveryException();
+            if(string.Equals(name.GetString(),"platform_superadmin",StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
     public async Task<AccountUser?> FindManagedAsync(string subject,CancellationToken ct)
     {
         if(!Guid.TryParse(subject,out var id)) return null;

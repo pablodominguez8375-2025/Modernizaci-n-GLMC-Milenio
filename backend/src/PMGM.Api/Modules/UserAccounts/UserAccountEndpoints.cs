@@ -23,6 +23,25 @@ public static class UserAccountEndpoints
         var group=endpoints.MapGroup("/api/system/user-accounts").RequireAuthorization().WithTags("Cuentas de usuarios");
         group.MapGet("/eligible-members",GetEligibleMembers);
         group.MapGet("",GetUsers);
+        group.MapGet("/inventory",GetInventory);
+        group.MapGet("/lifecycle-policy",GetLifecyclePolicy);
+        group.MapGet("/{subject}/lifecycle-verification",GetLifecycleVerification);
+        group.MapGet("/{subject}/lifecycle-reconciliation",GetLifecycleReconciliation);
+        group.MapPost("/{subject}/activate", (string subject,AccountLifecycleMutationRequest request,
+            HttpContext ctx,PmgmDbContext db,IInstitutionalAccessService access,
+            IAccountIdentityProvider identity,IAuditService audit,
+            Microsoft.Extensions.Options.IOptions<AccountIdentityOptions> opts,CancellationToken ct) =>
+            MutateLifecycle(subject,request,AccountLifecycleAction.Activate,ctx,db,access,identity,audit,opts,ct));
+        group.MapPost("/{subject}/deactivate", (string subject,AccountLifecycleMutationRequest request,
+            HttpContext ctx,PmgmDbContext db,IInstitutionalAccessService access,
+            IAccountIdentityProvider identity,IAuditService audit,
+            Microsoft.Extensions.Options.IOptions<AccountIdentityOptions> opts,CancellationToken ct) =>
+            MutateLifecycle(subject,request,AccountLifecycleAction.Deactivate,ctx,db,access,identity,audit,opts,ct));
+        group.MapPost("/{subject}/delete-permanently", (string subject,AccountLifecycleMutationRequest request,
+            HttpContext ctx,PmgmDbContext db,IInstitutionalAccessService access,
+            IAccountIdentityProvider identity,IAuditService audit,
+            Microsoft.Extensions.Options.IOptions<AccountIdentityOptions> opts,CancellationToken ct) =>
+            MutateLifecycle(subject,request,AccountLifecycleAction.DeletePermanently,ctx,db,access,identity,audit,opts,ct));
         group.MapPost("",CreateUserAccount);
         group.MapPost("/{subject}/password-recovery",ResetAccountAccess);
         return endpoints;
@@ -47,6 +66,377 @@ public static class UserAccountEndpoints
         catch(Exception e) when(e is AccountDeliveryException or HttpRequestException or TaskCanceledException)
         { return Failure(); }
     }
+    // Inventario de origen Keycloak exclusivo del Máster. No equivale a permiso de
+    // mutación: las cuentas heredadas/externas se clasifican como protegidas.
+    private static async Task<IResult> GetInventory(HttpContext ctx,IInstitutionalAccessService access,
+        IAccountIdentityProvider identity,CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        // Un rol heredado platform_superadmin no convierte a qa.admin ni a otra
+        // cuenta bootstrap en el único Máster admin del contrato #604.
+        if(!AccountLifecyclePolicy.IsUniqueMaster(ctx.User,access)) return Results.Forbid();
+        if(identity is not IAccountIdentityInventory inventory || !identity.Configured)
+            return Results.Json(new { message="No está disponible el inventario de identidades." },
+                statusCode:StatusCodes.Status503ServiceUnavailable);
+        try { return Results.Ok(new { items=await inventory.ListInventoryAsync(ct),configured=true }); }
+        catch(Exception e) when(e is AccountDeliveryException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        { return Results.Json(new { message="No se pudo consultar el inventario de identidades." },
+                statusCode:StatusCodes.Status503ServiceUnavailable); }
+    }
+    // Contrato informativo: la interfaz nunca debe habilitar acciones destructivas
+    // mientras la API de ejecución no supere los controles de identidad y auditoría.
+    private static IResult GetLifecyclePolicy(HttpContext ctx,IInstitutionalAccessService access,
+        Microsoft.Extensions.Options.IOptions<AccountIdentityOptions> options,
+        IAccountIdentityProvider identity)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        if(!AccountLifecyclePolicy.IsUniqueMaster(ctx.User,access)) return Results.Forbid();
+        return Results.Ok(new {
+            operationsAvailable=options.Value.RequireLiveTokenIntrospection &&
+                options.Value.EnableLifecycleMutations && identity.Configured &&
+                identity is IAccountIdentityInventory &&
+                identity is IAccountIdentitySecurityReader &&
+                identity is IUniqueMasterIdentityVerifier &&
+                identity is IAccountIdentityLifecycleCommands,
+            actionNames=new[]{"activate","deactivate","delete_permanently"},
+            reasonRequired=true,
+            reasonMinLength=10,
+            reasonMaxLength=200,
+            deletionNeedsExactUsername=true,
+            requiresLiveIdentityVerification=true,
+            requiresEffectiveSessionRevocation=true
+        });
+    }
+
+    // Verificación previa solo lectura. Los estados informativos NO otorgan
+    // permisos; la mutación requerirá otra comprobación atómica del proveedor.
+    private static async Task<IResult> GetLifecycleVerification(string subject,HttpContext ctx,
+        IInstitutionalAccessService access,IAccountIdentityProvider identity,CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        if(!AccountLifecyclePolicy.IsUniqueMaster(ctx.User,access)) return Results.Forbid();
+        if(!Guid.TryParse(subject,out var parsed)) return Results.NotFound();
+        var actor=DynamicTreasuryAccess.Subject(ctx.User);
+        if(identity is not IAccountIdentitySecurityReader securityReader ||
+            identity is not IUniqueMasterIdentityVerifier masterVerifier ||
+            !identity.Configured || string.IsNullOrWhiteSpace(actor))
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        try
+        {
+            // Una firma JWT válida y preferred_username=admin no bastan:
+            // revalidar en Keycloak el UUID y rol efectivo del Máster vivo,
+            // incluso para una lectura de evidencia de seguridad.
+            if(!await masterVerifier.VerifyUniqueMasterDistinctFromAsync(
+                actor,parsed.ToString(),ct)) return Results.Forbid();
+            var snapshot=await securityReader.ReadSecuritySnapshotAsync(parsed.ToString(),ct);
+            if(snapshot is null) return Results.NotFound();
+            return Results.Ok(new {
+                snapshot.Subject,snapshot.Username,snapshot.Enabled,snapshot.Managed,
+                snapshot.Kind,snapshot.PrivilegedRoleDetected,snapshot.EffectiveRoleEvidenceComplete,
+                operationsAvailable=false,
+                requiresFurtherVerification=!snapshot.EffectiveRoleEvidenceComplete
+            });
+        }
+        catch(Exception e) when(e is AccountDeliveryException or HttpRequestException or TaskCanceledException
+            or System.Text.Json.JsonException)
+        { return Results.StatusCode(StatusCodes.Status503ServiceUnavailable); }
+    }
+
+    // Seguimiento read-only de intentos sin cierre confirmado. No reintenta
+    // comandos ni infiere que Keycloak y PostgreSQL estén conciliados.
+    private static async Task<IResult> GetLifecycleReconciliation(string subject,
+        HttpContext ctx,PmgmDbContext db,IInstitutionalAccessService access,
+        IAccountIdentityProvider identity,CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        if(!AccountLifecyclePolicy.IsUniqueMaster(ctx.User,access)) return Results.Forbid();
+        if(!Guid.TryParse(subject,out var target)) return Results.NotFound();
+        var actor=DynamicTreasuryAccess.Subject(ctx.User);
+        if(identity is not IUniqueMasterIdentityVerifier verifier ||
+            !identity.Configured || string.IsNullOrWhiteSpace(actor))
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        try
+        {
+            if(!await verifier.VerifyUniqueMasterDistinctFromAsync(actor,target.ToString(),ct))
+                return Results.Forbid();
+            var canonical=target.ToString();
+            const string requested="system.users.lifecycle_requested";
+            const string completed="system.users.lifecycle_completed";
+            const string failed="system.users.lifecycle_failed";
+            const string preflightRejected="system.users.lifecycle_preflight_rejected";
+            // Nunca retornar metadatos, motivos, IP ni nombres de personas.
+            var events=await db.AuditEvents.AsNoTracking()
+                .Where(e=>e.EntityType=="UserAccount" && e.EntityId==canonical &&
+                    (e.Action==requested || e.Action==completed || e.Action==failed ||
+                     e.Action==preflightRejected))
+                .OrderByDescending(e=>e.OccurredAtUtc).ThenByDescending(e=>e.Id)
+                .Select(e=>new {e.Action,e.MetadataJson,e.OccurredAtUtc})
+                .Take(201).ToListAsync(ct);
+            var truncated=events.Count>200;
+            // Sólo correlacionar por ID generado por el servidor. La cabecera
+            // X-Correlation-ID es aportada por el cliente y no es evidencia.
+            var linked=events.Take(200).Select(e=>new {
+                e.Action,e.OccurredAtUtc,
+                OperationId=ReadLifecycleOperationId(e.MetadataJson)
+            }).ToArray();
+            var items=linked.Where(e=>e.OperationId is not null)
+                .GroupBy(e=>e.OperationId!,StringComparer.Ordinal)
+                .Where(g=>g.Any(e=>e.Action==requested))
+                .Select(g=>
+                {
+                    var hasCompleted=g.Any(e=>e.Action==completed);
+                    var hasFailed=g.Any(e=>e.Action==failed);
+                    var preflightDenied=g.Any(e=>e.Action==preflightRejected);
+                    // Si coexisten estados terminales contradictorios (p.ej.
+                    // commit ambiguo) nunca declarar una operación completada.
+                    var conflictingTerminal=hasCompleted && (hasFailed || preflightDenied) ||
+                        hasFailed && preflightDenied;
+                    var needsReview=hasFailed || conflictingTerminal ||
+                        (!hasCompleted && !preflightDenied);
+                    return new {
+                        operationId=g.Key,
+                        requestedAtUtc=g.Where(e=>e.Action==requested)
+                            .Min(e=>e.OccurredAtUtc),
+                        state=hasFailed || conflictingTerminal?"failed_needs_review":
+                            hasCompleted?"completed":preflightDenied?
+                            "denied_no_external_mutation":"unresolved_needs_review",
+                        requiresReview=needsReview
+                    };
+                })
+                .OrderByDescending(x=>x.requestedAtUtc)
+                .Take(50).ToArray();
+            return Results.Ok(new {subject=canonical,items,historyTruncated=truncated,
+                unlinkedLegacyEvents=linked.Count(e=>e.OperationId is null),
+                automaticRetryAllowed=false});
+        }
+        catch(Exception e) when(e is AccountDeliveryException or HttpRequestException
+            or TaskCanceledException or System.Text.Json.JsonException
+            or System.Data.Common.DbException)
+        { return Results.StatusCode(StatusCodes.Status503ServiceUnavailable); }
+    }
+
+    private static string? ReadLifecycleOperationId(string? metadata)
+    {
+        if(string.IsNullOrWhiteSpace(metadata)) return null;
+        try
+        {
+            using var json=System.Text.Json.JsonDocument.Parse(metadata);
+            if(json.RootElement.ValueKind==System.Text.Json.JsonValueKind.Object &&
+                json.RootElement.TryGetProperty("operationId",out var id) &&
+                id.ValueKind==System.Text.Json.JsonValueKind.String &&
+                Guid.TryParseExact(id.GetString(),"N",out var parsed))
+                return parsed.ToString("N");
+        }
+        catch(System.Text.Json.JsonException) { }
+        return null;
+    }
+
+    // Acciones opt-in: el despliegue existente permanece solo lectura. No
+    // equivale a aprobación QA/UAT: la bandera se habilita tras probar
+    // introspección real, auditoría y respaldo del entorno autorizado.
+    private static async Task<IResult> MutateLifecycle(string subject,
+        AccountLifecycleMutationRequest request,AccountLifecycleAction action,
+        HttpContext ctx,PmgmDbContext db,IInstitutionalAccessService access,
+        IAccountIdentityProvider identity,IAuditService audit,
+        Microsoft.Extensions.Options.IOptions<AccountIdentityOptions> options,
+        CancellationToken ct)
+    {
+        ctx.Response.Headers.CacheControl="private, no-store";
+        if(!AccountLifecyclePolicy.IsUniqueMaster(ctx.User,access)) return Results.Forbid();
+        var cfg=options.Value;
+        if(!cfg.EnableLifecycleMutations || !cfg.RequireLiveTokenIntrospection ||
+            identity is not IAccountIdentityInventory inventory ||
+            identity is not IAccountIdentitySecurityReader reader ||
+            identity is not IAccountIdentityLifecycleCommands commands ||
+            identity is not IUniqueMasterIdentityVerifier masterVerifier ||
+            !identity.Configured)
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+
+        var validReason=AccountLifecyclePolicy.ValidateReason(request.Reason);
+        if(!validReason.Allowed)
+            return Results.BadRequest(new {code=validReason.DenialCode,
+                message="El motivo debe contener de 10 a 200 caracteres sin caracteres de control."});
+        if(!Guid.TryParse(subject,out var targetId)) return Results.NotFound();
+        var targetSubject=targetId.ToString();
+        var actor=DynamicTreasuryAccess.Subject(ctx.User)??"";
+        if(string.Equals(actor,targetSubject,StringComparison.OrdinalIgnoreCase))
+            return Results.Forbid();
+
+        var actionCode=action switch {
+            AccountLifecycleAction.Activate=>"activate",
+            AccountLifecycleAction.Deactivate=>"deactivate",
+            _=>"delete_permanently"
+        };
+        // ID generado en el servidor, distinto de X-Correlation-ID del cliente.
+        var operationId=Guid.NewGuid().ToString("N");
+        // Registro durable de la intención ANTES de llamar Keycloak o abrir la
+        // transacción de conciliación. Si el proceso cae durante una mutación
+        // externa, este evento sobrevive y permite localizar el caso pendiente.
+        // No representa aprobación ni una operación completada.
+        audit.Add(ctx,"system.users.lifecycle_requested","UserAccount",targetSubject,
+            null,AuditResults.Observed,new {operationId,action=actionCode,reason=request.Reason?.Trim()});
+        await db.SaveChangesAsync(ct);
+
+        // Serializar por identidad en PostgreSQL: la verificación no puede
+        // hacerse fuera del bloqueo ni confiar en datos de la pantalla.
+        await using var tx=await db.Database.BeginTransactionAsync(IsolationLevel.Serializable,ct);
+        // Las denegaciones de preflight nunca alcanzan comandos externos.
+        // Cerrar su auditoría fuera de la transacción evita falsos pendientes.
+        async Task<IResult> RejectPreflight(IResult response,string code)
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            await tx.DisposeAsync();
+            db.ChangeTracker.Clear();
+            audit.Add(ctx,"system.users.lifecycle_preflight_rejected",
+                "UserAccount",targetSubject,null,AuditResults.Rejected,
+                new {operationId,action=actionCode,code});
+            await db.SaveChangesAsync(CancellationToken.None);
+            return response;
+        }
+        var externalMutationStarted=false;
+        try
+        {
+            var lockKey="account-lifecycle:"+targetSubject;
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT pg_advisory_xact_lock(hashtextextended({lockKey},0))",ct);
+            // Operación previa sin cierre seguro: bloquear antes de TODA
+            // mutación externa. Una nueva solicitud no puede "arreglar" ni
+            // repetir un fallo parcial mediante una acción de la pantalla.
+            // La comprobación se hace bajo el advisory lock por cuenta.
+            var recent=await db.AuditEvents.AsNoTracking()
+                .Where(e=>e.EntityType=="UserAccount" && e.EntityId==targetSubject &&
+                    (e.Action=="system.users.lifecycle_requested" ||
+                     e.Action=="system.users.lifecycle_completed" ||
+                     e.Action=="system.users.lifecycle_failed" ||
+                     e.Action=="system.users.lifecycle_preflight_rejected"))
+                .OrderByDescending(e=>e.OccurredAtUtc).ThenByDescending(e=>e.Id)
+                .Select(e=>new {e.Action,e.MetadataJson})
+                .Take(501).ToListAsync(ct);
+            // Si no cabe toda la historia de la cuenta en el límite de
+            // inspección, no asumir que los intentos antiguos quedaron cerrados.
+            if(recent.Count>500)
+                return await RejectPreflight(Results.Conflict(
+                    new {code="lifecycle_history_requires_review"}),
+                    "lifecycle_history_requires_review");
+            var priorOperations=recent.Select(e=>new {
+                e.Action,Id=ReadLifecycleOperationId(e.MetadataJson)
+            }).Where(e=>e.Id is not null && e.Id!=operationId)
+                .GroupBy(e=>e.Id!,StringComparer.Ordinal);
+            if(priorOperations.Any(g=>
+                g.Any(e=>e.Action=="system.users.lifecycle_failed") ||
+                (g.Any(e=>e.Action=="system.users.lifecycle_completed") &&
+                 g.Any(e=>e.Action=="system.users.lifecycle_preflight_rejected")) ||
+                (g.Any(e=>e.Action=="system.users.lifecycle_requested") &&
+                 !g.Any(e=>e.Action=="system.users.lifecycle_completed") &&
+                 !g.Any(e=>e.Action=="system.users.lifecycle_preflight_rejected"))))
+                return await RejectPreflight(Results.Conflict(
+                    new {code="prior_lifecycle_requires_review"}),
+                    "prior_lifecycle_requires_review");
+            // Eventos antiguos sin operationId tampoco acreditan cierre seguro.
+            if(recent.Any(e=>ReadLifecycleOperationId(e.MetadataJson) is null))
+                return await RejectPreflight(Results.Conflict(
+                    new {code="legacy_lifecycle_audit_requires_review"}),
+                    "legacy_lifecycle_audit_requires_review");
+            var matches=(await inventory.ListInventoryAsync(ct))
+                .Where(x=>string.Equals(x.Subject,targetSubject,StringComparison.OrdinalIgnoreCase))
+                .Take(2).ToArray();
+            if(matches.Length!=1)
+                return await RejectPreflight(Results.NotFound(),"target_not_unique_or_missing");
+            var target=matches[0];
+            var live=await reader.ReadSecuritySnapshotAsync(targetSubject,ct);
+            if(live is null || live.Subject!=targetSubject ||
+                !string.Equals(live.Username,target.Username,StringComparison.Ordinal) ||
+                live.Enabled!=target.Enabled || live.Managed!=target.Managed)
+                return await RejectPreflight(Results.Conflict(new {code="identity_state_changed"}),
+                    "identity_state_changed");
+
+            // Nunca confiar solo en el rol contenido en un JWT anterior:
+            // revalidar en Keycloak la existencia y rol efectivo del único
+            // Máster para TODAS las operaciones, no únicamente qa.admin.
+            var masterVerified=
+                await masterVerifier.VerifyUniqueMasterDistinctFromAsync(actor,targetSubject,ct);
+            if(!masterVerified)
+                return await RejectPreflight(Results.Forbid(),"master_not_verified");
+            var qaException=action==AccountLifecycleAction.DeletePermanently &&
+                string.Equals(target.Username,"qa.admin",StringComparison.OrdinalIgnoreCase);
+
+            var entitled=false;
+            if(action==AccountLifecycleAction.Activate && live.Kind=="member" && live.Managed)
+            {
+                var links=await db.Database.SqlQuery<Guid>(
+                    $"SELECT \"MemberId\" AS \"Value\" FROM core.member_identity_links WHERE \"Issuer\"={identity.Issuer} AND \"Subject\"={targetSubject} AND \"RevokedAtUtc\" IS NULL")
+                    .ToListAsync(ct);
+                entitled=links.Count==1 && await Eligible(db,DynamicAccessEndpoints.Today())
+                    .AnyAsync(m=>m.MemberId==links[0],ct);
+            }
+            // Soporte exige verificación de perfiles propia antes de reactivar;
+            // se deniega hasta implementar esa comprobación de concesiones.
+            var evidence=new AccountLifecycleEvidence(
+                RolesReadFromKeycloak:true,
+                HasPrivilegedEffectiveRole:live.PrivilegedRoleDetected,
+                IdentityStateVerified:true,
+                CurrentEntitlementVerified:entitled,
+                RevocationGuaranteed:true, // validación OnTokenValidated con flag obligatorio
+                HistoricalDataRetentionVerified:true, // no eliminar hechos ni auditoría
+                LegacyQaAdminSubjectVerified:qaException &&
+                    live.Username=="qa.admin" && target.Kind=="legacy_protected",
+                UniqueMasterSubjectVerifiedDistinct:masterVerified,
+                EffectiveRoleEvidenceComplete:live.EffectiveRoleEvidenceComplete);
+            var decision=AccountLifecyclePolicy.Evaluate(
+                action,target,actor,evidence,request.Confirmation);
+            if(!decision.Allowed)
+                return await RejectPreflight(Results.Conflict(new {code=decision.DenialCode}),
+                    decision.DenialCode??"policy_denied");
+
+
+            // Todo error a partir de aquí puede implicar una mutación parcial
+            // en Keycloak y exige conciliación manual, incluso si la llamada falla.
+            externalMutationStarted=true;
+            if(action==AccountLifecycleAction.Activate)
+                await commands.ReactivateAsync(targetSubject,ct);
+            else
+            {
+                await commands.DisableAndLogoutAsync(targetSubject,ct);
+                if(action==AccountLifecycleAction.DeletePermanently)
+                {
+                    await commands.DeleteDisabledAsync(targetSubject,ct);
+                    var now=DateTimeOffset.UtcNow;
+                    await db.Database.ExecuteSqlInterpolatedAsync(
+                        $"UPDATE core.member_identity_links SET \"RevokedAtUtc\"={now} WHERE \"Issuer\"={identity.Issuer} AND \"Subject\"={targetSubject} AND \"RevokedAtUtc\" IS NULL",ct);
+                }
+            }
+            var after=await reader.ReadSecuritySnapshotAsync(targetSubject,ct);
+            if(action==AccountLifecycleAction.DeletePermanently
+                ? after is not null
+                : after is null || after.Enabled!=(action==AccountLifecycleAction.Activate))
+                throw new AccountDeliveryException();
+
+            audit.Add(ctx,"system.users.lifecycle_completed","UserAccount",targetSubject,
+                null,AuditResults.Success,new {operationId,action=actionCode,reason=request.Reason?.Trim(),
+                    identityVerified=true});
+            await db.SaveChangesAsync(ct);
+            await tx.CommitAsync(ct);
+            return Results.Ok(new {subject=targetSubject,action=actionCode,completed=true});
+        }
+        catch(Exception e) when(e is AccountDeliveryException or AccountConflictException
+            or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException
+            or DbUpdateException or System.Data.Common.DbException)
+        {
+            if(!externalMutationStarted)
+                return await RejectPreflight(
+                    Results.StatusCode(StatusCodes.Status503ServiceUnavailable),
+                    "preflight_provider_or_storage_unavailable");
+            await tx.RollbackAsync(CancellationToken.None);
+            db.ChangeTracker.Clear();
+            // Si Keycloak cambió pero la transacción DB falló, no anunciar éxito.
+            audit.Add(ctx,"system.users.lifecycle_failed","UserAccount",targetSubject,
+                null,AuditResults.Rejected,new {operationId,action=action.ToString(),
+                    reason="identity_or_storage_reconciliation_required"});
+            await db.SaveChangesAsync(CancellationToken.None);
+            return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+    }
+
     private static async Task<IResult> CreateUserAccount(CreateUserAccountRequest request,HttpContext ctx,PmgmDbContext db,
         IInstitutionalAccessService access,IAccountIdentityProvider identity,IInitialAccountMail mail,IAuditService audit,
         ILoggerFactory logs,CancellationToken ct)

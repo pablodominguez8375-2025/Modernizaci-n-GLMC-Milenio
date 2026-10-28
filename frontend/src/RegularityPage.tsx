@@ -93,6 +93,9 @@ export default function RegularityPage({ api, kind, canWrite=true }: { api: Pmgm
     finally { if(request===generation.current)setWorking(false) }
   }
 
+  // La consulta es automática al elegir Taller o fecha de corte (sin botón «Consultar»).
+  useEffect(() => { if (organizationId) void readCurrent() }, [organizationId, asOfDate]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!organizationId||!canWrite) return
@@ -131,7 +134,6 @@ export default function RegularityPage({ api, kind, canWrite=true }: { api: Pmgm
         <div className="regularity-form">
           <Field label="Taller / organización"><select required value={organizationId} onChange={event => { setOrganizationId(event.target.value); invalidate() }}><option value="">Seleccione…</option>{organizations.map(item => <option key={item.id} value={item.id}>{organizationLabel(item)}</option>)}</select></Field>
           <Field label="Fecha de corte · Chile"><input type="date" required value={asOfDate} onChange={event => { setAsOfDate(event.target.value); invalidate() }} /></Field>
-          <button className="regularity-secondary" type="button" disabled={working || !organizationId} onClick={() => { void readCurrent() }}>Consultar estado</button>
         </div>
 
         <div className="regularity-current">

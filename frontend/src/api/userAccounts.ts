@@ -2,6 +2,13 @@ import { SUPPORT_VIEW_PROFILES,profileDisplayName } from './supportViewProfiles'
 export interface AccountCandidate { memberId:string;organizationId:string;name:string;email:string;workshop:string }
 export interface AccountCandidates { items:AccountCandidate[];canCreateUser?:boolean;canCreateSuperuser:boolean;deliveryConfigured:boolean;identityConfigured?:boolean;mailConfigured?:boolean }
 export interface AccountUser { subject:string;name:string;email:string;enabled:boolean;kind:'member'|'superuser'|'platform' }
+/** Inventario completo de cuentas (solo el Máster único; solo lectura). `protected`: cuenta preexistente que no se activa, desactiva ni elimina desde el sistema. */
+export interface AccountInventoryItem { subject:string;username:string;name:string;enabled:boolean;kind:'legacy_protected'|'member'|'superuser'|string;managed:boolean;protected:boolean;origin:'provisioned'|'managed'|string }
+/** Ciclo de vida de cuentas (#768/#770): contrato de ChatGPT en el PR #772. La UI nunca llama a Keycloak. */
+export type AccountLifecycleAction='activate'|'deactivate'|'delete-permanently'
+export interface AccountLifecyclePolicy { operationsAvailable:boolean;actionNames:string[];reasonRequired:boolean;reasonMinLength:number;reasonMaxLength:number;deletionNeedsExactUsername:boolean;requiresLiveIdentityVerification:boolean;requiresEffectiveSessionRevocation:boolean }
+export interface AccountLifecycleRequest { reason:string;confirmation?:string }
+export interface AccountLifecycleResult { subject:string;action:string;completed:boolean }
 export interface CreateUserAccount { memberId?:string|null;organizationId?:string|null;superuser?:boolean;platformName?:string|null;platformEmail?:string|null }
 export interface UserAccountCreated { subject:string;email:string;memberId:string|null;organizationId:string|null;superuser:boolean;requiresPasswordChange:true;initialPasswordEmailSent:boolean }
 
@@ -25,9 +32,41 @@ export interface AccessResetResult { subject:string;name:string;modality:AccessR
 // Synthetic institutional records only. Identity and email delivery are simulated on Pages.
 export class UserAccountsDemo {
  private users:AccountUser[]
+ private legacyEnabled=new Map<string,boolean>()
+ private legacyRemoved=new Set<string>()
  private grants:SupportCorrectionGrant[]=[]
  private corrections:Array<MySupportCorrection&{targetSubject:string}>=[]
  constructor(private readonly candidates:AccountCandidate[],private readonly allowed:()=>boolean,private readonly platformAllowed:()=>boolean,seed:AccountUser[]=[],private readonly currentSubject:()=>string=()=>'',private readonly operatorAllowed:()=>boolean=()=>false){this.users=structuredClone(seed)}
+ // Inventario sintético de la demostración (nunca cuentas reales): solo para el Máster registrado.
+ inventory():{items:AccountInventoryItem[];configured:boolean}{
+  this.authorize();if(!this.platformAllowed())throw new Error('Solo el Máster único puede ver el inventario completo de cuentas.')
+  const legacy:AccountInventoryItem[]=[
+   {subject:'demo:legacy-qa-admin',username:'qa.admin',name:'Administrador de pruebas (ficticio)',enabled:true,kind:'legacy_protected',managed:false,protected:true,origin:'provisioned'},
+   {subject:'demo:legacy-admin',username:'admin',name:'Máster de plataforma (ficticio)',enabled:true,kind:'legacy_protected',managed:false,protected:true,origin:'provisioned'},
+   {subject:'demo:legacy-bootstrap',username:'bootstrap.inicial',name:'Cuenta de carga inicial (ficticia)',enabled:false,kind:'legacy_protected',managed:false,protected:true,origin:'provisioned'},
+  ].filter(item=>!this.legacyRemoved.has(item.subject)).map(item=>({...item,enabled:this.legacyEnabled.get(item.subject)??item.enabled}))
+  const managed:AccountInventoryItem[]=this.users.filter(u=>u.kind==='member'||u.kind==='superuser').map(u=>({subject:u.subject,username:u.email.split('@')[0]||'usuario',name:u.name,enabled:u.enabled,kind:u.kind,managed:true,protected:false,origin:'managed'}))
+  return{items:[...legacy,...managed],configured:true}
+ }
+ // Ciclo de vida de cuentas: simulado en la demostración (IDs ficticios que NO son UUID y nunca se envían a la API real).
+ lifecyclePolicy():AccountLifecyclePolicy{
+  this.authorize();if(!this.platformAllowed())throw new Error('Solo el Máster único puede gestionar cuentas.')
+  return{operationsAvailable:true,actionNames:['activate','deactivate','delete-permanently'],reasonRequired:true,reasonMinLength:10,reasonMaxLength:200,deletionNeedsExactUsername:true,requiresLiveIdentityVerification:true,requiresEffectiveSessionRevocation:true}
+ }
+ lifecycleAction(subject:string,action:AccountLifecycleAction,request:AccountLifecycleRequest):AccountLifecycleResult{
+  this.authorize();if(!this.platformAllowed())throw new Error('Su cuenta no tiene permiso para realizar esta operación.')
+  const reason=request.reason.trim();if(reason.length<10||reason.length>200)throw new Error('Indique el motivo (10 a 200 caracteres).')
+  const item=this.inventory().items.find(x=>x.subject===subject);if(!item)throw new Error('La cuenta no existe.')
+  if(item.username==='admin')throw new Error('La cuenta del Máster no se puede modificar desde el sistema.')
+  if(item.protected&&!(item.username==='qa.admin'&&action==='delete-permanently'))throw new Error('Esta cuenta preexistente está protegida: no se puede activar, desactivar ni eliminar desde el sistema.')
+  if(action==='delete-permanently'&&request.confirmation!==item.username)throw new Error('Para eliminar, escriba el nombre de usuario exactamente como aparece.')
+  if(action==='activate'&&item.enabled)throw new Error('La cuenta ya está activa.')
+  if(action==='deactivate'&&!item.enabled)throw new Error('La cuenta ya está desactivada.')
+  if(item.protected){this.legacyRemoved.add(subject)}
+  else if(action==='delete-permanently'){this.users=this.users.filter(u=>u.subject!==subject)}
+  else{this.users=this.users.map(u=>u.subject===subject?{...u,enabled:action==='activate'}:u)}
+  return{subject,action,completed:true}
+ }
  // «Corregir como soporte»: el Máster da el permiso; el Superusuario corrige; el Hermano ve la corrección.
  correctionStatus():SupportCorrectionStatus{
   this.authorize();const now=Date.now();const me=this.currentSubject();const master=this.platformAllowed()
