@@ -116,10 +116,18 @@ public static class UserAccountEndpoints
         ctx.Response.Headers.CacheControl="private, no-store";
         if(!AccountLifecyclePolicy.IsUniqueMaster(ctx.User,access)) return Results.Forbid();
         if(!Guid.TryParse(subject,out var parsed)) return Results.NotFound();
-        if(identity is not IAccountIdentitySecurityReader securityReader || !identity.Configured)
+        var actor=DynamicTreasuryAccess.Subject(ctx.User);
+        if(identity is not IAccountIdentitySecurityReader securityReader ||
+            identity is not IUniqueMasterIdentityVerifier masterVerifier ||
+            !identity.Configured || string.IsNullOrWhiteSpace(actor))
             return Results.StatusCode(StatusCodes.Status503ServiceUnavailable);
         try
         {
+            // Una firma JWT válida y preferred_username=admin no bastan:
+            // revalidar en Keycloak el UUID y rol efectivo del Máster vivo,
+            // incluso para una lectura de evidencia de seguridad.
+            if(!await masterVerifier.VerifyUniqueMasterDistinctFromAsync(
+                actor,parsed.ToString(),ct)) return Results.Forbid();
             var snapshot=await securityReader.ReadSecuritySnapshotAsync(parsed.ToString(),ct);
             if(snapshot is null) return Results.NotFound();
             return Results.Ok(new {
