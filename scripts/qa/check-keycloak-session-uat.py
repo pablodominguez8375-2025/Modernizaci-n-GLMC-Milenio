@@ -8,6 +8,7 @@ No imprime ni conserva tokens, identificadores ni respuestas HTTP.
 """
 import argparse
 import base64
+import binascii
 import http.client
 import json
 import os
@@ -60,13 +61,15 @@ def read_private_token(path):
 def parse_claims(token, now):
     """Inspección local NO criptográfica; la firma la valida la API real."""
     parts = token.split(".")
-    require(len(parts) == 3 and all(parts), "TOKEN_FORMAT")
+    require(len(parts) == 3 and all(parts) and
+            re.fullmatch(r"[A-Za-z0-9_-]+", parts[1]) is not None,
+            "TOKEN_FORMAT")
     try:
         payload = parts[1] + "=" * (-len(parts[1]) % 4)
         raw = base64.urlsafe_b64decode(payload.encode("ascii"))
         require(len(raw) <= 16384, "TOKEN_CLAIMS_SIZE")
         data = json.loads(raw)
-    except (ValueError, UnicodeError, json.JSONDecodeError):
+    except (ValueError, UnicodeError, binascii.Error):
         raise Blocked("TOKEN_CLAIMS_INVALID") from None
     require(isinstance(data, dict), "TOKEN_CLAIMS_INVALID")
     username = data.get("preferred_username")
