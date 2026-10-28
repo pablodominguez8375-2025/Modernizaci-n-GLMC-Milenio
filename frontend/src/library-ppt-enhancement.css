@@ -409,3 +409,12 @@
 .library-card-magazine .library-card-cover {
   background: linear-gradient(120deg, #06148E, #b8860b);
 }
+
+/* Selector de categoría para pantallas angostas: reemplaza la barra tipo pestañas (rem/em). */
+.library-category-select { display: none; }
+
+@media (max-width: 40em) {
+  .library-category-select { display: grid; gap: 0.375rem; }
+  .library-category-select select { min-height: 2.75rem; width: 100%; }
+  .library-category-rail { display: none; }
+}

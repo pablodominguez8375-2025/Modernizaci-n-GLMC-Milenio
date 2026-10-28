@@ -365,7 +365,7 @@ function PublicationProgress({ item }: { item: CeremonyReviewQueueItem }) {
   const percentage = Math.min(100, Math.round(publication.completedDays / Math.max(1, publication.requiredDays) * 100))
   return <div className="publication-progress">
     <div><strong>Publicación del insinuado</strong><span>{publication.completedDays}/{publication.requiredDays} días</span></div>
-    <div className="progress-track" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percentage}%` }} /></div>
+    <div className="progress-track" role="progressbar" aria-label="Avance de la publicación del insinuado" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100} aria-valuetext={`${publication.completedDays} de ${publication.requiredDays} días`}><span style={{ width: `${percentage}%` }} /></div>
   </div>
 }
 
