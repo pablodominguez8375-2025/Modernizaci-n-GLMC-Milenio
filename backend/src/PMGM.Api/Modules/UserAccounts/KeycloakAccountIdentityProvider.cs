@@ -141,8 +141,9 @@ public sealed class KeycloakAccountIdentityProvider(HttpClient http, IOptions<Ac
                 if(string.IsNullOrWhiteSpace(username)) throw new AccountDeliveryException();
                 var accountKind=Attribute(x,"pmgm_account_kind");
                 var managed=Attribute(x,"pmgm_managed")=="active-member-accounts"
-                    && accountKind is "member" or "superuser";
-                var protectedAccount=!managed || string.Equals(username,"admin",StringComparison.OrdinalIgnoreCase);
+                    && (accountKind is "member" or "superuser");
+                var protectedAccount=!managed || string.Equals(username,"admin",StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(username,"qa.admin",StringComparison.OrdinalIgnoreCase);
                 var kind=protectedAccount?"legacy_protected":accountKind;
                 result.Add(new AccountInventoryItem(subject,username,
                     $"{Text(x,"firstName")} {Text(x,"lastName")}".Trim(),
