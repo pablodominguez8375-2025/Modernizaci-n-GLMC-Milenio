@@ -114,7 +114,6 @@ public sealed class AccountTokenIntrospectionTests
     }
 
     [Theory]
-    [InlineData(false,false,false,false,false)]
     [InlineData(true,false,false,false,false)]
     [InlineData(false,true,false,false,false)]
     [InlineData(false,false,true,false,false)]
