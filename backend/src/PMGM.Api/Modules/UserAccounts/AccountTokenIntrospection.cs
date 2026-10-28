@@ -96,8 +96,7 @@ public sealed class KeycloakAccountTokenIntrospector(HttpClient http,
                 session.ValueKind==JsonValueKind.Object &&
                 session.TryGetProperty("id",out var id) &&
                 id.ValueKind==JsonValueKind.String &&
-                Guid.TryParse(id.GetString(),out var currentSessionId) &&
-                currentSessionId==tokenSessionId);
+                string.Equals(id.GetString(),tokenSessionId,StringComparison.Ordinal));
         }
         catch (Exception e) when(e is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException)
         { return false; }
@@ -106,18 +105,22 @@ public sealed class KeycloakAccountTokenIntrospector(HttpClient http,
     // Keycloak puede exponer sid o session_state según cliente/protocolo.
     // Si ambos existen deben coincidir; ausencia, tipo inesperado o
     // identificadores incompatibles son evidencia insuficiente (fail closed).
-    private static bool TryReadSessionId(JsonElement root,out Guid sessionId)
+    private static bool TryReadSessionId(JsonElement root,out string sessionId)
     {
-        sessionId=default;
+        sessionId="";
         var found=false;
         foreach(var name in new[]{"sid","session_state"})
         {
             if(!root.TryGetProperty(name,out var value) ||
                value.ValueKind==JsonValueKind.Null) continue;
-            if(value.ValueKind!=JsonValueKind.String ||
-               !Guid.TryParse(value.GetString(),out var parsed)) return false;
-            if(found && sessionId!=parsed) return false;
-            sessionId=parsed;
+            if(value.ValueKind!=JsonValueKind.String) return false;
+            var candidate=value.GetString();
+            // OIDC sid es un identificador opaco, no necesariamente UUID.
+            if(string.IsNullOrWhiteSpace(candidate) || candidate.Length>256 ||
+               candidate.Any(char.IsControl)) return false;
+            if(found && !string.Equals(sessionId,candidate,StringComparison.Ordinal))
+                return false;
+            sessionId=candidate;
             found=true;
         }
         return found;
