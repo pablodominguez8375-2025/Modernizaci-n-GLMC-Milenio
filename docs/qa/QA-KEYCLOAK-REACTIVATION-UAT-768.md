@@ -16,6 +16,9 @@ La aceptación completa exige:
 1. En **entorno QA aislado** y en una cuenta de prueba qa.* distinta de
    qa.admin, obtener un JWT previo a desactivar, aún no vencido y con
    sid o session_state; resguardar el token en archivo privado.
+   **Registrar como testigo previo** que ese mismo JWT fue emitido por Keycloak
+   y obtuvo HTTP 200 ANTES de desactivar. Sin esta evidencia, un JWT viejo
+   falso también podría responder 401 y el chequeador no prueba revocación.
 2. Por procedimiento autorizado **fuera del script**, desactivar y cerrar
    sesiones anteriores, y después reactivar la misma cuenta con un nuevo
    inicio de sesión, verificando permisos efectivos del Máster. No realizar
