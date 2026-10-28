@@ -54,7 +54,11 @@ public static class UserAccountEndpoints
         IAccountIdentityProvider identity,CancellationToken ct)
     {
         ctx.Response.Headers.CacheControl="private, no-store";
-        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User)) return Results.Forbid();
+        // Un rol heredado platform_superadmin no convierte a qa.admin ni a otra
+        // cuenta bootstrap en el único Máster admin del contrato #604.
+        if(!access.CanConfigureSystem(ctx.User) || !access.IsPlatformSuperAdmin(ctx.User) ||
+            !ctx.User.Claims.Any(c=>c.Type=="preferred_username" &&
+                string.Equals(c.Value,"admin",StringComparison.OrdinalIgnoreCase))) return Results.Forbid();
         if(identity is not IAccountIdentityInventory inventory || !identity.Configured)
             return Results.Json(new { message="No está disponible el inventario de identidades." },
                 statusCode:StatusCodes.Status503ServiceUnavailable);
