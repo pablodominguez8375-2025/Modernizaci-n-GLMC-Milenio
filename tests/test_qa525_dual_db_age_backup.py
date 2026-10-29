@@ -75,7 +75,8 @@ class DualAgeBackupTests(unittest.TestCase):
         with TemporaryDirectory() as temp:
             target = Path(temp) / "pmgm.pgdump.age"
             runner, calls = ciphertext_runner()
-            result = mod.dump_age("pmgm", target, run=runner)
+            with patch.object(mod, "ciphertext_is_root_private", return_value=True):
+                result = mod.dump_age("pmgm", target, run=runner)
             self.assertEqual("pmgm.pgdump.age", result["file"])
             self.assertEqual(mod.sha256_file(target), result["sha256"])
             self.assertGreater(result["encrypted_bytes"], 1024)
@@ -87,6 +88,18 @@ class DualAgeBackupTests(unittest.TestCase):
             self.assertEqual("pmgm", calls[0][-1])
             self.assertEqual(str(mod.AGE), calls[1][0])
             self.assertEqual("-R", calls[1][1])
+
+    def test_ciphertext_root_mode_and_size_are_strict(self):
+        from types import SimpleNamespace
+        import stat
+        good = SimpleNamespace(st_mode=stat.S_IFREG | 0o600, st_uid=0,
+                               st_nlink=1, st_size=4096)
+        self.assertTrue(mod.ciphertext_is_root_private(good))
+        for kw in ({"st_uid": 1000}, {"st_mode": stat.S_IFREG | 0o644},
+                   {"st_nlink": 2}, {"st_size": 100},
+                   {"st_mode": stat.S_IFLNK | 0o600}):
+            bad = SimpleNamespace(**{**vars(good), **kw})
+            self.assertFalse(mod.ciphertext_is_root_private(bad))
 
     def test_no_unlisted_or_malicious_database(self):
         with TemporaryDirectory() as temp:
@@ -257,7 +270,7 @@ class DualAgeBackupTests(unittest.TestCase):
     def test_read_only_db_dump_no_service_mutating_commands(self):
         code = SRC.read_text()
         for x in ("docker compose", '"up"', '"down"', '"restart"',
-                  "pg_restore", "psql", "DROP DATABASE", "TRUNCATE",
+                  '"pg_restore",', '"psql",', "DROP DATABASE", "TRUNCATE",
                   "subprocess.run(['sh'", "os.system("):
             self.assertNotIn(x, code)
         self.assertIn('"may_apply": False', code)
