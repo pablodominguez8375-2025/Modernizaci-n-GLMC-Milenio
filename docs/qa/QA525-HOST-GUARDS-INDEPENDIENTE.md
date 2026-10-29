@@ -16,6 +16,12 @@ Al corte `dev@700d0e23f9cc98f83bc9d3cef4d55040a2dba446`, los cinco controles de 
 
 La comparación de la API instalada históricamente `6ff4ae0d092d4214df4ea31af484efbc969fde54` con ese `dev` muestra 99 archivos diferentes, incluidos `backend/src/PMGM.Api/Program.cs` y `backend/src/PMGM.Api/Modules/UserAccounts/`. Por lo tanto, ese corte exige revisión técnica, no staging físico desatendido. La referencia de instalación física debe validarse de nuevo en glmdch; un SHA en memoria o GitHub no acredita los contenedores efectivos.
 
+## Revisión de seguridad posterior — cadena de imports del preflight
+
+El preflight independiente `qa525-current-host-preflight.py` verifica también las dependencias transitivas locales `qa525-current-release-gate.py` y `qa-agent-readiness.py` junto con el propio script, la política y el preflight histórico, **antes de ejecutar `importlib`**. Se exige ruta absoluta, propiedad root, sin symlinks y sin escritura por grupo/otros en cada ancestro; si falla, no se importa ni ejecuta código local. Las pruebas negativas simulan pérdida de confianza tanto del gate como del selector y bloquean antes de cargar módulos. El chequeo se aplica al preflight autónomo; el staging compuesto ya verificaba su propia cadena de dependencias.
+
+Esta mejora NO modifica el resultado `BLOCKED_REVIEW_REQUIRED` ante cambios de identidad/Program/migraciones ni habilita builds, backup o `apply`. Acredita solo la resistencia ante dependencias locales no confiables; no sustituye revisión de glmdch o UAT física.
+
 ## Pruebas CI y continuidad multi-IA
 
 El workflow nuevo `.github/workflows/qa525-host-guards-contract.yml` compila el código y ejecuta 3 conjuntos herméticos: 14 casos de clasificación de cambios, 10 de preflight físico simulado y 13 de staging/limpieza/verificación de rutas. **37 pruebas sintéticas**, sin datos reales, SSH, Docker, GitHub API o contraseñas. `QA readonly contract tests` también puede comprobar el código por su ruta. Solo un workflow finalizado `SUCCESS` del HEAD exacto permite integrar este incremento.
