@@ -161,6 +161,12 @@ def transact(*, before, new, source_sha, layers, workdir, state_dir, run,
         json.dump(journal, output, sort_keys=True)
         output.flush()
         os.fsync(output.fileno())
+    # Ensure initial crash-recovery receipt survives power loss before any up.
+    dirfd = os.open(record.parent, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(dirfd)
+    finally:
+        os.close(dirfd)
     # Do not print Docker output or identity environment.
     started = False
     try:
