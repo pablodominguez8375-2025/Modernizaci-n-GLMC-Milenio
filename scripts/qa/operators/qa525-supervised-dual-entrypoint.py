@@ -307,6 +307,39 @@ def expected_compose_chain(*, name, target, original_files,
         "qa525-" + name + "-" + target + "-" + current_image[7:] + ".json"))]
 
 
+
+def retain_rollback_images(before, target, docker):
+    """Tag BOTH old OCI IDs under the existing QA locks before any recreate.
+
+    A retained tag makes an old image resist ordinary dangling-image pruning.
+    This does not protect against an administrator explicitly force-deleting it.
+    Tags are SHA+image-specific and must never be silently reassigned.
+    """
+    require(type(target) is str and SHA.fullmatch(target) and callable(docker),
+            "ROLLBACK_RETAIN_INPUT_INVALID")
+    tags = {}
+    for name in ("api", "web"):
+        previous = before.get(name)
+        require(type(previous) is dict, "ROLLBACK_OLD_IMAGE_MISSING")
+        old = previous.get("image")
+        require(type(old) is str and re.fullmatch(r"sha256:[a-f0-9]{64}", old),
+                "ROLLBACK_OLD_IMAGE_INVALID")
+        tag = "pmgm-qa525-rollback:" + name + "-" + target[:12] + "-" + old[7:19]
+        require(docker(["image", "inspect", "--format", "{{.Id}}", old]) == old,
+                "ROLLBACK_IMAGE_NOT_PRESENT")
+        try:
+            existing = docker(["image", "inspect", "--format", "{{.Id}}", tag])
+        except Exception:
+            existing = None
+        require(existing is None or existing == old, "ROLLBACK_TAG_COLLISION")
+        if existing is None:
+            docker(["image", "tag", old, tag])
+        require(docker(["image", "inspect", "--format", "{{.Id}}", tag]) == old,
+                "ROLLBACK_TAG_NOT_PINNED")
+        tags[name] = tag
+    return tags
+
+
 def main():
     mode = sys.argv[1:]
     require(mode in (["--prepare-reviewed"], ["--apply-supervised"]),
@@ -465,6 +498,11 @@ def main():
                 return False
         require(evidence("pre", target, before, new) is True,
                 "SUPERVISED_EVIDENCE_DRIFTED")
+        # Pin both prior images while the same exclusive locks are held.
+        # This is image metadata only; no containers are changed yet.
+        rollback_tags = retain_rollback_images(before, target, adapter.docker)
+        require(set(rollback_tags) == set(core.TARGETS),
+                "ROLLBACK_IMAGES_NOT_RETAINED")
         fd = os.open(used, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as stream:
             stream.write(target + "\n")
