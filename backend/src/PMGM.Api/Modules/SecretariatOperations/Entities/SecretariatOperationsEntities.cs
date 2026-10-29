@@ -126,3 +126,39 @@ public sealed class LodgeAgendaItem
     public string? UpdatedBySubject { get; set; }
     public DateTimeOffset? UpdatedAtUtc { get; set; }
 }
+
+/// <summary>Propuesta de la Secretaría del Taller para completar o corregir la historia de un hermano (cargos y fechas de iniciación, aumento de salario y exaltación). Solo Régimen Interior la aprueba.</summary>
+public sealed class MemberHistoryProposal
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid OrganizationId { get; set; }
+    public Guid MemberId { get; set; }
+    public required string Status { get; set; }
+    public required string EvidenceReference { get; set; }
+    public required string Reason { get; set; }
+    public required string CreatedBySubject { get; set; }
+    public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
+    public string? ReviewedBySubject { get; set; }
+    public DateTimeOffset? ReviewedAtUtc { get; set; }
+    public string? ReviewNotes { get; set; }
+    public List<MemberHistoryProposalItem> Items { get; set; } = [];
+}
+
+public sealed class MemberHistoryProposalItem
+{
+    public Guid Id { get; init; } = Guid.NewGuid();
+    public Guid ProposalId { get; set; }
+    public MemberHistoryProposal Proposal { get; set; } = null!;
+    /// <summary>office | degree.</summary>
+    public required string Kind { get; set; }
+    /// <summary>add | replace.</summary>
+    public required string Action { get; set; }
+    /// <summary>Registro vigente que se reemplaza (OfficeAssignment o DegreeEvent) cuando Action = replace.</summary>
+    public Guid? TargetRecordId { get; set; }
+    public string? OfficeType { get; set; }
+    public string? Period { get; set; }
+    public DateOnly? StartDate { get; set; }
+    public DateOnly? EndDate { get; set; }
+    public string? EventType { get; set; }
+    public DateOnly? EventDate { get; set; }
+}

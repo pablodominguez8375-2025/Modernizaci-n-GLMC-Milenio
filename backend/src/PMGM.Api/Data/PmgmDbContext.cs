@@ -31,6 +31,8 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
     public DbSet<OfficeAssignment> OfficeAssignments => Set<OfficeAssignment>();
     public DbSet<HistoricalMemberIntake> HistoricalMemberIntakes => Set<HistoricalMemberIntake>();
     public DbSet<HistoricalMemberIntakeOffice> HistoricalMemberIntakeOffices => Set<HistoricalMemberIntakeOffice>();
+    public DbSet<MemberHistoryProposal> MemberHistoryProposals => Set<MemberHistoryProposal>();
+    public DbSet<MemberHistoryProposalItem> MemberHistoryProposalItems => Set<MemberHistoryProposalItem>();
     public DbSet<LodgeAdministrativeMeeting> LodgeAdministrativeMeetings => Set<LodgeAdministrativeMeeting>();
     public DbSet<LodgeSecretariatRecord> LodgeSecretariatRecords => Set<LodgeSecretariatRecord>();
     public DbSet<LodgeCorrespondence> LodgeCorrespondence => Set<LodgeCorrespondence>();
@@ -402,6 +404,33 @@ public sealed class PmgmDbContext(DbContextOptions<PmgmDbContext> options) : DbC
             entity.Property(x => x.Period).HasMaxLength(80).IsRequired();
             entity.HasOne(x => x.Intake).WithMany(x => x.Offices).HasForeignKey(x => x.IntakeId).OnDelete(DeleteBehavior.Cascade);
             entity.HasIndex(x => new { x.IntakeId, x.OfficeType, x.Period });
+        });
+
+        modelBuilder.Entity<MemberHistoryProposal>(entity =>
+        {
+            entity.ToTable("member_history_proposals");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Status).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.EvidenceReference).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(1000).IsRequired();
+            entity.Property(x => x.CreatedBySubject).HasMaxLength(320).IsRequired();
+            entity.Property(x => x.ReviewedBySubject).HasMaxLength(320);
+            entity.Property(x => x.ReviewNotes).HasMaxLength(2000);
+            entity.HasIndex(x => new { x.MemberId, x.Status });
+            entity.HasIndex(x => new { x.OrganizationId, x.Status, x.CreatedAtUtc });
+        });
+
+        modelBuilder.Entity<MemberHistoryProposalItem>(entity =>
+        {
+            entity.ToTable("member_history_proposal_items");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Kind).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.OfficeType).HasMaxLength(120);
+            entity.Property(x => x.Period).HasMaxLength(80);
+            entity.Property(x => x.EventType).HasMaxLength(80);
+            entity.HasOne(x => x.Proposal).WithMany(x => x.Items).HasForeignKey(x => x.ProposalId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(x => x.ProposalId);
         });
 
         modelBuilder.Entity<LodgeAdministrativeMeeting>(entity =>

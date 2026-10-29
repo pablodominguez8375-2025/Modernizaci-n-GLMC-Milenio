@@ -67,6 +67,8 @@ public static class SecretariatOperationsEndpoints
         ri.MapGet("/", ListPendingHistoricalIntakesAsync);
         ri.MapPost("/{intakeId:guid}/resolver", ReviewHistoricalIntakeAsync);
 
+        endpoints.MapMemberHistoryEndpoints();
+
         return endpoints;
     }
 
