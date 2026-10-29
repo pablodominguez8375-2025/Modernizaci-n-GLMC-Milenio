@@ -219,6 +219,37 @@ class SupervisorTests(unittest.TestCase):
                 host.validate_live_ef_history(lambda _: "not called")
 
 
+    def test_public_version_health_passes_only_matching_signed_sha(self):
+        class Response:
+            status = 200
+            def __init__(self, url, payload):
+                self.url, self.payload = url, payload
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def geturl(self):
+                return self.url
+            def read(self, _):
+                return self.payload
+        class Opener:
+            def __init__(self, published):
+                self.published = published
+            def open(self, req, timeout=12):
+                from json import dumps
+                payload = (dumps({"environment": "QA_SYNTHETIC",
+                                  "source_sha": self.published}).encode()
+                           if req.full_url.endswith("/qa-version.json") else b"ok")
+                return Response(req.full_url, payload)
+        with patch.object(host, "disable_redirects", return_value=Opener(TARGET)):
+            self.assertTrue(host.health(TARGET))
+        with patch.object(host, "disable_redirects", return_value=Opener("e"*40)):
+            self.assertFalse(host.health(TARGET))
+
+    def test_public_version_health_fails_on_invalid_sha(self):
+        self.assertFalse(host.health("old"))
+        self.assertFalse(host.health(None))
+
 
 if __name__ == "__main__":
     unittest.main()
