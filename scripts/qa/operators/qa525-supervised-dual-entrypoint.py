@@ -250,7 +250,7 @@ def validate_post_db_dba(review, source, now, docker, gate, probe):
         state = probe.inspect(receipt, docker, gate)
     except (probe.Blocked, gate.Blocked):
         raise Blocked("POST_DB_SCHEMA_LIVE_READONLY_NOT_VERIFIED") from None
-    require(state.get("status") == "POST_DB_99_MIGRATIONS_AND_OBJECTS_READ_ONLY_PASS"
+    require(state.get("status") == probe.POST_DB_PASS_STATUS
             and state.get("history_count") == 99
             and state.get("may_apply") is False,
             "POST_DB_SCHEMA_LIVE_READONLY_NOT_VERIFIED")
