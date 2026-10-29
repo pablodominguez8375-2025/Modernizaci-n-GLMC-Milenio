@@ -192,6 +192,27 @@ class DynamicImagePreparationTests(unittest.TestCase):
             self.assertEqual(2, mod.main([]))
             prep.assert_not_called()
 
+    def test_root_sticky_lock_directory_is_narrowly_allowed(self):
+        from types import SimpleNamespace
+        import stat as st
+        with patch.object(mod, "trusted") as trusted, \
+             patch.object(Path, "lstat", return_value=SimpleNamespace(
+                 st_mode=st.S_IFDIR | 0o1777, st_uid=0)):
+            mod.trusted_lock_parent(Path("/run/lock"))
+            trusted.assert_called_once_with(Path("/run"), directory=True)
+
+    def test_untrusted_lock_directory_is_blocked(self):
+        from types import SimpleNamespace
+        import stat as st
+        for mode, uid in ((0o0777, 0), (0o1777, 1000),
+                          (0o0775, 0)):
+            with self.subTest(mode=mode, uid=uid), \
+                 patch.object(mod, "trusted"), \
+                 patch.object(Path, "lstat", return_value=SimpleNamespace(
+                     st_mode=st.S_IFDIR | mode, st_uid=uid)):
+                with self.assertRaisesRegex(mod.Blocked, "LOCK_DIRECTORY_NOT_ROOT_STICKY"):
+                    mod.trusted_lock_parent(Path("/run/lock"))
+
     def test_code_does_not_contain_apply_operations(self):
         source = SRC.read_text()
         for op in ("--force-recreate", "'up'", '"up"', "systemctl", "pg_dump",
