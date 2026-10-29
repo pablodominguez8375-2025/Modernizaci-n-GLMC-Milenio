@@ -19,6 +19,12 @@ HERE = Path(__file__).resolve().parent
 POLICY_FILE = HERE / "qa525-current-change-policy.py"
 PREFLIGHT_FILE = HERE / "qa525-host-baseline-6ff4-readonly.py"
 PREFLIGHT_SHA256 = "7867c8ae21f8be4ad2e60e6aa1491d90c35356e67d07954a2e80994bfb78f2ae"
+# The policy imports the release gate, which imports the readiness selector.
+# Validate this entire first-party import chain BEFORE executing any local code.
+PRE_IMPORT_DEPENDENCIES = (
+    HERE.parent / "qa525-current-release-gate.py",
+    HERE.parent / "qa-agent-readiness.py",
+)
 SCOPE = "HOST_READ_ONLY_NO_BUILD_NO_STAGING_NO_APPLY_NO_UAT"
 
 
@@ -92,7 +98,8 @@ def main():
         require(sys.argv[1:] == [], "READ_ONLY_NO_OPTIONS")
         require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
                 "HOST_NOT_AUTHORIZED")
-        for path in (Path(__file__), POLICY_FILE, PREFLIGHT_FILE):
+        for path in (Path(__file__), POLICY_FILE, PREFLIGHT_FILE,
+                     *PRE_IMPORT_DEPENDENCIES):
             trusted_source(path)
         require(digest(PREFLIGHT_FILE) == PREFLIGHT_SHA256,
                 "REVIEWED_PREFLIGHT_SHA_CHANGED")
