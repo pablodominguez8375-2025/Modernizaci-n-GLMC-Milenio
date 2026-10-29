@@ -97,7 +97,7 @@ class SupervisorTests(unittest.TestCase):
                 {"filename": "backend/NewName.cs", "previous_filename": "backend/Data/PmgmDbContext.cs",
                  "status": "renamed"}]}
         with self.assertRaisesRegex(host.Blocked, "EF_MIGRATION"):
-            host.scan_migrations(POLICY, fetch)
+            host.scan_migrations(POLICY, fetch, TARGET)
 
     def test_simple_runtime_change_can_pass_schema_scan(self):
         host.scan_migrations(POLICY, lambda _: {
