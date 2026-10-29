@@ -1,0 +1,25 @@
+name: QA525 synthetic reversible API WEB transaction
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/operators/qa525-synthetic-reversible-transaction.py'
+      - 'tests/test_qa525_synthetic_reversible_transaction.py'
+      - '.github/workflows/qa525-synthetic-reversible-transaction.yml'
+permissions:
+  contents: read
+jobs:
+  synthetic-dual-rollback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Compile synthetic transaction and tests
+        run: |
+          python3 -m py_compile scripts/qa/operators/qa525-synthetic-reversible-transaction.py
+          python3 -m py_compile tests/test_qa525_synthetic_reversible_transaction.py
+      - name: Test both databases, dual rollback and failures with no host
+        run: python3 -m unittest discover -s tests -p test_qa525_synthetic_reversible_transaction.py -v
