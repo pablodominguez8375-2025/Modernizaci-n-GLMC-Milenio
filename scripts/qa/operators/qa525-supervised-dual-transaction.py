@@ -140,14 +140,15 @@ def transact(*, before, new, source_sha, layers, workdir, state_dir, run,
     baseline_contract(before, new, source_sha, layers, workdir)
     require(callable(run) and callable(live_snapshot) and callable(evidence)
             and callable(health) and callable(audit), "TRUSTED_CALLBACK_MISSING")
-    require(evidence("pre", source_sha, before, new) is True,
-            "SIGNED_G6_SENSITIVE_OR_SUPERVISION_EVIDENCE_MISSING")
-    require(live_snapshot() == before, "BASELINE_CHANGED_BEFORE_APPLY")
-    # Snapshot journal is private and intentionally never deleted on failure.
+    # Reject prior successful, failed or interrupted attempts BEFORE touching
+    # host evidence: a stale deployment is never implicitly retried.
     root_path(state_dir, directory=True)
     record = Path(state_dir) / ("dual-" + source_sha + ".json")
     require(not record.exists() and not record.is_symlink(),
             "TRANSACTION_ALREADY_EXISTS_OR_INCOMPLETE")
+    require(evidence("pre", source_sha, before, new) is True,
+            "SIGNED_G6_SENSITIVE_OR_SUPERVISION_EVIDENCE_MISSING")
+    require(live_snapshot() == before, "BASELINE_CHANGED_BEFORE_APPLY")
     api_new = make_override(state_dir, source_sha, "api", new["api"])
     web_new = make_override(state_dir, source_sha, "web", new["web"])
     api_old = make_override(state_dir, source_sha, "api", before["api"]["image"])
