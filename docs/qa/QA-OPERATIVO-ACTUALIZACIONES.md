@@ -278,3 +278,25 @@ preparación de imagen API+WEB del SHA dinámico y su apply/rollback
 supervisado. Debe tomar un artefacto con firma real comprobada por
 `qa525-stage-current-release.py`, usar evidencia de línea base
 recién verificada y proteger Master/SMTP/Keycloak sin mutaciones.
+
+
+## Etapa intermedia de staging con firma y doble preflight (28-10-2026)
+
+El nuevo `scripts/qa/operators/qa525-current-host-staging.py` (PR #771) reúne, sin instalar ni construir imágenes, tres comprobaciones anteriormente separadas:
+
+1. Solo en glmdch, como root, exige un destino absoluto nuevo bajo directorio privado `0700`. Los archivos de los verificadores deben estar bajo rutas locales root-owned sin symlinks ni escrituras ajenas; el preflight histórico está fijado mediante SHA256.
+2. Ejecuta la política de cambios firmados del HEAD actual y un preflight físico de solo lectura. Los cambios en identidad, cuentas, `Program.cs`, migraciones o infraestructura **bloquean aquí**, antes de descargar siquiera el ZIP.
+3. Si resultara elegible, usa `qa525-stage-current-release.py` para descargar la release pública sin token, verificar SHA256, Sigstore y manifiesto dentro de una carpeta temporal privada. Solo conserva el candidato si un **segundo preflight físico** verifica el mismo SHA, la misma release, los siete servicios y las mismas protecciones; en otro caso, elimina el staging temporal.
+
+Su única salida exitosa es `SIGNED_SOURCE_AND_HOST_RECHECKED_NOT_PREPARED`, con `may_build:false`, `may_apply:false`, `api_web_images_built:false` y `fresh_backup_created:false`. Es un candidato de código, **no** una instalación, compilación, actualización, UAT ni autorización de aplicar.
+
+El uso operativo requiere primero instalar el código confiable mediante un procedimiento físico separado y aprobado; **no ejecutar este comando en glmdch todavía**. Ejemplo documental, únicamente para un host previamente auditado y autorizado:
+
+~~~bash
+python3 /opt/centenario/qa-tools/qa525-current-host-staging.py --stage \
+  --output /opt/centenario/qa-api-refresh/private/qa525-corte-verificado
+~~~
+
+Las pruebas CI son simuladas y no acreditan firma real ni estado físico. Se prueban cambios de SHA durante el proceso, fallos de firma, host incorrecto, rutas inseguras, candidatos sensibles y limpieza de staging. Los operadores anteriores que fijan `88fb` o `0bd927b` permanecen deshabilitados para versiones actuales.
+
+**Paso siguiente:** adaptar un build de API+WEB que pueda consumir únicamente este staging verificado y su comprobación de estado, para cortes formalmente elegibles, y construir/verificar un mecanismo de aplicación/rollback con backups frescos. El actual corte `dev@700d0e23...` contiene cambios en identidad y `Program.cs`, por lo que está marcado como `BLOCKED_REVIEW_REQUIRED` para staging físico desatendido.
