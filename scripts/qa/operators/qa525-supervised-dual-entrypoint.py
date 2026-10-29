@@ -356,7 +356,22 @@ def main():
         layers = core.normalized_layers(
             {name: (original[name][7] or "").split(",") for name in core.TARGETS},
             WORKDIR)
+        require(all(original[name][6] == str(WORKDIR) for name in core.TARGETS),
+                "COMPOSE_WORKING_DIR_CHANGED")
+        # Pin every ORIGINAL Compose file byte-for-byte. Other QA processes
+        # holding distinct locks must not change identity or route definitions.
+        compose_digests = {}
+        for filename in set(layers["api"] + layers["web"]):
+            with trusted(filename).open("rb") as stream:
+                compose_digests[filename] = hashlib.file_digest(stream, "sha256").hexdigest()
+        new = {name: prepared[name + "_image_id"] for name in core.TARGETS}
         def snapshot():
+            # Verify source files again both before and after recreation; the
+            # additive image overrides must not replace the qa754 identity.
+            for filename, digest in compose_digests.items():
+                with trusted(filename).open("rb") as stream:
+                    require(hashlib.file_digest(stream, "sha256").hexdigest() == digest,
+                            "COMPOSE_OR_IDENTITY_FILE_CHANGED")
             records = adapter.metadata()
             require(set(records) == set(original), "SERVICE_SET_CHANGED")
             answer = {}
@@ -369,6 +384,24 @@ def main():
                 if name in core.ONESHOTS:
                     answer[name]["exit_code"] = row[11]
                 if name in core.TARGETS:
+                    actual_files = (row[7] or "").split(",")
+                    prior = list(layers[name])
+                    if row[0] == original[name][0] and row[1] == original[name][1]:
+                        allowed_files = prior
+                    else:
+                        require(row[1] in (original[name][1], new[name]),
+                                "COMPOSE_UNEXPECTED_IMAGE")
+                        expected_overlay = STATE / (
+                            "qa525-" + name + "-" + target + "-" + row[1][7:] + ".json")
+                        allowed_files = prior + [str(expected_overlay)]
+                        overlay = trusted(expected_overlay)
+                        expected_payload = (json.dumps(
+                            {"services": {name: {"image": row[1]}}},
+                            sort_keys=True) + "\n")
+                        require(overlay.read_text() == expected_payload,
+                                "COMPOSE_OVERRIDE_TAMPERED")
+                    require(actual_files == allowed_files,
+                            "COMPOSE_LAYER_ORDER_CHANGED")
                     require(runtime_env(name) == env_before[name],
                             "API_OR_WEB_IDENTITY_ENV_CHANGED")
                     # Verify the same volumes, bindings, ports and network IDs
@@ -387,7 +420,6 @@ def main():
                         and before[n]["image"] == frozen[n]["image_id"]
                         for n in core.TARGETS + core.DEPENDENCIES),
                 "PREPARED_BASELINE_DRIFT")
-        new = {name: prepared[name + "_image_id"] for name in core.TARGETS}
         current_source = copy.deepcopy(source)
         # Unique nonce file: consuming locally is deliberately irreversible.
         used = STATE / ("approval-consumed-" + approve["nonce"])
