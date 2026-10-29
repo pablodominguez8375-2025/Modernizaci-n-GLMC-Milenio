@@ -43,6 +43,7 @@ class ReadonlyPostDBTests(unittest.TestCase):
         docker, calls = fake_docker()
         result = host.inspect({"database_migrations": BASE}, docker, gate)
         self.assertEqual(result["history_count"], 99)
+        self.assertEqual(result["status"], host.POST_DB_PASS_STATUS)
         self.assertEqual(result["expected_columns_present"], 22)
         self.assertEqual(result["expected_constraints_present"], 3)
         self.assertFalse(result["may_apply"])
