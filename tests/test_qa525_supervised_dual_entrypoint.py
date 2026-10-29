@@ -1,6 +1,7 @@
 """Offline adversarial QA525 supervised host entrypoint tests."""
 import importlib.util
 from pathlib import Path
+import tempfile
 import time
 import unittest
 from unittest.mock import patch
@@ -197,6 +198,31 @@ class SupervisorTests(unittest.TestCase):
             host.retain_rollback_images(
                 {"api": {"image": old_api}, "web": {"image": old_web}},
                 TARGET, docker)
+
+    def test_compose_empty_env_must_accept_physically_verified_zero_bytes(self):
+        # Actual glmdch QA baseline: SHA256(empty.env) == SHA256(b"").
+        # It is intentionally a 0-byte file, not a missing configuration.
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "empty.env"
+            path.write_bytes(b"")
+            path.chmod(0o600)
+            with patch.object(host, "trusted", return_value=path):
+                self.assertEqual(
+                    host.checked_compose_env_file(path),
+                    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+
+                # Allow comments only; block any effective assignment.
+                path.write_text("# QA empty environment\n")
+                self.assertNotEqual(host.checked_compose_env_file(path), "")
+                path.write_text("KEYCLOAK_SECRET=unexpected\n")
+                with self.assertRaisesRegex(host.Blocked, "COMPOSE_ENV_FILE_NOT_EMPTY"):
+                    host.checked_compose_env_file(path)
+
+                # Changing permissions must still fail closed.
+                path.write_bytes(b"")
+                path.chmod(0o644)
+                with self.assertRaisesRegex(host.Blocked, "COMPOSE_ENV_FILE_UNTRUSTED"):
+                    host.checked_compose_env_file(path)
 
     def test_live_ef_history_matches_installed_receipt_readonly(self):
         rows = ["2026_A_%03d" % i for i in range(98)]
