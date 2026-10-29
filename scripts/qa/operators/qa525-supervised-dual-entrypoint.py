@@ -340,6 +340,24 @@ def retain_rollback_images(before, target, docker):
     return tags
 
 
+def checked_compose_env_file(path):
+    """Verify physically approved --env-file contains no variable assignments."""
+    p = trusted(path)
+    st = p.stat()
+    require(stat.S_IMODE(st.st_mode) == 0o600 and 0 < st.st_size <= 65536
+            and st.st_nlink == 1, "COMPOSE_ENV_FILE_UNTRUSTED")
+    content = p.read_bytes()
+    require(len(content) == st.st_size and b"\x00" not in content,
+            "COMPOSE_ENV_FILE_CHANGED")
+    try:
+        decoded = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise Blocked("COMPOSE_ENV_FILE_INVALID") from None
+    require(all(not line.strip() or line.lstrip().startswith("#")
+                for line in decoded.splitlines()), "COMPOSE_ENV_FILE_NOT_EMPTY")
+    return hashlib.sha256(content).hexdigest()
+
+
 def main():
     mode = sys.argv[1:]
     require(mode in (["--prepare-reviewed"], ["--apply-supervised"]),
@@ -421,12 +439,15 @@ def main():
                 "COMPOSE_WORKING_DIR_CHANGED")
         # Pin every ORIGINAL Compose file byte-for-byte. Other QA processes
         # holding distinct locks must not change identity or route definitions.
+        envfile_digest = checked_compose_env_file(core.ENV_FILE)
         compose_digests = {}
         for filename in set(layers["api"] + layers["web"]):
             with trusted(filename).open("rb") as stream:
                 compose_digests[filename] = hashlib.file_digest(stream, "sha256").hexdigest()
         new = {name: prepared[name + "_image_id"] for name in core.TARGETS}
         def snapshot():
+            require(checked_compose_env_file(core.ENV_FILE) == envfile_digest,
+                    "COMPOSE_ENV_FILE_DRIFT")
             # Verify source files again both before and after recreation; the
             # additive image overrides must not replace the qa754 identity.
             for filename, digest in compose_digests.items():
