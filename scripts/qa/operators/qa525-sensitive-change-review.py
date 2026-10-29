@@ -46,6 +46,7 @@ MUST_PROVE = (
     "Signed exact-dev release and complete, untruncated GitHub comparison",
     "Independent read-only physical baseline and current Compose image IDs",
     "Manual security review of all flagged runtime/identity/schema paths",
+    "Review EF migrations and schema compatibility, with explicit separate approval",
     "Fresh encrypted off-host pmgm and pmgm_keycloak backups with restore drill",
     "Tested API+WEB dual rollback and privileged account/SMTP invariance",
     "Explicit single-use supervised deployment decision and authenticated UAT",
