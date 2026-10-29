@@ -124,7 +124,7 @@ class ReversibleTransactionContractTests(unittest.TestCase):
 
     def test_signed_asset_mismatch_blocks(self):
         for section, field, code in (
-            ("source", "release_asset_sha256", "SOURCE_RELEASE_NOT_VERIFIED"),
+            ("source", "release_asset_sha256", "SIGNED_STAGING_RECEIPT_INVALID"),
             ("staging", "release_asset_sha256", "SIGNED_STAGING_RECEIPT_INVALID"),
             ("prepared", "source_asset_sha256", "PREPARED_RECEIPT_INVALID"),
         ):
@@ -132,6 +132,11 @@ class ReversibleTransactionContractTests(unittest.TestCase):
                 sample = fixture()
                 sample[section][field] = "sha256:" + "1" * 64
                 self.assert_blocked(sample, code)
+
+    def test_malformed_source_digest_blocks_at_source_gate(self):
+        sample = fixture()
+        sample["source"]["release_asset_sha256"] = "not-a-digest"
+        self.assert_blocked(sample, "SOURCE_RELEASE_NOT_VERIFIED")
 
     def test_broken_signature_or_double_host_check_blocks(self):
         for key in ("signed_stage_executed", "host_checked_twice"):
