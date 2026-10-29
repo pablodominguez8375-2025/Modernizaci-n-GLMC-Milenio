@@ -191,6 +191,14 @@ class CurrentHostStagingTests(unittest.TestCase):
         self.assertNotIn("SMTP_KEY", output.getvalue())
         self.assertEqual("BLOCKED_QA525_HOST_STAGING", json.loads(output.getvalue())["status"])
 
+    def test_source_trust_guard_runs_before_dynamic_verifier_imports(self):
+        source = SOURCE.read_text()
+        call = source.index("\nbootstrap_source_trust()\nhost = load(")
+        self.assertLess(call, source.index('signed = load('))
+        self.assertIn("stat.S_ISLNK(details.st_mode)", source)
+        self.assertIn("details.st_uid != 0", source)
+        self.assertIn("LOCAL_SOURCE_UNTRUSTED", source)
+
     def test_no_runtime_apply_build_calls_exposed(self):
         source = SOURCE.read_text()
         for forbidden in ("subprocess", "systemctl", "compose up", "docker build",
