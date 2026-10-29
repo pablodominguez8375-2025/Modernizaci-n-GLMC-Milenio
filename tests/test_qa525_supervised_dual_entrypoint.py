@@ -362,8 +362,8 @@ class DBAReviewedMigrationTests(unittest.TestCase):
                         "history_count": 99, "may_apply": False}
         private = lambda path, maximum=65536: (dba if path == host.DBA_REVIEW
                                                  else {"database_migrations": ["x"] * 98})
-        with patch.object(host, "private_json", side_effect=private), \\
-             patch.object(host, "validate_g6", return_value=True):
+        with (patch.object(host, "private_json", side_effect=private),
+              patch.object(host, "validate_g6", return_value=True)):
             self.assertTrue(host.validate_post_db_dba(g6, SRC, now,
                                                        lambda _: "", Gate, Probe))
             for key, value in (("previous_api_forward_compatible", False),
