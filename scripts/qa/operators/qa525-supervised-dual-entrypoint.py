@@ -208,10 +208,12 @@ def health(expected_web_sha):
             with opener.open(req, timeout=12) as res:
                 if res.status != 200 or res.geturl() != origin + path:
                     return False
-                body = res.read(2049)
-                if len(body) > 2048:
-                    return False
+                # The homepage can be larger than a JSON version marker.
+                # Only the machine-readable marker has a strict 2 KiB cap.
                 if path == "/qa-version.json":
+                    body = res.read(2049)
+                    if len(body) > 2048:
+                        return False
                     marker = json.loads(body)
                     if (type(marker) is not dict or
                             marker.get("environment") != "QA_SYNTHETIC" or
