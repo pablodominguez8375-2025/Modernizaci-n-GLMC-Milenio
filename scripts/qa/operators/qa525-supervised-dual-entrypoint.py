@@ -279,6 +279,33 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
             "may_apply": False}
 
 
+
+def expected_compose_chain(*, name, target, original_files,
+                           previous_id, previous_image, current_id,
+                           current_image, candidate_image, state=STATE):
+    """Exact Docker config_files chain after additive image-only override.
+
+    The old untouched container must still have its original layers.
+    Recreated services may have only the trusted QA525 appended override.
+    """
+    require(name in ("api", "web") and type(original_files) is tuple
+            and type(previous_id) is str and type(current_id) is str
+            and re.fullmatch(r"[a-f0-9]{64}", previous_id)
+            and re.fullmatch(r"[a-f0-9]{64}", current_id)
+            and type(target) is str and SHA.fullmatch(target)
+            and all(type(x) is str for x in original_files),
+            "COMPOSE_CHAIN_INPUT_INVALID")
+    require(all(type(x) is str and re.fullmatch(r"sha256:[a-f0-9]{64}", x)
+                for x in (previous_image, current_image, candidate_image)),
+            "COMPOSE_CHAIN_IMAGE_INVALID")
+    if current_id == previous_id and current_image == previous_image:
+        return list(original_files)
+    require(current_image in (previous_image, candidate_image),
+            "COMPOSE_UNEXPECTED_IMAGE")
+    return list(original_files) + [str(Path(state) / (
+        "qa525-" + name + "-" + target + "-" + current_image[7:] + ".json"))]
+
+
 def main():
     mode = sys.argv[1:]
     require(mode in (["--prepare-reviewed"], ["--apply-supervised"]),
@@ -385,16 +412,14 @@ def main():
                     answer[name]["exit_code"] = row[11]
                 if name in core.TARGETS:
                     actual_files = (row[7] or "").split(",")
-                    prior = list(layers[name])
-                    if row[0] == original[name][0] and row[1] == original[name][1]:
-                        allowed_files = prior
-                    else:
-                        require(row[1] in (original[name][1], new[name]),
-                                "COMPOSE_UNEXPECTED_IMAGE")
-                        expected_overlay = STATE / (
-                            "qa525-" + name + "-" + target + "-" + row[1][7:] + ".json")
-                        allowed_files = prior + [str(expected_overlay)]
-                        overlay = trusted(expected_overlay)
+                    allowed_files = expected_compose_chain(
+                        name=name, target=target, original_files=layers[name],
+                        previous_id=original[name][0],
+                        previous_image=original[name][1],
+                        current_id=row[0], current_image=row[1],
+                        candidate_image=new[name])
+                    if len(allowed_files) > len(layers[name]):
+                        overlay = trusted(allowed_files[-1])
                         expected_payload = (json.dumps(
                             {"services": {name: {"image": row[1]}}},
                             sort_keys=True) + "\n")
