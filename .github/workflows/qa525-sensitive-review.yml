@@ -1,0 +1,25 @@
+name: QA525 signed-dev sensitive-cut review report
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/operators/qa525-sensitive-change-review.py'
+      - 'tests/test_qa525_sensitive_change_review.py'
+      - '.github/workflows/qa525-sensitive-review.yml'
+permissions:
+  contents: read
+jobs:
+  signed-diff-review-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Compile risk packet and offline tests
+        run: |
+          python3 -m py_compile scripts/qa/operators/qa525-sensitive-change-review.py
+          python3 -m py_compile tests/test_qa525_sensitive_change_review.py
+      - name: Verify conservative review, path inventory and no deployment
+        run: python3 -m unittest discover -s tests -p test_qa525_sensitive_change_review.py -v
