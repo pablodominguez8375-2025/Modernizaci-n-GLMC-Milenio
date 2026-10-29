@@ -1,0 +1,25 @@
+name: QA525 live-topology rollback plan contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/operators/qa525-live-rollback-plan.py'
+      - 'tests/test_qa525_live_rollback_plan.py'
+      - '.github/workflows/qa525-live-rollback-plan.yml'
+permissions:
+  contents: read
+jobs:
+  offline-rollback-topology:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Syntax of rollback contract and negative tests
+        run: |
+          python3 -m py_compile scripts/qa/operators/qa525-live-rollback-plan.py
+          python3 -m py_compile tests/test_qa525_live_rollback_plan.py
+      - name: Compare physical topology and immutable rollback images, NO host calls
+        run: python3 -m unittest discover -s tests -p test_qa525_live_rollback_plan.py -v
