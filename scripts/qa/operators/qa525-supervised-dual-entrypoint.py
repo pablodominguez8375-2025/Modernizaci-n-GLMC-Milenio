@@ -329,6 +329,22 @@ def main():
                          '{{index .Config.Labels "org.opencontainers.image.revision"}}',
                          image]) == SOURCE,
                     "PREPARED_IMAGE_INVALID")
+        # A new API image must not silently change live identity, mail or
+        # migration environment. Never log or write Config.Env values.
+        def runtime_env(name):
+            data = json.loads(adapter.docker([
+                "inspect", "--format", "{{json .Config.Env}}",
+                "centenario-qa-lab2-" + name + "-1"]))
+            require(type(data) is list and all(type(x) is str and "=" in x
+                    for x in data), "RUNTIME_ENV_SHAPE_INVALID")
+            settings = dict(x.split("=", 1) for x in data)
+            if name == "api":
+                require(settings.get("Database__ApplyMigrationsOnStartup", "false").lower()
+                        == "false" and
+                        settings.get("Database__RunMigrationsAndExit", "false").lower()
+                        == "false", "API_MIGRATION_FLAGS_ENABLED")
+            return hashlib.sha256(json.dumps(sorted(data)).encode()).hexdigest()
+        env_before = {name: runtime_env(name) for name in ("api", "web")}
         # Exact baseline and all approved Compose layers are checked at runtime.
         original = adapter.metadata()
         require(set(original) == set(core.TARGETS + core.DEPENDENCIES + core.ONESHOTS),
@@ -349,6 +365,8 @@ def main():
                 if name in core.ONESHOTS:
                     answer[name]["exit_code"] = row[11]
                 if name in core.TARGETS:
+                    require(runtime_env(name) == env_before[name],
+                            "API_OR_WEB_IDENTITY_ENV_CHANGED")
                     # Verify the same volumes, bindings, ports and network IDs
                     # even when container IDs must change during recreation.
                     baseline_row = original[name]
