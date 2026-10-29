@@ -164,6 +164,40 @@ class SupervisorTests(unittest.TestCase):
                 current_id="1"*64, current_image="sha256:" + "3"*64,
                 candidate_image="sha256:" + "3"*64)
 
+    def test_rollback_retains_both_verified_old_images(self):
+        old_api, old_web = "sha256:" + "a"*64, "sha256:" + "b"*64
+        existing = {old_api: old_api, old_web: old_web}
+        actions = []
+        def docker(cmd):
+            if cmd[:2] == ["image", "inspect"]:
+                if cmd[4] not in existing:
+                    raise RuntimeError("missing tag")
+                return existing[cmd[4]]
+            if cmd[:2] == ["image", "tag"]:
+                existing[cmd[3]] = cmd[2]
+                actions.append(tuple(cmd))
+                return ""
+            raise AssertionError(cmd)
+        result = host.retain_rollback_images(
+            {"api": {"image": old_api}, "web": {"image": old_web}},
+            TARGET, docker)
+        self.assertEqual(set(result), {"api", "web"})
+        self.assertEqual(len(actions), 2)
+        for name, tag in result.items():
+            self.assertEqual(existing[tag], old_api if name == "api" else old_web)
+
+    def test_rollback_tag_reassignment_is_denied(self):
+        old_api, old_web = "sha256:" + "a"*64, "sha256:" + "b"*64
+        first_tag = "pmgm-qa525-rollback:api-" + TARGET[:12] + "-" + "a"*12
+        def docker(cmd):
+            if cmd[0:2] == ["image", "inspect"]:
+                return "sha256:" + "f"*64 if cmd[4] == first_tag else cmd[4]
+            raise AssertionError("must not overwrite a collision")
+        with self.assertRaisesRegex(host.Blocked, "ROLLBACK_TAG_COLLISION"):
+            host.retain_rollback_images(
+                {"api": {"image": old_api}, "web": {"image": old_web}},
+                TARGET, docker)
+
 
 if __name__ == "__main__":
     unittest.main()
