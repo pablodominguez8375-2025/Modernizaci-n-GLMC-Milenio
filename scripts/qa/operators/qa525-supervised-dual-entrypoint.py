@@ -32,6 +32,7 @@ SHA = re.compile(r"[a-f0-9]{40}\Z")
 BASELINE = "6ff4ae0d092d4214df4ea31af484efbc969fde54"
 STATE = Path("/opt/centenario/qa525-signed-prepare")
 REVIEW = Path("/etc/pmgm/qa525-sensitive-reviewed.json")
+DBA_REVIEW = Path("/etc/pmgm/qa525-member-history-dba-approved.json")
 ARCHIVE_RECEIPT = Path("/opt/centenario/qa-g6/archive.receipt.json")
 G6_DIR = Path("/opt/centenario/qa-g6")
 WORKDIR = Path("/opt/centenario/qa-lab-firstboot/recovery-v2")
@@ -44,6 +45,8 @@ MODULES = (
     HERE / "qa525-current-change-policy.py",
     QA_DIR / "qa525-stage-current-release.py",
     QA_DIR / "qa-lite-compose-adapter.py",
+    HERE / "qa525-member-history-schema-gate.py",
+    HERE / "qa525-post-db-readonly.py",
 )
 HEALTH_PATHS = ("/", "/health/web", "/health/ready",
                 "/identity/realms/pmgm/.well-known/openid-configuration")
@@ -96,7 +99,7 @@ def load(name, path):
     return module
 
 
-def approved_review(review, source, policy, now):
+def approved_review(review, source, policy, now, *, schema_approved=False):
     """Review claims are necessary, never a substitute for manual QA signoff."""
     required = {"source_sha", "release_asset_sha256", "baseline_sha",
                 "reviewed_sections", "sensitive_reasons",
@@ -113,7 +116,8 @@ def approved_review(review, source, policy, now):
             and set(review["reviewed_sections"]) == REVIEWED
             and sorted(review["sensitive_reasons"]) == sorted(policy["reasons"])
             and policy["status"] == "BLOCKED_REVIEW_REQUIRED"
-            and review["no_new_ef_migrations"] is True
+            and type(schema_approved) is bool
+            and review["no_new_ef_migrations"] is (not schema_approved)
             and review["runtime_migration_flags_disabled"] is True
             and review["legacy_master_and_smtp_preserved"] is True
             and review["g6_offhost_sha256_verified"] is True,
@@ -166,8 +170,8 @@ def validate_g6(review, now):
     return True
 
 
-def scan_migrations(policy, fetch, target):
-    """No EF migration/DbContext changes may be silently applied."""
+def scan_migrations(policy, fetch, target, gate=None):
+    """Only the two pinned PR801 schema blobs may enter DBA-reviewed path."""
     comparison = fetch("/compare/" + BASELINE + "..." + target)
     require(comparison.get("status") == "ahead"
             and type(comparison.get("files")) is list
@@ -182,10 +186,75 @@ def scan_migrations(policy, fetch, target):
             require(type(row.get("previous_filename")) is str,
                     "RENAMED_MIGRATION_UNKNOWN")
             paths.add(row["previous_filename"].lower())
-    require(not any("/migrations/" in p or "dbcontext" in p for p in paths),
-            "EF_MIGRATION_OR_DBCONTEXT_CHANGE_REQUIRES_SEPARATE_PLAN")
-    return True
+    sensitive = {p for p in paths if "/migrations/" in p or "dbcontext" in p}
+    if not sensitive:
+        return "NO_SCHEMA_CHANGE"
+    require(gate is not None, "EF_MIGRATION_OR_DBCONTEXT_CHANGE_REQUIRES_SEPARATE_PLAN")
+    # These Git blob SHA values are independently pinned in the reviewed
+    # pure PR801 contract, and are checked against the exact signed HEAD.
+    blobs = {}
+    for path in (gate.MIGRATION_PATH, gate.CONTEXT_PATH):
+        detail = fetch("/contents/" + path + "?ref=" + target)
+        require(type(detail) is dict and type(detail.get("sha")) is str,
+                "MIGRATION_SOURCE_BLOB_UNAVAILABLE")
+        blobs[path] = detail["sha"]
+    try:
+        gate.reviewed_diff(comparison["files"], blobs)
+    except gate.Blocked:
+        raise Blocked("UNKNOWN_OR_UNREVIEWED_EF_CHANGE") from None
+    return "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
 
+
+def validate_post_db_dba(review, source, now, docker, gate, probe):
+    """Read-only live 99 + exact root DBA acta + G6 post-migration checkpoint.
+
+    Proof of the DB schema remains distinct from approval to deploy. This
+    function never runs the EF migrator or modifies PostgreSQL.
+    """
+    dba = private_json(DBA_REVIEW, maximum=8192)
+    fields = {"source_sha", "release_asset_sha256", "baseline_sha",
+              "migration_id", "migration_blob_sha", "dbcontext_blob_sha",
+              "migration_completed_at", "approved_at",
+              "dba_independently_reviewed", "additive_up_only",
+              "previous_api_forward_compatible", "post_db_g6_archive_name",
+              "post_db_g6_archive_sha256", "post_db_g6_restore_report_name"}
+    require(type(dba) is dict and set(dba) == fields,
+            "DBA_REVIEW_FIELDS_INVALID")
+    completed, approved = dba["migration_completed_at"], dba["approved_at"]
+    require(dba["source_sha"] == source["source_sha"]
+            and dba["release_asset_sha256"] == source["release_asset_sha256"]
+            and dba["baseline_sha"] == BASELINE
+            and dba["migration_id"] == gate.MIGRATION_ID
+            and dba["migration_blob_sha"] == gate.MIGRATION_BLOB
+            and dba["dbcontext_blob_sha"] == gate.CONTEXT_BLOB
+            and dba["dba_independently_reviewed"] is True
+            and dba["additive_up_only"] is True
+            and dba["previous_api_forward_compatible"] is True
+            and type(completed) is int and type(approved) is int
+            and 0 < completed <= approved <= now
+            and now - approved <= 1800
+            and dba["post_db_g6_archive_name"] == review["g6_archive_name"]
+            and dba["post_db_g6_archive_sha256"] == review["g6_archive_sha256"]
+            and dba["post_db_g6_restore_report_name"] == review["g6_restore_report_name"],
+            "DBA_REVIEW_OUTDATED_OR_NOT_APPROVED")
+    # Check the approved snapshot was actually created after DBA migration.
+    try:
+        archive_time = __import__("calendar").timegm(
+            time.strptime(review["g6_archive_name"][25:40], "%Y%m%dT%H%M%S"))
+    except (ValueError, TypeError, IndexError):
+        raise Blocked("POST_DB_G6_TIMESTAMP_INVALID") from None
+    require(archive_time >= completed, "G6_PRECEDES_DBA_MIGRATION")
+    validate_g6(review, now)
+    receipt = private_json(Path("/opt/centenario/qa-api-refresh/installed.json"))
+    try:
+        state = probe.inspect(receipt, docker, gate)
+    except (probe.Blocked, gate.Blocked):
+        raise Blocked("POST_DB_SCHEMA_LIVE_READONLY_NOT_VERIFIED") from None
+    require(state.get("status") == "POST_DB_99_MIGRATIONS_AND_OBJECTS_READ_ONLY_PASS"
+            and state.get("history_count") == 99
+            and state.get("may_apply") is False,
+            "POST_DB_SCHEMA_LIVE_READONLY_NOT_VERIFIED")
+    return True
 
 def disable_redirects():
     class NoRedirect(HTTPRedirectHandler):
@@ -411,6 +480,8 @@ def main():
     policy = load("qa525_supervised_change_policy", MODULES[3])
     signed = load("qa525_supervised_signed_stage", MODULES[4])
     adapter = load("qa525_supervised_transport", MODULES[5])
+    schema_gate = load("qa525_pr801_schema_review", MODULES[6])
+    post_db_probe = load("qa525_pr801_post_db_probe", MODULES[7])
     with build.exclusive():
         review = private_json(REVIEW, maximum=8192)
         source = signed.gate.evaluate(signed.gate.readiness.fetch_public)
@@ -418,9 +489,15 @@ def main():
         require(type(target) is str and SHA.fullmatch(target),
                 "SIGNATURE_RELEASE_TARGET_DRIFT")
         comparison = policy.evaluate(signed.gate.readiness.fetch_public, BASELINE)
-        scan_migrations(policy, signed.gate.readiness.fetch_public, target)
+        schema_state = scan_migrations(policy, signed.gate.readiness.fetch_public,
+                                       target, schema_gate)
+        known_schema = schema_state == "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
         now = int(time.time())
-        approved_review(review, source, comparison, now)
+        if known_schema:
+            validate_post_db_dba(review, source, now, adapter.docker,
+                                 schema_gate, post_db_probe)
+        approved_review(review, source, comparison, now,
+                        schema_approved=known_schema)
         validate_g6(review, now)
         approve = approval.read_root_approval()
         if mode == ["--prepare-reviewed"]:
@@ -465,8 +542,13 @@ def main():
         env_before = {name: runtime_env(name) for name in ("api", "web")}
         # Compare live read-only EF history against the installed baseline.
         # No migration, SQL write or migrator container is permitted.
-        require(validate_live_ef_history(adapter.docker),
-                "EF_MIGRATION_PREFLIGHT_FAILED")
+        if known_schema:
+            require(validate_post_db_dba(review, source, int(time.time()),
+                                         adapter.docker, schema_gate, post_db_probe),
+                    "POST_DBA_EF_PREFLIGHT_FAILED")
+        else:
+            require(validate_live_ef_history(adapter.docker),
+                    "EF_MIGRATION_PREFLIGHT_FAILED")
         # Exact baseline and all approved Compose layers are checked at runtime.
         original = adapter.metadata()
         require(set(original) == set(core.TARGETS + core.DEPENDENCIES + core.ONESHOTS),
@@ -568,7 +650,12 @@ def main():
                 return (fresh == current_source and
                         approval.validate(approve, fresh, prepared, int(time.time()))
                         ["status"] == "LOCAL_SUPERVISED_CUT_MATCH_NO_DEPLOYMENT_AUTHORITY"
-                        and approved_review(review, fresh, comparison, int(time.time())) is None
+                        and approved_review(review, fresh, comparison,
+                                            int(time.time()),
+                                            schema_approved=known_schema) is None
+                        and (not known_schema or validate_post_db_dba(
+                            review, fresh, int(time.time()), adapter.docker,
+                            schema_gate, post_db_probe))
                         and validate_g6(review, int(time.time())))
             except Exception:
                 return False
