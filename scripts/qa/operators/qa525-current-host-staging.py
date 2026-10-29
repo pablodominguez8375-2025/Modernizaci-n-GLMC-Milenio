@@ -35,7 +35,7 @@ class Blocked(Exception):
 TRUSTED_MODULES = (
     OPERATOR_DIR / "qa525-current-host-preflight.py",
     OPERATOR_DIR / "qa525-current-change-policy.py",
-    OPERATOR_DIR / "qa525-update-readiness-0bd927b.py",
+    OPERATOR_DIR / "qa525-host-baseline-6ff4-readonly.py",
     QA_DIR / "qa525-stage-current-release.py",
     QA_DIR / "qa525-current-release-gate.py",
     QA_DIR / "qa-agent-readiness.py",
@@ -76,7 +76,7 @@ def validated_host_check():
     """No remote code runs: checked local, read-only source and policy modules."""
     for path in (Path(__file__), OPERATOR_DIR / "qa525-current-host-preflight.py",
                  OPERATOR_DIR / "qa525-current-change-policy.py",
-                 OPERATOR_DIR / "qa525-update-readiness-0bd927b.py",
+                 OPERATOR_DIR / "qa525-host-baseline-6ff4-readonly.py",
                  QA_DIR / "qa525-stage-current-release.py",
                  QA_DIR / "qa525-current-release-gate.py",
                  QA_DIR / "qa-agent-readiness.py",
