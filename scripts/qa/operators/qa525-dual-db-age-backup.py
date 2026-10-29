@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import resource
 import secrets
 import shutil
 import socket
@@ -37,6 +38,8 @@ SERVICES = ("api", "web", "keycloak", "postgres",
             "minio", "gateway", "clamav")
 JOBS = ("db-grants", "migrator", "minio-init")
 SCOPE = "ENCRYPTED_LOCAL_DUAL_DB_BACKUP_NO_OFFHOST_NO_RESTORE_NO_APPLY"
+MAX_ENCRYPTED_FILE_BYTES = 2 * 1024**3
+FREE_SPACE_RESERVE_BYTES = 2 * 1024**3
 RECIPIENT_PATTERN = re.compile(r"age1[a-z0-9]{58}\Z")
 HASH = re.compile(r"[0-9a-f]{64}\Z")
 LOCKS = (
@@ -133,11 +136,18 @@ def load_inventory():
     return module
 
 
+def limit_age_output():
+    """Kernel file size cap on age ciphertext; protects the QA system volume."""
+    resource.setrlimit(resource.RLIMIT_FSIZE,
+                       (MAX_ENCRYPTED_FILE_BYTES, MAX_ENCRYPTED_FILE_BYTES))
+
+
 def fixed_process(args, *, stdin=None, stdout=None):
+    options = {"preexec_fn": limit_age_output} if args[0] == str(AGE) else {}
     return subprocess.Popen(
         args, stdin=stdin, stdout=stdout, stderr=subprocess.DEVNULL,
         env={"PATH": "/usr/bin:/bin", "HOME": "/root"},
-        close_fds=True,
+        close_fds=True, **options,
     )
 
 
@@ -196,7 +206,7 @@ def ciphertext_is_root_private(info):
     return (stat.S_ISREG(info.st_mode) and info.st_uid == 0
             and stat.S_IMODE(info.st_mode) == 0o600
             and info.st_nlink == 1
-            and 1024 < info.st_size <= 10 * 1024 * 1024 * 1024)
+            and 1024 < info.st_size <= MAX_ENCRYPTED_FILE_BYTES)
 
 
 def dump_age(db, destination, *, run=fixed_process):
@@ -262,7 +272,8 @@ def backup():
         before = snapshot(inv)
         check_postgres()
         volume = os.statvfs(STATE)
-        require(volume.f_bavail * volume.f_frsize > 2 * 1024**3,
+        require(volume.f_bavail * volume.f_frsize
+                > len(DBS) * MAX_ENCRYPTED_FILE_BYTES + FREE_SPACE_RESERVE_BYTES,
                 "BACKUP_DISK_HEADROOM_INSUFFICIENT")
         date = datetime.now(timezone.utc)
         ident = date.strftime("%Y%m%dT%H%M%SZ") + "-" + secrets.token_hex(8)
