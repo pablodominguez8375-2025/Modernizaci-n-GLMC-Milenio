@@ -15,6 +15,8 @@ import re
 import stat
 
 PROJECT = "centenario-qa-lab2"
+# Exact physical environment context required by dev's QA525 host preflight.
+ENV_FILE = "/opt/centenario/qa-auto-lite/empty.env"
 TARGETS = ("api", "web")
 DEPENDENCIES = ("keycloak", "postgres", "minio", "gateway", "clamav")
 ONESHOTS = ("db-grants", "migrator", "minio-init")
@@ -121,7 +123,8 @@ def make_override(state, source, name, image):
 def compose_args(workdir, base_layers, extra, service):
     require(service in TARGETS and type(base_layers) is tuple
             and 2 <= len(base_layers) <= 3, "COMPOSE_SCOPE_INVALID")
-    args = ["compose", "--project-name", PROJECT, "--project-directory", workdir]
+    args = ["compose", "--project-name", PROJECT, "--project-directory", workdir,
+            "--env-file", ENV_FILE]
     for path in (*base_layers, extra):
         args += ["--file", path]
     args += ["up", "--detach", "--no-deps", "--no-build", "--pull", "never",
