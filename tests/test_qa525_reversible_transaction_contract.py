@@ -114,7 +114,7 @@ class ReversibleTransactionContractTests(unittest.TestCase):
         for section, attr, code in keys:
             with self.subTest(section=section):
                 sample = fixture()
-                sample[section][attr] = "0" * 40
+                sample[section][attr] = "not-a-sha" if section == "source" else "0" * 40
                 self.assert_blocked(sample, code)
 
     def test_policy_baseline_conflict_blocks(self):
