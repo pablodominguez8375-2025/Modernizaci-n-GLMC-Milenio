@@ -194,18 +194,31 @@ def disable_redirects():
     return build_opener(HTTPHandler(), HTTPSHandler(), NoRedirect())
 
 
-def health():
+def health(expected_web_sha):
+    """HTTPS smoke PLUS public WEB version identity; validates rollback too."""
+    if type(expected_web_sha) is not str or not SHA.fullmatch(expected_web_sha):
+        return False
     opener = disable_redirects()
+    origin = "https://sistema.granlogiamixta.cl"
     try:
-        for path in HEALTH_PATHS:
-            req = Request("https://sistema.granlogiamixta.cl" + path,
-                          headers={"User-Agent": "PMGM-QA-supervised-smoke"})
+        for path in (*HEALTH_PATHS, "/qa-version.json"):
+            req = Request(origin + path,
+                          headers={"User-Agent": "PMGM-QA-supervised-smoke",
+                                   "Cache-Control": "no-cache"})
             with opener.open(req, timeout=12) as res:
-                if res.status != 200:
+                if res.status != 200 or res.geturl() != origin + path:
                     return False
-                res.read(2048)
+                body = res.read(2049)
+                if len(body) > 2048:
+                    return False
+                if path == "/qa-version.json":
+                    marker = json.loads(body)
+                    if (type(marker) is not dict or
+                            marker.get("environment") != "QA_SYNTHETIC" or
+                            marker.get("source_sha") != expected_web_sha):
+                        return False
         return True
-    except (URLError, OSError, TimeoutError):
+    except (URLError, OSError, TimeoutError, ValueError, TypeError, UnicodeError):
         return False
 
 
@@ -525,6 +538,22 @@ def main():
                         for n in core.TARGETS + core.DEPENDENCIES),
                 "PREPARED_BASELINE_DRIFT")
         current_source = copy.deepcopy(source)
+        # Public /qa-version.json must identify exact signed WEB SHA, not just
+        # a healthy nginx. On rollback it must match the old image source.
+        previous_web_sha = adapter.docker([
+            "image", "inspect", "--format",
+            '{{index .Config.Labels "org.opencontainers.image.revision"}}',
+            before["web"]["image"]])
+        require(type(previous_web_sha) is str and SHA.fullmatch(previous_web_sha),
+                "ROLLBACK_WEB_PROVENANCE_NOT_PINNED")
+        def versioned_health():
+            live = adapter.metadata().get("web")
+            if live is None or live[2] != "running":
+                return False
+            actual = live[1]
+            expected = (target if actual == new["web"] else
+                        previous_web_sha if actual == before["web"]["image"] else None)
+            return health(expected)
         # Unique nonce file: consuming locally is deliberately irreversible.
         used = STATE / ("approval-consumed-" + approve["nonce"])
         require(not used.exists() and not used.is_symlink(),
@@ -565,7 +594,7 @@ def main():
                              layers=layers, workdir=str(WORKDIR), state_dir=STATE,
                              run=lambda args: adapter.docker(args, cwd=str(WORKDIR), timeout=240),
                              live_snapshot=snapshot, evidence=evidence,
-                             health=health, audit=audit)
+                             health=versioned_health, audit=audit)
 
 
 if __name__ == "__main__":
