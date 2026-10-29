@@ -99,7 +99,7 @@ class Qa525HostPreflightTests(unittest.TestCase):
         self.assertEqual(1, candidate.evaluate.call_count)
 
     def test_pinned_old_preflight_bytes_are_as_reviewed(self):
-        path = ROOT / "scripts/qa/operators/qa525-update-readiness-0bd927b.py"
+        path = ROOT / "scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py"
         self.assertEqual(host.PREFLIGHT_SHA256,
                          hashlib.sha256(path.read_bytes()).hexdigest())
 
