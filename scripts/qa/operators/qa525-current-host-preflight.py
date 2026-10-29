@@ -17,7 +17,7 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 POLICY_FILE = HERE / "qa525-current-change-policy.py"
-PREFLIGHT_FILE = HERE / "qa525-update-readiness-0bd927b.py"
+PREFLIGHT_FILE = HERE / "qa525-host-baseline-6ff4-readonly.py"
 PREFLIGHT_SHA256 = "7867c8ae21f8be4ad2e60e6aa1491d90c35356e67d07954a2e80994bfb78f2ae"
 SCOPE = "HOST_READ_ONLY_NO_BUILD_NO_STAGING_NO_APPLY_NO_UAT"
 
