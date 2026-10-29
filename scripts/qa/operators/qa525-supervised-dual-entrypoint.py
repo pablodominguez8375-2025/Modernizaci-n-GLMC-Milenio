@@ -28,7 +28,7 @@ from urllib.error import URLError
 
 HERE = Path(__file__).resolve().parent
 QA_DIR = HERE.parent
-SOURCE = "0bd14cb81a1c0e607e04283083f77a5ddf36b339"
+SHA = re.compile(r"[a-f0-9]{40}\Z")
 BASELINE = "6ff4ae0d092d4214df4ea31af484efbc969fde54"
 STATE = Path("/opt/centenario/qa525-signed-prepare")
 REVIEW = Path("/etc/pmgm/qa525-sensitive-reviewed.json")
@@ -106,7 +106,8 @@ def approved_review(review, source, policy, now):
                 "g6_offhost_sha256_verified", "g6_restore_report_name"}
     require(type(review) is dict and set(review) == required,
             "SENSITIVE_REVIEW_FIELDS_INVALID")
-    require(review["source_sha"] == SOURCE == source["source_sha"]
+    require(type(source.get("source_sha")) is str and SHA.fullmatch(source["source_sha"])
+            and review["source_sha"] == source["source_sha"]
             and review["release_asset_sha256"] == source["release_asset_sha256"]
             and review["baseline_sha"] == BASELINE
             and set(review["reviewed_sections"]) == REVIEWED
@@ -165,9 +166,9 @@ def validate_g6(review, now):
     return True
 
 
-def scan_migrations(policy, fetch):
+def scan_migrations(policy, fetch, target):
     """No EF migration/DbContext changes may be silently applied."""
-    comparison = fetch("/compare/" + BASELINE + "..." + SOURCE)
+    comparison = fetch("/compare/" + BASELINE + "..." + target)
     require(comparison.get("status") == "ahead"
             and type(comparison.get("files")) is list
             and 0 < len(comparison["files"]) < 300,
@@ -215,10 +216,11 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
     An explicit root-owned sensitive review and a fresh supervised approval
     are necessary; the old unattended change policy is NOT treated as safe.
     """
+    target = source["source_sha"]
     receipt_path = STATE / "prepared.json"
     require(not receipt_path.exists() and not receipt_path.is_symlink(),
             "PREPARE_ALREADY_EXISTS")
-    require(approve.get("target_sha") == SOURCE and
+    require(approve.get("target_sha") == target and
             approve.get("release_asset_sha256") == source["release_asset_sha256"]
             and approve.get("scope") == approval.SCOPE
             and approve.get("action") == approval.ACTION
@@ -237,27 +239,27 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
     with tempfile.TemporaryDirectory(prefix=".qa525-reviewed-build-", dir=STATE) as tmp:
         package = Path(tmp) / "verified"
         attestation = signed.verify_current(package)
-        require(attestation["source_sha"] == SOURCE
+        require(attestation["source_sha"] == target
                 and attestation["release_asset_sha256"] ==
                 source["release_asset_sha256"], "PREPARE_SIGNATURE_MISMATCH")
         def verify(path, sha):
-            if sha != SOURCE or path != package:
+            if sha != target or path != package:
                 return False
             try:
                 signed.staging.verify_manifest(path, sha)
                 return signed.gate.evaluate(signed.gate.readiness.fetch_public) == source
             except Exception:
                 return False
-        require(verify(package, SOURCE), "PREPARE_SIGNATURE_OR_DEV_DRIFT")
-        images = build.build_images(package, SOURCE, verify, adapter.docker,
+        require(verify(package, target), "PREPARE_SIGNATURE_OR_DEV_DRIFT")
+        images = build.build_images(package, target, verify, adapter.docker,
                                    build.builder.prepare_web)
-        require(verify(package, SOURCE) and
+        require(verify(package, target) and
                 build.snapshot(adapter.docker) == before
                 and validate_g6(review, int(time.time())),
-                "PREPARE_SOURCE_HOST_OR_BACKUP_CHANGED")
+                "PREPARE_target_HOST_OR_BACKUP_CHANGED")
         prepared = {
             "status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT",
-            "scope": build.SCOPE, "source_sha": SOURCE,
+            "scope": build.SCOPE, "source_sha": target,
             "source_asset_sha256": source["release_asset_sha256"],
             **images, "baseline": before, "images_built": True,
             "services_unchanged": True, "may_apply": False,
@@ -273,7 +275,7 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
         output.flush()
         os.fsync(output.fileno())
     return {"status": "PREPARED_REVIEWED_API_WEB_NO_DEPLOYMENT",
-            "source_sha": SOURCE, "services_unchanged": True,
+            "source_sha": target, "services_unchanged": True,
             "may_apply": False}
 
 
@@ -298,9 +300,11 @@ def main():
     with build.exclusive():
         review = private_json(REVIEW, maximum=8192)
         source = signed.gate.evaluate(signed.gate.readiness.fetch_public)
-        require(source["source_sha"] == SOURCE, "SIGNATURE_RELEASE_TARGET_DRIFT")
+        target = source["source_sha"]
+        require(type(target) is str and SHA.fullmatch(target),
+                "SIGNATURE_RELEASE_TARGET_DRIFT")
         comparison = policy.evaluate(signed.gate.readiness.fetch_public, BASELINE)
-        scan_migrations(policy, signed.gate.readiness.fetch_public)
+        scan_migrations(policy, signed.gate.readiness.fetch_public, target)
         now = int(time.time())
         approved_review(review, source, comparison, now)
         validate_g6(review, now)
@@ -318,7 +322,7 @@ def main():
         # the physical host; prepared.json flags alone are never authority.
         with tempfile.TemporaryDirectory(prefix=".qa525-supervised-signed-", dir=STATE) as d:
             result = signed.verify_current(Path(d) / "signed")
-            require(result["source_sha"] == SOURCE and
+            require(result["source_sha"] == target and
                     result["release_asset_sha256"] == source["release_asset_sha256"],
                     "PHYSICAL_SIGNATURE_REVERIFICATION_FAILED")
         for name in core.TARGETS:
@@ -327,7 +331,7 @@ def main():
                     and adapter.docker(["image", "inspect", "--format", "{{.Id}}", image]) == image
                     and adapter.docker(["image", "inspect", "--format",
                          '{{index .Config.Labels "org.opencontainers.image.revision"}}',
-                         image]) == SOURCE,
+                         image]) == target,
                     "PREPARED_IMAGE_INVALID")
         # A new API image must not silently change live identity, mail or
         # migration environment. Never log or write Config.Env values.
@@ -390,7 +394,7 @@ def main():
         require(not used.exists() and not used.is_symlink(),
                 "SUPERVISION_ALREADY_CONSUMED")
         def evidence(phase, sha, old, candidate):
-            if sha != SOURCE or candidate != new:
+            if sha != target or candidate != new:
                 return False
             try:
                 fresh = signed.gate.evaluate(signed.gate.readiness.fetch_public)
@@ -401,11 +405,11 @@ def main():
                         and validate_g6(review, int(time.time())))
             except Exception:
                 return False
-        require(evidence("pre", SOURCE, before, new) is True,
+        require(evidence("pre", target, before, new) is True,
                 "SUPERVISED_EVIDENCE_DRIFTED")
         fd = os.open(used, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "w") as stream:
-            stream.write(SOURCE + "\n")
+            stream.write(target + "\n")
             stream.flush()
             os.fsync(stream.fileno())
         def audit(event, sha):
@@ -416,7 +420,7 @@ def main():
                 f.write(str(int(time.time())) + " " + event + " " + sha + "\n")
                 f.flush()
                 os.fsync(f.fileno())
-        return core.transact(before=before, new=new, source_sha=SOURCE,
+        return core.transact(before=before, new=new, source_sha=target,
                              layers=layers, workdir=str(WORKDIR), state_dir=STATE,
                              run=lambda args: adapter.docker(args, cwd=str(WORKDIR), timeout=240),
                              live_snapshot=snapshot, evidence=evidence,
