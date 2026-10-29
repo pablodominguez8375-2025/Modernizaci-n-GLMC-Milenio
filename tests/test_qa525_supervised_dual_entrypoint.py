@@ -274,5 +274,108 @@ class SupervisorTests(unittest.TestCase):
             self.assertTrue(host.health(TARGET))
 
 
+
+class DBAReviewedMigrationTests(unittest.TestCase):
+    """A known schema change is not equivalent to deployment authorization."""
+
+    def test_exact_pr801_blobs_are_only_supported_schema_exception(self):
+        class Gate:
+            MIGRATION_PATH = "backend/src/PMGM.Api/Migrations/20261029120000_AddMemberHistoryProposals.cs"
+            CONTEXT_PATH = "backend/src/PMGM.Api/Data/PmgmDbContext.cs"
+            MIGRATION_BLOB = "a" * 40
+            CONTEXT_BLOB = "b" * 40
+            class Blocked(Exception):
+                pass
+            @classmethod
+            def reviewed_diff(cls, files, blobs):
+                if blobs != {cls.MIGRATION_PATH: cls.MIGRATION_BLOB,
+                             cls.CONTEXT_PATH: cls.CONTEXT_BLOB}:
+                    raise cls.Blocked("BLOB_MISMATCH")
+                if {r["filename"] for r in files if "DbContext" in r["filename"]
+                    or "/Migrations/" in r["filename"]} != {
+                        cls.MIGRATION_PATH, cls.CONTEXT_PATH}:
+                    raise cls.Blocked("UNREVIEWED_MIGRATION")
+        def fetch(path):
+            if path.startswith("/compare/"):
+                return {"status": "ahead", "files": [
+                    {"filename": Gate.MIGRATION_PATH, "status": "added"},
+                    {"filename": Gate.CONTEXT_PATH, "status": "modified"},
+                    {"filename": "frontend/src/App.tsx", "status": "modified"}]}
+            if path.endswith(Gate.MIGRATION_PATH + "?ref=" + TARGET):
+                return {"sha": Gate.MIGRATION_BLOB}
+            if path.endswith(Gate.CONTEXT_PATH + "?ref=" + TARGET):
+                return {"sha": Gate.CONTEXT_BLOB}
+            raise AssertionError(path)
+        self.assertEqual(host.scan_migrations(POLICY, fetch, TARGET, Gate),
+                         "PR801_REVIEWED_ADDITIVE_NEEDS_DBA")
+        self.assertEqual(host.scan_migrations(POLICY, lambda _: {
+            "status": "ahead", "files": [
+                {"filename": "frontend/src/App.tsx", "status": "modified"}]},
+            TARGET, Gate), "NO_SCHEMA_CHANGE")
+        with self.assertRaisesRegex(host.Blocked, "SEPARATE_PLAN"):
+            host.scan_migrations(POLICY, fetch, TARGET)
+        def tampered(path):
+            obj = fetch(path)
+            return {"sha": "0" * 40} if path.endswith(Gate.CONTEXT_PATH + "?ref=" + TARGET) else obj
+        with self.assertRaisesRegex(host.Blocked, "UNKNOWN_OR_UNREVIEWED_EF_CHANGE"):
+            host.scan_migrations(POLICY, tampered, TARGET, Gate)
+
+    def test_schema_review_requires_flag_false_only_after_verification(self):
+        now = 1793299200
+        newer = review(now)
+        newer["no_new_ef_migrations"] = False
+        with self.assertRaises(host.Blocked):
+            host.approved_review(newer, SRC, POLICY, now)
+        host.approved_review(newer, SRC, POLICY, now, schema_approved=True)
+        with self.assertRaises(host.Blocked):
+            host.approved_review(review(now), SRC, POLICY, now, schema_approved=True)
+
+    def test_dba_approval_and_live_99_require_post_db_g6(self):
+        now = 1793299200  # 2026-10-29 18:40 UTC
+        g6 = review(now)
+        dba = {
+            "source_sha": TARGET,
+            "release_asset_sha256": SRC["release_asset_sha256"],
+            "baseline_sha": host.BASELINE,
+            "migration_id": "20261029120000_AddMemberHistoryProposals",
+            "migration_blob_sha": "a" * 40,
+            "dbcontext_blob_sha": "b" * 40,
+            "migration_completed_at": 1793294400,  # before 17:24 G6
+            "approved_at": now - 100,
+            "dba_independently_reviewed": True,
+            "additive_up_only": True,
+            "previous_api_forward_compatible": True,
+            "post_db_g6_archive_name": g6["g6_archive_name"],
+            "post_db_g6_archive_sha256": g6["g6_archive_sha256"],
+            "post_db_g6_restore_report_name": g6["g6_restore_report_name"],
+        }
+        class Gate:
+            MIGRATION_ID = dba["migration_id"]
+            MIGRATION_BLOB = "a" * 40
+            CONTEXT_BLOB = "b" * 40
+        class Probe:
+            class Blocked(Exception):
+                pass
+            @staticmethod
+            def inspect(receipt, docker, gate):
+                return {"status": "POST_DB_99_MIGRATIONS_AND_OBJECTS_READ_ONLY_PASS",
+                        "history_count": 99, "may_apply": False}
+        private = lambda path, maximum=65536: (dba if path == host.DBA_REVIEW
+                                                 else {"database_migrations": ["x"] * 98})
+        with patch.object(host, "private_json", side_effect=private), \\
+             patch.object(host, "validate_g6", return_value=True):
+            self.assertTrue(host.validate_post_db_dba(g6, SRC, now,
+                                                       lambda _: "", Gate, Probe))
+            for key, value in (("previous_api_forward_compatible", False),
+                               ("dba_independently_reviewed", False),
+                               ("source_sha", "e" * 40),
+                               ("migration_completed_at", 1793298000)):
+                altered = dict(dba, **{key: value})
+                with patch.object(host, "private_json", side_effect=lambda path, maximum=65536:
+                                  altered if path == host.DBA_REVIEW else
+                                  {"database_migrations": ["x"] * 98}):
+                    with self.assertRaises(host.Blocked, msg=key):
+                        host.validate_post_db_dba(g6, SRC, now, lambda _: "", Gate, Probe)
+
 if __name__ == "__main__":
     unittest.main()
