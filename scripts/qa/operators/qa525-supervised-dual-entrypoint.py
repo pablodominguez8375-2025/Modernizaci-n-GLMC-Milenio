@@ -298,7 +298,8 @@ def expected_compose_chain(*, name, target, original_files,
     require(all(type(x) is str and re.fullmatch(r"sha256:[a-f0-9]{64}", x)
                 for x in (previous_image, current_image, candidate_image)),
             "COMPOSE_CHAIN_IMAGE_INVALID")
-    if current_id == previous_id and current_image == previous_image:
+    if current_id == previous_id:
+        require(current_image == previous_image, "COMPOSE_CONTAINER_IMAGE_CHANGED_WITHOUT_RECREATE")
         return list(original_files)
     require(current_image in (previous_image, candidate_image),
             "COMPOSE_UNEXPECTED_IMAGE")
