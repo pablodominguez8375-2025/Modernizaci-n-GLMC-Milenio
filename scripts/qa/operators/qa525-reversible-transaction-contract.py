@@ -15,6 +15,7 @@ import sys
 SHA = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 IMAGES = re.compile(r"^sha256:[0-9a-f]{64}$")
+CONTAINER_IDS = re.compile(r"^[0-9a-f]{64}$")
 SERVICES = frozenset(("api", "web", "keycloak", "postgres", "minio",
                       "gateway", "clamav"))
 DATABASES = frozenset(("pmgm", "pmgm_keycloak"))
@@ -109,7 +110,8 @@ def evaluate(document):
     require(set(runtime) == SERVICES, "SEVEN_SERVICE_BASELINE_INCOMPLETE")
     for name, record in runtime.items():
         v = mapping(record, "SERVICE_RECEIPT_INVALID")
-        require(sha(v.get("container_fingerprint"))
+        require(type(v.get("container_fingerprint")) is str
+                and CONTAINER_IDS.fullmatch(v["container_fingerprint"])
                 and image(v.get("image_id"))
                 and v.get("running") is True, "SERVICE_RECEIPT_INVALID")
     require(runtime["api"]["image_id"] != api_image
