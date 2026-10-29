@@ -4,6 +4,7 @@ import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import MaskedRut from './MaskedRut'
 import MemberAvatar from './MemberAvatar'
 import { type MemberDirectoryItem, type MemberProfile, type MembershipApiClient } from './api/membershipApi'
+import MemberHistoryPanel from './MemberHistoryPanel'
 import './memberDirectory.css'
 import { organizationDisplayName } from './displayFormat'
 import { exportCsv, ListingToolbar, LoadMore, useListing, type ActiveFilter, type SortOption } from './listing'
@@ -15,7 +16,7 @@ const memberSorts: SortOption<MemberDirectoryItem>[] = [
   { id: 'status', label: 'Estado', compare: (a, b) => membershipLabel(a.membershipStatus).localeCompare(membershipLabel(b.membershipStatus), 'es') || a.displayName.localeCompare(b.displayName, 'es') },
 ]
 
-export default function MemberDirectoryPage({ api, membershipApi, initialQuery = '', canExport = false, allowTableView = false }: { api: PmgmApiClient; membershipApi: MembershipApiClient; initialQuery?: string; canExport?: boolean; allowTableView?: boolean }) {
+export default function MemberDirectoryPage({ api, membershipApi, initialQuery = '', canExport = false, allowTableView = false, canProposeHistory = false }: { api: PmgmApiClient; membershipApi: MembershipApiClient; initialQuery?: string; canExport?: boolean; allowTableView?: boolean; canProposeHistory?: boolean }) {
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([])
   const [organizationId, setOrganizationId] = useState('')
   const [query, setQuery] = useState(initialQuery)
@@ -121,7 +122,7 @@ export default function MemberDirectoryPage({ api, membershipApi, initialQuery =
       </article>
 
       <article className="panel member-profile">
-        {!selectedId ? <div className="empty-state"><strong>Seleccione un miembro.</strong></div> : !profile ? <Loading /> : <Profile profile={profile} membershipApi={membershipApi} />}
+        {!selectedId ? <div className="empty-state"><strong>Seleccione un miembro.</strong></div> : !profile ? <Loading /> : <Profile profile={profile} membershipApi={membershipApi} historyOrganizationId={canProposeHistory ? organizationId : undefined} />}
       </article>
     </section>
   </>
@@ -138,7 +139,7 @@ function MemberTable({ items, selectedId, onSelect }: { items: MemberDirectoryIt
 
 function degreeRank(value: string | null | undefined) { return value === 'master' ? 3 : value === 'fellowcraft' ? 2 : value === 'apprentice' ? 1 : 0 }
 
-function Profile({ profile, membershipApi }: { profile: MemberProfile; membershipApi: MembershipApiClient }) {
+function Profile({ profile, membershipApi, historyOrganizationId, onProfileChanged }: { profile: MemberProfile; membershipApi: MembershipApiClient; historyOrganizationId?: string; onProfileChanged?: () => void }) {
   const displayName = `${profile.member.firstNames} ${profile.member.lastNames}`.trim()
   const currentMembership = profile.current.membership
   return <>
@@ -171,6 +172,7 @@ function Profile({ profile, membershipApi }: { profile: MemberProfile; membershi
       <div className="profile-block-heading"><div><p className="eyebrow">Trayectoria</p><h3>Grados y cargos</h3></div></div>
       <div className="trajectory-grid"><div><strong>Grados</strong>{profile.degreeEvents.map(item => <span key={item.id}>{degreeLabel(item.degree)} · {formatDate(item.effectiveDate)}</span>)}</div><div><strong>Historial de cargos · {profile.offices.length}</strong>{profile.offices.length === 0 ? <span>Sin cargos registrados.</span> : <div className="office-history-list">{profile.offices.map(item => <article key={item.id}><strong>{officeLabel(item.officeType)} · {item.period}</strong><span>{item.organization}</span><small>{officePeriod(item.startDate, item.endDate)}</small>{item.evidenceReference && <small>Respaldo: {item.evidenceReference}</small>}</article>)}</div>}</div></div>
     </section>
+    {historyOrganizationId && <MemberHistoryPanel profile={profile} organizationId={historyOrganizationId} membershipApi={membershipApi} onApproved={onProfileChanged} />}
   </>
 }
 

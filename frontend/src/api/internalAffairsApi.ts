@@ -1,3 +1,5 @@
+import { demoHistoryPending, demoHistoryResolve } from './memberHistory'
+import type { PendingHistoryProposal } from './memberHistory'
 export interface MemberControlWorkshopRef {
   id: string
   name: string
@@ -183,6 +185,20 @@ export class InternalAffairsApiClient {
     }
     return this.request<HistoricalIntakeReviewItem>(`/api/regimen-interior/carga-historica/${encodeURIComponent(id)}/resolver`,{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({decision,notes:notes??null})
+    })
+  }
+
+  /** Historia del hermano: propuestas de la Secretaría del Taller pendientes de aprobación. */
+  async getPendingMemberHistory(organizationId?: string): Promise<{ total: number; items: PendingHistoryProposal[] }> {
+    if (this.useMocks) return demoHistoryPending(organizationId)
+    const query = new URLSearchParams(); if (organizationId) query.set('organizationId', organizationId)
+    return this.request(`/api/regimen-interior/historia-hermanos${query.size ? `?${query}` : ''}`)
+  }
+
+  async reviewMemberHistory(id: string, decision: 'approve' | 'observe' | 'reject', notes?: string | null): Promise<void> {
+    if (this.useMocks) { demoHistoryResolve(id, decision, notes); return }
+    await this.request(`/api/regimen-interior/historia-hermanos/${encodeURIComponent(id)}/resolver`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision, notes: notes ?? null }),
     })
   }
 
