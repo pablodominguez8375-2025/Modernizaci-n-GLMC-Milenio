@@ -398,7 +398,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.183' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.184' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
@@ -492,7 +492,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {view === 'candidateProfile' && canCandidateProfile && (canSecretariat ? <CandidateProfilePage api={candidateIntakeApi} canReview={canSecretariat} onBack={() => setView('candidates')} /> : <CandidateWorkshopIntakePage api={candidateIntakeApi} membershipApi={membershipApi} onBack={() => setView('candidates')} />)}
         {view === 'initiationCircuit' && (canCandidateProfile || canCeremonies) && <InitiationCircuitPage api={api} demoProfileKey={api.useMocks ? demoProfileKey : undefined} />}
         {view === 'admissions' && (canManageLodgeSecretariat || canSecretariat) && <AdmissionsPage demoProfileKey={api.useMocks ? demoProfileKey : undefined} api={api} membershipApi={membershipApi} documentApi={documentApi} />}
-        {view === 'members' && canMembers && <MemberDirectoryPage key={memberQueryRevision} api={api} membershipApi={membershipApi} initialQuery={memberQuery} canExport={canSecretariat || canManageLodgeSecretariat || canConfigureSystem} allowTableView={canSecretariat || canConfigureSystem} />}
+        {view === 'members' && canMembers && <MemberDirectoryPage key={memberQueryRevision} api={api} membershipApi={membershipApi} initialQuery={memberQuery} canExport={canSecretariat || canManageLodgeSecretariat || canConfigureSystem} allowTableView={canSecretariat || canConfigureSystem} canProposeHistory={canManageLodgeSecretariat} />}
         {view === 'lodgeProfile' && canLodgeProfile && !canLodge && <LodgeProfilePage api={api} organizationProfileApi={organizationProfileApi} canManageAccess={canManageLodgeSummaryAccess} canEditWorkshopProfile={canManageWorkshopProfile} />}
         {useWorkbench && view !== 'workbench' && workbenchViews.includes(view) && !reportViews.includes(view) && <button type="button" className="secondary reports-back" onClick={() => setView('workbench')}>← Volver a Mi mesa de trabajo</button>}
         {view === 'workbench' && useWorkbench && <WorkbenchPage items={workbenchItems} />}

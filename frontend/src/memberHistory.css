@@ -1,0 +1,21 @@
+.member-history { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line, #d9dde5); }
+.member-history-form { display: grid; gap: 1rem; }
+.member-history-form fieldset { border: 1px solid var(--line, #d9dde5); border-radius: 0.5rem; padding: 0.75rem; display: grid; gap: 0.5rem; min-width: 0; }
+.member-history-form legend { font-weight: 700; padding: 0 0.25rem; }
+.member-history-form label { display: grid; gap: 0.25rem; }
+.member-history-dates { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; }
+.member-history-row { display: grid; grid-template-columns: minmax(10rem, 2fr) minmax(5rem, 1fr) minmax(8rem, 1fr) minmax(8rem, 1fr) auto; gap: 0.5rem; align-items: center; }
+.member-history-row.is-new { background: rgba(0, 90, 160, 0.06); border-radius: 0.375rem; padding: 0.25rem; }
+.member-history-list { display: grid; gap: 0.5rem; margin-top: 0.5rem; }
+.member-history-card { border: 1px solid var(--line, #d9dde5); border-left-width: 0.25rem; border-radius: 0.5rem; padding: 0.625rem 0.75rem; display: grid; gap: 0.25rem; }
+.member-history-card.is-submitted { border-left-color: #b7791f; }
+.member-history-card.is-approved { border-left-color: #2f855a; }
+.member-history-card.is-observed, .member-history-card.is-rejected { border-left-color: #c53030; }
+.member-history-card div { display: grid; }
+.member-history-card ul { margin: 0; padding-left: 1.1rem; }
+.member-history-error { color: #9b1c1c; font-weight: 600; }
+.member-history-ok { color: #276749; font-weight: 600; }
+@media (max-width: 40em) { .member-history-row { grid-template-columns: 1fr 1fr; } .member-history-row > :first-child { grid-column: 1 / -1; } }
+.member-history-before { text-decoration: line-through; color: #6b7280; }
+.member-history-head { font-weight: 700; font-size: 0.85em; color: #4b5563; }
+@media (max-width: 40em) { .member-history-head { display: none; } }

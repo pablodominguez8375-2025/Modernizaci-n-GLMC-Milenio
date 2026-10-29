@@ -3,6 +3,7 @@
   "shards": {
     "a": [
       "UserAccountWorkflowTests",
+      "MemberHistoryProposalHttpTests",
       "WorkPaperReviewHttpTests",
       "DynamicProfilesMasterOnlyHttpTests",
       "DynamicLodgeScopeHttpTests",

@@ -1,3 +1,5 @@
+import { demoHistoryApplyToProfile, demoHistoryList, demoHistoryPropose, demoHistorySeed } from './memberHistory'
+import type { HistoryProposal, MemberHistoryRequest, MemberHistorySnapshot } from './memberHistory'
 export interface OwnOffice { id:string; cargo:string; periodo:string; tallerId:string; taller:string; desde:string|null; hasta:string|null }
 export interface OwnAttendance { id:string; fecha:string; tipo:'tenida'|'ceremonia'|'instruccion'; tema:string|null; tallerId:string; taller:string; estado:'presente'|'justificado'|'ausente' }
 export interface OwnAttendanceResponse { desde:string; hasta:string; items:OwnAttendance[]; resumen:{total:number;presente:number;justificado:number;ausente:number} }
@@ -115,6 +117,9 @@ const demoMembers: MemberDirectoryItem[] = demoWorkshopNumbers.flatMap(workshopN
   })
 })
 
+const seedMember = demoMembers.find(x => x.memberId.endsWith('000000000001'))
+if (seedMember) demoHistorySeed({ memberId: seedMember.memberId, memberName: seedMember.displayName, organizationId: org1, organizationName: 'Taller Demostrativo Nº 1', institutionalNumber: seedMember.institutionalNumber, targetOfficeId: null, targetOfficeBefore: null })
+
 const accountEmails:Record<string,string>={
  '23232323-0002-0000-0000-000000000023':'hermano.demo23@example.invalid',
  '11111111-0001-0000-0000-000000000001':'hermano.demo1@example.invalid'
@@ -191,9 +196,24 @@ export class MembershipApiClient {
     if (this.useMocks) {
       const item = demoMembers.find(x => x.memberId === memberId)
       if (!item) throw new Error('La ficha solicitada no existe en el QA.')
-      return mockProfile(item)
+      const profile = mockProfile(item)
+      return demoHistoryApplyToProfile(profile, (profile.memberships[0]?.organization ?? "Taller"))
     }
     return this.request<MemberProfile>(`/api/members/${encodeURIComponent(memberId)}/profile`)
+  }
+
+  /** Historia del hermano: propuestas de la Secretaría del Taller (cargos y fechas de iniciación, aumento de salario y exaltación). */
+  async getMemberHistory(organizationId: string, memberId: string): Promise<MemberHistorySnapshot> {
+    if (this.useMocks) return demoHistoryList(organizationId, memberId)
+    return this.request<MemberHistorySnapshot>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/hermanos/${encodeURIComponent(memberId)}/historia`)
+  }
+
+  async proposeMemberHistory(organizationId: string, memberId: string, body: MemberHistoryRequest): Promise<HistoryProposal> {
+    if (this.useMocks) {
+      const item = demoMembers.find(x => x.memberId === memberId)
+      return demoHistoryPropose(organizationId, item ? (mockProfile(item).memberships[0]?.organization ?? "Taller") : 'Taller', memberId, item?.displayName ?? 'Hermano', item?.institutionalNumber ?? null, body)
+    }
+    return this.request<HistoryProposal>(`/api/secretaria/talleres/${encodeURIComponent(organizationId)}/hermanos/${encodeURIComponent(memberId)}/historia`, { method: 'POST', body: JSON.stringify(body) })
   }
 
   /** «Ver completo» del RUT de un tercero (#609): motivo de catálogo; el servidor audita antes de responder. */

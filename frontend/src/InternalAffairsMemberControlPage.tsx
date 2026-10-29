@@ -3,6 +3,7 @@ import { type HistoricalIntakeReviewItem, type InternalAffairsApiClient, type Me
 import { type OrganizationOption, type PmgmApiClient } from './api/pmgmApi'
 import './internalAffairsControl.css'
 import { ActionDrawer, ConfirmAction } from './actionKit'
+import MemberHistoryReview from './MemberHistoryReview'
 import { organizationDisplayName } from './displayFormat'
 import { institutionalStatusLabel, institutionalStatusOptions } from './institutionalStatus'
 
@@ -119,6 +120,8 @@ export default function InternalAffairsMemberControlPage({ api, internalAffairsA
         {historicalIntakes.length===0 && <div className="empty-state"><strong>No hay cargas históricas pendientes de validación.</strong></div>}
       </div>
     </section>
+
+    <MemberHistoryReview internalAffairsApi={internalAffairsApi} organizationId={organizationId || undefined} onResolved={() => { void internalAffairsApi.getMembers({ asOf, organizationId: organizationId || undefined, limit: 500 }).then(c => { setRows(c.items); setTotal(c.total) }) }} />
 
     <section className="panel internal-control-table-panel">
       <div className="panel-heading"><div><p className="eyebrow">Trazabilidad institucional</p><h2>Miembros relacionados</h2></div><small>Máximo 500 filas por consulta · sin datos de contacto</small></div>
