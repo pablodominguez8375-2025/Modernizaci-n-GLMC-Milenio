@@ -2,7 +2,7 @@
 
 **Estado:** código candidato en PR #790, sin instalación física, `main` intacta.
 
-El antiguo preparador del PR #771 fija `TARGET` a SHAs históricos. Este nuevo operador toma el SHA del gate firmado integrado (#783/#785/#787) **durante cada ejecución**, nunca de un parámetro arbitrario de cliente o de una constante histórica. Se ejecuta solo en `glmdch` y como root a petición expresa `--prepare`. El operador depende de root ownership de cada archivo Python transitivo antes de importar código, de la cadena preflight de solo lectura, del cambio de política y de staging real con firma verificada. Mantiene exactamente los locks de las operaciones QA previas.
+El antiguo preparador del PR #771 fija `TARGET` a SHAs históricos. Este nuevo operador toma el SHA del gate firmado integrado (#783/#785/#787) **durante cada ejecución**, nunca de un parámetro arbitrario de cliente o de una constante histórica. Se ejecuta solo en `glmdch` y como root a petición expresa `--prepare`. El operador depende de root ownership de cada archivo Python transitivo antes de importar código, de la cadena preflight de solo lectura, del cambio de política y de staging real con firma verificada. Mantiene exactamente los locks de las operaciones QA previas. Para compatibilidad con Ubuntu, `/run/lock` se admite solo como directorio real propietario root con modo 0700, 0755 o 1777 (sticky), validando siempre el archivo individual root/0600, `O_NOFOLLOW` y flock exclusivo. Ningún otro directorio escribible por terceros está permitido.
 
 Proceso propuesto:
 
