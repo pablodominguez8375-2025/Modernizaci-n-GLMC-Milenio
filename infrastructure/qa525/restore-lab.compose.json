@@ -1,0 +1,33 @@
+{
+  "name": "qa525-restore-lab",
+  "services": {
+    "postgres": {
+      "image": "${QA525_POSTGRES_IMAGE:?Set an independently verified postgres:17@sha256 digest}",
+      "container_name": "qa525-restore-lab-postgres-1",
+      "network_mode": "none",
+      "pid": "private",
+      "ipc": "private",
+      "privileged": false,
+      "restart": "no",
+      "cap_drop": ["NET_ADMIN", "SYS_ADMIN", "SYS_PTRACE"],
+      "security_opt": ["no-new-privileges:true"],
+      "ports": [],
+      "environment": {
+        "POSTGRES_HOST_AUTH_METHOD": "trust",
+        "POSTGRES_DB": "postgres"
+      },
+      "volumes": ["pgdata:/var/lib/postgresql/data"],
+      "healthcheck": {
+        "test": ["CMD-SHELL", "pg_isready -U postgres -d postgres"],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 10
+      }
+    }
+  },
+  "volumes": {
+    "pgdata": {
+      "name": "qa525-restore-lab_pgdata"
+    }
+  }
+}
