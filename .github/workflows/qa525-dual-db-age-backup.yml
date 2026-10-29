@@ -1,0 +1,25 @@
+name: QA525 dual PostgreSQL encrypted local backup
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/operators/qa525-dual-db-age-backup.py'
+      - 'tests/test_qa525_dual_db_age_backup.py'
+      - '.github/workflows/qa525-dual-db-age-backup.yml'
+permissions:
+  contents: read
+jobs:
+  dual-db-encryption-no-deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Compile isolated backup executor and tests
+        run: |
+          python3 -m py_compile scripts/qa/operators/qa525-dual-db-age-backup.py
+          python3 -m py_compile tests/test_qa525_dual_db_age_backup.py
+      - name: Run hermetic negative tests with mocked Docker/age, no credentials
+        run: python3 -m unittest discover -s tests -p test_qa525_dual_db_age_backup.py -v
