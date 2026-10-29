@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import stat
 import sys
 import tempfile
 
@@ -27,12 +28,43 @@ def load(name, path):
     return value
 
 
-host = load("qa525_combined_host_preflight", OPERATOR_DIR / "qa525-current-host-preflight.py")
-signed = load("qa525_combined_signed_staging", QA_DIR / "qa525-stage-current-release.py")
-
-
 class Blocked(Exception):
     pass
+
+
+TRUSTED_MODULES = (
+    OPERATOR_DIR / "qa525-current-host-preflight.py",
+    OPERATOR_DIR / "qa525-current-change-policy.py",
+    OPERATOR_DIR / "qa525-update-readiness-0bd927b.py",
+    QA_DIR / "qa525-stage-current-release.py",
+    QA_DIR / "qa525-current-release-gate.py",
+    QA_DIR / "qa-agent-readiness.py",
+    QA_DIR / "qa-public-release-download.py",
+    QA_DIR / "qa-signed-staging.py",
+)
+
+
+def bootstrap_source_trust():
+    # The production root/glmdch entrypoint must validate ALL local modules
+    # BEFORE importlib executes any of their top-level Python code.
+    if os.geteuid() != 0 or socket.gethostname() != "glmdch":
+        return
+    for path in (Path(__file__), *TRUSTED_MODULES):
+        for item in (path, *path.parents):
+            try:
+                details = item.lstat()
+            except OSError:
+                raise Blocked("LOCAL_SOURCE_MISSING") from None
+            if stat.S_ISLNK(details.st_mode) or details.st_uid != 0 or (
+                    stat.S_IMODE(details.st_mode) & 0o022):
+                raise Blocked("LOCAL_SOURCE_UNTRUSTED")
+        if not path.is_file():
+            raise Blocked("LOCAL_SOURCE_NOT_FILE")
+
+
+bootstrap_source_trust()
+host = load("qa525_combined_host_preflight", OPERATOR_DIR / "qa525-current-host-preflight.py")
+signed = load("qa525_combined_signed_staging", QA_DIR / "qa525-stage-current-release.py")
 
 
 def require(ok, code):
