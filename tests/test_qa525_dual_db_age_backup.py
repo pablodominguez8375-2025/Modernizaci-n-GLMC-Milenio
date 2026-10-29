@@ -101,6 +101,15 @@ class DualAgeBackupTests(unittest.TestCase):
             bad = SimpleNamespace(**{**vars(good), **kw})
             self.assertFalse(mod.ciphertext_is_root_private(bad))
 
+    def test_age_ciphertext_has_kernel_size_limit_but_pg_dump_does_not(self):
+        self.assertEqual(2 * 1024**3, mod.MAX_ENCRYPTED_FILE_BYTES)
+        self.assertEqual(2 * 1024**3, mod.FREE_SPACE_RESERVE_BYTES)
+        with patch.object(mod.subprocess, "Popen") as proc:
+            mod.fixed_process([str(mod.AGE), "-R", "/etc/pmgm/test"])
+            self.assertIs(proc.call_args.kwargs["preexec_fn"], mod.limit_age_output)
+            mod.fixed_process([str(mod.DOCKER), "exec", "pg_dump"])
+            self.assertNotIn("preexec_fn", proc.call_args.kwargs)
+
     def test_no_unlisted_or_malicious_database(self):
         with TemporaryDirectory() as temp:
             runner, calls = ciphertext_runner()
