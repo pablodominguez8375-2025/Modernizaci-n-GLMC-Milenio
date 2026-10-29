@@ -198,6 +198,27 @@ class SupervisorTests(unittest.TestCase):
                 {"api": {"image": old_api}, "web": {"image": old_web}},
                 TARGET, docker)
 
+    def test_live_ef_history_matches_installed_receipt_readonly(self):
+        rows = ["2026_A_%03d" % i for i in range(98)]
+        def docker(args):
+            self.assertEqual(args[0:2], ["exec", "centenario-qa-lab2-postgres-1"])
+            self.assertIn("BEGIN READ ONLY", args[-1])
+            return "\n".join(rows)
+        with patch.object(host, "private_json", return_value={"database_migrations": rows}):
+            self.assertTrue(host.validate_live_ef_history(docker))
+
+    def test_live_ef_migration_drift_blocks_apply(self):
+        rows = ["2026_A_%03d" % i for i in range(98)]
+        with patch.object(host, "private_json", return_value={"database_migrations": rows}):
+            with self.assertRaisesRegex(host.Blocked, "EF_MIGRATION_HISTORY_DRIFT"):
+                host.validate_live_ef_history(lambda _: "\n".join(rows[:-1]))
+
+    def test_live_ef_receipt_missing_history_blocks_apply(self):
+        with patch.object(host, "private_json", return_value={"database_migrations": []}):
+            with self.assertRaisesRegex(host.Blocked, "EF_BASELINE_MIGRATIONS_INVALID"):
+                host.validate_live_ef_history(lambda _: "not called")
+
+
 
 if __name__ == "__main__":
     unittest.main()
