@@ -1,0 +1,26 @@
+name: QA525 current signed staging contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/qa525-stage-current-release.py'
+      - 'scripts/qa/qa525-current-release-gate.py'
+      - 'scripts/qa/qa-public-release-download.py'
+      - 'scripts/qa/qa-signed-staging.py'
+      - 'tests/test_qa525_stage_current_release.py'
+      - '.github/workflows/qa525-stage-current-contract.yml'
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Compile private staging flow
+        run: python3 -m py_compile scripts/qa/qa525-stage-current-release.py tests/test_qa525_stage_current_release.py
+      - name: Verify exact-head, signature, race and no-deployment contracts
+        run: python3 -m unittest discover -s tests -p test_qa525_stage_current_release.py -v
