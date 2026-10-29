@@ -304,6 +304,8 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
   }
   const activeTab: MobileTabId | null = view === 'dashboard' ? 'home' : view === 'calendar' ? 'calendar' : view === 'notifications' ? 'notifications' : (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && !operational ? 'second' : null
 
+  /** «Designar entrevistadores» es un trámite del Taller (no personal): el Venerable Maestro lo ve junto a «Insinuaciones e Iniciación». */
+  const designateInTramites = canManageLodgeSummaryAccess && !useWorkbench
   const toggleSidebar = () => setSidebarCollapsed(current => { const next = !current; writeSidebarPreference(next); return next })
   const openMembersSearch = (query: string) => { setMemberQuery(query); setMemberQueryRevision(revision => revision + 1); setView('members') }
 
@@ -396,7 +398,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.182' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.183' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
@@ -410,7 +412,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         <button className="sidebar-collapse" type="button" aria-pressed={sidebarCollapsed} aria-label={sidebarCollapsed ? 'Expandir menú lateral' : 'Contraer menú lateral'} title={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'} onClick={toggleSidebar}><InstitutionalIcon name={sidebarCollapsed ? 'sidebarExpand' : 'sidebarCollapse'} size={18} /><span>{sidebarCollapsed ? 'Expandir' : 'Contraer menú'}</span></button>
         <button className={view === 'dashboard' ? 'nav-item active' : 'nav-item'} type="button" title="Inicio" data-in-tabbar="true" onClick={() => setView('dashboard')}><NavIcon name="home" /> <span className="nav-text" data-hint={navHint('Inicio')}>Inicio</span></button>
         <div className="nav-section" data-in-tabbar={operational ? undefined : 'true'}>Mi espacio</div>
-        <ModuleAccess icon="candidate" label={canManageLodgeSummaryAccess ? 'Designar entrevistadores' : 'Mis entrevistas'} allowed={canMemberPortal} active={view === 'interviews'} onOpen={canMemberPortal ? () => setView('interviews') : undefined} />
+        {!designateInTramites && <ModuleAccess icon="candidate" label={canManageLodgeSummaryAccess ? 'Designar entrevistadores' : 'Mis entrevistas'} allowed={canMemberPortal} active={view === 'interviews'} onOpen={canMemberPortal ? () => setView('interviews') : undefined} />}
         <ModuleAccess icon="member" label="Mi ficha" inTabbar={!operational} allowed={canMemberPortal} active={view === 'memberPortal'} onOpen={canMemberPortal ? () => setView('memberPortal') : undefined} />
         <ModuleAccess icon="treasury" label="Mis pagos" allowed={canMemberPortal} active={view === 'memberPayments'} onOpen={canMemberPortal ? () => setView('memberPayments') : undefined} />
         <ModuleAccess icon="calendar" label="Mis asistencias" allowed={canMemberPortal} active={view === 'memberAttendance'} onOpen={canMemberPortal ? () => setView('memberAttendance') : undefined} />
@@ -421,6 +423,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
         {useWorkbench && <><div className="nav-section">Gestión</div><ModuleAccess icon="tasks" label="Mi mesa de trabajo" allowed active={workbenchViews.includes(view)} onOpen={() => setView('workbench')} /></>}
         {!useWorkbench && <div className="nav-section">Trámites</div>}
         {!useWorkbench && <ModuleAccess icon="candidate" label="Insinuaciones e Iniciación" allowed={initiationEntry !== null} active={isInitiationView} onOpen={initiationEntry ? () => setView(initiationEntry) : undefined} />}
+        {designateInTramites && <ModuleAccess icon="candidate" label="Designar entrevistadores" allowed={canMemberPortal} active={view === 'interviews'} onOpen={canMemberPortal ? () => setView('interviews') : undefined} />}
             {!useWorkbench && (isLodgeSecretaryWorkspace || isGrandSecretaryWorkspace) && canView('admissions') && <ModuleAccess icon="member" label="Afiliación e incorporación" allowed active={view === 'admissions'} onOpen={() => setView('admissions')} />}
         {hasInstitutionalManagement && !useWorkbench && <>
           <div className="nav-section">Gestión y consultas</div>
@@ -588,7 +591,7 @@ function CandidatePortal({ portal, loading, api }: { portal: CandidatePortalResp
 function CandidateCard({ candidate, api }: { candidate: CandidatePublication; api: CandidateIntakeApiClient }) {
   const percentage = Math.min(100, Math.round(candidate.elapsedDays / Math.max(1, candidate.requiredDays) * 100))
   const complete = candidate.elapsedDays >= candidate.requiredDays
-  return <article className="candidate-card"><div className="candidate-avatar" style={{ overflow: 'hidden' }}><PublishedCandidatePhoto candidate={candidate} api={api} /></div><div className="candidate-main"><div className="candidate-title-row"><div><h3>{candidate.displayName}</h3><p>{organizationDisplayName(candidate.workshopName, candidate.workshopNumber)}</p></div><span className={complete ? 'status-pill complete' : 'status-pill active'}>{complete ? 'Plazo cumplido' : 'En publicación'}</span></div><div className="progress-row"><div className="progress-track" role="progressbar" aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${percentage}%` }} /></div><strong>{candidate.elapsedDays}/{candidate.requiredDays} días</strong></div><dl className="candidate-meta"><div><dt>Publicado</dt><dd>{formatDate(candidate.publishedFromUtc)}</dd></div><div><dt>Cumplimiento</dt><dd>{formatDate(candidate.complianceDateUtc)}</dd></div></dl></div></article>
+  return <article className="candidate-card"><div className="candidate-avatar" style={{ overflow: 'hidden' }}><PublishedCandidatePhoto candidate={candidate} api={api} /></div><div className="candidate-main"><div className="candidate-title-row"><div><h3>{candidate.displayName}</h3><p>{organizationDisplayName(candidate.workshopName, candidate.workshopNumber)}</p></div><span className={complete ? 'status-pill complete' : 'status-pill active'}>{complete ? 'Plazo cumplido' : 'En publicación'}</span></div><div className="progress-row"><div className="progress-track" role="progressbar" aria-label={`Plazo de publicación de ${candidate.displayName ?? 'la persona insinuada'}`} aria-valuenow={percentage} aria-valuemin={0} aria-valuemax={100} aria-valuetext={`${candidate.elapsedDays} de ${candidate.requiredDays} días`}><span style={{ width: `${percentage}%` }} /></div><strong>{candidate.elapsedDays}/{candidate.requiredDays} días</strong></div><dl className="candidate-meta"><div><dt>Publicado</dt><dd>{formatDate(candidate.publishedFromUtc)}</dd></div><div><dt>Cumplimiento</dt><dd>{formatDate(candidate.complianceDateUtc)}</dd></div></dl></div></article>
 }
 
 function LoadingRows() { return <div className="loading-rows"><span /><span /><span /></div> }
