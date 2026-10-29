@@ -25,3 +25,7 @@ La rama de trabajo original del **PR #771 permanece en borrador** para desarroll
 ## Operación física separada
 
 No copiar ni ejecutar estas herramientas en glmdch por el hecho de estar fusionadas a `dev`. Antes de su primer despliegue: auditoría de archivos locales, confianza root y rutas, comparación del host, aceptación de licencia/seguridad, respaldo real de ambas bases, restore probado, pruebas API+WEB, protección de Master/SMTP/Keycloak y autorización de la intervención. El sistema de actualizaciones automáticas solo se habilita después de completar esa etapa y UAT.
+
+## Dependencia de línea base copiada y fijada
+
+El verificador `scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py` es una **copia byte a byte de solo lectura** del preflight histórico `qa525-update-readiness-0bd927b.py` que estaba exclusivamente dentro del PR #771. SHA-256 del contenido: `7867c8ae21f8be4ad2e60e6aa1491d90c35356e67d07954a2e80994bfb78f2ae`. Se incluye aquí por dependencia de los tests y para evitar integrar cualquier preparador o aplicador obsoleto. Verifica que la **línea base física** todavía corresponde a API 6ff4 y WEB 424153. **Nunca selecciona la versión a instalar**; ese rol corresponde al gate de release del HEAD vigente. Si la línea base física ya cambió, bloquea y requiere nueva revisión, en lugar de forzar la versión histórica.
