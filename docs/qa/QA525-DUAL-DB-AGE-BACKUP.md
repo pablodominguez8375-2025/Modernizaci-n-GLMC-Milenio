@@ -12,7 +12,7 @@ Requisitos físicos bloqueantes al primer uso manual:
 - `/usr/bin/docker` y `/usr/bin/age` deben existir y ser root-owned y no escribibles por terceros, con rutas ancestro confiables.
 - `/etc/pmgm/qa525-offhost-age-recipient.txt` debe contener **una sola** clave pública age de custodio externo, archivo root/0600 sin symlinks ni hardlinks. **No se genera ni almacena la clave privada en glmdch.**
 - `/opt/centenario/qa525-dual-db-backups` debe existir de antemano y pertenecer a root/0700, sin symlinks en el árbol. No solicitar al operador que cree la carpeta sin revisión de seguridad del path.
-- Más de 2 GiB libres; 5 locks QA libres; acceso `postgres` interno a ambas bases (no credenciales interactivas). El script falla en cerrado si falta cualquiera de estas condiciones.
+- Más de **6 GiB libres**, cuota máxima de **2 GiB cifrados por cada BD** aplicada por límite de tamaño de archivo del kernel al proceso age, y reserva extra de 2 GiB; 5 locks QA libres; acceso `postgres` interno a ambas bases (no credenciales interactivas). El script falla en cerrado si falta cualquiera de estas condiciones.
 
 Genera un directorio nuevo `backup-<fechaUTC>-<token>` con `pmgm.pgdump.age`, `pmgm_keycloak.pgdump.age` y `manifest.json`, todos root/0600 bajo directorio root/0700. Incluye tamaño y SHA-256 de cada ciphertext, y SHA-256 de la clave pública; registra IDs de contenedores, no contenidos ni secretos. Si falla cualquiera de las dos exportaciones, no publica un respaldo parcial y limpia el directorio temporal. El script no elimina respaldos anteriores ni accede a Keycloak, usuarios, SMTP o credenciales.
 
