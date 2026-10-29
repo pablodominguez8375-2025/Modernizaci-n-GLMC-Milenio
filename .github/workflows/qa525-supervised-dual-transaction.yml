@@ -10,6 +10,8 @@ on:
       - "tests/test_qa525_supervised_dual_entrypoint.py"
       - "tests/test_qa525_member_history_schema_gate.py"
       - "scripts/qa/operators/qa525-member-history-schema-gate.py"
+      - "scripts/qa/operators/qa525-post-db-readonly.py"
+      - "tests/test_qa525_post_db_readonly.py"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   pull_request:
     branches: [dev]
@@ -20,6 +22,8 @@ on:
       - "tests/test_qa525_supervised_dual_entrypoint.py"
       - "tests/test_qa525_member_history_schema_gate.py"
       - "scripts/qa/operators/qa525-member-history-schema-gate.py"
+      - "scripts/qa/operators/qa525-post-db-readonly.py"
+      - "tests/test_qa525_post_db_readonly.py"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   workflow_dispatch:
 
@@ -43,12 +47,16 @@ jobs:
           python -m py_compile tests/test_qa525_supervised_dual_entrypoint.py
           python -m py_compile scripts/qa/operators/qa525-member-history-schema-gate.py
           python -m py_compile tests/test_qa525_member_history_schema_gate.py
+          python -m py_compile scripts/qa/operators/qa525-post-db-readonly.py
+          python -m py_compile tests/test_qa525_post_db_readonly.py
       - name: All dual transaction regressions, fake Docker only
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
       - name: Offline review, migration and supervision regressions
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_entrypoint.py' -v
       - name: Verified PR801 additive migration contract (no database access)
         run: python -m unittest discover -s tests -p 'test_qa525_member_history_schema_gate.py' -v
+      - name: Post-DB 99 migration checkpoint (fake Docker, NO writes)
+        run: python -m unittest discover -s tests -p 'test_qa525_post_db_readonly.py' -v
       - name: Ensure no unattended deployment entrypoint
         run: |
           python - <<'PY'
