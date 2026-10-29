@@ -8,6 +8,7 @@ on:
       - 'tests/test_qa525_prepare_0bd927b.py'
       - 'tests/test_qa525_current_change_policy.py'
       - 'tests/test_qa525_current_host_preflight.py'
+      - 'tests/test_qa525_current_host_staging.py'
       - 'tests/test_keycloak_session_qa_readonly.py'
       - '.github/workflows/check-qa.yml'
       - '.github/workflows/qa-readonly-tests.yml'
@@ -32,3 +33,5 @@ jobs:
       - run: python3 -m unittest discover -s tests -p test_qa525_current_change_policy.py -v
       - run: python3 -m py_compile scripts/qa/operators/qa525-current-host-preflight.py tests/test_qa525_current_host_preflight.py
       - run: python3 -m unittest discover -s tests -p test_qa525_current_host_preflight.py -v
+      - run: python3 -m py_compile scripts/qa/operators/qa525-current-host-staging.py tests/test_qa525_current_host_staging.py
+      - run: python3 -m unittest discover -s tests -p test_qa525_current_host_staging.py -v
