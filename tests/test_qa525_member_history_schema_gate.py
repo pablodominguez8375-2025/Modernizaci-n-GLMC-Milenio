@@ -76,8 +76,7 @@ class SchemaAcceptanceTests(unittest.TestCase):
 
     def test_baseline_98_to_exact_99(self):
         original = [f"2026_Original_{i:03}" for i in range(98)]
-        live = original + [gate.MIGRATION_ID]
-        result = gate.exact_post_migration_history(original, live)
+        result = gate.exact_post_migration_history(original, original + [gate.MIGRATION_ID])
         self.assertEqual(result["count"], 99)
         self.assertFalse(result["may_apply"])
 
@@ -88,10 +87,26 @@ class SchemaAcceptanceTests(unittest.TestCase):
         with self.assertRaises(gate.Blocked):
             gate.exact_post_migration_history(original, original + ["OtherMigration"])
 
-    def test_schema_inventory_two_tables_three_indexes(self):
-        self.assertTrue(gate.schema_objects(list(gate.TABLES), list(gate.INDEXES)))
-        with self.assertRaises(gate.Blocked):
-            gate.schema_objects(list(gate.TABLES[:1]), list(gate.INDEXES))
+    def test_exact_schema_inventory(self):
+        self.assertTrue(gate.schema_objects(list(gate.TABLES),
+                                            list(gate.INDEX_DEFINITIONS),
+                                            list(gate.EXPECTED_COLUMNS),
+                                            list(gate.EXPECTED_CONSTRAINTS)))
+
+    def test_schema_drift_denied(self):
+        cases = [
+            (list(gate.TABLES[:1]), list(gate.INDEX_DEFINITIONS),
+             list(gate.EXPECTED_COLUMNS), list(gate.EXPECTED_CONSTRAINTS)),
+            (list(gate.TABLES), list(gate.INDEX_DEFINITIONS[:1]),
+             list(gate.EXPECTED_COLUMNS), list(gate.EXPECTED_CONSTRAINTS)),
+            (list(gate.TABLES), list(gate.INDEX_DEFINITIONS),
+             list(gate.EXPECTED_COLUMNS[:-1]), list(gate.EXPECTED_CONSTRAINTS)),
+            (list(gate.TABLES), list(gate.INDEX_DEFINITIONS),
+             list(gate.EXPECTED_COLUMNS), list(gate.EXPECTED_CONSTRAINTS[:-1])),
+        ]
+        for values in cases:
+            with self.subTest(lengths=[len(x) for x in values]), self.assertRaises(gate.Blocked):
+                gate.schema_objects(*values)
 
 
 if __name__ == "__main__":
