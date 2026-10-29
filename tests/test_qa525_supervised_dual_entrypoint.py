@@ -9,7 +9,8 @@ FILE = Path(__file__).resolve().parents[1] / "scripts/qa/operators/qa525-supervi
 spec = importlib.util.spec_from_file_location("qa525_supervised_host_test", FILE)
 host = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(host)
-SRC = {"source_sha": host.SOURCE, "release_asset_sha256": "sha256:" + "a" * 64}
+TARGET = "0bd14cb81a1c0e607e04283083f77a5ddf36b339"
+SRC = {"source_sha": TARGET, "release_asset_sha256": "sha256:" + "a" * 64}
 POLICY = {"status": "BLOCKED_REVIEW_REQUIRED",
           "reasons": ["ACCOUNT_OR_IDENTITY_CHANGE", "API_BOOTSTRAP_CHANGE",
                       "OTHER_BACKEND_RUNTIME_CHANGE"]}
@@ -17,7 +18,7 @@ POLICY = {"status": "BLOCKED_REVIEW_REQUIRED",
 
 def review(now):
     return {
-        "source_sha": host.SOURCE,
+        "source_sha": TARGET,
         "release_asset_sha256": SRC["release_asset_sha256"],
         "baseline_sha": host.BASELINE,
         "reviewed_sections": sorted(host.REVIEWED),
@@ -88,7 +89,7 @@ class SupervisorTests(unittest.TestCase):
             return {"status": "ahead", "files": [
                 {"filename": "backend/src/PMGM.Api/Persistence/Migrations/New.cs", "status": "added"}]}
         with self.assertRaisesRegex(host.Blocked, "EF_MIGRATION"):
-            host.scan_migrations(POLICY, fetch)
+            host.scan_migrations(POLICY, fetch, TARGET)
 
     def test_renamed_dbcontext_is_blocked(self):
         def fetch(_):
@@ -100,7 +101,7 @@ class SupervisorTests(unittest.TestCase):
 
     def test_simple_runtime_change_can_pass_schema_scan(self):
         host.scan_migrations(POLICY, lambda _: {
-            "status": "ahead", "files": [{"filename": "frontend/src/App.tsx", "status": "modified"}]})
+            "status": "ahead", "files": [{"filename": "frontend/src/App.tsx", "status": "modified"}]}, TARGET)
 
     def test_tampered_g6_archive_ref_is_blocked(self):
         v = review(self.now)
