@@ -5,13 +5,17 @@ on:
     branches: [dev, "feature/**", "fix/**"]
     paths:
       - "scripts/qa/operators/qa525-supervised-dual-transaction.py"
+      - "scripts/qa/operators/qa525-supervised-dual-entrypoint.py"
       - "tests/test_qa525_supervised_dual_transaction.py"
+      - "tests/test_qa525_supervised_dual_entrypoint.py"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   pull_request:
     branches: [dev]
     paths:
       - "scripts/qa/operators/qa525-supervised-dual-transaction.py"
+      - "scripts/qa/operators/qa525-supervised-dual-entrypoint.py"
       - "tests/test_qa525_supervised_dual_transaction.py"
+      - "tests/test_qa525_supervised_dual_entrypoint.py"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   workflow_dispatch:
 
@@ -30,10 +34,14 @@ jobs:
       - name: Compile trusted core and test module
         run: |
           python -m py_compile scripts/qa/operators/qa525-supervised-dual-transaction.py
+          python -m py_compile scripts/qa/operators/qa525-supervised-dual-entrypoint.py
           python -m py_compile tests/test_qa525_supervised_dual_transaction.py
+          python -m py_compile tests/test_qa525_supervised_dual_entrypoint.py
       - name: All dual transaction regressions, fake Docker only
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
-      - name: Ensure no executable deployment entrypoint
+      - name: Offline review, migration and supervision regressions
+        run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_entrypoint.py' -v
+      - name: Ensure no unattended deployment entrypoint
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -42,4 +50,10 @@ jobs:
           assert '"--no-deps"' in src and '"--no-build"' in src
           assert '"--force-recreate"' in src
           assert 'rollback' in src.lower()
+          entry=Path("scripts/qa/operators/qa525-supervised-dual-entrypoint.py").read_text()
+          assert 'ONLY_EXPLICIT_SUPERVISION_ALLOWED' in entry
+          assert 'approved_review' in entry and 'validate_g6' in entry
+          assert 'approval.validate' in entry
+          assert 'signed.verify_current' in entry
+          assert 'scan_migrations' in entry
           PY
