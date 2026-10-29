@@ -114,6 +114,56 @@ class SupervisorTests(unittest.TestCase):
             with self.assertRaisesRegex(host.Blocked, "ONLY_EXPLICIT_SUPERVISION"):
                 host.main()
 
+    def test_new_signed_head_can_be_reviewed_without_code_pin(self):
+        new_source = dict(SRC, source_sha="e" * 40)
+        v = review(self.now)
+        v["source_sha"] = new_source["source_sha"]
+        host.approved_review(v, new_source, POLICY, self.now)
+
+    def test_old_review_cannot_approve_new_signed_head(self):
+        new_source = dict(SRC, source_sha="e" * 40)
+        with self.assertRaises(host.Blocked):
+            host.approved_review(review(self.now), new_source, POLICY, self.now)
+
+    def test_compose_untouched_container_retains_identity_stack(self):
+        original = ("/opt/centenario/qa-lab-firstboot/recovery-v2/compose.recovery.json",
+                    "/etc/pmgm/qa754-identity-overlay.stage.json")
+        self.assertEqual(host.expected_compose_chain(
+            name="api", target=TARGET, original_files=original,
+            previous_id="1" * 64, previous_image="sha256:" + "2" * 64,
+            current_id="1" * 64, current_image="sha256:" + "2" * 64,
+            candidate_image="sha256:" + "3" * 64), list(original))
+
+    def test_compose_recreated_api_appends_only_image_overlay(self):
+        original = ("/opt/centenario/qa-lab-firstboot/recovery-v2/compose.recovery.json",
+                    "/opt/centenario/qa-api-refresh/api-" + "b"*40 + ".json",
+                    "/etc/pmgm/qa754-identity-overlay.stage.json")
+        result = host.expected_compose_chain(
+            name="api", target=TARGET, original_files=original,
+            previous_id="1" * 64, previous_image="sha256:" + "2" * 64,
+            current_id="4" * 64, current_image="sha256:" + "3" * 64,
+            candidate_image="sha256:" + "3" * 64)
+        self.assertEqual(result[:3], list(original))
+        self.assertEqual(result[-1], "/opt/centenario/qa525-signed-prepare/"
+                         "qa525-api-" + TARGET + "-" + "3"*64 + ".json")
+
+    def test_compose_unknown_image_is_rejected(self):
+        with self.assertRaisesRegex(host.Blocked, "COMPOSE_UNEXPECTED_IMAGE"):
+            host.expected_compose_chain(
+                name="web", target=TARGET, original_files=("/etc/root-compose.json",),
+                previous_id="1"*64, previous_image="sha256:" + "2"*64,
+                current_id="4"*64, current_image="sha256:" + "9"*64,
+                candidate_image="sha256:" + "3"*64)
+
+    def test_compose_same_id_with_new_image_is_rejected(self):
+        # Docker container identity must change on recreation.
+        with self.assertRaises(host.Blocked):
+            host.expected_compose_chain(
+                name="web", target=TARGET, original_files=("/etc/root-compose.json",),
+                previous_id="1"*64, previous_image="sha256:" + "2"*64,
+                current_id="1"*64, current_image="sha256:" + "3"*64,
+                candidate_image="sha256:" + "3"*64)
+
 
 if __name__ == "__main__":
     unittest.main()
