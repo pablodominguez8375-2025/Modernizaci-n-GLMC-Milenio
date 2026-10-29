@@ -186,6 +186,14 @@ class TransactionTests(unittest.TestCase):
                          "/opt/centenario/qa-auto-lite/empty.env")
         self.assertIn("--no-deps", args)
 
+    def test_real_qa525_compose_layers_are_accepted(self):
+        # Regression: /opt/centenario/qa-api-refresh is a sibling of
+        # qa-lab-firstboot, not a child of it.
+        verified = tx.normalized_layers(
+            {"api": list(LAYERS["api"]), "web": list(LAYERS["web"])}, WORK)
+        self.assertEqual(verified["api"], LAYERS["api"])
+        self.assertEqual(verified["web"], LAYERS["web"])
+
 
 if __name__ == "__main__":
     unittest.main()
