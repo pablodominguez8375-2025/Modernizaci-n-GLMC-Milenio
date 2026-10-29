@@ -358,6 +358,26 @@ def checked_compose_env_file(path):
     return hashlib.sha256(content).hexdigest()
 
 
+def validate_live_ef_history(docker):
+    """Read-only EF migration set against installed API baseline receipt."""
+    receipt = private_json(Path("/opt/centenario/qa-api-refresh/installed.json"))
+    expected = receipt.get("database_migrations")
+    require(type(expected) is list and len(expected) == 98 and
+            all(type(x) is str and re.fullmatch(r"[A-Za-z0-9_]+", x)
+                for x in expected) and len(set(expected)) == len(expected),
+            "EF_BASELINE_MIGRATIONS_INVALID")
+    query = ('BEGIN READ ONLY; SELECT "MigrationId" FROM '
+             'public."__EFMigrationsHistory" ORDER BY 1; COMMIT;')
+    raw = docker(["exec", "centenario-qa-lab2-postgres-1",
+                  "sh", "-c",
+                  'exec psql -X -qAt -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d pmgm -c "$1"',
+                  "qa525-readonly", query])
+    actual = raw.splitlines()
+    require(len(actual) == len(expected) and len(set(actual)) == len(actual)
+            and set(actual) == set(expected), "EF_MIGRATION_HISTORY_DRIFT")
+    return True
+
+
 def main():
     mode = sys.argv[1:]
     require(mode in (["--prepare-reviewed"], ["--apply-supervised"]),
@@ -428,6 +448,10 @@ def main():
                         == "false", "API_MIGRATION_FLAGS_ENABLED")
             return hashlib.sha256(json.dumps(sorted(data)).encode()).hexdigest()
         env_before = {name: runtime_env(name) for name in ("api", "web")}
+        # Compare live read-only EF history against the installed baseline.
+        # No migration, SQL write or migrator container is permitted.
+        require(validate_live_ef_history(adapter.docker),
+                "EF_MIGRATION_PREFLIGHT_FAILED")
         # Exact baseline and all approved Compose layers are checked at runtime.
         original = adapter.metadata()
         require(set(original) == set(core.TARGETS + core.DEPENDENCIES + core.ONESHOTS),
