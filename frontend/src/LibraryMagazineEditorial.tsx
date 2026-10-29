@@ -46,7 +46,8 @@ export default function LibraryMagazineEditorial({ documentApi, onChanged, edito
       else { setAllowed(true); setNotice({ tone: 'error', text: message(reason) }) }
     }
   }, [documentApi])
-  useEffect(() => { void load() }, [load])
+  // En la demostración solo los perfiles editoriales ven la gestión; con servidor real lo decide el 403.
+  useEffect(() => { if (documentApi.useMocks && !editorRole) setAllowed(false); else void load() }, [load, documentApi.useMocks, editorRole])
 
   async function stageFile(documentId: string, file: File, documentType: string) {
     if (isBulletin(documentType) && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf'))

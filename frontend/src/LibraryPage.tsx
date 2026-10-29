@@ -8,7 +8,20 @@ import AreaCollaboratorsSection from './AreaCollaborators'
 import LibraryManagedUpload from './LibraryManagedUpload'
 import LibraryManagement, { type LibraryCategory, type LibrarySubmission } from './LibraryManagement'
 
-const pageSize = 12
+const pageSizeDesktop = 12
+const pageSizeMobile = 6
+const narrowQuery = '(max-width: 40em)'
+function useIsNarrow() {
+  const [narrow, setNarrow] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(narrowQuery).matches)
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return
+    const query = window.matchMedia(narrowQuery)
+    const onChange = () => setNarrow(query.matches)
+    query.addEventListener('change', onChange)
+    return () => query.removeEventListener('change', onChange)
+  }, [])
+  return narrow
+}
 const emptyFacets: LibraryFacetsResponse = { collections: [], documentTypes: [], degrees: [], topics: [], officialDocumentTypes: [] }
 // Categorías que no se administran desde la tabla del Bibliotecario: documentos oficiales y videos (futuro).
 const fixedCategories: LibraryCategory[] = [
@@ -26,6 +39,7 @@ const initialCategories: LibraryCategory[] = [
 export type LibraryEditorRole = 'librarian' | 'communications' | null
 
 export default function LibraryPage({ documentApi, editorRole = null }: { documentApi: DocumentApiClient; editorRole?: LibraryEditorRole }) {
+  const pageSize = useIsNarrow() ? pageSizeMobile : pageSizeDesktop
   const [items, setItems] = useState<LibraryCatalogItem[]>([])
   const [facets, setFacets] = useState<LibraryFacetsResponse>(emptyFacets)
   const [query, setQuery] = useState('')
@@ -132,7 +146,7 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
     }, query ? 250 : 0)
 
     return () => { active = false; window.clearTimeout(timer) }
-  }, [degree, documentApi, documentType, officialDocumentType, page, query, reloadKey, topic])
+  }, [degree, documentApi, documentType, officialDocumentType, page, pageSize, query, reloadKey, topic])
 
   const demoCollectionId = facets.collections[0]?.value ?? items[0]?.collectionId ?? 'demo-library'
   const baseDemoCatalog = useMemo(() => documentApi.useMocks ? createDemoShowcaseCatalog(demoCollectionId) : [], [demoCollectionId, documentApi.useMocks])
@@ -148,6 +162,9 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
   const topicFacets = documentApi.useMocks ? buildTopicFacets(demoCatalog) : facets.topics
   const officialTypeFacets = documentApi.useMocks ? buildOfficialTypeFacets(demoCatalog) : facets.officialDocumentTypes
   const pageCount = Math.max(1, Math.ceil(visibleTotal / pageSize))
+  // En la demostración el catálogo viene completo: se corta en páginas igual que con el servidor real.
+  const pageItems = documentApi.useMocks ? visibleItems.slice((page - 1) * pageSize, page * pageSize) : visibleItems
+  const activeCategories = categories.filter(category => category.active)
   const showingFutureVideos = documentType === 'video' && (categoryCounts.video ?? 0) === 0
 
   async function download(item: LibraryCatalogItem) {
@@ -201,9 +218,16 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
     </>}
 
     <section className="panel library-panel">
+      <label className="library-category-select document-field">
+        <span>Categoría</span>
+        <select value={documentType} onChange={event => selectCategory(event.target.value)}>
+          <option value="">Todos ({categoryTotal})</option>
+          {activeCategories.map(category => <option key={category.value} value={category.value}>{category.label}{category.future ? ' · futuro' : ''} ({categoryCounts[category.value] ?? 0})</option>)}
+        </select>
+      </label>
       <nav className="library-category-rail" aria-label="Categorías de Biblioteca Virtual">
         <button type="button" className={documentType === '' ? 'active' : ''} aria-pressed={documentType === ''} onClick={() => selectCategory('')}>Todos <span>{categoryTotal}</span></button>
-        {categories.filter(category => category.active).map(category => <button key={category.value} type="button" className={`${documentType === category.value ? 'active' : ''} ${category.future ? 'future' : ''}`} aria-pressed={documentType === category.value} onClick={() => selectCategory(category.value)}>
+        {activeCategories.map(category => <button key={category.value} type="button" className={`${documentType === category.value ? 'active' : ''} ${category.future ? 'future' : ''}`} aria-pressed={documentType === category.value} onClick={() => selectCategory(category.value)}>
           {category.label}{category.future ? ' · futuro' : ''} <span>{categoryCounts[category.value] ?? 0}</span>
         </button>)}
       </nav>
@@ -228,9 +252,9 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
       {showingFutureVideos ? <div className="library-future-state">
         <span className="library-future-icon" aria-hidden="true"><InstitutionalIcon name="library" size={26} /></span>
         <div><strong>Videos · preparado para una versión futura</strong><p>La categoría y el modelo de catálogo quedan previstos, pero este candidato no habilita todavía reproducción ni publicaciones audiovisuales.</p></div>
-      </div> : loading && !documentApi.useMocks ? <div className="loading-rows"><span /><span /><span /></div> : visibleItems.length === 0 ? <div className="empty-state"><strong>No hay publicaciones visibles.</strong><p>Prueba otros filtros. La Biblioteca sólo muestra material publicado y autorizado para tu cuenta y grado.</p></div> : <div className="document-library-grid">{visibleItems.map(item => <LibraryCard key={item.id} item={item} downloading={downloadingId === item.id} onDownload={() => download(item)} />)}</div>}
+      </div> : loading && !documentApi.useMocks ? <div className="loading-rows"><span /><span /><span /></div> : visibleItems.length === 0 ? <div className="empty-state"><strong>No hay publicaciones visibles.</strong><p>Prueba otros filtros. La Biblioteca sólo muestra material publicado y autorizado para tu cuenta y grado.</p></div> : <div className="document-library-grid">{pageItems.map(item => <LibraryCard key={item.id} item={item} downloading={downloadingId === item.id} onDownload={() => download(item)} />)}</div>}
 
-      {!loading && !documentApi.useMocks && visibleTotal > pageSize && <nav className="library-pagination" aria-label="Paginación de Biblioteca">
+      {!loading && visibleTotal > pageSize && <nav className="library-pagination" aria-label="Paginación de Biblioteca">
         <button className="document-secondary" type="button" disabled={page <= 1} onClick={() => setPage(value => Math.max(1, value - 1))}>Anterior</button>
         <span>Página {page} de {pageCount}</span>
         <button className="document-secondary" type="button" disabled={page >= pageCount} onClick={() => setPage(value => Math.min(pageCount, value + 1))}>Siguiente</button>
