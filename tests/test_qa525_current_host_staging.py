@@ -36,6 +36,21 @@ class CurrentHostStagingTests(unittest.TestCase):
         self.parent.mkdir(mode=0o700)
         self.output = self.parent / "signed-package"
         self.events = []
+        # The production destination checker enforces UID root. GitHub Actions
+        # fixtures belong to its unprivileged runner; retain the same private
+        # path contract here and leave production's UID check unchanged.
+        self.destination_patch = patch.object(
+            mod.signed, "trusted_destination", side_effect=self.fixture_destination)
+        self.destination_patch.start()
+        self.addCleanup(self.destination_patch.stop)
+
+    def fixture_destination(self, output):
+        output = Path(output)
+        if not output.is_absolute() or output.exists() or output.is_symlink():
+            raise mod.signed.Blocked("DESTINATION_ALREADY_EXISTS")
+        if output.parent.is_symlink() or not output.parent.is_dir() or (output.parent.stat().st_mode & 0o777) != 0o700:
+            raise mod.signed.Blocked("PRIVATE_STAGING_PARENT_UNTRUSTED")
+        return output
 
     def good_preflight(self):
         self.events.append("host")
