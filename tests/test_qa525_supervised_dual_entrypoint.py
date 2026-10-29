@@ -250,6 +250,29 @@ class SupervisorTests(unittest.TestCase):
         self.assertFalse(host.health("old"))
         self.assertFalse(host.health(None))
 
+    def test_public_version_ignores_large_but_healthy_homepage(self):
+        class Response:
+            status = 200
+            def __init__(self, url):
+                self.url = url
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+            def geturl(self):
+                return self.url
+            def read(self, _):
+                import json
+                if self.url.endswith("/qa-version.json"):
+                    return json.dumps({"environment": "QA_SYNTHETIC",
+                                       "source_sha": TARGET}).encode()
+                return b"X" * 4096
+        class Opener:
+            def open(self, req, timeout=12):
+                return Response(req.full_url)
+        with patch.object(host, "disable_redirects", return_value=Opener()):
+            self.assertTrue(host.health(TARGET))
+
 
 if __name__ == "__main__":
     unittest.main()
