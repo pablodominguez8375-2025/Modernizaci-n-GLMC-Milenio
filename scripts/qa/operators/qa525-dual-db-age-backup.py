@@ -191,6 +191,14 @@ def sha256_file(path):
     return h.hexdigest()
 
 
+def ciphertext_is_root_private(info):
+    """Pure trust check, deliberately not bypassable through the host CLI."""
+    return (stat.S_ISREG(info.st_mode) and info.st_uid == 0
+            and stat.S_IMODE(info.st_mode) == 0o600
+            and info.st_nlink == 1
+            and 1024 < info.st_size <= 10 * 1024 * 1024 * 1024)
+
+
 def dump_age(db, destination, *, run=fixed_process):
     """Stream pg_dump directly into age; no unencrypted dump on host disk."""
     require(db in DBS and destination.parent.is_dir()
@@ -215,11 +223,7 @@ def dump_age(db, destination, *, run=fixed_process):
         require(enc_status == 0 and pg_status == 0,
                 "ENCRYPTED_PG_DUMP_FAILED")
         info = destination.lstat()
-        require(stat.S_ISREG(info.st_mode) and info.st_uid == 0
-                and stat.S_IMODE(info.st_mode) == 0o600
-                and info.st_nlink == 1
-                and 1024 < info.st_size <= 10 * 1024 * 1024 * 1024,
-                "BACKUP_CIPHERTEXT_INVALID")
+        require(ciphertext_is_root_private(info), "BACKUP_CIPHERTEXT_INVALID")
         return {"file": db + ".pgdump.age",
                 "encrypted_bytes": info.st_size,
                 "sha256": sha256_file(destination)}
