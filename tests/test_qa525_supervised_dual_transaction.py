@@ -180,6 +180,12 @@ class TransactionTests(unittest.TestCase):
             self.do()
         self.assertFalse(list(self.state.iterdir()))
 
+    def test_compose_env_file_matches_physical_qa_preflight(self):
+        args = tx.compose_args(str(WORK), LAYERS["api"], "/tmp/override.json", "api")
+        self.assertEqual(args[args.index("--env-file")+1],
+                         "/opt/centenario/qa-auto-lite/empty.env")
+        self.assertIn("--no-deps", args)
+
 
 if __name__ == "__main__":
     unittest.main()
