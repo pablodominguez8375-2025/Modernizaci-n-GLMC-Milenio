@@ -51,3 +51,18 @@ Comparación GitHub exacta \`6ff4ae0d092d4214df4ea31af484efbc969fde54...0bd14cb8
 ## Trazabilidad
 
 Seguimiento [Issue #525](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525), [Issue #97](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/97), comentario [6504066245](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6504066245), Estado Ejecutivo Drive \`1rqG3YAi_csweWyxT4362Wzf3guJRdzy3foqn-Pvizf0\`. No se modifica \`main\` ni se ejecuta despliegue por crear este PR.
+
+
+## Auditoría de hardening — continuidad y rollback verificable
+
+Correcciones incorporadas tras la primera revisión del PR:
+
+- **Fuente dinámica, autorización específica**: no se fija \`dev@0bd14...\` dentro del aplicador. El SHA objetivo procede del selector de **HEAD vigente firmado**; el acta de revisión sensible, la aprobación temporal y el recibo de imágenes deben coincidir exactamente. Integrar este PR en \`dev\` cambia el HEAD: exige nueva release firmada y nueva aprobación, **nunca se reutiliza** la release del SHA antiguo.
+- **Capas inmutables**: el operador obtiene las cuatro rutas de Compose **directamente de las etiquetas físicas** API/WEB; exige base compartida, override API/WEB e identidad \`qa754\` en el orden observado. Calcula SHA-256 de los cuatro archivos root-owned, vuelve a comprobarlos en cada snapshot, y verifica que después de cada recreación solo exista un override adicional \`qa525-<servicio>-<source>-<imagen>.json\` con contenido exacto \`services.<servicio>.image\`. También coteja hash de entorno (sin mostrar secretos), montajes, redes y puertos.
+- **Retención de dos imágenes anteriores**: antes de mutar contenedores, dentro de los mismos locks, verifica los IDs OCI activos y les añade etiquetas \`pmgm-qa525-rollback:<servicio>-<source>-<old-image>\`. Si una etiqueta apunta a otro ID, deniega; después confirma que ambas etiquetas siguen resolviendo a sus respectivos hashes. Previene el borrado accidental de imágenes *dangling* ordinarias (no protege ante borrado forzado por otro administrador).
+- **Journal de energía**: la transacción sincroniza el archivo \`dual-<sha>.json\` y su directorio antes del primer Compose up. Un journal anterior \`PENDING\`, \`APPLIED\` o \`RECOVERY_MANUALLY_REQUIRED\` deniega el reintento silencioso; requiere conciliación manual si hubo interrupción.
+- **G6**: confirma hash del archivo cifrado **local**, acta administrativa de verificación off-host, reporte de restauración aislada por nombre+SHA y edad inferior a 48 horas. No verifica Drive desde el host en tiempo real; la verificación externa sigue siendo evidencia humana cotejable. La herramienta no expone claves, env, manifiestos privados ni datos personales.
+- **No sustituir UAT**: flags de introspección y mutaciones de cuentas siguen OFF por defecto en el código; antes de activarlos se requieren pruebas reales con cuentas sintéticas, verificación del único Master, recuperación SMTP y garantías de revocación de JWT. Una versión de API nueva no concede derecho automático a eliminar usuarios.
+
+**Gates actuales de desarrollo:** pruebas herméticas de transacción, revisión sensible, cadena Compose y etiquetas rollback en GitHub Actions; **ningún test con fake Docker equivale a un ensayo físico del aplicador**. Mantener PR como draft hasta revisión independiente y controles exact-head. La única VM sigue siendo \`glmdch\`; no provisionar otra.
+
