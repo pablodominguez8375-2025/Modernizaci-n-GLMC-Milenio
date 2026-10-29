@@ -12,6 +12,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 API_RECEIPT = Path("/opt/centenario/qa-api-refresh/installed.json")
 PG_CONTAINER = "centenario-qa-lab2-postgres-1"
+POST_DB_PASS_STATUS = "POST_DB_99_MIGRATIONS_AND_EXACT_SCHEMA_READ_ONLY_PASS"
 HISTORY_SQL = ('BEGIN READ ONLY; SELECT "MigrationId" FROM '
                'public."__EFMigrationsHistory" ORDER BY 1; COMMIT;')
 TABLES_SQL = (
@@ -99,7 +100,7 @@ def inspect(receipt, docker, gate):
     constraints = checked_query(docker, CONSTRAINTS_SQL)
     gate.exact_post_migration_history(receipt["database_migrations"], history)
     gate.schema_objects(tables, indexes, columns, constraints)
-    return {"status": "POST_DB_99_MIGRATIONS_AND_EXACT_SCHEMA_READ_ONLY_PASS",
+    return {"status": POST_DB_PASS_STATUS,
             "migration_id": gate.MIGRATION_ID, "history_count": len(history),
             "expected_tables_present": len(tables), "expected_indexes_present": len(indexes),
             "expected_columns_present": len(columns),
