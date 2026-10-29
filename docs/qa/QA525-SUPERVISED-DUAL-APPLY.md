@@ -66,3 +66,12 @@ Correcciones incorporadas tras la primera revisión del PR:
 
 **Gates actuales de desarrollo:** pruebas herméticas de transacción, revisión sensible, cadena Compose y etiquetas rollback en GitHub Actions; **ningún test con fake Docker equivale a un ensayo físico del aplicador**. Mantener PR como draft hasta revisión independiente y controles exact-head. La única VM sigue siendo \`glmdch\`; no provisionar otra.
 
+
+
+## Tercera auditoría: contexto Compose y EF físico
+
+Se cotejó la llamada Docker Compose original con la línea base read-only `scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py` ya fusionada. El contrato de `glmdch` exige `--env-file /opt/centenario/qa-auto-lite/empty.env` en el **mismo** contexto de API y WEB. El operador QA525 conserva esa opción tanto en apply como en rollback; antes de recrear contenedores comprueba que sea un archivo root/0600, sin asignaciones (solo comentarios/blancos), y fija su SHA-256 para detectar cambios durante la transacción. Si falla, se cancela sin ejecutar Compose. No se sustituye por variables exportadas en la terminal.
+
+La revisión sensible de EF se reforzó con consulta **solo lectura** al PostgreSQL activo: `BEGIN READ ONLY; SELECT "MigrationId" FROM public."__EFMigrationsHistory" ORDER BY 1; COMMIT;`. Compara estrictamente el conjunto de las 98 migraciones esperadas en el recibo root de API `/opt/centenario/qa-api-refresh/installed.json`; cualquier migración agregada, eliminada, faltante o duplicada bloquea el primer apply y requiere plan DBA separado. Este control complementa, sin reemplazar, la comparación de archivos GitHub y los flags de migración desactivados. No se tocan dos bases ni se ejecuta migrator.
+
+El código mantiene bloqueo sin autorización física vigente del operador y revisión humana de Program.cs/UserAccounts/Keycloak-SMTP. No afirmar que pruebas herméticas de GitHub demuestren que la configuración Compose física está lista. PR #800 permanece DRAFT hasta validación independiente de ese diseño; solo existe `glmdch`.
