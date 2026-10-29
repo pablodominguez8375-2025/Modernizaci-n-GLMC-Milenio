@@ -3,6 +3,7 @@ on:
   pull_request:
     branches: [dev]
     paths:
+      - 'scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py'
       - 'scripts/qa/operators/qa525-current-change-policy.py'
       - 'scripts/qa/operators/qa525-current-host-preflight.py'
       - 'scripts/qa/operators/qa525-current-host-staging.py'
@@ -23,7 +24,7 @@ jobs:
           persist-credentials: false
       - name: Compile isolated QA525 guards
         run: |
-          python3 -m py_compile scripts/qa/operators/qa525-current-change-policy.py scripts/qa/operators/qa525-current-host-preflight.py scripts/qa/operators/qa525-current-host-staging.py
+          python3 -m py_compile scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py scripts/qa/operators/qa525-current-change-policy.py scripts/qa/operators/qa525-current-host-preflight.py scripts/qa/operators/qa525-current-host-staging.py
           python3 -m py_compile tests/test_qa525_current_change_policy.py tests/test_qa525_current_host_preflight.py tests/test_qa525_current_host_staging.py
       - name: Verify change review, physical host guard and signed-stage boundaries
         run: |
