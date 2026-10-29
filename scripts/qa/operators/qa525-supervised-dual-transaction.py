@@ -68,7 +68,7 @@ def normalized_layers(record, root):
             and api[2] == "/etc/pmgm/qa754-identity-overlay.stage.json"
             and re.fullmatch(r"web-[0-9a-f]{64}\.json", Path(web[1]).name),
             "COMPOSE_LAYER_BINDING_INVALID")
-    require(Path(api[1]).parent == root.parent.parent.parent / "qa-api-refresh"
+    require(Path(api[1]).parent == root.parent.parent / "qa-api-refresh"
             and Path(web[1]).parent in (root, Path("/opt/centenario/qa-auto-lite")),
             "COMPOSE_LAYER_LOCATION_INVALID")
     return {k: tuple(v) for k, v in (("api", api), ("web", web))}
