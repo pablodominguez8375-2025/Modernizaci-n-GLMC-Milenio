@@ -428,7 +428,7 @@ def checked_compose_env_file(path):
     """Verify physically approved --env-file contains no variable assignments."""
     p = trusted(path)
     st = p.stat()
-    require(stat.S_IMODE(st.st_mode) == 0o600 and 0 < st.st_size <= 65536
+    require(stat.S_IMODE(st.st_mode) == 0o600 and st.st_size <= 65536
             and st.st_nlink == 1, "COMPOSE_ENV_FILE_UNTRUSTED")
     content = p.read_bytes()
     require(len(content) == st.st_size and b"\x00" not in content,
