@@ -1,0 +1,33 @@
+name: QA525 independent host guards contract
+on:
+  pull_request:
+    branches: [dev]
+    paths:
+      - 'scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py'
+      - 'scripts/qa/operators/qa525-current-change-policy.py'
+      - 'scripts/qa/operators/qa525-current-host-preflight.py'
+      - 'scripts/qa/operators/qa525-current-host-staging.py'
+      - 'tests/test_qa525_current_change_policy.py'
+      - 'tests/test_qa525_current_host_preflight.py'
+      - 'tests/test_qa525_current_host_staging.py'
+      - '.github/workflows/qa525-host-guards-contract.yml'
+permissions:
+  contents: read
+jobs:
+  guards:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Compile isolated QA525 guards
+        run: |
+          python3 -m py_compile scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py scripts/qa/operators/qa525-current-change-policy.py scripts/qa/operators/qa525-current-host-preflight.py scripts/qa/operators/qa525-current-host-staging.py
+          python3 -m py_compile tests/test_qa525_current_change_policy.py tests/test_qa525_current_host_preflight.py tests/test_qa525_current_host_staging.py
+      - name: Verify change review, physical host guard and signed-stage boundaries
+        run: |
+          python3 -m unittest discover -s tests -p test_qa525_current_change_policy.py -v
+          python3 -m unittest discover -s tests -p test_qa525_current_host_preflight.py -v
+          python3 -m unittest discover -s tests -p test_qa525_current_host_staging.py -v
