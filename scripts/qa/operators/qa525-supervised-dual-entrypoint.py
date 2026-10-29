@@ -159,7 +159,7 @@ def validate_g6(review, now):
             and restore.get("production_touched") is False,
             "G6_RESTORATION_UNVERIFIED")
     # G6 checkpoint maximum age is 48 hours for this QA apply.
-    timestamp = time.strptime(name[22:37], "%Y%m%dT%H%M%S")
+    timestamp = time.strptime(name[25:40], "%Y%m%dT%H%M%S")
     age = now - int(__import__("calendar").timegm(timestamp))
     require(0 <= age < 48 * 3600, "G6_CHECKPOINT_TOO_OLD")
     return True
@@ -208,9 +208,79 @@ def health():
         return False
 
 
+
+def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
+    """Build both images from a newly verified Sigstore release; no deployment.
+
+    An explicit root-owned sensitive review and a fresh supervised approval
+    are necessary; the old unattended change policy is NOT treated as safe.
+    """
+    receipt_path = STATE / "prepared.json"
+    require(not receipt_path.exists() and not receipt_path.is_symlink(),
+            "PREPARE_ALREADY_EXISTS")
+    require(approve.get("target_sha") == SOURCE and
+            approve.get("release_asset_sha256") == source["release_asset_sha256"]
+            and approve.get("scope") == approval.SCOPE
+            and approve.get("action") == approval.ACTION
+            and approve.get("environment") == approval.ENVIRONMENT
+            and approve.get("operator_reviewed") is True,
+            "PREPARE_SUPERVISION_NOT_MATCHED")
+    now = int(time.time())
+    require(type(approve.get("issued_at")) is int
+            and type(approve.get("expires_at")) is int
+            and 0 <= now - approve["issued_at"] <= 1800
+            and now < approve["expires_at"] <= approve["issued_at"] + 1800,
+            "PREPARE_SUPERVISION_EXPIRED")
+    before = build.snapshot(adapter.docker)
+    require(all(x["running"] is True for x in before.values()),
+            "PREPARE_BASELINE_NOT_RUNNING")
+    with tempfile.TemporaryDirectory(prefix=".qa525-reviewed-build-", dir=STATE) as tmp:
+        package = Path(tmp) / "verified"
+        attestation = signed.verify_current(package)
+        require(attestation["source_sha"] == SOURCE
+                and attestation["release_asset_sha256"] ==
+                source["release_asset_sha256"], "PREPARE_SIGNATURE_MISMATCH")
+        def verify(path, sha):
+            if sha != SOURCE or path != package:
+                return False
+            try:
+                signed.staging.verify_manifest(path, sha)
+                return signed.gate.evaluate(signed.gate.readiness.fetch_public) == source
+            except Exception:
+                return False
+        require(verify(package, SOURCE), "PREPARE_SIGNATURE_OR_DEV_DRIFT")
+        images = build.build_images(package, SOURCE, verify, adapter.docker,
+                                   build.builder.prepare_web)
+        require(verify(package, SOURCE) and
+                build.snapshot(adapter.docker) == before
+                and validate_g6(review, int(time.time())),
+                "PREPARE_SOURCE_HOST_OR_BACKUP_CHANGED")
+        prepared = {
+            "status": "PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT",
+            "scope": build.SCOPE, "source_sha": SOURCE,
+            "source_asset_sha256": source["release_asset_sha256"],
+            **images, "baseline": before, "images_built": True,
+            "services_unchanged": True, "may_apply": False,
+            "fresh_backup_created": False, "signed_stage_ephemeral": True,
+            "actual_rollback_drill_completed": False,
+        }
+        approval.validate(approve, source, prepared, int(time.time()))
+    require(not receipt_path.exists() and not receipt_path.is_symlink(),
+            "PREPARED_RECEIPT_CREATED_DURING_BUILD")
+    fd = os.open(receipt_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as output:
+        json.dump(prepared, output, sort_keys=True)
+        output.flush()
+        os.fsync(output.fileno())
+    return {"status": "PREPARED_REVIEWED_API_WEB_NO_DEPLOYMENT",
+            "source_sha": SOURCE, "services_unchanged": True,
+            "may_apply": False}
+
+
 def main():
-    require(sys.argv[1:] == ["--apply-supervised"],
-            "ONLY_EXPLICIT_SUPERVISED_APPLY_ALLOWED")
+    mode = sys.argv[1:]
+    require(mode in (["--prepare-reviewed"], ["--apply-supervised"]),
+            "ONLY_EXPLICIT_SUPERVISION_ALLOWED")
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "ONLY_GLM DCH_ROOT_QA".replace(" ", "_"))
     for path in (Path(__file__), *MODULES):
@@ -226,8 +296,6 @@ def main():
     signed = load("qa525_supervised_signed_stage", MODULES[4])
     adapter = load("qa525_supervised_transport", MODULES[5])
     with build.exclusive():
-        # Existing root-only prepared images were built under exact-SHA attestation.
-        prepared = private_json(STATE / "prepared.json")
         review = private_json(REVIEW, maximum=8192)
         source = signed.gate.evaluate(signed.gate.readiness.fetch_public)
         require(source["source_sha"] == SOURCE, "SIGNATURE_RELEASE_TARGET_DRIFT")
@@ -235,7 +303,13 @@ def main():
         scan_migrations(policy, signed.gate.readiness.fetch_public)
         now = int(time.time())
         approved_review(review, source, comparison, now)
+        validate_g6(review, now)
         approve = approval.read_root_approval()
+        if mode == ["--prepare-reviewed"]:
+            return prepare_reviewed(build, approval, signed, adapter,
+                                    source, approve, review)
+        # Only after a separate, audited and signed build may we apply.
+        prepared = private_json(STATE / "prepared.json")
         approved = approval.validate(approve, source, prepared, now)
         require(approved["status"] == "LOCAL_SUPERVISED_CUT_MATCH_NO_DEPLOYMENT_AUTHORITY",
                 "SUPERVISOR_CUT_MISMATCH")
