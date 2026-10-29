@@ -98,6 +98,49 @@ class Qa525HostPreflightTests(unittest.TestCase):
                 host.check_host(Mock(), candidate, preflight)
         self.assertEqual(1, candidate.evaluate.call_count)
 
+    def test_transitive_modules_are_trusted_before_first_import(self):
+        """Root-owned local gate/readiness code must never run unverified."""
+        output = io.StringIO()
+        checked = []
+        def collect(path):
+            checked.append(Path(path).name)
+        with patch.object(host.os, "geteuid", return_value=0), \
+             patch.object(host.socket, "gethostname", return_value="glmdch"), \
+             patch.object(host, "trusted_source", side_effect=collect), \
+             patch.object(host, "digest", return_value=host.PREFLIGHT_SHA256), \
+             patch.object(host, "module", side_effect=RuntimeError("IMPORT_BLOCKED")) as imported, \
+             patch.object(host.sys, "argv", [str(PATH)]), \
+             contextlib.redirect_stdout(output):
+            result = host.main()
+        self.assertEqual(2, result)
+        self.assertEqual([
+            PATH.name, "qa525-current-change-policy.py",
+            "qa525-host-baseline-6ff4-readonly.py",
+            "qa525-current-release-gate.py", "qa-agent-readiness.py",
+        ], checked)
+        imported.assert_called_once()
+        self.assertIn("HOST_EVIDENCE_UNAVAILABLE", output.getvalue())
+
+    def test_untrusted_import_dependency_fails_closed_before_execution(self):
+        for bad_name in ("qa525-current-release-gate.py", "qa-agent-readiness.py"):
+            with self.subTest(bad=bad_name):
+                def check(path):
+                    if Path(path).name == bad_name:
+                        raise host.Blocked("LOCAL_SOURCE_UNTRUSTED")
+                output = io.StringIO()
+                with patch.object(host.os, "geteuid", return_value=0), \
+                     patch.object(host.socket, "gethostname", return_value="glmdch"), \
+                     patch.object(host, "trusted_source", side_effect=check), \
+                     patch.object(host, "module") as imported, \
+                     patch.object(host, "digest") as hashed, \
+                     patch.object(host.sys, "argv", [str(PATH)]), \
+                     contextlib.redirect_stdout(output):
+                    result = host.main()
+                self.assertEqual(2, result)
+                self.assertIn("LOCAL_SOURCE_UNTRUSTED", output.getvalue())
+                imported.assert_not_called()
+                hashed.assert_not_called()
+
     def test_pinned_old_preflight_bytes_are_as_reviewed(self):
         path = ROOT / "scripts/qa/operators/qa525-host-baseline-6ff4-readonly.py"
         self.assertEqual(host.PREFLIGHT_SHA256,
