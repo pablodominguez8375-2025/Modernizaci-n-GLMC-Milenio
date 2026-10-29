@@ -1,0 +1,14 @@
+# QA525 — actualización conservando identidad y hotfix
+
+Base dev e3e90cbbc21d131a477445b3127b4ce96a7e3605; main6dfb9546a4873baff15955cf86abfd7d47e3d111 sin promoción. PR771 DRAFT. Reserva ChatGPT limitada a scripts/qa/operators/qa525-* y sus tests.
+
+## Estado físico confirmado por Sponsor
+API6ff4ae0d092d4214df4ea31af484efbc969fde54; WEB hotfix424153c3a06c2b0bc0f8c2e8599eed4bb9ac6786. Preflight qa525-update-readiness.py a141fe827ca49d1391577d45880bb9ec6ca4b32f6e76664e26836d7752b4974c ejecutado físicamente PASS: API tres capas/WEB dos, entorno+imágenes efectivos, identidad/Master/cifrado, 98 migraciones, G6 cifrado hash conocido bajo48h y salud pública. Sin escrituras BD ni servicios.
+
+## Preparación de imágenes, aún no ejecutada físicamente
+Nuevo qa525-prepare-e3e90.py SHA256089ad9a9225b58cba2d457165668e713cd301d64958ee22c3a1917949f4004a6. Tests totales25PASS locales; no Docker local. Instalar ambos operadores root-owned en /opt/centenario/qa-tools con modo0700; ejecutar python3 -I -u qa525-prepare-e3e90.py --prepare vía systemd-run. Repite preflight bajo locks compartidos; valida porhash los cinco módulos existentes del verificador instalado code-4c0101...; no usa wrapper de backup antiguo. Gates PUSH exactos y pertenencia a dev; paquete público con digest ligado al artefacto y Sigstore gh attestation verify tokenless; manifiesto completo antes/después; build API/WEB con builder histórico verificado y argumentos OIDC QA pinneados; exige98migraciones y ninguna modificación de migraciones/Program.cs desde baseline. Verifica inmutabilidad de contenedores API/WEB/dependencias e imágenes originales disponibles al finalizar; guarda prepared.json root0600 en /opt/centenario/qa-api-refresh/prepare-e3e90.
+
+Sin --apply, compose up, migrador, cuentas ni escritura de configuración de servicios. Preparar escribe únicamente staging/caché/locks/recibo e imágenes Docker. Si falla, servicios no reciben cambios. No imprimir errores crudos, secretos, Compose ni logs de build. BLOCKED_GITHUB_RATE_LIMIT_RESET_epoch requiere esperarcuota; otras fallas se diagnostican antes de repetir. Si ya existe prepared.json, bloquea repetición.
+
+## Próximo gate
+Resultado esperado PREPARED_API_AND_WEB_SERVICES_UNCHANGED_APPLY_NOT_IMPLEMENTED. Tras evidencia física, auditar recibo/imágenes y configuración efectiva futura+reversión con tercera capa API; desarrollar operación conjunta atómica compatible y probar fallos antes de permitir apply. CI PR exacthead pendiente de finalizar; no afirmar merge. G6 offhost integridad previa no certifica restauración independiente, ni contiene necesariamente últimas escrituras posteriores: revisar cobertura/frescura y nuevo dump antes del despliegue. No V10, no repetir hotfix754, no promover main ni recrear Master/cliente técnico/Taller. #769/768 no está integrado en candidato e3e90; activar/desactivar/eliminar cuentas no se promete por este corte.
