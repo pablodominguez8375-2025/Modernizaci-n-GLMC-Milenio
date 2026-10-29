@@ -354,11 +354,12 @@ class DBAReviewedMigrationTests(unittest.TestCase):
             MIGRATION_BLOB = "a" * 40
             CONTEXT_BLOB = "b" * 40
         class Probe:
+            POST_DB_PASS_STATUS = "POST_DB_99_MIGRATIONS_AND_EXACT_SCHEMA_READ_ONLY_PASS"
             class Blocked(Exception):
                 pass
             @staticmethod
             def inspect(receipt, docker, gate):
-                return {"status": "POST_DB_99_MIGRATIONS_AND_OBJECTS_READ_ONLY_PASS",
+                return {"status": Probe.POST_DB_PASS_STATUS,
                         "history_count": 99, "may_apply": False}
         private = lambda path, maximum=65536: (dba if path == host.DBA_REVIEW
                                                  else {"database_migrations": ["x"] * 98})
