@@ -78,6 +78,27 @@ def trusted_state():
     return STATE
 
 
+def trusted_lock_parent(path):
+    """Only /run/lock may be root-owned sticky instead of root-only.
+    
+    The lock itself is still opened O_NOFOLLOW, verified root/0600 and
+    exclusively flocked. All other lock directories must be root-controlled.
+    """
+    path = Path(path)
+    if path == Path("/run/lock"):
+        trusted(path.parent, directory=True)
+        try:
+            st = path.lstat()
+        except OSError:
+            raise Blocked("LOCK_DIRECTORY_MISSING") from None
+        require(stat.S_ISDIR(st.st_mode) and not stat.S_ISLNK(st.st_mode)
+                and st.st_uid == 0
+                and stat.S_IMODE(st.st_mode) in (0o700, 0o755, 0o1777),
+                "LOCK_DIRECTORY_NOT_ROOT_STICKY")
+        return
+    trusted(path, directory=True)
+
+
 def bootstrap_import_trust():
     if os.geteuid() == 0 and socket.gethostname() == "glmdch":
         for filename in SOURCE_CHAIN:
@@ -173,7 +194,7 @@ def build_images(package, target, verify, run, prepare_web):
 def exclusive():
     with contextlib.ExitStack() as resources:
         for lockfile in LOCKS:
-            trusted(lockfile.parent, directory=True)
+            trusted_lock_parent(lockfile.parent)
             fd = os.open(lockfile, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             resources.callback(os.close, fd)
             st = os.fstat(fd)
