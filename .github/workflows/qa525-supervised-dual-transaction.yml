@@ -1,0 +1,75 @@
+name: QA525 supervised API WEB dual transaction (hermetic)
+
+on:
+  push:
+    branches: [dev, "feature/**", "fix/**"]
+    paths:
+      - "scripts/qa/operators/qa525-supervised-dual-transaction.py"
+      - "scripts/qa/operators/qa525-supervised-dual-entrypoint.py"
+      - "tests/test_qa525_supervised_dual_transaction.py"
+      - "tests/test_qa525_supervised_dual_entrypoint.py"
+      - "tests/test_qa525_member_history_schema_gate.py"
+      - "scripts/qa/operators/qa525-member-history-schema-gate.py"
+      - "scripts/qa/operators/qa525-post-db-readonly.py"
+      - "tests/test_qa525_post_db_readonly.py"
+      - ".github/workflows/qa525-supervised-dual-transaction.yml"
+  pull_request:
+    branches: [dev]
+    paths:
+      - "scripts/qa/operators/qa525-supervised-dual-transaction.py"
+      - "scripts/qa/operators/qa525-supervised-dual-entrypoint.py"
+      - "tests/test_qa525_supervised_dual_transaction.py"
+      - "tests/test_qa525_supervised_dual_entrypoint.py"
+      - "tests/test_qa525_member_history_schema_gate.py"
+      - "scripts/qa/operators/qa525-member-history-schema-gate.py"
+      - "scripts/qa/operators/qa525-post-db-readonly.py"
+      - "tests/test_qa525_post_db_readonly.py"
+      - ".github/workflows/qa525-supervised-dual-transaction.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hermetic-rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile trusted core and test module
+        run: |
+          python -m py_compile scripts/qa/operators/qa525-supervised-dual-transaction.py
+          python -m py_compile scripts/qa/operators/qa525-supervised-dual-entrypoint.py
+          python -m py_compile tests/test_qa525_supervised_dual_transaction.py
+          python -m py_compile tests/test_qa525_supervised_dual_entrypoint.py
+          python -m py_compile scripts/qa/operators/qa525-member-history-schema-gate.py
+          python -m py_compile tests/test_qa525_member_history_schema_gate.py
+          python -m py_compile scripts/qa/operators/qa525-post-db-readonly.py
+          python -m py_compile tests/test_qa525_post_db_readonly.py
+      - name: All dual transaction regressions, fake Docker only
+        run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
+      - name: Offline review, migration and supervision regressions
+        run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_entrypoint.py' -v
+      - name: Verified PR801 additive migration contract (no database access)
+        run: python -m unittest discover -s tests -p 'test_qa525_member_history_schema_gate.py' -v
+      - name: Post-DB 99 migration checkpoint (fake Docker, NO writes)
+        run: python -m unittest discover -s tests -p 'test_qa525_post_db_readonly.py' -v
+      - name: Ensure no unattended deployment entrypoint
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          src=Path("scripts/qa/operators/qa525-supervised-dual-transaction.py").read_text()
+          assert 'NO_CLI_TRUSTED_HOST_WRAPPER_REQUIRED' in src
+          assert '"--no-deps"' in src and '"--no-build"' in src
+          assert '"--force-recreate"' in src
+          assert 'rollback' in src.lower()
+          entry=Path("scripts/qa/operators/qa525-supervised-dual-entrypoint.py").read_text()
+          assert 'ONLY_EXPLICIT_SUPERVISION_ALLOWED' in entry
+          assert 'approved_review' in entry and 'validate_g6' in entry
+          assert 'approval.validate' in entry
+          assert 'signed.verify_current' in entry
+          assert 'scan_migrations' in entry
+          PY
