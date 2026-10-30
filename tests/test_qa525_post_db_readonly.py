@@ -52,6 +52,28 @@ class ReadonlyPostDBTests(unittest.TestCase):
         self.assertTrue(all(c[-1].startswith("BEGIN READ ONLY;") for c in calls))
         self.assertTrue(all(c[-1].endswith("COMMIT;") for c in calls))
 
+    def test_catalog_sql_matches_postgresql_physical_text_contract(self):
+        self.assertIn(
+            "CASE WHEN x.indisunique THEN 't' ELSE 'f' END",
+            host.INDEXES_SQL,
+        )
+        self.assertIn(
+            "CASE WHEN a.attnotnull THEN 't' ELSE 'f' END",
+            host.COLUMNS_SQL,
+        )
+        self.assertIn("con.contype::text", host.CONSTRAINTS_SQL)
+        physical_fk = gate.EXPECTED_CONSTRAINTS[0].split("|")[2]
+        self.assertEqual(
+            physical_fk,
+            "FK_member_history_proposal_items_member_history_proposals_Propo",
+        )
+        self.assertEqual(len(physical_fk.encode("utf-8")), 63)
+        self.assertNotIn(
+            "FK_member_history_proposal_items_"
+            "member_history_proposals_ProposalId",
+            gate.EXPECTED_CONSTRAINTS,
+        )
+
     def test_missing_and_rogue_history_fail(self):
         for history in (BASE, BASE + ["another"], BASE + [BASE[0]],
                         BASE[:-1] + [gate.MIGRATION_ID]):
