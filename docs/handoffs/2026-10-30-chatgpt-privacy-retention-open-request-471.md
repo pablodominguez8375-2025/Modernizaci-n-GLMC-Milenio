@@ -12,7 +12,9 @@
 
 Ahora el adaptador llama `RetentionExecutionPolicy.CanAnonymizeDataSubjectRequest` **antes de cambiar campos**. Acepta únicamente `Status == closed` y `ClosedAtUtc != null`. En otro caso HTTP 409 con código `DATA_SUBJECT_REQUEST_NOT_FORMALLY_CLOSED` y `requiresManualReview=true`. La evaluación permanece pendiente para una decisión formal; no se autoriza borrado duro ni ninguna anonimización de otras entidades.
 
-Pruebas unitarias añadidas a `RetentionExecutionPolicyTests`: rechazos de `under_review` con/sin fecha, `active`, `closed` sin fecha, estado desconocido; aceptación solo `closed` con fecha. CI exact-head pendiente de registrar. No se hace afirmación de prueba PostgreSQL de este flujo hasta completar test de integración específico.
+Pruebas unitarias añadidas a `RetentionExecutionPolicyTests`: rechazos de `under_review` con/sin fecha, `active`, `closed` sin fecha, estado desconocido; aceptación solo `closed` con fecha.
+
+Prueba HTTP/PostgreSQL también implementada en `backend/tests/PMGM.Api.Tests/Integration/PrivacyRetentionClosurePostgreSqlTests.cs` (class nueva, shard b): crea datos sintéticos, envía `POST /api/privacy/retention/evaluations/{id}/execute`; exige 409, código de cierre y persistencia **sin cambios** de identidad/narrativas/evaluación para `under_review` y `closed` sin fecha. Después simula cierre formal y exige 200, borrado solo de campos ya previstos y estado `executed`; el segundo intento debe ser 409. Agregada exactamente una clase al manifiesto `.github/backend-integration-shards.json`, sin alterar ninguna asignación anterior. **CI exact-head pendiente** para validar ejecución real, no se afirma PASS por haber escrito el test.
 
 ## Inventario técnico de ejecución automática actual
 
