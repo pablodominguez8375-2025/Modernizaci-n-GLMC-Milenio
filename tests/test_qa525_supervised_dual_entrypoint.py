@@ -571,5 +571,158 @@ class SingleOperatorPostDbTests(unittest.TestCase):
                                   SRC, None, None, single_operator=True)
 
 
+class PublicApiBudgetTests(unittest.TestCase):
+    """Real metadata/staging orchestration with fake HTTP, signer and Docker."""
+
+    def setUp(self):
+        import copy
+        from types import SimpleNamespace
+        from test_qa525_current_release_gate import fixture, SHA
+        self.sha = SHA
+        self.db, _, _ = fixture()
+        self.calls = []
+        self.changed = False
+        self.branch_drift = False
+        self.manifest_bad = False
+        self.copy = copy.deepcopy
+        filename = FILE.parents[1] / "qa525-stage-current-release.py"
+        spec = importlib.util.spec_from_file_location("qa525_budget_signed_stage", filename)
+        self.signed = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.signed)
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.now = 1793299200
+        self.adapter = SimpleNamespace(docker=lambda _: "not used")
+        self.approval = SimpleNamespace(SCOPE="local", ACTION="reviewed", ENVIRONMENT="QA_SYNTHETIC",
+                                        validate=lambda *args: {})
+        self.build = SimpleNamespace(SCOPE="test", snapshot=lambda _: {"api": {"running": True}},
+                                    builder=SimpleNamespace(prepare_web=None), build_images=self.images)
+
+    def fetch(self, path):
+        self.calls.append(path)
+        return self.copy(self.db[path])
+
+    def download(self, selection, archive):
+        archive.write_bytes(b"synthetic signed envelope")
+        return {"source_sha": self.sha, "sha256": selection["artifact_sha256"]}
+
+    def sign(self, archive, digest, sha, output, *, tokenless):
+        self.assertTrue(tokenless)
+        output.mkdir()
+        return {"status": "SIGNED_CODE_STAGED_NOT_INSTALLED", "source_sha": sha}
+
+    def images(self, package, sha, verify, run, web):
+        # Existing build_images + API and WEB builders have six source callbacks.
+        if self.branch_drift:
+            self.db["/branches/dev"] = {"commit": {"sha": "c" * 40}}
+        for _ in range(6):
+            host.require(verify(package, sha), "TEST_BUILD_GUARD_REJECTED")
+        if self.changed:
+            key = next(p for p in self.db if p.startswith("/actions/runs?"))
+            self.db[key]["workflow_runs"][0]["conclusion"] = "failure"
+        return {"api_image_id": "sha256:" + "1" * 64,
+                "web_image_id": "sha256:" + "2" * 64}
+
+    def prepare(self):
+        gate = self.signed.gate
+        with (patch.object(gate.readiness, "fetch_public", side_effect=self.fetch),
+              patch.object(self.signed.download, "download", side_effect=self.download),
+              patch.object(self.signed.staging, "stage", side_effect=self.sign),
+              patch.object(self.signed.staging, "verify_manifest",
+                           side_effect=self.signed.staging.Blocked("MANIFEST_CHANGED")
+                           if self.manifest_bad else None),
+              patch.object(host, "STATE", self.root),
+              patch.object(host, "validate_g6", return_value=True),
+              patch.object(host.time, "time", return_value=self.now)):
+            source = gate.evaluate(gate.readiness.fetch_public, expected_sha=self.sha)
+            approve = dict(target_sha=self.sha, release_asset_sha256=source["release_asset_sha256"],
+                           scope=self.approval.SCOPE, action=self.approval.ACTION,
+                           environment=self.approval.ENVIRONMENT, operator_reviewed=True,
+                           issued_at=self.now - 1, expires_at=self.now + 100)
+            host.prepare_reviewed(self.build, self.approval, self.signed, self.adapter,
+                                  source, approve, {})
+            return source
+
+    def test_preparation_callbacks_fit_public_quota_without_reusing_receipts(self):
+        import json
+        self.prepare()
+        self.assertEqual(len(self.calls), 18)  # +3 live diff/blob reads in main =21
+        inventories = [p for p in self.calls if p.startswith("/actions/runs?")]
+        self.assertEqual(len(inventories), 3)  # start, signature end, build end
+        self.assertTrue(json.loads((self.root / "prepared.json").read_text())["images_built"])
+
+    def test_ci_revoked_during_build_never_produces_prepared_receipt(self):
+        self.changed = True
+        with self.assertRaises(self.signed.gate.readiness.GateFailure):
+            self.prepare()
+        self.assertFalse((self.root / "prepared.json").exists())
+
+    def test_head_drift_and_manifest_tampering_block_build_callbacks(self):
+        self.branch_drift = True
+        with self.assertRaisesRegex(host.Blocked, "TEST_BUILD_GUARD_REJECTED"):
+            self.prepare()
+        self.assertFalse((self.root / "prepared.json").exists())
+        self.db["/branches/dev"] = {"commit": {"sha": self.sha}}
+        self.branch_drift = False
+        self.manifest_bad = True
+        with self.assertRaisesRegex(host.Blocked, "TEST_BUILD_GUARD_REJECTED"):
+            self.prepare()
+        self.assertFalse((self.root / "prepared.json").exists())
+
+    def test_same_comparison_is_classified_and_schema_checked_with_three_reads(self):
+        from types import SimpleNamespace
+        class Gate:
+            MIGRATION_PATH = "backend/src/PMGM.Api/Migrations/Known.cs"
+            CONTEXT_PATH = "backend/src/PMGM.Api/Data/PmgmDbContext.cs"
+            MIGRATION_BLOB = "a" * 40
+            CONTEXT_BLOB = "b" * 40
+            class Blocked(Exception):
+                pass
+            @classmethod
+            def reviewed_diff(cls, files, blobs):
+                if blobs != {cls.MIGRATION_PATH: cls.MIGRATION_BLOB,
+                             cls.CONTEXT_PATH: cls.CONTEXT_BLOB}:
+                    raise cls.Blocked("BLOB")
+        diff = {"status": "ahead", "files": [
+            {"filename": Gate.MIGRATION_PATH, "status": "added"},
+            {"filename": Gate.CONTEXT_PATH, "status": "modified"}]}
+        self.db["/compare/" + host.BASELINE + "..." + self.sha] = diff
+        self.db["/contents/" + Gate.MIGRATION_PATH + "?ref=" + self.sha] = {"sha": Gate.MIGRATION_BLOB}
+        self.db["/contents/" + Gate.CONTEXT_PATH + "?ref=" + self.sha] = {"sha": Gate.CONTEXT_BLOB}
+        classified = []
+        def classify(baseline, source, comparison):
+            self.assertEqual(baseline, host.BASELINE)
+            self.assertEqual(comparison, diff)
+            classified.append(True)
+            return {"status": "BLOCKED_REVIEW_REQUIRED"}
+        with patch.object(self.signed.gate.readiness, "fetch_public", side_effect=self.fetch):
+            host.current_change_review(SimpleNamespace(classify=classify), self.signed,
+                                       {"source_sha": self.sha}, Gate)
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(classified, [True])
+
+    def test_diagnostic_exposes_only_allowlisted_public_api_codes(self):
+        self.assertEqual(host.public_failure_code(ValueError("PRIVATE_SECRET_EXAMPLE")),
+                         "SUPERVISED_APPLY_NOT_COMPLETED")
+        self.assertEqual(host.public_failure_code(self.signed.gate.readiness.GateFailure(
+            "GITHUB_API_RATE_LIMITED")), "GITHUB_API_RATE_LIMITED")
+
+    def test_recreation_and_post_phases_always_fetch_fresh_full_gate(self):
+        with patch.object(self.signed.gate.readiness, "fetch_public", side_effect=self.fetch):
+            source = self.signed.gate.evaluate(self.fetch, expected_sha=self.sha)
+            self.calls.clear()
+            self.assertEqual(host.phase_source(self.signed, source, "pre"), source)
+            self.assertEqual(self.calls, [])  # no recreation before next phase
+            self.assertEqual(host.phase_source(self.signed, source, "just-before-apply"), source)
+            self.assertEqual(len(self.calls), 4)
+            key = next(p for p in self.db if p.startswith("/actions/runs?"))
+            self.db[key]["workflow_runs"][0]["conclusion"] = "failure"
+            with self.assertRaises(self.signed.gate.readiness.GateFailure):
+                host.phase_source(self.signed, source, "post")
+            with self.assertRaises(host.Blocked):
+                host.phase_source(self.signed, source, "skip")
+
+
 if __name__ == "__main__":
     unittest.main()

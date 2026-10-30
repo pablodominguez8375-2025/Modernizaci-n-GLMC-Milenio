@@ -41,7 +41,14 @@ def fetch_public(path):
             if resp.geturl().split("/", 3)[:3] != ["https:", "", "api.github.com"]:
                 raise GateFailure("API_REDIRECT_FORBIDDEN")
             return json.load(resp)
-    except (HTTPError, URLError, OSError, ValueError):
+    except HTTPError as exc:
+        headers = exc.headers or {}
+        if exc.code in (403, 429) and headers.get("X-RateLimit-Remaining") == "0":
+            raise GateFailure("GITHUB_API_RATE_LIMITED") from None
+        if exc.code == 429 or headers.get("Retry-After"):
+            raise GateFailure("GITHUB_API_RETRY_LATER") from None
+        raise GateFailure("GITHUB_API_HTTP_ERROR") from None
+    except (URLError, OSError, ValueError):
         raise GateFailure("GITHUB_API_UNAVAILABLE") from None
 
 

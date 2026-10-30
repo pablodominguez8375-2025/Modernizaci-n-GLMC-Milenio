@@ -176,6 +176,25 @@ class CurrentSignedStagingTests(unittest.TestCase):
             # The module docstring may mention Docker as a prohibition.
             self.assertNotIn(forbidden, src.split('"""', 2)[-1])
 
+    def test_internal_selection_still_requires_signature_and_full_post_gate(self):
+        with (patch.object(stage.gate, "evaluate", return_value=RELEASE) as gates,
+              patch.object(stage.download, "download", side_effect=self.download),
+              patch.object(stage.staging, "stage", side_effect=self.signed_stage) as signer):
+            self.assertEqual(stage.verify_current(self.output, selection=RELEASE)["source_sha"], SHA)
+        gates.assert_called_once_with(stage.gate.readiness.fetch_public, expected_sha=SHA)
+        signer.assert_called_once()
+
+    def test_supplied_selection_is_never_authority_if_post_gate_differs(self):
+        for field, value in (("source_sha", "c" * 40), ("release_asset_id", 999),
+                             ("release_asset_sha256", "sha256:" + "c" * 64)):
+            with self.subTest(field=field):
+                with (patch.object(stage.gate, "evaluate", return_value={**RELEASE, field: value}),
+                      patch.object(stage.download, "download", side_effect=self.download),
+                      patch.object(stage.staging, "stage", side_effect=self.signed_stage)):
+                    with self.assertRaisesRegex(stage.Blocked, "CURRENT_RELEASE_CHANGED"):
+                        stage.verify_current(self.output, selection=RELEASE)
+                self.assertEqual([], list(self.private.iterdir()))
+
 
 if __name__ == "__main__":
     unittest.main()

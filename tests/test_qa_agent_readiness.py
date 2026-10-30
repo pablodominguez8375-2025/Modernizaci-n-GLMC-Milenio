@@ -2,6 +2,9 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError, URLError
+from email.message import Message
 
 FILE = Path(__file__).resolve().parents[1] / "scripts/qa/qa-agent-readiness.py"
 spec = importlib.util.spec_from_file_location("qa_agent_readiness", FILE)
@@ -9,6 +12,32 @@ agent = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(agent)
 
 SOURCE_SHA = "a" * 40
+
+
+class HttpDiagnosticTests(unittest.TestCase):
+    def test_rate_limit_and_retry_headers_have_safe_distinct_codes(self):
+        for status, headers, expected in (
+                (403, {"X-RateLimit-Remaining": "0"}, "GITHUB_API_RATE_LIMITED"),
+                (429, {}, "GITHUB_API_RETRY_LATER"),
+                (403, {"Retry-After": "60"}, "GITHUB_API_RETRY_LATER"),
+                (500, {}, "GITHUB_API_HTTP_ERROR")):
+            with self.subTest(status=status):
+                msg = Message()
+                for key, value in headers.items():
+                    msg[key] = value
+                error = HTTPError("https://api.github.com/", status, "sensitive-detail", msg, None)
+                with patch.object(agent, "urlopen", side_effect=error):
+                    with self.assertRaisesRegex(agent.GateFailure, "^" + expected + "$"):
+                        agent.fetch_public("/branches/dev")
+
+    def test_network_failure_and_absent_headers_never_expose_details(self):
+        for error, expected in (
+                (URLError("sensitive-detail"), "GITHUB_API_UNAVAILABLE"),
+                (HTTPError("https://api.github.com/", 403, "sensitive-detail", None, None),
+                 "GITHUB_API_HTTP_ERROR")):
+            with patch.object(agent, "urlopen", side_effect=error):
+                with self.assertRaisesRegex(agent.GateFailure, "^" + expected + "$"):
+                    agent.fetch_public("/branches/dev")
 
 
 def fixture():
