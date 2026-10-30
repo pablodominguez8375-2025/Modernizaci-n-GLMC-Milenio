@@ -404,5 +404,172 @@ class DBAReviewedMigrationTests(unittest.TestCase):
                     with self.assertRaises(host.Blocked, msg=key):
                         host.validate_post_db_dba(g6, SRC, now, lambda _: "", Gate, Probe)
 
+class SingleOperatorPostDbTests(unittest.TestCase):
+    def setUp(self):
+        self.now = 1793299200
+        self.review = review(self.now)
+        self.record = {
+            "source_sha": TARGET, "release_asset_sha256": SRC["release_asset_sha256"],
+            "baseline_sha": host.BASELINE,
+            "migration_id": "20261029120000_AddMemberHistoryProposals",
+            "migration_blob_sha": "a" * 40, "dbcontext_blob_sha": "b" * 40,
+            "migration_completed_at": 1793294400, "approved_at": self.now - 100,
+            "additive_up_only": True, "previous_api_forward_compatible": True,
+            "post_db_g6_archive_name": self.review["g6_archive_name"],
+            "post_db_g6_archive_sha256": self.review["g6_archive_sha256"],
+            "post_db_g6_restore_report_name": self.review["g6_restore_report_name"],
+            "review_mode": "single_operator_qa", "environment": "QA_SYNTHETIC",
+            "host": "glmdch", "scope": "POST_PR801_API_WEB_ONLY_NO_MIGRATION",
+            "sponsor_approval_reference": host.SINGLE_OPERATOR_DECISION,
+            "sponsor_accepts_single_operator_risk": True,
+            "independent_human_review": False, "technical_review_kind": "automated_ai",
+            "technical_review_reference": host.SINGLE_OPERATOR_DECISION,
+            "operator_name": "Synthetic QA operator",
+        }
+        self.receipt = {"database_migrations": ["baseline"]}
+        self.private_paths = []
+        outer = self
+        class Gate:
+            MIGRATION_ID = outer.record["migration_id"]
+            MIGRATION_BLOB = "a" * 40
+            CONTEXT_BLOB = "b" * 40
+            class Blocked(Exception):
+                pass
+        class Probe:
+            POST_DB_PASS_STATUS = "POST_DB_99_MIGRATIONS_AND_EXACT_SCHEMA_READ_ONLY_PASS"
+            class Blocked(Exception):
+                pass
+            def inspect(self, receipt, docker, gate):
+                outer.assertIs(receipt, outer.receipt)
+                outer.assertIs(gate, Gate)
+                return {"status": self.POST_DB_PASS_STATUS, "history_count": 99,
+                        "may_apply": False}
+        self.gate, self.probe = Gate, Probe()
+
+    def check(self, *, single=True):
+        def private(path, maximum=65536):
+            self.private_paths.append(path)
+            if path in (host.SINGLE_OPERATOR_REVIEW, host.DBA_REVIEW):
+                return self.record
+            return self.receipt
+        with (patch.object(host, "private_json", side_effect=private),
+              patch.object(host, "validate_g6", return_value=True) as backup):
+            answer = host.validate_post_db_dba(
+                self.review, SRC, self.now, lambda _: "", self.gate, self.probe,
+                single_operator=single)
+            backup.assert_called_once_with(self.review, self.now)
+            return answer
+
+    def test_explicit_mode_accepts_realistic_claims_and_reads_separate_file(self):
+        self.assertTrue(self.check())
+        self.assertEqual(self.private_paths[0], host.SINGLE_OPERATOR_REVIEW)
+        self.assertNotIn(host.DBA_REVIEW, self.private_paths)
+
+    def test_default_dba_route_does_not_accept_single_operator_record(self):
+        with self.assertRaises(host.Blocked):
+            self.check(single=False)
+        self.assertEqual(self.private_paths, [host.DBA_REVIEW])
+
+    def test_missing_dba_acta_never_falls_back(self):
+        with patch.object(host, "private_json", side_effect=host.Blocked("MISSING")) as read:
+            with self.assertRaisesRegex(host.Blocked, "MISSING"):
+                host.validate_post_db_dba(self.review, SRC, self.now,
+                                         lambda _: "", self.gate, self.probe)
+            read.assert_called_once_with(host.DBA_REVIEW, maximum=8192)
+
+    def test_unknown_fields_and_claim_of_independent_dba_are_rejected(self):
+        self.record["dba_independently_reviewed"] = True
+        with self.assertRaisesRegex(host.Blocked, "FIELDS_INVALID"):
+            self.check()
+
+    def test_explicit_approval_attribution_scope_and_evidence_required(self):
+        invalid = {
+            "review_mode": "automatic", "environment": "PRODUCTION", "host": "srv01",
+            "scope": "MIGRATE", "sponsor_approval_reference": "https://example.invalid/",
+            "sponsor_accepts_single_operator_risk": False, "independent_human_review": True,
+            "technical_review_kind": "human_dba", "technical_review_reference": "file:///secret",
+            "operator_name": "\ninvalid",
+        }
+        for key, value in invalid.items():
+            with self.subTest(key=key):
+                original = self.record[key]
+                self.record[key] = value
+                with self.assertRaises(host.Blocked):
+                    self.check()
+                self.record[key] = original
+        del self.record["sponsor_accepts_single_operator_risk"]
+        with self.assertRaises(host.Blocked):
+            self.check()
+
+    def test_source_schema_backup_and_age_guards_still_enforced(self):
+        for key, value in (
+                ("source_sha", "e" * 40), ("release_asset_sha256", "sha256:" + "e" * 64),
+                ("migration_blob_sha", "e" * 40), ("dbcontext_blob_sha", "e" * 40),
+                ("previous_api_forward_compatible", False), ("additive_up_only", False),
+                ("approved_at", self.now - 1801), ("approved_at", self.now + 1),
+                ("migration_completed_at", 1793298000),
+                ("post_db_g6_archive_sha256", "e" * 64)):
+            with self.subTest(key=key, value=value):
+                original = self.record[key]
+                self.record[key] = value
+                with self.assertRaises(host.Blocked):
+                    self.check()
+                self.record[key] = original
+
+    def test_live_probe_failure_still_blocks(self):
+        with patch.object(self.probe, "inspect", side_effect=self.probe.Blocked("DRIFT")):
+            with self.assertRaisesRegex(host.Blocked, "SCHEMA_LIVE"):
+                self.check()
+
+    def test_backup_failure_still_blocks(self):
+        with (patch.object(host, "private_json", return_value=self.record),
+              patch.object(host, "validate_g6", side_effect=host.Blocked("G6_INVALID"))):
+            with self.assertRaisesRegex(host.Blocked, "G6_INVALID"):
+                host.validate_post_db_dba(self.review, SRC, self.now, lambda _: "",
+                                         self.gate, self.probe, single_operator=True)
+
+    def test_cli_requires_explicit_opt_in_and_keeps_legacy_modes(self):
+        for action in ("--prepare-reviewed", "--apply-supervised"):
+            self.assertEqual(host.supervision_mode([action]), (action, False))
+            self.assertEqual(host.supervision_mode([action, "--single-operator-qa"]),
+                             (action, True))
+        for args in ([], ["--auto"], ["--single-operator-qa"],
+                     ["--apply-supervised", "--single-operator-qa", "--force"]):
+            with self.assertRaises(host.Blocked):
+                host.supervision_mode(args)
+
+    def test_single_operator_environment_disallows_migrations_and_account_activation(self):
+        import json
+        baseline = ["Database__ApplyMigrationsOnStartup=false",
+                    "Database__RunMigrationsAndExit=false", "PRIVATE_VALUE=never_print"]
+        self.assertEqual(len(host.single_operator_runtime(lambda _: json.dumps(baseline))), 64)
+        for values in (baseline[1:], [baseline[0]],
+                       [baseline[0].replace("false", "true"), *baseline[1:]],
+                       [*baseline, "UserAccounts__Identity__EnableLifecycleMutations=true"],
+                       [*baseline, "UserAccounts__Identity__RequireLiveTokenIntrospection=true"],
+                       [*baseline, "database__applymigrationsonstartup=true"]):
+            with self.subTest(values=values):
+                with self.assertRaises(host.Blocked):
+                    host.single_operator_runtime(lambda _: json.dumps(values))
+
+    def test_prepared_images_cannot_cross_review_modes(self):
+        host.validate_prepared_review_mode({}, False)  # historical DBA receipt
+        host.validate_prepared_review_mode({"review_mode": "independent_dba"}, False)
+        host.validate_prepared_review_mode({"review_mode": "single_operator_qa"}, True)
+        for record, single in (({}, True), ({"review_mode": "independent_dba"}, True),
+                               ({"review_mode": "single_operator_qa"}, False),
+                               ({"review_mode": "unknown"}, True)):
+            with self.assertRaisesRegex(host.Blocked, "PREPARED_REVIEW_MODE_MISMATCH"):
+                host.validate_prepared_review_mode(record, single)
+
+    def test_prepare_checks_disabled_flags_before_any_build(self):
+        import json
+        from types import SimpleNamespace
+        docker = lambda _: json.dumps(["Database__ApplyMigrationsOnStartup=true"])
+        with self.assertRaisesRegex(host.Blocked, "MIGRATION_FLAGS_NOT_DISABLED"):
+            host.prepare_reviewed(None, None, None, SimpleNamespace(docker=docker),
+                                  SRC, None, None, single_operator=True)
+
+
 if __name__ == "__main__":
     unittest.main()

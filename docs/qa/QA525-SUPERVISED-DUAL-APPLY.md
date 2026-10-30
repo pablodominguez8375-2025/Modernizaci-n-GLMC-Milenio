@@ -1,5 +1,63 @@
 # QA525 — Aplicador API+WEB supervisado, firma, G6 y rollback dual
 
+## Actualización aprobada 30-10-2026: operador único post-PR801 (PR #806)
+
+Esta sección prevalece para el modo explícito de operador único sobre las
+referencias históricas a revisión humana independiente de este documento.
+No constituye ejecución ni UAT. El PO aprobó la propuesta #525/6527378960;
+registro de decisión y reconciliación: [#525/6528024401](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6528024401).
+La migración ya había sido autorizada con revisión técnica **automatizada de
+ChatGPT**, sin afirmar DBA humano, en [#525/6512522202](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6512522202).
+
+El entrypoint conserva la ruta DBA independiente original. Solo al añadir
+`--single-operator-qa` después de `--prepare-reviewed` o `--apply-supervised`
+selecciona el modo aprobado de un operador. No existe fallback por acta ausente.
+Este modo solo admite el esquema conocido PR801, ya aplicado y verificado en
+vivo, en `glmdch`/`QA_SYNTHETIC`, para preparación/aplicación binaria API+WEB.
+
+En lugar de un acta DBA humana usa exclusivamente
+`/etc/pmgm/qa525-single-operator-postdb-approved.json`, root/0600. Mantiene todos
+los campos comunes del acta post-DB descrita en
+[contrato PR801](QA525-PR801-PR802-SCHEMA-CUT.md), **excepto**
+`dba_independently_reviewed`, que está prohibido en este modo. Añade exactamente:
+
+| Campo | Contrato |
+| --- | --- |
+| `review_mode` | `single_operator_qa` |
+| `environment` / `host` | `QA_SYNTHETIC` / `glmdch` |
+| `scope` | `POST_PR801_API_WEB_ONLY_NO_MIGRATION` |
+| `sponsor_approval_reference` | URL exacta de #525/6528024401 |
+| `sponsor_accepts_single_operator_risk` | `true`, solo tras aceptación real del PO |
+| `independent_human_review` | `false`; no afirmar segunda persona |
+| `technical_review_kind` | `automated_ai` |
+| `technical_review_reference` | URL de comentario real #525 con revisión técnica del corte |
+| `operator_name` | Nombre del operador real, sin caracteres de control |
+
+La revisión sensible y aprobación local temporal de uso único siguen siendo
+obligatorias, por separado y con sus campos anteriores. No generar ninguno de
+estos registros como plantilla preaprobada; fechas/identidad/hashes deben provenir
+de la evidencia real. El nuevo acta queda ligada a SHA/digest, blobs EF, G6
+postmigración y revisión actual de máximo 30 minutos, igual que la ruta DBA.
+El G6 mantiene su ventana de 48 horas y la comprobación de restauración y hash.
+
+Se exigen explícitamente las dos variables de migración en `false`. Introspección
+y mutaciones de cuentas deben estar ausentes (defaults del corte revisado) o en
+`false`; el modo rechaza valores activados o ambiguos y no cambia configuración.
+La ausencia en el entorno no prueba otras fuentes de configuración: revisar
+también la configuración del paquete firmado antes de atestiguar el acta sensible.
+El recibo de preparación registra `review_mode`; no se puede aplicar una
+preparación bajo otro modo. Los recibos históricos sin ese campo solo pertenecen
+a la ruta DBA original. Los controles de firma, HEAD, manifiesto, locks, capas
+Compose/identidad, imágenes anteriores retenidas y rollback dual se conservan.
+
+Antes de usar el modo: PR806/CI exact-head y nuevo corte firmado aprobados;
+revisión técnica y aceptación real del operador; crear registros privados solo
+tras comprobar evidencias; preparar imágenes y luego aplicar supervisado con
+UAT sintética. No reutilizar el código de `ceaca327` como si ya tuviera el modo
+nuevo, no repetir EF99/G6 válidos ni tocar PR804/805, main, producción o srv01.
+
+El resto del documento describe la ruta original y sus antecedentes históricos.
+
 **Estado: PR #800 DRAFT / DESARROLLO. NO instalado ni probado en glmdch.**
 Objetivo exclusivo: QA sintético en la ÚNICA VM \`glmdch\`. No tocar \`main\`, producción, \`srv01\`, datos reales, claves institucionales, Keycloak/SMTP ni migraciones. NO ejecutar operadores obsoletos de PR #771/#737/#766 ni scripts \`backup-srv01*\`.
 

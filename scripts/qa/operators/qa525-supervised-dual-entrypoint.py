@@ -33,6 +33,10 @@ BASELINE = "6ff4ae0d092d4214df4ea31af484efbc969fde54"
 STATE = Path("/opt/centenario/qa525-signed-prepare")
 REVIEW = Path("/etc/pmgm/qa525-sensitive-reviewed.json")
 DBA_REVIEW = Path("/etc/pmgm/qa525-member-history-dba-approved.json")
+SINGLE_OPERATOR_REVIEW = Path("/etc/pmgm/qa525-single-operator-postdb-approved.json")
+SINGLE_OPERATOR_DECISION = (
+    "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/"
+    "issues/525#issuecomment-6528024401")
 ARCHIVE_RECEIPT = Path("/opt/centenario/qa-g6/archive.receipt.json")
 G6_DIR = Path("/opt/centenario/qa-g6")
 WORKDIR = Path("/opt/centenario/qa-lab-firstboot/recovery-v2")
@@ -205,21 +209,53 @@ def scan_migrations(policy, fetch, target, gate=None):
     return "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
 
 
-def validate_post_db_dba(review, source, now, docker, gate, probe):
+def validate_single_operator_review(record):
+    """Explicit PO-approved QA route; never claim an independent human DBA."""
+    require(record.get("review_mode") == "single_operator_qa"
+            and record.get("environment") == "QA_SYNTHETIC"
+            and record.get("host") == "glmdch"
+            and record.get("scope") == "POST_PR801_API_WEB_ONLY_NO_MIGRATION"
+            and record.get("sponsor_approval_reference") == SINGLE_OPERATOR_DECISION
+            and record.get("sponsor_accepts_single_operator_risk") is True
+            and record.get("independent_human_review") is False
+            and record.get("technical_review_kind") == "automated_ai"
+            and type(record.get("operator_name")) is str
+            and 1 <= len(record["operator_name"].strip()) <= 120
+            and not any(ord(c) < 32 or ord(c) == 127 for c in record["operator_name"])
+            and type(record.get("technical_review_reference")) is str
+            and re.fullmatch(
+                r"https://github\.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/"
+                r"issues/525#issuecomment-[1-9][0-9]{0,19}",
+                record["technical_review_reference"]),
+            "SINGLE_OPERATOR_REVIEW_NOT_APPROVED")
+
+
+def validate_post_db_dba(review, source, now, docker, gate, probe, *, single_operator=False):
     """Read-only live 99 + exact root DBA acta + G6 post-migration checkpoint.
 
     Proof of the DB schema remains distinct from approval to deploy. This
     function never runs the EF migrator or modifies PostgreSQL.
     """
-    dba = private_json(DBA_REVIEW, maximum=8192)
+    require(type(single_operator) is bool, "POST_DB_REVIEW_MODE_INVALID")
+    # No fallback: a missing/invalid DBA acta NEVER selects the single-operator route.
+    dba = private_json(SINGLE_OPERATOR_REVIEW if single_operator else DBA_REVIEW,
+                       maximum=8192)
     fields = {"source_sha", "release_asset_sha256", "baseline_sha",
               "migration_id", "migration_blob_sha", "dbcontext_blob_sha",
               "migration_completed_at", "approved_at",
               "dba_independently_reviewed", "additive_up_only",
               "previous_api_forward_compatible", "post_db_g6_archive_name",
               "post_db_g6_archive_sha256", "post_db_g6_restore_report_name"}
+    if single_operator:
+        fields.remove("dba_independently_reviewed")
+        fields.update({"review_mode", "environment", "host", "scope",
+                       "sponsor_approval_reference", "sponsor_accepts_single_operator_risk",
+                       "independent_human_review", "technical_review_kind",
+                       "technical_review_reference", "operator_name"})
     require(type(dba) is dict and set(dba) == fields,
             "DBA_REVIEW_FIELDS_INVALID")
+    if single_operator:
+        validate_single_operator_review(dba)
     completed, approved = dba["migration_completed_at"], dba["approved_at"]
     require(dba["source_sha"] == source["source_sha"]
             and dba["release_asset_sha256"] == source["release_asset_sha256"]
@@ -227,7 +263,7 @@ def validate_post_db_dba(review, source, now, docker, gate, probe):
             and dba["migration_id"] == gate.MIGRATION_ID
             and dba["migration_blob_sha"] == gate.MIGRATION_BLOB
             and dba["dbcontext_blob_sha"] == gate.CONTEXT_BLOB
-            and dba["dba_independently_reviewed"] is True
+            and (single_operator or dba["dba_independently_reviewed"] is True)
             and dba["additive_up_only"] is True
             and dba["previous_api_forward_compatible"] is True
             and type(completed) is int and type(approved) is int
@@ -294,13 +330,34 @@ def health(expected_web_sha):
 
 
 
-def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
+def single_operator_runtime(docker):
+    """No secret output; no migration or account-lifecycle activation in this mode."""
+    data = json.loads(docker(["inspect", "--format", "{{json .Config.Env}}",
+                              "centenario-qa-lab2-api-1"]))
+    require(type(data) is list and all(type(x) is str and "=" in x for x in data),
+            "SINGLE_OPERATOR_RUNTIME_INVALID")
+    pairs = [x.split("=", 1) for x in data]
+    keys = [x[0].lower() for x in pairs]
+    require(len(keys) == len(set(keys)), "SINGLE_OPERATOR_RUNTIME_DUPLICATE")
+    settings = {k.lower(): v for k, v in pairs}
+    for key in ("Database__ApplyMigrationsOnStartup", "Database__RunMigrationsAndExit"):
+        require(settings.get(key.lower(), "").lower() == "false",
+                "SINGLE_OPERATOR_MIGRATION_FLAGS_NOT_DISABLED")
+    for key in ("UserAccounts__Identity__EnableLifecycleMutations",
+                "UserAccounts__Identity__RequireLiveTokenIntrospection"):
+        require(settings.get(key.lower(), "false").lower() == "false",
+                "SINGLE_OPERATOR_ACCOUNT_FLAGS_NOT_DISABLED")
+    return hashlib.sha256(json.dumps(sorted(data)).encode()).hexdigest()
+
+
+def prepare_reviewed(build, approval, signed, adapter, source, approve, review, *, single_operator=False):
     """Build both images from a newly verified Sigstore release; no deployment.
 
     An explicit root-owned sensitive review and a fresh supervised approval
     are necessary; the old unattended change policy is NOT treated as safe.
     """
     target = source["source_sha"]
+    env_fingerprint = single_operator_runtime(adapter.docker) if single_operator else None
     receipt_path = STATE / "prepared.json"
     require(not receipt_path.exists() and not receipt_path.is_symlink(),
             "PREPARE_ALREADY_EXISTS")
@@ -339,6 +396,7 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
                                    build.builder.prepare_web)
         require(verify(package, target) and
                 build.snapshot(adapter.docker) == before
+                and (not single_operator or single_operator_runtime(adapter.docker) == env_fingerprint)
                 and validate_g6(review, int(time.time())),
                 "PREPARE_target_HOST_OR_BACKUP_CHANGED")
         prepared = {
@@ -349,6 +407,7 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review):
             "services_unchanged": True, "may_apply": False,
             "fresh_backup_created": False, "signed_stage_ephemeral": True,
             "actual_rollback_drill_completed": False,
+            "review_mode": "single_operator_qa" if single_operator else "independent_dba",
         }
         approval.validate(approve, source, prepared, int(time.time()))
     require(not receipt_path.exists() and not receipt_path.is_symlink(),
@@ -462,10 +521,23 @@ def validate_live_ef_history(docker):
     return True
 
 
-def main():
-    mode = sys.argv[1:]
-    require(mode in (["--prepare-reviewed"], ["--apply-supervised"]),
+def supervision_mode(args):
+    require(args in (["--prepare-reviewed"], ["--apply-supervised"],
+                     ["--prepare-reviewed", "--single-operator-qa"],
+                     ["--apply-supervised", "--single-operator-qa"]),
             "ONLY_EXPLICIT_SUPERVISION_ALLOWED")
+    return args[0], len(args) == 2
+
+
+def validate_prepared_review_mode(prepared, single_operator):
+    require(type(prepared) is dict and type(single_operator) is bool
+            and prepared.get("review_mode", "independent_dba") ==
+            ("single_operator_qa" if single_operator else "independent_dba"),
+            "PREPARED_REVIEW_MODE_MISMATCH")
+
+
+def main():
+    action, single_operator = supervision_mode(sys.argv[1:])
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "ONLY_GLM DCH_ROOT_QA".replace(" ", "_"))
     for path in (Path(__file__), *MODULES):
@@ -492,19 +564,24 @@ def main():
         schema_state = scan_migrations(policy, signed.gate.readiness.fetch_public,
                                        target, schema_gate)
         known_schema = schema_state == "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
+        require(not single_operator or known_schema,
+                "SINGLE_OPERATOR_ONLY_POST_PR801")
         now = int(time.time())
         if known_schema:
             validate_post_db_dba(review, source, now, adapter.docker,
-                                 schema_gate, post_db_probe)
+                                 schema_gate, post_db_probe, single_operator=single_operator)
         approved_review(review, source, comparison, now,
                         schema_approved=known_schema)
         validate_g6(review, now)
         approve = approval.read_root_approval()
-        if mode == ["--prepare-reviewed"]:
+        if action == "--prepare-reviewed":
             return prepare_reviewed(build, approval, signed, adapter,
-                                    source, approve, review)
+                                    source, approve, review, single_operator=single_operator)
         # Only after a separate, audited and signed build may we apply.
         prepared = private_json(STATE / "prepared.json")
+        validate_prepared_review_mode(prepared, single_operator)
+        if single_operator:
+            single_operator_runtime(adapter.docker)
         approved = approval.validate(approve, source, prepared, now)
         require(approved["status"] == "LOCAL_SUPERVISED_CUT_MATCH_NO_DEPLOYMENT_AUTHORITY",
                 "SUPERVISOR_CUT_MISMATCH")
@@ -534,6 +611,8 @@ def main():
                     for x in data), "RUNTIME_ENV_SHAPE_INVALID")
             settings = dict(x.split("=", 1) for x in data)
             if name == "api":
+                if single_operator:
+                    single_operator_runtime(adapter.docker)
                 require(settings.get("Database__ApplyMigrationsOnStartup", "false").lower()
                         == "false" and
                         settings.get("Database__RunMigrationsAndExit", "false").lower()
@@ -544,7 +623,8 @@ def main():
         # No migration, SQL write or migrator container is permitted.
         if known_schema:
             require(validate_post_db_dba(review, source, int(time.time()),
-                                         adapter.docker, schema_gate, post_db_probe),
+                                         adapter.docker, schema_gate, post_db_probe,
+                                         single_operator=single_operator),
                     "POST_DBA_EF_PREFLIGHT_FAILED")
         else:
             require(validate_live_ef_history(adapter.docker),
@@ -655,7 +735,7 @@ def main():
                                             schema_approved=known_schema) is None
                         and (not known_schema or validate_post_db_dba(
                             review, fresh, int(time.time()), adapter.docker,
-                            schema_gate, post_db_probe))
+                            schema_gate, post_db_probe, single_operator=single_operator))
                         and validate_g6(review, int(time.time())))
             except Exception:
                 return False
