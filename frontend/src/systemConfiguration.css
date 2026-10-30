@@ -62,3 +62,17 @@
 .system-profile-table td:last-child{white-space:normal;color:#526078;font-size:0.875rem}
 .system-profile-table td:last-child::before{content:"Alcance: ";font-weight:700}
 }
+.system-users-layout{grid-template-columns:1fr!important;gap:.75rem!important}
+.system-users-bar{display:flex!important;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap}
+.system-users-list{display:grid;gap:0}
+.system-users-list .system-user-row{display:flex;flex-wrap:wrap;align-items:center;gap:.25rem 1rem;padding:.5rem .25rem}
+.system-users-list .system-user-row>strong{flex:1 1 12rem;min-width:0}
+.system-users-list .system-user-row>span{flex:1 1 14rem;min-width:0;overflow-wrap:anywhere}
+.system-users-list .system-user-row>small{flex:1 1 12rem;min-width:0;overflow-wrap:anywhere}
+.system-users-list .system-user-row>.action-bar{flex:0 0 auto;margin-left:auto}
+.system-users-list .system-user-row>.action-bar+.action-bar{margin-left:0}
+.system-users-list .system-user-row>.action-bar{margin:0 0 0 auto;padding:0;gap:.25rem}
+.system-users-list .system-user-row>strong{flex-basis:11rem}
+.system-users-list .system-user-row>span{flex-basis:13rem}
+.system-users-list .system-user-row>small{flex-basis:10rem}
+.system-users-bar h3{margin:0 0 0 .5rem;flex:1 1 auto}

@@ -20,3 +20,15 @@
 .initial-load-counts li{display:flex;justify-content:space-between;gap:12px}
 @media(max-width:620px){.initial-load-picker{grid-template-columns:1fr}.initial-load-prepare .button-row{display:grid;gap:8px}.initial-load-prepare .button-row button{width:100%;min-height:48px}}
 .initial-load-result .table-wrap{overflow-x:auto;max-width:100%}.initial-load-result th,.initial-load-result td{padding:6px 10px;text-align:left;vertical-align:top}.initial-load-prepare{min-width:0}
+.initial-load-guide{display:grid;gap:.75rem;margin:.75rem 0}
+.initial-load-guide h3{margin:0}
+.initial-load-howto{margin:0;padding-left:1.25rem;display:grid;gap:.25rem}
+.initial-load-file{border:1px solid var(--line,#d6d9e0);border-radius:.5rem;padding:.5rem .75rem}
+.initial-load-file summary{cursor:pointer;display:flex;gap:.75rem;flex-wrap:wrap;align-items:baseline}
+.initial-load-file table{margin:.5rem 0}
+.initial-load-file td{vertical-align:top}
+.initial-load-official{margin:.5rem 0}
+.initial-load-hint{margin:0;font-size:.9rem}
+.initial-load-prepare>*,.initial-load-guide>*{min-width:0;max-width:100%}
+.initial-load-file .table-wrap{overflow-x:auto}
+@media(max-width:40em){.initial-load-file table,.initial-load-file tbody,.initial-load-file tr,.initial-load-file td{display:block;min-width:0!important;width:auto}.initial-load-file thead{display:none}.initial-load-file tr{padding:.5rem 0;border-bottom:1px solid #e1e6ee}.initial-load-file td{padding:.1rem 0;overflow-wrap:anywhere}.initial-load-file td:nth-child(3)::before{content:"Ejemplo: ";color:#667188}}
