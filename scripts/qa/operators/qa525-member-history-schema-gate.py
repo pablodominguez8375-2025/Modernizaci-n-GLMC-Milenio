@@ -46,7 +46,7 @@ EXPECTED_COLUMNS = (
     "member_history_proposals|11|ReviewNotes|character varying(2000)|f",
 )
 EXPECTED_CONSTRAINTS = (
-    "member_history_proposal_items|f|FK_member_history_proposal_items_member_history_proposals_ProposalId|ProposalId|core.member_history_proposals|Id|c",
+    "member_history_proposal_items|f|FK_member_history_proposal_items_member_history_proposals_Propo|ProposalId|core.member_history_proposals|Id|c",
     "member_history_proposal_items|p|PK_member_history_proposal_items|Id|||",
     "member_history_proposals|p|PK_member_history_proposals|Id|||",
 )
