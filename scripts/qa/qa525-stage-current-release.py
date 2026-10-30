@@ -57,9 +57,12 @@ def trusted_destination(output):
     return output
 
 
-def verify_current(output):
+def verify_current(output, *, selection=None):
     output = trusted_destination(output)
-    first = gate.evaluate(gate.readiness.fetch_public)
+    # Internal callers can supply the full gate they JUST evaluated in this
+    # operation. Not a CLI option or persisted receipt. Signature verification
+    # and the independent, full post-download gate below are never skipped.
+    first = gate.evaluate(gate.readiness.fetch_public) if selection is None else dict(selection)
     require(first.get("status") == "READY_FOR_SIGNATURE_VERIFICATION_ONLY" and
             first.get("scope") == gate.RESULT_SCOPE,
             "CURRENT_RELEASE_NOT_APPROVED")
@@ -85,7 +88,8 @@ def verify_current(output):
                 "SIGNED_STAGING_RECEIPT_INVALID")
         # A second full gate invalidates the staged candidate if dev, any
         # workflow result, artifact or release moved during the download.
-        second = gate.evaluate(gate.readiness.fetch_public)
+        second = (gate.evaluate(gate.readiness.fetch_public) if selection is None else
+                  gate.evaluate(gate.readiness.fetch_public, expected_sha=sha))
         require(second == first, "CURRENT_RELEASE_CHANGED_DURING_STAGING")
         require(not output.exists() and not output.is_symlink(),
                 "DESTINATION_CHANGED_DURING_STAGING")

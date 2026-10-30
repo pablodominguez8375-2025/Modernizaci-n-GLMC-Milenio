@@ -145,6 +145,43 @@ class CurrentReleaseGateTests(unittest.TestCase):
         with patch.object(module.readiness, "fetch_public", side_effect=AssertionError("network")):
             self.assertEqual(2, module.main(["--unsafe-apply"]))
 
+    def test_one_coherent_workflow_inventory_and_fresh_branch_end(self):
+        db, _, _ = fixture()
+        calls = []
+        def fetch(path):
+            calls.append(path)
+            return copy.deepcopy(db[path])
+        module.evaluate(fetch)
+        self.assertEqual(calls.count(RUN_PATH), 1)
+        self.assertEqual(calls.count("/branches/dev"), 2)
+        self.assertEqual(len(calls), 5)
+        self.assertEqual(calls[-1], "/branches/dev")
+
+    def test_expected_pin_reduces_reads_but_cannot_select_old_dev(self):
+        db, _, _ = fixture()
+        calls = []
+        def fetch(path):
+            calls.append(path)
+            return copy.deepcopy(db[path])
+        self.assertEqual(module.evaluate(fetch, expected_sha=SHA)["source_sha"], SHA)
+        self.assertEqual(len(calls), 4)
+        self.assertEqual(calls, [RUN_PATH, next(p for p in db if "/artifacts?" in p),
+                                 "/releases/tags/" + TAG, "/branches/dev"])
+        db["/branches/dev"] = {"commit": {"sha": "c" * 40}}
+        with self.assertRaisesRegex(module.Blocked, "DEV_CHANGED_DURING_GATE"):
+            module.evaluate(fetch, expected_sha=SHA)
+
+    def test_cache_lifetime_is_one_gate_not_one_process_or_sha(self):
+        db, _, publisher = fixture()
+        module.evaluate(fetch_from(db), expected_sha=SHA)
+        publisher["conclusion"] = "failure"
+        with self.assertRaisesRegex(module.Blocked, "PUBLISH_WORKFLOW_NOT_SUCCESS"):
+            module.evaluate(fetch_from(db), expected_sha=SHA)
+
+    def test_bad_pin_is_blocked_without_fetch(self):
+        with self.assertRaisesRegex(module.Blocked, "EXPECTED_SOURCE_SHA_INVALID"):
+            module.evaluate(lambda _: self.fail("must not fetch"), expected_sha="../old")
+
     def test_no_shell_docker_token_or_staging_side_effects(self):
         source = FILE.read_text()
         for forbidden in ("subprocess", "docker", "os.system", "open(", "unlink(", "chmod(",

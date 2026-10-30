@@ -174,9 +174,10 @@ def validate_g6(review, now):
     return True
 
 
-def scan_migrations(policy, fetch, target, gate=None):
+def scan_migrations(policy, fetch, target, gate=None, *, comparison=None):
     """Only the two pinned PR801 schema blobs may enter DBA-reviewed path."""
-    comparison = fetch("/compare/" + BASELINE + "..." + target)
+    if comparison is None:
+        comparison = fetch("/compare/" + BASELINE + "..." + target)
     require(comparison.get("status") == "ahead"
             and type(comparison.get("files")) is list
             and 0 < len(comparison["files"]) < 300,
@@ -379,7 +380,7 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review, 
             "PREPARE_BASELINE_NOT_RUNNING")
     with tempfile.TemporaryDirectory(prefix=".qa525-reviewed-build-", dir=STATE) as tmp:
         package = Path(tmp) / "verified"
-        attestation = signed.verify_current(package)
+        attestation = signed.verify_current(package, selection=source)
         require(attestation["source_sha"] == target
                 and attestation["release_asset_sha256"] ==
                 source["release_asset_sha256"], "PREPARE_SIGNATURE_MISMATCH")
@@ -388,13 +389,20 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review, 
                 return False
             try:
                 signed.staging.verify_manifest(path, sha)
-                return signed.gate.evaluate(signed.gate.readiness.fetch_public) == source
+                # The package is immutable and signature verified above. Check
+                # its entire manifest and LIVE HEAD at every build boundary;
+                # perform the full CI/release gate again before any receipt.
+                return signed.gate.readiness.fetch_public("/branches/dev").get(
+                    "commit", {}).get("sha") == target
+            except signed.gate.readiness.GateFailure:
+                raise
             except Exception:
                 return False
-        require(verify(package, target), "PREPARE_SIGNATURE_OR_DEV_DRIFT")
         images = build.build_images(package, target, verify, adapter.docker,
                                    build.builder.prepare_web)
-        require(verify(package, target) and
+        signed.staging.verify_manifest(package, target)
+        require(signed.gate.evaluate(signed.gate.readiness.fetch_public,
+                                     expected_sha=target) == source and
                 build.snapshot(adapter.docker) == before
                 and (not single_operator or single_operator_runtime(adapter.docker) == env_fingerprint)
                 and validate_g6(review, int(time.time())),
@@ -536,6 +544,28 @@ def validate_prepared_review_mode(prepared, single_operator):
             "PREPARED_REVIEW_MODE_MISMATCH")
 
 
+def phase_source(signed, verified_source, phase):
+    require(phase in ("pre", "just-before-apply", "post"),
+            "EVIDENCE_PHASE_INVALID")
+    if phase == "pre":
+        # Only journal/rollback-image metadata is prepared in this phase. Reuse
+        # cryptographic evidence obtained in THIS locked operation, not a file.
+        # Full fresh gates are mandatory immediately before Docker recreation
+        # and after health/snapshot checks; failure there triggers dual rollback.
+        return copy.deepcopy(verified_source)
+    return signed.gate.evaluate(signed.gate.readiness.fetch_public,
+                                expected_sha=verified_source["source_sha"])
+
+
+def current_change_review(policy, signed, source, schema_gate):
+    fetch = signed.gate.readiness.fetch_public
+    target = source["source_sha"]
+    diff = fetch("/compare/" + BASELINE + "..." + target)
+    decision = policy.classify(BASELINE, source, diff)
+    schema = scan_migrations(policy, fetch, target, schema_gate, comparison=diff)
+    return decision, schema
+
+
 def main():
     action, single_operator = supervision_mode(sys.argv[1:])
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
@@ -556,13 +586,12 @@ def main():
     post_db_probe = load("qa525_pr801_post_db_probe", MODULES[7])
     with build.exclusive():
         review = private_json(REVIEW, maximum=8192)
-        source = signed.gate.evaluate(signed.gate.readiness.fetch_public)
+        source = signed.gate.evaluate(signed.gate.readiness.fetch_public,
+                                     expected_sha=review.get("source_sha"))
         target = source["source_sha"]
         require(type(target) is str and SHA.fullmatch(target),
                 "SIGNATURE_RELEASE_TARGET_DRIFT")
-        comparison = policy.evaluate(signed.gate.readiness.fetch_public, BASELINE)
-        schema_state = scan_migrations(policy, signed.gate.readiness.fetch_public,
-                                       target, schema_gate)
+        comparison, schema_state = current_change_review(policy, signed, source, schema_gate)
         known_schema = schema_state == "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
         require(not single_operator or known_schema,
                 "SINGLE_OPERATOR_ONLY_POST_PR801")
@@ -589,7 +618,7 @@ def main():
         # Re-download exact public release and REVALIDATE Sigstore signature on
         # the physical host; prepared.json flags alone are never authority.
         with tempfile.TemporaryDirectory(prefix=".qa525-supervised-signed-", dir=STATE) as d:
-            result = signed.verify_current(Path(d) / "signed")
+            result = signed.verify_current(Path(d) / "signed", selection=source)
             require(result["source_sha"] == target and
                     result["release_asset_sha256"] == source["release_asset_sha256"],
                     "PHYSICAL_SIGNATURE_REVERIFICATION_FAILED")
@@ -726,7 +755,7 @@ def main():
             if sha != target or candidate != new:
                 return False
             try:
-                fresh = signed.gate.evaluate(signed.gate.readiness.fetch_public)
+                fresh = phase_source(signed, current_source, phase)
                 return (fresh == current_source and
                         approval.validate(approve, fresh, prepared, int(time.time()))
                         ["status"] == "LOCAL_SUPERVISED_CUT_MATCH_NO_DEPLOYMENT_AUTHORITY"
@@ -766,13 +795,22 @@ def main():
                              health=versioned_health, audit=audit)
 
 
+def public_failure_code(exc):
+    if isinstance(exc, Blocked):
+        return str(exc)
+    code = str(exc)
+    return code if code in {"GITHUB_API_RATE_LIMITED", "GITHUB_API_RETRY_LATER",
+                            "GITHUB_API_HTTP_ERROR", "GITHUB_API_UNAVAILABLE"} else \
+        "SUPERVISED_APPLY_NOT_COMPLETED"
+
+
 if __name__ == "__main__":
     try:
         result = main()
         print(json.dumps(result, sort_keys=True))
     except Exception as exc:
         # Stable coarse codes, never secret-bearing process/config output.
-        code = str(exc) if isinstance(exc, Blocked) else "SUPERVISED_APPLY_NOT_COMPLETED"
+        code = public_failure_code(exc)
         print(json.dumps({"status": "BLOCKED_QA525_SUPERVISED_DUAL",
                           "code": code, "may_apply": False}, sort_keys=True))
         raise SystemExit(2)

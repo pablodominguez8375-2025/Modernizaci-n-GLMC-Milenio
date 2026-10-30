@@ -131,6 +131,24 @@ class TransactionTests(unittest.TestCase):
         self.assertEqual(self.fake.now["web"]["image"], self.fake.initial["web"]["image"])
         self.assertEqual(self.fake.audit_events, ["DUAL_API_WEB_ROLLED_BACK"])
 
+    def test_revoked_post_evidence_reverts_both_even_when_health_is_green(self):
+        phases = []
+        def evidence(phase, *args):
+            phases.append(phase)
+            return phase != "post"
+        with self.assertRaisesRegex(tx.Blocked, "POST_APPLY_EVIDENCE_INVALID"):
+            self.do(evidence=evidence)
+        self.assertEqual(phases, ["pre", "just-before-apply", "post"])
+        self.assertEqual([s for s, _, _ in self.fake.commands], ["api", "web", "web", "api"])
+        for name in tx.TARGETS:
+            self.assertEqual(self.fake.now[name]["image"], self.fake.initial[name]["image"])
+        self.assertEqual(json.loads(next(self.state.glob("dual-*.json")).read_text())["status"], "ROLLED_BACK")
+
+    def test_failed_just_before_gate_never_recreates_a_service(self):
+        with self.assertRaisesRegex(tx.Blocked, "SIGNED_G6_OR_APPROVAL_CHANGED"):
+            self.do(evidence=lambda phase, *args: phase != "just-before-apply")
+        self.assertEqual(self.fake.commands, [])
+
     def test_rollback_failure_is_explicit_and_preserves_receipt(self):
         self.fake.fail_web = True
         self.fake.fail_rollback = True

@@ -29,13 +29,29 @@ def require(value, reason):
         raise Blocked(reason)
 
 
-def evaluate(fetch):
+def evaluate(fetch, *, expected_sha=None):
+    # A caller may already know its exact reviewed cut. It remains only a pin:
+    # the real, uncached branch MUST equal it at the end of this full gate.
+    require(expected_sha is None or
+            (type(expected_sha) is str and readiness.SHA.fullmatch(expected_sha)),
+            "EXPECTED_SOURCE_SHA_INVALID")
+    inventories = {}
+    def coherent_fetch(path):
+        if path == "/branches/dev" and expected_sha is not None:
+            return {"commit": {"sha": expected_sha}}
+        # CI and publisher must use one coherent workflow inventory. Cache no
+        # branch, release, artifacts, failures or data across gate invocations.
+        if path.startswith("/actions/runs?head_sha="):
+            if path not in inventories:
+                inventories[path] = fetch(path)
+            return inventories[path]
+        return fetch(path)
     # Reuse the established 5-workflow selector and the unique signed Silo
     # artifact, rather than maintaining a weaker duplicate of that logic.
-    selected = readiness.evaluate(fetch)
+    selected = readiness.evaluate(coherent_fetch)
     sha = selected["source_sha"]
     expected_tag = "qa-signed-" + sha
-    runs = fetch("/actions/runs?head_sha=" + sha + "&per_page=100")
+    runs = coherent_fetch("/actions/runs?head_sha=" + sha + "&per_page=100")
     workflow_runs = runs.get("workflow_runs")
     require(isinstance(workflow_runs, list), "PUBLISH_WORKFLOW_INVENTORY_INVALID")
     publisher = [r for r in workflow_runs if isinstance(r, dict)
