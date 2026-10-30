@@ -4,39 +4,37 @@ import type { DemoProfileKey } from '../demoProfiles'
 
 export interface SupportViewProfile { key:string;label:string;group:'Taller'|'Gran Logia' }
 
-export const SUPPORT_VIEW_PROFILES:SupportViewProfile[]=[
- {key:'hermano',label:'Hermano',group:'Taller'},
- {key:'venerable',label:'Venerable Maestro',group:'Taller'},
- {key:'primer-vigilante',label:'Primer Vigilante',group:'Taller'},
- {key:'segundo-vigilante',label:'Segundo Vigilante',group:'Taller'},
- {key:'tesorero',label:'Tesorero',group:'Taller'},
- {key:'secretario',label:'Secretario',group:'Taller'},
- {key:'hospitalario',label:'Hospitalario',group:'Taller'},
- {key:'orador',label:'Orador',group:'Taller'},
- {key:'inmediato-ex-venerable',label:'Inmediato Ex Venerable Maestro',group:'Taller'},
- {key:'gran-secretario',label:'Gran Secretario',group:'Gran Logia'},
- {key:'regimen-interior',label:'Régimen Interior',group:'Gran Logia'},
- {key:'gran-tesorero',label:'Gran Tesorero',group:'Gran Logia'},
- {key:'gran-hospitalaria',label:'Gran Hospitalaria',group:'Gran Logia'},
- {key:'gran-maestro',label:'Gran Maestro',group:'Gran Logia'},
- {key:'gran-segundo-vigilante',label:'Gran Segundo Vigilante',group:'Gran Logia'},
- {key:'gran-primer-vigilante',label:'Gran Primer Vigilante',group:'Gran Logia'},
- {key:'inmediato-ex-gran-maestro',label:'Inmediato Ex Gran Maestro',group:'Gran Logia'},
- {key:'jefatura-docencia',label:'Jefatura de Docencia',group:'Gran Logia'},
- {key:'gran-archivero',label:'Gran Archivero',group:'Gran Logia'},
- {key:'bibliotecario',label:'Bibliotecario',group:'Gran Logia'},
- {key:'comunicaciones',label:'Comunicaciones',group:'Gran Logia'},
+// Un solo inventario de metadatos: evita duplicar las claves en el catálogo y el
+// adaptador demo. La API real sigue siendo la autoridad y confirma cada perfil.
+const PROFILE_ROWS: ReadonlyArray<readonly [string,string,SupportViewProfile['group'],DemoProfileKey]> = [
+ ['hermano','Hermano','Taller','brother'],
+ ['venerable','Venerable Maestro','Taller','lodge'],
+ ['primer-vigilante','Primer Vigilante','Taller','lodgeFirstWarden'],
+ ['segundo-vigilante','Segundo Vigilante','Taller','lodgeSecondWarden'],
+ ['tesorero','Tesorero','Taller','lodgeTreasurer'],
+ ['secretario','Secretario','Taller','lodgeSecretary'],
+ ['hospitalario','Hospitalario','Taller','lodgeHospitalaria'],
+ ['orador','Orador','Taller','lodgeOrator'],
+ ['inmediato-ex-venerable','Inmediato Ex Venerable Maestro','Taller','lodgePastMaster'],
+ ['gran-secretario','Gran Secretario','Gran Logia','secretariat'],
+ ['regimen-interior','Régimen Interior','Gran Logia','regimen'],
+ ['gran-tesorero','Gran Tesorero','Gran Logia','treasury'],
+ ['gran-hospitalaria','Gran Hospitalaria','Gran Logia','hospitalaria'],
+ ['gran-maestro','Gran Maestro','Gran Logia','grandMaster'],
+ ['gran-segundo-vigilante','Gran Segundo Vigilante','Gran Logia','grandSecondWarden'],
+ ['gran-primer-vigilante','Gran Primer Vigilante','Gran Logia','grandFirstWarden'],
+ ['inmediato-ex-gran-maestro','Inmediato Ex Gran Maestro','Gran Logia','immediatePastGrandMaster'],
+ ['jefatura-docencia','Jefatura de Docencia','Gran Logia','instructionDepartmentHead'],
+ ['gran-archivero','Gran Archivero','Gran Logia','grandArchivist'],
+ ['bibliotecario','Bibliotecario','Gran Logia','librarian'],
+ ['comunicaciones','Comunicaciones','Gran Logia','communications'],
 ]
 
+export const SUPPORT_VIEW_PROFILES:SupportViewProfile[]=PROFILE_ROWS.map(([key,label,group])=>({key,label,group}))
+
 /** Solo para la demostración: qué perfil de demostración corresponde a cada perfil. */
-export const DEMO_PROFILE_FOR:Record<string,DemoProfileKey>={
- hermano:'brother',venerable:'lodge','primer-vigilante':'lodgeFirstWarden','segundo-vigilante':'lodgeSecondWarden',
- tesorero:'lodgeTreasurer',secretario:'lodgeSecretary',hospitalario:'lodgeHospitalaria',orador:'lodgeOrator',
- 'inmediato-ex-venerable':'lodgePastMaster',
- 'gran-secretario':'secretariat','regimen-interior':'regimen','gran-tesorero':'treasury','gran-hospitalaria':'hospitalaria','gran-maestro':'grandMaster',
- 'gran-segundo-vigilante':'grandSecondWarden','gran-primer-vigilante':'grandFirstWarden',
- 'inmediato-ex-gran-maestro':'immediatePastGrandMaster','jefatura-docencia':'instructionDepartmentHead',
- 'gran-archivero':'grandArchivist',bibliotecario:'librarian',comunicaciones:'communications',
-}
+export const DEMO_PROFILE_FOR:Record<string,DemoProfileKey>=Object.fromEntries(
+ PROFILE_ROWS.map(([key,,,demo])=>[key,demo]),
+)
 
 export function profileDisplayName(profile:SupportViewProfile){return profile.group==='Taller'?`${profile.label} · Taller 00`:profile.label}
