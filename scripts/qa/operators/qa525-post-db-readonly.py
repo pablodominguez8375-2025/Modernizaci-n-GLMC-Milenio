@@ -22,7 +22,7 @@ TABLES_SQL = (
     "('member_history_proposal_items','member_history_proposals') ORDER BY 1; COMMIT;")
 INDEXES_SQL = (
     "BEGIN READ ONLY; SELECT t.relname || '|' || i.relname || '|' || "
-    "x.indisunique || '|' || string_agg(a.attname, ',' ORDER BY k.ord) "
+    "CASE WHEN x.indisunique THEN 't' ELSE 'f' END || '|' || string_agg(a.attname, ',' ORDER BY k.ord) "
     "FROM pg_index x JOIN pg_class i ON i.oid=x.indexrelid "
     "JOIN pg_class t ON t.oid=x.indrelid JOIN pg_namespace n ON n.oid=t.relnamespace "
     "JOIN LATERAL unnest(x.indkey) WITH ORDINALITY k(attnum,ord) ON true "
@@ -34,7 +34,8 @@ INDEXES_SQL = (
     "GROUP BY t.relname,i.relname,x.indisunique ORDER BY 1; COMMIT;")
 COLUMNS_SQL = (
     "BEGIN READ ONLY; SELECT c.relname || '|' || a.attnum || '|' || a.attname || "
-    "'|' || pg_catalog.format_type(a.atttypid,a.atttypmod) || '|' || a.attnotnull "
+    "'|' || pg_catalog.format_type(a.atttypid,a.atttypmod) || '|' || "
+    "CASE WHEN a.attnotnull THEN 't' ELSE 'f' END "
     "FROM pg_attribute a JOIN pg_class c ON c.oid=a.attrelid "
     "JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='core' "
     "AND c.relname IN ('member_history_proposal_items','member_history_proposals') "
@@ -48,7 +49,7 @@ CONSTRAINTS_SQL = (
     "ORDER BY k.ord) cols FROM pg_constraint con JOIN LATERAL "
     "unnest(con.confkey) WITH ORDINALITY k(attnum,ord) ON true "
     "JOIN pg_attribute a ON a.attrelid=con.confrelid AND a.attnum=k.attnum "
-    "WHERE con.contype='f' GROUP BY con.oid) SELECT c.relname || '|' || con.contype || "
+    "WHERE con.contype='f' GROUP BY con.oid) SELECT c.relname || '|' || con.contype::text || "
     "'|' || con.conname || '|' || keys.cols || '|' || COALESCE(rn.nspname || '.' || "
     "rc.relname,'') || '|' || COALESCE(refs.cols,'') || '|' || "
     "CASE WHEN con.contype='f' THEN con.confdeltype::text ELSE '' END "
