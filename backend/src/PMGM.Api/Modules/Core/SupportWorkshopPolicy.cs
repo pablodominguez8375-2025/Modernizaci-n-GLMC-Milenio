@@ -7,6 +7,10 @@ namespace PMGM.Api.Modules.Core;
 public static class SupportWorkshopPolicy
 {
     public const string OrganizationType = "support";
+    public const string OrganizationNumber = "00";
+
+    public static bool IsConfiguredSupportWorkshop(string? type, string? number)
+        => IsSupportOrganization(type) && string.Equals(number, OrganizationNumber, StringComparison.Ordinal);
 
     public static bool IsSupportOrganization(string? type)
         => string.Equals(type, OrganizationType, StringComparison.OrdinalIgnoreCase);
