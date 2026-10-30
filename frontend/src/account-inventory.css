@@ -17,3 +17,7 @@
 @media (max-width: 480px) {
   .topbar:has(.view-profile-menu) .brand > span:last-child { display: none; }
 }
+.account-inventory-list { grid-template-columns: 1fr; gap: 0; }
+.account-inventory-row { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; padding: .5rem .25rem; }
+.account-inventory-row > * { flex: 1 1 11rem; min-width: 0; margin: 0; }
+.account-inventory-row > .action-bar { flex: 0 0 auto; margin-left: auto; }
