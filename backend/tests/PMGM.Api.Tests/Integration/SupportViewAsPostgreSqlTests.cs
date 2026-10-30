@@ -122,6 +122,36 @@ public sealed class SupportViewAsPostgreSqlTests
     }
 
     [Fact]
+    public async Task Support_workshop_00_is_permanent_technical_seed_without_institutional_activity()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = await CreateAsync(cs);
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+
+        var support = await db.Organizations.AsNoTracking()
+            .Where(o => o.Type.ToLower() == "support").ToListAsync(ct);
+        var workshop = Assert.Single(support);
+        Assert.Equal("00", workshop.Number);
+        Assert.Equal("support", workshop.Type);
+        Assert.Null(workshop.ParentOrganizationId);
+        Assert.Empty(await db.Memberships.AsNoTracking()
+            .Where(m => m.OrganizationId == workshop.Id).ToListAsync(ct));
+        Assert.Empty(await db.TreasuryMonthlyStatements.AsNoTracking()
+            .Where(m => m.OrganizationId == workshop.Id).ToListAsync(ct));
+        Assert.Empty(await db.LodgeHospitalariaMovements.AsNoTracking()
+            .Where(m => m.OrganizationId == workshop.Id).ToListAsync(ct));
+
+        // Repetir migrate no debe reemplazar el UUID ni crear un segundo 00.
+        await db.Database.MigrateAsync(ct);
+        var second = await db.Organizations.AsNoTracking()
+            .Where(o => o.Type.ToLower() == "support").ToListAsync(ct);
+        Assert.Equal(workshop.Id, Assert.Single(second).Id);
+    }
+
+    [Fact]
     public async Task Profile_view_is_read_only_synthetic_and_never_exposes_the_master_or_a_real_person()
     {
         var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
