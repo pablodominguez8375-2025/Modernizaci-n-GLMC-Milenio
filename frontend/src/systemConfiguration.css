@@ -47,3 +47,18 @@
 .action-drawer-body .system-reset-choice label{display:flex!important;flex-direction:row;gap:12px;align-items:flex-start;grid-template-columns:none}.action-drawer-body .system-reset-choice input[type=radio]{flex:none;width:20px;height:20px;min-height:0;padding:0;margin:3px 0 0}
 .system-role-hint{display:block;font-size:.875rem;font-weight:400;color:#4a5a73;margin-top:2px}
 .system-designer-editor fieldset.system-sensitive-roles{border-color:#b07a1f;background:#fffaf0}
+.system-profile-group th{background:#eaf0fa;color:#06148E;font-size:0.9rem;text-transform:uppercase;letter-spacing:.04em;padding:0.5rem 0.625rem}
+.system-profile-table tbody th small{display:block;margin-top:0.25rem;font-weight:400;font-size:0.8125rem;color:#526078}
+.system-profile-table td:last-child{white-space:nowrap}
+@media (max-width:40em){
+.system-profile-table table,.system-profile-table tbody{display:block;width:100%;min-width:0}
+.system-profile-table tbody tr th,.system-profile-table tbody tr td,.system-profile-table tbody th small{overflow-wrap:anywhere;white-space:normal;max-width:100%}
+.system-profile-table .system-permission-chips span{max-width:100%;white-space:normal}
+.system-profile-table thead{display:none}
+.system-profile-table tbody tr{display:block;padding:0.5rem 0;border-bottom:1px solid #e0e5ed}
+.system-profile-table tbody tr th,.system-profile-table tbody tr td{display:block;width:auto;border:0;padding:0.25rem 0.625rem}
+.system-profile-table tbody tr.system-profile-group{padding:0;border:0}
+.system-profile-table tbody tr.system-profile-group th{padding:0.5rem 0.625rem}
+.system-profile-table td:last-child{white-space:normal;color:#526078;font-size:0.875rem}
+.system-profile-table td:last-child::before{content:"Alcance: ";font-weight:700}
+}

@@ -7,6 +7,7 @@ import FormSchemaAdminPanel from './FormSchemaAdminPanel'
 import SystemSettingsCategoryPanel from './SystemSettingsCategoryPanel'
 import SupportDiagnosticsPanel from './SupportDiagnosticsPanel'
 import AreaCollaboratorsSection from './AreaCollaborators'
+import InstitutionalProfileMatrix from './InstitutionalProfileMatrix'
 import type { DocumentApiClient } from './api/documentApi'
 
 /* PMGM-UX administración ordenada (04-10-2026): un solo menú de secciones (antes había tres niveles de pestañas)
@@ -31,7 +32,6 @@ export default function SystemConfigurationPage({ api, bootstrapSlot, canManageP
   const categories=useMemo(()=>Array.from(new Set(generalItems.map(item=>item.category))),[generalItems])
   const activeCategory=category||categories[0]||''
   const visible=generalItems.filter(item=>item.category===activeCategory)
-  const profiles=items.filter(item=>item.category==='Perfiles y permisos')
 
   useEffect(()=>{ let active=true; api.getSystemSettings().then(response=>{if(!active)return;setItems(response.items)}).catch(reason=>active&&setError(toMessage(reason)));return()=>{active=false}},[api])
 
@@ -42,7 +42,7 @@ export default function SystemConfigurationPage({ api, bootstrapSlot, canManageP
     <WorkspaceTabs label="Secciones de Sistema" active={tab} onChange={id=>setTab(id as Section)} hub={{ title: 'Parámetros del sistema', hideBack: tab==='settings'&&categoryOpen }} tabs={[{id:'backup',label:'Respaldos',icon:'archive' as const},{id:'users',label:'Usuarios',icon:'members' as const},{id:'profiles',label:'Perfiles y accesos',icon:'shield' as const},{id:'forms',label:'Formularios',icon:'settings' as const},{id:'mail',label:'Correo',icon:'mail' as const},{id:'brand',label:'Logos y colores',icon:'home' as const},{id:'audit',label:'Auditoría de accesos',icon:'check' as const},{id:'support',label:'Soporte técnico',icon:'shield' as const},{id:'settings',label:`Parámetros (${generalItems.length})`,icon:'settings' as const},...(bootstrapSlot?[{id:'bootstrap' as Section,label:'Configuración inicial',icon:'tasks' as const}]:[])].filter(t=>canManageProfiles||t.id!=='profiles')} />
     {/* La consola queda montada (oculta) para conservar lo escrito al cambiar de sección. */}
     <div hidden={!isOps}><SystemOperationsPanel api={api} area={lastOps.current} canManageProfiles={canManageProfiles} /></div>
-    <WorkspacePanel id="profiles" active={canManageProfiles&&tab==='profiles'}>{<section className="panel system-profile-matrix"><header><div><p className="eyebrow">Control de acceso</p><h2>Matriz vigente de perfiles</h2></div><span className="count-badge">{profiles.length} perfiles</span></header><div className="system-profile-table"><table><thead><tr><th>Perfil</th><th>Vistas y acciones habilitadas</th><th>Vigencia</th></tr></thead><tbody>{profiles.map(profile=><tr key={profile.code}><th>{profile.label}</th><td><div className="system-permission-chips">{profile.value.split('|').filter(Boolean).map(permission=><span key={permission}>{permission}</span>)}</div></td><td>{profile.effectiveFrom}</td></tr>)}</tbody></table></div><p className="system-profile-note">La matriz permite revisar el alcance completo antes de versionar cambios en las tarjetas inferiores. Las autorizaciones críticas continúan sujetas a segregación de funciones y auditoría.</p></section>}{canManageProfiles&&documentApi&&tab==='profiles'&&<><AreaCollaboratorsSection documentApi={documentApi} area="library" title="Colaboradores · Biblioteca Virtual"/><AreaCollaboratorsSection documentApi={documentApi} area="documentmanager" title="Colaboradores · Gestión Documental"/></>}</WorkspacePanel>
+    <WorkspacePanel id="profiles" active={canManageProfiles&&tab==='profiles'}>{canManageProfiles&&tab==='profiles'&&<InstitutionalProfileMatrix api={api}/>}{canManageProfiles&&documentApi&&tab==='profiles'&&<><AreaCollaboratorsSection documentApi={documentApi} area="library" title="Colaboradores · Biblioteca Virtual"/><AreaCollaboratorsSection documentApi={documentApi} area="documentmanager" title="Colaboradores · Gestión Documental"/></>}</WorkspacePanel>
     <WorkspacePanel id="support" active={tab==='support'}>{tab==='support' && <SupportDiagnosticsPanel api={api} onOpenAudit={() => setTab('audit')} />}</WorkspacePanel>
     <WorkspacePanel id="mail" active={tab==='mail'}>{tab==='mail'&&<SystemSettingsCategoryPanel api={api} category={MAIL} items={mailItems} onSaved={saved=>setItems(current=>current.map(value=>saved.find(x=>x.code===value.code)??value))} onMessage={setMessage} onError={setError} />}</WorkspacePanel>
     <WorkspacePanel id="forms" active={tab==='forms'}><FormSchemaAdminPanel api={api} /></WorkspacePanel>
