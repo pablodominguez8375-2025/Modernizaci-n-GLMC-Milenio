@@ -13,10 +13,16 @@ export const SUPPORT_VIEW_PROFILES:SupportViewProfile[]=[
  {key:'secretario',label:'Secretario',group:'Taller'},
  {key:'hospitalario',label:'Hospitalario',group:'Taller'},
  {key:'orador',label:'Orador',group:'Taller'},
+ {key:'inmediato-ex-venerable',label:'Inmediato Ex Venerable Maestro',group:'Taller'},
  {key:'gran-secretario',label:'Gran Secretario',group:'Gran Logia'},
  {key:'regimen-interior',label:'Régimen Interior',group:'Gran Logia'},
  {key:'gran-tesorero',label:'Gran Tesorero',group:'Gran Logia'},
+ {key:'gran-hospitalaria',label:'Gran Hospitalaria',group:'Gran Logia'},
  {key:'gran-maestro',label:'Gran Maestro',group:'Gran Logia'},
+ {key:'gran-segundo-vigilante',label:'Gran Segundo Vigilante',group:'Gran Logia'},
+ {key:'gran-primer-vigilante',label:'Gran Primer Vigilante',group:'Gran Logia'},
+ {key:'inmediato-ex-gran-maestro',label:'Inmediato Ex Gran Maestro',group:'Gran Logia'},
+ {key:'jefatura-docencia',label:'Jefatura de Docencia',group:'Gran Logia'},
  {key:'gran-archivero',label:'Gran Archivero',group:'Gran Logia'},
  {key:'bibliotecario',label:'Bibliotecario',group:'Gran Logia'},
  {key:'comunicaciones',label:'Comunicaciones',group:'Gran Logia'},
@@ -26,7 +32,10 @@ export const SUPPORT_VIEW_PROFILES:SupportViewProfile[]=[
 export const DEMO_PROFILE_FOR:Record<string,DemoProfileKey>={
  hermano:'brother',venerable:'lodge','primer-vigilante':'lodgeFirstWarden','segundo-vigilante':'lodgeSecondWarden',
  tesorero:'lodgeTreasurer',secretario:'lodgeSecretary',hospitalario:'lodgeHospitalaria',orador:'lodgeOrator',
- 'gran-secretario':'secretariat','regimen-interior':'regimen','gran-tesorero':'treasury','gran-maestro':'grandMaster',
+ 'inmediato-ex-venerable':'lodgePastMaster',
+ 'gran-secretario':'secretariat','regimen-interior':'regimen','gran-tesorero':'treasury','gran-hospitalaria':'hospitalaria','gran-maestro':'grandMaster',
+ 'gran-segundo-vigilante':'grandSecondWarden','gran-primer-vigilante':'grandFirstWarden',
+ 'inmediato-ex-gran-maestro':'immediatePastGrandMaster','jefatura-docencia':'instructionDepartmentHead',
  'gran-archivero':'grandArchivist',bibliotecario:'librarian',comunicaciones:'communications',
 }
 
