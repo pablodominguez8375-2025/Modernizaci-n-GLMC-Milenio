@@ -20,7 +20,7 @@ REPO = "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
 STATE = Path("/opt/centenario/qa-auto-lite")
 PINNED_CODE = {
     "check-public-readiness.py": "490a3b03004ce8ef54888046de3d255c93aee9c3b6287edf22753cb6893a1857",
-    "qa-agent-readiness.py": "afc1d54a90696a4a33bdfe689c47406b5dc0aaf8838426f907761adab20ddd55",
+    "qa-agent-readiness.py": "a652918767877d25e91dfd0364ce95932803c9bfb3281418f09d2addca10750c",
     "qa-lite-compose-adapter.py": "5fa03db393159a49c3606276635248467f6cada8ffdbd5ccaded5afb8b68ed7d",
     "qa-lite-install.py": "0162384605473b15ded3602207be5a978d9ddbcb0bfd59aa5de7bfd8f6551388",
     "qa-lite-web-build.py": "299aa40b12df1ae615a8aaa1cbc6437effc2fd0bf1d83211b5a97550084c1aef",

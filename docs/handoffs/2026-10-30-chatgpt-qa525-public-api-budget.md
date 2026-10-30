@@ -12,10 +12,12 @@ Contrato: docs/qa/QA525-PUBLIC-API-BUDGET.md. Fuente/aplicación y controles de 
 
 ## Verificación
 
-124 pruebas herméticas locales PASS (antes del ajuste documental). Incluyen presupuesto real de consultas, pin antiguo/deriva de HEAD, revocación CI durante build, actas/flags/capas, firma y selección alteradas, postgate revocado con rollback dual y clasificación HTTP sin exponer datos privados. CI exact-head pendiente de consultar; no afirmar integrado o desplegado.
+126 pruebas herméticas locales PASS (antes del ajuste documental). Incluyen presupuesto real de consultas, pin antiguo/deriva de HEAD, revocación CI durante build, actas/flags/capas, firma y selección alteradas, postgate revocado con rollback dual y clasificación HTTP sin exponer datos privados. CI exact-head pendiente de consultar; no afirmar integrado o desplegado.
 
 ## Continuidad física
 
 Staging ae21 Sigstore/manifiesto PASS; EF99 exacto y G6 postDB de01:33:39 Drive/restore PASS. Tres registros privados se crearon válidos, pero su vigencia30min puede vencer durante espera de cuota. No existe prepared.json según último diagnóstico. Tras CI y nuevo corte firmado, validar ausencia de deriva y registrar revisión del nuevo SHA/digest; archivar actas previas y reemitirlas solo tras revalidación real. Esperar reset de cuota, no repetir probes a ciegas, no forzar contra 403.
 
 Luego preparar API/WEB por fuente nueva, comprobar recibo y activar con aprobación real de único uso y rollback. Verificar /qa-version.json, HTTPS/OIDC, correo, roles y UAT sintética. Solo glmdch; no main/producción/srv01 ni PR771/737/766.
+
+CI inicial detectó un hash antiguo del lector en qa-lite-bootstrap.py. Se actualizó SOLO el pin de ese lector a los bytes revisados, conservando las ocho dependencias fijadas; test BootstrapTests completo PASS. No se ejecuta bootstrap ni instala nada en glmdch.
