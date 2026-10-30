@@ -206,7 +206,8 @@ export default function LibraryPage({ documentApi, editorRole = null }: { docume
 
     {error && <div className="error-banner" role="alert"><strong>No fue posible completar la consulta de Biblioteca.</strong><span>{error}</span></div>}
 
-    {editorRole === 'librarian' && <AreaCollaboratorsSection documentApi={documentApi} area="library" />}
+    {editorRole === 'librarian' && <AreaCollaboratorsSection documentApi={documentApi} area="library" title="Colaboradores de Biblioteca" />}
+    {editorRole === 'communications' && <AreaCollaboratorsSection documentApi={documentApi} area="communications" title="Colaboradores de Comunicaciones" />}
     {<LibraryMagazineEditorial documentApi={documentApi} editorRole={editorRole} onChanged={() => setReloadKey(value => value + 1)} />}
     {editorRole && (documentApi.useMocks || editorRole === 'librarian') && <>
       {notice && <p className="library-admin-notice" role="status">{notice}</p>}

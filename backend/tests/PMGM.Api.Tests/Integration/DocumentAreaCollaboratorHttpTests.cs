@@ -25,6 +25,130 @@ namespace PMGM.Api.Tests.Integration;
 public sealed class DocumentAreaCollaboratorHttpTests
 {
     [Fact]
+    public async Task Communications_and_librarian_manage_isolated_collaborators_with_update_and_audit()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = Factory(cs);
+        await using (var scope = factory.Services.CreateAsyncScope())
+            await scope.ServiceProvider.GetRequiredService<PmgmDbContext>().Database.MigrateAsync(ct);
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Communications);
+
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/biblioteca/colaboradores", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/documentos/colaboradores", ct)).StatusCode);
+
+        var initial = await client.GetFromJsonAsync<JsonElement>("/api/comunicaciones/colaboradores", ct);
+        var version = initial.GetProperty("version").GetInt32();
+        var communicationSubject = "collab-comm-" + Guid.NewGuid().ToString("N");
+        var creation = new
+        {
+            subject = communicationSubject, category = "magazine",
+            actions = new[] { "view", "create", "write" },
+            effectiveFrom = "2026-10-30", effectiveTo = (string?)null, expectedVersion = version
+        };
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            "/api/comunicaciones/colaboradores",
+            new { subject = communicationSubject, category = "book", actions = new[] { "view" },
+                effectiveFrom = "2026-10-30", expectedVersion = version }, ct)).StatusCode);
+        using var created = await client.PostAsJsonAsync("/api/comunicaciones/colaboradores", creation, ct);
+        Assert.Equal(HttpStatusCode.OK, created.StatusCode);
+        var createdBody = await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var commId = createdBody.GetProperty("assignmentId").GetGuid();
+        version = createdBody.GetProperty("version").GetInt32();
+        var librarianSubject = "collab-library-" + Guid.NewGuid().ToString("N");
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.GetAsync("/api/comunicaciones/colaboradores", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync("/api/comunicaciones/colaboradores",
+                creation, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.DeleteAsync($"/api/comunicaciones/colaboradores/{commId}?expectedVersion={version}", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PutAsJsonAsync($"/api/comunicaciones/colaboradores/{commId}",
+                new { subject = communicationSubject, category = "bulletin",
+                    actions = new[] { "view", "edit" }, effectiveFrom = "2026-10-30",
+                    expectedVersion = version }, ct)).StatusCode);
+        var libraryBefore = await client.GetFromJsonAsync<JsonElement>("/api/biblioteca/colaboradores", ct);
+        Assert.DoesNotContain(libraryBefore.GetProperty("items").EnumerateArray(),
+            x => x.GetProperty("assignmentId").GetGuid() == commId);
+        using var libraryCreated = await client.PostAsJsonAsync("/api/biblioteca/colaboradores",
+            new { subject = librarianSubject, category = "book", actions = new[] { "view", "edit" },
+                effectiveFrom = "2026-10-30", expectedVersion = version }, ct);
+        Assert.Equal(HttpStatusCode.OK, libraryCreated.StatusCode);
+        var libraryBody = await libraryCreated.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
+        var libraryId = libraryBody.GetProperty("assignmentId").GetGuid();
+        version = libraryBody.GetProperty("version").GetInt32();
+
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Communications);
+        var commBefore = await client.GetFromJsonAsync<JsonElement>("/api/comunicaciones/colaboradores", ct);
+        Assert.DoesNotContain(commBefore.GetProperty("items").EnumerateArray(),
+            x => x.GetProperty("assignmentId").GetGuid() == libraryId);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PostAsJsonAsync("/api/biblioteca/colaboradores",
+                new { subject = communicationSubject, category = "magazine",
+                    actions = new[] { "view" }, effectiveFrom = "2026-10-30",
+                    expectedVersion = version }, ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.DeleteAsync($"/api/biblioteca/colaboradores/{libraryId}?expectedVersion={version}", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await client.PutAsJsonAsync($"/api/biblioteca/colaboradores/{libraryId}",
+                new { subject = librarianSubject, category = "book", actions = new[] { "view" },
+                    effectiveFrom = "2026-10-30", expectedVersion = version }, ct)).StatusCode);
+
+        using var stale = await client.PutAsJsonAsync($"/api/comunicaciones/colaboradores/{commId}",
+            new { subject = communicationSubject, category = "bulletin", actions = new[] { "view", "edit" },
+                effectiveFrom = "2026-10-30", expectedVersion = version - 1 }, ct);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        using var forbiddenCategory = await client.PutAsJsonAsync($"/api/comunicaciones/colaboradores/{commId}",
+            new { subject = communicationSubject, category = "official_document", actions = new[] { "view" },
+                effectiveFrom = "2026-10-30", expectedVersion = version }, ct);
+        Assert.Equal(HttpStatusCode.BadRequest, forbiddenCategory.StatusCode);
+
+        using var changed = await client.PutAsJsonAsync($"/api/comunicaciones/colaboradores/{commId}",
+            new { subject = communicationSubject, category = "bulletin",
+                actions = new[] { "view", "edit", "write" }, effectiveFrom = "2026-10-30",
+                effectiveTo = "2026-12-31", expectedVersion = version }, ct);
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        version = (await changed.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+            .GetProperty("version").GetInt32();
+
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            var catalog = await DynamicAccessEndpoints.LoadAsync(db, ct);
+            Assert.True(DynamicAccessEndpoints.IsCategoryGranted(catalog, communicationSubject,
+                "library", "edit", "bulletin", null, new DateOnly(2026, 11, 1)));
+            Assert.False(DynamicAccessEndpoints.IsCategoryGranted(catalog, communicationSubject,
+                "library", "edit", "magazine", null, new DateOnly(2026, 11, 1)));
+            Assert.False(DynamicAccessEndpoints.IsCategoryGranted(catalog, communicationSubject,
+                "library", "edit", "book", null, new DateOnly(2026, 11, 1)));
+            Assert.False(DynamicAccessEndpoints.IsCategoryGranted(catalog, communicationSubject,
+                "documentmanager", "edit", "bulletin", null, new DateOnly(2026, 11, 1)));
+            Assert.True(await db.AuditEvents.AnyAsync(x => x.Action == "library.collaborator.updated" &&
+                x.EntityId == commId.ToString("D"), ct));
+        }
+
+        using var removed = await client.DeleteAsync(
+            $"/api/comunicaciones/colaboradores/{commId}?expectedVersion={version}", ct);
+        Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
+        await using var verify = factory.Services.CreateAsyncScope();
+        var dbFinal = verify.ServiceProvider.GetRequiredService<PmgmDbContext>();
+        var finalCatalog = await DynamicAccessEndpoints.LoadAsync(dbFinal, ct);
+        Assert.False(DynamicAccessEndpoints.IsCategoryGranted(finalCatalog, communicationSubject,
+            "library", "edit", "bulletin", null, new DateOnly(2026, 11, 1)));
+        Assert.True(await dbFinal.AuditEvents.AnyAsync(x => x.Action == "library.collaborator.revoked" &&
+            x.EntityId == commId.ToString("D"), ct));
+    }
+
+    [Fact]
     public async Task Librarian_can_delegate_only_magazine_and_revoke_with_audit()
     {
         var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
@@ -65,6 +189,16 @@ public sealed class DocumentAreaCollaboratorHttpTests
         var json = await created.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct);
         var assignmentId = json.GetProperty("assignmentId").GetGuid();
         Assert.Equal(version + 1, json.GetProperty("version").GetInt32());
+        // El Bibliotecario puede modificar exclusivamente sus colaboradores.
+        using var librarianEdited = await client.PutAsJsonAsync(
+            $"/api/biblioteca/colaboradores/{assignmentId}",
+            new { subject, category = "magazine",
+                actions = new[] { "view", "edit" },
+                effectiveFrom = "2026-10-20", effectiveTo = "2026-12-30",
+                expectedVersion = version + 1 }, ct);
+        Assert.Equal(HttpStatusCode.OK, librarianEdited.StatusCode);
+        Assert.True((await librarianEdited.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: ct))
+            .GetProperty("updated").GetBoolean());
 
         using var stale = await client.PostAsJsonAsync(
             "/api/biblioteca/colaboradores", payload, ct);

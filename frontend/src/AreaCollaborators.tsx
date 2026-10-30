@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { ActionDrawer, ConfirmAction, HelpNote } from './actionKit'
 import { DocumentApiHttpError, type DocumentApiClient } from './api/documentApi'
-import { canDelegateUpload, collaboratorActionLabels, collaboratorCategories, type AreaCollaborator, type AreaCollaborators, type CollaboratorAction, type CollaboratorArea } from './api/areaCollaborators'
+import { canDelegateUpload, collaboratorActionLabels, collaboratorCategories, type AreaCollaborator, type AreaCollaborators, type CollaboratorAction, type CollaboratorArea, type AddAreaCollaborator } from './api/areaCollaborators'
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago' }).format(new Date())
-const areaTitle: Record<CollaboratorArea, string> = { library: 'Biblioteca Virtual', documentmanager: 'Gestión Documental' }
+const areaTitle: Record<CollaboratorArea, string> = { library: 'Biblioteca Virtual', communications: 'Comunicaciones', documentmanager: 'Gestión Documental' }
 const toMessage = (e: unknown) => {
   if (e instanceof DocumentApiHttpError) {
     if (e.status === 409) return 'La lista cambió o el usuario ya tiene acceso vigente a esa categoría en ese período. Se recargó; revise y repita.'
@@ -55,6 +55,14 @@ export default function AreaCollaboratorsSection({ documentApi, area, title = 'C
       setNotice('Acceso otorgado y registrado en auditoría. Tiene efecto de inmediato.'); setSubject(''); setActions(['view'])
     } catch (e) { setError(toMessage(e)); await load() } finally { setBusy(false) }
   }
+  async function update(item: AreaCollaborator, request: Omit<AddAreaCollaborator, 'expectedVersion'>) {
+    if (!data) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      setData(await documentApi.updateAreaCollaborator(area, item.assignmentId, { ...request, expectedVersion: data.version }))
+      setNotice('Colaborador modificado y registrado en auditoría.')
+    } catch (e) { setError(toMessage(e)); await load() } finally { setBusy(false) }
+  }
   async function revoke(item: AreaCollaborator) {
     if (!data) return
     setBusy(true); setError(''); setNotice('')
@@ -85,8 +93,52 @@ export default function AreaCollaboratorsSection({ documentApi, area, title = 'C
     {data && data.items.length === 0 && <p className="library-admin-empty">No hay colaboradores. Solo quien administra esta área y el Máster pueden agregarlos.</p>}
     <div className="library-admin-list">{data?.items.map(item => <article key={item.assignmentId} className="library-admin-card">
       <div><strong>{label(item.category)}</strong><span>{people.find(p => p.subject === item.subject)?.name ?? item.subject}</span><small>{item.actions.map(a => collaboratorActionLabels[a]).join(' · ')} · desde {fmt(item.effectiveFrom)}{item.effectiveTo ? ` hasta ${fmt(item.effectiveTo)}` : ' sin fecha de término'}{item.effectiveTo && item.effectiveTo < today() ? ' · vencido' : ''}</small></div>
-      <div className="library-admin-row-actions"><ConfirmAction label="Revocar" tone="secondary" message="Pierde el acceso de inmediato. Queda registrado en auditoría." disabled={busy} onConfirm={() => void revoke(item)} /></div>
+      <div className="library-admin-row-actions">
+        {item.isActive && <EditCollaboratorAction area={area} item={item} disabled={busy} onSave={request => void update(item, request)} />}
+        <ConfirmAction label="Revocar" tone="secondary" message="Pierde el acceso de inmediato. Queda registrado en auditoría." disabled={busy} onConfirm={() => void revoke(item)} /></div>
     </article>)}</div>
     <HelpNote>El acceso se verifica siempre en el servidor. Vencida la fecha, el colaborador deja de ver la categoría sin que usted haga nada.</HelpNote>
   </section>
+}
+
+
+/** Editar exclusivamente una asignación del área desde la cual fue listada. */
+function EditCollaboratorAction({ area, item, disabled, onSave }: {
+  area: CollaboratorArea; item: AreaCollaborator; disabled: boolean
+  onSave: (request: Omit<AddAreaCollaborator, 'expectedVersion'>) => void
+}) {
+  const [subject, setSubject] = useState(item.subject)
+  const [category, setCategory] = useState(item.category)
+  const [actions, setActions] = useState<CollaboratorAction[]>(item.actions)
+  const [effectiveFrom, setEffectiveFrom] = useState(item.effectiveFrom)
+  const [effectiveTo, setEffectiveTo] = useState(item.effectiveTo ?? '')
+  const options = collaboratorCategories[area]
+  const toggle = (action: CollaboratorAction) =>
+    setActions(current => current.includes(action) ? current.filter(x => x !== action) : [...current, action])
+  const chooseCategory = (value: string) => {
+    setCategory(value)
+    if (!canDelegateUpload(area, value)) setActions(current => current.filter(x => x !== 'write'))
+  }
+  return <ActionDrawer label="Modificar" title="Modificar colaborador"
+    description="Cambie la persona, categoría, acciones o vigencia sin crear un acceso en otra área." keepOpen>
+    <form className="library-admin-form" onSubmit={event => {
+      event.preventDefault()
+      onSave({ subject: subject.trim(), category, actions: ['view', ...actions.filter(x => x !== 'view')],
+        effectiveFrom, effectiveTo: effectiveTo || null })
+    }}>
+      <label><span>Identificador del usuario</span><input required maxLength={320} value={subject} disabled={disabled} onChange={event => setSubject(event.target.value)} /></label>
+      <label><span>Categoría</span><select value={category} disabled={disabled} onChange={event => chooseCategory(event.target.value)}>
+        {options.map(option => <option value={option.value} key={option.value}>{option.label}</option>)}
+      </select></label>
+      <fieldset className="area-collaborators-actions"><legend>Qué puede hacer</legend>
+        <label><input type="checkbox" checked disabled /> {collaboratorActionLabels.view} <small>(siempre)</small></label>
+        {(['create', 'edit', 'delete'] as CollaboratorAction[]).map(a => <label key={a}>
+          <input type="checkbox" checked={actions.includes(a)} disabled={disabled} onChange={() => toggle(a)} /> {collaboratorActionLabels[a]}</label>)}
+        {canDelegateUpload(area, category) && <label><input type="checkbox" checked={actions.includes('write')} disabled={disabled} onChange={() => toggle('write')} /> {collaboratorActionLabels.write}</label>}
+      </fieldset>
+      <label><span>Desde</span><input type="date" required value={effectiveFrom} disabled={disabled} onChange={event => setEffectiveFrom(event.target.value)} /></label>
+      <label><span>Hasta (opcional)</span><input type="date" min={effectiveFrom} value={effectiveTo} disabled={disabled} onChange={event => setEffectiveTo(event.target.value)} /></label>
+      <button type="submit" className="action-trigger primary" disabled={disabled}>Guardar cambios</button>
+    </form>
+  </ActionDrawer>
 }

@@ -1,4 +1,4 @@
-import { AreaCollaboratorsDemo, type AddAreaCollaborator, type AreaCollaboratorCandidates, type AreaCollaborators, type CollaboratorArea } from './areaCollaborators'
+import type { AreaCollaboratorsDemo, AddAreaCollaborator, AreaCollaboratorCandidates, AreaCollaborators, CollaboratorArea } from './areaCollaborators'
 export type DocumentScope = 'order' | 'organization'
 export type DocumentClassification = 'internal' | 'confidential' | 'sensitive' | 'restricted'
 export type DocumentAccessPolicy = 'library_authenticated' | 'organization_authenticated' | 'management_only'
@@ -193,24 +193,37 @@ export class DocumentApiClient {
   ]
   private mockEditorialVersions: Array<EditorialMagazineVersion & { documentId: string }> = this.mockEditorial.map(item => ({ documentId: item.documentId, id: `${item.documentId}-v1`, versionNumber: 1, processingStatus: 'available', originalFileName: `${item.documentId}.pdf`, contentType: 'application/pdf', sizeBytes: 1_200_000, createdAtUtc: item.createdAtUtc }))
 
-  private readonly collaboratorsDemo = new AreaCollaboratorsDemo()
-  private collaboratorsPath(area: CollaboratorArea) { return area === 'library' ? '/api/biblioteca/colaboradores' : '/api/documentos/colaboradores' }
-  // Sin política de vista en el cliente: el servidor decide (solo Bibliotecario / Gran Archivero responsables) y falla cerrado.
+  // Una única instancia bajo demanda, incluso si dos solicitudes inician simultáneamente.
+  // La simulación no debe entrar en el bundle de la portada pública.
+  private collaboratorsDemoPromise: Promise<AreaCollaboratorsDemo> | null = null
+  private getCollaboratorsDemo(): Promise<AreaCollaboratorsDemo> {
+    return this.collaboratorsDemoPromise ??= import('./areaCollaborators')
+      .then(({ AreaCollaboratorsDemo }) => new AreaCollaboratorsDemo())
+  }
+  private collaboratorsPath(area: CollaboratorArea) { return area === 'library' ? '/api/biblioteca/colaboradores' : area === 'communications' ? '/api/comunicaciones/colaboradores' : '/api/documentos/colaboradores' }
+  // El servidor decide: Bibliotecario, Comunicaciones y Gran Archivero administran ámbitos distintos.
   async getAreaCollaborators(area: CollaboratorArea): Promise<AreaCollaborators> {
-    if (this.useMocks) return this.collaboratorsDemo.list(area)
+    if (this.useMocks) return (await this.getCollaboratorsDemo()).list(area)
     return this.request<AreaCollaborators>(this.collaboratorsPath(area))
   }
   async getAreaCollaboratorCandidates(area: CollaboratorArea): Promise<AreaCollaboratorCandidates> {
-    if (this.useMocks) return this.collaboratorsDemo.candidates()
+    if (this.useMocks) return (await this.getCollaboratorsDemo()).candidates()
     return this.request<AreaCollaboratorCandidates>(`${this.collaboratorsPath(area)}/candidatos`)
   }
   async addAreaCollaborator(area: CollaboratorArea, request: AddAreaCollaborator): Promise<AreaCollaborators> {
-    if (this.useMocks) return this.collaboratorsDemo.add(area, request)
+    if (this.useMocks) return (await this.getCollaboratorsDemo()).add(area, request)
     await this.postJson(this.collaboratorsPath(area), request)
     return this.getAreaCollaborators(area)
   }
+  async updateAreaCollaborator(area: CollaboratorArea, assignmentId: string, request: AddAreaCollaborator): Promise<AreaCollaborators> {
+    if (this.useMocks) return (await this.getCollaboratorsDemo()).update(area, assignmentId, request)
+    await this.authorizedFetch(`${this.collaboratorsPath(area)}/${encodeURIComponent(assignmentId)}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(request)
+    })
+    return this.getAreaCollaborators(area)
+  }
   async revokeAreaCollaborator(area: CollaboratorArea, assignmentId: string, expectedVersion: number): Promise<AreaCollaborators> {
-    if (this.useMocks) return this.collaboratorsDemo.revoke(area, assignmentId, expectedVersion)
+    if (this.useMocks) return (await this.getCollaboratorsDemo()).revoke(area, assignmentId, expectedVersion)
     await this.authorizedFetch(`${this.collaboratorsPath(area)}/${encodeURIComponent(assignmentId)}?expectedVersion=${expectedVersion}`, { method: 'DELETE' })
     return this.getAreaCollaborators(area)
   }

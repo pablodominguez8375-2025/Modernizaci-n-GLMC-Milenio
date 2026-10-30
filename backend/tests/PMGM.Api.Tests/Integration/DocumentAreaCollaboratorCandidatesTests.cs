@@ -40,12 +40,21 @@ public sealed class DocumentAreaCollaboratorCandidatesTests
         client.DefaultRequestHeaders.Remove("X-Collab-Role");
         client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/documentos/colaboradores/candidatos", ct)).StatusCode);
+        // Comunicaciones consulta sus candidatos, nunca los de Biblioteca/Archivo.
+        client.DefaultRequestHeaders.Remove("X-Collab-Role");
+        client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Communications);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/biblioteca/colaboradores/candidatos", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync("/api/documentos/colaboradores/candidatos", ct)).StatusCode);
+        var commList = await client.GetFromJsonAsync<JsonElement>("/api/comunicaciones/colaboradores/candidatos", ct);
+        Assert.True(commList.GetProperty("available").GetBoolean());
+        Assert.All(commList.GetProperty("items").EnumerateArray(), i => Assert.Equal(2, i.EnumerateObject().Count()));
         // Máster/superadmin: pueden administrar los colaboradores de ambas áreas (PO 25-10).
         client.DefaultRequestHeaders.Remove("X-Collab-Role");
         client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.PlatformSuperAdmin);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/documentos/colaboradores/candidatos", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/biblioteca/colaboradores", ct)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/documentos/colaboradores", ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/comunicaciones/colaboradores", ct)).StatusCode);
         client.DefaultRequestHeaders.Remove("X-Collab-Role");
         client.DefaultRequestHeaders.Add("X-Collab-Role", InstitutionalRoles.Librarian);
         var response = await client.GetAsync("/api/biblioteca/colaboradores/candidatos", ct);
