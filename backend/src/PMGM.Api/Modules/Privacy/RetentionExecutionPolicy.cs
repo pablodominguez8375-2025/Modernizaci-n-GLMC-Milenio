@@ -14,6 +14,25 @@ public sealed record RetentionExecutionDecision(
 
 public static class RetentionExecutionPolicy
 {
+    /// <summary>
+    /// Una solicitud abierta debe permanecer vinculada a su titular para que
+    /// Privacidad pueda atenderla y documentar la resolución. Una fecha de cierre
+    /// por sí sola, sin estado institucional cerrado, tampoco autoriza anonimizar.
+    /// </summary>
+    public static RetentionExecutionDecision CanAnonymizeDataSubjectRequest(
+        DataSubjectRequest request)
+    {
+        if (request.Status != PrivacyCodes.Status.Closed ||
+            request.ClosedAtUtc is null)
+        {
+            return new(false, true,
+                "La solicitud de derechos sigue abierta o no tiene cierre formal; requiere revisión de Privacidad antes de anonimizar.");
+        }
+
+        return new(true, false,
+            "La solicitud tiene cierre formal y puede evaluarse para anonimización con los demás controles.");
+    }
+
     public static RetentionExecutionDecision Evaluate(
         DataRetentionEvaluation evaluation,
         string expectedAction,
