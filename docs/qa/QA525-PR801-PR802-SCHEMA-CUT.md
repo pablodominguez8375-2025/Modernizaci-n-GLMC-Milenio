@@ -1,5 +1,16 @@
 # QA525 — Ruta mínima y segura para incorporar PR #801 y #802 a QA
 
+> **Decisión PO 30-10-2026, PR #806:** para la actualización binaria API+WEB
+> posterior a PR801 ya aplicado, se añade una ruta **explícita** de operador
+> único en glmdch QA. Identifica revisión técnica automatizada y ausencia de
+> DBA humano; no falsifica `dba_independently_reviewed`. El contrato exacto del
+> acta separada y del opt-in CLI está en
+> [Actualización de operador único](QA525-SUPERVISED-DUAL-APPLY.md).
+> Las exigencias de acta DBA independiente que siguen describen la ruta
+> original, que se conserva. Ambas rutas mantienen blobs fijos, historial99 y
+> esquema exacto, G6 post-DB, firma, locks, aprobación temporal y rollback dual.
+> El nuevo modo no ejecuta ni autoriza una migración y no se activa por omisión.
+
 **Estado: procedimiento supervisado propuesto, NO ejecutado.** Una sola VM `glmdch`, exclusivamente QA sintético; `main`, producción y `srv01` fuera de alcance. No usar aplicadores descartados de PR #771/#737/#766.
 
 ## Fuente y cambio exactos
