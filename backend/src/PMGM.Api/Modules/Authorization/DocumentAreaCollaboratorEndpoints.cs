@@ -17,6 +17,10 @@ public static class DocumentAreaCollaboratorEndpoints
     private const long CatalogLock = 26620261004;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly string[] DelegableActions = ["view", "create", "write", "edit", "delete"];
+    private static readonly string[] CommunicationsCategories = ["magazine", "bulletin"];
+    // El área propietaria determina el prefijo del colaborador; ambos perfiles
+    // publican en la vista library, sin poder administrar los colaboradores del otro.
+    private static string GrantView(string area) => area == "communications" ? "library" : area;
 
     public static IEndpointRouteBuilder MapDocumentAreaCollaboratorEndpoints(
         this IEndpointRouteBuilder endpoints)
@@ -30,6 +34,10 @@ public static class DocumentAreaCollaboratorEndpoints
             HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
             IAuditService audit, CancellationToken ct) =>
             AssignAsync("library", request, ctx, db, access, audit, ct));
+        library.MapPut("/{assignmentId:guid}", (Guid assignmentId, DocumentAreaCollaboratorRequest request,
+            HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+            IAuditService audit, CancellationToken ct) =>
+            UpdateAsync("library", assignmentId, request, ctx, db, access, audit, ct));
         library.MapDelete("/{assignmentId:guid}", (Guid assignmentId,
             int expectedVersion, HttpContext ctx, PmgmDbContext db,
             IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
@@ -49,6 +57,10 @@ public static class DocumentAreaCollaboratorEndpoints
             HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
             IAuditService audit, CancellationToken ct) =>
             AssignAsync("documentmanager", request, ctx, db, access, audit, ct));
+        documents.MapPut("/{assignmentId:guid}", (Guid assignmentId, DocumentAreaCollaboratorRequest request,
+            HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+            IAuditService audit, CancellationToken ct) =>
+            UpdateAsync("documentmanager", assignmentId, request, ctx, db, access, audit, ct));
         documents.MapDelete("/{assignmentId:guid}", (Guid assignmentId,
             int expectedVersion, HttpContext ctx, PmgmDbContext db,
             IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
@@ -58,6 +70,28 @@ public static class DocumentAreaCollaboratorEndpoints
             IInstitutionalAccessService access, IAccountIdentityProvider identity,
             IAuditService audit, CancellationToken ct) =>
             CandidatesAsync("documentmanager", ctx, db, access, identity, audit, ct));
+        // El cargo Comunicaciones NO hereda los colaboradores del Bibliotecario.
+        var communications = endpoints.MapGroup("/api/comunicaciones/colaboradores")
+            .WithTags("Comunicaciones - Colaboradores").RequireAuthorization();
+        communications.MapGet("", (HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, CancellationToken ct) =>
+            ListAsync("communications", ctx, db, access, ct));
+        communications.MapPost("", (DocumentAreaCollaboratorRequest request,
+            HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+            IAuditService audit, CancellationToken ct) =>
+            AssignAsync("communications", request, ctx, db, access, audit, ct));
+        communications.MapPut("/{assignmentId:guid}", (Guid assignmentId, DocumentAreaCollaboratorRequest request,
+            HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+            IAuditService audit, CancellationToken ct) =>
+            UpdateAsync("communications", assignmentId, request, ctx, db, access, audit, ct));
+        communications.MapDelete("/{assignmentId:guid}", (Guid assignmentId,
+            int expectedVersion, HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, IAuditService audit, CancellationToken ct) =>
+            RevokeAsync("communications", assignmentId, expectedVersion, ctx, db, access, audit, ct));
+        communications.MapGet("/candidatos", (HttpContext ctx, PmgmDbContext db,
+            IInstitutionalAccessService access, IAccountIdentityProvider identity,
+            IAuditService audit, CancellationToken ct) =>
+            CandidatesAsync("communications", ctx, db, access, identity, audit, ct));
         return endpoints;
     }
 
@@ -97,12 +131,15 @@ public static class DocumentAreaCollaboratorEndpoints
         string view, HttpContext ctx, IInstitutionalAccessService access)
         => ctx.User.Identity?.IsAuthenticated == true &&
            !string.IsNullOrWhiteSpace(ctx.User.FindFirst("sub")?.Value) &&
-           // Cada área administra sus propios colaboradores (Bibliotecario → Biblioteca, Gran Archivero →
-           // Gestión Documental); el Máster y los superadmin pueden editarlos en ambas (PO 25-10).
-           (access.IsPlatformSuperAdmin(ctx.User) ||
-            (view == "library"
-               ? access.CanManageLibrary(ctx.User, null)
-               : view == "documentmanager" && access.CanManageGrandArchive(ctx.User)));
+           // La autoridad institucional solo delega en su propia área.
+           // El Máster técnico conserva acceso explícito de soporte auditable.
+           (access.IsPlatformSuperAdmin(ctx.User) || (view switch
+           {
+               "library" => access.CanManageLibrary(ctx.User, null),
+               "communications" => access.CanManageCommunications(ctx.User),
+               "documentmanager" => access.CanManageGrandArchive(ctx.User),
+               _ => false
+           }));
 
     private static string CodePrefix(string view) => "collab-" + view + "-";
 
@@ -113,7 +150,7 @@ public static class DocumentAreaCollaboratorEndpoints
             .Where(p => p.Code.StartsWith(CodePrefix(view), StringComparison.Ordinal) &&
                         p.Scope == "order" && p.MenuCodes.Contains("documents") &&
                         !p.IsSystem && p.Grants.Count == 1 &&
-                        p.Grants[0].ViewCode == view &&
+                        p.Grants[0].ViewCode == GrantView(view) &&
                         p.Grants[0].Categories is { Length: 1 })
             .ToDictionary(p => p.Code, StringComparer.Ordinal);
 
@@ -137,8 +174,18 @@ public static class DocumentAreaCollaboratorEndpoints
         if (!CanAdminister(view, ctx, access)) return Results.Forbid();
         ctx.Response.Headers.CacheControl = "private, no-store";
         var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
-        return Results.Ok(new { version = catalog.Version, items = Project(catalog, view) });
+        return Results.Ok(new { version = catalog.Version, items = Project(catalog, view).Where(x => x.IsActive).ToArray() });
     }
+
+    private static bool ValidRequest(string view, string? subject, string? category, string[] actions,
+        DateOnly effectiveFrom, DateOnly? effectiveTo, string? rawSubject)
+        => subject is { Length: >= 1 and <= 320 } && rawSubject == subject &&
+           !string.IsNullOrWhiteSpace(category) && DynamicAccessEndpoints.CatalogCategories.Contains(category) &&
+           (view != "communications" || CommunicationsCategories.Contains(category)) &&
+           actions.Length > 0 && actions.All(DelegableActions.Contains) && actions.Contains("view") &&
+           (!actions.Contains("write") ||
+              (GrantView(view) == "library" && CommunicationsCategories.Contains(category))) &&
+           effectiveFrom != default && (effectiveTo is null || effectiveTo >= effectiveFrom);
 
     private static async Task<IResult> AssignAsync(
         string view, DocumentAreaCollaboratorRequest request,
@@ -152,17 +199,8 @@ public static class DocumentAreaCollaboratorEndpoints
         var actions = (request.Actions ?? []).Select(a => a?.Trim().ToLowerInvariant() ?? "")
             .Distinct().ToArray();
 
-        if (subject is null || subject.Length is < 1 or > 320 ||
-            request.Subject != subject ||
-            string.IsNullOrWhiteSpace(category) ||
-            !DynamicAccessEndpoints.CatalogCategories.Contains(category) ||
-            actions.Length == 0 || actions.Any(a => !DelegableActions.Contains(a)) ||
-            // El permiso de contenido se delega sólo en publicaciones editoriales
-            // de Biblioteca (Revista y Boletín); otras categorías y Gestión
-            // Documental no reciben una vía de carga.
-            (actions.Contains("write") && (view != "library" || category is not ("magazine" or "bulletin"))) ||
-            !actions.Contains("view") ||
-            request.EffectiveTo < request.EffectiveFrom)
+        if (!ValidRequest(view, subject, category, actions, request.EffectiveFrom,
+                request.EffectiveTo, request.Subject))
             return Results.BadRequest(new { code = "INVALID_COLLABORATOR_SCOPE" });
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
@@ -182,9 +220,9 @@ public static class DocumentAreaCollaboratorEndpoints
         catalog.Profiles.Add(new DynamicProfile(
             Guid.NewGuid(), code, "Colaborador limitado - " + view,
             "order", false, true, ["documents"],
-            [new DynamicGrant(view, actions, [category])]));
+            [new DynamicGrant(GrantView(view), actions, [category!])]));
         var assignment = new DynamicAssignment(
-            Guid.NewGuid(), subject, code, null,
+            Guid.NewGuid(), subject!, code, null,
             request.EffectiveFrom, request.EffectiveTo, true);
         catalog.Assignments.Add(assignment);
         var next = catalog with { Version = catalog.Version + 1 };
@@ -202,6 +240,67 @@ public static class DocumentAreaCollaboratorEndpoints
             assignmentId = assignment.Id, area = view,
             category, actions, assignment.EffectiveFrom,
             assignment.EffectiveTo, active = true });
+    }
+
+    /// <summary>
+    /// Modifica una delegación activa sin cambiar de área ni exponer el perfil
+    /// del otro cargo. Concurrencia optimista y auditoría en la transacción.
+    /// </summary>
+    private static async Task<IResult> UpdateAsync(
+        string view, Guid assignmentId, DocumentAreaCollaboratorRequest request,
+        HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access,
+        IAuditService audit, CancellationToken ct)
+    {
+        if (!CanAdminister(view, ctx, access)) return Results.Forbid();
+        if (assignmentId == Guid.Empty) return Results.BadRequest(new { code = "INVALID_ASSIGNMENT_ID" });
+        ctx.Response.Headers.CacheControl = "private, no-store";
+        var subject = request.Subject?.Trim();
+        var category = request.Category?.Trim().ToLowerInvariant();
+        var actions = (request.Actions ?? []).Select(x => x?.Trim().ToLowerInvariant() ?? "")
+            .Distinct().ToArray();
+        if (!ValidRequest(view, subject, category, actions, request.EffectiveFrom,
+                request.EffectiveTo, request.Subject))
+            return Results.BadRequest(new { code = "INVALID_COLLABORATOR_SCOPE" });
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock({CatalogLock})", ct);
+        var catalog = await DynamicAccessEndpoints.LoadRawAsync(db, ct);
+        if (request.ExpectedVersion != catalog.Version)
+            return Results.Conflict(new { code = "STALE_COLLABORATOR_CATALOG" });
+        var owned = Project(catalog, view).FirstOrDefault(x => x.AssignmentId == assignmentId && x.IsActive);
+        if (owned is null) return Results.NotFound();
+        var endsOn = request.EffectiveTo ?? DateOnly.MaxValue;
+        if (Project(catalog, view).Any(x => x.IsActive && x.AssignmentId != assignmentId &&
+                x.Subject == subject && x.Category == category && x.EffectiveFrom <= endsOn &&
+                (x.EffectiveTo ?? DateOnly.MaxValue) >= request.EffectiveFrom))
+            return Results.Conflict(new { code = "COLLABORATOR_PERIOD_OVERLAP" });
+        var index = catalog.Assignments.FindIndex(x => x.Id == assignmentId);
+        if (index < 0) return Results.NotFound();
+        var original = catalog.Assignments[index];
+        var profileIndex = catalog.Profiles.FindIndex(p => p.Code == original.ProfileCode &&
+            p.Code.StartsWith(CodePrefix(view), StringComparison.Ordinal));
+        if (profileIndex < 0) return Results.NotFound();
+        catalog.Assignments[index] = original with
+        {
+            Subject = subject!, EffectiveFrom = request.EffectiveFrom, EffectiveTo = request.EffectiveTo
+        };
+        var profile = catalog.Profiles[profileIndex];
+        catalog.Profiles[profileIndex] = profile with
+        {
+            Grants = [new DynamicGrant(GrantView(view), actions, [category!])]
+        };
+        var next = catalog with { Version = catalog.Version + 1 };
+        db.DynamicAccessSnapshots.Add(new DynamicAccessSnapshot
+        {
+            Version = next.Version, Payload = JsonSerializer.Serialize(next, JsonOptions)
+        });
+        audit.Add(ctx, "library.collaborator.updated", "DynamicAccessCatalog",
+            assignmentId.ToString("D"), null, AuditResults.Success,
+            new { area = view, category, actions, version = next.Version });
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Results.Ok(new { version = next.Version, assignmentId, updated = true });
     }
 
     private static async Task<IResult> RevokeAsync(
