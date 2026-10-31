@@ -336,6 +336,37 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
                 self.assertEqual(before[path.name], path.read_bytes())
             self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
 
+            # Failure on the FINAL state-directory fsync, after a durable
+            # receipt and intent-marker unlink, is *past the commit boundary*.
+            # Do not roll four already-archived approvals back or delete
+            # their archived proof. The reported result must be fail-closed.
+            normal_sync = update.os.fsync
+            post_commit_injected = {'yes': False}
+
+            def fail_final_state_sync(fd):
+                if (not (state / 'expired-prepared-archive-pending.json').exists()
+                        and list(state.glob('review-archive-*/expired-prepared-archive.json'))):
+                    post_commit_injected['yes'] = True
+                    raise OSError('synthetic power-loss durability uncertainty')
+                return normal_sync(fd)
+
+            with patch.object(update.os, 'fsync', side_effect=fail_final_state_sync), \
+                 patch.object(update.time, 'time', return_value=NOW), \
+                 patch.object(update, 'invoke', side_effect=AssertionError('must not apply')):
+                with self.assertRaisesRegex(
+                        update.Blocked, 'RECOVERY_ARCHIVE_COMMIT_SYNC_UNCERTAIN'):
+                    update.archive_expired_prepared(e, args, modules)
+            self.assertTrue(post_commit_injected['yes'])
+            archives = list(state.glob('review-archive-*'))
+            self.assertEqual(1, len(archives))
+            self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                json.loads((archives[0] / 'expired-prepared-archive.json').read_text())['status'])
+            for path in originals:
+                self.assertFalse(path.exists())
+                self.assertEqual(before[path.name],
+                                 (archives[0] / path.name).read_bytes())
+            self.assertFalse((state / 'expired-prepared-archive-pending.json').exists())
+            self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
 
 
 class InterruptedArchiveInspectionTests(unittest.TestCase):
