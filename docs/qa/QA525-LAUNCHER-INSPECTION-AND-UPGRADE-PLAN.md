@@ -68,3 +68,21 @@ el operador reemplazante ni se ha completado la UAT. Los hashes locales
 sólo sirven para inventario, no para validación de integridad con Sigstore.
 
 Continuidad: Issues #525, #819, #821, #822; PR #820 permanece draft.
+
+## Fase 2 — Candidato firmado, comprobación previa sin instalar
+
+La PR #823 incorpora también `scripts/qa/operators/qa525-launcher-signed-preflight.py`. Sólo después de publicar, aprobar y entregar su paquete firmado al host, el comando previsto para el operador supervisado será:
+
+```text
+sudo python3 -B <RUTA_INMUTABLE_Y_VERIFICADA>/scripts/qa/operators/qa525-launcher-signed-preflight.py --preflight
+```
+
+**No ejecutar esta ruta a partir de una copia no verificada de GitHub.** El paquete y todos sus módulos deben estar previamente acreditados como root-owned, con identidad exacta y permisos privados; el comando no es una autorización implícita de instalación. La rama PR aún no es una publicación firmada utilizable en glmdch.
+
+El preflight exige UID 0 y host glmdch, origen del propio código y dependencias root-owned sin symlink ni padres escribibles; inspecciona dos veces el launcher antiguo y sus hashes; reutiliza `qa525-stage-current-release.py` para revalidar el `dev` vivo antes y después de la descarga, verificar hash de la release y autenticidad **Sigstore** del instalable. Repite la comprobación del `MANIFEST.sha256` del paquete, compara explícitamente el hash del archivo `scripts/qa/operators/qa525-update.py` contra su entrada firmada, y rechaza candidatos que no incluyan los comandos de recuperación segura.
+
+Su salida `SIGNED_LAUNCHER_CANDIDATE_VERIFIED_NO_INSTALL` no es un acta de aprobación ni la prueba de que el host fue actualizado. Los archivos descargados se eliminan al terminar la comprobación: por diseño no deja ninguna credencial, paquete temporal reutilizable ni autorización para reemplazar el launcher. Todos los resultados declaran `replacement_applied=false`, `may_install=false`, `may_apply=false`. Ningún archivo API/WEB ni instalación existente se modifica.
+
+Pruebas herméticas en `tests/test_qa525_launcher_signed_preflight.py`: rechazo por host incorrecto, launcher antiguo alterado, origen sin permisos, manifest manipulado, ausencia de recuperación segura, firma no verificada, source SHA o digest inválidos, cambio del launcher durante la descarga, symlinks/hardlinks, y ausencia de instalador en este módulo. El workflow QA525 las ejecuta en PR exact-HEAD.
+
+**Fase 3 aún pendiente:** diseñar e integrar la sustitución atómica del launcher con respaldo completo, aprobación específica, journal/lock/fsync, pruebas de SIGKILL y rollback. Antes de ese paso no existe comando seguro autorizado para escribir `/usr/local/sbin/pmgm-qa-update`.
