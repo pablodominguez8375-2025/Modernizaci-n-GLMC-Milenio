@@ -210,7 +210,7 @@ module.simulate(pathlib.Path(sys.argv[2]),source_sha=sys.argv[4],
         self.assertNotIn("docker",SOURCE.read_text().lower())
         self.assertNotIn("/usr/local/sbin/pmgm-qa-update",SOURCE.read_text().split("def simulate")[1])
 
-    def test_pre-existing_intent_blocks_without_touching_launcher(self):
+    def test_pre_existing_intent_blocks_without_touching_launcher(self):
         intent=self.base/"state"/("intent-"+NONCE+".json")
         intent.write_text("{}")
         with self.assertRaisesRegex(swap.Blocked,
