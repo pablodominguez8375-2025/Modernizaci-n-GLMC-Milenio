@@ -6,29 +6,29 @@ Un examen satisfactorio de un lanzador antiguo **no** autoriza reemplazarlo.
 
 ## Riesgo real
 
-En glmdch existe \`/usr/local/sbin/pmgm-qa-update\`; su plantilla fijó el
+En glmdch existe `/usr/local/sbin/pmgm-qa-update`; su plantilla fijó el
 código Python del operador en un directorio root-owned. El comando actual
-\`--install-launcher\` utiliza \`O_EXCL\`, por lo que no sustituye el archivo
+`--install-launcher` utiliza `O_EXCL`, por lo que no sustituye el archivo
 existente. La PR #820 introduce el archivado con marcador de recuperación
 pero ese código NO se activa al hacer commit en GitHub.
 
 ## Herramienta propuesta para comprobación inicial
 
-\`scripts/qa/operators/qa525-launcher-upgrade-inspect.py\` inspecciona
+`scripts/qa/operators/qa525-launcher-upgrade-inspect.py` inspecciona
 **únicamente** el estado actual. Antes de leer exige UID 0 en hostname glmdch;
 verifica propiedad root, sin symlinks, padres no escribibles por terceros,
 archivo regular único, modo launcher 0700, lectura sin seguir enlaces, identidad
 de inode y tamaño limitado. Rechaza cualquier lanzador que no coincida
 exactamente con la plantilla Python históricamente instalada; extrae su ruta
-inmutable usando \`ast.literal_eval\`, **sin ejecutarla**. Comprueba por separado
+inmutable usando `ast.literal_eval`, **sin ejecutarla**. Comprueba por separado
 la fuente antigua root-owned y emite sus hashes SHA-256 como evidencia local,
 no como prueba de firma ni de correspondencia con un commit GitHub.
 
 Salida informativa:
-\`LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED\`,
-\`signed_release_verified=false\`, \`rollback_validated=false\`,
-\`may_install=false\`, \`may_apply=false\`. En fallos devuelve
-\`BLOCKED_QA525_LAUNCHER_INSPECTION\` y código estable no sensible.
+`LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED`,
+`signed_release_verified=false`, `rollback_validated=false`,
+`may_install=false`, `may_apply=false`. En fallos devuelve
+`BLOCKED_QA525_LAUNCHER_INSPECTION` y código estable no sensible.
 
 **NO usar esta herramienta desde código crudo de GitHub en glmdch.**
 Solo después de CI exact-head, revisión independiente y publicación firmada,
@@ -47,7 +47,7 @@ del proyecto cambia aún al launcher existente.
 4. Aprobar una operación específica de sustitución del launcher, con lock,
    copia íntegra del antiguo, journal de reemplazo duradero, fsync,
    sustitución atómica y rollback seguro incluso tras interrupción.
-5. Validar que el launcher nuevo solo hace \`--status\` y que no ha cambiado
+5. Validar que el launcher nuevo solo hace `--status` y que no ha cambiado
    API/WEB, identidad, Compose, EF100, Keycloak ni SMTP. Solo entonces se
    puede considerar el paso explícito de archivar el preparado caducado,
    con aprobación nueva para otro SHA y G6 vigente.
@@ -57,7 +57,7 @@ del proyecto cambia aún al launcher existente.
 
 ## Pruebas iniciales
 
-\`tests/test_qa525_launcher_upgrade_inspect.py\` cubre la plantilla
+`tests/test_qa525_launcher_upgrade_inspect.py` cubre la plantilla
 histórica válida, inyección de comandos, intérprete alterado, fuente relativa,
 parent traversal, enlaces simbólicos, UID/hostname incompatible, ausencia de
 capacidades de instalación y distinción inequívoca entre inspección y firma.
