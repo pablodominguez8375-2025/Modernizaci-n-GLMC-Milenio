@@ -501,6 +501,7 @@ def main(argv=None):
         with build.exclusive():
             return archive_expired_prepared(entry, args, modules)
     if args.apply_prepared:
+        require_reconciled_archive(entry)
         prepared = entry.private_json(entry.STATE / 'prepared.json')
         mode = prepared.get('schema_mode', 'member_history_postdb')
         require(mode in ('member_history_postdb', 'support00_postdb'), 'UPDATE_PREPARED_SCHEMA_UNKNOWN')
