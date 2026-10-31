@@ -123,6 +123,8 @@ antes exige historial99 exacto y pending={soloPR813}; después exige100 exacto.
 3. Crear root0600 `/etc/pmgm/qa525-support00-migration-approved.json` usando la
    plantilla del mismo nombre. Registrar el corte/digest, nonce, alcance,
    revisión técnica y referencia PO indicados por el contrato, sin secretos.
+   Su referencia técnica debe ser el comentario estructurado del mismo
+   SHA/digest descrito arriba; el operador también lo verifica en GitHub.
 4. Del paquete firmado actual, ejecutar por separado:
 
 ```text
@@ -173,6 +175,19 @@ Se aceptan capas de imagen QA525 anteriores SOLO con JSON exacto image-only,
 root0600, nombre/OCI fijados y journal APPLIED correspondiente. No se compactan
 ni se borran archivos históricos. Máximo128 capas: al alcanzar el límite se
 requiere una compactación revisada, nunca descartar identidad silenciosamente.
+
+## Cuota pública de GitHub y tiempos
+
+El controlador conserva las consultas críticas de firma/fuente/CI, compartiendo
+solo el resultado recién comprobado dentro de la misma operación. No utiliza
+tokens personales ni cache persistente como sustituto de una comprobación viva.
+La cuota pública de la IP puede agotarse por varias operaciones en la misma
+ventana. Ante GITHUB_API_RATE_LIMITED/RETRY_LATER no repetir comandos en bucle:
+esperar el reinicio informado por GitHub, inspeccionar el estado y conservar
+journals. Si vencieron las actas, una revisión real nueva debe preceder al
+reintento; nunca editar solo expires_at. Preparación, migración, G6 y publicación
+pueden seguir requiriendo tiempo de CI/proveedor; el comando único reduce las
+intervenciones manuales, no elimina esas comprobaciones ni garantiza duración.
 
 No se instala un timer que despliegue arbitrariamente ni se habilitan migraciones
 al iniciar API. El monitoreo puede ser automático; la escritura sigue atada al

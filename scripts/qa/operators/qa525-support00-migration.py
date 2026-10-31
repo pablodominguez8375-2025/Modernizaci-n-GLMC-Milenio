@@ -154,6 +154,11 @@ def main(argv=None):
         source = signed.gate.evaluate(signed.gate.readiness.fetch_public,
                                      expected_sha=record.get('source_sha'))
         before, history = preflight(entry, record, source, modules, gate, probe)
+        update.verify_technical_reference(signed.gate.readiness.fetch_public,
+            record['technical_review_reference'], source, entry.REVIEWED)
+        completion_path = entry.STATE / 'support00-completed.json'
+        require(not completion_path.exists() and not completion_path.is_symlink(),
+                'MIGRATION_COMPLETION_ALREADY_EXISTS_RECONCILE_REQUIRED')
         target = source['source_sha']
         prepared_path = entry.STATE / ('support00-prepared-' + target + '.json')
         journal_path = entry.STATE / ('support00-migration-' + target + '.json')
