@@ -303,6 +303,85 @@ def expired_prepared_archive_contract(prepared, review, post, cut, *, sha, diges
     return True
 
 
+
+def inspect_pending_archive(entry, approval):
+    """Classify interrupted archive evidence without changing any file.
+
+    A valid result is diagnostic only: it never clears the durable blocker,
+    restores records, grants an approval or authorizes an API/WEB update.
+    Called under the existing QA525 exclusive lock.
+    """
+    import hashlib
+    pending = entry.STATE / 'expired-prepared-archive-pending.json'
+    if not pending.exists() and not pending.is_symlink():
+        return {'status': 'NO_PENDING_ARCHIVE_NOT_A_RECOVERY_AUTHORIZATION',
+                'may_apply': False, 'may_reconcile_automatically': False}
+    marker = entry.private_json(pending)
+    source = marker.get('source_sha')
+    digest = marker.get('source_asset_sha256')
+    archive_name = marker.get('archive_name')
+    hashes = marker.get('files_sha256')
+    require(marker.get('status') == 'ARCHIVE_INCOMPLETE_NO_DEPLOYMENT'
+            and type(source) is str and re.fullmatch(r'[a-f0-9]{40}', source)
+            and type(digest) is str and re.fullmatch(r'sha256:[a-f0-9]{64}', digest)
+            and type(archive_name) is str
+            and re.fullmatch(r'review-archive-[a-f0-9]{24}', archive_name)
+            and type(hashes) is dict,
+            'RECOVERY_PENDING_MARKER_INVALID')
+    paths = (entry.STATE / 'prepared.json', entry.REVIEW,
+             entry.SINGLE_OPERATOR_REVIEW, approval.APPROVAL)
+    names = [p.name for p in paths]
+    require(len(set(names)) == 4 and set(hashes) == set(names)
+            and all(type(v) is str and re.fullmatch(r'[a-f0-9]{64}', v)
+                    for v in hashes.values()),
+            'RECOVERY_PENDING_HASHES_INVALID')
+    archive = entry.STATE / archive_name
+    entry.trusted(archive, directory=True)
+    require(stat.S_IMODE(archive.lstat().st_mode) == 0o700,
+            'RECOVERY_ARCHIVE_DIRECTORY_NOT_PRIVATE')
+    original_count = archived_count = 0
+    for p in paths:
+        saved = archive / p.name
+        original = p.exists() or p.is_symlink()
+        stored = saved.exists() or saved.is_symlink()
+        require(original != stored, 'RECOVERY_DUPLICATE_OR_MISSING_EVIDENCE')
+        selected = p if original else saved
+        # Root-owned, non-symlink, private JSON: reject a spoofed or altered
+        # file before hashing the raw bytes. No script or evidence is executed.
+        entry.private_json(selected)
+        with selected.open('rb') as stream:
+            actual = hashlib.file_digest(stream, 'sha256').hexdigest()
+        require(actual == hashes[p.name], 'RECOVERY_ARCHIVE_HASH_MISMATCH')
+        original_count += int(original)
+        archived_count += int(stored)
+    receipt_path = archive / 'expired-prepared-archive.json'
+    receipt_present = receipt_path.exists() or receipt_path.is_symlink()
+    if receipt_present:
+        receipt = entry.private_json(receipt_path)
+        require(receipt.get('status') == 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT'
+                and receipt.get('source_sha') == source
+                and receipt.get('source_asset_sha256') == digest
+                and receipt.get('files_sha256') == hashes
+                and receipt.get('operator') == 'soporte@glmdch',
+                'RECOVERY_ARCHIVE_RECEIPT_INVALID')
+        require(archived_count == 4, 'RECOVERY_RECEIPT_WITH_PARTIAL_FILES')
+        status = 'ARCHIVE_RECORDED_PENDING_MARKER_MANUAL_RECONCILIATION'
+    elif archived_count == 4:
+        status = 'ARCHIVE_ALL_MOVED_NO_RECEIPT_MANUAL_RECONCILIATION'
+    elif original_count == 4:
+        status = 'ARCHIVE_NOT_MOVED_MANUAL_RECONCILIATION'
+    else:
+        status = 'ARCHIVE_PARTIALLY_MOVED_MANUAL_RECONCILIATION'
+    return {
+        'status': status,
+        'source_sha': source,
+        'original_files': original_count,
+        'archived_files': archived_count,
+        'may_apply': False,
+        'may_reconcile_automatically': False,
+    }
+
+
 def archive_expired_prepared(entry, args, modules):
     """Archive an unconsumed, expired QA preparation; no image/apply changes.
 
@@ -461,6 +540,7 @@ def main(argv=None):
     choice.add_argument('--run-reviewed', type=Path, metavar='ROOT_REVIEW_PACKET')
     choice.add_argument('--apply-prepared', action='store_true')
     choice.add_argument('--archive-expired-prepared', action='store_true')
+    choice.add_argument('--inspect-pending-archive', action='store_true')
     choice.add_argument('--install-launcher', action='store_true')
     choice.add_argument('--review-and-run', action='store_true')
     parser.add_argument('--source')
@@ -497,6 +577,9 @@ def main(argv=None):
                 'prepared_exists': (entry.STATE / 'prepared.json').exists(),
                 'archive_reconciliation_required': pending.exists() or pending.is_symlink(),
                 'may_apply': False}
+    if args.inspect_pending_archive:
+        with build.exclusive():
+            return inspect_pending_archive(entry, modules[2])
     if args.archive_expired_prepared:
         with build.exclusive():
             return archive_expired_prepared(entry, args, modules)
