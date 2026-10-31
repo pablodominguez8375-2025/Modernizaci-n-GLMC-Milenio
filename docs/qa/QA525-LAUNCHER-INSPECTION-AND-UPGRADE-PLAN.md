@@ -100,3 +100,11 @@ Se añadió `scripts/qa/operators/qa525-launcher-replacement-contract.py` junto 
 **Bloqueo de coordinación:** tras integrar PR #820 a `dev` por squash, la PR #823 todavía se basa en un SHA anterior. Se intentó preparar un árbol de sincronización pero la herramienta rechazó la operación; no se forzó ningún ref, no se hizo merge ni se intentó sustituir la verificación. Antes de integrar #823 será necesario actualizarla contra el HEAD vivo de dev, validar CI nueva y cumplir la coordinación multi-IA.
 
 **Fase 3b pendiente:** implementar el instalador físico transaccional en paquete firmado inmutable, con adquisición comprobada, lock compartido de cinco recursos, evidencia/aprobación root0600, respaldo antiguo con SHA, journal de intención durable, sustitución atómica `os.replace`, fsync, recibo final y reconciliación manual obligatoria de interrupciones. Revalidar no alteración de Compose/identidad, G6 y API/WEB separadamente. Sin esta fase, **NO ejecutar reemplazo root ni archivo de preparado**.
+
+## Mejora adversarial — validación del operador como AST, no cadenas
+
+El verificador de la fase 2 ya no considera suficiente que el archivo firmado contenga palabras como `--archive-expired-prepared` en comentarios. Utiliza `ast.parse` **sin ejecutar el módulo** para comprobar definiciones Python únicas de las funciones de recuperación, registro real mediante `choice.add_argument()` de cinco opciones del CLI, invocaciones del guard `require_reconciled_archive()` en `install_review_packet`, `archive_expired_prepared` y `main`, y la existencia de códigos de error de recuperación fail-closed.
+
+Pruebas adversariales nuevas prueban comentarios falsos, guard comentado, código Python inválido y bytes UTF-8 incorrectos. Se valida sobre **bytes del operador extraídos del paquete Sigstore, atados al MANIFEST SHA-256**, no GitHub raw. Este análisis estático es defensa adicional de coherencia, NO prueba formal de que el programa sea seguro ni autoriza instalarlo.
+
+Todo cambio al verificador requiere un HEAD exacto nuevo de la PR #823 y que los tests del workflow QA525 estén realmente en SUCCESS. Si hay un falso positivo por diferencias legítimas de sintaxis, registrar la causa y cambiar el test con criterio de aceptación; nunca saltar la firma ni la comparación del manifiesto.
