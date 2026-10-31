@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -280,6 +281,71 @@ public sealed class SupportViewAsPostgreSqlTests
         Assert.True(await reader.NextResultAsync(ct));
         Assert.True(await reader.ReadAsync(ct));
         Assert.Equal(1L, reader.GetInt64(0));
+    }
+
+    [Fact]
+    public async Task Reviewed_migrator_applies_only_support00_to_an_isolated_database_and_rejects_replay()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        var name = "qa525_support00_" + Guid.NewGuid().ToString("N");
+        var adminBuilder = new Npgsql.NpgsqlConnectionStringBuilder(cs) { Database = "postgres", Pooling = false };
+        await using var admin = new Npgsql.NpgsqlConnection(adminBuilder.ConnectionString);
+        await admin.OpenAsync(ct);
+        await using (var create = new Npgsql.NpgsqlCommand($"CREATE DATABASE \"{name}\"", admin))
+            await create.ExecuteNonQueryAsync(ct);
+        try
+        {
+            var testBuilder = new Npgsql.NpgsqlConnectionStringBuilder(cs) { Database = name, Pooling = false };
+            var options = new DbContextOptionsBuilder<PmgmDbContext>().UseNpgsql(testBuilder.ConnectionString).Options;
+            await using var db = new PmgmDbContext(options);
+            await db.GetService<Microsoft.EntityFrameworkCore.Migrations.IMigrator>()
+                .MigrateAsync(PMGM.Qa.Support00MigrationRunner.Previous, ct);
+            var applied = (await db.Database.GetAppliedMigrationsAsync(ct)).ToList();
+            // The host's99 IDs include other DbContexts sharing the history.
+            // This isolated engine test supplies synthetic history entries for
+            // those contexts; it creates no institutional data or other schema.
+            for (var i = applied.Count; i < 99; i++)
+            {
+                var id = $"19000101_OtherContextSynthetic{i:D3}";
+                const string version = "10.0.11";
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO public.\"__EFMigrationsHistory\" (\"MigrationId\", \"ProductVersion\") VALUES ({id}, {version})", ct);
+                applied.Add(id);
+            }
+            await PMGM.Qa.Support00MigrationRunner.MigrateExactlyAsync(db, applied.ToArray(), ct);
+            var after = (await db.Database.GetAppliedMigrationsAsync(ct)).ToArray();
+            Assert.Equal(100, after.Length);
+            Assert.Contains(PMGM.Qa.Support00MigrationRunner.Target, after);
+            var support = Assert.Single(await db.Organizations.AsNoTracking()
+                .Where(o => o.Type == "support").ToListAsync(ct));
+            Assert.Equal(Guid.Parse("b12c0000-0000-4000-8000-000000000000"), support.Id);
+            Assert.Equal("00", support.Number);
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                PMGM.Qa.Support00MigrationRunner.MigrateExactlyAsync(db, applied.ToArray(), ct));
+            Assert.Equal(100, (await db.Database.GetAppliedMigrationsAsync(ct)).Count());
+        }
+        finally
+        {
+            await using var drop = new Npgsql.NpgsqlCommand($"DROP DATABASE \"{name}\" WITH (FORCE)", admin);
+            await drop.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+    }
+
+    [Fact]
+    public void Reviewed_migrator_rejects_unknown_pending_migrations_or_different_history()
+    {
+        var expected = Enumerable.Range(0, 98).Select(i => $"synthetic{i}")
+            .Append(PMGM.Qa.Support00MigrationRunner.Previous).ToArray();
+        PMGM.Qa.Support00MigrationRunner.ValidateBefore(expected, expected,
+            [PMGM.Qa.Support00MigrationRunner.Target]);
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected, [PMGM.Qa.Support00MigrationRunner.Target, "unknown"]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected.Skip(1).Append("different").ToArray(), [PMGM.Qa.Support00MigrationRunner.Target]));
+        Assert.Throws<InvalidOperationException>(() => PMGM.Qa.Support00MigrationRunner.ValidateBefore(
+            expected, expected.Append(PMGM.Qa.Support00MigrationRunner.Target).ToArray(), []));
     }
 
     private static Task<HttpResponseMessage> StartProfile(HttpClient c, string key, CancellationToken ct)

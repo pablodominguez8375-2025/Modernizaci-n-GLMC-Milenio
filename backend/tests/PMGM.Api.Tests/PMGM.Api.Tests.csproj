@@ -20,6 +20,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/PMGM.Api/PMGM.Api.csproj" />
+    <ProjectReference Include="../../../scripts/qa/operators/support00-migrator/Support00Migrator.csproj" />
   </ItemGroup>
 
 </Project>
+

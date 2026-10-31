@@ -259,6 +259,15 @@ def validate_post_db_dba(review, source, now, docker, gate, probe, *, single_ope
         validate_single_operator_review(dba, scope=getattr(gate, "SINGLE_OPERATOR_SCOPE",
             "POST_PR801_API_WEB_ONLY_NO_MIGRATION"))
     completed, approved = dba["migration_completed_at"], dba["approved_at"]
+    if getattr(gate, "MIGRATION_COMPLETION_REQUIRED", False):
+        completion = private_json(STATE / "support00-completed.json")
+        require(completion.get("status") == "SUPPORT00_EF100_VERIFIED"
+                and type(completion.get("source_sha")) is str
+                and SHA.fullmatch(completion["source_sha"])
+                and completion.get("migration_id") == gate.MIGRATION_ID
+                and completion.get("migration_blob_sha") == gate.MIGRATION_BLOB
+                and completion.get("completed_at") == completed,
+                "SUPPORT00_MIGRATION_COMPLETION_UNVERIFIED")
     require(dba["source_sha"] == source["source_sha"]
             and dba["release_asset_sha256"] == source["release_asset_sha256"]
             and dba["baseline_sha"] == BASELINE
@@ -352,6 +361,14 @@ def single_operator_runtime(docker):
     return hashlib.sha256(json.dumps(sorted(data)).encode()).hexdigest()
 
 
+def validate_package_account_defaults(package):
+    for path in (Path(package) / "backend/src/PMGM.Api").glob("appsettings*.json"):
+        options = json.loads(path.read_text()).get("UserAccounts", {}).get("Identity", {})
+        require(all(options.get(key, False) is False for key in
+                    ("EnableLifecycleMutations", "RequireLiveTokenIntrospection")),
+                "SINGLE_OPERATOR_PACKAGE_ACCOUNT_FLAGS_ENABLED")
+
+
 def prepare_reviewed(build, approval, signed, adapter, source, approve, review, *, single_operator=False,
                      support00=False):
     """Build both images from a newly verified Sigstore release; no deployment.
@@ -386,6 +403,8 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review, 
         require(attestation["source_sha"] == target
                 and attestation["release_asset_sha256"] ==
                 source["release_asset_sha256"], "PREPARE_SIGNATURE_MISMATCH")
+        if single_operator:
+            validate_package_account_defaults(package)
         def verify(path, sha):
             if sha != target or path != package:
                 return False
@@ -459,6 +478,38 @@ def expected_compose_chain(*, name, target, original_files,
             "COMPOSE_UNEXPECTED_IMAGE")
     return list(original_files) + [str(Path(state) / (
         "qa525-" + name + "-" + target + "-" + current_image[7:] + ".json"))]
+
+
+def reviewed_layers(core, records, root):
+    """Accept prior successful QA525 image-only layers, never arbitrary overlays.
+
+    Keep the original base/API/identity byte order and every historic layer.
+    Each extra file must be root600, exact image-only JSON and bound to its
+    successful dual journal. No compaction, deletion or identity rewriting.
+    """
+    require(type(records) is dict and set(records) == {"api", "web"},
+            "COMPOSE_HISTORY_INVALID")
+    base = {name: records[name][:size] for name, size in (("api", 3), ("web", 2))}
+    core.normalized_layers(base, root)
+    for name, size in (("api", 3), ("web", 2)):
+        files = records[name]
+        require(type(files) is list and size <= len(files) <= 128
+                and len(files) == len(set(files)), "COMPOSE_HISTORY_INVALID")
+        for filename in files[size:]:
+            path = Path(filename)
+            match = re.fullmatch(r"qa525-" + name + r"-([a-f0-9]{40})-([a-f0-9]{64})\.json", path.name)
+            require(path.parent == STATE and match is not None,
+                    "COMPOSE_HISTORY_LAYER_UNRECOGNIZED")
+            source, digest = match.groups()
+            image = "sha256:" + digest
+            require(private_json(path) == {"services": {name: {"image": image}}},
+                    "COMPOSE_HISTORY_LAYER_NOT_IMAGE_ONLY")
+            journal = private_json(STATE / ("dual-" + source + ".json"))
+            require(journal.get("status") == "APPLIED"
+                    and journal.get("source_sha") == source
+                    and journal.get("new_images", {}).get(name) == image,
+                    "COMPOSE_HISTORY_NOT_SUCCESSFULLY_APPLIED")
+    return {name: tuple(records[name]) for name in ("api", "web")}
 
 
 
@@ -649,6 +700,8 @@ def main():
             require(result["source_sha"] == target and
                     result["release_asset_sha256"] == source["release_asset_sha256"],
                     "PHYSICAL_SIGNATURE_REVERIFICATION_FAILED")
+            if single_operator:
+                validate_package_account_defaults(Path(d) / "signed")
         for name in core.TARGETS:
             image = prepared.get(name + "_image_id")
             require(type(image) is str and core.IMAGE.fullmatch(image)
@@ -689,7 +742,7 @@ def main():
         original = adapter.metadata()
         require(set(original) == set(core.TARGETS + core.DEPENDENCIES + core.ONESHOTS),
                 "UNEXPECTED_QA_SERVICE_SET")
-        layers = core.normalized_layers(
+        layers = reviewed_layers(core,
             {name: (original[name][7] or "").split(",") for name in core.TARGETS},
             WORKDIR)
         require(all(original[name][6] == str(WORKDIR) for name in core.TARGETS),

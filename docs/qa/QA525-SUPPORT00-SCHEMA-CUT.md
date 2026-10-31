@@ -38,13 +38,17 @@ a la intervención PR813, restore/hash y revisión vigentes, fuente/digest nuevo
 nonce temporal, locks y rollback binario dual. El prepared registra schema_mode;
 no puede cruzarse entre las rutas99 y100. No se cambian flags, identidad o SMTP.
 
-## Intervención de migración separada: pendiente
+## Intervención de migración separada: implementada, pendiente de validación/ejecución
 
-Esta entrega **no ejecuta EF99→100 ni concede autoridad mediante un JSON**.
-Antes del primer uso de la ruta postDB100 falta concretar y revisar el migrador
-de un solo uso con identidad DDL, fuente firmada y objetivo EF exacto PR813.
-Debe comprobar pending migrations={solo PR813} y los99 IDs previos, conservar
-servicios/identidad y no ejecutar Program.cs con todas sus inicializaciones.
+La sola publicación de esta entrega **no ejecuta EF99→100 ni concede autoridad
+mediante un JSON**. El migrador separado `qa525-support00-migration.py` exige
+identidad DDL del contenedor original, fuente firmada y objetivo EF exacto PR813.
+Comprueba pending migrations={solo PR813} y los99 IDs previos, conserva
+servicios/identidad y no ejecuta Program.cs con sus inicializaciones.
+Sus modos de preparación y migración son acciones explícitas separadas; exige
+checkpoint G6 de menos de30min, referencia PO/revisión, nonce y journal durable.
+El manual [Actualizaciones rápidas revisadas](QA525-FAST-REVIEWED-UPDATES.md)
+describe los comandos, plantillas, instalación y recuperación.
 No usar INSERT/ALTER manual ni Down. Si la ejecución falla, conservar journal
 y detenerse; no repetir automáticamente ni restaurar destructivamente.
 
@@ -55,7 +59,7 @@ posteriores. Tras migración exitosa, comprobar EF100/esquema, dejar evidencia d
 hora real y preparar evidencia G6 postDB antes del enlace binario si lo exige el
 acta. No reusar fechas, hashes o flags de una evidencia anterior.
 
-Después: nueva release firmada del operador ya integrado, actas exactas del
+Tras CI completo: nueva release firmada del operador ya integrado, actas exactas del
 nuevo SHA, preparación y aplicación dual, health/version/OIDC y UAT de «Ver como».
 El defecto Content-Type se corrige en PR814; no confundir415 con falta de00.
 main, srv01, PR771/737/766 y datos reales permanecen fuera de alcance.

@@ -1,0 +1,50 @@
+{
+  "schema_mode": "support00_postdb",
+  "review": {
+    "source_sha": "",
+    "release_asset_sha256": "",
+    "baseline_sha": "6ff4ae0d092d4214df4ea31af484efbc969fde54",
+    "reviewed_sections": [
+      "Program.cs",
+      "UserAccounts",
+      "Keycloak/SMTP",
+      "EF/migrations",
+      "Compose/identity"
+    ],
+    "sensitive_reasons": [],
+    "no_new_ef_migrations": false,
+    "runtime_migration_flags_disabled": false,
+    "legacy_master_and_smtp_preserved": false,
+    "reviewed_at": 0,
+    "g6_archive_name": "",
+    "g6_archive_sha256": "",
+    "g6_drive_file_id": "",
+    "g6_offhost_sha256_verified": false,
+    "g6_restore_report_name": ""
+  },
+  "post_db": {
+    "source_sha": "",
+    "release_asset_sha256": "",
+    "baseline_sha": "6ff4ae0d092d4214df4ea31af484efbc969fde54",
+    "migration_id": "20261030223000_SeedSupportWorkshop00",
+    "migration_blob_sha": "8eb86e632009acd0bf252e8ea8abee1eabee6c6b",
+    "dbcontext_blob_sha": "9de850e92d9addce7f47de99c67fa052b99408c5",
+    "migration_completed_at": 0,
+    "approved_at": 0,
+    "additive_up_only": false,
+    "previous_api_forward_compatible": false,
+    "post_db_g6_archive_name": "",
+    "post_db_g6_archive_sha256": "",
+    "post_db_g6_restore_report_name": "",
+    "review_mode": "single_operator_qa",
+    "environment": "QA_SYNTHETIC",
+    "host": "glmdch",
+    "scope": "POST_PR813_API_WEB_ONLY_NO_MIGRATION",
+    "sponsor_approval_reference": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6528024401",
+    "sponsor_accepts_single_operator_risk": false,
+    "independent_human_review": false,
+    "technical_review_kind": "automated_ai",
+    "operator_name": "",
+    "technical_review_reference": ""
+  }
+}

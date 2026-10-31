@@ -170,6 +170,10 @@ class Support00Tests(unittest.TestCase):
             'Blocked': probe.Blocked, 'inspect': staticmethod(lambda *args: {
                 'status': probe.POST_DB_PASS_STATUS, 'history_count': 100, 'may_apply': False})})
         def private(path, maximum=65536):
+            if path.name == 'support00-completed.json':
+                return {'status': 'SUPPORT00_EF100_VERIFIED', 'source_sha': SRC['source_sha'],
+                        'migration_id': gate.MIGRATION_ID, 'migration_blob_sha': gate.MIGRATION_BLOB,
+                        'completed_at': record['migration_completed_at']}
             return record if path == entry.SINGLE_OPERATOR_REVIEW else fixture.receipt
         with patch.object(entry, 'private_json', side_effect=private), \
              patch.object(entry, 'validate_g6', return_value=True):

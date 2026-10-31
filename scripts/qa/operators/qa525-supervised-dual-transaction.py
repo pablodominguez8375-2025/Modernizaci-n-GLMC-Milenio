@@ -122,7 +122,8 @@ def make_override(state, source, name, image):
 
 def compose_args(workdir, base_layers, extra, service):
     require(service in TARGETS and type(base_layers) is tuple
-            and 2 <= len(base_layers) <= 3, "COMPOSE_SCOPE_INVALID")
+            and 2 <= len(base_layers) <= 128
+            and len(base_layers) == len(set(base_layers)), "COMPOSE_SCOPE_INVALID")
     args = ["compose", "--project-name", PROJECT, "--project-directory", workdir,
             "--env-file", ENV_FILE]
     for path in (*base_layers, extra):
