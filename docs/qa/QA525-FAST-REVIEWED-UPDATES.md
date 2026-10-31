@@ -162,6 +162,68 @@ migración ni borrar el journal para ocultar el estado.
    comprobar ausencia de415, contexto00 técnico, solo lectura, auditoría y bloqueo
    cruzado. Un health verde no sustituye esta aceptación funcional.
 
+## Recuperación de preparado vencido y no aplicado (#819) — solo cuando el parche esté firmado e instalado
+
+Caso real 31-10-2026 en `glmdch`: después de preparar las imágenes para
+`a184936d78e6e9ee0fa85f7be060b13a5280710e`, la cuota pública GitHub
+impidió aplicar; `prepared.json` siguió presente con estado
+`PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT`, sin journal target,
+mientras API/WEB anteriores `41d9c490d138419c7286445f37e7aeddf0d1b8d5`
+continuaron activas. El control del operador abortó con
+`VIGENCIA_RESTANTE_SEGUNDOS=-567`, `NO_APLICAR=VIGENCIA_INSUFICIENTE`.
+No es un éxito ni un rollback de una operación iniciada.
+
+**Prohibido** reescribir fechas (`reviewed_at`, `approved_at`, `expires_at`),
+reutilizar un nonce, borrar/mover manualmente `prepared.json`, modificar
+journals o recurrir a `--apply-prepared` cuando las actas han caducado.
+Tampoco ejecutar `--review-and-run` de nuevo: esa ruta no archiva
+una preparación anterior SIN journal APPLIED.
+
+La nueva operación explícita `--archive-expired-prepared` **no aplica
+ninguna imagen, no renueva actas ni toca PostgreSQL/EF100**. Solo existe
+en una versión posterior del código. **No está instalada en el lanzador
+actual de glmdch** por el hecho de existir en dev/PR; antes de cualquier
+uso, pasar por PR, CI exact-head, publicación firmada y procedimiento
+aprobado de instalación del operador actualizado desde paquete firmado
+root-owned. No descargar ni ejecutar scripts raw de una rama.
+
+Una vez que el propio operador revisado esté instalado y con la cuota y
+runtime recuperados, el paso de archivo requiere un comando explícito,
+SHA y digest del `prepared` caducado y operador real:
+
+```bash
+sudo pmgm-qa-update --archive-expired-prepared \
+  --source <SHA_PREPARED_CADUCADO> \
+  --digest <DIGEST_PREPARED_CADUCADO> \
+  --operator-name 'soporte@glmdch'
+```
+
+Bajo el lock del QA, exige el preparado/las tres actas root0600, SHA y digest,
+`schema_mode=support00_postdb`, actas **todas expiradas**, nonce de la
+autorización sin consumir, journal de target ausente, journals anteriores solo
+APPLIED, imágenes construidas existentes con identidad OCI exacta, snapshot
+de servicios idéntico al preparado, estado y salud del WEB anterior,
+capas Compose revisadas y guardas del operador único. Si no se cumplen,
+aborta sin cambiar el preparado. Solo conserva los cuatro originales en
+`review-archive-<id>`, con un manifiesto root0600 de hashes y estado
+`EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT`. Los contenedores y la BD siguen
+intactos; el archivo no equivale a revisión nueva ni permiso de aplicar.
+
+**Después** de comprobar el recibo archivado (sin volcar datos privados),
+el próximo corte debe obtener revisión técnica REAL nueva, source/CI exactos,
+release Sigstore firmada y evidencia G6 vigente; usar una sola vez el
+procedimiento normal `--review-and-run` con las referencias nuevas.
+Un parche que cambia `dev` cambia el HEAD: las imágenes preparadas para
+el SHA anterior NO deben aplicarse saltándose el gate `dev HEAD == release`.
+Se reconstruyen las imágenes para el SHA nuevo y la misma EF100 verificada,
+sin correr de nuevo la migración.
+
+Nunca utilizar el archivo como bypass de una transacción PENDING/ROLLED_BACK:
+esa condición exige reconciliación especializada. Ante cualquier `BLOCKED`,
+registrar código, runtime y archivo sin modificar el host a mano. Las
+pruebas QA/UAT autenticadas continúan pendientes aunque el controlador
+informe `DUAL_API_WEB_APPLIED`.
+
 ## Recuperación y evidencia para la siguiente sesión
 
 Conservar el recibo API histórico de98 migraciones, manifests y paquetes firmados,
