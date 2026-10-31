@@ -34,6 +34,25 @@ def packet():
 
 
 class ReviewPacketTests(unittest.TestCase):
+    def test_cli_diagnostics_preserve_static_codes_but_never_arbitrary_details(self):
+        import sys
+        with patch.dict(sys.modules, {'qa525_update_entry': entry}):
+            for module, fallback in ((update, 'UPDATE_NOT_COMPLETED'),
+                    (migration, 'MIGRATION_NOT_CONFIRMED_RECONCILE_REQUIRED')):
+                for code in ('GITHUB_API_RATE_LIMITED', 'GITHUB_API_RETRY_LATER',
+                             'GITHUB_API_HTTP_ERROR', 'GITHUB_API_UNAVAILABLE'):
+                    self.assertEqual(code, module.public_error_code(RuntimeError(code)))
+                self.assertEqual('G6_CHECKPOINT_TOO_OLD',
+                    module.public_error_code(entry.Blocked('G6_CHECKPOINT_TOO_OLD')))
+                self.assertEqual('LOCAL_STATIC_BLOCK',
+                    module.public_error_code(module.Blocked('LOCAL_STATIC_BLOCK')))
+                for exc in (RuntimeError('password=DO_NOT_EMIT_TOKEN'),
+                            entry.Blocked('not a static code: secret'),
+                            module.Blocked('not a static code: secret')):
+                    self.assertEqual(fallback, module.public_error_code(exc))
+        with patch.dict(sys.modules, {'qa525_update_entry': None}):
+            self.assertEqual('UPDATE_NOT_COMPLETED', update.public_error_code(RuntimeError('secret')))
+
     def test_github_review_must_bind_owner_exact_sha_digest_and_explicit_ai_kind(self):
         import json
         source = {'source_sha': SHA, 'release_asset_sha256': DIGEST}

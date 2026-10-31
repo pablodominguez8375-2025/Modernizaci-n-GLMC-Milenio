@@ -32,6 +32,20 @@ def require(value, code):
         raise Blocked(code)
 
 
+def public_error_code(exc):
+    try:
+        code = str(exc) if isinstance(exc, Blocked) else None
+        entry = sys.modules.get('qa525_update_entry')
+        if code is None and entry is not None:
+            code = entry.public_failure_code(exc)
+        if (type(code) is str and code != 'SUPERVISED_APPLY_NOT_COMPLETED'
+                and re.fullmatch(r'[A-Z][A-Z0-9_]{2,100}', code)):
+            return code
+    except Exception:
+        pass
+    return 'MIGRATION_NOT_CONFIRMED_RECONCILE_REQUIRED'
+
+
 def approval_contract(record, source, now):
     require(type(record) is dict and set(record) == FIELDS, 'MIGRATION_APPROVAL_FIELDS_INVALID')
     require(record['source_sha'] == source.get('source_sha')
@@ -262,6 +276,6 @@ if __name__ == '__main__':
         print(json.dumps(main(), sort_keys=True))
     except Exception as exc:
         print(json.dumps({'status': 'BLOCKED_QA525_SUPPORT00_MIGRATION',
-            'code': str(exc) if isinstance(exc, Blocked) else 'MIGRATION_NOT_CONFIRMED_RECONCILE_REQUIRED',
+            'code': public_error_code(exc),
             'may_apply': False}, sort_keys=True))
         raise SystemExit(2)
