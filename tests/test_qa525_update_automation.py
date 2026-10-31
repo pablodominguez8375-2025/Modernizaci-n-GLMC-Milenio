@@ -337,6 +337,149 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
             self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
 
 
+
+class InterruptedArchiveInspectionTests(unittest.TestCase):
+    """No Docker/SSH: inspect a durable crash marker and 4 preserved records."""
+
+    def setUp(self):
+        import hashlib
+        import json
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.state = root / 'state'
+        self.state.mkdir(mode=0o700)
+        self.paths = (self.state / 'prepared.json', root / 'review.json',
+                      root / 'post.json', root / 'approval.json')
+        self.approval = types.SimpleNamespace(APPROVAL=self.paths[3])
+        self.entry = types.SimpleNamespace(
+            STATE=self.state, REVIEW=self.paths[1],
+            SINGLE_OPERATOR_REVIEW=self.paths[2],
+            trusted=lambda path, directory=False: (
+                self.assertTrue(path.is_dir()) if directory else None),
+            private_json=lambda p: json.loads(p.read_text()))
+        for index, p in enumerate(self.paths):
+            p.write_text(json.dumps({'ordinal': index}, sort_keys=True))
+        self.before = {p.name: p.read_bytes() for p in self.paths}
+        self.hashes = {name: hashlib.sha256(data).hexdigest()
+                       for name, data in self.before.items()}
+        self.archive = self.state / ('review-archive-' + 'e' * 24)
+        self.archive.mkdir(mode=0o700)
+        self.archive.chmod(0o700)
+        self.marker = self.state / 'expired-prepared-archive-pending.json'
+        self.marker.write_text(json.dumps({
+            'status': 'ARCHIVE_INCOMPLETE_NO_DEPLOYMENT',
+            'source_sha': SHA, 'source_asset_sha256': DIGEST,
+            'archive_name': self.archive.name,
+            'files_sha256': self.hashes}, sort_keys=True))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def inspect(self):
+        return update.inspect_pending_archive(self.entry, self.approval)
+
+    def assert_immutable(self, result, expected, originals, archives):
+        self.assertEqual(expected, result['status'])
+        self.assertIs(result['may_apply'], False)
+        self.assertIs(result['may_reconcile_automatically'], False)
+        self.assertEqual(originals, result['original_files'])
+        self.assertEqual(archives, result['archived_files'])
+        self.assertTrue(self.marker.is_file())
+        for path in self.paths:
+            stored = path if path.exists() else self.archive / path.name
+            self.assertEqual(self.before[path.name], stored.read_bytes())
+
+    def move(self, *indexes):
+        for index in indexes:
+            self.paths[index].rename(self.archive / self.paths[index].name)
+
+    def receipt(self):
+        import json
+        receipt = {'status': 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                   'source_sha': SHA, 'source_asset_sha256': DIGEST,
+                   'files_sha256': self.hashes, 'operator': 'soporte@glmdch'}
+        (self.archive / 'expired-prepared-archive.json').write_text(
+            json.dumps(receipt, sort_keys=True))
+
+    def test_absent_marker_does_not_claim_archive_complete(self):
+        self.marker.unlink()
+        result = self.inspect()
+        self.assertEqual('NO_PENDING_ARCHIVE_NOT_A_RECOVERY_AUTHORIZATION',
+                         result['status'])
+        self.assertIs(result['may_apply'], False)
+
+    def test_before_first_move_is_blocked_for_manual_reconciliation(self):
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_NOT_MOVED_MANUAL_RECONCILIATION', 4, 0)
+
+    def test_partial_move_is_classified_without_restoring_or_deploying(self):
+        self.move(0, 1)
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_PARTIALLY_MOVED_MANUAL_RECONCILIATION', 2, 2)
+        with self.assertRaises(update.Blocked):
+            update.require_reconciled_archive(self.entry)
+
+    def test_all_moved_but_receipt_not_persisted(self):
+        self.move(0, 1, 2, 3)
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_ALL_MOVED_NO_RECEIPT_MANUAL_RECONCILIATION',
+                              0, 4)
+
+    def test_all_moved_with_valid_receipt_and_stale_marker(self):
+        self.move(0, 1, 2, 3)
+        self.receipt()
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_RECORDED_PENDING_MARKER_MANUAL_RECONCILIATION',
+                              0, 4)
+
+    def test_receipt_in_incomplete_archive_blocks(self):
+        self.move(0, 1)
+        self.receipt()
+        with self.assertRaisesRegex(update.Blocked,
+                                    'RECOVERY_RECEIPT_WITH_PARTIAL_FILES'):
+            self.inspect()
+
+    def test_tampered_files_missing_files_and_collisions_fail_closed(self):
+        self.paths[0].write_text('{"tampered":true}')
+        with self.assertRaisesRegex(update.Blocked, 'RECOVERY_ARCHIVE_HASH_MISMATCH'):
+            self.inspect()
+        self.paths[0].write_bytes(self.before[self.paths[0].name])
+        self.paths[0].unlink()
+        with self.assertRaisesRegex(update.Blocked,
+                                    'RECOVERY_DUPLICATE_OR_MISSING_EVIDENCE'):
+            self.inspect()
+        self.paths[0].write_bytes(self.before[self.paths[0].name])
+        self.move(0)
+        self.paths[0].write_bytes(self.before[self.paths[0].name])
+        with self.assertRaisesRegex(update.Blocked,
+                                    'RECOVERY_DUPLICATE_OR_MISSING_EVIDENCE'):
+            self.inspect()
+
+    def test_marker_symlink_or_bad_archive_and_forged_receipt_fail_closed(self):
+        self.marker.unlink()
+        self.marker.symlink_to(self.archive / 'absent')
+        with self.assertRaises((ValueError, OSError, update.Blocked)):
+            self.inspect()
+        self.marker.unlink()
+        import json
+        marker = {'status': 'ARCHIVE_INCOMPLETE_NO_DEPLOYMENT',
+                  'source_sha': SHA, 'source_asset_sha256': DIGEST,
+                  'archive_name': '../bad', 'files_sha256': self.hashes}
+        self.marker.write_text(json.dumps(marker))
+        with self.assertRaisesRegex(update.Blocked, 'RECOVERY_PENDING_MARKER_INVALID'):
+            self.inspect()
+        marker['archive_name'] = self.archive.name
+        self.marker.write_text(json.dumps(marker))
+        self.move(0, 1, 2, 3)
+        self.receipt()
+        receipt_path = self.archive / 'expired-prepared-archive.json'
+        claim = json.loads(receipt_path.read_text())
+        claim['operator'] = 'untrusted'
+        receipt_path.write_text(json.dumps(claim))
+        with self.assertRaisesRegex(update.Blocked, 'RECOVERY_ARCHIVE_RECEIPT_INVALID'):
+            self.inspect()
+
+
 class RepeatedLayersTests(unittest.TestCase):
     def setUp(self):
         self.root = entry.WORKDIR
