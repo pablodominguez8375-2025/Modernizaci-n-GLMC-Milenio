@@ -21,6 +21,8 @@ on:
       - "tests/test_qa525_launcher_upgrade_inspect.py"
       - "scripts/qa/operators/qa525-launcher-signed-preflight.py"
       - "tests/test_qa525_launcher_signed_preflight.py"
+      - "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+      - "tests/test_qa525_launcher_replacement_contract.py"
       - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   pull_request:
@@ -43,6 +45,8 @@ on:
       - "tests/test_qa525_launcher_upgrade_inspect.py"
       - "scripts/qa/operators/qa525-launcher-signed-preflight.py"
       - "tests/test_qa525_launcher_signed_preflight.py"
+      - "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+      - "tests/test_qa525_launcher_replacement_contract.py"
       - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   workflow_dispatch:
@@ -79,6 +83,8 @@ jobs:
           python -m py_compile tests/test_qa525_launcher_upgrade_inspect.py
           python -m py_compile scripts/qa/operators/qa525-launcher-signed-preflight.py
           python -m py_compile tests/test_qa525_launcher_signed_preflight.py
+          python -m py_compile scripts/qa/operators/qa525-launcher-replacement-contract.py
+          python -m py_compile tests/test_qa525_launcher_replacement_contract.py
       - name: All dual transaction regressions, fake Docker only
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
       - name: Offline review, migration and supervision regressions
@@ -95,6 +101,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_qa525_launcher_upgrade_inspect.py' -v
       - name: Signed-release launcher preflight regressions, fake host and signature
         run: python -m unittest discover -s tests -p 'test_qa525_launcher_signed_preflight.py' -v
+      - name: QA525 launcher approved cut and crash-state policy (no host, no writes)
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_replacement_contract.py' -v
       - name: Ensure no unattended deployment entrypoint
         run: |
           python - <<'PY'
