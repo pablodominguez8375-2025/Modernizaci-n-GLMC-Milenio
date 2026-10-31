@@ -17,6 +17,8 @@ on:
       - "scripts/qa/operators/support00-migrator/**"
       - "tests/test_qa525_support00_schema.py"
       - "tests/test_qa525_update_automation.py"
+      - "scripts/qa/operators/qa525-launcher-upgrade-inspect.py"
+      - "tests/test_qa525_launcher_upgrade_inspect.py"
       - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   pull_request:
@@ -35,6 +37,8 @@ on:
       - "scripts/qa/operators/support00-migrator/**"
       - "tests/test_qa525_support00_schema.py"
       - "tests/test_qa525_update_automation.py"
+      - "scripts/qa/operators/qa525-launcher-upgrade-inspect.py"
+      - "tests/test_qa525_launcher_upgrade_inspect.py"
       - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   workflow_dispatch:
@@ -67,6 +71,8 @@ jobs:
           python -m py_compile scripts/qa/operators/qa525-support00-post-db-readonly.py
           python -m py_compile tests/test_qa525_support00_schema.py
           python -m py_compile tests/test_qa525_update_automation.py
+          python -m py_compile scripts/qa/operators/qa525-launcher-upgrade-inspect.py
+          python -m py_compile tests/test_qa525_launcher_upgrade_inspect.py
       - name: All dual transaction regressions, fake Docker only
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
       - name: Offline review, migration and supervision regressions
@@ -79,6 +85,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_qa525_support00_schema.py' -v
       - name: Reusable controller, replay, quota redaction and Compose history
         run: python -m unittest discover -s tests -p 'test_qa525_update_automation.py' -v
+      - name: Read-only launcher inspection adversarial tests, no host access
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_upgrade_inspect.py' -v
       - name: Ensure no unattended deployment entrypoint
         run: |
           python - <<'PY'
