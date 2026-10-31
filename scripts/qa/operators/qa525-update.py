@@ -24,6 +24,20 @@ def require(value, code):
         raise Blocked(code)
 
 
+def public_error_code(exc):
+    try:
+        code = str(exc) if isinstance(exc, Blocked) else None
+        entry = sys.modules.get('qa525_update_entry')
+        if code is None and entry is not None:
+            code = entry.public_failure_code(exc)
+        if (type(code) is str and code != 'SUPERVISED_APPLY_NOT_COMPLETED'
+                and re.fullmatch(r'[A-Z][A-Z0-9_]{2,100}', code)):
+            return code
+    except Exception:
+        pass
+    return 'UPDATE_NOT_COMPLETED'
+
+
 def trusted(path):
     for item in (path, *path.parents):
         info = item.lstat()
@@ -307,6 +321,6 @@ if __name__ == '__main__':
         print(json.dumps(main(), sort_keys=True))
     except Exception as exc:
         print(json.dumps({'status': 'BLOCKED_QA525_UPDATE',
-                          'code': str(exc) if isinstance(exc, Blocked) else 'UPDATE_NOT_COMPLETED',
+                          'code': public_error_code(exc),
                           'may_apply': False}, sort_keys=True))
         raise SystemExit(2)
