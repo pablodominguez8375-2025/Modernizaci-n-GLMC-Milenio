@@ -246,6 +246,147 @@ def install_review_packet(entry, packet, modules, *, verified=None):
     return support00
 
 
+
+def expired_prepared_archive_contract(prepared, review, post, cut, *, sha, digest,
+                                      baseline, now, journals, nonce_consumed):
+    """Pure, fail-closed archive decision. This never grants deploy authority."""
+    require(type(prepared) is dict and type(review) is dict
+            and type(post) is dict and type(cut) is dict,
+            'RECOVERY_RECORDS_INVALID')
+    require(type(sha) is str and re.fullmatch(r'[a-f0-9]{40}', sha)
+            and type(digest) is str and re.fullmatch(r'sha256:[a-f0-9]{64}', digest),
+            'RECOVERY_CUT_INVALID')
+    require(prepared.get('status') == 'PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT'
+            and prepared.get('source_sha') == sha
+            and prepared.get('source_asset_sha256') == digest
+            and prepared.get('schema_mode') == 'support00_postdb'
+            and prepared.get('review_mode') == 'single_operator_qa'
+            and prepared.get('images_built') is True
+            and prepared.get('services_unchanged') is True
+            and prepared.get('may_apply') is False
+            and prepared.get('baseline') == baseline,
+            'RECOVERY_PREPARED_OR_BASELINE_INVALID')
+    require(review.get('source_sha') == sha
+            and review.get('release_asset_sha256') == digest
+            and post.get('source_sha') == sha
+            and post.get('release_asset_sha256') == digest
+            and post.get('review_mode') == 'single_operator_qa'
+            and cut.get('target_sha') == sha
+            and cut.get('release_asset_sha256') == digest
+            and cut.get('operator_reviewed') is True
+            and cut.get('scope') == 'LOCAL_SUPERVISION_MATCH_ONLY_NO_APPLY'
+            and cut.get('action') == 'first-qa-api-web-supervised'
+            and cut.get('environment') == 'QA_SYNTHETIC',
+            'RECOVERY_REVIEWS_NOT_THIS_CUT')
+    nonce = cut.get('nonce')
+    require(type(nonce) is str and re.fullmatch(r'[0-9a-f]{64}', nonce)
+            and nonce_consumed is False, 'RECOVERY_NONCE_CONSUMED_OR_INVALID')
+    times = (review.get('reviewed_at'), post.get('approved_at'),
+             cut.get('issued_at'), cut.get('expires_at'))
+    require(all(type(t) is int and t >= 0 for t in times)
+            and times[3] > times[2]
+            and times[3] <= times[2] + 1800
+            and now >= max(times[0] + 1800, times[1] + 1800, times[3]),
+            'RECOVERY_REVIEW_NOT_FULLY_EXPIRED')
+    require(type(journals) in (tuple, list)
+            and all(type(j) is dict and j.get('status') == 'APPLIED'
+                    and j.get('source_sha') != sha for j in journals),
+            'RECOVERY_JOURNAL_REQUIRES_RECONCILIATION')
+    return True
+
+
+def archive_expired_prepared(entry, args, modules):
+    """Archive an unconsumed, expired QA preparation; no image/apply changes.
+
+    Only a NEW exact-HEAD reviewed release may be prepared afterwards.
+    This action never renews timestamps, claims backup freshness or consumes
+    the old nonce. The original artifacts remain in root-owned history.
+    """
+    import hashlib
+    core, build, approval, _, _, adapter, _, _ = modules
+    require(args.source and re.fullmatch(r'[a-f0-9]{40}', args.source)
+            and args.digest and re.fullmatch(r'sha256:[a-f0-9]{64}', args.digest)
+            and args.operator_name == 'soporte@glmdch',
+            'RECOVERY_EXPLICIT_TARGET_AND_OPERATOR_REQUIRED')
+    entry.single_operator_runtime(adapter.docker)
+    live = adapter.metadata()
+    require(all(live[n][2] == 'running' for n in core.TARGETS),
+            'RECOVERY_SERVICES_NOT_RUNNING')
+    entry.reviewed_layers(core, {n: live[n][7].split(',') for n in core.TARGETS},
+                          entry.WORKDIR)
+    receipt = entry.STATE / 'prepared.json'
+    prepared = entry.private_json(receipt)
+    review = entry.private_json(entry.REVIEW)
+    post = entry.private_json(entry.SINGLE_OPERATOR_REVIEW)
+    cut = entry.private_json(approval.APPROVAL)
+    target_journal = entry.STATE / ('dual-' + args.source + '.json')
+    require(not target_journal.exists() and not target_journal.is_symlink(),
+            'RECOVERY_TARGET_JOURNAL_PRESENT')
+    journals = [entry.private_json(p) for p in entry.STATE.glob('dual-*.json')]
+    nonce = cut.get('nonce', '')
+    consumed = entry.STATE / ('approval-consumed-' + nonce)
+    before = build.snapshot(adapter.docker)
+    expired_prepared_archive_contract(
+        prepared, review, post, cut, sha=args.source, digest=args.digest,
+        baseline=before, now=int(time.time()), journals=journals,
+        nonce_consumed=(consumed.exists() or consumed.is_symlink()))
+    for name in core.TARGETS:
+        image = prepared.get(name + '_image_id')
+        require(type(image) is str and re.fullmatch(r'sha256:[a-f0-9]{64}', image)
+                and adapter.docker(['image', 'inspect', '--format', '{{.Id}}', image]) == image
+                and adapter.docker(['image', 'inspect', '--format',
+                    '{{index .Config.Labels "org.opencontainers.image.revision"}}',
+                    image]) == args.source,
+                'RECOVERY_PREBUILT_IMAGE_IDENTITY_CHANGED')
+    old_sha = adapter.docker(['image', 'inspect', '--format',
+        '{{index .Config.Labels "org.opencontainers.image.revision"}}',
+        live['web'][1]])
+    require(type(old_sha) is str and re.fullmatch(r'[a-f0-9]{40}', old_sha)
+            and old_sha != args.source and entry.health(old_sha),
+            'RECOVERY_OLD_WEB_NOT_HEALTHY')
+    require(adapter.metadata() == live and build.snapshot(adapter.docker) == before,
+            'RECOVERY_RUNTIME_DRIFT')
+    paths = [receipt, entry.REVIEW, entry.SINGLE_OPERATOR_REVIEW, approval.APPROVAL]
+    hashes = {}
+    for p in paths:
+        entry.private_json(p)
+        with p.open('rb') as stream:
+            hashes[p.name] = hashlib.file_digest(stream, 'sha256').hexdigest()
+    archive = entry.STATE / ('review-archive-' + secrets.token_hex(12))
+    archive.mkdir(mode=0o700)
+    moved = []
+    try:
+        for p in paths:
+            destination = archive / p.name
+            p.rename(destination)
+            moved.append((p, destination))
+        with os.fdopen(os.open(archive / 'expired-prepared-archive.json',
+                             os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                             0o600), 'w') as stream:
+            json.dump({'status': 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                       'source_sha': args.source,
+                       'source_asset_sha256': args.digest,
+                       'last_running_web_sha': old_sha,
+                       'archived_at': int(time.time()),
+                       'files_sha256': hashes,
+                       'operator': args.operator_name}, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        for directory in (archive, entry.STATE):
+            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+    except BaseException:
+        for p, archived in reversed(moved):
+            if archived.exists() and not p.exists() and not p.is_symlink():
+                archived.rename(p)
+        raise
+    return {'status': 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+            'source_sha': args.source, 'may_apply': False}
+
+
 def invoke(entry, action, support00):
     previous = sys.argv
     sys.argv = [str(HERE / 'qa525-supervised-dual-entrypoint.py'), action, '--single-operator-qa']
@@ -263,6 +404,7 @@ def main(argv=None):
     choice.add_argument('--status', action='store_true')
     choice.add_argument('--run-reviewed', type=Path, metavar='ROOT_REVIEW_PACKET')
     choice.add_argument('--apply-prepared', action='store_true')
+    choice.add_argument('--archive-expired-prepared', action='store_true')
     choice.add_argument('--install-launcher', action='store_true')
     choice.add_argument('--review-and-run', action='store_true')
     parser.add_argument('--source')
@@ -297,6 +439,9 @@ def main(argv=None):
                 'services_running': all(live[n][2] == 'running' for n in modules[0].TARGETS),
                 'prepared_exists': (entry.STATE / 'prepared.json').exists(),
                 'may_apply': False}
+    if args.archive_expired_prepared:
+        with build.exclusive():
+            return archive_expired_prepared(entry, args, modules)
     if args.apply_prepared:
         prepared = entry.private_json(entry.STATE / 'prepared.json')
         mode = prepared.get('schema_mode', 'member_history_postdb')
