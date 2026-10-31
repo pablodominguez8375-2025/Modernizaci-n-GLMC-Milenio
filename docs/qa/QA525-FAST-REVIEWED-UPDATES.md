@@ -262,3 +262,43 @@ producción, PR771/737/766 ni datos reales.
 El operador del PR #820 crea el marcador privado `expired-prepared-archive-pending.json` en el directorio QA525 **antes** de mover `prepared.json` y las tres actas a `review-archive-*`. Lo escribe con `root:root 0600`, incluye SHA, digest, nombre del archivo e hashes de las evidencias, y sincroniza a disco. Al finalizar el archivo completo y su recibo, sincroniza los directorios y quita el marcador. Si ocurre una excepción Python normal durante los movimientos, revierte los archivos; una prueba hermética inyecta un error en el segundo renombrado y confirma integridad y limpieza. Si hay `SIGKILL`, caída de energía o rollback incompleto, debe quedar el marcador y el próximo intento `--review-and-run`, `--run-reviewed`, `--apply-prepared` o `--archive-expired-prepared` **se bloquea** con `RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION` mientras el marcador esté presente. `--status` expone `archive_reconciliation_required` sin cambiar la máquina.
 
 **El marcador NO es una aprobación, un journal APPLIED ni un permiso para continuar.** Jamás borrar manualmente ese marcador, usar otro launcher o fingir un prepared exitoso: inspeccionar originales y archivo parcial, validar hashes y journals bajo el procedimiento de recuperación previamente revisado. El PR todavía está DRAFT. La prueba de excepción no equivale a simulación real de pérdida súbita de energía ni prueba el funcionamiento en glmdch; se exige revisión adversarial independiente y liberación firmada antes del uso físico. La nueva actualización de QA también requiere resolver el reemplazo firmado del launcher inmutable actualmente fijado (O_EXCL), verificación de G6 y nueva aprobación válida.
+
+## Diagnóstico de interrupción del archivado, sólo lectura (#819/#820)
+
+El operador firmado actualizado (NO el instalador antiguo) incorporará:
+
+```text
+sudo pmgm-qa-update --inspect-pending-archive
+```
+
+El comando usa el lock exclusivo existente, no consulta Docker, no modifica
+actas, no desarchiva ni elimina el marcador y devuelve `may_apply=false` y
+`may_reconcile_automatically=false` sin excepción. Ante el marcador
+`expired-prepared-archive-pending.json`, compara los SHA256 originales
+contra los cuatro archivos entre sus ubicaciones iniciales y archivo
+root-owned privado. Rechaza nombres, digest o receipts manipulados, symlinks,
+duplicaciones, ausencias, colisiones y hash divergentes. Clasifica:
+
+- `ARCHIVE_NOT_MOVED_MANUAL_RECONCILIATION`: todos los originales presentes.
+- `ARCHIVE_PARTIALLY_MOVED_MANUAL_RECONCILIATION`: mezcla no ambigua.
+- `ARCHIVE_ALL_MOVED_NO_RECEIPT_MANUAL_RECONCILIATION`: cuatro movidos.
+- `ARCHIVE_RECORDED_PENDING_MARKER_MANUAL_RECONCILIATION`: los cuatro movidos,
+  acta de archivo válida pero marcador no despejado.
+- `NO_PENDING_ARCHIVE_NOT_A_RECOVERY_AUTHORIZATION`: ausencia del marcador,
+  **sin afirmar** que no existe otra falla o que el upgrade fue seguro.
+
+Ante fallo o ambigüedad responde `BLOCKED_QA525_UPDATE`; nunca recomienda
+borrar el marcador ni autoriza replay. Cualquier reconciliación posterior
+necesita acta, revisión independiente del estado y procedimiento supervisado
+separado. No hay comando automático de reparación.
+
+Las ocho regresiones nuevas de
+`tests/test_qa525_update_automation.py` simulan esos estados con
+archivos temporales; no usan SSH, Docker ni el servidor. Se ejecutan en
+`QA525 supervised API WEB dual transaction (hermetic)`. La CI tiene que ser
+SUCCESS en el HEAD exacto de PR #820 antes de confiar en su entrega.
+
+**Importante:** hasta que una publicación firmada y la sustitución auditada
+del launcher sean autorizadas en `glmdch`, este comando existe sólo en GitHub.
+No se debe pegar código crudo de repositorio como root para obtenerlo.
+
