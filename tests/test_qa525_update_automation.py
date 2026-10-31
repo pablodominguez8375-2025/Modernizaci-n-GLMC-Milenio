@@ -275,7 +275,8 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
             args = types.SimpleNamespace(source=SHA, digest=DIGEST,
                                          operator_name='soporte@glmdch')
             modules = [core_mod, build, approval_mod, None, None, adapter, None, None]
-            with patch.object(update, 'invoke', side_effect=AssertionError('must not apply')):
+            with patch.object(update, 'invoke', side_effect=AssertionError('must not apply')), \
+                 patch.object(update.time, 'time', return_value=NOW):
                 result = update.archive_expired_prepared(e, args, modules)
             self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT', result['status'])
             archives = list(state.glob('review-archive-*'))
