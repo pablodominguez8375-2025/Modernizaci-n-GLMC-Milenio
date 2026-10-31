@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import InstitutionalIcon from './InstitutionalIcon'
+import { describeBuild, type BuildInfoInput } from './buildInfo'
 import { helpTopics, searchGuides, visibleGuides, type HelpAccess, type HelpGuide, type HelpTarget, type HelpTopic } from './help/helpGuides'
 
 type Props = {
@@ -7,6 +8,8 @@ type Props = {
   onOpenView?: (view: HelpTarget) => void
   /** Pantallas que esta persona puede abrir; un destino no incluido no muestra «Llévame ahí». */
   canOpen?: (view: HelpTarget) => boolean
+  /** Datos de la compilación para «Acerca de esta versión». */
+  build?: BuildInfoInput
 }
 
 const topicIcon: Record<HelpTopic, 'search' | 'member' | 'lodge' | 'secretariat' | 'settings'> = {
@@ -14,7 +17,7 @@ const topicIcon: Record<HelpTopic, 'search' | 'member' | 'lodge' | 'secretariat'
 }
 
 /** Centro de ayuda (etapa 1): guías paso a paso, con buscador, según el cargo de la persona. Sin pestañas: una lista y, al elegir, una guía con «← Volver a Ayuda». */
-export default function HelpCenterPage({ access, onOpenView, canOpen }: Props) {
+export default function HelpCenterPage({ access, onOpenView, canOpen, build }: Props) {
   const [query, setQuery] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const guides = useMemo(() => visibleGuides(access), [access])
@@ -61,7 +64,15 @@ export default function HelpCenterPage({ access, onOpenView, canOpen }: Props) {
             <div className="section-hub-grid" role="list">{list.map(guide => <GuideCard key={guide.id} guide={guide} onChoose={choose} />)}</div>
           </section>
         })}
+    <AboutBuild build={build} />
   </section>
+}
+
+function AboutBuild({ build }: { build?: BuildInfoInput }) {
+  if (!build) return null
+  return <aside className="help-about" aria-labelledby="ayuda-acerca"><h2 id="ayuda-acerca">Acerca de esta versión</h2>
+    <dl>{describeBuild(build).map(row => <div key={row.label}><dt>{row.label}</dt><dd>{row.value}</dd></div>)}</dl>
+  </aside>
 }
 
 function GuideCard({ guide, onChoose, showTopic }: { guide: HelpGuide; onChoose: (guide: HelpGuide) => void; showTopic?: boolean }) {
