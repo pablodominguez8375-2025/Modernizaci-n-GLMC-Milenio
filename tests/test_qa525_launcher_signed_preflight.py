@@ -1,5 +1,6 @@
 """No-host tests for exact-dev Sigstore launcher replacement preflight."""
 import ast
+import hashlib
 import importlib.util
 from pathlib import Path
 import os
@@ -51,7 +52,9 @@ class SignedLauncherPreflightTests(unittest.TestCase):
                                          return_value=True)
         self.private_guard = patch.object(preflight, "private_stage_parent",
                                           return_value=True)
-        self.hash_guard = patch.object(preflight, "stable_hash", return_value=OPER)
+        self.hash_guard = patch.object(preflight, "stable_hash",
+                                       side_effect=lambda path, maximum=2_000_000:
+                                       path.read_bytes())
         for change in (self.host, self.hostname, self.source_guard,
                        self.private_guard, self.hash_guard):
             change.start()
@@ -62,6 +65,9 @@ class SignedLauncherPreflightTests(unittest.TestCase):
         file = path / preflight.CANDIDATE
         file.parent.mkdir(parents=True)
         file.write_bytes(OPER)
+        (path / "MANIFEST.sha256").write_text(
+            hashlib.sha256(OPER).hexdigest() + "  ./" +
+            preflight.CANDIDATE.as_posix() + "\n")
         return {
             "status": "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
             "scope": self.signer.SCOPE,
@@ -86,7 +92,7 @@ class SignedLauncherPreflightTests(unittest.TestCase):
         self.assertIs(result["replacement_applied"], False)
         self.assertEqual(2, self.inspector.inspect.call_count)
         self.signer.verify_current.assert_called_once()
-        self.signer.staging.verify_manifest.assert_called_once()
+        self.assertEqual(2, self.signer.staging.verify_manifest.call_count)
         self.assertEqual([], list(self.parent.iterdir()))
 
     def test_old_launcher_rejected_before_signature_download(self):
@@ -131,11 +137,33 @@ class SignedLauncherPreflightTests(unittest.TestCase):
         self.assertEqual([], list(self.parent.iterdir()))
 
     def test_candidate_missing_recovery_command_blocks(self):
-        with patch.object(preflight, "stable_hash",
-                          return_value=b"--status --apply-prepared"):
-            with self.assertRaisesRegex(preflight.Blocked,
-                                        "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING"):
-                self.check()
+        tampered = b"--status --apply-prepared"
+        def stage_missing_flag(package):
+            self.valid_signed_stage(package)
+            file = package / preflight.CANDIDATE
+            file.write_bytes(tampered)
+            (package / "MANIFEST.sha256").write_text(
+                hashlib.sha256(tampered).hexdigest() + "  ./" +
+                preflight.CANDIDATE.as_posix() + "\n")
+            return {"status": "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
+                    "scope": self.signer.SCOPE, "source_sha": SHA,
+                    "release_asset_sha256": DIGEST}
+        self.signer.verify_current.side_effect = stage_missing_flag
+        with self.assertRaisesRegex(preflight.Blocked,
+                                    "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING"):
+            self.check()
+
+    def test_manifest_claim_mismatch_is_rejected_even_if_verifier_is_mocked(self):
+        def staged_bad_manifest(package):
+            result = self.valid_signed_stage(package)
+            (package / "MANIFEST.sha256").write_text(
+                "0" * 64 + "  ./" + preflight.CANDIDATE.as_posix() + "\n")
+            return result
+        self.signer.verify_current.side_effect = staged_bad_manifest
+        with self.assertRaisesRegex(preflight.Blocked,
+                                    "PREFLIGHT_OPERATOR_SIGNED_MANIFEST_MISMATCH"):
+            self.check()
+        self.assertEqual([], list(self.parent.iterdir()))
 
     def test_launcher_changed_during_download_blocks(self):
         new = dict(OLD, current_launcher_sha256="e" * 64)
