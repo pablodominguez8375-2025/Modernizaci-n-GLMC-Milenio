@@ -159,6 +159,20 @@ def signed_candidate_preflight(inspector, signed, *, stage_parent=STATE):
         signed.staging.verify_manifest(package, sha)
         candidate = package / CANDIDATE
         data = stable_hash(candidate)
+        observed = hashlib.sha256(data).hexdigest()
+        manifest_raw = stable_hash(package / "MANIFEST.sha256", maximum=5_000_000)
+        try:
+            manifest_lines = manifest_raw.decode("utf-8").splitlines()
+        except UnicodeDecodeError:
+            raise Blocked("PREFLIGHT_SIGNED_MANIFEST_ENCODING_INVALID") from None
+        exact_member = "./" + CANDIDATE.as_posix()
+        digest_lines = [line for line in manifest_lines
+                        if line.endswith("  " + exact_member)]
+        require(len(digest_lines) == 1
+                and digest_lines[0] == observed + "  " + exact_member,
+                "PREFLIGHT_OPERATOR_SIGNED_MANIFEST_MISMATCH")
+        # Ensure both the manifest and candidate remained valid on re-read.
+        signed.staging.verify_manifest(package, sha)
         try:
             decoded = data.decode("utf-8")
         except UnicodeDecodeError:
@@ -179,7 +193,7 @@ def signed_candidate_preflight(inspector, signed, *, stage_parent=STATE):
             "scope": SCOPE,
             "source_sha": sha,
             "release_asset_sha256": digest,
-            "candidate_operator_sha256": hashlib.sha256(data).hexdigest(),
+            "candidate_operator_sha256": observed,
             "old_launcher_sha256": old_identity[0],
             "old_operator_sha256": old_identity[1],
             "sigstore_verified_in_this_operation": True,
