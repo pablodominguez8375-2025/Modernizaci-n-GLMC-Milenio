@@ -181,6 +181,23 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
         return update.expired_prepared_archive_contract(
             self.prepared, self.review, self.post, self.cut, **params)
 
+    def test_unfinished_archive_marker_blocks_all_followup_actions(self):
+        with tempfile.TemporaryDirectory() as td:
+            state = Path(td)
+            e = types.SimpleNamespace(STATE=state)
+            marker = state / 'expired-prepared-archive-pending.json'
+            marker.write_text('{"status":"ARCHIVE_INCOMPLETE_NO_DEPLOYMENT"}')
+            with self.assertRaisesRegex(update.Blocked,
+                                        'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION'):
+                update.require_reconciled_archive(e)
+            marker.unlink()
+            marker.symlink_to(state / 'missing-intent')
+            with self.assertRaisesRegex(update.Blocked,
+                                        'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION'):
+                update.require_reconciled_archive(e)
+            marker.unlink()
+            update.require_reconciled_archive(e)
+
     def test_only_fully_expired_target_with_unconsumed_nonce_is_archivable(self):
         self.assertTrue(self.contract())
         self.cut['expires_at'] = NOW + 1
@@ -286,6 +303,7 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
             for name, bytes_before in before.items():
                 self.assertEqual(bytes_before, (archives[0] / name).read_bytes())
             self.assertFalse((state / 'prepared.json').exists())
+            self.assertFalse((state / 'expired-prepared-archive-pending.json').exists())
             self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
 
             # Recreate the same expired prepared for an adversarial failed
@@ -313,6 +331,7 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
                     update.archive_expired_prepared(e, args, modules)
             self.assertTrue(failure['injected'])
             self.assertFalse(list(state.glob('review-archive-*')))
+            self.assertFalse((state / 'expired-prepared-archive-pending.json').exists())
             for path in originals:
                 self.assertEqual(before[path.name], path.read_bytes())
             self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
