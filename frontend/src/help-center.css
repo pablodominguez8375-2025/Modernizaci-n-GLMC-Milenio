@@ -22,3 +22,9 @@
 .topbar-help { display: inline-flex; align-items: center; gap: .4rem; min-height: 2.25rem; padding: 0 .75rem; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(255,255,255,.1); color: #efd99b; font-weight: 700; font-size: .95rem; cursor: pointer; }
 .topbar-help:hover, .topbar-help:focus-visible, .topbar-help.is-active { background: #efd99b; color: var(--navy, #06148E); }
 @media (max-width: 640px) { .topbar-help { padding: 0; width: 2.25rem; justify-content: center; } .topbar-help-label { display: none; } }
+.help-about{margin-top:1.5rem;padding:.75rem 1rem;border:1px solid var(--line,#d6d9e0);border-radius:.5rem;background:#f7f9fc}
+.help-about h2{margin:0 0 .5rem;font-size:1rem}
+.help-about dl{margin:0;display:grid;gap:.25rem}
+.help-about dl>div{display:flex;flex-wrap:wrap;gap:.25rem .75rem}
+.help-about dt{font-weight:700;min-width:5rem}
+.help-about dd{margin:0;overflow-wrap:anywhere}

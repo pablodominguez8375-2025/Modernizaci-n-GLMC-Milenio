@@ -398,7 +398,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
     if (path === '/official-documents' && canOfficialDocuments) return setView('officialDocuments')
   }
 
-  const versionLabel = api.useMocks ? 'UI QA v0.189' : `API v${systemInfo?.version ?? '—'}`
+  const versionLabel = api.useMocks ? 'UI QA v0.190' : `API v${systemInfo?.version ?? '—'}`
   return <LodgeCouncilApiProvider api={councilApi}><div className="app-shell">
     <SupportViewBanner onExit={exitSupportView} />
     {api.useMocks && <div className="demo-strip" role="region" aria-label="Controles de la demostración"><span className="demo-badge">QA demostración</span><DemoProfileSwitcher value={demoProfileKey} onChange={changeDemoProfile} /><span className="demo-version">{versionLabel}</span></div>}
@@ -470,7 +470,7 @@ export default function App({ api: rawApi, bootstrapApi: rawBootstrapApi, lodgeA
              : 'La sesión no tiene autorización confirmada para abrir Sistema. No se han cambiado permisos ni datos; solicita una revisión de acceso QA.'}</p>
            <button type="button" className="secondary" onClick={() => setView('dashboard')}>Volver a Inicio</button>
          </section>}
-        {view === 'help' && <HelpCenterPage access={helpAccess} canOpen={helpCanOpen} onOpenView={target => setView(target)} />}
+        {view === 'help' && <HelpCenterPage access={helpAccess} canOpen={helpCanOpen} onOpenView={target => setView(target)} build={{ demo: api.useMocks, versionLabel, sha: import.meta.env.VITE_BUILD_SHA || import.meta.env.VITE_SHOWCASE_SHA, environment: import.meta.env.VITE_APP_ENV }} />}
         {view === 'privacy' && <PrivacyPage contactEmail={privacyEmail} corrections={supportCorrections} onOpenProfile={canMemberPortal ? () => setView('memberPortal') : undefined} />}
         {activeViewAllowed && (view === 'memberPortal' || view === 'memberPayments' || view === 'memberAttendance') && canMemberPortal && <MemberPortalPage section={view === 'memberPayments' ? 'pagos' : view === 'memberAttendance' ? 'asistencias' : 'datos'} profile={effectiveProfile} useMocks={api.useMocks} membershipApi={membershipApi} documentApi={documentApi} onOpenCalendar={canCalendar ? () => setView('calendar') : undefined} onOpenNotifications={canNotifications ? () => setView('notifications') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
         {view === 'dashboard' && <DashboardPage membershipApi={membershipApi} pendingTasks={pendingTasks} operational={operational} administrator={isSystemAdministrator(pendingFlags)} onOpenPending={openPendingTarget} portal={portal} systemInfo={systemInfo} profile={effectiveProfile} loading={loading} calendarApi={calendarApi} notificationApi={notificationApi} onOpenCandidates={() => setView('candidates')} onOpenCalendar={() => setView('calendar')} onOpenNotifications={() => setView('notifications')} onOpenSecretariat={canSecretariat ? () => setView('secretariat') : undefined} onOpenLodge={canLodge ? () => setView('lodge') : undefined} />}
