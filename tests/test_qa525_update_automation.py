@@ -288,6 +288,35 @@ class ExpiredPreparedArchiveTests(unittest.TestCase):
             self.assertFalse((state / 'prepared.json').exists())
             self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
 
+            # Recreate the same expired prepared for an adversarial failed
+            # second rename. A normal Python exception must restore all
+            # original bytes and journals without leaving a fake receipt.
+            archive = archives[0]
+            (archive / 'expired-prepared-archive.json').unlink()
+            originals = (state / 'prepared.json', sensitive, post, approval_path)
+            for path in originals:
+                (archive / path.name).rename(path)
+            archive.rmdir()
+            normal_rename = Path.rename
+            failure = {'injected': False}
+
+            def fail_second_move(path, destination):
+                if path == sensitive and not failure['injected']:
+                    failure['injected'] = True
+                    raise OSError('synthetic archive rename failure')
+                return normal_rename(path, destination)
+
+            with patch.object(Path, 'rename', new=fail_second_move), \
+                 patch.object(update.time, 'time', return_value=NOW), \
+                 patch.object(update, 'invoke', side_effect=AssertionError('must not apply')):
+                with self.assertRaisesRegex(OSError, 'synthetic archive rename failure'):
+                    update.archive_expired_prepared(e, args, modules)
+            self.assertTrue(failure['injected'])
+            self.assertFalse(list(state.glob('review-archive-*')))
+            for path in originals:
+                self.assertEqual(before[path.name], path.read_bytes())
+            self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
+
 
 class RepeatedLayersTests(unittest.TestCase):
     def setUp(self):
