@@ -9,10 +9,10 @@ import hashlib
 import json
 import re
 
-SHA = re.compile(r"[0-9a-f]{40}\\Z")
-DIGEST = re.compile(r"sha256:[0-9a-f]{64}\\Z")
-HASH = re.compile(r"[0-9a-f]{64}\\Z")
-NONCE = re.compile(r"[0-9a-f]{64}\\Z")
+SHA = re.compile(r"[0-9a-f]{40}")
+DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
+HASH = re.compile(r"[0-9a-f]{64}")
+NONCE = re.compile(r"[0-9a-f]{64}")
 SCOPE = "QA525_LAUNCHER_ONLY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION"
 ACTION = "replace-root-launcher-supervised"
 ENVIRONMENT = "QA_GLM DCH_ONLY".replace(" ", "")
