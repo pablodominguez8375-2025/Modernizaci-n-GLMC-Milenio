@@ -3,6 +3,28 @@ import { PmgmApiClient } from './pmgmApi'
 
 afterEach(() => vi.unstubAllGlobals())
 
+it.each([
+  ['perfil técnico', { profileKey: 'tesorero' }],
+  ['usuario observado', { targetSubject: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', reason: 'Revisión de pantalla en soporte' }],
+])('Ver como envía POST JSON explícito para %s (#812)', async (_label, payload) => {
+  const fetch = vi.fn().mockResolvedValue(new Response('{}', {
+    status: 200, headers: { 'Content-Type': 'application/json' },
+  }))
+  vi.stubGlobal('fetch', fetch)
+  const client = new PmgmApiClient({ getAccessToken: async () => 'token-de-prueba' })
+  await client.startSupportView(payload)
+
+  const [url, options] = fetch.mock.calls[0] as [string, RequestInit]
+  const headers = new Headers(options.headers)
+  expect(url).toBe('/api/system/support/view-as')
+  expect(options.method).toBe('POST')
+  expect(headers.get('Content-Type')).toBe('application/json')
+  expect(headers.get('Accept')).toBe('application/json')
+  expect(headers.get('Authorization')).toBe('Bearer token-de-prueba')
+  expect(JSON.parse(options.body as string)).toEqual(payload)
+})
+
+
 it('sends only the access token, with no cookies, caching or redirect following', async () => {
   const fetch = vi.fn().mockResolvedValue(new Response('{}')); vi.stubGlobal('fetch', fetch)
   await new PmgmApiClient({ getAccessToken: async () => 'access-token' }).getSystemInfo()

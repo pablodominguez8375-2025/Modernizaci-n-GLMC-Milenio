@@ -72,7 +72,7 @@ it('publication has a 12-month default end, can be set, expires into the archive
   // Volver a publicar: nueva vigencia (por defecto 12 meses) y vuelve a verse.
   const again = await client.publish(expired.id, 2)
   expect(again.publicationStatus).toBe('published')
-  expect(again.publishedUntilUtc!.slice(0, 7)).toBe(defaultPublicationEnd().slice(0, 7))
+  expect(again.publishedUntilUtc).toBe(new Date(defaultPublicationEnd() + 'T23:59:59-03:00').toISOString())
   expect((await client.listOfficial()).items.some(x => x.id === expired.id)).toBe(true)
   // Fechas inválidas.
   await expect(client.publish(expired.id, 2, '2020-01-01')).rejects.toThrow(/posterior a hoy/)
