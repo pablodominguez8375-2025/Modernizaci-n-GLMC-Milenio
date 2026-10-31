@@ -1,4 +1,5 @@
 """Hermetic adversarial tests: launcher inspection cannot install or deploy."""
+import ast
 import importlib.util
 import json
 from pathlib import Path
@@ -94,8 +95,16 @@ class LauncherInspectionTests(unittest.TestCase):
         content = FILE.read_text()
         # The inspector has no write-capable OS operations or Docker imports.
         for marker in ("os.replace(", "os.rename(", "subprocess.", "docker ",
-                       "os.execv(", "os.chmod(", "os.chown(", "shutil."):
+                       "os.chmod(", "os.chown(", "shutil."):
             self.assertNotIn(marker, content)
+        calls = [node.func for node in ast.walk(ast.parse(content))
+                 if isinstance(node, ast.Call)]
+        forbidden = {"execv", "execve", "system", "popen", "replace",
+                     "rename", "unlink", "chmod", "chown", "write_text",
+                     "write_bytes"}
+        self.assertFalse([node.attr for node in calls
+                          if isinstance(node, ast.Attribute)
+                          and node.attr in forbidden])
         self.assertIn('"may_install": False', content)
         self.assertIn('"may_apply": False', content)
 
