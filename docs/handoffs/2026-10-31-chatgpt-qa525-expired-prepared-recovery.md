@@ -12,8 +12,8 @@
 
 1. Incorporar un comando opt-in de recuperación de prepared ya construido, con nueva revisión técnica comprobada contra GitHub y CI/Sigstore actual.
 2. Bajo locks, exigir que el prepared SHA/digest y esquema coincidan, journal target esté ausente, ningún nonce se haya consumido, baseline e imágenes de Docker sean idénticos, todo journal previo esté APPLIED y las actas antiguas estén realmente expiradas.
-3. Conservar las actas antiguas en el archivo histórico root0600; **no** archivar ni eliminar `prepared.json`. Emitir actas nuevas de vida limitada mediante el controlador oficial.
-4. Continuar por el aplicador supervisado existente, que revalida cada gate y hace rollback dual si corresponde; no alterar políticas de firma ni relajar requisitos.
+3. Archivar **conjuntamente** el `prepared.json` vencido y las tres actas en `review-archive-*`, preservando bytes íntegros, hashes, recibo root0600 y journals sin alteración. Tras el archivado exitoso ya no queda `prepared.json` activo: esto **no** es despliegue, aprobación, renovación ni borrado de evidencia.
+4. Desde el HEAD de `dev` vigente tras integrar los cambios, generar release exacta **nueva**, revisión técnica y aprobación con TTL/nonce nuevos y G6 verdaderamente vigente; continuar por el aplicador supervisado existente con sus gates y rollback dual. Nunca reaplicar el preparado anterior por bypass.
 5. Regresiones adversariales, CI exact-head, revisión multi-IA y release firmada antes de ejecutar nada en glmdch.
 
 ## Implementación en PR #820 (draft)
@@ -36,3 +36,11 @@
 
 Código en PR draft, tests herméticos iniciales PASS, **SIN autorización para uso físico**. Compilar/revisar nuevamente y dejar constancia en #819, #525 y Drive.
 
+
+## Corte documental de continuidad — 2026-10-31 (GitHub API, antes de este commit)
+
+- El commit previo de esta PR era `fd598b13a810e9dafd97708e33407d81f2e7c255`, con **7/7 workflow runs completed/success**. GitHub check-runs: **15 completados: 14 SUCCESS, 1 SKIPPED** (Deploy testing showcase). Son validaciones exact-head del **commit previo**, no se transfieren automáticamente al nuevo SHA de esta documentación; releer Actions tras el push.
+- `dev=a184936d78e6e9ee0fa85f7be060b13a5280710e` y `main=6dfb9546a4873baff15955cf86abfd7d47e3d111` consultados en GitHub API antes del cambio.
+- Seguimiento de intervención mínima, agentes multi-IA, espejo GitHub/Drive y esquema read-only en [Issue #821](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/821). Todo trabajo desde HEAD vivo de `dev` y PR; no implica habilitar automatismos de despliegue.
+- **Diferencia aclarada**: en el plan anterior se decía no archivar `prepared.json`, mientras el código y su prueba hermética lo mueven al archivo histórico. Se corrigió la instrucción; sigue pendiente revisión adversarial de seguridad de la operación, instalación firmada del launcher y autorización física.
+- Estado: **PR draft, NO despliegue**. No editar prepared/actas/journals a mano, no reaplicar SHA antiguo ni tocar `main`, producción, `srv01` o EF100.
