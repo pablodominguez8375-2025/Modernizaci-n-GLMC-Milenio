@@ -16,6 +16,23 @@
 4. Continuar por el aplicador supervisado existente, que revalida cada gate y hace rollback dual si corresponde; no alterar políticas de firma ni relajar requisitos.
 5. Regresiones adversariales, CI exact-head, revisión multi-IA y release firmada antes de ejecutar nada en glmdch.
 
+## Implementación en PR #820 (draft)
+
+- `scripts/qa/operators/qa525-update.py`: nuevo subcomando explícito `--archive-expired-prepared`, con chequeo de permisos root0600 mediante el entrypoint existente, SHA/digest/scope/schema exactos, todas las actas expiradas, nonce no consumido, todos los journals anteriores APPLIED y ningún journal del candidato; verifica snapshot y estados running de API+WEB, imágenes OCI target correctas, cadena Compose/identidad revisada y salud del WEB vigente.
+- El subcomando **no** despliega, reconstruye, migra, firma, consume nonce ni renueva timestamps; mueve el preparado y tres actas conservando bytes a `review-archive-*` y genera un recibo root0600 `EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT` con hashes y fsync. Ante excepción intenta restituir los originales; no ofrece flags para omitir validaciones.
+- `tests/test_qa525_update_automation.py`: contratos adversariales para fuente/digest/estado/imagen/snapshot, todas las expiraciones, nonce, journal PENDING/ROLLED_BACK, y prueba hermética de archivo sin despliegue ni mutación de servicios.
+- `docs/qa/QA525-FAST-REVIEWED-UPDATES.md`: procedimiento de recuperación y límites de instalación.
+
+## Controles y pendientes para la próxima IA
+
+- Rama `fix/qa525-expired-prepared-20261031-gpt`, PR [#820](https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/pull/820) **DRAFT**; no promover dev ni main desde un borrador sin revisión y CI exact HEAD.
+- Verificaciones `QA525 supervised API WEB dual transaction (hermetic)` y `QA readonly contract tests` en SUCCESS para el último SHA consultado `fad0d28aae3c4c5ee4598787944251e6d94836cd`; restantes Actions en progreso al registrar y deben releerse.
+- Antes de aceptar: revisión de seguridad independiente del nuevo operador, pruebas exhaustivas de filesystem root/symlinks/rollback y de no alteración de journal, CI/Showcase/instalable exact-head PASS. Evitar afirmaciones de ejecución física.
+- **Nuevo SHA de merge implica nuevo release**, por lo que el preparado viejo a184 queda archivado, nunca se fuerza su aplicación. Actualizador instalado en glmdch permanece antiguo: desarrollar/habilitar procedimiento **firmado y supervisado** para sustituir launcher root-owned de modo controlado; `--install-launcher` actual es O_EXCL y NO reemplaza. No ejecutar raw ni editar el launcher manualmente.
+- En el host, no iniciar archivo ni actualización antes de tener el operador firmado oficialmente instalado y autorización explícita. Luego se requiere nueva revisión técnica estructurada y G6 verdaderamente vigente; un solo `--review-and-run` del HEAD nuevo.
+- La UAT sintética sigue pendiente: Ver como 415, Taller00, asignación de perfiles y crear usuario (#754); `main` sin cambios.
+
 ## Estado
 
-En desarrollo, **sin autorización para uso físico**. No marcar como completado hasta tests y revisión.
+Código en PR draft, tests herméticos iniciales PASS, **SIN autorización para uso físico**. Compilar/revisar nuevamente y dejar constancia en #819, #525 y Drive.
+
