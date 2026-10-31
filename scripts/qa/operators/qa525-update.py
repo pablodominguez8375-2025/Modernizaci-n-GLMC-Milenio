@@ -166,7 +166,15 @@ def make_review_packet(entry, args, modules):
     return {'schema_mode': args.schema_mode, 'review': review, 'post_db': post}, (source, decision, state)
 
 
+def require_reconciled_archive(entry):
+    """A process crash during archival never grants a clean update state."""
+    marker = entry.STATE / 'expired-prepared-archive-pending.json'
+    require(not marker.exists() and not marker.is_symlink(),
+            'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION')
+
+
 def install_review_packet(entry, packet, modules, *, verified=None):
+    require_reconciled_archive(entry)
     core, build, approval, policy, signed, adapter, gate, probe = modules
     support00 = packet['schema_mode'] == 'support00_postdb'
     if support00:
@@ -308,6 +316,7 @@ def archive_expired_prepared(entry, args, modules):
             and args.digest and re.fullmatch(r'sha256:[a-f0-9]{64}', args.digest)
             and args.operator_name == 'soporte@glmdch',
             'RECOVERY_EXPLICIT_TARGET_AND_OPERATOR_REQUIRED')
+    require_reconciled_archive(entry)
     entry.single_operator_runtime(adapter.docker)
     live = adapter.metadata()
     require(all(live[n][2] == 'running' for n in core.TARGETS),
@@ -356,8 +365,29 @@ def archive_expired_prepared(entry, args, modules):
             hashes[p.name] = hashlib.file_digest(stream, 'sha256').hexdigest()
     archive = entry.STATE / ('review-archive-' + secrets.token_hex(12))
     archive.mkdir(mode=0o700)
+    pending = entry.STATE / 'expired-prepared-archive-pending.json'
     moved = []
+    pending_created = False
     try:
+        # Durable write-ahead marker BEFORE the first rename. SIGKILL/power
+        # loss leaves this file and blocks future reviewed updates until
+        # evidence is reconciled; never silently assume an empty prepared slot.
+        fd = os.open(pending, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600)
+        pending_created = True
+        with os.fdopen(fd, 'w') as stream:
+            json.dump({'status': 'ARCHIVE_INCOMPLETE_NO_DEPLOYMENT',
+                       'source_sha': args.source,
+                       'source_asset_sha256': args.digest,
+                       'archive_name': archive.name,
+                       'files_sha256': hashes}, stream, sort_keys=True)
+            stream.flush()
+            os.fsync(stream.fileno())
+        fd = os.open(entry.STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         for p in paths:
             destination = archive / p.name
             p.rename(destination)
@@ -374,12 +404,19 @@ def archive_expired_prepared(entry, args, modules):
                        'operator': args.operator_name}, stream, sort_keys=True)
             stream.flush()
             os.fsync(stream.fileno())
-        for directory in (archive, entry.STATE):
+        for directory in (archive, entry.STATE, entry.REVIEW.parent,
+                          entry.SINGLE_OPERATOR_REVIEW.parent, approval.APPROVAL.parent):
             fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
             try:
                 os.fsync(fd)
             finally:
                 os.close(fd)
+        pending.unlink()
+        fd = os.open(entry.STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
     except BaseException:
         result_path = archive / 'expired-prepared-archive.json'
         if result_path.is_file() and not result_path.is_symlink():
@@ -391,6 +428,16 @@ def archive_expired_prepared(entry, args, modules):
             archive.rmdir()
         except OSError:
             pass
+        # Remove marker only after complete verified restoration. If rollback
+        # is itself interrupted/incomplete, preserve a durable blocker.
+        if pending_created and not archive.exists() and all(p.is_file() for p in paths):
+            if pending.exists() and not pending.is_symlink():
+                pending.unlink()
+                fd = os.open(entry.STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try:
+                    os.fsync(fd)
+                finally:
+                    os.close(fd)
         raise
     return {'status': 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
             'source_sha': args.source, 'may_apply': False}
@@ -444,9 +491,11 @@ def main(argv=None):
     if args.status:
         with build.exclusive():
             live = adapter.metadata()
+            pending = entry.STATE / 'expired-prepared-archive-pending.json'
             return {'status': 'QA525_UPDATE_STATUS_READ_ONLY',
                 'services_running': all(live[n][2] == 'running' for n in modules[0].TARGETS),
                 'prepared_exists': (entry.STATE / 'prepared.json').exists(),
+                'archive_reconciliation_required': pending.exists() or pending.is_symlink(),
                 'may_apply': False}
     if args.archive_expired_prepared:
         with build.exclusive():
