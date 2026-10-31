@@ -323,7 +323,9 @@ def archive_expired_prepared(entry, args, modules):
     require(not target_journal.exists() and not target_journal.is_symlink(),
             'RECOVERY_TARGET_JOURNAL_PRESENT')
     journals = [entry.private_json(p) for p in entry.STATE.glob('dual-*.json')]
-    nonce = cut.get('nonce', '')
+    nonce = cut.get('nonce')
+    require(type(nonce) is str and re.fullmatch(r'[0-9a-f]{64}', nonce),
+            'RECOVERY_NONCE_INVALID')
     consumed = entry.STATE / ('approval-consumed-' + nonce)
     before = build.snapshot(adapter.docker)
     expired_prepared_archive_contract(
@@ -379,9 +381,16 @@ def archive_expired_prepared(entry, args, modules):
             finally:
                 os.close(fd)
     except BaseException:
+        result_path = archive / 'expired-prepared-archive.json'
+        if result_path.is_file() and not result_path.is_symlink():
+            result_path.unlink()
         for p, archived in reversed(moved):
             if archived.exists() and not p.exists() and not p.is_symlink():
                 archived.rename(p)
+        try:
+            archive.rmdir()
+        except OSError:
+            pass
         raise
     return {'status': 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
             'source_sha': args.source, 'may_apply': False}
