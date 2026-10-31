@@ -14,6 +14,9 @@ FILE = ROOT / "scripts/qa/operators/qa525-launcher-signed-preflight.py"
 spec = importlib.util.spec_from_file_location("qa525_signed_launcher_preflight_test", FILE)
 preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)
+REAL_STABLE_HASH = preflight.stable_hash
+REAL_STAGE_PARENT = preflight.private_stage_parent
+REAL_TRUSTED_FILE = preflight.trusted_file
 
 SHA = "a" * 40
 DIGEST = "sha256:" + "b" * 64
@@ -154,18 +157,18 @@ class SignedLauncherPreflightTests(unittest.TestCase):
         symlink = self.parent / "candidate-link"
         symlink.symlink_to(target)
         with self.assertRaises(preflight.Blocked):
-            preflight.stable_hash(symlink)
+            REAL_STABLE_HASH(symlink)
         hardlink = self.parent / "candidate-hardlink"
         os.link(target, hardlink)
         with self.assertRaises(preflight.Blocked):
-            preflight.stable_hash(target)
+            REAL_STABLE_HASH(target)
 
     def test_untrusted_stage_parent_cannot_be_used(self):
         # A writable or non-root fake parent must never be a staging root.
         with self.assertRaises(preflight.Blocked):
-            preflight.private_stage_parent(self.parent)
+            REAL_STAGE_PARENT(self.parent)
         with self.assertRaises(preflight.Blocked):
-            preflight.trusted_file(self.parent)
+            REAL_TRUSTED_FILE(self.parent)
 
     def test_preflight_has_no_direct_launcher_write_primitive(self):
         contents = FILE.read_text()
