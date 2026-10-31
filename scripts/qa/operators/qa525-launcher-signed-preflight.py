@@ -32,13 +32,6 @@ SOURCE_NAMES = (
     QA_DIR / "qa-signed-staging.py",
 )
 CANDIDATE = Path("scripts/qa/operators/qa525-update.py")
-REQUIRED_OPERATOR_CONTRACT = (
-    "--archive-expired-prepared",
-    "--inspect-pending-archive",
-    "RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION",
-    "--status",
-    "--apply-prepared",
-)
 SCOPE = "SIGNED_EXACT_DEV_PREFLIGHT_ONLY_NO_LAUNCHER_REPLACEMENT_NO_DEPLOY"
 
 
