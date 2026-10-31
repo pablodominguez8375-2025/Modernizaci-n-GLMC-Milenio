@@ -304,6 +304,22 @@ export const helpGuides: HelpGuide[] = [
     keywords: 'corregir contacto correo telefono domicilio reenviar aviso soporte superusuario permiso',
   },
   {
+    id: 'asignar-perfil', topic: 'Sistema', needs: 'systemAdmin',
+    title: 'Asignar un perfil a un usuario',
+    summary: 'Darle a una cuenta un perfil técnico, buscándola por nombre o correo.',
+    steps: [
+      'Abre «Parámetros del sistema» y entra a «Usuarios». Baja hasta «Asignaciones de perfiles a usuarios».',
+      'Pulsa «Asignar perfil a un usuario».',
+      'En «Buscar usuario» escribe parte del nombre o del correo y elige la cuenta en la lista. No necesitas conocer ningún código.',
+      'Elige el «Perfil técnico». Si el perfil es de un Taller, elige también el Taller.',
+      'Indica desde cuándo rige y, si quieres, hasta cuándo. Para perfiles sensibles (Tesorería, Hospitalaria, Privacidad) el «Hasta» es obligatorio y de máximo 12 meses.',
+      'Pulsa «Asignar perfil». Queda auditado y puedes retirarlo después con «Revocar».',
+    ],
+    tip: 'Si el Hermano no aparece en la lista, primero créale el usuario con «Crear usuario». El identificador a mano es solo para casos avanzados.',
+    target: { view: 'system', label: 'Abrir Parámetros del sistema' },
+    keywords: 'asignar perfil usuario buscar hermano codigo oidc identificador permisos acceso revocar',
+  },
+  {
     id: 'permiso-correccion', topic: 'Sistema', needs: 'systemAdmin',
     title: 'Dar a un Superusuario permiso para corregir datos',
     summary: 'Solo el Máster. El permiso es por un tiempo y se puede retirar.',
