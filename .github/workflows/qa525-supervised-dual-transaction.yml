@@ -17,6 +17,14 @@ on:
       - "scripts/qa/operators/support00-migrator/**"
       - "tests/test_qa525_support00_schema.py"
       - "tests/test_qa525_update_automation.py"
+      - "scripts/qa/operators/qa525-launcher-upgrade-inspect.py"
+      - "tests/test_qa525_launcher_upgrade_inspect.py"
+      - "scripts/qa/operators/qa525-launcher-signed-preflight.py"
+      - "tests/test_qa525_launcher_signed_preflight.py"
+      - "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+      - "tests/test_qa525_launcher_replacement_contract.py"
+      - "scripts/qa/operators/qa525-launcher-atomic-sandbox.py"
+      - "tests/test_qa525_launcher_atomic_sandbox.py"
       - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   pull_request:
@@ -35,6 +43,14 @@ on:
       - "scripts/qa/operators/support00-migrator/**"
       - "tests/test_qa525_support00_schema.py"
       - "tests/test_qa525_update_automation.py"
+      - "scripts/qa/operators/qa525-launcher-upgrade-inspect.py"
+      - "tests/test_qa525_launcher_upgrade_inspect.py"
+      - "scripts/qa/operators/qa525-launcher-signed-preflight.py"
+      - "tests/test_qa525_launcher_signed_preflight.py"
+      - "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+      - "tests/test_qa525_launcher_replacement_contract.py"
+      - "scripts/qa/operators/qa525-launcher-atomic-sandbox.py"
+      - "tests/test_qa525_launcher_atomic_sandbox.py"
       - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   workflow_dispatch:
@@ -67,6 +83,14 @@ jobs:
           python -m py_compile scripts/qa/operators/qa525-support00-post-db-readonly.py
           python -m py_compile tests/test_qa525_support00_schema.py
           python -m py_compile tests/test_qa525_update_automation.py
+          python -m py_compile scripts/qa/operators/qa525-launcher-upgrade-inspect.py
+          python -m py_compile tests/test_qa525_launcher_upgrade_inspect.py
+          python -m py_compile scripts/qa/operators/qa525-launcher-signed-preflight.py
+          python -m py_compile tests/test_qa525_launcher_signed_preflight.py
+          python -m py_compile scripts/qa/operators/qa525-launcher-replacement-contract.py
+          python -m py_compile tests/test_qa525_launcher_replacement_contract.py
+          python -m py_compile scripts/qa/operators/qa525-launcher-atomic-sandbox.py
+          python -m py_compile tests/test_qa525_launcher_atomic_sandbox.py
       - name: All dual transaction regressions, fake Docker only
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
       - name: Offline review, migration and supervision regressions
@@ -79,6 +103,14 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_qa525_support00_schema.py' -v
       - name: Reusable controller, replay, quota redaction and Compose history
         run: python -m unittest discover -s tests -p 'test_qa525_update_automation.py' -v
+      - name: Read-only launcher inspection adversarial tests, no host access
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_upgrade_inspect.py' -v
+      - name: Signed-release launcher preflight regressions, fake host and signature
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_signed_preflight.py' -v
+      - name: QA525 launcher approved cut and crash-state policy (no host, no writes)
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_replacement_contract.py' -v
+      - name: QA525 launcher sandbox process-death and receipt regressions (no host)
+        run: python -m unittest discover -s tests -p 'test_qa525_launcher_atomic_sandbox.py' -v
       - name: Ensure no unattended deployment entrypoint
         run: |
           python - <<'PY'
