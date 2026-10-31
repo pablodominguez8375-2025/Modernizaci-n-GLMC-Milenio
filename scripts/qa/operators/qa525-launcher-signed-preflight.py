@@ -7,6 +7,7 @@ the candidate's signed manifest, then return an ephemeral non-authorizing plan.
 Never modifies /usr/local/sbin, Compose, API, WEB, identity or G6.
 """
 import argparse
+import ast
 import hashlib
 import importlib.util
 import json
@@ -106,6 +107,54 @@ def stable_hash(path, maximum=2_000_000):
 
 
 
+def validate_operator_ast(data):
+    """Syntax-only gate: comments/strings cannot impersonate recovery logic.
+
+    This augments the signed manifest and hermetic tests; it is deliberately
+    NOT a security proof of the operator's behavior, nor execution approval.
+    """
+    try:
+        tree = ast.parse(data.decode("utf-8"), filename="signed-qa525-update.py")
+    except (UnicodeDecodeError, SyntaxError, ValueError):
+        raise Blocked("PREFLIGHT_OPERATOR_PYTHON_INVALID") from None
+    functions = [node for node in tree.body if isinstance(node,
+                 (ast.FunctionDef, ast.AsyncFunctionDef))]
+    names = [node.name for node in functions]
+    needed = ("main", "archive_expired_prepared", "inspect_pending_archive",
+              "require_reconciled_archive", "install_review_packet")
+    require(all(names.count(name) == 1 for name in needed),
+            "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING")
+    # Arguments must be registered on the exact mutual-exclusive CLI parser.
+    main = next(node for node in functions if node.name == "main")
+    flags = []
+    for node in ast.walk(main):
+        if (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "add_argument"
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "choice"
+                and node.args and isinstance(node.args[0], ast.Constant)
+                and type(node.args[0].value) is str):
+            flags.append(node.args[0].value)
+    for flag in ("--archive-expired-prepared", "--inspect-pending-archive",
+                 "--status", "--apply-prepared", "--review-and-run"):
+        require(flags.count(flag) == 1,
+                "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING")
+    by_name = {node.name: node for node in functions}
+    for name in ("install_review_packet", "archive_expired_prepared", "main"):
+        guard = any(isinstance(node, ast.Call)
+                    and isinstance(node.func, ast.Name)
+                    and node.func.id == "require_reconciled_archive"
+                    for node in ast.walk(by_name[name]))
+        require(guard, "PREFLIGHT_ARCHIVE_RECONCILIATION_GUARD_MISSING")
+    fail_codes = {node.value for node in ast.walk(tree)
+                  if isinstance(node, ast.Constant) and type(node.value) is str}
+    require("RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION" in fail_codes
+            and "RECOVERY_ARCHIVE_COMMIT_SYNC_UNCERTAIN" in fail_codes,
+            "PREFLIGHT_FAIL_CLOSED_RECOVERY_CODES_MISSING")
+    return True
+
+
 def private_stage_parent(path):
     require(path.is_absolute(), "PREFLIGHT_STAGE_PARENT_NOT_ABSOLUTE")
     for item in (path, *path.parents):
@@ -173,12 +222,7 @@ def signed_candidate_preflight(inspector, signed, *, stage_parent=STATE):
                 "PREFLIGHT_OPERATOR_SIGNED_MANIFEST_MISMATCH")
         # Ensure both the manifest and candidate remained valid on re-read.
         signed.staging.verify_manifest(package, sha)
-        try:
-            decoded = data.decode("utf-8")
-        except UnicodeDecodeError:
-            raise Blocked("PREFLIGHT_OPERATOR_ENCODING_INVALID") from None
-        require(all(flag in decoded for flag in REQUIRED_OPERATOR_CONTRACT),
-                "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING")
+        validate_operator_ast(data)
         # Re-read launcher to reject concurrent replacement during download.
         current = inspector.inspect()
         require(all(current.get(k) == old[k] for k in
