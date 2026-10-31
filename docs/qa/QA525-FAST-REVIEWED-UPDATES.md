@@ -162,6 +162,68 @@ migración ni borrar el journal para ocultar el estado.
    comprobar ausencia de415, contexto00 técnico, solo lectura, auditoría y bloqueo
    cruzado. Un health verde no sustituye esta aceptación funcional.
 
+## Recuperación de preparado vencido y no aplicado (#819) — solo cuando el parche esté firmado e instalado
+
+Caso real 31-10-2026 en `glmdch`: después de preparar las imágenes para
+`a184936d78e6e9ee0fa85f7be060b13a5280710e`, la cuota pública GitHub
+impidió aplicar; `prepared.json` siguió presente con estado
+`PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT`, sin journal target,
+mientras API/WEB anteriores `41d9c490d138419c7286445f37e7aeddf0d1b8d5`
+continuaron activas. El control del operador abortó con
+`VIGENCIA_RESTANTE_SEGUNDOS=-567`, `NO_APLICAR=VIGENCIA_INSUFICIENTE`.
+No es un éxito ni un rollback de una operación iniciada.
+
+**Prohibido** reescribir fechas (`reviewed_at`, `approved_at`, `expires_at`),
+reutilizar un nonce, borrar/mover manualmente `prepared.json`, modificar
+journals o recurrir a `--apply-prepared` cuando las actas han caducado.
+Tampoco ejecutar `--review-and-run` de nuevo: esa ruta no archiva
+una preparación anterior SIN journal APPLIED.
+
+La nueva operación explícita `--archive-expired-prepared` **no aplica
+ninguna imagen, no renueva actas ni toca PostgreSQL/EF100**. Solo existe
+en una versión posterior del código. **No está instalada en el lanzador
+actual de glmdch** por el hecho de existir en dev/PR; antes de cualquier
+uso, pasar por PR, CI exact-head, publicación firmada y procedimiento
+aprobado de instalación del operador actualizado desde paquete firmado
+root-owned. No descargar ni ejecutar scripts raw de una rama.
+
+Una vez que el propio operador revisado esté instalado y con la cuota y
+runtime recuperados, el paso de archivo requiere un comando explícito,
+SHA y digest del `prepared` caducado y operador real:
+
+```bash
+sudo pmgm-qa-update --archive-expired-prepared \
+  --source <SHA_PREPARED_CADUCADO> \
+  --digest <DIGEST_PREPARED_CADUCADO> \
+  --operator-name 'soporte@glmdch'
+```
+
+Bajo el lock del QA, exige el preparado/las tres actas root0600, SHA y digest,
+`schema_mode=support00_postdb`, actas **todas expiradas**, nonce de la
+autorización sin consumir, journal de target ausente, journals anteriores solo
+APPLIED, imágenes construidas existentes con identidad OCI exacta, snapshot
+de servicios idéntico al preparado, estado y salud del WEB anterior,
+capas Compose revisadas y guardas del operador único. Si no se cumplen,
+aborta sin cambiar el preparado. Solo conserva los cuatro originales en
+`review-archive-<id>`, con un manifiesto root0600 de hashes y estado
+`EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT`. Los contenedores y la BD siguen
+intactos; el archivo no equivale a revisión nueva ni permiso de aplicar.
+
+**Después** de comprobar el recibo archivado (sin volcar datos privados),
+el próximo corte debe obtener revisión técnica REAL nueva, source/CI exactos,
+release Sigstore firmada y evidencia G6 vigente; usar una sola vez el
+procedimiento normal `--review-and-run` con las referencias nuevas.
+Un parche que cambia `dev` cambia el HEAD: las imágenes preparadas para
+el SHA anterior NO deben aplicarse saltándose el gate `dev HEAD == release`.
+Se reconstruyen las imágenes para el SHA nuevo y la misma EF100 verificada,
+sin correr de nuevo la migración.
+
+Nunca utilizar el archivo como bypass de una transacción PENDING/ROLLED_BACK:
+esa condición exige reconciliación especializada. Ante cualquier `BLOCKED`,
+registrar código, runtime y archivo sin modificar el host a mano. Las
+pruebas QA/UAT autenticadas continúan pendientes aunque el controlador
+informe `DUAL_API_WEB_APPLIED`.
+
 ## Recuperación y evidencia para la siguiente sesión
 
 Conservar el recibo API histórico de98 migraciones, manifests y paquetes firmados,
@@ -193,3 +255,50 @@ No se instala un timer que despliegue arbitrariamente ni se habilitan migracione
 al iniciar API. El monitoreo puede ser automático; la escritura sigue atada al
 corte revisado, evidencia vigente y acciones explícitas. No main, srv01,
 producción, PR771/737/766 ni datos reales.
+
+
+## Seguridad ante corte abrupto del archivado de preparados vencidos — 31-10-2026
+
+El operador del PR #820 crea el marcador privado `expired-prepared-archive-pending.json` en el directorio QA525 **antes** de mover `prepared.json` y las tres actas a `review-archive-*`. Lo escribe con `root:root 0600`, incluye SHA, digest, nombre del archivo e hashes de las evidencias, y sincroniza a disco. Al finalizar el archivo completo y su recibo, sincroniza los directorios y quita el marcador. Si ocurre una excepción Python normal durante los movimientos, revierte los archivos; una prueba hermética inyecta un error en el segundo renombrado y confirma integridad y limpieza. Si hay `SIGKILL`, caída de energía o rollback incompleto, debe quedar el marcador y el próximo intento `--review-and-run`, `--run-reviewed`, `--apply-prepared` o `--archive-expired-prepared` **se bloquea** con `RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION` mientras el marcador esté presente. `--status` expone `archive_reconciliation_required` sin cambiar la máquina.
+
+**El marcador NO es una aprobación, un journal APPLIED ni un permiso para continuar.** Jamás borrar manualmente ese marcador, usar otro launcher o fingir un prepared exitoso: inspeccionar originales y archivo parcial, validar hashes y journals bajo el procedimiento de recuperación previamente revisado. El PR todavía está DRAFT. La prueba de excepción no equivale a simulación real de pérdida súbita de energía ni prueba el funcionamiento en glmdch; se exige revisión adversarial independiente y liberación firmada antes del uso físico. La nueva actualización de QA también requiere resolver el reemplazo firmado del launcher inmutable actualmente fijado (O_EXCL), verificación de G6 y nueva aprobación válida.
+
+## Diagnóstico de interrupción del archivado, sólo lectura (#819/#820)
+
+El operador firmado actualizado (NO el instalador antiguo) incorporará:
+
+```text
+sudo pmgm-qa-update --inspect-pending-archive
+```
+
+El comando usa el lock exclusivo existente, no consulta Docker, no modifica
+actas, no desarchiva ni elimina el marcador y devuelve `may_apply=false` y
+`may_reconcile_automatically=false` sin excepción. Ante el marcador
+`expired-prepared-archive-pending.json`, compara los SHA256 originales
+contra los cuatro archivos entre sus ubicaciones iniciales y archivo
+root-owned privado. Rechaza nombres, digest o receipts manipulados, symlinks,
+duplicaciones, ausencias, colisiones y hash divergentes. Clasifica:
+
+- `ARCHIVE_NOT_MOVED_MANUAL_RECONCILIATION`: todos los originales presentes.
+- `ARCHIVE_PARTIALLY_MOVED_MANUAL_RECONCILIATION`: mezcla no ambigua.
+- `ARCHIVE_ALL_MOVED_NO_RECEIPT_MANUAL_RECONCILIATION`: cuatro movidos.
+- `ARCHIVE_RECORDED_PENDING_MARKER_MANUAL_RECONCILIATION`: los cuatro movidos,
+  acta de archivo válida pero marcador no despejado.
+- `NO_PENDING_ARCHIVE_NOT_A_RECOVERY_AUTHORIZATION`: ausencia del marcador,
+  **sin afirmar** que no existe otra falla o que el upgrade fue seguro.
+
+Ante fallo o ambigüedad responde `BLOCKED_QA525_UPDATE`; nunca recomienda
+borrar el marcador ni autoriza replay. Cualquier reconciliación posterior
+necesita acta, revisión independiente del estado y procedimiento supervisado
+separado. No hay comando automático de reparación.
+
+Las ocho regresiones nuevas de
+`tests/test_qa525_update_automation.py` simulan esos estados con
+archivos temporales; no usan SSH, Docker ni el servidor. Se ejecutan en
+`QA525 supervised API WEB dual transaction (hermetic)`. La CI tiene que ser
+SUCCESS en el HEAD exacto de PR #820 antes de confiar en su entrega.
+
+**Importante:** hasta que una publicación firmada y la sustitución auditada
+del launcher sean autorizadas en `glmdch`, este comando existe sólo en GitHub.
+No se debe pegar código crudo de repositorio como root para obtenerlo.
+

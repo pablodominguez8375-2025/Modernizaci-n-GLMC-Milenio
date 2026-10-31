@@ -147,6 +147,370 @@ class ReviewPacketTests(unittest.TestCase):
             self.assertEqual(1, invoke.call_count)
 
 
+
+class ExpiredPreparedArchiveTests(unittest.TestCase):
+    """No Docker/SSH/network: pure expired-prepared preconditions and archive."""
+    def setUp(self):
+        self.sha = SHA
+        self.digest = DIGEST
+        self.baseline = {'api': {'image_id': 'sha256:' + 'd' * 64},
+                         'web': {'image_id': 'sha256:' + 'e' * 64}}
+        self.prepared = dict(
+            status='PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT',
+            source_sha=SHA, source_asset_sha256=DIGEST,
+            schema_mode='support00_postdb', review_mode='single_operator_qa',
+            images_built=True, services_unchanged=True, may_apply=False,
+            baseline=self.baseline, api_image_id='sha256:' + 'f' * 64,
+            web_image_id='sha256:' + 'b' * 64)
+        self.review = dict(source_sha=SHA, release_asset_sha256=DIGEST,
+                           reviewed_at=NOW - 2000)
+        self.post = dict(source_sha=SHA, release_asset_sha256=DIGEST,
+                         approved_at=NOW - 2000, review_mode='single_operator_qa')
+        self.cut = dict(target_sha=SHA, release_asset_sha256=DIGEST,
+                        nonce='c' * 64, issued_at=NOW - 2000,
+                        expires_at=NOW - 200, operator_reviewed=True,
+                        scope='LOCAL_SUPERVISION_MATCH_ONLY_NO_APPLY',
+                        action='first-qa-api-web-supervised',
+                        environment='QA_SYNTHETIC')
+        self.journals = [{'status': 'APPLIED', 'source_sha': 'd' * 40}]
+
+    def contract(self, **changes):
+        params = dict(sha=SHA, digest=DIGEST, baseline=self.baseline,
+                      now=NOW, journals=self.journals, nonce_consumed=False)
+        params.update(changes)
+        return update.expired_prepared_archive_contract(
+            self.prepared, self.review, self.post, self.cut, **params)
+
+    def test_unfinished_archive_marker_blocks_all_followup_actions(self):
+        with tempfile.TemporaryDirectory() as td:
+            state = Path(td)
+            e = types.SimpleNamespace(STATE=state)
+            marker = state / 'expired-prepared-archive-pending.json'
+            marker.write_text('{"status":"ARCHIVE_INCOMPLETE_NO_DEPLOYMENT"}')
+            with self.assertRaisesRegex(update.Blocked,
+                                        'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION'):
+                update.require_reconciled_archive(e)
+            marker.unlink()
+            marker.symlink_to(state / 'missing-intent')
+            with self.assertRaisesRegex(update.Blocked,
+                                        'RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION'):
+                update.require_reconciled_archive(e)
+            marker.unlink()
+            update.require_reconciled_archive(e)
+
+    def test_only_fully_expired_target_with_unconsumed_nonce_is_archivable(self):
+        self.assertTrue(self.contract())
+        self.cut['expires_at'] = NOW + 1
+        with self.assertRaises(update.Blocked):
+            self.contract()
+        self.cut['expires_at'] = NOW - 200
+        self.review['reviewed_at'] = NOW - 1799
+        with self.assertRaises(update.Blocked):
+            self.contract()
+        self.review['reviewed_at'] = NOW - 2000
+        with self.assertRaises(update.Blocked):
+            self.contract(nonce_consumed=True)
+
+    def test_foreign_sha_digest_unexpected_mode_and_baseline_are_blocked(self):
+        for key, bad in [('source_sha', 'd' * 40),
+                         ('source_asset_sha256', 'sha256:' + 'e' * 64),
+                         ('schema_mode', 'member_history_postdb'),
+                         ('review_mode', 'independent_dba'),
+                         ('status', 'APPLIED'),
+                         ('images_built', False),
+                         ('services_unchanged', False),
+                         ('may_apply', True),
+                         ('baseline', {})]:
+            original = self.prepared[key]
+            self.prepared[key] = bad
+            with self.subTest(key=key), self.assertRaises(update.Blocked):
+                self.contract()
+            self.prepared[key] = original
+        for object_, key, bad in [
+                (self.review, 'source_sha', 'd' * 40),
+                (self.review, 'release_asset_sha256', 'sha256:' + 'e' * 64),
+                (self.post, 'approved_at', NOW - 1),
+                (self.post, 'review_mode', 'automatic'),
+                (self.cut, 'nonce', 'unsafe'),
+                (self.cut, 'operator_reviewed', False),
+                (self.cut, 'action', 'apply_everything'),
+                (self.cut, 'environment', 'PRODUCTION')]:
+            previous = object_[key]
+            object_[key] = bad
+            with self.subTest(field=key), self.assertRaises(update.Blocked):
+                self.contract()
+            object_[key] = previous
+
+    def test_pending_or_target_journal_is_never_treated_as_completed(self):
+        for journal in ({'status': 'PENDING', 'source_sha': 'd' * 40},
+                        {'status': 'ROLLED_BACK', 'source_sha': 'd' * 40},
+                        {'status': 'APPLIED', 'source_sha': SHA}):
+            with self.subTest(journal=journal), self.assertRaises(update.Blocked):
+                self.contract(journals=[journal])
+
+    def test_archive_preserves_bytes_and_never_runs_deployment(self):
+        import json
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state = root / 'state'
+            state.mkdir()
+            sensitive = root / 'review.json'
+            post = root / 'post.json'
+            approval_path = root / 'approval.json'
+            self.prepared['source_sha'] = SHA
+            for path, value in ((state / 'prepared.json', self.prepared),
+                                (sensitive, self.review), (post, self.post),
+                                (approval_path, self.cut),
+                                (state / ('dual-' + 'd' * 40 + '.json'), self.journals[0])):
+                path.write_text(json.dumps(value, sort_keys=True))
+            before = {p.name: p.read_bytes() for p in
+                      (state / 'prepared.json', sensitive, post, approval_path)}
+            live = {name: ['id', self.baseline[name]['image_id'], 'running',
+                           None, None, None, None, 'base-compose.json']
+                    for name in ('api', 'web')}
+            def docker(cmd):
+                if cmd[0:2] != ['image', 'inspect']:
+                    raise AssertionError('unexpected docker command')
+                if cmd[2:4] == ['--format', '{{.Id}}']:
+                    return cmd[-1]
+                if 'org.opencontainers.image.revision' in cmd[3]:
+                    return SHA if cmd[-1] in (self.prepared['api_image_id'],
+                                              self.prepared['web_image_id']) else 'd' * 40
+                raise AssertionError('unknown inspect format')
+            adapter = types.SimpleNamespace(docker=docker, metadata=lambda: live)
+            build = types.SimpleNamespace(snapshot=lambda _: self.baseline)
+            approval_mod = types.SimpleNamespace(APPROVAL=approval_path)
+            core_mod = types.SimpleNamespace(TARGETS=['api', 'web'])
+            e = types.SimpleNamespace(
+                STATE=state, REVIEW=sensitive, SINGLE_OPERATOR_REVIEW=post,
+                WORKDIR=root,
+                single_operator_runtime=lambda _: None,
+                reviewed_layers=lambda *args: None,
+                private_json=lambda p: json.loads(p.read_text()),
+                health=lambda source: source == 'd' * 40)
+            args = types.SimpleNamespace(source=SHA, digest=DIGEST,
+                                         operator_name='soporte@glmdch')
+            modules = [core_mod, build, approval_mod, None, None, adapter, None, None]
+            with patch.object(update, 'invoke', side_effect=AssertionError('must not apply')), \
+                 patch.object(update.time, 'time', return_value=NOW):
+                result = update.archive_expired_prepared(e, args, modules)
+            self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT', result['status'])
+            archives = list(state.glob('review-archive-*'))
+            self.assertEqual(len(archives), 1)
+            self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                json.loads((archives[0] / 'expired-prepared-archive.json').read_text())['status'])
+            for name, bytes_before in before.items():
+                self.assertEqual(bytes_before, (archives[0] / name).read_bytes())
+            self.assertFalse((state / 'prepared.json').exists())
+            self.assertFalse((state / 'expired-prepared-archive-pending.json').exists())
+            self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
+
+            # Recreate the same expired prepared for an adversarial failed
+            # second rename. A normal Python exception must restore all
+            # original bytes and journals without leaving a fake receipt.
+            archive = archives[0]
+            (archive / 'expired-prepared-archive.json').unlink()
+            originals = (state / 'prepared.json', sensitive, post, approval_path)
+            for path in originals:
+                (archive / path.name).rename(path)
+            archive.rmdir()
+            normal_rename = Path.rename
+            failure = {'injected': False}
+
+            def fail_second_move(path, destination):
+                if path == sensitive and not failure['injected']:
+                    failure['injected'] = True
+                    raise OSError('synthetic archive rename failure')
+                return normal_rename(path, destination)
+
+            with patch.object(Path, 'rename', new=fail_second_move), \
+                 patch.object(update.time, 'time', return_value=NOW), \
+                 patch.object(update, 'invoke', side_effect=AssertionError('must not apply')):
+                with self.assertRaisesRegex(OSError, 'synthetic archive rename failure'):
+                    update.archive_expired_prepared(e, args, modules)
+            self.assertTrue(failure['injected'])
+            self.assertFalse(list(state.glob('review-archive-*')))
+            self.assertFalse((state / 'expired-prepared-archive-pending.json').exists())
+            for path in originals:
+                self.assertEqual(before[path.name], path.read_bytes())
+            self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
+
+            # Failure on the FINAL state-directory fsync, after a durable
+            # receipt and intent-marker unlink, is *past the commit boundary*.
+            # Do not roll four already-archived approvals back or delete
+            # their archived proof. The reported result must be fail-closed.
+            normal_sync = update.os.fsync
+            post_commit_injected = {'yes': False}
+
+            def fail_final_state_sync(fd):
+                if (not (state / 'expired-prepared-archive-pending.json').exists()
+                        and list(state.glob('review-archive-*/expired-prepared-archive.json'))):
+                    post_commit_injected['yes'] = True
+                    raise OSError('synthetic power-loss durability uncertainty')
+                return normal_sync(fd)
+
+            with patch.object(update.os, 'fsync', side_effect=fail_final_state_sync), \
+                 patch.object(update.time, 'time', return_value=NOW), \
+                 patch.object(update, 'invoke', side_effect=AssertionError('must not apply')):
+                with self.assertRaisesRegex(
+                        update.Blocked, 'RECOVERY_ARCHIVE_COMMIT_SYNC_UNCERTAIN'):
+                    update.archive_expired_prepared(e, args, modules)
+            self.assertTrue(post_commit_injected['yes'])
+            archives = list(state.glob('review-archive-*'))
+            self.assertEqual(1, len(archives))
+            self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                json.loads((archives[0] / 'expired-prepared-archive.json').read_text())['status'])
+            for path in originals:
+                self.assertFalse(path.exists())
+                self.assertEqual(before[path.name],
+                                 (archives[0] / path.name).read_bytes())
+            self.assertFalse((state / 'expired-prepared-archive-pending.json').exists())
+            self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
+
+
+class InterruptedArchiveInspectionTests(unittest.TestCase):
+    """No Docker/SSH: inspect a durable crash marker and 4 preserved records."""
+
+    def setUp(self):
+        import hashlib
+        import json
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.state = root / 'state'
+        self.state.mkdir(mode=0o700)
+        self.paths = (self.state / 'prepared.json', root / 'review.json',
+                      root / 'post.json', root / 'approval.json')
+        self.approval = types.SimpleNamespace(APPROVAL=self.paths[3])
+        self.entry = types.SimpleNamespace(
+            STATE=self.state, REVIEW=self.paths[1],
+            SINGLE_OPERATOR_REVIEW=self.paths[2],
+            trusted=lambda path, directory=False: (
+                self.assertTrue(path.is_dir()) if directory else None),
+            private_json=lambda p: json.loads(p.read_text()))
+        for index, p in enumerate(self.paths):
+            p.write_text(json.dumps({'ordinal': index}, sort_keys=True))
+        self.before = {p.name: p.read_bytes() for p in self.paths}
+        self.hashes = {name: hashlib.sha256(data).hexdigest()
+                       for name, data in self.before.items()}
+        self.archive = self.state / ('review-archive-' + 'e' * 24)
+        self.archive.mkdir(mode=0o700)
+        self.archive.chmod(0o700)
+        self.marker = self.state / 'expired-prepared-archive-pending.json'
+        self.marker.write_text(json.dumps({
+            'status': 'ARCHIVE_INCOMPLETE_NO_DEPLOYMENT',
+            'source_sha': SHA, 'source_asset_sha256': DIGEST,
+            'archive_name': self.archive.name,
+            'files_sha256': self.hashes}, sort_keys=True))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def inspect(self):
+        return update.inspect_pending_archive(self.entry, self.approval)
+
+    def assert_immutable(self, result, expected, originals, archives):
+        self.assertEqual(expected, result['status'])
+        self.assertIs(result['may_apply'], False)
+        self.assertIs(result['may_reconcile_automatically'], False)
+        self.assertEqual(originals, result['original_files'])
+        self.assertEqual(archives, result['archived_files'])
+        self.assertTrue(self.marker.is_file())
+        for path in self.paths:
+            stored = path if path.exists() else self.archive / path.name
+            self.assertEqual(self.before[path.name], stored.read_bytes())
+
+    def move(self, *indexes):
+        for index in indexes:
+            self.paths[index].rename(self.archive / self.paths[index].name)
+
+    def receipt(self):
+        import json
+        receipt = {'status': 'EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                   'source_sha': SHA, 'source_asset_sha256': DIGEST,
+                   'files_sha256': self.hashes, 'operator': 'soporte@glmdch'}
+        (self.archive / 'expired-prepared-archive.json').write_text(
+            json.dumps(receipt, sort_keys=True))
+
+    def test_absent_marker_does_not_claim_archive_complete(self):
+        self.marker.unlink()
+        result = self.inspect()
+        self.assertEqual('NO_PENDING_ARCHIVE_NOT_A_RECOVERY_AUTHORIZATION',
+                         result['status'])
+        self.assertIs(result['may_apply'], False)
+
+    def test_before_first_move_is_blocked_for_manual_reconciliation(self):
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_NOT_MOVED_MANUAL_RECONCILIATION', 4, 0)
+
+    def test_partial_move_is_classified_without_restoring_or_deploying(self):
+        self.move(0, 1)
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_PARTIALLY_MOVED_MANUAL_RECONCILIATION', 2, 2)
+        with self.assertRaises(update.Blocked):
+            update.require_reconciled_archive(self.entry)
+
+    def test_all_moved_but_receipt_not_persisted(self):
+        self.move(0, 1, 2, 3)
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_ALL_MOVED_NO_RECEIPT_MANUAL_RECONCILIATION',
+                              0, 4)
+
+    def test_all_moved_with_valid_receipt_and_stale_marker(self):
+        self.move(0, 1, 2, 3)
+        self.receipt()
+        self.assert_immutable(self.inspect(),
+                              'ARCHIVE_RECORDED_PENDING_MARKER_MANUAL_RECONCILIATION',
+                              0, 4)
+
+    def test_receipt_in_incomplete_archive_blocks(self):
+        self.move(0, 1)
+        self.receipt()
+        with self.assertRaisesRegex(update.Blocked,
+                                    'RECOVERY_RECEIPT_WITH_PARTIAL_FILES'):
+            self.inspect()
+
+    def test_tampered_files_missing_files_and_collisions_fail_closed(self):
+        self.paths[0].write_text('{"tampered":true}')
+        with self.assertRaisesRegex(update.Blocked, 'RECOVERY_ARCHIVE_HASH_MISMATCH'):
+            self.inspect()
+        self.paths[0].write_bytes(self.before[self.paths[0].name])
+        self.paths[0].unlink()
+        with self.assertRaisesRegex(update.Blocked,
+                                    'RECOVERY_DUPLICATE_OR_MISSING_EVIDENCE'):
+            self.inspect()
+        self.paths[0].write_bytes(self.before[self.paths[0].name])
+        self.move(0)
+        self.paths[0].write_bytes(self.before[self.paths[0].name])
+        with self.assertRaisesRegex(update.Blocked,
+                                    'RECOVERY_DUPLICATE_OR_MISSING_EVIDENCE'):
+            self.inspect()
+
+    def test_marker_symlink_or_bad_archive_and_forged_receipt_fail_closed(self):
+        self.marker.unlink()
+        self.marker.symlink_to(self.archive / 'absent')
+        with self.assertRaises((ValueError, OSError, update.Blocked)):
+            self.inspect()
+        self.marker.unlink()
+        import json
+        marker = {'status': 'ARCHIVE_INCOMPLETE_NO_DEPLOYMENT',
+                  'source_sha': SHA, 'source_asset_sha256': DIGEST,
+                  'archive_name': '../bad', 'files_sha256': self.hashes}
+        self.marker.write_text(json.dumps(marker))
+        with self.assertRaisesRegex(update.Blocked, 'RECOVERY_PENDING_MARKER_INVALID'):
+            self.inspect()
+        marker['archive_name'] = self.archive.name
+        self.marker.write_text(json.dumps(marker))
+        self.move(0, 1, 2, 3)
+        self.receipt()
+        receipt_path = self.archive / 'expired-prepared-archive.json'
+        claim = json.loads(receipt_path.read_text())
+        claim['operator'] = 'untrusted'
+        receipt_path.write_text(json.dumps(claim))
+        with self.assertRaisesRegex(update.Blocked, 'RECOVERY_ARCHIVE_RECEIPT_INVALID'):
+            self.inspect()
+
+
 class RepeatedLayersTests(unittest.TestCase):
     def setUp(self):
         self.root = entry.WORKDIR
