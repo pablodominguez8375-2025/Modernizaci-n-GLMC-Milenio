@@ -124,7 +124,7 @@ def signed_candidate_preflight(inspector, signed, *, stage_parent=STATE):
     always creates both dependencies from trusted root-owned source files.
     """
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
-            "PREFLIGHT_ONLY_GLM DCH_ROOT".replace(" ", "_"))
+            "PREFLIGHT_ONLY_GLMDCH_ROOT")
     for source in SOURCE_NAMES:
         trusted_file(source)
     private_stage_parent(stage_parent)
@@ -212,7 +212,7 @@ def main(argv=None):
     try:
         require(args.preflight, "PREFLIGHT_EXPLICIT_COMMAND_REQUIRED")
         require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
-                "PREFLIGHT_ONLY_GLM DCH_ROOT".replace(" ", "_"))
+                "PREFLIGHT_ONLY_GLMDCH_ROOT")
         for source in SOURCE_NAMES:
             trusted_file(source)
         inspector = load("qa525_launcher_signed_old_inspector", SOURCE_NAMES[1])
