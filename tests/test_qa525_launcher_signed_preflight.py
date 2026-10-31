@@ -194,7 +194,7 @@ class SignedLauncherPreflightTests(unittest.TestCase):
             preflight.validate_operator_ast(b"invalid python: << syntax")
         with self.assertRaisesRegex(preflight.Blocked,
                                     "PREFLIGHT_OPERATOR_PYTHON_INVALID"):
-            preflight.validate_operator_ast(b"\\xff")
+            preflight.validate_operator_ast(bytes([255]))
 
     def test_manifest_claim_mismatch_is_rejected_even_if_verifier_is_mocked(self):
         def staged_bad_manifest(package):
