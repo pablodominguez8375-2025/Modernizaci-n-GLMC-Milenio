@@ -12,6 +12,12 @@ on:
       - "scripts/qa/operators/qa525-member-history-schema-gate.py"
       - "scripts/qa/operators/qa525-post-db-readonly.py"
       - "tests/test_qa525_post_db_readonly.py"
+      - "scripts/qa/operators/qa525-update.py"
+      - "scripts/qa/operators/qa525-support00-*.py"
+      - "scripts/qa/operators/support00-migrator/**"
+      - "tests/test_qa525_support00_schema.py"
+      - "tests/test_qa525_update_automation.py"
+      - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   pull_request:
     branches: [dev]
@@ -24,6 +30,12 @@ on:
       - "scripts/qa/operators/qa525-member-history-schema-gate.py"
       - "scripts/qa/operators/qa525-post-db-readonly.py"
       - "tests/test_qa525_post_db_readonly.py"
+      - "scripts/qa/operators/qa525-update.py"
+      - "scripts/qa/operators/qa525-support00-*.py"
+      - "scripts/qa/operators/support00-migrator/**"
+      - "tests/test_qa525_support00_schema.py"
+      - "tests/test_qa525_update_automation.py"
+      - "backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs"
       - ".github/workflows/qa525-supervised-dual-transaction.yml"
   workflow_dispatch:
 
@@ -49,6 +61,12 @@ jobs:
           python -m py_compile tests/test_qa525_member_history_schema_gate.py
           python -m py_compile scripts/qa/operators/qa525-post-db-readonly.py
           python -m py_compile tests/test_qa525_post_db_readonly.py
+          python -m py_compile scripts/qa/operators/qa525-update.py
+          python -m py_compile scripts/qa/operators/qa525-support00-migration.py
+          python -m py_compile scripts/qa/operators/qa525-support00-schema-gate.py
+          python -m py_compile scripts/qa/operators/qa525-support00-post-db-readonly.py
+          python -m py_compile tests/test_qa525_support00_schema.py
+          python -m py_compile tests/test_qa525_update_automation.py
       - name: All dual transaction regressions, fake Docker only
         run: python -m unittest discover -s tests -p 'test_qa525_supervised_dual_transaction.py' -v
       - name: Offline review, migration and supervision regressions
@@ -57,6 +75,10 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_qa525_member_history_schema_gate.py' -v
       - name: Post-DB 99 migration checkpoint (fake Docker, NO writes)
         run: python -m unittest discover -s tests -p 'test_qa525_post_db_readonly.py' -v
+      - name: Exact EF100 and support00 catalog contract (fake Docker)
+        run: python -m unittest discover -s tests -p 'test_qa525_support00_schema.py' -v
+      - name: Reusable controller, replay, quota redaction and Compose history
+        run: python -m unittest discover -s tests -p 'test_qa525_update_automation.py' -v
       - name: Ensure no unattended deployment entrypoint
         run: |
           python - <<'PY'
