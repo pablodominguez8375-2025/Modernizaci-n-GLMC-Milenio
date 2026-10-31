@@ -31,7 +31,27 @@ OLD = {
     "current_launcher": "/usr/local/sbin/pmgm-qa-update",
     "current_operator": "/opt/centenario/qa525-signed-stage/old/qa525-update.py",
 }
-OPER = b"".join(x.encode() for x in preflight.REQUIRED_OPERATOR_CONTRACT)
+OPER = ("""def require_reconciled_archive(entry):
+    raise RuntimeError("RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION")
+
+def install_review_packet(entry, packet):
+    require_reconciled_archive(entry)
+
+def archive_expired_prepared(entry, args):
+    require_reconciled_archive(entry)
+
+def inspect_pending_archive(entry):
+    raise RuntimeError("RECOVERY_ARCHIVE_COMMIT_SYNC_UNCERTAIN")
+
+def main():
+    choice = parser.add_mutually_exclusive_group()
+    choice.add_argument('--archive-expired-prepared')
+    choice.add_argument('--inspect-pending-archive')
+    choice.add_argument('--status')
+    choice.add_argument('--apply-prepared')
+    choice.add_argument('--review-and-run')
+    require_reconciled_archive(None)
+""").encode("utf-8")
 
 
 class SignedLauncherPreflightTests(unittest.TestCase):
@@ -137,21 +157,44 @@ class SignedLauncherPreflightTests(unittest.TestCase):
         self.assertEqual([], list(self.parent.iterdir()))
 
     def test_candidate_missing_recovery_command_blocks(self):
-        tampered = b"--status --apply-prepared"
+        original = OPER.decode("utf-8")
+        tampered = original.replace(
+            "    choice.add_argument('--archive-expired-prepared')\n", "")
         def stage_missing_flag(package):
-            self.valid_signed_stage(package)
+            result = self.valid_signed_stage(package)
             file = package / preflight.CANDIDATE
-            file.write_bytes(tampered)
+            file.write_bytes(tampered.encode("utf-8"))
             (package / "MANIFEST.sha256").write_text(
-                hashlib.sha256(tampered).hexdigest() + "  ./" +
+                hashlib.sha256(file.read_bytes()).hexdigest() + "  ./" +
                 preflight.CANDIDATE.as_posix() + "\n")
-            return {"status": "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
-                    "scope": self.signer.SCOPE, "source_sha": SHA,
-                    "release_asset_sha256": DIGEST}
+            return result
         self.signer.verify_current.side_effect = stage_missing_flag
         with self.assertRaisesRegex(preflight.Blocked,
                                     "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING"):
             self.check()
+
+    def test_comment_or_string_mentions_cannot_spoof_cli_or_guard(self):
+        contents = OPER.decode("utf-8")
+        no_cli = contents.replace(
+            "    choice.add_argument('--inspect-pending-archive')",
+            "    # choice.add_argument('--inspect-pending-archive')")
+        with self.assertRaisesRegex(preflight.Blocked,
+                                    "PREFLIGHT_REQUIRED_RECOVERY_CONTRACT_MISSING"):
+            preflight.validate_operator_ast(no_cli.encode("utf-8"))
+        no_guard = contents.replace(
+            "def archive_expired_prepared(entry, args):\n    require_reconciled_archive(entry)",
+            "def archive_expired_prepared(entry, args):\n    # require_reconciled_archive(entry)\n    pass")
+        with self.assertRaisesRegex(preflight.Blocked,
+                                    "PREFLIGHT_ARCHIVE_RECONCILIATION_GUARD_MISSING"):
+            preflight.validate_operator_ast(no_guard.encode("utf-8"))
+
+    def test_unparseable_operator_is_rejected_before_any_execution(self):
+        with self.assertRaisesRegex(preflight.Blocked,
+                                    "PREFLIGHT_OPERATOR_PYTHON_INVALID"):
+            preflight.validate_operator_ast(b"invalid python: << syntax")
+        with self.assertRaisesRegex(preflight.Blocked,
+                                    "PREFLIGHT_OPERATOR_PYTHON_INVALID"):
+            preflight.validate_operator_ast(b"\\xff")
 
     def test_manifest_claim_mismatch_is_rejected_even_if_verifier_is_mocked(self):
         def staged_bad_manifest(package):
