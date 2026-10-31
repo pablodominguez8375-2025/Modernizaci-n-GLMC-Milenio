@@ -122,6 +122,43 @@ public sealed class SupportViewAsPostgreSqlTests
     }
 
     [Fact]
+    public async Task Master_and_superuser_get_only_the_technical_support_context_without_an_institutional_assignment()
+    {
+        var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
+        if (string.IsNullOrWhiteSpace(cs)) return;
+        var ct = TestContext.Current.CancellationToken;
+        using var factory = await CreateAsync(cs);
+        using var master = factory.CreateClient();
+
+        master.DefaultRequestHeaders.Add("X-View-Role", InstitutionalRoles.PlatformSuperAdmin);
+        using var masterResponse = await master.GetAsync("/api/session/support-workshop", ct);
+        Assert.Equal(HttpStatusCode.OK, masterResponse.StatusCode);
+        var masterJson = await masterResponse.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("00", masterJson.GetProperty("number").GetString());
+        Assert.Equal("support", masterJson.GetProperty("type").GetString());
+        Assert.True(masterJson.GetProperty("technicalOnly").GetBoolean());
+        Assert.False(masterJson.GetProperty("institutionalMembership").GetBoolean());
+        var supportId = masterJson.GetProperty("organizationId").GetGuid();
+
+        // Nunca convertir una asignación de soporte en claims institucionales.
+        using var profileResponse = await master.GetAsync("/api/session/me", ct);
+        Assert.Equal(HttpStatusCode.OK, profileResponse.StatusCode);
+        var masterProfile = await profileResponse.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("order", masterProfile.GetProperty("accessScope").GetString());
+
+        using var superuser = factory.CreateClient();
+        superuser.DefaultRequestHeaders.Add("X-View-Account-Kind", "superuser");
+        using var superuserResponse = await superuser.GetAsync("/api/session/support-workshop", ct);
+        Assert.Equal(HttpStatusCode.OK, superuserResponse.StatusCode);
+        var superuserJson = await superuserResponse.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal(supportId, superuserJson.GetProperty("organizationId").GetGuid());
+
+        using var ordinary = factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await ordinary.GetAsync("/api/session/support-workshop", ct)).StatusCode);
+    }
+
+    [Fact]
     public async Task Support_workshop_00_is_permanent_technical_seed_without_institutional_activity()
     {
         var cs = Environment.GetEnvironmentVariable("PMGM_TEST_POSTGRES");
@@ -255,6 +292,7 @@ public sealed class SupportViewAsPostgreSqlTests
             var principal = new ClaimsPrincipal(new ClaimsIdentity(
             [
                 new Claim("sub", sub), new Claim("name", "Master Ficticio"), new Claim(InstitutionalClaims.Scope, "order"),
+                new Claim(InstitutionalClaims.AccountKind, Request.Headers["X-View-Account-Kind"].FirstOrDefault() ?? "member"),
                 new Claim(InstitutionalClaims.Role, Request.Headers["X-View-Role"].ToString())
             ], Name));
             return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(principal, Name)));
