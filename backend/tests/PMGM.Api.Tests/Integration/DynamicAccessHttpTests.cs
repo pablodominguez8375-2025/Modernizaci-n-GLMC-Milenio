@@ -170,14 +170,15 @@ public sealed class DynamicAccessHttpTests
         // Todos los datos son ficticios. Nunca usar RUT, correos o cuentas reales.
         var marker = Guid.NewGuid().ToString("N");
         var real = new Organization { Name = "Taller real sintético " + marker, Number = "28", Type = "workshop" };
-        var support = new Organization { Name = "Taller 00 Soporte GLMCh QA " + marker, Number = "00", Type = "support" };
-        var uppercase = new Organization { Name = "Taller soporte mayúscula QA " + marker, Number = "00", Type = "SUPPORT" };
+        // El Taller 00 de soporte es único y fijo; la cobertura SUPPORT mayúscula
+        // corresponde a la política de tipos, no a una segunda entidad institucional.
+        Guid supportId;
         var synthetic = new Member {
             Person = new Person { FirstNames = "Miembro QA", LastNames = "FICTICIO " + marker },
             CurrentDegree = "apprentice"
         };
         var supportLink = new Membership {
-            Member = synthetic, Organization = support, Status = "active", MembershipType = "regular"
+            Member = synthetic, Status = "active", MembershipType = "regular"
         };
         // Simula un vínculo equivocado: el miembro de soporte no debe entrar
         // al listado institucional aunque tenga otra membresía workshop.
@@ -188,7 +189,11 @@ public sealed class DynamicAccessHttpTests
         {
             var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
             await db.Database.MigrateAsync(ct);
-            db.Organizations.AddRange(real, support, uppercase);
+            supportId = await db.Organizations.AsNoTracking()
+                .Where(o => o.Type.ToLower() == "support" && o.Number == "00")
+                .Select(o => o.Id).SingleAsync(ct);
+            supportLink.OrganizationId = supportId;
+            db.Organizations.Add(real);
             db.Members.Add(synthetic);
             db.Memberships.AddRange(supportLink, mixedLink);
             await db.SaveChangesAsync(ct);
@@ -198,21 +203,17 @@ public sealed class DynamicAccessHttpTests
         using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         var items = payload.RootElement.GetProperty("items").EnumerateArray().ToArray();
         Assert.Contains(items, item => item.GetProperty("id").GetGuid() == real.Id);
-        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == support.Id);
-        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == uppercase.Id);
-        Assert.DoesNotContain("Taller 00 Soporte GLMCh QA " + marker, await response.Content.ReadAsStringAsync(ct));
+        Assert.DoesNotContain(items, item => item.GetProperty("id").GetGuid() == supportId);
+        Assert.DoesNotContain("Taller 00 - Soporte", await response.Content.ReadAsStringAsync(ct));
 
         // La ocultación de opciones no basta: incluso con claims de Orden,
         // el UUID directo jamás ofrece un padrón o ficha de soporte.
-        foreach (var hidden in new[] { support, uppercase })
-        {
-            using var organizationProfile = await client.GetAsync(
-                $"/api/institutional/organizations/{hidden.Id}/profile", ct);
+        using (var organizationProfile = await client.GetAsync(
+            $"/api/institutional/organizations/{supportId}/profile", ct))
             Assert.Equal(HttpStatusCode.NotFound, organizationProfile.StatusCode);
-            using var roster = await client.GetAsync(
-                $"/api/members?organizationId={hidden.Id}", ct);
+        using (var roster = await client.GetAsync(
+            $"/api/members?organizationId={supportId}", ct))
             Assert.Equal(HttpStatusCode.NotFound, roster.StatusCode);
-        }
 
         using var syntheticProfile = await client.GetAsync($"/api/members/{synthetic.Id}/profile", ct);
         Assert.Equal(HttpStatusCode.NotFound, syntheticProfile.StatusCode);
@@ -227,6 +228,17 @@ public sealed class DynamicAccessHttpTests
         Assert.DoesNotContain(realListJson.RootElement.GetProperty("items").EnumerateArray(),
             item => item.GetProperty("memberId").GetGuid() == synthetic.Id);
         Assert.DoesNotContain("FICTICIO " + marker, await realRoster.Content.ReadAsStringAsync(ct));
+
+        // La pertenencia de soporte ficticia no debe persistir al terminar el test.
+        // Sin limpieza, podría alterar la prueba del Taller 00 sin actividad institucional.
+        await using (var scope = factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PmgmDbContext>();
+            await db.Memberships.Where(m => m.MemberId == synthetic.Id).ExecuteDeleteAsync(ct);
+            await db.Members.Where(m => m.Id == synthetic.Id).ExecuteDeleteAsync(ct);
+            await db.People.Where(p => p.Id == synthetic.Person.Id).ExecuteDeleteAsync(ct);
+            await db.Organizations.Where(o => o.Id == real.Id).ExecuteDeleteAsync(ct);
+        }
     }
 
     private sealed class Auth(IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)

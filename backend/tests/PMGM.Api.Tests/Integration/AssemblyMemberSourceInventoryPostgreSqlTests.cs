@@ -102,11 +102,13 @@ public sealed class AssemblyMemberSourceInventoryPostgreSqlTests
         await using var db = Open(cs);
         await db.Database.MigrateAsync(ct);
 
-        var support = new Organization { Name = "Taller 00 QA", Type = "support" };
+        // El Taller 00 ya es semilla permanente: no se permiten organizaciones support paralelas.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        var support = await db.Organizations.SingleAsync(o => o.Type == "support" && o.Number == "00", ct);
         var person = new Person { FirstNames = "Carlos", LastNames = "Test" };
         var member = new Member { Person = person, PersonId = person.Id };
         var code = "vm-c24-" + Guid.NewGuid().ToString("N");
-        db.AddRange(support, person, member,
+        db.AddRange(person, member,
             new OfficeAssignment
             {
                 MemberId = member.Id, OrganizationId = support.Id,
@@ -130,5 +132,7 @@ public sealed class AssemblyMemberSourceInventoryPostgreSqlTests
             db, Cutoff, code + "-absent", ct);
         Assert.False(absent.InventoryReadCompleted);
         Assert.Contains("MASTER_OFFICE_RECORDS_MISSING", absent.BlockingReasons);
+        // Los datos deliberadamente incompatibles solo existen dentro de esta prueba.
+        await tx.RollbackAsync(ct);
     }
 }

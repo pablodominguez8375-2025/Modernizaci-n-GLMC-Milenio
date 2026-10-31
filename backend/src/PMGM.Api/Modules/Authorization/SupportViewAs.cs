@@ -79,6 +79,7 @@ public sealed class SupportViewAsMiddleware(RequestDelegate next)
                 code,
                 message = code == "SUPPORT_VIEW_READ_ONLY" ? "«Ver como» es solo lectura: no se puede modificar nada."
                     : code == "SUPPORT_VIEW_RESOURCE_DENIED" ? "Este dato no se muestra en «Ver como» para proteger los datos personales."
+                    : code == "SUPPORT_WORKSHOP_00_UNAVAILABLE" ? "El Taller 00 técnico de soporte no está configurado correctamente."
                     : "La sesión de «Ver como» no es válida o ya terminó."
             });
         }
@@ -103,9 +104,24 @@ public sealed class SupportViewAsMiddleware(RequestDelegate next)
         {
             if (profile is not null)
             {
-                var supportOrg = await db.Organizations.AsNoTracking().Where(o => o.Type.ToLower() == PMGM.Api.Modules.Core.SupportWorkshopPolicy.OrganizationType)
-                    .Select(o => (Guid?)o.Id).FirstOrDefaultAsync(ctx.RequestAborted);
-                target = SupportViewProfiles.Claims(profile, supportOrg);
+                if (profile.OrderScope)
+                {
+                    target = SupportViewProfiles.Claims(profile, null);
+                }
+                else
+                {
+                    var candidates = await db.Organizations.AsNoTracking()
+                        .Where(o => o.Type.ToLower() == PMGM.Api.Modules.Core.SupportWorkshopPolicy.OrganizationType)
+                        .Select(o => new { o.Id, o.Type, o.Number })
+                        .Take(2).ToListAsync(ctx.RequestAborted);
+                    if (candidates.Count != 1 ||
+                        !PMGM.Api.Modules.Core.SupportWorkshopPolicy.IsConfiguredSupportWorkshop(candidates[0].Type, candidates[0].Number))
+                    {
+                        await Deny(StatusCodes.Status503ServiceUnavailable, "SUPPORT_WORKSHOP_00_UNAVAILABLE", sid);
+                        return;
+                    }
+                    target = SupportViewProfiles.Claims(profile, candidates[0].Id);
+                }
             }
             else
             target = await cache.GetOrCreateAsync("support-view-target:" + sid, async entry =>
@@ -188,6 +204,27 @@ public static class SupportViewAsEndpoints
         var profile = SupportViewProfiles.Find(request.ProfileKey?.Trim());
         if (profile is null || !string.IsNullOrWhiteSpace(request.TargetSubject))
             return Results.BadRequest(new { code = "SUPPORT_VIEW_PROFILE_UNKNOWN", message = "Seleccione un perfil de la lista." });
+        // Los perfiles de Taller no pueden abrir una sesión si no hay exactamente un
+        // Taller 00 técnico. Una organización vacía permitiría vistas ambiguas.
+        if (!profile.OrderScope)
+        {
+            var candidates = await db.Organizations.AsNoTracking()
+                .Where(o => o.Type.ToLower() == PMGM.Api.Modules.Core.SupportWorkshopPolicy.OrganizationType)
+                .Select(o => new { o.Type, o.Number })
+                .Take(2).ToListAsync(ct);
+            if (candidates.Count != 1 ||
+                !PMGM.Api.Modules.Core.SupportWorkshopPolicy.IsConfiguredSupportWorkshop(candidates[0].Type, candidates[0].Number))
+            {
+                audit.Add(ctx, "support.view_as.start_denied", "SupportViewSession", "none", null,
+                    AuditResults.Rejected, new { code = "SUPPORT_WORKSHOP_00_UNAVAILABLE" });
+                await db.SaveChangesAsync(ct);
+                return Results.Json(new
+                {
+                    code = "SUPPORT_WORKSHOP_00_UNAVAILABLE",
+                    message = "El Taller 00 técnico de soporte no está configurado correctamente."
+                }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        }
         var op = Operator(ctx); var now = DateTimeOffset.UtcNow; var subject = SupportViewProfiles.SubjectPrefix + profile.Key;
         var open = await db.SupportViewSessions.Where(x => x.OperatorSubject == op && x.EndedAtUtc == null).ToListAsync(ct);
         foreach (var previous in open) previous.EndedAtUtc = now;

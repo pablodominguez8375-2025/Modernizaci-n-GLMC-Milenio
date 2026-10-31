@@ -14,6 +14,37 @@ public static class SessionEndpoints
             .WithTags("Sesión institucional")
             .RequireAuthorization();
 
+        // #812: asignación técnica virtual y predeterminada al Taller 00 para
+        // Máster/superusuarios. No es una claim institucional, membresía ni cargo.
+        endpoints.MapGet("/api/session/support-workshop", async (
+            HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
+        {
+            ctx.Response.Headers.CacheControl = "private, no-store";
+            if (!access.IsPlatformOperator(ctx.User)) return Results.Forbid();
+            var candidates = await db.Organizations.AsNoTracking()
+                .Where(o => o.Type.ToLower() == PMGM.Api.Modules.Core.SupportWorkshopPolicy.OrganizationType)
+                .Select(o => new { o.Id, o.Name, o.Type, o.Number })
+                .Take(2).ToListAsync(ct);
+            if (candidates.Count != 1 ||
+                !PMGM.Api.Modules.Core.SupportWorkshopPolicy.IsConfiguredSupportWorkshop(candidates[0].Type, candidates[0].Number))
+            {
+                return Results.Json(new
+                {
+                    code = "SUPPORT_WORKSHOP_00_UNAVAILABLE",
+                    message = "El Taller 00 técnico de soporte no está configurado correctamente."
+                }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+            return Results.Ok(new
+            {
+                organizationId = candidates[0].Id,
+                number = candidates[0].Number,
+                name = candidates[0].Name,
+                type = candidates[0].Type,
+                technicalOnly = true,
+                institutionalMembership = false
+            });
+        }).WithTags("Sesión institucional").RequireAuthorization();
+
         endpoints.MapGet("/api/session/treasury-access", async (Guid organizationId, HttpContext ctx, PmgmDbContext db, IInstitutionalAccessService access, CancellationToken ct) =>
         {
             ctx.Response.Headers.CacheControl = "private, no-store";
