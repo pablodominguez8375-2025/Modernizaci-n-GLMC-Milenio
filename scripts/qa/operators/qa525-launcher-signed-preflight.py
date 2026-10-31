@@ -105,6 +105,18 @@ def stable_hash(path, maximum=2_000_000):
     return data
 
 
+
+def private_stage_parent(path):
+    require(path.is_absolute(), "PREFLIGHT_STAGE_PARENT_NOT_ABSOLUTE")
+    for item in (path, *path.parents):
+        st = item.lstat()
+        require(st.st_uid == 0 and stat.S_ISDIR(st.st_mode)
+                and not stat.S_ISLNK(st.st_mode) and not (st.st_mode & 0o022),
+                "PREFLIGHT_STAGE_PARENT_UNSAFE")
+    require(stat.S_IMODE(path.lstat().st_mode) == 0o700,
+            "PREFLIGHT_STAGE_NOT_PRIVATE")
+    return True
+
 def signed_candidate_preflight(inspector, signed, *, stage_parent=STATE):
     """Only the built-in signed verifier may choose the candidate.
 
@@ -115,13 +127,7 @@ def signed_candidate_preflight(inspector, signed, *, stage_parent=STATE):
             "PREFLIGHT_ONLY_GLM DCH_ROOT".replace(" ", "_"))
     for source in SOURCE_NAMES:
         trusted_file(source)
-    for item in (stage_parent, *stage_parent.parents):
-        st = item.lstat()
-        require(st.st_uid == 0 and stat.S_ISDIR(st.st_mode)
-                and not stat.S_ISLNK(st.st_mode) and not (st.st_mode & 0o022),
-                "PREFLIGHT_STAGE_PARENT_UNSAFE")
-    require(stat.S_IMODE(stage_parent.lstat().st_mode) == 0o700,
-            "PREFLIGHT_STAGE_NOT_PRIVATE")
+    private_stage_parent(stage_parent)
     old = inspector.inspect()
     require(old.get("status") == "LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED"
             and old.get("old_launcher_template_verified") is True
