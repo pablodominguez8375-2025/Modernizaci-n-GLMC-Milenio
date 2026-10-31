@@ -33,6 +33,13 @@ class Support00Tests(unittest.TestCase):
         f, b = self.fixture()
         self.assertFalse(gate.reviewed_diff(f, b)['may_apply'])
 
+    def test_postgresql_integration_exercises_the_identical_sql(self):
+        source = (OPS.parents[2] / 'backend/tests/PMGM.Api.Tests/Integration/SupportViewAsPostgreSqlTests.cs').read_text()
+        start = source.index('command.CommandText = """') + len('command.CommandText = """')
+        sql = source[start:source.index('""";', start)]
+        import textwrap
+        self.assertEqual(probe.SUPPORT_SQL, textwrap.dedent(sql).strip())
+
     def test_unknown_schema_or_renamed_original_is_rejected(self):
         for filename in ('backend/X/Migrations/Other.cs', 'backend/OtherDbContext.cs'):
             f, b = self.fixture()
