@@ -1,0 +1,19 @@
+{
+  "source_sha": "",
+  "release_asset_sha256": "",
+  "reviewed_at": 0,
+  "expires_at": 0,
+  "nonce": "",
+  "operator_reviewed": false,
+  "review_mode": "single_operator_qa",
+  "technical_review_reference": "",
+  "sponsor_approval_reference": "https://github.com/pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio/issues/525#issuecomment-6538679406",
+  "scope": "QA_GLM_DCH_EF99_TO_100_SUPPORT00_ONLY",
+  "g6": {
+    "g6_archive_name": "",
+    "g6_archive_sha256": "",
+    "g6_drive_file_id": "",
+    "g6_offhost_sha256_verified": false,
+    "g6_restore_report_name": ""
+  }
+}

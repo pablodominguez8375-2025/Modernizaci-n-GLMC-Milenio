@@ -1,0 +1,10 @@
+# QA525 — actualización reutilizable y migrador Taller00
+
+PR815: inicio dev02271268, nueva base c78bc03ee9978132b7aaea6ec6f97f52960a834b (PR816 ayuda de Claude, cuatro rutas frontend preservadas); main6dfb9546 intacta. Fuente02271268 staged/firma física PASS, API+WEB con última evidencia725bc319, BD99/PR801=1/Taller00=0/soporte0/conflictos0. Sin modificación física durante esta entrega.
+
+Implementado: contrato3 blobs PR801+contexto+PR813; sondaEF100/catálogo exacto; opt-in postDB100 con acta/recibo real y prepared separados de99. Runner C# EF objetivo único, sin Program/otros contextos/Down; host operator prepare/migrate explícitos con fuente/firma, DDL del migrador original, red QA, G6 fresco, nonce y journal durable. Controlador update: status, launcher O_EXCL, review-and-run con comentario GitHub del proyecto ligado a SHA/digest/IA, archivo de actas, prepare+apply dual; no renueva aprobaciones ni reintenta journals incompletos. Capas históricas solo JSON image-only/journalAPPLIED, preservando identidad y orden. Defaults lifecycle/introspección comprobados en paquete firmado.
+
+205 pruebas Python locales PASS. La versión anterior48e9 pasó7/7 workflows, incluida prueba PostgreSQL real de catálogo; NO extrapolar a este nuevo HEAD/runner. Nuevas pruebas .NET/PostgreSQL aislado de migración exacta y replay, y coordinador requieren CI nuevo. No hay .NET/Docker/PostgreSQL local en esta sesión. Primera falla de clase fuera del shard se corrigió integrándola en clase existente; Silo HTTP400 externo inicial pasó en siguiente HEAD sin eludirlo.
+
+Manuales: QA525-SUPPORT00-SCHEMA-CUT.md y QA525-FAST-REVIEWED-UPDATES.md. Plantillas intencionalmente inválidas con false/fechas0, sin secretos. Automatización NO instalada: requiere CI exact-head, merge serial dev, release firmada y activación/ensayo en glmdch. Primera migración: G6 actual preDB, acta separada, ejecución única, EF100/recibo real y G6 postDB antes de API+WEB. UAT Ver como/login/roles pendiente. No main/srv01, PR771/737/766, SQL manual, Down ni datos reales; PR804/805 fuera del corte.
+

@@ -198,7 +198,7 @@ def scan_migrations(policy, fetch, target, gate=None, *, comparison=None):
     # These Git blob SHA values are independently pinned in the reviewed
     # pure PR801 contract, and are checked against the exact signed HEAD.
     blobs = {}
-    for path in (gate.MIGRATION_PATH, gate.CONTEXT_PATH):
+    for path in getattr(gate, "SCHEMA_PATHS", (gate.MIGRATION_PATH, gate.CONTEXT_PATH)):
         detail = fetch("/contents/" + path + "?ref=" + target)
         require(type(detail) is dict and type(detail.get("sha")) is str,
                 "MIGRATION_SOURCE_BLOB_UNAVAILABLE")
@@ -207,15 +207,15 @@ def scan_migrations(policy, fetch, target, gate=None, *, comparison=None):
         gate.reviewed_diff(comparison["files"], blobs)
     except gate.Blocked:
         raise Blocked("UNKNOWN_OR_UNREVIEWED_EF_CHANGE") from None
-    return "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
+    return getattr(gate, "SCHEMA_REVIEW_STATE", "PR801_REVIEWED_ADDITIVE_NEEDS_DBA")
 
 
-def validate_single_operator_review(record):
+def validate_single_operator_review(record, *, scope="POST_PR801_API_WEB_ONLY_NO_MIGRATION"):
     """Explicit PO-approved QA route; never claim an independent human DBA."""
     require(record.get("review_mode") == "single_operator_qa"
             and record.get("environment") == "QA_SYNTHETIC"
             and record.get("host") == "glmdch"
-            and record.get("scope") == "POST_PR801_API_WEB_ONLY_NO_MIGRATION"
+            and record.get("scope") == scope
             and record.get("sponsor_approval_reference") == SINGLE_OPERATOR_DECISION
             and record.get("sponsor_accepts_single_operator_risk") is True
             and record.get("independent_human_review") is False
@@ -256,8 +256,18 @@ def validate_post_db_dba(review, source, now, docker, gate, probe, *, single_ope
     require(type(dba) is dict and set(dba) == fields,
             "DBA_REVIEW_FIELDS_INVALID")
     if single_operator:
-        validate_single_operator_review(dba)
+        validate_single_operator_review(dba, scope=getattr(gate, "SINGLE_OPERATOR_SCOPE",
+            "POST_PR801_API_WEB_ONLY_NO_MIGRATION"))
     completed, approved = dba["migration_completed_at"], dba["approved_at"]
+    if getattr(gate, "MIGRATION_COMPLETION_REQUIRED", False):
+        completion = private_json(STATE / "support00-completed.json")
+        require(completion.get("status") == "SUPPORT00_EF100_VERIFIED"
+                and type(completion.get("source_sha")) is str
+                and SHA.fullmatch(completion["source_sha"])
+                and completion.get("migration_id") == gate.MIGRATION_ID
+                and completion.get("migration_blob_sha") == gate.MIGRATION_BLOB
+                and completion.get("completed_at") == completed,
+                "SUPPORT00_MIGRATION_COMPLETION_UNVERIFIED")
     require(dba["source_sha"] == source["source_sha"]
             and dba["release_asset_sha256"] == source["release_asset_sha256"]
             and dba["baseline_sha"] == BASELINE
@@ -288,7 +298,7 @@ def validate_post_db_dba(review, source, now, docker, gate, probe, *, single_ope
     except (probe.Blocked, gate.Blocked):
         raise Blocked("POST_DB_SCHEMA_LIVE_READONLY_NOT_VERIFIED") from None
     require(state.get("status") == probe.POST_DB_PASS_STATUS
-            and state.get("history_count") == 99
+            and state.get("history_count") == getattr(gate, "EXPECTED_HISTORY_COUNT", 99)
             and state.get("may_apply") is False,
             "POST_DB_SCHEMA_LIVE_READONLY_NOT_VERIFIED")
     return True
@@ -351,7 +361,16 @@ def single_operator_runtime(docker):
     return hashlib.sha256(json.dumps(sorted(data)).encode()).hexdigest()
 
 
-def prepare_reviewed(build, approval, signed, adapter, source, approve, review, *, single_operator=False):
+def validate_package_account_defaults(package):
+    for path in (Path(package) / "backend/src/PMGM.Api").glob("appsettings*.json"):
+        options = json.loads(path.read_text()).get("UserAccounts", {}).get("Identity", {})
+        require(all(options.get(key, False) is False for key in
+                    ("EnableLifecycleMutations", "RequireLiveTokenIntrospection")),
+                "SINGLE_OPERATOR_PACKAGE_ACCOUNT_FLAGS_ENABLED")
+
+
+def prepare_reviewed(build, approval, signed, adapter, source, approve, review, *, single_operator=False,
+                     support00=False):
     """Build both images from a newly verified Sigstore release; no deployment.
 
     An explicit root-owned sensitive review and a fresh supervised approval
@@ -384,6 +403,8 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review, 
         require(attestation["source_sha"] == target
                 and attestation["release_asset_sha256"] ==
                 source["release_asset_sha256"], "PREPARE_SIGNATURE_MISMATCH")
+        if single_operator:
+            validate_package_account_defaults(package)
         def verify(path, sha):
             if sha != target or path != package:
                 return False
@@ -416,6 +437,7 @@ def prepare_reviewed(build, approval, signed, adapter, source, approve, review, 
             "fresh_backup_created": False, "signed_stage_ephemeral": True,
             "actual_rollback_drill_completed": False,
             "review_mode": "single_operator_qa" if single_operator else "independent_dba",
+            "schema_mode": "support00_postdb" if support00 else "member_history_postdb",
         }
         approval.validate(approve, source, prepared, int(time.time()))
     require(not receipt_path.exists() and not receipt_path.is_symlink(),
@@ -456,6 +478,38 @@ def expected_compose_chain(*, name, target, original_files,
             "COMPOSE_UNEXPECTED_IMAGE")
     return list(original_files) + [str(Path(state) / (
         "qa525-" + name + "-" + target + "-" + current_image[7:] + ".json"))]
+
+
+def reviewed_layers(core, records, root):
+    """Accept prior successful QA525 image-only layers, never arbitrary overlays.
+
+    Keep the original base/API/identity byte order and every historic layer.
+    Each extra file must be root600, exact image-only JSON and bound to its
+    successful dual journal. No compaction, deletion or identity rewriting.
+    """
+    require(type(records) is dict and set(records) == {"api", "web"},
+            "COMPOSE_HISTORY_INVALID")
+    base = {name: records[name][:size] for name, size in (("api", 3), ("web", 2))}
+    core.normalized_layers(base, root)
+    for name, size in (("api", 3), ("web", 2)):
+        files = records[name]
+        require(type(files) is list and size <= len(files) <= 128
+                and len(files) == len(set(files)), "COMPOSE_HISTORY_INVALID")
+        for filename in files[size:]:
+            path = Path(filename)
+            match = re.fullmatch(r"qa525-" + name + r"-([a-f0-9]{40})-([a-f0-9]{64})\.json", path.name)
+            require(path.parent == STATE and match is not None,
+                    "COMPOSE_HISTORY_LAYER_UNRECOGNIZED")
+            source, digest = match.groups()
+            image = "sha256:" + digest
+            require(private_json(path) == {"services": {name: {"image": image}}},
+                    "COMPOSE_HISTORY_LAYER_NOT_IMAGE_ONLY")
+            journal = private_json(STATE / ("dual-" + source + ".json"))
+            require(journal.get("status") == "APPLIED"
+                    and journal.get("source_sha") == source
+                    and journal.get("new_images", {}).get(name) == image,
+                    "COMPOSE_HISTORY_NOT_SUCCESSFULLY_APPLIED")
+    return {name: tuple(records[name]) for name in ("api", "web")}
 
 
 
@@ -537,6 +591,20 @@ def supervision_mode(args):
     return args[0], len(args) == 2
 
 
+def schema_supervision_mode(arguments):
+    support00 = arguments[-1:] == ["--support00-postdb"]
+    action, single_operator = supervision_mode(arguments[:-1] if support00 else arguments)
+    require(not support00 or single_operator, "SUPPORT00_REQUIRES_EXPLICIT_SINGLE_OPERATOR")
+    return action, single_operator, support00
+
+
+def validate_prepared_schema_mode(prepared, support00):
+    require(type(prepared) is dict and type(support00) is bool
+            and prepared.get("schema_mode", "member_history_postdb") ==
+            ("support00_postdb" if support00 else "member_history_postdb"),
+            "PREPARED_SCHEMA_MODE_MISMATCH")
+
+
 def validate_prepared_review_mode(prepared, single_operator):
     require(type(prepared) is dict and type(single_operator) is bool
             and prepared.get("review_mode", "independent_dba") ==
@@ -567,11 +635,15 @@ def current_change_review(policy, signed, source, schema_gate):
 
 
 def main():
-    action, single_operator = supervision_mode(sys.argv[1:])
+    action, single_operator, support00 = schema_supervision_mode(sys.argv[1:])
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "ONLY_GLM DCH_ROOT_QA".replace(" ", "_"))
     for path in (Path(__file__), *MODULES):
         trusted(path)
+    if support00:
+        for path in (HERE / "qa525-support00-schema-gate.py",
+                     HERE / "qa525-support00-post-db-readonly.py"):
+            trusted(path)
     trusted(STATE, directory=True)
     trusted(G6_DIR, directory=True)
     require(stat.S_IMODE(STATE.stat().st_mode) == 0o700,
@@ -584,6 +656,9 @@ def main():
     adapter = load("qa525_supervised_transport", MODULES[5])
     schema_gate = load("qa525_pr801_schema_review", MODULES[6])
     post_db_probe = load("qa525_pr801_post_db_probe", MODULES[7])
+    if support00:
+        schema_gate = load("qa525_pr813_schema_review", HERE / "qa525-support00-schema-gate.py")
+        post_db_probe = load("qa525_pr813_post_db_probe", HERE / "qa525-support00-post-db-readonly.py")
     with build.exclusive():
         review = private_json(REVIEW, maximum=8192)
         source = signed.gate.evaluate(signed.gate.readiness.fetch_public,
@@ -592,7 +667,8 @@ def main():
         require(type(target) is str and SHA.fullmatch(target),
                 "SIGNATURE_RELEASE_TARGET_DRIFT")
         comparison, schema_state = current_change_review(policy, signed, source, schema_gate)
-        known_schema = schema_state == "PR801_REVIEWED_ADDITIVE_NEEDS_DBA"
+        known_schema = schema_state == getattr(schema_gate, "SCHEMA_REVIEW_STATE",
+                                               "PR801_REVIEWED_ADDITIVE_NEEDS_DBA")
         require(not single_operator or known_schema,
                 "SINGLE_OPERATOR_ONLY_POST_PR801")
         now = int(time.time())
@@ -605,10 +681,12 @@ def main():
         approve = approval.read_root_approval()
         if action == "--prepare-reviewed":
             return prepare_reviewed(build, approval, signed, adapter,
-                                    source, approve, review, single_operator=single_operator)
+                                    source, approve, review, single_operator=single_operator,
+                                    support00=support00)
         # Only after a separate, audited and signed build may we apply.
         prepared = private_json(STATE / "prepared.json")
         validate_prepared_review_mode(prepared, single_operator)
+        validate_prepared_schema_mode(prepared, support00)
         if single_operator:
             single_operator_runtime(adapter.docker)
         approved = approval.validate(approve, source, prepared, now)
@@ -622,6 +700,8 @@ def main():
             require(result["source_sha"] == target and
                     result["release_asset_sha256"] == source["release_asset_sha256"],
                     "PHYSICAL_SIGNATURE_REVERIFICATION_FAILED")
+            if single_operator:
+                validate_package_account_defaults(Path(d) / "signed")
         for name in core.TARGETS:
             image = prepared.get(name + "_image_id")
             require(type(image) is str and core.IMAGE.fullmatch(image)
@@ -662,7 +742,7 @@ def main():
         original = adapter.metadata()
         require(set(original) == set(core.TARGETS + core.DEPENDENCIES + core.ONESHOTS),
                 "UNEXPECTED_QA_SERVICE_SET")
-        layers = core.normalized_layers(
+        layers = reviewed_layers(core,
             {name: (original[name][7] or "").split(",") for name in core.TARGETS},
             WORKDIR)
         require(all(original[name][6] == str(WORKDIR) for name in core.TARGETS),
@@ -814,3 +894,4 @@ if __name__ == "__main__":
         print(json.dumps({"status": "BLOCKED_QA525_SUPERVISED_DUAL",
                           "code": code, "may_apply": False}, sort_keys=True))
         raise SystemExit(2)
+
