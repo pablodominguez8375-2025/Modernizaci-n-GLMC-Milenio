@@ -447,6 +447,7 @@ def archive_expired_prepared(entry, args, modules):
     pending = entry.STATE / 'expired-prepared-archive-pending.json'
     moved = []
     pending_created = False
+    marker_unlinked_after_durable_archive = False
     try:
         # Durable write-ahead marker BEFORE the first rename. SIGKILL/power
         # loss leaves this file and blocks future reviewed updates until
@@ -491,12 +492,19 @@ def archive_expired_prepared(entry, args, modules):
             finally:
                 os.close(fd)
         pending.unlink()
+        # After the durable archive and receipt have been fsynced, deleting
+        # the intent marker is the commit boundary. A later fsync failure
+        # must NOT roll the committed archive back; after a crash either
+        # the old marker survives (safe block) or the full archive does.
+        marker_unlinked_after_durable_archive = True
         fd = os.open(entry.STATE, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             os.fsync(fd)
         finally:
             os.close(fd)
     except BaseException:
+        if marker_unlinked_after_durable_archive:
+            raise Blocked('RECOVERY_ARCHIVE_COMMIT_SYNC_UNCERTAIN') from None
         result_path = archive / 'expired-prepared-archive.json'
         if result_path.is_file() and not result_path.is_symlink():
             result_path.unlink()
