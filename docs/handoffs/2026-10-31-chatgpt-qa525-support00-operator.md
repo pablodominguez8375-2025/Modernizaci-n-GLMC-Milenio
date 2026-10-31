@@ -1,0 +1,3 @@
+# QA525 — adaptación supervisada Taller 00
+
+Reserva ChatGPT: base dev02271268d3957d3aa669f8cef38e29e40c2b9298. Evidencia física EF99, PR801=1, SeedSupportWorkshop00=0, support=0, conflictos00=0. Fuente02271268 firmada en glmdch pero no aplicada. Implementar contrato exacto de EF99→100, sonda de solo lectura, procedimiento migrador separado y enlace al aplicador dual manteniendo ruta PR801 original. No SQL manual, Down, cambio main/srv01/identidad ni backup ficticio. CI, release y aplicación pendientes. Archivos reservados scripts/qa/operators/qa525-support00-*, entrypoint supervisado y tests correspondientes; sin migraciones backend ni frontend.
