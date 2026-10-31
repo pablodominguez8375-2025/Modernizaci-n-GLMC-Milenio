@@ -147,6 +147,147 @@ class ReviewPacketTests(unittest.TestCase):
             self.assertEqual(1, invoke.call_count)
 
 
+
+class ExpiredPreparedArchiveTests(unittest.TestCase):
+    """No Docker/SSH/network: pure expired-prepared preconditions and archive."""
+    def setUp(self):
+        self.sha = SHA
+        self.digest = DIGEST
+        self.baseline = {'api': {'image_id': 'sha256:' + 'd' * 64},
+                         'web': {'image_id': 'sha256:' + 'e' * 64}}
+        self.prepared = dict(
+            status='PREPARED_API_WEB_SIGNATURE_VERIFIED_NO_DEPLOYMENT',
+            source_sha=SHA, source_asset_sha256=DIGEST,
+            schema_mode='support00_postdb', review_mode='single_operator_qa',
+            images_built=True, services_unchanged=True, may_apply=False,
+            baseline=self.baseline, api_image_id='sha256:' + 'f' * 64,
+            web_image_id='sha256:' + 'b' * 64)
+        self.review = dict(source_sha=SHA, release_asset_sha256=DIGEST,
+                           reviewed_at=NOW - 2000)
+        self.post = dict(source_sha=SHA, release_asset_sha256=DIGEST,
+                         approved_at=NOW - 2000, review_mode='single_operator_qa')
+        self.cut = dict(target_sha=SHA, release_asset_sha256=DIGEST,
+                        nonce='c' * 64, issued_at=NOW - 2000,
+                        expires_at=NOW - 200, operator_reviewed=True,
+                        scope='LOCAL_SUPERVISION_MATCH_ONLY_NO_APPLY',
+                        action='first-qa-api-web-supervised',
+                        environment='QA_SYNTHETIC')
+        self.journals = [{'status': 'APPLIED', 'source_sha': 'd' * 40}]
+
+    def contract(self, **changes):
+        params = dict(sha=SHA, digest=DIGEST, baseline=self.baseline,
+                      now=NOW, journals=self.journals, nonce_consumed=False)
+        params.update(changes)
+        return update.expired_prepared_archive_contract(
+            self.prepared, self.review, self.post, self.cut, **params)
+
+    def test_only_fully_expired_target_with_unconsumed_nonce_is_archivable(self):
+        self.assertTrue(self.contract())
+        self.cut['expires_at'] = NOW + 1
+        with self.assertRaises(update.Blocked):
+            self.contract()
+        self.cut['expires_at'] = NOW - 200
+        self.review['reviewed_at'] = NOW - 1799
+        with self.assertRaises(update.Blocked):
+            self.contract()
+        self.review['reviewed_at'] = NOW - 2000
+        with self.assertRaises(update.Blocked):
+            self.contract(nonce_consumed=True)
+
+    def test_foreign_sha_digest_unexpected_mode_and_baseline_are_blocked(self):
+        for key, bad in [('source_sha', 'd' * 40),
+                         ('source_asset_sha256', 'sha256:' + 'e' * 64),
+                         ('schema_mode', 'member_history_postdb'),
+                         ('review_mode', 'independent_dba'),
+                         ('status', 'APPLIED'),
+                         ('images_built', False),
+                         ('services_unchanged', False),
+                         ('may_apply', True),
+                         ('baseline', {})]:
+            original = self.prepared[key]
+            self.prepared[key] = bad
+            with self.subTest(key=key), self.assertRaises(update.Blocked):
+                self.contract()
+            self.prepared[key] = original
+        for object_, key, bad in [
+                (self.review, 'source_sha', 'd' * 40),
+                (self.review, 'release_asset_sha256', 'sha256:' + 'e' * 64),
+                (self.post, 'approved_at', NOW - 1),
+                (self.post, 'review_mode', 'automatic'),
+                (self.cut, 'nonce', 'unsafe'),
+                (self.cut, 'operator_reviewed', False),
+                (self.cut, 'action', 'apply_everything'),
+                (self.cut, 'environment', 'PRODUCTION')]:
+            previous = object_[key]
+            object_[key] = bad
+            with self.subTest(field=key), self.assertRaises(update.Blocked):
+                self.contract()
+            object_[key] = previous
+
+    def test_pending_or_target_journal_is_never_treated_as_completed(self):
+        for journal in ({'status': 'PENDING', 'source_sha': 'd' * 40},
+                        {'status': 'ROLLED_BACK', 'source_sha': 'd' * 40},
+                        {'status': 'APPLIED', 'source_sha': SHA}):
+            with self.subTest(journal=journal), self.assertRaises(update.Blocked):
+                self.contract(journals=[journal])
+
+    def test_archive_preserves_bytes_and_never_runs_deployment(self):
+        import json
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state = root / 'state'
+            state.mkdir()
+            sensitive = root / 'review.json'
+            post = root / 'post.json'
+            approval_path = root / 'approval.json'
+            self.prepared['source_sha'] = SHA
+            for path, value in ((state / 'prepared.json', self.prepared),
+                                (sensitive, self.review), (post, self.post),
+                                (approval_path, self.cut),
+                                (state / ('dual-' + 'd' * 40 + '.json'), self.journals[0])):
+                path.write_text(json.dumps(value, sort_keys=True))
+            before = {p.name: p.read_bytes() for p in
+                      (state / 'prepared.json', sensitive, post, approval_path)}
+            live = {name: ['id', self.baseline[name]['image_id'], 'running',
+                           None, None, None, None, 'base-compose.json']
+                    for name in ('api', 'web')}
+            def docker(cmd):
+                if cmd[0:2] != ['image', 'inspect']:
+                    raise AssertionError('unexpected docker command')
+                if cmd[2:4] == ['--format', '{{.Id}}']:
+                    return cmd[-1]
+                if 'org.opencontainers.image.revision' in cmd[3]:
+                    return SHA if cmd[-1] in (self.prepared['api_image_id'],
+                                              self.prepared['web_image_id']) else 'd' * 40
+                raise AssertionError('unknown inspect format')
+            adapter = types.SimpleNamespace(docker=docker, metadata=lambda: live)
+            build = types.SimpleNamespace(snapshot=lambda _: self.baseline)
+            approval_mod = types.SimpleNamespace(APPROVAL=approval_path)
+            core_mod = types.SimpleNamespace(TARGETS=['api', 'web'])
+            e = types.SimpleNamespace(
+                STATE=state, REVIEW=sensitive, SINGLE_OPERATOR_REVIEW=post,
+                WORKDIR=root,
+                single_operator_runtime=lambda _: None,
+                reviewed_layers=lambda *args: None,
+                private_json=lambda p: json.loads(p.read_text()),
+                health=lambda source: source == 'd' * 40)
+            args = types.SimpleNamespace(source=SHA, digest=DIGEST,
+                                         operator_name='soporte@glmdch')
+            modules = [core_mod, build, approval_mod, None, None, adapter, None, None]
+            with patch.object(update, 'invoke', side_effect=AssertionError('must not apply')):
+                result = update.archive_expired_prepared(e, args, modules)
+            self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT', result['status'])
+            archives = list(state.glob('review-archive-*'))
+            self.assertEqual(len(archives), 1)
+            self.assertEqual('EXPIRED_PREPARED_ARCHIVED_NO_DEPLOYMENT',
+                json.loads((archives[0] / 'expired-prepared-archive.json').read_text())['status'])
+            for name, bytes_before in before.items():
+                self.assertEqual(bytes_before, (archives[0] / name).read_bytes())
+            self.assertFalse((state / 'prepared.json').exists())
+            self.assertTrue((state / ('dual-' + 'd' * 40 + '.json')).exists())
+
+
 class RepeatedLayersTests(unittest.TestCase):
     def setUp(self):
         self.root = entry.WORKDIR
