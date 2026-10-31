@@ -255,3 +255,10 @@ No se instala un timer que despliegue arbitrariamente ni se habilitan migracione
 al iniciar API. El monitoreo puede ser automático; la escritura sigue atada al
 corte revisado, evidencia vigente y acciones explícitas. No main, srv01,
 producción, PR771/737/766 ni datos reales.
+
+
+## Seguridad ante corte abrupto del archivado de preparados vencidos — 31-10-2026
+
+El operador del PR #820 crea el marcador privado `expired-prepared-archive-pending.json` en el directorio QA525 **antes** de mover `prepared.json` y las tres actas a `review-archive-*`. Lo escribe con `root:root 0600`, incluye SHA, digest, nombre del archivo e hashes de las evidencias, y sincroniza a disco. Al finalizar el archivo completo y su recibo, sincroniza los directorios y quita el marcador. Si ocurre una excepción Python normal durante los movimientos, revierte los archivos; una prueba hermética inyecta un error en el segundo renombrado y confirma integridad y limpieza. Si hay `SIGKILL`, caída de energía o rollback incompleto, debe quedar el marcador y el próximo intento `--review-and-run`, `--run-reviewed`, `--apply-prepared` o `--archive-expired-prepared` **se bloquea** con `RECOVERY_ARCHIVE_PARTIAL_REQUIRES_RECONCILIATION` mientras el marcador esté presente. `--status` expone `archive_reconciliation_required` sin cambiar la máquina.
+
+**El marcador NO es una aprobación, un journal APPLIED ni un permiso para continuar.** Jamás borrar manualmente ese marcador, usar otro launcher o fingir un prepared exitoso: inspeccionar originales y archivo parcial, validar hashes y journals bajo el procedimiento de recuperación previamente revisado. El PR todavía está DRAFT. La prueba de excepción no equivale a simulación real de pérdida súbita de energía ni prueba el funcionamiento en glmdch; se exige revisión adversarial independiente y liberación firmada antes del uso físico. La nueva actualización de QA también requiere resolver el reemplazo firmado del launcher inmutable actualmente fijado (O_EXCL), verificación de G6 y nueva aprobación válida.
