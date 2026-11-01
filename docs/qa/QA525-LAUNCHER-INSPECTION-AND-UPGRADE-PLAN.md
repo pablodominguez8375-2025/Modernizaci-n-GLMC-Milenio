@@ -37,7 +37,11 @@ la inspección; en cualquier fallo controlado emite
 `status=LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED` requerido por el
 preflight firmado previo. Estos estados no verifican que exista un release
 firmado, no acreditan una instalación, no renuevan aprobaciones y no permiten
-`may_install` ni `may_apply`.
+`may_install` ni `may_apply`. Tampoco comparan el launcher con el HEAD actual
+de `dev`: `INSTALLER_UPDATE_REQUIRED` significa que **para sustituir este
+launcher heredado se necesita el instalador firmado**, no que ya exista una
+nueva versión instalable ni que el host haya quedado atrasado. Tras instalar
+el reemplazo, usar diagnóstico post-instalación específico, no este indicador.
 
 **NO usar esta herramienta desde código crudo de GitHub en glmdch.**
 Solo después de CI exact-head, revisión independiente y publicación firmada,
