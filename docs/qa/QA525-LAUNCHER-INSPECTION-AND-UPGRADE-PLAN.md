@@ -1,7 +1,6 @@
 # QA525 — Inspección previa del lanzador root-owned (#822)
 
-Estado: **fase 1 / solo lectura**. No actualiza, no instala, no valida la
-firma de un paquete, no hace cambios en Docker ni desbloquea la PR #820.
+Estado: **fases 1–2 de inspección + ensayo 3b exclusivamente temporal**. El inspector aislado no verifica firma, pero el preflight de fase 2 añade Sigstore y manifiesto. Ninguno instala, cambia Docker, ni habilita la actualización física QA525.
 Un examen satisfactorio de un lanzador antiguo **no** autoriza reemplazarlo.
 
 ## Riesgo real
@@ -35,7 +34,7 @@ Solo después de CI exact-head, revisión independiente y publicación firmada,
 el inspector podrá incorporarse a una instalación autorizada. Ningún comando
 del proyecto cambia aún al launcher existente.
 
-## Contrato de fase 2 (futuro, NO implementado aquí)
+## Contrato general para una instalación física futura (especificación)
 
 1. Inspeccionar estado antiguo y registrar hash, propietario, permisos,
    ubicación exacta, ausencia de symlink y ruta efectiva. Bloquear si difiere.
@@ -67,7 +66,7 @@ no se probó apagón real, no hay firma nueva para la PR #820, no se ha instalad
 el operador reemplazante ni se ha completado la UAT. Los hashes locales
 sólo sirven para inventario, no para validación de integridad con Sigstore.
 
-Continuidad: Issues #525, #819, #821, #822; PR #820 permanece draft.
+Continuidad: Issues #525, #819, #821, #822. PR #820 integrada exclusivamente a `dev` mediante squash `6b7b6a3c34d0d3d309dd12d7217f9725a00d95fe`; recuperación disponible **en código**, NO instalada en `glmdch`.
 
 ## Fase 2 — Candidato firmado, comprobación previa sin instalar
 
@@ -85,7 +84,7 @@ Su salida `SIGNED_LAUNCHER_CANDIDATE_VERIFIED_NO_INSTALL` no es un acta de aprob
 
 Pruebas herméticas en `tests/test_qa525_launcher_signed_preflight.py`: rechazo por host incorrecto, launcher antiguo alterado, origen sin permisos, manifest manipulado, ausencia de recuperación segura, firma no verificada, source SHA o digest inválidos, cambio del launcher durante la descarga, symlinks/hardlinks, y ausencia de instalador en este módulo. El workflow QA525 las ejecuta en PR exact-HEAD.
 
-**Fase 3 aún pendiente:** diseñar e integrar la sustitución atómica del launcher con respaldo completo, aprobación específica, journal/lock/fsync, pruebas de SIGKILL y rollback. Antes de ese paso no existe comando seguro autorizado para escribir `/usr/local/sbin/pmgm-qa-update`.
+**Fase 3 de instalador físico aún pendiente:** integrar la sustitución atómica del launcher con respaldo completo, aprobación específica, journal/lock/fsync, pruebas de SIGKILL y rollback. Antes de ese paso no existe comando seguro autorizado para escribir `/usr/local/sbin/pmgm-qa-update`.
 
 ## Fase 3a — Contrato auditable previo al reemplazo (NO instalador)
 
@@ -97,7 +96,7 @@ Se añadió `scripts/qa/operators/qa525-launcher-replacement-contract.py` junto 
 
 **Hallazgo de auditoría:** una versión inicial duplicó una barra de escape en los patrones regex de hash; el CI hermético lo detectó (no se acepta como verificación). La corrección simplifica las expresiones porque `re.fullmatch()` ya obliga a coincidir con toda la cadena. Solo el **nuevo HEAD exacto** y su CI determinan si la corrección quedó validada.
 
-**Bloqueo de coordinación:** tras integrar PR #820 a `dev` por squash, la PR #823 todavía se basa en un SHA anterior. Se intentó preparar un árbol de sincronización pero la herramienta rechazó la operación; no se forzó ningún ref, no se hizo merge ni se intentó sustituir la verificación. Antes de integrar #823 será necesario actualizarla contra el HEAD vivo de dev, validar CI nueva y cumplir la coordinación multi-IA.
+**Coordinación recuperada:** después del intento previo de construir un árbol bloqueado, GitHub generó su commit de prueba de fusión con dos padres (`dev@d5f828642120de539ace8795904d3b60c35d9d42` y el HEAD de PR #823). Se verificaron los hashes de archivos críticos y se avanzó la rama con `update_ref` fast-forward `force=false`, con SHA esperado, a `2f94cfbf2ae7c65ef8bbf6d3c12e1c3216128a68`. No se reescribió historial, no se fusionó a `dev` y no se desplegó: la ronda de CI de este nuevo HEAD debe ser `SUCCESS` antes de integrar.
 
 **Fase 3b pendiente:** implementar el instalador físico transaccional en paquete firmado inmutable, con adquisición comprobada, lock compartido de cinco recursos, evidencia/aprobación root0600, respaldo antiguo con SHA, journal de intención durable, sustitución atómica `os.replace`, fsync, recibo final y reconciliación manual obligatoria de interrupciones. Revalidar no alteración de Compose/identidad, G6 y API/WEB separadamente. Sin esta fase, **NO ejecutar reemplazo root ni archivo de preparado**.
 
