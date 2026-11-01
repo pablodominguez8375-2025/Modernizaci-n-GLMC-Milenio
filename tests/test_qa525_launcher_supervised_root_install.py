@@ -431,6 +431,124 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
         self.exercise(bad_manifest=True)
 
 
+class RealProductionContractCompatibilityTests(unittest.TestCase):
+    """No mocks of production APIs: inspect real sibling source and pure logic.
+
+    No network, root, Docker, filesystem writes outside the test sandbox, or
+    execution of downloaded candidate/operator source. Fail on API drift.
+    """
+
+    CONTRACTS = {
+        "scripts/qa/operators/qa525-launcher-upgrade-inspect.py":
+            {"inspect": ((), ())},
+        "scripts/qa/operators/qa525-launcher-signed-preflight.py":
+            {"signed_candidate_preflight":
+                (("inspector", "signed"), ("stage_parent",)),
+             "stable_hash": (("path", "maximum"), ())},
+        "scripts/qa/qa525-stage-current-release.py":
+            {"verify_current": (("output",), ("selection",))},
+        "scripts/qa/qa-signed-staging.py":
+            {"verify_manifest": (("package", "source_sha"), ())},
+        "scripts/qa/operators/qa525-launcher-root-approval.py":
+            {"read_root_approval": ((), ())},
+        "scripts/qa/operators/qa525-launcher-replacement-contract.py":
+            {"assess_review":
+                (("preflight", "approval"),
+                 ("now", "pending", "consumed_nonces"))},
+        "scripts/qa/operators/qa525-launcher-pinned-template.py":
+            {"render": (("source_sha",), ()),
+             "inspect_template": (("source_sha", "candidate"), ())},
+        "scripts/qa/operators/qa525-launcher-retained-source-inspect.py":
+            {"inspect_retained":
+                (("source_sha", "expected_operator_sha256"), ())},
+    }
+
+    def test_real_production_module_function_interfaces(self):
+        for relative, requirements in self.CONTRACTS.items():
+            with self.subTest(path=relative):
+                src = ROOT / relative
+                self.assertTrue(src.is_file())
+                tree = ast.parse(src.read_text(encoding="utf-8"),
+                                 filename=str(src))
+                functions = {item.name: item for item in tree.body
+                             if isinstance(item, ast.FunctionDef)}
+                for name, (positional, keywords) in requirements.items():
+                    self.assertIn(name, functions)
+                    node = functions[name]
+                    self.assertEqual(
+                        list(positional),
+                        [a.arg for a in node.args.posonlyargs
+                         + node.args.args])
+                    self.assertEqual(
+                        list(keywords),
+                        [a.arg for a in node.args.kwonlyargs])
+
+    def test_real_pure_approval_contract_and_pinned_template(self):
+        def from_real_file(name, path):
+            spec = importlib.util.spec_from_file_location(name, ROOT / path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+            return module
+
+        contract = from_real_file(
+            "qa525_root_contract_real",
+            "scripts/qa/operators/qa525-launcher-replacement-contract.py")
+        approval = from_real_file(
+            "qa525_root_approval_real",
+            "scripts/qa/operators/qa525-launcher-root-approval.py")
+        template = from_real_file(
+            "qa525_root_template_real",
+            "scripts/qa/operators/qa525-launcher-pinned-template.py")
+        now = 1793488800
+        sha = "a" * 40
+        old = "c" * 64
+        operator = "d" * 64
+        signed_digest = "sha256:" + "e" * 64
+        nonce = "f" * 64
+        plan = {
+            "status": "SIGNED_LAUNCHER_CANDIDATE_VERIFIED_NO_INSTALL",
+            "scope": "SIGNED_EXACT_DEV_PREFLIGHT_ONLY_NO_LAUNCHER_REPLACEMENT_NO_DEPLOY",
+            "source_sha": sha, "release_asset_sha256": signed_digest,
+            "old_launcher_sha256": old,
+            "candidate_operator_sha256": operator,
+            "sigstore_verified_in_this_operation": True,
+            "signed_manifest_verified": True,
+            "old_launcher_checked_twice": True,
+            "replacement_applied": False,
+            "may_install": False, "may_apply": False,
+        }
+        packet = {
+            "source_sha": sha, "release_asset_sha256": signed_digest,
+            "old_launcher_sha256": old,
+            "candidate_operator_sha256": operator,
+            "scope": approval.SCOPE, "action": approval.ACTION,
+            "environment": approval.ENVIRONMENT,
+            "operator": approval.OPERATOR, "approved": True,
+            "issued_at": now - 60, "expires_at": now + 60,
+            "nonce": nonce,
+        }
+        self.assertFalse(approval.validate(packet, now)["may_install"])
+        assessed = contract.assess_review(
+            plan, packet, now=now, pending=False, consumed_nonces=())
+        self.assertEqual("REVIEWED_SIGNED_LAUNCHER_PLAN_NO_INSTALL",
+                         assessed["status"])
+        self.assertFalse(assessed["may_apply"])
+        self.assertEqual(sha, assessed["source_sha"])
+        self.assertEqual(nonce, assessed["nonce"])
+        actual_launcher = template.render(sha)
+        template_check = template.inspect_template(sha, actual_launcher)
+        self.assertEqual(m.digest(actual_launcher),
+                         template_check["launcher_sha256"])
+        self.assertFalse(template_check["may_install"])
+        with self.assertRaises(contract.Blocked):
+            contract.assess_review(
+                plan, packet, now=now, pending=False,
+                consumed_nonces=(nonce,))
+        with self.assertRaises(approval.Blocked):
+            approval.validate(dict(packet, approved=1), now)
+
+
 class IndependentBootstrapAdmissionTests(unittest.TestCase):
     """Cross-check an externally provisioned receipt, never forge a signature."""
 
