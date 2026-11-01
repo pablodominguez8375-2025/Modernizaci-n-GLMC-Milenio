@@ -255,10 +255,11 @@ class RootLauncherInstallerTests(unittest.TestCase):
 class LauncherSandboxTransactionTests(unittest.TestCase):
     """Execute real fsync/rename/journal in a temp root, never actual QA."""
 
-    def exercise(self, *, fault=None, change_approval=False):
+    def exercise(self, *, fault=None, change_approval=False, bad_manifest=False):
         old = b"#!/usr/bin/python3\nprint('old synthetic launcher')\n"
         new = b"#!/usr/bin/python3\nprint('signed synthetic launcher')\n"
         operator = b"print('synthetic signed operator, never executed')\n"
+        manifest = b"synthetic manifest bound to external admission\n"
         source_sha = SHA
         release_digest = "sha256:" + "c" * 64
         operator_hash = m.digest(operator)
@@ -296,6 +297,7 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     folder.mkdir(mode=0o700)
                 location = folder / "qa525-update.py"
                 location.write_bytes(operator)
+                (package / "MANIFEST.sha256").write_bytes(manifest)
                 return {
                     "status": "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
                     "source_sha": source_sha,
@@ -352,7 +354,10 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     m, "all_five_locks", return_value=nullcontext()))
                 stack.enter_context(patch.object(m, "verify_inputs",
                                                  return_value=modules))
-                stack.enter_context(patch.object(m, "verify_bootstrap_binding"))
+                stack.enter_context(patch.object(
+                    m, "verify_bootstrap_binding", return_value={
+                        "manifest_sha256": ("f" * 64 if bad_manifest
+                                            else m.digest(manifest))}))
                 if fault in ("before_swap", "after_swap"):
                     stack.enter_context(patch.object(m.os, "replace",
                                                      side_effect=swap))
@@ -362,6 +367,10 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                 if fault:
                     with self.assertRaisesRegex(RuntimeError,
                                                 "SYNTHETIC_PROCESS_DEATH"):
+                        m.replace_approved()
+                elif bad_manifest:
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_BOOTSTRAP_MANIFEST_BINDING_MISMATCH"):
                         m.replace_approved()
                 elif change_approval:
                     with self.assertRaisesRegex(
@@ -375,7 +384,7 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     self.assertFalse(result["may_apply"])
                 self.assertEqual(
                     new if fault in ("after_swap", "after_receipt") or
-                        (not fault and not change_approval) else old,
+                        (not fault and not change_approval and not bad_manifest) else old,
                     launcher.read_bytes())
                 pending = state / ("intent-" + NONCE + ".json")
                 receipt = state / ("receipt-" + NONCE + ".json")
@@ -389,7 +398,7 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     with self.assertRaisesRegex(
                             m.Blocked, "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION"):
                         m.replace_approved()
-                elif change_approval:
+                elif change_approval or bad_manifest:
                     self.assertFalse(pending.exists())
                     self.assertFalse(backup.exists())
                     self.assertFalse(receipt.exists())
@@ -417,6 +426,9 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
 
     def test_switched_approval_during_signed_download_aborts_before_intent(self):
         self.exercise(change_approval=True)
+
+    def test_external_manifest_drift_aborts_before_intent(self):
+        self.exercise(bad_manifest=True)
 
 
 class IndependentBootstrapAdmissionTests(unittest.TestCase):
