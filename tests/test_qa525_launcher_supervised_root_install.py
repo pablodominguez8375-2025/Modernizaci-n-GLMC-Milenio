@@ -1390,12 +1390,11 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
             self.run_reversal()
 
     def test_recovery_interruption_after_swap_blocks_retry(self):
-        original = m.sync_dir
-        def crash_on_launcher_directory(path):
-            if Path(path) == self.bin:
-                raise RuntimeError("synthetic crash after atomic swap")
-            return original(path)
-        with patch.object(m, "sync_dir", side_effect=crash_on_launcher_directory):
+        original = m.os.replace
+        def crash_after_atomic_replace(source, dest):
+            original(source, dest)
+            raise RuntimeError("synthetic crash after atomic swap")
+        with patch.object(m.os, "replace", side_effect=crash_after_atomic_replace):
             with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
                 self.run_reversal()
         self.assertEqual(self.old, self.launcher.read_bytes())
