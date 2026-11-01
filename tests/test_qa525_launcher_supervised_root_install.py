@@ -214,7 +214,9 @@ class RootLauncherInstallerTests(unittest.TestCase):
 
     def test_cli_does_not_offer_paths_force_or_disable_authentication(self):
         script = SOURCE.read_text()
-        self.assertIn('parser.add_argument("--replace-approved"', script)
+        self.assertIn('choice.add_argument("--replace-approved"', script)
+        self.assertIn('choice.add_argument("--inspect-pending"', script)
+        self.assertIn("add_mutually_exclusive_group(required=True)", script)
         self.assertNotIn("--force", script)
         self.assertNotIn("--unsigned", script)
         self.assertNotIn("--skip-verification", script)
@@ -708,6 +710,53 @@ class IndependentBootstrapAdmissionTests(unittest.TestCase):
         self.assertNotIn("write_once(ADMISSION", code)
 
 
+class ReadOnlyDiagnosticCliTests(unittest.TestCase):
+    """A diagnostic CLI must never become an install/recovery capability."""
+
+    def test_diagnostic_requires_bootstrap_and_does_not_mutate(self):
+        report = {
+            "status": "MANUAL_RECONCILIATION_REQUIRED_NO_AUTOREPAIR",
+            "observed_phase": "POST_ATOMIC_SWAP",
+            "may_resume": False, "may_apply": False,
+            "rollback_authorized": False,
+        }
+        with patch.object(m, "bootstrap_trusted_sources",
+                          return_value={"status": m.BOOTSTRAP_STATUS}) as gate, \
+             patch.object(m, "inspect_pending_reconciliation",
+                          return_value=report) as inspect, \
+             patch.object(m, "replace_approved") as install, \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(0, m.main(["--inspect-pending"]))
+            self.assertEqual(report, json.loads(output.getvalue()))
+            gate.assert_called_once_with()
+            inspect.assert_called_once_with()
+            install.assert_not_called()
+
+    def test_missing_bootstrap_blocks_read_only_diagnostics_before_inspection(self):
+        with patch.object(m, "bootstrap_trusted_sources",
+                          side_effect=m.Blocked("ROOT_PATH_MISSING")), \
+             patch.object(m, "inspect_pending_reconciliation") as inspect, \
+             patch.object(m, "replace_approved") as install, \
+             patch("sys.stdout", new_callable=io.StringIO) as output:
+            self.assertEqual(2, m.main(["--inspect-pending"]))
+            result = json.loads(output.getvalue())
+            self.assertEqual("BLOCKED_QA525_LAUNCHER_INSPECTION",
+                             result["status"])
+            self.assertEqual("ROOT_PATH_MISSING", result["code"])
+            self.assertFalse(result["may_apply"])
+            inspect.assert_not_called()
+            install.assert_not_called()
+
+    def test_two_actions_cannot_be_requested_together(self):
+        with patch.object(m, "replace_approved") as install, \
+             patch.object(m, "inspect_pending_reconciliation") as inspect, \
+             patch("sys.stderr", new_callable=io.StringIO):
+            with self.assertRaises(SystemExit):
+                m.main(["--replace-approved", "--inspect-pending"])
+            install.assert_not_called()
+            inspect.assert_not_called()
+
+
 class ReadOnlyPendingJournalTests(unittest.TestCase):
     """Never resume or roll back based solely on an on-disk journal."""
 
@@ -748,6 +797,24 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
                 intent.write_text('{"nonce":"bad","nonce":"bad-again"}')
             if corrupt == "missing_backup":
                 backup.unlink()
+            if corrupt == "intent_equals_old":
+                intent.write_bytes(m.json_bytes(
+                    dict(act, new_launcher_sha256=m.digest(old))))
+            if corrupt == "unknown_entry":
+                (journal / "unknown-journal.tmp").write_bytes(b"junk")
+            if corrupt in ("receipt_extra", "receipt_missing_candidate",
+                           "receipt_wrong_candidate"):
+                committed = dict(
+                    act, status="LAUNCHER_ATOMIC_SWAP_COMMITTED",
+                    candidate_operator_sha256="d"*64)
+                if corrupt == "receipt_extra":
+                    committed["unauthorized"] = True
+                if corrupt == "receipt_missing_candidate":
+                    del committed["candidate_operator_sha256"]
+                if corrupt == "receipt_wrong_candidate":
+                    committed["candidate_operator_sha256"] = "WRONG_HASH"
+                (journal / ("receipt-" + NONCE + ".json")).write_bytes(
+                    m.json_bytes(committed))
             before = {x.name: x.read_bytes() for x in journal.iterdir()}
             with patch.object(m, "STATE", journal), \
                  patch.object(m, "LAUNCHER", launcher), \
@@ -791,7 +858,12 @@ class ReadOnlyPendingJournalTests(unittest.TestCase):
     def test_corrupt_backup_live_receipt_or_missing_journal_block(self):
         for case, post in (("backup", False), ("unknown_live", False),
                            ("receipt", True), ("duplicate", False),
-                           ("missing_backup", False)):
+                           ("missing_backup", False),
+                           ("intent_equals_old", False),
+                           ("unknown_entry", False),
+                           ("receipt_extra", True),
+                           ("receipt_missing_candidate", True),
+                           ("receipt_wrong_candidate", True)):
             with self.subTest(case=case):
                 self.check(post=post, corrupt=case)
 
