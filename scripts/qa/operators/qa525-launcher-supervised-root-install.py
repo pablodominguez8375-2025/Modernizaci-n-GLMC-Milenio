@@ -642,7 +642,11 @@ def replace_approved():
             sync_dir(LAUNCHER.parent)
             require(digest(read_bound(LAUNCHER, exact_mode=0o700)) ==
                     digest(new_bytes), "ROOT_LAUNCHER_DRIFT_AFTER_SWAP")
-            retained.inspect_retained(sha, plan["candidate_operator_sha256"])
+            post_swap_retained = retained.inspect_retained(
+                sha, plan["candidate_operator_sha256"])
+            require(post_swap_retained.get("status") ==
+                    "ROOT_OWNED_PINNED_SOURCE_HASH_MATCH_NOT_SIGNED",
+                    "ROOT_RETAINED_SOURCE_POST_SWAP_INVALID")
             write_once(receipt, json_bytes({
                 **record, "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
                 "candidate_operator_sha256": plan["candidate_operator_sha256"],
