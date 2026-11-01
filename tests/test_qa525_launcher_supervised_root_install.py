@@ -49,6 +49,42 @@ class RootLauncherInstallerTests(unittest.TestCase):
              "/run/lock/pmgm-qa754-web-hotfix.lock",
              "/run/lock/pmgm-qa754-api-activation.lock"])
 
+    def test_hardlinked_shared_lock_is_rejected_before_flock(self):
+        fake = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,
+                               st_uid=0, st_nlink=2,
+                               st_dev=10, st_ino=20)
+        with patch.object(m, "require_host"), \
+             patch.object(m, "lock_parent"), \
+             patch.object(m.os, "open", return_value=100), \
+             patch.object(m.os, "fstat", return_value=fake), \
+             patch.object(m.os, "close"), \
+             patch.object(m.fcntl, "flock") as flock:
+            with self.assertRaisesRegex(m.Blocked,
+                                        "ROOT_LOCK_FILE_UNTRUSTED"):
+                with m.all_five_locks():
+                    self.fail("The unsafe lock must not be granted")
+            flock.assert_not_called()
+
+    def test_shared_lock_inode_swap_is_rejected_before_flock(self):
+        trusted = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,
+                                  st_uid=0, st_nlink=1,
+                                  st_dev=10, st_ino=20)
+        replacement = SimpleNamespace(st_mode=stat.S_IFREG | 0o600,
+                                      st_uid=0, st_nlink=1,
+                                      st_dev=10, st_ino=21)
+        with patch.object(m, "require_host"), \
+             patch.object(m, "lock_parent"), \
+             patch.object(m.os, "open", return_value=100), \
+             patch.object(m.os, "fstat", return_value=trusted), \
+             patch.object(Path, "lstat", return_value=replacement), \
+             patch.object(m.os, "close"), \
+             patch.object(m.fcntl, "flock") as flock:
+            with self.assertRaisesRegex(m.Blocked,
+                                        "ROOT_LOCK_PATH_CHANGED_DURING_OPEN"):
+                with m.all_five_locks():
+                    self.fail("The changed lock must not be granted")
+            flock.assert_not_called()
+
     def test_wrong_host_blocks_before_import_or_filesystem(self):
         with patch.object(m.os, "geteuid", return_value=0), \
              patch.object(m.socket, "gethostname", return_value="srv01"), \
