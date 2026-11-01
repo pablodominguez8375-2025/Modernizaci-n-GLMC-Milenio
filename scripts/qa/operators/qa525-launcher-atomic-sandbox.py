@@ -123,11 +123,12 @@ def json_bytes(data):
     return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode()
 
 
-def inspect(root, nonce, *, old_hash, new_hash):
+def inspect(root, nonce, *, old_hash, new_hash, source_sha, digest):
     """Classify persisted evidence. No mutation or automatic reconciliation."""
     root = trust_sandbox(root)
     require(valid(nonce, HASH) and valid(old_hash, HASH)
-            and valid(new_hash, HASH) and old_hash != new_hash,
+            and valid(new_hash, HASH) and old_hash != new_hash
+            and valid(source_sha, SHA) and valid(digest, DIGEST),
             "SANDBOX_INSPECTION_IDENTITY_INVALID")
     state = root / STATE_REL
     pending = state / ("intent-" + nonce + ".json")
@@ -143,7 +144,9 @@ def inspect(root, nonce, *, old_hash, new_hash):
         require(record.get("status") == "SWAP_INTENT_NO_DEPLOYMENT"
                 and record.get("old_launcher_sha256") == old_hash
                 and record.get("new_launcher_sha256") == new_hash
-                and record.get("nonce") == nonce,
+                and record.get("nonce") == nonce
+                and record.get("source_sha") == source_sha
+                and record.get("release_asset_sha256") == digest,
                 "SANDBOX_INTENT_IDENTITY_INVALID")
     live_hash = sha(read_exact(live))
     if backup.exists():
@@ -155,7 +158,9 @@ def inspect(root, nonce, *, old_hash, new_hash):
         require(record.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
                 and record.get("old_launcher_sha256") == old_hash
                 and record.get("new_launcher_sha256") == new_hash
-                and record.get("nonce") == nonce,
+                and record.get("nonce") == nonce
+                and record.get("source_sha") == source_sha
+                and record.get("release_asset_sha256") == digest,
                 "SANDBOX_COMMIT_RECEIPT_INVALID")
     if pending.exists():
         if not backup.exists():
@@ -245,7 +250,8 @@ def simulate(root, *, source_sha, digest, nonce, old_hash, new_hash,
     pending.unlink()
     checkpoint("after_intent_unlink")
     sync_dir(state)
-    return inspect(root, nonce, old_hash=old_hash, new_hash=new_hash)
+    return inspect(root, nonce, old_hash=old_hash, new_hash=new_hash,
+                   source_sha=source_sha, digest=digest)
 
 
 if __name__ == "__main__":
