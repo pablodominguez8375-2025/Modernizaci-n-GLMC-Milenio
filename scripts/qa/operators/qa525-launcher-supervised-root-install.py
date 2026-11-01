@@ -280,6 +280,14 @@ def all_five_locks():
         yield
 
 
+def unique_json_fields(pairs):
+    result = {}
+    for name, value in pairs:
+        require(name not in result, "ROOT_JOURNAL_DUPLICATE_JSON_FIELD")
+        result[name] = value
+    return result
+
+
 def scan_history():
     """Fail closed on any unresolved transaction, unknown file or nonce."""
     root_chain(STATE, directory=True, exact_mode=0o700)
@@ -302,7 +310,9 @@ def scan_history():
                 ("old-" + suffix + ".bin") in names,
                 "ROOT_LAUNCHER_INCOMPLETE_JOURNAL")
         if name.startswith("receipt-"):
-            record = json.loads(read_bound(entry, maximum=4096, exact_mode=0o600))
+            record = json.loads(
+                read_bound(entry, maximum=4096, exact_mode=0o600),
+                object_pairs_hook=unique_json_fields)
             require(type(record) is dict
                     and record.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
                     and record.get("nonce") == suffix,
@@ -311,6 +321,84 @@ def scan_history():
         else:
             read_bound(entry, maximum=4096, exact_mode=0o700)
     return consumed
+
+
+def inspect_pending_reconciliation():
+    """Classify one unfinished durable journal WITHOUT authorizing any action.
+
+    This is a read-only diagnostic to be run by a separately authenticated,
+    root-owned code path on glmdch. It never executes a staged launcher,
+    downloads a release, consumes an approval, rolls back, or deploys.
+    """
+    require_host()
+    root_chain(STATE, directory=True, exact_mode=0o700)
+    root_chain(LAUNCHER, exact_mode=0o700)
+    with all_five_locks():
+        names = {p.name for p in STATE.iterdir()}
+        require(len(names) <= 1000, "ROOT_RECONCILIATION_JOURNAL_TOO_LARGE")
+        intents = [s for s in names if s.startswith("intent-")]
+        require(len(intents) == 1, "ROOT_RECONCILIATION_ONE_PENDING_REQUIRED")
+        name = intents[0]
+        require(name.endswith(".json")
+                and NONCE.fullmatch(name[len("intent-"):-len(".json")]) is not None,
+                "ROOT_RECONCILIATION_NONCE_INVALID")
+        nonce = name[len("intent-"):-len(".json")]
+        intent = STATE / name
+        backup = STATE / ("old-" + nonce + ".bin")
+        receipt = STATE / ("receipt-" + nonce + ".json")
+        require(backup.name in names, "ROOT_RECONCILIATION_BACKUP_MISSING")
+        try:
+            act = json.loads(read_bound(intent, exact_mode=0o600),
+                             object_pairs_hook=unique_json_fields)
+        except (ValueError, UnicodeError, TypeError):
+            raise Blocked("ROOT_RECONCILIATION_INTENT_JSON_INVALID") from None
+        require(type(act) is dict and set(act) == {
+                    "status", "source_sha", "release_asset_sha256",
+                    "old_launcher_sha256", "new_launcher_sha256", "nonce"}
+                and act["status"] == "SWAP_INTENT_NO_DEPLOYMENT"
+                and act["nonce"] == nonce
+                and type(act["source_sha"]) is str
+                and SHA.fullmatch(act["source_sha"]) is not None
+                and type(act["release_asset_sha256"]) is str
+                and re.fullmatch(r"sha256:[0-9a-f]{64}",
+                                 act["release_asset_sha256"]) is not None
+                and all(type(act[k]) is str
+                        and NONCE.fullmatch(act[k]) is not None
+                        for k in ("old_launcher_sha256", "new_launcher_sha256")),
+                "ROOT_RECONCILIATION_INTENT_INVALID")
+        old_bytes = read_bound(backup, exact_mode=0o700)
+        require(digest(old_bytes) == act["old_launcher_sha256"],
+                "ROOT_RECONCILIATION_BACKUP_HASH_MISMATCH")
+        current_hash = digest(read_bound(LAUNCHER, exact_mode=0o700))
+        require(current_hash in (
+                    act["old_launcher_sha256"], act["new_launcher_sha256"]),
+                "ROOT_RECONCILIATION_LIVE_UNKNOWN")
+        receipt_present = receipt.name in names
+        if receipt_present:
+            try:
+                commit = json.loads(read_bound(receipt, exact_mode=0o600),
+                                    object_pairs_hook=unique_json_fields)
+            except (ValueError, UnicodeError, TypeError):
+                raise Blocked("ROOT_RECONCILIATION_RECEIPT_JSON_INVALID") from None
+            require(type(commit) is dict
+                    and commit.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+                    and all(commit.get(k) == act[k] for k in act if k != "status")
+                    and current_hash == act["new_launcher_sha256"],
+                    "ROOT_RECONCILIATION_RECEIPT_MISMATCH")
+        return {
+            "status": "MANUAL_RECONCILIATION_REQUIRED_NO_AUTOREPAIR",
+            "source_sha": act["source_sha"],
+            "nonce": nonce,
+            "observed_phase": ("POST_ATOMIC_SWAP" if current_hash ==
+                               act["new_launcher_sha256"]
+                               else "PRE_ATOMIC_SWAP"),
+            "durable_receipt_present": receipt_present,
+            "backup_hash_matches_intent": True,
+            "signature_verified_by_inspection": False,
+            "rollback_authorized": False,
+            "may_resume": False,
+            "may_apply": False,
+        }
 
 
 def verify_inputs():
