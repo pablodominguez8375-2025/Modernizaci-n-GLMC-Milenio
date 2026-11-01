@@ -98,6 +98,12 @@ def root_owned(path, *, directory=False, mode=None):
                     "BOOTSTRAP_ROOT_PATH_MODE_INVALID")
 
 
+def require_isolated_root_python():
+    """Reject Python startup controlled by sitecustomize or user env paths."""
+    require(sys.flags.isolated == 1 and sys.flags.no_site == 1,
+            "BOOTSTRAP_ROOT_PYTHON_ISOLATION_REQUIRED")
+
+
 def write_all(fd, data):
     view = memoryview(data)
     while view:
@@ -388,6 +394,7 @@ def prepare(envelope, sha, expected, verifier_sha, *, now=None,
             verify=subprocess.run):
     require(os.geteuid() == 0 and socket.gethostname() == "glmdch",
             "BOOTSTRAP_ROOT_GLMDCH_ONLY")
+    require_isolated_root_python()
     with locked_bootstrap():
         return _prepare_locked(envelope, sha, expected, verifier_sha,
                                now=now, verify=verify)
