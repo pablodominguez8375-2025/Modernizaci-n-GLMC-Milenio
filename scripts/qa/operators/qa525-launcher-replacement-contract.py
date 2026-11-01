@@ -102,25 +102,47 @@ def assess_review(preflight, approval, *, now, pending, consumed_nonces=()):
 
 
 def assess_interrupted_swap(*, old_sha, new_sha, live_sha, backup_sha,
-                            pending, receipt=None):
-    """Diagnose intent+backup+launcher after a crash: never auto-recover.
+                            pending, source_sha, release_asset_sha256,
+                            nonce, intent=None, receipt=None):
+    """Diagnose a signed-cut launcher swap without recovery authorization.
 
-    Callers must inspect inode/owner/mode, journal and signed package first;
-    these inputs are evidence values rather than authorization.
+    Require exact signed source, release digest and nonce in every durable
+    marker. Values are caller-observed evidence, NOT cryptographic proof.
+    A future installer MUST independently re-read trusted host state,
+    verify release Sigstore/manifest and require operator approval/locks.
     """
     require(all(valid_sha(v, HASH) for v in
                 (old_sha, new_sha, live_sha, backup_sha)),
             "REPLACE_RECOVERY_HASH_INVALID")
+    require(valid_sha(source_sha, SHA)
+            and valid_sha(release_asset_sha256, DIGEST)
+            and valid_sha(nonce, NONCE),
+            "REPLACE_RECOVERY_SIGNED_IDENTITY_INVALID")
     require(old_sha != new_sha, "REPLACE_NO_NEW_LAUNCHER")
     require(type(pending) is bool, "REPLACE_RECOVERY_MARKER_INVALID")
+    require(intent is None or type(intent) is dict,
+            "REPLACE_PENDING_INTENT_INVALID")
     require(receipt is None or type(receipt) is dict,
             "REPLACE_RECOVERY_RECEIPT_INVALID")
+    identity = {
+        "source_sha": source_sha,
+        "release_asset_sha256": release_asset_sha256,
+        "nonce": nonce,
+        "old_launcher_sha256": old_sha,
+        "new_launcher_sha256": new_sha,
+    }
+    if pending:
+        require(intent is not None
+                and intent.get("status") == "SWAP_INTENT_NO_DEPLOYMENT"
+                and all(intent.get(key) == value for key, value in identity.items()),
+                "REPLACE_PENDING_INTENT_NOT_THIS_CUT")
+    else:
+        require(intent is None, "REPLACE_UNEXPECTED_INTENT_WITHOUT_MARKER")
     if backup_sha != old_sha:
         raise Blocked("REPLACE_BACKUP_HASH_DRIFT")
     if receipt is not None:
         require(receipt.get("status") == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
-                and receipt.get("old_launcher_sha256") == old_sha
-                and receipt.get("new_launcher_sha256") == new_sha,
+                and all(receipt.get(key) == value for key, value in identity.items()),
                 "REPLACE_COMMIT_RECEIPT_NOT_THIS_CUT")
     if pending:
         status = (
