@@ -173,6 +173,116 @@ def assess_reversal(committed, approval, *, current_launcher_sha256,
     }
 
 
+
+# Contract-only model. Neither the caller's packet nor the JSON approval is
+# proof of authenticity. A distinct future *trusted root* verifier must check
+# Sigstore, complete manifests, original receipts and root-owned files.
+DELAYED_RECOVERY_SCOPE = "QA525_LAUNCHER_ONLY_DELAYED_RECOVERY_NO_API_WEB"
+DELAYED_RECOVERY_ACTION = "review-delayed-root-launcher-reversal"
+DELAYED_RECOVERY_CLAIM_FIELDS = frozenset({
+    "purpose", "source_sha", "release_asset_sha256",
+    "manifest_sha256", "executor_sha256", "issued_at", "expires_at",
+})
+DELAYED_RECOVERY_APPROVAL_FIELDS = frozenset({
+    "action", "scope", "environment", "operator", "approved",
+    "cut_source_sha", "cut_release_asset_sha256", "cut_nonce",
+    "cut_receipt_sha256", "old_launcher_sha256", "new_launcher_sha256",
+    "recovery_source_sha", "recovery_release_asset_sha256",
+    "recovery_manifest_sha256", "recovery_executor_sha256",
+    "nonce", "issued_at", "expires_at",
+})
+
+
+def assess_delayed_recovery_plan(committed, recovery_claim, approval, *,
+                                 live_sha256, backup_sha256, pending, now,
+                                 consumed_nonces=()):
+    """Pure *review* of original-cut A and independently sourced executor B.
+
+    No signature, IAM, filesystem, privilege or lock checks. recovery_claim is
+    UNTRUSTED caller data, never a root admission. The time limit applies to a
+    separate new recovery claim, not to the historical installation admission.
+    A future trusted runner must authenticate both immutable source chains
+    and original journal, prove live state, recheck consent, and fail closed
+    after any interruption. This function is NEVER executable authorization.
+    """
+    require(type(committed) is dict and
+            set(committed) == RECOVERY_RECEIPT_FIELDS and
+            committed["status"] == "LAUNCHER_ATOMIC_SWAP_COMMITTED" and
+            valid_sha(committed["source_sha"], SHA) and
+            valid_sha(committed["release_asset_sha256"], DIGEST) and
+            all(valid_sha(committed[k], HASH) for k in (
+                "old_launcher_sha256", "new_launcher_sha256",
+                "candidate_operator_sha256", "nonce")) and
+            committed["old_launcher_sha256"] !=
+                committed["new_launcher_sha256"],
+            "DELAYED_ORIGINAL_COMMITTED_RECEIPT_INVALID")
+    require(type(pending) is bool and pending is False and
+            valid_sha(live_sha256, HASH) and
+            valid_sha(backup_sha256, HASH) and
+            live_sha256 == committed["new_launcher_sha256"] and
+            backup_sha256 == committed["old_launcher_sha256"],
+            "DELAYED_ORIGINAL_PENDING_OR_HASH_DRIFT")
+    require(type(recovery_claim) is dict and
+            set(recovery_claim) == DELAYED_RECOVERY_CLAIM_FIELDS and
+            recovery_claim["purpose"] ==
+                "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED" and
+            valid_sha(recovery_claim["source_sha"], SHA) and
+            valid_sha(recovery_claim["release_asset_sha256"], DIGEST) and
+            all(valid_sha(recovery_claim[k], HASH) for k in
+                ("manifest_sha256", "executor_sha256")),
+            "DELAYED_RECOVERY_SOURCE_CLAIM_INVALID")
+    require(type(approval) is dict and
+            set(approval) == DELAYED_RECOVERY_APPROVAL_FIELDS and
+            approval["action"] == DELAYED_RECOVERY_ACTION and
+            approval["scope"] == DELAYED_RECOVERY_SCOPE and
+            approval["environment"] == ENVIRONMENT and
+            approval["operator"] == "soporte@glmdch" and
+            approval["approved"] is True and
+            approval["cut_source_sha"] == committed["source_sha"] and
+            approval["cut_release_asset_sha256"] ==
+                committed["release_asset_sha256"] and
+            approval["cut_nonce"] == committed["nonce"] and
+            approval["cut_receipt_sha256"] == frozen_sha(committed) and
+            all(approval[k] == committed[k] for k in
+                ("old_launcher_sha256", "new_launcher_sha256")) and
+            all(approval["recovery_" + k] == recovery_claim[k] for k in
+                ("source_sha", "release_asset_sha256",
+                 "manifest_sha256", "executor_sha256")),
+            "DELAYED_DUAL_PROVENANCE_APPROVAL_REQUIRED")
+    nonce = approval["nonce"]
+    require(valid_sha(nonce, NONCE) and nonce != committed["nonce"] and
+            type(consumed_nonces) in (tuple, list, frozenset) and
+            all(valid_sha(n, NONCE) for n in consumed_nonces) and
+            nonce not in consumed_nonces,
+            "DELAYED_RECOVERY_NONCE_INVALID_OR_REPLAYED")
+    require(type(now) is int and
+            all(type(packet[k]) is int for packet in
+                (approval, recovery_claim) for k in ("issued_at", "expires_at")) and
+            all(packet["issued_at"] <= now < packet["expires_at"] and
+                0 < packet["expires_at"] - packet["issued_at"] <= 900
+                for packet in (approval, recovery_claim)),
+            "DELAYED_RECOVERY_FRESH_AUTHENTICATION_CLAIM_REQUIRED")
+    return {
+        "status": "REVIEWED_DELAYED_DUAL_PROVENANCE_NO_EXECUTION",
+        "scope": DELAYED_RECOVERY_SCOPE,
+        "cut_source_sha": committed["source_sha"],
+        "cut_receipt_sha256": frozen_sha(committed),
+        "recovery_source_sha": recovery_claim["source_sha"],
+        "recovery_release_asset_sha256":
+            recovery_claim["release_asset_sha256"],
+        "recovery_manifest_sha256": recovery_claim["manifest_sha256"],
+        "recovery_executor_sha256": recovery_claim["executor_sha256"],
+        "recovery_nonce": nonce,
+        "may_install": False, "may_apply": False,
+        "may_recover": False, "rollback_complete": False,
+        "claims_authenticated": False,
+        "requires_independent_signed_root_executor": True,
+        "requires_new_recovery_bootstrap": True,
+        "requires_original_cut_authentication": True,
+        "requires_root_journal_and_lock_verification": True,
+    }
+
+
 def assess_interrupted_swap(*, old_sha, new_sha, live_sha, backup_sha,
                             pending, source_sha, release_asset_sha256,
                             nonce, intent=None, receipt=None):
