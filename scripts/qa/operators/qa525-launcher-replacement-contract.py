@@ -101,6 +101,78 @@ def assess_review(preflight, approval, *, now, pending, consumed_nonces=()):
     }
 
 
+
+RECOVERY_SCOPE = "QA525_LAUNCHER_ONLY_RECOVERY_NO_DOCKER_NO_IDENTITY_NO_MIGRATION"
+RECOVERY_ACTION = "rollback-root-launcher-supervised"
+RECOVERY_RECEIPT_FIELDS = frozenset({
+    "status", "source_sha", "release_asset_sha256",
+    "old_launcher_sha256", "new_launcher_sha256",
+    "candidate_operator_sha256", "nonce",
+})
+RECOVERY_APPROVAL_FIELDS = frozenset({
+    "action", "scope", "environment", "operator", "approved",
+    "cut_nonce", "nonce", "source_sha", "release_asset_sha256",
+    "old_launcher_sha256", "new_launcher_sha256", "issued_at", "expires_at",
+})
+
+
+def assess_reversal(committed, approval, *, current_launcher_sha256,
+                    backup_sha256, pending, now, consumed_nonces=()):
+    """PURE precondition for a separate supervised reversal; never authorizes it.
+
+    No filesystem access, lock, signature or operator authentication here.
+    The future independently signed root entrypoint must confirm all of them.
+    """
+    require(type(committed) is dict and set(committed) == RECOVERY_RECEIPT_FIELDS
+            and committed["status"] == "LAUNCHER_ATOMIC_SWAP_COMMITTED"
+            and valid_sha(committed["source_sha"], SHA)
+            and valid_sha(committed["release_asset_sha256"], DIGEST)
+            and all(valid_sha(committed[k], HASH) for k in (
+                "old_launcher_sha256", "new_launcher_sha256",
+                "candidate_operator_sha256", "nonce"))
+            and committed["old_launcher_sha256"] !=
+                committed["new_launcher_sha256"],
+            "RECOVERY_COMMITTED_RECEIPT_UNTRUSTED")
+    require(type(pending) is bool and pending is False
+            and valid_sha(current_launcher_sha256, HASH)
+            and valid_sha(backup_sha256, HASH)
+            and current_launcher_sha256 == committed["new_launcher_sha256"]
+            and backup_sha256 == committed["old_launcher_sha256"],
+            "RECOVERY_PENDING_OR_HASH_DRIFT")
+    require(type(approval) is dict and set(approval) == RECOVERY_APPROVAL_FIELDS
+            and approval["action"] == RECOVERY_ACTION
+            and approval["scope"] == RECOVERY_SCOPE
+            and approval["environment"] == ENVIRONMENT
+            and approval["operator"] == "soporte@glmdch"
+            and approval["approved"] is True
+            and all(approval[k] == committed[k] for k in (
+                "source_sha", "release_asset_sha256",
+                "old_launcher_sha256", "new_launcher_sha256"))
+            and approval["cut_nonce"] == committed["nonce"],
+            "RECOVERY_SEPARATE_APPROVAL_REQUIRED")
+    nonce = approval["nonce"]
+    require(valid_sha(nonce, NONCE) and nonce != committed["nonce"]
+            and type(consumed_nonces) in (tuple, list, frozenset)
+            and all(valid_sha(n, NONCE) for n in consumed_nonces)
+            and nonce not in consumed_nonces,
+            "RECOVERY_NONCE_REPLAY_OR_INVALID")
+    issued, expires = approval["issued_at"], approval["expires_at"]
+    require(type(now) is int and type(issued) is int and
+            type(expires) is int and issued <= now < expires
+            and 0 < expires - issued <= 900,
+            "RECOVERY_APPROVAL_EXPIRED")
+    return {
+        "status": "REVIEWED_LAUNCHER_REVERSAL_PLAN_NO_INSTALL",
+        "scope": RECOVERY_SCOPE, "source_sha": committed["source_sha"],
+        "cut_nonce": committed["nonce"], "recovery_nonce": nonce,
+        "old_launcher_sha256": backup_sha256,
+        "new_launcher_sha256": current_launcher_sha256,
+        "may_install": False, "may_apply": False,
+        "may_recover": False, "rollback_complete": False,
+        "requires_independent_signed_root_executor": True,
+    }
+
+
 def assess_interrupted_swap(*, old_sha, new_sha, live_sha, backup_sha,
                             pending, source_sha, release_asset_sha256,
                             nonce, intent=None, receipt=None):
