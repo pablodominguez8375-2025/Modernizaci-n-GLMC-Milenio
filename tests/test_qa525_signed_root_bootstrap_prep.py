@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 import stat
 import subprocess
 import sys
@@ -23,6 +24,7 @@ m = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = m
 spec.loader.exec_module(m)
 SHA = "a" * 40
+ORIGINAL_ISOLATION = m.require_isolated_root_python
 BOOTSTRAP_HASH = hashlib.sha256(FILE.read_bytes()).hexdigest()
 
 
@@ -92,6 +94,7 @@ class RootBootstrapTests(unittest.TestCase):
             patch.object(m, "ADMISSION", self.admission),
             patch.object(m, "root_owned"),
             patch.object(m.os, "geteuid", return_value=0),
+            patch.object(m, "require_isolated_root_python"),
             patch.object(m.socket, "gethostname", return_value="glmdch"),
         ]
         for p in self.patchers:
@@ -105,6 +108,17 @@ class RootBootstrapTests(unittest.TestCase):
         expected = digest or hashlib.sha256(data).hexdigest()
         return m.prepare(self.envelope, SHA, expected, BOOTSTRAP_HASH,
                          now=1_800_000_000, verify=fake), fake
+
+    def test_root_bootstrap_requires_isolated_python_before_staging(self):
+        for isolated, no_site in ((0, 0), (1, 0), (0, 1)):
+            with self.subTest(isolated=isolated, no_site=no_site):
+                with patch.object(m.sys, "flags", SimpleNamespace(
+                        isolated=isolated, no_site=no_site)):
+                    with self.assertRaisesRegex(
+                            m.Blocked, "BOOTSTRAP_ROOT_PYTHON_ISOLATION_REQUIRED"):
+                        ORIGINAL_ISOLATION()
+        with patch.object(m.sys, "flags", SimpleNamespace(isolated=1, no_site=1)):
+            ORIGINAL_ISOLATION()
 
     def test_signed_source_is_staged_without_running_and_admitted_900_seconds(self):
         answer, runner = self.verify(build_release())
