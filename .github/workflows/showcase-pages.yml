@@ -14,11 +14,14 @@ permissions:
   deployments: read
   id-token: write
 
-# Keep only the newest validation for each PR/ref. Exact-head evidence remains attached
-# to the latest commit, while stale visual/package work is cancelled automatically.
+# PR reviews may cancel older PR attempts, but exact-SHA push-to-dev CI must
+# finish: the QA signed-release gate only accepts event=push. Manual reruns
+# (workflow_dispatch) cannot replace/cancel that evidence, even on the same ref.
+# Different event names use independent groups. A superseded queued dev push
+# may be replaced, but the final dev push remains pending/runs to completion.
 concurrency:
-  group: pmgm-showcase-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: pmgm-showcase-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
