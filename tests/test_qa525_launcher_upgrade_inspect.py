@@ -65,11 +65,27 @@ class LauncherInspectionTests(unittest.TestCase):
             output = inspector.inspect()
         self.assertEqual(2, loader.call_count)
         self.assertEqual("LAUNCHER_OBSERVED_UPGRADE_NOT_AUTHORIZED", output["status"])
+        self.assertEqual("INSTALLER_UPDATE_REQUIRED", output["launcher_transition"])
         self.assertFalse(output["may_install"])
         self.assertFalse(output["may_apply"])
         self.assertFalse(output["signed_release_verified"])
         self.assertFalse(output["rollback_validated"])
         self.assertEqual(64, len(output["current_operator_sha256"]))
+
+    def test_failed_inspection_has_blocked_transition_not_upgrade_claim(self):
+        from io import StringIO
+        with patch.object(inspector.os, "geteuid", return_value=0), \
+             patch.object(inspector.socket, "gethostname", return_value="srv01"), \
+             patch.object(inspector, "read_regular_file") as loader, \
+             patch("sys.stdout", new_callable=StringIO) as output:
+            result = inspector.main([])
+        self.assertEqual(2, result)
+        report = json.loads(output.getvalue())
+        self.assertEqual("BLOCKED_QA525_LAUNCHER_INSPECTION", report["status"])
+        self.assertEqual("LAUNCHER_INSPECTION_BLOCKED", report["launcher_transition"])
+        self.assertFalse(report["may_install"])
+        self.assertFalse(report["may_apply"])
+        loader.assert_not_called()
 
     def test_wrong_host_never_reads_source(self):
         with patch.object(inspector.os, "geteuid", return_value=0), \
