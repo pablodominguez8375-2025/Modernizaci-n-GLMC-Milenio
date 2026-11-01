@@ -159,6 +159,129 @@ class RecoverySandboxTests(unittest.TestCase):
         with self.assertRaises(m.Blocked):
             self.call()
 
+    def delayed_packets(self):
+        path = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        sp = importlib.util.spec_from_file_location("qa525_delayed_test_policy", path)
+        policy = importlib.util.module_from_spec(sp)
+        sp.loader.exec_module(policy)
+        claim = {
+            "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+            "source_sha": "f" * 40,
+            "release_asset_sha256": "sha256:" + "7" * 64,
+            "manifest_sha256": "8" * 64,
+            "executor_sha256": "9" * 64,
+            "issued_at": self.now - 5,
+            "expires_at": self.now + 120,
+        }
+        approval = {
+            "action": policy.DELAYED_RECOVERY_ACTION,
+            "scope": policy.DELAYED_RECOVERY_SCOPE,
+            "environment": policy.ENVIRONMENT,
+            "operator": "soporte@glmdch",
+            "approved": True,
+            "cut_source_sha": SHA,
+            "cut_release_asset_sha256": DIGEST,
+            "cut_nonce": CUT,
+            "cut_receipt_sha256": policy.frozen_sha(self.source),
+            "old_launcher_sha256": m.sha(OLD),
+            "new_launcher_sha256": m.sha(NEW),
+            "recovery_source_sha": claim["source_sha"],
+            "recovery_release_asset_sha256":
+                claim["release_asset_sha256"],
+            "recovery_manifest_sha256": claim["manifest_sha256"],
+            "recovery_executor_sha256": claim["executor_sha256"],
+            "nonce": REVERSAL,
+            "issued_at": self.now - 5,
+            "expires_at": self.now + 120,
+        }
+        return claim, approval
+
+    def test_delayed_dual_provenance_recovery_only_in_disposable_sandbox(self):
+        # A is a historical committed receipt; the original approval is not
+        # consulted. B is a distinct fresh *untrusted* synthetic identity.
+        claim, approval = self.delayed_packets()
+        self.assertNotEqual(self.source["source_sha"], claim["source_sha"])
+        report = m.simulate_delayed_dual_recovery(
+            self.root, claim, approval, now=self.now)
+        self.assertEqual("SIMULATED_DELAYED_DUAL_PROVENANCE_NO_HOST_CHANGE",
+                         report["status"])
+        self.assertFalse(report["approved_for_host_recovery"])
+        self.assertFalse(report["recovery_claim_authenticated"])
+        self.assertEqual(OLD, self.live.read_bytes())
+        self.assertEqual(OLD, self.backup.read_bytes())
+        self.assertEqual(self.source, json.loads(self.receipt.read_text()))
+        self.assertEqual(NEW, (self.state /
+            ("rollback-new-" + REVERSAL + ".bin")).read_bytes())
+        with self.assertRaises(m.Blocked):
+            m.simulate_delayed_dual_recovery(
+                self.root, claim, approval, now=self.now)
+
+    def test_delayed_dual_provenance_rejects_unbound_sources_without_writes(self):
+        claim, approval = self.delayed_packets()
+        for change in (
+            {"source_sha": "0" * 40},
+            {"release_asset_sha256": "sha256:" + "0" * 64},
+            {"manifest_sha256": "0" * 64},
+            {"executor_sha256": "0" * 64},
+            {"expires_at": self.now},
+        ):
+            with self.subTest(change=change):
+                with self.assertRaises(m.Blocked):
+                    m.simulate_delayed_dual_recovery(
+                        self.root, {**claim, **change}, approval, now=self.now)
+                self.assertEqual(NEW, self.live.read_bytes())
+                self.assertEqual(3, len(list(self.state.iterdir())))
+        for change in (
+            {"cut_receipt_sha256": "0" * 64},
+            {"recovery_source_sha": "0" * 40},
+            {"nonce": CUT},
+            {"scope": "API_AND_WEB"},
+            {"expires_at": self.now},
+        ):
+            with self.subTest(change=change):
+                with self.assertRaises(m.Blocked):
+                    m.simulate_delayed_dual_recovery(
+                        self.root, claim, {**approval, **change}, now=self.now)
+                self.assertEqual(NEW, self.live.read_bytes())
+                self.assertEqual(3, len(list(self.state.iterdir())))
+
+    def test_delayed_dual_provenance_mutation_aborts_before_swap(self):
+        claim, approval = self.delayed_packets()
+        def mutate(stage):
+            if stage == "after_backup":
+                claim["manifest_sha256"] = "0" * 64
+        with self.assertRaisesRegex(
+                m.Blocked, "DELAYED_SANDBOX_CONSENT_OR_CLAIM_CHANGED"):
+            m.simulate_delayed_dual_recovery(
+                self.root, claim, approval, now=self.now, checkpoint=mutate)
+        self.assertEqual(NEW, self.live.read_bytes())
+        self.assertTrue((self.state /
+            ("rollback-intent-" + REVERSAL + ".json")).is_file())
+        with self.assertRaises(m.Blocked):
+            m.simulate_delayed_dual_recovery(
+                self.root, claim, approval, now=self.now)
+
+    def test_delayed_dual_provenance_post_swap_crash_blocks_replay(self):
+        claim, approval = self.delayed_packets()
+        def crash(stage):
+            if stage == "after_swap":
+                raise RuntimeError("synthetic post-swap crash")
+        with self.assertRaisesRegex(RuntimeError, "post-swap crash"):
+            m.simulate_delayed_dual_recovery(
+                self.root, claim, approval, now=self.now, checkpoint=crash)
+        self.assertEqual(OLD, self.live.read_bytes())
+        self.assertTrue((self.state /
+            ("rollback-intent-" + REVERSAL + ".json")).is_file())
+        with self.assertRaises(m.Blocked):
+            m.simulate_delayed_dual_recovery(
+                self.root, claim, approval, now=self.now)
+
+    def test_delayed_dual_provenance_refuses_real_host_path(self):
+        claim, approval = self.delayed_packets()
+        with self.assertRaises(m.Blocked):
+            m.simulate_delayed_dual_recovery(
+                Path("/opt/centenario"), claim, approval, now=self.now)
+
     def test_never_accepts_host_paths_or_symlink_backups(self):
         with self.assertRaises(m.Blocked):
             m.rollback(Path("/opt/centenario"), self.approval, now=self.now)
