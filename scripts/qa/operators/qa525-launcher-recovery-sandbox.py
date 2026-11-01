@@ -31,7 +31,6 @@ APPROVAL_KEYS = frozenset({
     "new_launcher_sha256", "issued_at", "expires_at",
 })
 SCOPE = "QA525_LAUNCHER_RECOVERY_SANDBOX_ONLY_NO_HOST_OR_API_WEB"
-OLD = b""
 
 
 class Blocked(Exception):
@@ -214,6 +213,7 @@ def rollback(root, approval, *, now=None, checkpoint=lambda stage: None):
                 "RECOVERY_BACKUP_OR_LIVE_HASH_DRIFT")
         timestamp = int(time.time()) if now is None else now
         nonce = validate_approval(approval, receipt, now=timestamp)
+        approved_snapshot = dict(approval)
         intent = state / ("rollback-intent-" + nonce + ".json")
         current = state / ("rollback-new-" + nonce + ".bin")
         final = state / ("rollback-receipt-" + nonce + ".json")
@@ -238,8 +238,10 @@ def rollback(root, approval, *, now=None, checkpoint=lambda stage: None):
         require(sha(trusted_file(live, 0o700)) == sha(new)
                 and sha(trusted_file(stage, 0o700)) == sha(old),
                 "RECOVERY_PRE_SWAP_DRIFT")
-        validate_approval(approval, receipt,
-                          now=int(time.time()) if now is None else now)
+        last_nonce = validate_approval(
+            approval, receipt, now=int(time.time()) if now is None else now)
+        require(approval == approved_snapshot and last_nonce == nonce,
+                "RECOVERY_APPROVAL_CHANGED_DURING_TRANSACTION")
         checkpoint("before_swap")
         os.replace(stage, live)
         sync_dir(live_dir)
