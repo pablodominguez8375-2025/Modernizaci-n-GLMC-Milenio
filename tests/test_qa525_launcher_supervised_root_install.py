@@ -1380,12 +1380,16 @@ class RootLauncherReversalTransactionTests(unittest.TestCase):
         Current design intentionally rejects the mismatch; a future
         dual-provenance design needs separate adversarial tests and review.
         """
-        self.packet["source_sha"] = "c" * 40
-        with self.assertRaisesRegex(
-                m.Blocked, "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT"):
-            self.run_reversal()
-        self.assertEqual(self.new, self.launcher.read_bytes())
-        self.assertFalse(any(self.recovery.iterdir()))
+        original = dict(self.packet)
+        for changed in ({"source_sha": "c" * 40},
+                        {"release_asset_sha256": "sha256:" + "d" * 64}):
+            with self.subTest(changed=changed):
+                self.packet = dict(original, **changed)
+                with self.assertRaisesRegex(
+                        m.Blocked, "ROOT_REVERSAL_BOOTSTRAP_NOT_ORIGINAL_CUT"):
+                    self.run_reversal()
+                self.assertEqual(self.new, self.launcher.read_bytes())
+                self.assertFalse(any(self.recovery.iterdir()))
 
     def test_recovery_interruption_after_durable_intent_blocks_retry(self):
         before = m.write_once
