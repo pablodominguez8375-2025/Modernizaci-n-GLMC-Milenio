@@ -222,8 +222,11 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                 stable_hash=lambda path: Path(path).read_bytes())
             def stage(package):
                 package.mkdir(mode=0o700)
-                location = package / "scripts/qa/operators/qa525-update.py"
-                location.parent.mkdir(parents=True, exist_ok=True)
+                folder = package
+                for segment in ("scripts", "qa", "operators"):
+                    folder = folder / segment
+                    folder.mkdir(mode=0o700)
+                location = folder / "qa525-update.py"
                 location.write_bytes(operator)
                 return {
                     "status": "SIGNATURE_VERIFIED_STAGED_NOT_DEPLOYED",
@@ -345,6 +348,54 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
 
     def test_switched_approval_during_signed_download_aborts_before_intent(self):
         self.exercise(change_approval=True)
+
+
+class RetainedPackageDurabilityTests(unittest.TestCase):
+    def test_fsync_accepts_private_source_tree_before_publish(self):
+        with tempfile.TemporaryDirectory() as td:
+            package = Path(td) / "package"
+            package.mkdir(mode=0o700)
+            folder = package / "scripts"
+            folder.mkdir(mode=0o700)
+            member = folder / "qa525-update.py"
+            member.write_bytes(b"synthetic attested Python operator\n")
+            m.fsync_retained_package(package)
+            self.assertEqual(b"synthetic attested Python operator\n",
+                             member.read_bytes())
+
+    def test_reject_symlinks_hardlinks_and_writable_members(self):
+        with tempfile.TemporaryDirectory() as td:
+            package = Path(td) / "package"
+            package.mkdir(mode=0o700)
+            member = package / "qa525-update.py"
+            member.write_bytes(b"safe synthetic bytes")
+            with self.subTest(case="symlink"):
+                link = package / "symlink"
+                link.symlink_to(member)
+                with self.assertRaisesRegex(
+                        m.Blocked, "RETAINED_PACKAGE_FILE_UNTRUSTED"):
+                    m.fsync_retained_package(package)
+                link.unlink()
+            with self.subTest(case="hardlink"):
+                link = package / "hardlink"
+                os.link(member, link)
+                with self.assertRaisesRegex(
+                        m.Blocked, "RETAINED_PACKAGE_FILE_UNTRUSTED"):
+                    m.fsync_retained_package(package)
+                link.unlink()
+            with self.subTest(case="world_writable"):
+                member.chmod(0o666)
+                with self.assertRaisesRegex(
+                        m.Blocked, "RETAINED_PACKAGE_FILE_UNTRUSTED"):
+                    m.fsync_retained_package(package)
+                member.chmod(0o600)
+            with self.subTest(case="untrusted_directory"):
+                subdir = package / "folder"
+                subdir.mkdir(mode=0o777)
+                subdir.chmod(0o755)
+                with self.assertRaisesRegex(
+                        m.Blocked, "RETAINED_PACKAGE_DIRECTORY_UNTRUSTED"):
+                    m.fsync_retained_package(package)
 
 
 class KilledSubprocessDurabilityTests(unittest.TestCase):
