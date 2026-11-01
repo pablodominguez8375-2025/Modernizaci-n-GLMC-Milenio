@@ -1263,6 +1263,154 @@ class ReversalPolicyGateTests(unittest.TestCase):
 
 
 
+
+class DelayedRecoveryPlanPolicyTests(unittest.TestCase):
+    """Dual provenance is a pure review, never root or deployment authority."""
+
+    @classmethod
+    def setUpClass(cls):
+        source = ROOT / "scripts/qa/operators/qa525-launcher-replacement-contract.py"
+        spec = importlib.util.spec_from_file_location(
+            "qa525_delayed_reversal_policy", source)
+        cls.policy = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = cls.policy
+        spec.loader.exec_module(cls.policy)
+
+    def setUp(self):
+        p = self.policy
+        self.original = {
+            "status": "LAUNCHER_ATOMIC_SWAP_COMMITTED",
+            "source_sha": "a" * 40,
+            "release_asset_sha256": "sha256:" + "b" * 64,
+            "old_launcher_sha256": "c" * 64,
+            "new_launcher_sha256": "d" * 64,
+            "candidate_operator_sha256": "e" * 64,
+            "nonce": "1" * 64,
+        }
+        self.claim = {
+            "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
+            "source_sha": "f" * 40,
+            "release_asset_sha256": "sha256:" + "7" * 64,
+            "manifest_sha256": "8" * 64,
+            "executor_sha256": "9" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+        self.approval = {
+            "action": p.DELAYED_RECOVERY_ACTION,
+            "scope": p.DELAYED_RECOVERY_SCOPE,
+            "environment": p.ENVIRONMENT,
+            "operator": "soporte@glmdch",
+            "approved": True,
+            "cut_source_sha": self.original["source_sha"],
+            "cut_release_asset_sha256":
+                self.original["release_asset_sha256"],
+            "cut_nonce": self.original["nonce"],
+            "cut_receipt_sha256": p.frozen_sha(self.original),
+            "old_launcher_sha256": self.original["old_launcher_sha256"],
+            "new_launcher_sha256": self.original["new_launcher_sha256"],
+            "recovery_source_sha": self.claim["source_sha"],
+            "recovery_release_asset_sha256":
+                self.claim["release_asset_sha256"],
+            "recovery_manifest_sha256": self.claim["manifest_sha256"],
+            "recovery_executor_sha256": self.claim["executor_sha256"],
+            "nonce": "2" * 64,
+            "issued_at": 4900, "expires_at": 5100,
+        }
+
+    def check(self, *, committed=None, claim=None, approval=None,
+              now=5000, pending=False, live=None, backup=None, consumed=()):
+        return self.policy.assess_delayed_recovery_plan(
+            self.original if committed is None else committed,
+            self.claim if claim is None else claim,
+            self.approval if approval is None else approval,
+            live_sha256=(self.original["new_launcher_sha256"]
+                         if live is None else live),
+            backup_sha256=(self.original["old_launcher_sha256"]
+                           if backup is None else backup),
+            pending=pending, now=now, consumed_nonces=consumed)
+
+    def test_fresh_dual_provenance_only_produces_untrusted_plan(self):
+        outcome = self.check()
+        self.assertEqual("REVIEWED_DELAYED_DUAL_PROVENANCE_NO_EXECUTION",
+                         outcome["status"])
+        self.assertEqual(self.claim["source_sha"],
+                         outcome["recovery_source_sha"])
+        self.assertEqual(self.original["source_sha"],
+                         outcome["cut_source_sha"])
+        self.assertNotEqual(outcome["recovery_source_sha"],
+                            outcome["cut_source_sha"])
+        for field in ("may_install", "may_apply", "may_recover",
+                      "rollback_complete", "claims_authenticated"):
+            self.assertFalse(outcome[field])
+        for field in ("requires_independent_signed_root_executor",
+                      "requires_new_recovery_bootstrap",
+                      "requires_original_cut_authentication",
+                      "requires_root_journal_and_lock_verification"):
+            self.assertTrue(outcome[field])
+
+    def test_independent_recovery_source_digest_manifest_executor_bound(self):
+        for changes in ({"source_sha": "0" * 40},
+                        {"release_asset_sha256": "sha256:" + "0" * 64},
+                        {"manifest_sha256": "0" * 64},
+                        {"executor_sha256": "0" * 64},
+                        {"purpose": "CLAIMED_SIGSTORE_PASS"},
+                        {"extra": "anything"}):
+            with self.subTest(changes=changes):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(claim={**self.claim, **changes})
+
+    def test_original_cut_receipt_and_approval_are_bound_exactly(self):
+        for changes in ({"cut_source_sha": "0" * 40},
+                        {"cut_release_asset_sha256": "sha256:" + "0" * 64},
+                        {"cut_receipt_sha256": "0" * 64},
+                        {"cut_nonce": "0" * 64},
+                        {"old_launcher_sha256": "0" * 64},
+                        {"recovery_source_sha": "0" * 40},
+                        {"scope": "API_AND_WEB"},
+                        {"approved": False},
+                        {"extra": "anything"}):
+            with self.subTest(changes=changes):
+                with self.assertRaises(self.policy.Blocked):
+                    self.check(approval={**self.approval, **changes})
+        with self.assertRaises(self.policy.Blocked):
+            self.check(committed={**self.original, "status": "INCOMPLETE"})
+        with self.assertRaises(self.policy.Blocked):
+            self.check(committed={**self.original, "nonce": "0" * 64})
+
+    def test_fresh_recovery_has_own_short_lifetime_no_old_admission(self):
+        # The original installation admission was one-shot and long expired:
+        # it is intentionally NOT an input. Only a fresh untrusted review
+        # claim plus a distinct fresh approval can yield a NON-authorizing plan.
+        self.assertFalse(self.check()["may_recover"])
+        for change in ({"expires_at": 5000},
+                       {"issued_at": 5001},
+                       {"expires_at": 5901},
+                       {"issued_at": True},
+                       {"expires_at": False}):
+            for field in ("claim", "approval"):
+                with self.subTest(field=field, change=change):
+                    kwargs = {field: {**getattr(self, field), **change}}
+                    with self.assertRaises(self.policy.Blocked):
+                        self.check(**kwargs)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(now=True)
+
+    def test_pending_invalid_live_backup_and_replayed_nonce_refused(self):
+        with self.assertRaises(self.policy.Blocked):
+            self.check(pending=True)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(live="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(backup="0" * 64)
+        with self.assertRaises(self.policy.Blocked):
+            self.check(consumed=("2" * 64,))
+        with self.assertRaises(self.policy.Blocked):
+            self.check(approval={**self.approval,
+                                 "nonce": self.original["nonce"]})
+        with self.assertRaises(self.policy.Blocked):
+            self.check(consumed=("not-a-hash",))
+
+
 class RootLauncherReversalTransactionTests(unittest.TestCase):
     """Real fsync and os.replace in disposable paths, never physical host."""
 
