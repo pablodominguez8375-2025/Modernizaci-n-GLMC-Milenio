@@ -5,13 +5,17 @@ on:
     branches: [dev]
     paths:
       - "scripts/qa/operators/qa525-launcher-supervised-root-install.py"
+      - "scripts/qa/operators/qa525-attested-installer-audit.py"
       - "tests/test_qa525_launcher_supervised_root_install.py"
+      - "tests/test_qa525_attested_installer_audit.py"
       - ".github/workflows/qa525-root-launcher-installer-review.yml"
   push:
     branches: [dev]
     paths:
       - "scripts/qa/operators/qa525-launcher-supervised-root-install.py"
+      - "scripts/qa/operators/qa525-attested-installer-audit.py"
       - "tests/test_qa525_launcher_supervised_root_install.py"
+      - "tests/test_qa525_attested_installer_audit.py"
       - ".github/workflows/qa525-root-launcher-installer-review.yml"
   workflow_dispatch:
 
@@ -33,8 +37,12 @@ jobs:
         run: |
           python -m py_compile scripts/qa/operators/qa525-launcher-supervised-root-install.py
           python -m py_compile tests/test_qa525_launcher_supervised_root_install.py
+          python -m py_compile scripts/qa/operators/qa525-attested-installer-audit.py
+          python -m py_compile tests/test_qa525_attested_installer_audit.py
       - name: Hermetic root installer guards and journal tests (temporary files only)
-        run: python -m unittest discover -s tests -p 'test_qa525_launcher_supervised_root_install.py' -v
+        run: |
+          python -m unittest discover -s tests -p 'test_qa525_launcher_supervised_root_install.py' -v
+          python -m unittest discover -s tests -p 'test_qa525_attested_installer_audit.py' -v
       - name: No hidden deployment route
         run: |
           python - <<'PY'
