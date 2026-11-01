@@ -359,9 +359,22 @@ def unique_json_fields(pairs):
     return result
 
 
-def scan_history():
-    """Fail closed on any unresolved transaction, unknown file or nonce."""
+def scan_history(*, pending_nonce=None):
+    """Verify all historical receipts; optionally exclude ONE pending triplet.
+
+    The pending triplet is validated independently by the read-only inspector.
+    Never use this optional mode for an authorized new installation.
+    """
     root_chain(STATE, directory=True, exact_mode=0o700)
+    require(pending_nonce is None or (
+                type(pending_nonce) is str and
+                NONCE.fullmatch(pending_nonce) is not None),
+            "ROOT_HISTORY_PENDING_NONCE_INVALID")
+    pending_names = (set() if pending_nonce is None else {
+        "intent-" + pending_nonce + ".json",
+        "old-" + pending_nonce + ".bin",
+        "receipt-" + pending_nonce + ".json",
+    })
     consumed = set()
     listing = sorted(STATE.iterdir(), key=lambda item: item.name)
     require(len(listing) <= 1000, "ROOT_LAUNCHER_JOURNAL_TOO_LARGE")
@@ -369,6 +382,10 @@ def scan_history():
     for entry in listing:
         name = entry.name
         require(not entry.is_symlink(), "ROOT_LAUNCHER_JOURNAL_SYMLINK")
+        if name in pending_names:
+            # Inspect-pending validates these three contents and consistency
+            # under the SAME five read-only locks, before reporting any phase.
+            continue
         require(not name.startswith("intent-"),
                 "ROOT_LAUNCHER_PENDING_MANUAL_RECONCILIATION")
         require(name.startswith(("receipt-", "old-")),
@@ -438,6 +455,9 @@ def inspect_pending_reconciliation():
                 and NONCE.fullmatch(name[len("intent-"):-len(".json")]) is not None,
                 "ROOT_RECONCILIATION_NONCE_INVALID")
         nonce = name[len("intent-"):-len(".json")]
+        # A valid-looking filename is not proof of a previous safe cut.
+        # Validate every historical receipt and immutable old backup first.
+        consumed_history = scan_history(pending_nonce=nonce)
         intent = STATE / name
         backup = STATE / ("old-" + nonce + ".bin")
         receipt = STATE / ("receipt-" + nonce + ".json")
@@ -504,6 +524,7 @@ def inspect_pending_reconciliation():
                                else "PRE_ATOMIC_SWAP"),
             "durable_receipt_present": receipt_present,
             "backup_hash_matches_intent": True,
+            "historical_receipts_verified": len(consumed_history),
             "signature_verified_by_inspection": False,
             "rollback_authorized": False,
             "may_resume": False,
