@@ -317,7 +317,8 @@ class RootLauncherInstallerTests(unittest.TestCase):
 class LauncherSandboxTransactionTests(unittest.TestCase):
     """Execute real fsync/rename/journal in a temp root, never actual QA."""
 
-    def exercise(self, *, fault=None, change_approval=False, bad_manifest=False):
+    def exercise(self, *, fault=None, change_approval=False, bad_manifest=False,
+                 bad_postflight=False):
         old = b"#!/usr/bin/python3\nprint('old synthetic launcher')\n"
         new = b"#!/usr/bin/python3\nprint('signed synthetic launcher')\n"
         operator = b"print('synthetic signed operator, never executed')\n"
@@ -383,9 +384,11 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                 inspect_template=Mock(return_value={
                     "launcher_sha256": m.digest(new), "may_install": False,
                 }))
-            retained = SimpleNamespace(inspect_retained=Mock(return_value={
-                "status": "ROOT_OWNED_PINNED_SOURCE_HASH_MATCH_NOT_SIGNED",
-            }))
+            retained_ok = {"status": "ROOT_OWNED_PINNED_SOURCE_HASH_MATCH_NOT_SIGNED"}
+            retained = SimpleNamespace(inspect_retained=Mock(
+                side_effect=([retained_ok, {"status": "ROOT_RETAINED_SOURCE_DRIFT"}]
+                             if bad_postflight else None),
+                return_value=retained_ok))
             modules = (inspect_old, preflight, signed, approval,
                        contract, template, retained)
             real_replace = os.replace
@@ -438,6 +441,10 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     with self.assertRaisesRegex(
                             m.Blocked, "ROOT_APPROVAL_CHANGED_DURING_RELEASE_DOWNLOAD"):
                         m.replace_approved()
+                elif bad_postflight:
+                    with self.assertRaisesRegex(
+                            m.Blocked, "ROOT_RETAINED_SOURCE_POST_SWAP_INVALID"):
+                        m.replace_approved()
                 else:
                     result = m.replace_approved()
                     self.assertEqual("QA525_LAUNCHER_REPLACED_NO_API_WEB_DEPLOY",
@@ -448,13 +455,13 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
                     self.assertEqual(m.digest(NONCE.encode("ascii")),
                                      result["nonce_sha256"])
                 self.assertEqual(
-                    new if fault in ("after_swap", "after_receipt") or
+                    new if fault in ("after_swap", "after_receipt") or bad_postflight or
                         (not fault and not change_approval and not bad_manifest) else old,
                     launcher.read_bytes())
                 pending = state / ("intent-" + NONCE + ".json")
                 receipt = state / ("receipt-" + NONCE + ".json")
                 backup = state / ("old-" + NONCE + ".bin")
-                if fault:
+                if fault or bad_postflight:
                     self.assertTrue(pending.exists())
                     self.assertTrue(backup.exists())
                     with self.assertRaisesRegex(
@@ -494,6 +501,9 @@ class LauncherSandboxTransactionTests(unittest.TestCase):
 
     def test_external_manifest_drift_aborts_before_intent(self):
         self.exercise(bad_manifest=True)
+
+    def test_post_swap_retained_drift_blocks_success_and_requires_manual_reconciliation(self):
+        self.exercise(bad_postflight=True)
 
 
 class RealProductionContractCompatibilityTests(unittest.TestCase):
