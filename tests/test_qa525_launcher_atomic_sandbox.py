@@ -49,7 +49,8 @@ class AtomicSandboxTests(unittest.TestCase):
         return swap.simulate(self.base, **args)
 
     def status(self):
-        return swap.inspect(self.base, NONCE, old_hash=OLD_SHA, new_hash=NEW_SHA)
+        return swap.inspect(self.base, NONCE, old_hash=OLD_SHA, new_hash=NEW_SHA,
+                            source_sha=SOURCE_SHA, digest=DIGEST)
 
     def test_normal_sandbox_cut_commits_with_durable_backup_and_receipt(self):
         seen = []
@@ -100,7 +101,8 @@ class AtomicSandboxTests(unittest.TestCase):
                         swap.simulate(base,source_sha=SOURCE_SHA,digest=DIGEST,
                                       nonce=NONCE,old_hash=OLD_SHA,new_hash=NEW_SHA,
                                       checkpoint=break_at)
-                    observed = swap.inspect(base,NONCE,old_hash=OLD_SHA,new_hash=NEW_SHA)
+                    observed = swap.inspect(base,NONCE,old_hash=OLD_SHA,new_hash=NEW_SHA,
+                                           source_sha=SOURCE_SHA,digest=DIGEST)
                     self.assertEqual(expected,observed["status"])
                     self.assertEqual(content,(base/swap.LIVE_REL).read_bytes())
                     self.assertEqual(pending,observed["pending_intent"])
@@ -138,7 +140,8 @@ module.simulate(pathlib.Path(sys.argv[2]),source_sha=sys.argv[4],
                                          phase,SOURCE_SHA,DIGEST,NONCE,OLD_SHA,NEW_SHA],
                                          capture_output=True,text=True,timeout=10)
                     self.assertEqual(-signal.SIGKILL,proc.returncode,proc.stderr)
-                    state=swap.inspect(base,NONCE,old_hash=OLD_SHA,new_hash=NEW_SHA)
+                    state=swap.inspect(base,NONCE,old_hash=OLD_SHA,new_hash=NEW_SHA,
+                                           source_sha=SOURCE_SHA,digest=DIGEST)
                     self.assertTrue(state["pending_intent"])
                     self.assertIn("MANUAL_RECONCILIATION",state["status"])
                     self.assertFalse(state["may_recover_automatically"])
@@ -180,6 +183,47 @@ module.simulate(pathlib.Path(sys.argv[2]),source_sha=sys.argv[4],
         receipt.write_text(json.dumps(contents))
         with self.assertRaisesRegex(swap.Blocked,"SANDBOX_COMMIT_RECEIPT_INVALID"):
             self.status()
+
+    def test_signed_release_identity_must_match_durable_receipt(self):
+        self.execute()
+        receipt = self.base / "state" / ("receipt-" + NONCE + ".json")
+        original = json.loads(receipt.read_text())
+        for key, invalid in (
+            ("source_sha", "c" * 40),
+            ("release_asset_sha256", "sha256:" + "f" * 64),
+        ):
+            with self.subTest(field=key):
+                changed = dict(original, **{key: invalid})
+                receipt.write_text(json.dumps(changed))
+                with self.assertRaisesRegex(
+                        swap.Blocked, "SANDBOX_COMMIT_RECEIPT_INVALID"):
+                    self.status()
+        receipt.write_text(json.dumps(original))
+        self.assertEqual(
+            "SIMULATED_LAUNCHER_COMMITTED_NO_DEPLOYMENT",
+            self.status()["status"])
+
+    def test_signed_release_identity_must_match_pending_intent(self):
+        def die_after_intent(step):
+            if step == "after_durable_intent":
+                raise RuntimeError("synthetic crash after intent")
+        with self.assertRaisesRegex(RuntimeError, "synthetic crash"):
+            self.execute(checkpoint=die_after_intent)
+        intent = self.base / "state" / ("intent-" + NONCE + ".json")
+        original = json.loads(intent.read_text())
+        for key, invalid in (
+            ("source_sha", "c" * 40),
+            ("release_asset_sha256", "sha256:" + "f" * 64),
+        ):
+            with self.subTest(field=key):
+                intent.write_text(json.dumps(dict(original, **{key: invalid})))
+                with self.assertRaisesRegex(
+                        swap.Blocked, "SANDBOX_INTENT_IDENTITY_INVALID"):
+                    self.status()
+        intent.write_text(json.dumps(original))
+        self.assertEqual(
+            "PENDING_BEFORE_DURABLE_BACKUP_MANUAL_RECONCILIATION",
+            self.status()["status"])
 
     def test_symlink_hardlink_and_unauthorized_root_are_blocked(self):
         fake=self.base/"signed"/"suspicious"
