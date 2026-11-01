@@ -91,9 +91,6 @@ def review_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
             "DELAYED_LOCAL_CONTRACT_MISSING")
     pre = policy_path.read_bytes()
     local_sha256 = hashlib.sha256(pre).hexdigest()
-    policy = load_local("qa525-launcher-replacement-contract.py")
-    require(hashlib.sha256(policy_path.read_bytes()).hexdigest() == local_sha256,
-            "DELAYED_LOCAL_CONTRACT_CHANGED")
     test_override = audit_fn is not None
     if audit_fn is None:
         verifier = load_local("qa525-attested-installer-audit.py")
@@ -116,6 +113,11 @@ def review_two_signed_envelopes(cut_zip, cut_source_sha, cut_zip_sha256,
     require(a["source_sha"] == committed["source_sha"] and
             a["release_asset_sha256"] == committed["release_asset_sha256"],
             "DELAYED_ORIGINAL_CUT_SIGNED_IDENTITY_MISMATCH")
+    # Import local policy ONLY after the signed release B binds its exact
+    # bytes. Never execute unverified local candidate Python even unprivileged.
+    policy = load_local("qa525-launcher-replacement-contract.py")
+    require(hashlib.sha256(policy_path.read_bytes()).hexdigest() == local_sha256,
+            "DELAYED_LOCAL_CONTRACT_CHANGED")
     claim = {
         "purpose": "QA525_DELAYED_RECOVERY_REVIEW_UNTRUSTED",
         "source_sha": recovery_source_sha,
