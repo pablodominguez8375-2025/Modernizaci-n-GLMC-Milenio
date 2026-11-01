@@ -98,3 +98,49 @@ cut físico se requiere verificador de firmas exactas A/B, mecanismo seguro
 de emisión de admisión B sin borrar A, ensayo de recovery/suspensión, review
 independiente, CI exact HEAD y aprobación separada launcher-only. No se
 modificó la release root0600 antigua ni glmdch. No ejecutar scripts srv01.
+
+## Auditoría dual Sigstore sin privilegios — continuidad 01-11-2026 (NUEVO, SIN DESPLIEGUE)
+
+Se agregó `scripts/qa/operators/qa525-delayed-recovery-signed-evidence-audit.py`
+para vincular, bajo UID **no root**, dos artefactos locales distintos:
+A, ZIP firmado del corte original (SHA+digest debe coincidir con su receipt
+committed), y B, ZIP firmado del candidato de recuperación (SHA+digest, digest
+de manifiesto y SHA del ejecutor root extraído de su MANIFEST). Reutiliza el
+auditor previo `qa525-attested-installer-audit.py`, el cual verifica SHA del
+sobre, GitHub Sigstore con workflow y repo exactos, source-digest, prohibición
+de runners self-hosted y todas las entradas del manifiesto firmado. El contrato
+`assess_delayed_recovery_plan()` comprueba en **solo lectura** que una
+aprobación de revisión nueva vincule ambos cortes, hashes y nonce, sin
+permitir root, API/WEB, autorización real, cambios de estado ni admisión.
+Antes de importar el módulo Python de contrato local se exige que B haya
+verificado el hash del mismo código en su release firmado y que no haya
+cambiado en disco; impide cargar una versión local de contrato no coincidente
+con el contenido firmado (no reemplaza un ancla de primer arranque).
+
+Comits: `7debd019` auditor de evidencias; `4c04feb7` obliga a que las
+inyecciones de pruebas devuelvan `SYNTHETIC_...` y
+`release_envelopes_sigstore_checked_unprivileged=false`, para que jamás
+se interpreten stubs como una verificación criptográfica real;
+`633e4f0a` tests adversariales de informes falseados A/B, hashes,
+aprobación y prohibición de root; `d2ffe51b` los integra obligatoriamente
+al gate QA525 offline; `0cf081a1` mueve el import Python local de contrato
+después de la verificación del manifiesto B; `d47f6874` añade test de ese
+límite de confianza. En ejecución real sin inyecciones, el informe sólo
+puede expresar `release_envelopes_sigstore_checked_unprivileged=true`
+cuando ambas llamadas al auditor previo terminan satisfactoriamente.
+En test sintético permanece false. El objeto receipt y aprobación siguen
+siendo datos del llamador no autenticados; `cut_receipt_authenticated_by_audit`
+y `approval_authenticated_by_audit` permanecen siempre false.
+
+**PROHIBIDO CONFUNDIR**: verificación de dos releases bajo usuario sin root
+no crea una credencial durable ni verifica la custodia física de journal y
+backup en glmdch. Todavía NO existe una admisión fresca root autorizada
+para un ejecutor B, ni ha cambiado el `rollback_approved()` físico
+(continúa A==B y requiere admisión antigua one-shot). No existe recuperación
+de un corte original incompleto sin receipt. El verificador tampoco
+demuestra restauración de IAM o DR fuera del host; la máquina QA única
+sigue siendo glmdch. PR #838 sigue borrador; revisión independiente,
+CI exact-HEAD completo, G6 y autorización launcher-only continúan como
+gates NO-GO para cualquier operación física.
+
+Trazabilidad: Issues #822/#525, este handoff y Drive Proyecto Centenario.
