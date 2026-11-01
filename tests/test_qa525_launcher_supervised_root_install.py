@@ -40,6 +40,19 @@ def fake_modules(*, gate_error=None, approval_error=None, contract_error=None):
 
 
 class RootLauncherInstallerTests(unittest.TestCase):
+    def test_root_installer_requires_isolated_no_site_python(self):
+        from types import SimpleNamespace
+        with patch.object(m.os, "geteuid", return_value=0), \
+             patch.object(m.socket, "gethostname", return_value="glmdch"):
+            for isolated, no_site in ((0, 0), (1, 0), (0, 1)):
+                with self.subTest(isolated=isolated, no_site=no_site):
+                    with patch.object(m.sys, "flags", SimpleNamespace(
+                            isolated=isolated, no_site=no_site)):
+                        with self.assertRaisesRegex(
+                                m.Blocked,
+                                "SIGNED_LAUNCHER_ROOT_PYTHON_ISOLATION_REQUIRED"):
+                            m.require_host()
+
     def test_exact_five_shared_locks_in_operational_order(self):
         self.assertEqual(
             [str(p) for p in m.LOCKS],
