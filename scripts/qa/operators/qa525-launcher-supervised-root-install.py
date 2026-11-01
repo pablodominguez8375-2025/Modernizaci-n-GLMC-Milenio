@@ -126,7 +126,9 @@ def read_bound(path, maximum=4_096, *, exact_mode=None):
         require(stat.S_ISREG(live.st_mode) and live.st_uid == 0
                 and live.st_nlink == 1 and not (live.st_mode & 0o022)
                 and live.st_dev == before.st_dev and live.st_ino == before.st_ino
-                and live.st_size == before.st_size,
+                and live.st_size == before.st_size
+                and (exact_mode is None
+                     or stat.S_IMODE(live.st_mode) == exact_mode),
                 "READ_BOUND_RACE_OR_PERMISSIONS")
         with os.fdopen(fd, "rb") as stream:
             fd = -1
@@ -406,6 +408,13 @@ def replace_approved():
             # Manifest and signatures were verified before staging. Guarantee
             # the ZIP-extracted bytes are durable before publishing the path.
             fsync_retained_package(package)
+            # Rehash ALL attested members after durability barriers, then
+            # reaffirm the exact operator's digest before exposing a path.
+            signed.staging.verify_manifest(package, sha)
+            require(digest(preflight.stable_hash(package /
+                    "scripts/qa/operators/qa525-update.py")) ==
+                    plan["candidate_operator_sha256"],
+                    "ROOT_SIGNED_OPERATOR_CHANGED_DURING_FSYNC")
             os.rename(package, target)
             sync_dir(STORE)
             retained_root = retained.inspect_retained(
