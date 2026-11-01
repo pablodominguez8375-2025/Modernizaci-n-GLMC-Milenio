@@ -188,8 +188,9 @@ class LauncherLocalApprovalTests(unittest.TestCase):
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
                 self.assertNotIn(node.func.attr, forbidden)
-        self.assertNotIn("docker", [n.name for n in ast.walk(tree)
-                                  if isinstance(n, ast.Import)])
+        imports = [a.name for n in ast.walk(tree)
+                   if isinstance(n, ast.Import) for a in n.names]
+        self.assertNotIn("docker", imports)
         self.assertNotIn("O_CREAT", data)
         self.assertNotIn("O_WRONLY", data)
         self.assertIn("LIBRARY_ONLY_NO_INSTALL_ENTRYPOINT", data)
