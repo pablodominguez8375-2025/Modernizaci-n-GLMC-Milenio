@@ -30,6 +30,7 @@ REPO = "pablodominguez8375-2025/Modernizaci-n-GLMC-Milenio"
 SIGNER = REPO + "/.github/workflows/qa-silo-rebuild.yml"
 STORE = Path("/opt/centenario/qa525-root-source")
 LOCK = STORE / "bootstrap.lock"
+GH_BINARY = Path("/usr/bin/gh")  # checked exact system binary, never PATH lookup
 ADMISSION = Path("/etc/pmgm/qa525-bootstrap-admission.json")
 SHA40 = re.compile(r"[a-f0-9]{40}\Z")
 SHA64 = re.compile(r"[a-f0-9]{64}\Z")
@@ -201,13 +202,20 @@ def verify_zip_and_prepare(envelope_path, source_sha, envelope_digest,
             bundle.write_bytes(read_member(zf, outer[bundle_name], maximum=5_000_000))
             require(outer[verification_name].file_size <= 5_000_000,
                     "BOOTSTRAP_VERIFICATION_METADATA_OVERSIZE")
-        command = ["gh", "attestation", "verify", str(inner_zip),
+        # A root command MUST NOT resolve gh through caller-controlled PATH.
+        # Nor may caller variables inject an alternate gh config or loader.
+        root_owned(GH_BINARY)
+        gh_config = temp / "gh-config"
+        gh_config.mkdir(mode=0o700)
+        command = [str(GH_BINARY), "attestation", "verify", str(inner_zip),
                    "--repo", REPO, "--bundle", str(bundle),
                    "--signer-workflow", SIGNER, "--source-digest", source_sha,
                    "--deny-self-hosted-runners", "--format", "json"]
         try:
             verify(command, check=True, stdout=subprocess.DEVNULL,
-                   stderr=subprocess.DEVNULL, timeout=120)
+                   stderr=subprocess.DEVNULL, timeout=120,
+                   env={"PATH": "/usr/bin:/bin", "HOME": str(temp),
+                        "GH_CONFIG_DIR": str(gh_config), "LC_ALL": "C"})
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
             raise Blocked("BOOTSTRAP_ATTESTATION_FAILED") from None
         with zipfile.ZipFile(inner_zip) as zf:
