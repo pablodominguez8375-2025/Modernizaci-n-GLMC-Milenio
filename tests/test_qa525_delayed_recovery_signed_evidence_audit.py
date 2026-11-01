@@ -154,6 +154,21 @@ class DelayedDualSignedEvidenceAuditTests(unittest.TestCase):
         finally:
             self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL] = prior
 
+    def test_untrusted_recovery_contract_never_imported_before_manifest_match(self):
+        original = self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL]
+        self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL] = "0" * 64
+        try:
+            with patch.object(m, "load_local", wraps=m.load_local) as loaded:
+                with self.assertRaisesRegex(
+                        m.Blocked,
+                        "DELAYED_LOCAL_CONTRACT_NOT_IN_SIGNED_RECOVERY_RELEASE"):
+                    self.call()
+                self.assertNotIn(
+                    "qa525-launcher-replacement-contract.py",
+                    [args.args[0] for args in loaded.call_args_list])
+        finally:
+            self.signed_b["privileged_sources_sha256"][m.CONTRACT_REL] = original
+
     def test_approval_mutations_replay_and_pending_are_rejected(self):
         for change in ({"nonce": self.original["nonce"]},
                        {"cut_receipt_sha256": "0" * 64},
